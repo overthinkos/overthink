@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -51,6 +52,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 
 	// Validate no circular dependencies in images
 	validateImageDAG(cfg, errs)
+
+	// Validate ports
+	validatePorts(cfg, layers, errs)
 
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
@@ -191,6 +195,66 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 			}
 		}
 	}
+}
+
+// validatePorts validates port declarations in layers and images
+func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// Validate layer ports files
+	for name, layer := range layers {
+		if !layer.HasPorts {
+			continue
+		}
+		ports, err := layer.Ports()
+		if err != nil {
+			errs.Add("layer %q: error reading ports file: %v", name, err)
+			continue
+		}
+		for _, port := range ports {
+			if !isValidPort(port) {
+				errs.Add("layer %q ports: %q is not a valid port number (1-65535)", name, port)
+			}
+		}
+	}
+
+	// Validate image port mappings
+	validatePortMappings := func(name string, ports []string) {
+		for _, mapping := range ports {
+			parts := strings.Split(mapping, ":")
+			switch len(parts) {
+			case 1:
+				if !isValidPort(parts[0]) {
+					errs.Add("image %q ports: %q is not a valid port number (1-65535)", name, parts[0])
+				}
+			case 2:
+				if !isValidPort(parts[0]) {
+					errs.Add("image %q ports: host port %q in %q is not valid (1-65535)", name, parts[0], mapping)
+				}
+				if !isValidPort(parts[1]) {
+					errs.Add("image %q ports: container port %q in %q is not valid (1-65535)", name, parts[1], mapping)
+				}
+			default:
+				errs.Add("image %q ports: %q must be \"port\" or \"host:container\" format", name, mapping)
+			}
+		}
+	}
+
+	if len(cfg.Defaults.Ports) > 0 {
+		validatePortMappings("defaults", cfg.Defaults.Ports)
+	}
+	for name, img := range cfg.Images {
+		if len(img.Ports) > 0 {
+			validatePortMappings(name, img.Ports)
+		}
+	}
+}
+
+// isValidPort checks if a string is a valid port number (1-65535)
+func isValidPort(s string) bool {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return false
+	}
+	return n >= 1 && n <= 65535
 }
 
 // findSimilarName finds a similar name for typo suggestions

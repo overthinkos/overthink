@@ -207,6 +207,9 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Collect and write environment variables from layers
 	g.writeLayerEnv(&b, layerOrder, img)
 
+	// Emit EXPOSE directives for layer ports
+	g.writeExpose(&b, layerOrder)
+
 	// Copy pixi environments
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
@@ -357,6 +360,40 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
 		b.WriteString("\n")
 	}
+}
+
+// writeExpose collects ports from all layers, deduplicates, sorts, and emits EXPOSE directives
+func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
+	seen := make(map[string]bool)
+	var ports []string
+
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasPorts {
+			continue
+		}
+		layerPorts, err := layer.Ports()
+		if err != nil {
+			continue
+		}
+		for _, port := range layerPorts {
+			if !seen[port] {
+				seen[port] = true
+				ports = append(ports, port)
+			}
+		}
+	}
+
+	if len(ports) == 0 {
+		return
+	}
+
+	sortStrings(ports)
+	b.WriteString("# Exposed ports\n")
+	for _, port := range ports {
+		b.WriteString(fmt.Sprintf("EXPOSE %s\n", port))
+	}
+	b.WriteString("\n")
 }
 
 // writeLayerSteps writes the RUN steps for a single layer
@@ -532,6 +569,8 @@ func (g *Generator) generateBakeHCL(order []string) error {
 		// Dependencies
 		if !img.IsExternalBase {
 			b.WriteString(fmt.Sprintf("  depends_on = [%q]\n", img.Base))
+			baseImg := g.Images[img.Base]
+			b.WriteString(fmt.Sprintf("  contexts = {\n    %q = \"target:%s\"\n  }\n", baseImg.FullTag, img.Base))
 		}
 
 		b.WriteString("}\n\n")

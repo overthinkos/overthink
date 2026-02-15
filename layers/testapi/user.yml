@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/testapi
+      - cp /ctx/app.py ~/testapi/app.py

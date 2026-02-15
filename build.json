@@ -19,6 +19,11 @@
       "base": "debian:13",
       "layers": ["pixi", "python", "nodejs", "rust", "supervisord"],
       "pkg": "deb"
+    },
+    "fedora-test": {
+      "base": "fedora",
+      "layers": ["testapi"],
+      "ports": ["9090:9090"]
     }
   }
 }

@@ -16,6 +16,8 @@ type CLI struct {
 	List     ListCmd     `cmd:"" help:"List components"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
+	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
+	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
 
@@ -101,6 +103,10 @@ func (c *InspectCmd) Run() error {
 		case "layers":
 			for _, l := range resolved.Layers {
 				fmt.Println(l)
+			}
+		case "ports":
+			for _, p := range resolved.Ports {
+				fmt.Println(p)
 			}
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)

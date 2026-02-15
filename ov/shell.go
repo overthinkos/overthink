@@ -46,7 +46,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID)
+	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports)
 
 	// Find docker binary
 	dockerPath, err := findExecutable("docker")
@@ -67,15 +67,18 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the docker run argument list.
-func buildShellArgs(imageRef, workspace string, uid, gid int) []string {
-	return []string{
+func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string) []string {
+	args := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
-		"--entrypoint", "bash",
-		imageRef,
 	}
+	for _, port := range ports {
+		args = append(args, "-p", port)
+	}
+	args = append(args, "--entrypoint", "bash", imageRef)
+	return args
 }
 
 // findExecutable locates an executable in PATH.

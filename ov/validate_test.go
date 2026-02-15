@@ -231,6 +231,139 @@ func TestValidateMultipleErrors(t *testing.T) {
 	}
 }
 
+func TestValidateLayerPortsValid(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"web": {
+			Name:       "web",
+			HasUserYml: true,
+			HasPorts:   true,
+			ports:      []string{"8080", "9090"},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestValidateLayerPortsInvalid(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"web": {
+			Name:       "web",
+			HasUserYml: true,
+			HasPorts:   true,
+			ports:      []string{"99999"},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for invalid port number")
+	}
+	if !strings.Contains(err.Error(), "not a valid port") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateImagePortsValid(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Pkg:       "rpm",
+			Platforms: []string{"linux/amd64"},
+		},
+		Images: map[string]ImageConfig{
+			"test": {
+				Layers: []string{"web"},
+				Ports:  []string{"8080:8080", "9090"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"web": {Name: "web", HasUserYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestValidateImagePortsInvalid(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {
+				Layers: []string{"web"},
+				Ports:  []string{"abc:8080"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"web": {Name: "web", HasUserYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for invalid port mapping")
+	}
+	if !strings.Contains(err.Error(), "not valid") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateImagePortsBadFormat(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {
+				Layers: []string{"web"},
+				Ports:  []string{"8080:9090:1234"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"web": {Name: "web", HasUserYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for bad port format")
+	}
+	if !strings.Contains(err.Error(), "host:container") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestIsValidPort(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		{"80", true},
+		{"8080", true},
+		{"65535", true},
+		{"1", true},
+		{"0", false},
+		{"65536", false},
+		{"abc", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isValidPort(tt.input)
+			if got != tt.want {
+				t.Errorf("isValidPort(%q) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestLevenshteinDistance(t *testing.T) {
 	tests := []struct {
 		a, b string

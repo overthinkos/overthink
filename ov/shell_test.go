@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildShellArgs(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000)
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -21,7 +21,7 @@ func TestBuildShellArgs(t *testing.T) {
 }
 
 func TestBuildShellArgsCustomUIDGID(t *testing.T) {
-	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002)
+	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/tmp:/workspace",
@@ -29,6 +29,23 @@ func TestBuildShellArgsCustomUIDGID(t *testing.T) {
 		"--user", "1001:1002",
 		"--entrypoint", "bash",
 		"fedora:latest",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsWithPorts(t *testing.T) {
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"})
+	want := []string{
+		"docker", "run", "--rm", "-it",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"-p", "9090:9090",
+		"-p", "8080:8080",
+		"--entrypoint", "bash",
+		"ghcr.io/atrawog/fedora:latest",
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildShellArgs() =\n  %v\nwant\n  %v", args, want)

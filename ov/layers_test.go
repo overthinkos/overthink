@@ -11,7 +11,7 @@ func TestScanLayers(t *testing.T) {
 		t.Fatalf("ScanLayers() error = %v", err)
 	}
 
-	expectedLayers := []string{"pixi", "python", "nodejs", "cargo-tool"}
+	expectedLayers := []string{"pixi", "python", "nodejs", "cargo-tool", "webservice"}
 	for _, name := range expectedLayers {
 		if _, ok := layers[name]; !ok {
 			t.Errorf("missing layer %q", name)
@@ -141,8 +141,8 @@ func TestLayerNames(t *testing.T) {
 	}
 
 	names := LayerNames(layers)
-	if len(names) != 4 {
-		t.Errorf("LayerNames() returned %d names, want 4", len(names))
+	if len(names) != 5 {
+		t.Errorf("LayerNames() returned %d names, want 5", len(names))
 	}
 
 	// Should be sorted
@@ -151,6 +151,59 @@ func TestLayerNames(t *testing.T) {
 			t.Errorf("LayerNames() not sorted: %v", names)
 			break
 		}
+	}
+}
+
+func TestLayerPorts(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	ws := layers["webservice"]
+	if ws == nil {
+		t.Fatal("webservice layer not found")
+	}
+
+	if !ws.HasPorts {
+		t.Error("webservice should have ports")
+	}
+
+	ports, err := ws.Ports()
+	if err != nil {
+		t.Fatalf("Ports() error = %v", err)
+	}
+	if !reflect.DeepEqual(ports, []string{"8080", "9090"}) {
+		t.Errorf("Ports() = %v, want [8080 9090]", ports)
+	}
+
+	// Test caching
+	ports2, err := ws.Ports()
+	if err != nil {
+		t.Fatalf("Ports() second call error = %v", err)
+	}
+	if !reflect.DeepEqual(ports, ports2) {
+		t.Error("Ports() should return cached result")
+	}
+}
+
+func TestLayerPortsNone(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	pixi := layers["pixi"]
+	if pixi.HasPorts {
+		t.Error("pixi should not have ports")
+	}
+
+	ports, err := pixi.Ports()
+	if err != nil {
+		t.Fatalf("Ports() error = %v", err)
+	}
+	if ports != nil {
+		t.Errorf("Ports() = %v, want nil", ports)
 	}
 }
 

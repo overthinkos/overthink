@@ -25,12 +25,14 @@ type Layer struct {
 	HasUserYml        bool
 	HasSupervisord    bool
 	HasEnv            bool
+	HasPorts          bool
 	Depends           []string
 
 	// Cached file contents (loaded on demand)
 	rpmPackages []string
 	debPackages []string
 	coprRepos   []string
+	ports       []string
 	envConfig   *EnvConfig
 }
 
@@ -83,6 +85,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasSupervisord = fileExists(filepath.Join(path, "supervisord.conf"))
 	layer.HasEnv = fileExists(filepath.Join(path, "env"))
+	layer.HasPorts = fileExists(filepath.Join(path, "ports"))
 
 	// Read depends file if present
 	dependsPath := filepath.Join(path, "depends")
@@ -184,6 +187,23 @@ func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	}
 	l.envConfig = cfg
 	return l.envConfig, nil
+}
+
+// Ports returns the ports from the ports file (cached)
+func (l *Layer) Ports() ([]string, error) {
+	if l.ports != nil {
+		return l.ports, nil
+	}
+	if !l.HasPorts {
+		return nil, nil
+	}
+
+	ports, err := readLineFile(filepath.Join(l.Path, "ports"))
+	if err != nil {
+		return nil, err
+	}
+	l.ports = ports
+	return l.ports, nil
 }
 
 // LayerNames returns a sorted list of layer names

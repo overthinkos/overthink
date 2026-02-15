@@ -174,6 +174,51 @@ func TestImageNames(t *testing.T) {
 	}
 }
 
+func TestResolveImagePorts(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Pkg:       "rpm",
+			Platforms: []string{"linux/amd64"},
+			Ports:     []string{"80:80"},
+		},
+		Images: map[string]ImageConfig{
+			"with-ports":    {Layers: []string{}, Ports: []string{"9090:9090"}},
+			"inherit-ports": {Layers: []string{}},
+			"no-ports":      {Layers: []string{}, Ports: []string{}},
+		},
+	}
+
+	// Image with explicit ports
+	resolved, err := cfg.ResolveImage("with-ports", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if !reflect.DeepEqual(resolved.Ports, []string{"9090:9090"}) {
+		t.Errorf("Ports = %v, want [9090:9090]", resolved.Ports)
+	}
+
+	// Image inheriting default ports
+	resolved, err = cfg.ResolveImage("inherit-ports", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if !reflect.DeepEqual(resolved.Ports, []string{"80:80"}) {
+		t.Errorf("Ports = %v, want [80:80]", resolved.Ports)
+	}
+
+	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
+	resolved, err = cfg.ResolveImage("no-ports", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	// Empty slice in JSON becomes nil after unmarshal, but in Go struct it's []string{}
+	// When len == 0, we fall through to defaults
+	if !reflect.DeepEqual(resolved.Ports, []string{"80:80"}) {
+		t.Errorf("Ports = %v, want [80:80]", resolved.Ports)
+	}
+}
+
 func TestFullTag(t *testing.T) {
 	cfg, err := LoadConfig("testdata")
 	if err != nil {

@@ -22,7 +22,8 @@ type ImageConfig struct {
 	Registry  string   `json:"registry,omitempty"`
 	Pkg       string   `json:"pkg,omitempty"`
 	Layers    []string `json:"layers,omitempty"`
-	User      string   `json:"user,omitempty"` // username (default: "user")
+	Ports     []string `json:"ports,omitempty"` // runtime port mappings ["host:container"]
+	User      string   `json:"user,omitempty"`  // username (default: "user")
 	UID       int      `json:"uid,omitempty"`  // user ID (default: 1000)
 	GID       int      `json:"gid,omitempty"`  // group ID (default: 1000)
 }
@@ -37,6 +38,7 @@ type ResolvedImage struct {
 	Registry  string
 	Pkg       string
 	Layers    []string
+	Ports     []string // runtime port mappings
 
 	// User configuration
 	User string // username
@@ -137,6 +139,12 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 
 	// Layers are not inherited, they're image-specific
 	resolved.Layers = img.Layers
+
+	// Resolve ports: image -> defaults -> nil
+	resolved.Ports = img.Ports
+	if len(resolved.Ports) == 0 {
+		resolved.Ports = c.Defaults.Ports
+	}
 
 	// Resolve user: image -> defaults -> "user"
 	resolved.User = img.User

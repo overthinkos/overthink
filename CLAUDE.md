@@ -8,7 +8,7 @@ Composable container images from a library of layers. Built on `docker buildx ba
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell` execs into `docker run` as a developer convenience (not part of the build pipeline).
+**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell`/`ov start`/`ov stop` exec into `docker run`/`docker stop` as developer conveniences (not part of the build pipeline).
 
 **`task` (Taskfile)** -- all execution. Thin wrappers that call `ov` for generation, `docker`/`podman` for builds. No JSON parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
 
@@ -42,6 +42,7 @@ A **layer** is a directory under `layers/<name>/` that installs a single concern
 |---|---|
 | `depends` | Layer dependencies, one per line. Resolved transitively; topologically sorted. |
 | `env` | Environment variables. Merged across layers, emitted as `ENV` directives. See [ENV from Layer env Files](#env-from-layer-env-files). |
+| `ports` | Exposed ports, one per line (1-65535). Collected across layers, deduplicated, emitted as `EXPOSE` directives. |
 | `supervisord.conf` | Service fragment (`[program:<name>]`). Triggers supervisord assembly in images. |
 
 ### Root vs User Rule
@@ -80,6 +81,11 @@ An **image** is a named build target in `build.json`. The current configuration:
       "base": "debian:13",
       "layers": ["pixi", "python", "nodejs", "rust", "supervisord"],
       "pkg": "deb"
+    },
+    "fedora-test": {
+      "base": "fedora",
+      "layers": ["testapi"],
+      "ports": ["9090:9090"]
     }
   }
 }
@@ -98,6 +104,7 @@ Every setting resolves through: **image -> defaults -> hardcoded fallback** (fir
 | `registry` | `""` | Container registry prefix |
 | `pkg` | `"rpm"` | System package manager: `"rpm"` or `"deb"` |
 | `layers` | (required) | Layer list (image-specific, not inherited) |
+| `ports` | `[]` | Runtime port mappings (`"host:container"` or `"port"`). Used by `ov shell` for `-p` flags. |
 | `user` | `"user"` | Username for non-root operations |
 | `uid` | `1000` | User ID |
 | `gid` | `1000` | Group ID |
@@ -121,12 +128,13 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
 6. **`FROM ${BASE_IMAGE}`**
 7. **Bootstrap** (external base only) -- install `task`, create user/group if not exists at configured UID/GID, set `WORKDIR`. For internal base: just `USER root`.
 8. **Layer ENV** -- consolidated `ENV` directives from all layers' `env` files
-9. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
-10. **COPY pixi binary** -- from first pixi build stage
-11. **Per-layer steps** -- for each layer in order: rpm/deb install, root.yml, package.json, Cargo.toml, user.yml (only steps for files that exist)
-12. **Supervisord assembly** -- `cat /fragments/*.conf > /etc/supervisord.conf` (if services)
-13. **`USER <UID>`** -- final directive (uses numeric UID, not username)
-14. **`RUN bootc container lint`** -- (bootc images only)
+9. **EXPOSE** -- deduplicated, sorted port numbers from all layers' `ports` files
+10. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
+11. **COPY pixi binary** -- from first pixi build stage
+12. **Per-layer steps** -- for each layer in order: rpm/deb install, root.yml, package.json, Cargo.toml, user.yml (only steps for files that exist)
+13. **Supervisord assembly** -- `cat /fragments/*.conf > /etc/supervisord.conf` (if services)
+14. **`USER <UID>`** -- final directive (uses numeric UID, not username)
+15. **`RUN bootc container lint`** -- (bootc images only)
 
 Within per-layer steps, `USER <UID>` is emitted before the first user-mode step, and `USER root` resets after the last user-mode step for the next layer.
 
@@ -252,14 +260,16 @@ ov list targets                        # Bake targets from generated HCL
 ov list services                       # Layers with supervisord.conf
 ov new layer <name>                    # Scaffold a layer directory
 ov shell <image> [-w PATH] [--tag TAG] # Bash shell in a container (mounts cwd at /workspace)
+ov start <image> [-w PATH] [--tag TAG] # Start service container with supervisord (detached)
+ov stop <image>                        # Stop a running service container
 ov version                             # Print computed CalVer tag
 ```
 
-**Output conventions:** `generate`/`validate`/`new` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `pkg`, `registry`, `platforms`, `layers`).
+**Output conventions:** `generate`/`validate`/`new` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `pkg`, `registry`, `platforms`, `layers`, `ports`).
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
-**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `copr.repo` requires `rpm.list`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `env` files must use `PATH+=` not `PATH=`.
+**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `copr.repo` requires `rpm.list`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `env` files must use `PATH+=` not `PATH=`, `ports` files must contain valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format.
 
 ---
 
@@ -310,6 +320,7 @@ project/
 | `nodejs` | `rpm.list`, `deb.list`, `env` | Node.js + npm. Sets `NPM_CONFIG_PREFIX`, `npm_config_cache`, PATH. |
 | `rust` | `rpm.list`, `deb.list`, `env` | Rust + Cargo via system packages. Sets PATH for `~/.cargo/bin`. |
 | `supervisord` | `depends` (python), `pixi.toml` | supervisor package via pixi. |
+| `testapi` | `depends` (supervisord), `pixi.toml`, `app.py`, `user.yml`, `supervisord.conf`, `ports` | Minimal FastAPI test service on port 9090. |
 
 ---
 

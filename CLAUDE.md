@@ -8,7 +8,7 @@ Composable container images from a library of layers. Built on `docker buildx ba
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Never calls docker/podman. Registry inspection via go-containerregistry.
+**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell` execs into `docker run` as a developer convenience (not part of the build pipeline).
 
 **`task` (Taskfile)** -- all execution. Thin wrappers that call `ov` for generation, `docker`/`podman` for builds. No JSON parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
 
@@ -251,6 +251,7 @@ ov list layers                         # Layers from filesystem
 ov list targets                        # Bake targets from generated HCL
 ov list services                       # Layers with supervisord.conf
 ov new layer <name>                    # Scaffold a layer directory
+ov shell <image> [-w PATH] [--tag TAG] # Bash shell in a container (mounts cwd at /workspace)
 ov version                             # Print computed CalVer tag
 ```
 
@@ -279,6 +280,7 @@ project/
 |   +-- version.go                      # CalVer computation
 |   +-- scaffold.go                     # `new layer` scaffolding
 |   +-- registry.go                     # Remote image inspection (go-containerregistry)
+|   +-- shell.go                        # `shell` command (execs docker run)
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
 |   +-- docker-bake.hcl
@@ -321,7 +323,7 @@ project/
 | `task build:local -- <image>` | Build for host platform only |
 | `task build:push` | Build and push all images |
 | `task run:container -- <image>` | `docker run` |
-| `task run:shell -- <image>` | `docker run --entrypoint bash` |
+| `task run:shell -- <image>` | Delegates to `ov shell` |
 | `task build:iso -- <image> [tag]` | Build ISO via Bootc Image Builder (bootc only) |
 | `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image (bootc only) |
 | `task build:raw -- <image> [tag]` | Build RAW disk image (bootc only) |

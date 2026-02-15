@@ -9,7 +9,7 @@ tasks:
   shell:
     desc: "Shell into a built image. Usage: task run:shell -- <image>"
     cmds:
-      - docker run --rm -it --entrypoint bash $(ov inspect --format tag {{.CLI_ARGS}})
+      - ov shell {{.CLI_ARGS}}
 
   vm:
     desc: "Run a QCOW2 image in QEMU. Usage: task run:vm -- <image> [tag]"

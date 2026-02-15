@@ -15,6 +15,7 @@ type CLI struct {
 	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
 	List     ListCmd     `cmd:"" help:"List components"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
 

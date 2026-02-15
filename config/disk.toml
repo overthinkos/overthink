@@ -1,0 +1,11 @@
+# Bootc Image Builder configuration for QCOW2/RAW disk images
+# See: https://osbuild.org/docs/bootc/
+
+[customizations.filesystem]
+# Root partition settings
+mountpoint = "/"
+minsize = "10 GiB"
+
+[customizations.kernel]
+# Kernel arguments
+append = "console=ttyS0,115200n8"

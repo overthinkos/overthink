@@ -1,0 +1,29 @@
+# Bootc Image Builder configuration for ISO installer (GNOME)
+# See: https://osbuild.org/docs/bootc/
+
+[customizations.installer]
+# Anaconda modules to enable
+modules = [
+    "org.fedoraproject.Anaconda.Modules.Localization",
+    "org.fedoraproject.Anaconda.Modules.Network",
+    "org.fedoraproject.Anaconda.Modules.Payloads",
+    "org.fedoraproject.Anaconda.Modules.Storage",
+    "org.fedoraproject.Anaconda.Modules.Users"
+]
+
+[customizations.installer.kickstart]
+# Kickstart configuration embedded in ISO
+# The %post script runs bootc switch to the target image
+contents = """
+# Basic kickstart for bootc
+lang en_US.UTF-8
+keyboard us
+timezone UTC
+
+# Bootc switch happens automatically via the installer
+# The target image is specified when running BIB
+"""
+
+[customizations.filesystem]
+mountpoint = "/"
+minsize = "10 GiB"

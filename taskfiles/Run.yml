@@ -1,0 +1,52 @@
+version: '3'
+
+tasks:
+  container:
+    desc: "Run a built image. Usage: task run:container -- <image>"
+    cmds:
+      - docker run --rm -it $(ov inspect --format tag {{.CLI_ARGS}})
+
+  shell:
+    desc: "Shell into a built image. Usage: task run:shell -- <image>"
+    cmds:
+      - docker run --rm -it --entrypoint bash $(ov inspect --format tag {{.CLI_ARGS}})
+
+  vm:
+    desc: "Run a QCOW2 image in QEMU. Usage: task run:vm -- <image> [tag]"
+    preconditions:
+      - sh: command -v qemu-system-x86_64 || command -v qemu-system-aarch64
+        msg: "qemu not found -- install qemu-system"
+      - sh: test -d output/qcow2
+        msg: "No QCOW2 output found -- run 'task build:qcow2' first"
+    vars:
+      QEMU_RAM: '{{default "4G" .QEMU_RAM}}'
+      QEMU_CPUS: '{{default "2" .QEMU_CPUS}}'
+    cmds:
+      - |
+        set -- {{.CLI_ARGS}}
+        IMAGE="$1"; TAG="${2:-latest}"
+        DISK="output/qcow2/disk.qcow2"
+        if [ ! -f "$DISK" ]; then
+          echo "error: $DISK not found" >&2
+          exit 1
+        fi
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64)
+            qemu-system-x86_64 \
+              -m {{.QEMU_RAM}} -smp {{.QEMU_CPUS}} \
+              -cpu host -enable-kvm \
+              -drive file="$DISK",format=qcow2,if=virtio \
+              -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \
+              -serial mon:stdio -nographic
+            ;;
+          aarch64)
+            qemu-system-aarch64 \
+              -m {{.QEMU_RAM}} -smp {{.QEMU_CPUS}} \
+              -cpu host -machine virt -enable-kvm \
+              -drive file="$DISK",format=qcow2,if=virtio \
+              -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \
+              -serial mon:stdio -nographic
+            ;;
+          *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
+        esac

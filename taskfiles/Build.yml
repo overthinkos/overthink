@@ -1,0 +1,125 @@
+version: '3'
+
+vars:
+  BIB_IMAGE: quay.io/centos-bootc/bootc-image-builder:latest
+
+tasks:
+  ov:
+    desc: Build ov from source
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - mkdir -p bin
+      - cd ov && go build -o ../bin/ov .
+
+  all:
+    desc: Build all images (respects dependency order)
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+    cmds:
+      - ov generate
+      - docker buildx bake -f .build/docker-bake.hcl
+
+  local:
+    desc: Build a single image for host platform only
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+    vars:
+      ARCH:
+        sh: uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/'
+    cmds:
+      - ov generate
+      - >-
+        docker buildx bake -f .build/docker-bake.hcl
+        --set '*.platform=linux/{{.ARCH}}' {{.CLI_ARGS}}
+
+  push:
+    desc: Build and push all images
+    cmds:
+      - ov generate
+      - docker buildx bake -f .build/docker-bake.hcl --push
+
+  iso:
+    desc: "Build ISO disk image (bootc only). Usage: task build:iso -- <image> [tag]"
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+      - sh: command -v podman
+        msg: "podman required for disk image builds"
+    cmds:
+      - ov generate
+      - |
+        set -- {{.CLI_ARGS}}
+        IMAGE="$1"; TAG="${2:-latest}"
+        IMAGE_REF=$(ov inspect --format tag "$IMAGE")
+        echo "Building ISO for $IMAGE_REF"
+        mkdir -p output/iso
+        docker save "$IMAGE_REF" | sudo podman load
+        sudo podman run --rm --privileged \
+          --pull=newer \
+          --security-opt label=type:unconfined_t \
+          -v ./config/iso-gnome.toml:/config.toml:ro \
+          -v ./output/iso:/output \
+          -v /var/lib/containers/storage:/var/lib/containers/storage \
+          {{.BIB_IMAGE}} \
+          --type iso \
+          --config /config.toml \
+          "$IMAGE_REF"
+        echo "ISO written to output/iso/"
+
+  qcow2:
+    desc: "Build QCOW2 virtual machine image (bootc only). Usage: task build:qcow2 -- <image> [tag]"
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+      - sh: command -v podman
+        msg: "podman required for disk image builds"
+    cmds:
+      - ov generate
+      - |
+        set -- {{.CLI_ARGS}}
+        IMAGE="$1"; TAG="${2:-latest}"
+        IMAGE_REF=$(ov inspect --format tag "$IMAGE")
+        echo "Building QCOW2 for $IMAGE_REF"
+        mkdir -p output/qcow2
+        docker save "$IMAGE_REF" | sudo podman load
+        sudo podman run --rm --privileged \
+          --pull=newer \
+          --security-opt label=type:unconfined_t \
+          -v ./config/disk.toml:/config.toml:ro \
+          -v ./output/qcow2:/output \
+          -v /var/lib/containers/storage:/var/lib/containers/storage \
+          {{.BIB_IMAGE}} \
+          --type qcow2 \
+          --config /config.toml \
+          "$IMAGE_REF"
+        echo "QCOW2 written to output/qcow2/"
+
+  raw:
+    desc: "Build RAW disk image (bootc only). Usage: task build:raw -- <image> [tag]"
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+      - sh: command -v podman
+        msg: "podman required for disk image builds"
+    cmds:
+      - ov generate
+      - |
+        set -- {{.CLI_ARGS}}
+        IMAGE="$1"; TAG="${2:-latest}"
+        IMAGE_REF=$(ov inspect --format tag "$IMAGE")
+        echo "Building RAW for $IMAGE_REF"
+        mkdir -p output/raw
+        docker save "$IMAGE_REF" | sudo podman load
+        sudo podman run --rm --privileged \
+          --pull=newer \
+          --security-opt label=type:unconfined_t \
+          -v ./config/disk.toml:/config.toml:ro \
+          -v ./output/raw:/output \
+          -v /var/lib/containers/storage:/var/lib/containers/storage \
+          {{.BIB_IMAGE}} \
+          --type raw \
+          --config /config.toml \
+          "$IMAGE_REF"
+        echo "RAW image written to output/raw/"

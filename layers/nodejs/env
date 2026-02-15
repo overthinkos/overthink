@@ -1,0 +1,4 @@
+# Node.js / npm environment
+NPM_CONFIG_PREFIX=~/.npm-global
+npm_config_cache=~/.cache/npm
+PATH+=:~/.npm-global/bin

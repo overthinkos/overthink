@@ -1,0 +1,4 @@
+# Pixi package manager environment
+PIXI_HOME=/opt/pixi
+PATH+=:~/.pixi/envs/default/bin
+PATH+=:/opt/pixi/bin

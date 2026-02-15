@@ -16,7 +16,7 @@ type Layer struct {
 	HasDebList     bool
 	HasCoprRepo    bool
 	HasRootYml     bool
-	HasPixiToml    bool
+	HasPixiList    bool
 	HasPackageJson bool
 	HasCargoToml   bool
 	HasSrcDir      bool
@@ -26,10 +26,11 @@ type Layer struct {
 	Depends        []string
 
 	// Cached file contents (loaded on demand)
-	rpmPackages []string
-	debPackages []string
-	coprRepos   []string
-	envConfig   *EnvConfig
+	rpmPackages  []string
+	debPackages  []string
+	coprRepos    []string
+	pixiPackages []string
+	envConfig    *EnvConfig
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -72,7 +73,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasDebList = fileExists(filepath.Join(path, "deb.list"))
 	layer.HasCoprRepo = fileExists(filepath.Join(path, "copr.repo"))
 	layer.HasRootYml = fileExists(filepath.Join(path, "root.yml"))
-	layer.HasPixiToml = fileExists(filepath.Join(path, "pixi.toml"))
+	layer.HasPixiList = fileExists(filepath.Join(path, "pixi.list"))
 	layer.HasPackageJson = fileExists(filepath.Join(path, "package.json"))
 	layer.HasCargoToml = fileExists(filepath.Join(path, "Cargo.toml"))
 	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
@@ -96,7 +97,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 // HasInstallFiles returns true if the layer has at least one install file
 func (l *Layer) HasInstallFiles() bool {
 	return l.HasRpmList || l.HasDebList || l.HasRootYml ||
-		l.HasPixiToml || l.HasPackageJson || l.HasCargoToml || l.HasUserYml
+		l.HasPixiList || l.HasPackageJson || l.HasCargoToml || l.HasUserYml
 }
 
 // RpmPackages returns the packages from rpm.list (cached)
@@ -148,6 +149,23 @@ func (l *Layer) CoprRepos() ([]string, error) {
 	}
 	l.coprRepos = repos
 	return l.coprRepos, nil
+}
+
+// PixiPackages returns the packages from pixi.list (cached)
+func (l *Layer) PixiPackages() ([]string, error) {
+	if l.pixiPackages != nil {
+		return l.pixiPackages, nil
+	}
+	if !l.HasPixiList {
+		return nil, nil
+	}
+
+	pkgs, err := readLineFile(filepath.Join(l.Path, "pixi.list"))
+	if err != nil {
+		return nil, err
+	}
+	l.pixiPackages = pkgs
+	return l.pixiPackages, nil
 }
 
 // EnvConfig returns the environment config from env file (cached)

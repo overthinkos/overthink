@@ -250,11 +250,7 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("    (getent group %d >/dev/null 2>&1 || groupadd -g %d %s && \\\n", img.GID, img.GID, img.User))
 	b.WriteString(fmt.Sprintf("     useradd -m -u %d -g %d -s /bin/bash %s)\n\n", img.UID, img.GID, img.User))
 
-	// Environment (using resolved home)
-	b.WriteString("ENV PIXI_HOME=\"/opt/pixi\"\n")
-	b.WriteString(fmt.Sprintf("ENV NPM_CONFIG_PREFIX=\"%s/.npm-global\"\n", img.Home))
-	b.WriteString(fmt.Sprintf("ENV npm_config_cache=\"%s/.cache/npm\"\n", img.Home))
-	b.WriteString(fmt.Sprintf("ENV PATH=\"%s/.pixi/envs/default/bin:%s/.npm-global/bin:%s/.cargo/bin:/opt/pixi/bin:${PATH}\"\n", img.Home, img.Home, img.Home))
+	// WORKDIR only - ENV comes from layer env files
 	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
 }
 
@@ -330,13 +326,13 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		g.writeRootYml(b, layerName, img.Pkg)
 	}
 
-	// 3. pixi.toml (user)
-	if layer.HasPixiToml {
+	// 3. pixi.list (user)
+	if layer.HasPixiList {
 		if !asUser {
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writePixiToml(b, layerName, img)
+		g.writePixiList(b, layer, img)
 	}
 
 	// 4. package.json (user)
@@ -415,10 +411,24 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg strin
 	b.WriteString("    cd /ctx && task -t root.yml install\n")
 }
 
-func (g *Generator) writePixiToml(b *strings.Builder, layerName string, img *ResolvedImage) {
-	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
-	b.WriteString(fmt.Sprintf("    cp /ctx/pixi.toml %s/pixi.toml && pixi install\n", img.Home))
+func (g *Generator) writePixiList(b *strings.Builder, layer *Layer, img *ResolvedImage) {
+	pkgs, _ := layer.PixiPackages()
+	if len(pkgs) == 0 {
+		return
+	}
+
+	// Quote packages with special characters
+	quotedPkgs := make([]string, len(pkgs))
+	for i, pkg := range pkgs {
+		if strings.ContainsAny(pkg, "<>=,") {
+			quotedPkgs[i] = fmt.Sprintf("%q", pkg)
+		} else {
+			quotedPkgs[i] = pkg
+		}
+	}
+
+	b.WriteString(fmt.Sprintf("RUN --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
+	b.WriteString(fmt.Sprintf("    pixi add %s\n", strings.Join(quotedPkgs, " ")))
 }
 
 func (g *Generator) writePackageJson(b *strings.Builder, layerName string, img *ResolvedImage) {

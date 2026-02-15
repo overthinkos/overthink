@@ -42,6 +42,14 @@ tasks:
       - ov generate
       - docker buildx bake -f .build/docker-bake.hcl --push
 
+  merge:
+    desc: "Merge small layers in a built image. Usage: task build:merge -- <image>"
+    preconditions:
+      - sh: command -v ov
+        msg: "ov not found -- run 'task build:ov' first"
+    cmds:
+      - ov merge {{.CLI_ARGS}}
+
   iso:
     desc: "Build ISO disk image (bootc only). Usage: task build:iso -- <image> [tag]"
     preconditions:

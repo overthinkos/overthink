@@ -13,19 +13,26 @@ type Config struct {
 	Images   map[string]ImageConfig `json:"images"`
 }
 
+// MergeConfig configures post-build layer merging
+type MergeConfig struct {
+	MinMB int `json:"min_mb,omitempty"` // layers smaller than this are merge candidates (default: 100)
+	MaxMB int `json:"max_mb,omitempty"` // maximum size of a merged layer (default: 1024)
+}
+
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
-	Base      string   `json:"base,omitempty"`
-	Bootc     bool     `json:"bootc,omitempty"`
-	Platforms []string `json:"platforms,omitempty"`
-	Tag       string   `json:"tag,omitempty"`
-	Registry  string   `json:"registry,omitempty"`
-	Pkg       string   `json:"pkg,omitempty"`
-	Layers    []string `json:"layers,omitempty"`
-	Ports     []string `json:"ports,omitempty"` // runtime port mappings ["host:container"]
-	User      string   `json:"user,omitempty"`  // username (default: "user")
-	UID       int      `json:"uid,omitempty"`  // user ID (default: 1000)
-	GID       int      `json:"gid,omitempty"`  // group ID (default: 1000)
+	Base      string       `json:"base,omitempty"`
+	Bootc     bool         `json:"bootc,omitempty"`
+	Platforms []string     `json:"platforms,omitempty"`
+	Tag       string       `json:"tag,omitempty"`
+	Registry  string       `json:"registry,omitempty"`
+	Pkg       string       `json:"pkg,omitempty"`
+	Layers    []string     `json:"layers,omitempty"`
+	Ports     []string     `json:"ports,omitempty"` // runtime port mappings ["host:container"]
+	User      string       `json:"user,omitempty"`  // username (default: "user")
+	UID       int          `json:"uid,omitempty"`    // user ID (default: 1000)
+	GID       int          `json:"gid,omitempty"`    // group ID (default: 1000)
+	Merge     *MergeConfig `json:"merge,omitempty"`  // layer merge settings
 }
 
 // ResolvedImage represents a fully resolved image configuration
@@ -45,6 +52,9 @@ type ResolvedImage struct {
 	UID  int    // user ID
 	GID  int    // group ID
 	Home string // resolved home directory (detected or /home/<user>)
+
+	// Merge configuration
+	Merge *MergeConfig // layer merge settings (nil means use CLI defaults)
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -171,6 +181,13 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	}
 	if resolved.GID == 0 {
 		resolved.GID = 1000
+	}
+
+	// Resolve merge config: image -> defaults -> nil
+	if img.Merge != nil {
+		resolved.Merge = img.Merge
+	} else if c.Defaults.Merge != nil {
+		resolved.Merge = c.Defaults.Merge
 	}
 
 	// Home directory will be resolved later (after inspecting base image)

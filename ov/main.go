@@ -15,6 +15,7 @@ type CLI struct {
 	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
 	List     ListCmd     `cmd:"" help:"List components"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`

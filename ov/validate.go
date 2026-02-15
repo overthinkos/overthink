@@ -59,6 +59,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate routes
 	validateRoutes(cfg, layers, errs)
 
+	// Validate merge config
+	validateMergeConfig(cfg, errs)
+
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
@@ -298,6 +301,29 @@ func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		if hasRoute && !hasTraefik {
 			errs.Add("image %q: has layers with route files but traefik layer is not reachable", imageName)
 		}
+	}
+}
+
+// validateMergeConfig validates merge configuration
+func validateMergeConfig(cfg *Config, errs *ValidationError) {
+	check := func(name string, m *MergeConfig) {
+		if m == nil {
+			return
+		}
+		if m.MinMB < 0 {
+			errs.Add("%s: merge min_mb must be > 0, got %d", name, m.MinMB)
+		}
+		if m.MaxMB < 0 {
+			errs.Add("%s: merge max_mb must be > 0, got %d", name, m.MaxMB)
+		}
+		if m.MinMB > 0 && m.MaxMB > 0 && m.MaxMB < m.MinMB {
+			errs.Add("%s: merge max_mb (%d) must be >= min_mb (%d)", name, m.MaxMB, m.MinMB)
+		}
+	}
+
+	check("defaults", cfg.Defaults.Merge)
+	for name, img := range cfg.Images {
+		check(fmt.Sprintf("image %q", name), img.Merge)
 	}
 }
 

@@ -9,12 +9,42 @@ import (
 
 // Generator holds state for generating build artifacts
 type Generator struct {
-	Dir     string
-	Config  *Config
-	Layers  map[string]*Layer
-	Tag     string
-	Images  map[string]*ResolvedImage
+	Dir      string
+	Config   *Config
+	Layers   map[string]*Layer
+	Tag      string
+	Images   map[string]*ResolvedImage
 	BuildDir string
+}
+
+// resolveUserContext detects existing user in base image or uses configured values
+func (g *Generator) resolveUserContext(img *ResolvedImage) error {
+	if !img.IsExternalBase {
+		// Internal base - inherit from parent
+		parentImg := g.Images[img.Base]
+		img.Home = parentImg.Home
+		img.User = parentImg.User
+		img.UID = parentImg.UID
+		img.GID = parentImg.GID
+		return nil
+	}
+
+	// External base - try to detect existing user at configured UID
+	userInfo, err := InspectImageUser(img.Base, img.UID)
+	if err != nil {
+		// Can't inspect, use configured defaults
+		return nil
+	}
+
+	if userInfo != nil {
+		// Found existing user - use their info
+		img.User = userInfo.Name
+		img.Home = userInfo.Home
+		img.GID = userInfo.GID
+	}
+	// else: no user found at UID, will create with configured values
+
+	return nil
 }
 
 // NewGenerator creates a new generator
@@ -64,6 +94,13 @@ func (g *Generator) Generate() error {
 	order, err := ResolveImageOrder(g.Images)
 	if err != nil {
 		return fmt.Errorf("resolving image order: %w", err)
+	}
+
+	// Resolve user context for each image (in order, so parents are resolved first)
+	for _, name := range order {
+		if err := g.resolveUserContext(g.Images[name]); err != nil {
+			return fmt.Errorf("resolving user context for %s: %w", name, err)
+		}
 	}
 
 	// Generate Containerfile for each image
@@ -142,12 +179,18 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Bootstrap preamble (only for external base images)
 	if img.IsExternalBase {
-		g.writeBootstrap(&b, img.Pkg)
+		g.writeBootstrap(&b, img)
+	} else {
+		// Internal base - reset to root for layer processing
+		b.WriteString("USER root\n\n")
 	}
+
+	// Collect and write environment variables from layers
+	g.writeLayerEnv(&b, layerOrder, img)
 
 	// Process each layer
 	for _, layerName := range layerOrder {
-		g.writeLayerSteps(&b, layerName, img.Pkg)
+		g.writeLayerSteps(&b, layerName, img)
 	}
 
 	// Assemble supervisord config if needed
@@ -157,8 +200,8 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString("    cat /fragments/*.conf > /etc/supervisord.conf\n\n")
 	}
 
-	// Final USER directive
-	b.WriteString("USER user\n")
+	// Final USER directive (use UID for robustness)
+	b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 
 	// Bootc lint if applicable
 	if img.Bootc {
@@ -186,14 +229,15 @@ func (g *Generator) resolveBaseImage(img *ResolvedImage) string {
 }
 
 // writeBootstrap writes the bootstrap preamble for external base images
-func (g *Generator) writeBootstrap(b *strings.Builder, pkg string) {
+func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString("# Bootstrap\n")
 
 	// Install task
 	b.WriteString("RUN ")
-	if pkg == "deb" {
+	if img.Pkg == "deb" {
 		b.WriteString("--mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
-		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n    ")
+		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
+		b.WriteString("    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \\\n    ")
 	} else {
 		b.WriteString("--mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n    ")
 	}
@@ -201,19 +245,65 @@ func (g *Generator) writeBootstrap(b *strings.Builder, pkg string) {
 	b.WriteString("    case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac && \\\n")
 	b.WriteString("    curl -fsSL \"https://github.com/go-task/task/releases/latest/download/task_linux_${ARCH}.tar.gz\" | tar -xzf - -C /usr/local/bin task\n\n")
 
-	// Create user (skip if exists)
-	b.WriteString("RUN id -u user >/dev/null 2>&1 || useradd -m -u 1000 -s /bin/bash user\n\n")
+	// Create user/group if they don't exist at configured UID/GID
+	b.WriteString(fmt.Sprintf("RUN getent passwd %d >/dev/null 2>&1 || \\\n", img.UID))
+	b.WriteString(fmt.Sprintf("    (getent group %d >/dev/null 2>&1 || groupadd -g %d %s && \\\n", img.GID, img.GID, img.User))
+	b.WriteString(fmt.Sprintf("     useradd -m -u %d -g %d -s /bin/bash %s)\n\n", img.UID, img.GID, img.User))
 
-	// Environment
+	// Environment (using resolved home)
 	b.WriteString("ENV PIXI_HOME=\"/opt/pixi\"\n")
-	b.WriteString("ENV NPM_CONFIG_PREFIX=\"/home/user/.npm-global\"\n")
-	b.WriteString("ENV npm_config_cache=\"/home/user/.cache/npm\"\n")
-	b.WriteString("ENV PATH=\"/home/user/.pixi/envs/default/bin:/home/user/.npm-global/bin:/home/user/.cargo/bin:/opt/pixi/bin:${PATH}\"\n")
-	b.WriteString("WORKDIR /home/user\n\n")
+	b.WriteString(fmt.Sprintf("ENV NPM_CONFIG_PREFIX=\"%s/.npm-global\"\n", img.Home))
+	b.WriteString(fmt.Sprintf("ENV npm_config_cache=\"%s/.cache/npm\"\n", img.Home))
+	b.WriteString(fmt.Sprintf("ENV PATH=\"%s/.pixi/envs/default/bin:%s/.npm-global/bin:%s/.cargo/bin:/opt/pixi/bin:${PATH}\"\n", img.Home, img.Home, img.Home))
+	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
+}
+
+// writeLayerEnv collects env configs from all layers and writes ENV directives
+func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedImage) {
+	var configs []*EnvConfig
+
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnv {
+			cfg, err := layer.EnvConfig()
+			if err == nil && cfg != nil {
+				configs = append(configs, cfg)
+			}
+		}
+	}
+
+	if len(configs) == 0 {
+		return
+	}
+
+	// Merge all configs
+	merged := MergeEnvConfigs(configs)
+
+	// Expand paths with home directory
+	expanded := ExpandEnvConfig(merged, img.Home)
+
+	// Write ENV directives
+	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
+		b.WriteString("# Layer environment variables\n")
+	}
+
+	for key, value := range expanded.Vars {
+		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", key, value))
+	}
+
+	// Append to PATH if there are path additions
+	if len(expanded.PathAppend) > 0 {
+		pathAdditions := strings.Join(expanded.PathAppend, ":")
+		b.WriteString(fmt.Sprintf("ENV PATH=\"%s:${PATH}\"\n", pathAdditions))
+	}
+
+	if len(expanded.Vars) > 0 || len(expanded.PathAppend) > 0 {
+		b.WriteString("\n")
+	}
 }
 
 // writeLayerSteps writes the RUN steps for a single layer
-func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, pkg string) {
+func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedImage) {
 	layer := g.Layers[layerName]
 
 	b.WriteString(fmt.Sprintf("# Layer: %s\n", layerName))
@@ -222,13 +312,13 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, pkg st
 	asUser := false
 
 	// 1. rpm.list or deb.list (root)
-	if pkg == "rpm" && layer.HasRpmList {
+	if img.Pkg == "rpm" && layer.HasRpmList {
 		pkgs, _ := layer.RpmPackages()
 		if len(pkgs) > 0 {
 			coprRepos, _ := layer.CoprRepos()
 			g.writeDnfInstall(b, pkgs, coprRepos)
 		}
-	} else if pkg == "deb" && layer.HasDebList {
+	} else if img.Pkg == "deb" && layer.HasDebList {
 		pkgs, _ := layer.DebPackages()
 		if len(pkgs) > 0 {
 			g.writeAptInstall(b, pkgs)
@@ -237,43 +327,43 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, pkg st
 
 	// 2. root.yml (root)
 	if layer.HasRootYml {
-		g.writeRootYml(b, layerName, pkg)
+		g.writeRootYml(b, layerName, img.Pkg)
 	}
 
 	// 3. pixi.toml (user)
 	if layer.HasPixiToml {
 		if !asUser {
-			b.WriteString("USER user\n")
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writePixiToml(b, layerName)
+		g.writePixiToml(b, layerName, img)
 	}
 
 	// 4. package.json (user)
 	if layer.HasPackageJson {
 		if !asUser {
-			b.WriteString("USER user\n")
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writePackageJson(b, layerName)
+		g.writePackageJson(b, layerName, img)
 	}
 
 	// 5. Cargo.toml (user)
 	if layer.HasCargoToml {
 		if !asUser {
-			b.WriteString("USER user\n")
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writeCargoToml(b, layerName)
+		g.writeCargoToml(b, layerName, img)
 	}
 
 	// 6. user.yml (user)
 	if layer.HasUserYml {
 		if !asUser {
-			b.WriteString("USER user\n")
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writeUserYml(b, layerName)
+		g.writeUserYml(b, layerName, img)
 	}
 
 	// Reset to root for next layer
@@ -325,27 +415,27 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg strin
 	b.WriteString("    cd /ctx && task -t root.yml install\n")
 }
 
-func (g *Generator) writePixiToml(b *strings.Builder, layerName string) {
+func (g *Generator) writePixiToml(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString("    --mount=type=cache,dst=/home/user/.cache/rattler,uid=1000,gid=1000 \\\n")
-	b.WriteString("    cp /ctx/pixi.toml /home/user/pixi.toml && pixi install\n")
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
+	b.WriteString(fmt.Sprintf("    cp /ctx/pixi.toml %s/pixi.toml && pixi install\n", img.Home))
 }
 
-func (g *Generator) writePackageJson(b *strings.Builder, layerName string) {
+func (g *Generator) writePackageJson(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString("    --mount=type=cache,dst=/home/user/.cache/npm,uid=1000,gid=1000 \\\n")
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/npm,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
 	b.WriteString("    npm install -g /ctx\n")
 }
 
-func (g *Generator) writeCargoToml(b *strings.Builder, layerName string) {
+func (g *Generator) writeCargoToml(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString("    --mount=type=cache,dst=/home/user/.cargo/registry,uid=1000,gid=1000 \\\n")
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cargo/registry,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
 	b.WriteString("    cargo install --path /ctx\n")
 }
 
-func (g *Generator) writeUserYml(b *strings.Builder, layerName string) {
+func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString("    --mount=type=cache,dst=/home/user/.cache/npm,uid=1000,gid=1000 \\\n")
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/npm,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
 	b.WriteString("    cd /ctx && task -t user.yml install\n")
 }
 

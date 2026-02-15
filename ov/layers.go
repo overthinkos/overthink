@@ -22,12 +22,14 @@ type Layer struct {
 	HasSrcDir      bool
 	HasUserYml     bool
 	HasSupervisord bool
+	HasEnv         bool
 	Depends        []string
 
 	// Cached file contents (loaded on demand)
-	rpmPackages  []string
-	debPackages  []string
-	coprRepos    []string
+	rpmPackages []string
+	debPackages []string
+	coprRepos   []string
+	envConfig   *EnvConfig
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -76,6 +78,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasSupervisord = fileExists(filepath.Join(path, "supervisord.conf"))
+	layer.HasEnv = fileExists(filepath.Join(path, "env"))
 
 	// Read depends file if present
 	dependsPath := filepath.Join(path, "depends")
@@ -145,6 +148,23 @@ func (l *Layer) CoprRepos() ([]string, error) {
 	}
 	l.coprRepos = repos
 	return l.coprRepos, nil
+}
+
+// EnvConfig returns the environment config from env file (cached)
+func (l *Layer) EnvConfig() (*EnvConfig, error) {
+	if l.envConfig != nil {
+		return l.envConfig, nil
+	}
+	if !l.HasEnv {
+		return nil, nil
+	}
+
+	cfg, err := ParseEnvFile(filepath.Join(l.Path, "env"))
+	if err != nil {
+		return nil, err
+	}
+	l.envConfig = cfg
+	return l.envConfig, nil
 }
 
 // LayerNames returns a sorted list of layer names

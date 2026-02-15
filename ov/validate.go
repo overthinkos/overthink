@@ -40,6 +40,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate layer contents
 	validateLayerContents(layers, errs)
 
+	// Validate env files
+	validateEnvFiles(layers, errs)
+
 	// Validate copr.repo usage
 	validateCoprUsage(cfg, layers, errs)
 
@@ -111,6 +114,26 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 					errs.Add("layer %q depends: unknown layer %q", name, dep)
 				}
 			}
+		}
+	}
+}
+
+// validateEnvFiles validates env file syntax
+func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasEnv {
+			continue
+		}
+
+		cfg, err := layer.EnvConfig()
+		if err != nil {
+			errs.Add("layer %q: error parsing env file: %v", name, err)
+			continue
+		}
+
+		// Warn if PATH is set directly (should use PATH+=)
+		if _, hasPath := cfg.Vars["PATH"]; hasPath {
+			errs.Add("layer %q env: use PATH+=:/path instead of PATH=/path to append to PATH", name)
 		}
 	}
 }

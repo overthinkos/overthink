@@ -21,7 +21,7 @@ tasks:
       - docker buildx bake -f .build/docker-bake.hcl
 
   local:
-    desc: Build a single image for host platform only
+    desc: Build images for host platform only (uses local docker cache)
     preconditions:
       - sh: command -v ov
         msg: "ov not found -- run 'task build:ov' first"
@@ -32,7 +32,9 @@ tasks:
       - ov generate
       - >-
         docker buildx bake -f .build/docker-bake.hcl
-        --set '*.platform=linux/{{.ARCH}}' {{.CLI_ARGS}}
+        --builder default
+        --set '*.platform=linux/{{.ARCH}}'
+        --load {{.CLI_ARGS}}
 
   push:
     desc: Build and push all images

@@ -22,6 +22,9 @@ type ImageConfig struct {
 	Registry  string   `json:"registry,omitempty"`
 	Pkg       string   `json:"pkg,omitempty"`
 	Layers    []string `json:"layers,omitempty"`
+	User      string   `json:"user,omitempty"` // username (default: "user")
+	UID       int      `json:"uid,omitempty"`  // user ID (default: 1000)
+	GID       int      `json:"gid,omitempty"`  // group ID (default: 1000)
 }
 
 // ResolvedImage represents a fully resolved image configuration
@@ -34,6 +37,12 @@ type ResolvedImage struct {
 	Registry  string
 	Pkg       string
 	Layers    []string
+
+	// User configuration
+	User string // username
+	UID  int    // user ID
+	GID  int    // group ID
+	Home string // resolved home directory (detected or /home/<user>)
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -128,6 +137,36 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 
 	// Layers are not inherited, they're image-specific
 	resolved.Layers = img.Layers
+
+	// Resolve user: image -> defaults -> "user"
+	resolved.User = img.User
+	if resolved.User == "" {
+		resolved.User = c.Defaults.User
+	}
+	if resolved.User == "" {
+		resolved.User = "user"
+	}
+
+	// Resolve UID: image -> defaults -> 1000
+	resolved.UID = img.UID
+	if resolved.UID == 0 {
+		resolved.UID = c.Defaults.UID
+	}
+	if resolved.UID == 0 {
+		resolved.UID = 1000
+	}
+
+	// Resolve GID: image -> defaults -> 1000
+	resolved.GID = img.GID
+	if resolved.GID == 0 {
+		resolved.GID = c.Defaults.GID
+	}
+	if resolved.GID == 0 {
+		resolved.GID = 1000
+	}
+
+	// Home directory will be resolved later (after inspecting base image)
+	resolved.Home = fmt.Sprintf("/home/%s", resolved.User)
 
 	// Compute full tag
 	if resolved.Registry != "" {

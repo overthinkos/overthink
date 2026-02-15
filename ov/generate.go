@@ -151,6 +151,25 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY layers/%s/ /\n\n", layerName))
 	}
 
+	// Emit per-layer pixi build stages
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		manifest := layer.PixiManifest()
+		if manifest != "" {
+			b.WriteString(fmt.Sprintf("FROM ghcr.io/prefix-dev/pixi:latest AS %s-pixi-build\n", layerName))
+			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
+			b.WriteString(fmt.Sprintf("COPY layers/%s/%s %s\n", layerName, manifest, manifest))
+			if manifest == "environment.yml" {
+				b.WriteString(fmt.Sprintf("RUN pixi project import %s && pixi install\n", manifest))
+			} else if manifest == "pyproject.toml" {
+				b.WriteString("RUN pixi install --manifest-path pyproject.toml\n")
+			} else {
+				b.WriteString("RUN pixi install\n")
+			}
+			b.WriteString("\n")
+		}
+	}
+
 	// Check if this is a service image (has supervisord layers)
 	hasServices := false
 	for _, layerName := range layerOrder {
@@ -187,6 +206,42 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Collect and write environment variables from layers
 	g.writeLayerEnv(&b, layerOrder, img)
+
+	// Copy pixi environments
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.PixiManifest() != "" {
+			b.WriteString(fmt.Sprintf("# Copy pixi environment: %s\n", layerName))
+			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s/.pixi/envs/default %s/.pixi/envs/default\n", layerName, img.UID, img.GID, img.Home, img.Home))
+			// Also copy the binary if it's the first time or just overwrite (pixi is self-contained?)
+			// Wait, the pixi binary itself:
+			// "please use ghcr.io/prefix-dev/pixi:latest as the build image for all pixi build layers"
+			// The final image needs the pixi binary.
+			// We can copy it from the first pixi layer, or just any.
+		}
+	}
+	
+	// Ensure pixi binary is present if any pixi layer exists
+	hasPixi := false
+	for _, layerName := range layerOrder {
+		if g.Layers[layerName].PixiManifest() != "" {
+			hasPixi = true
+			break
+		}
+	}
+	if hasPixi {
+		// Just take it from the first one available or explicitly from the image if we could refer to it.
+		// Since we have build stages, we can pick the last one.
+		// Or better, just COPY --from=ghcr.io/prefix-dev/pixi:latest if we could.
+		// But we don't have that alias in the final stage context unless we define it.
+		// We'll copy from the first pixi layer found.
+		for _, layerName := range layerOrder {
+			if g.Layers[layerName].PixiManifest() != "" {
+				b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build /usr/local/bin/pixi /usr/local/bin/pixi\n\n", layerName))
+				break
+			}
+		}
+	}
 
 	// Process each layer
 	for _, layerName := range layerOrder {
@@ -326,15 +381,6 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		g.writeRootYml(b, layerName, img.Pkg)
 	}
 
-	// 3. pixi.list (user)
-	if layer.HasPixiList {
-		if !asUser {
-			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-			asUser = true
-		}
-		g.writePixiList(b, layer, img)
-	}
-
 	// 4. package.json (user)
 	if layer.HasPackageJson {
 		if !asUser {
@@ -409,26 +455,6 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg strin
 		b.WriteString("    --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
 	}
 	b.WriteString("    cd /ctx && task -t root.yml install\n")
-}
-
-func (g *Generator) writePixiList(b *strings.Builder, layer *Layer, img *ResolvedImage) {
-	pkgs, _ := layer.PixiPackages()
-	if len(pkgs) == 0 {
-		return
-	}
-
-	// Quote packages with special characters
-	quotedPkgs := make([]string, len(pkgs))
-	for i, pkg := range pkgs {
-		if strings.ContainsAny(pkg, "<>=,") {
-			quotedPkgs[i] = fmt.Sprintf("%q", pkg)
-		} else {
-			quotedPkgs[i] = pkg
-		}
-	}
-
-	b.WriteString(fmt.Sprintf("RUN --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
-	b.WriteString(fmt.Sprintf("    pixi add %s\n", strings.Join(quotedPkgs, " ")))
 }
 
 func (g *Generator) writePackageJson(b *strings.Builder, layerName string, img *ResolvedImage) {

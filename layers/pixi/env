@@ -1,4 +1,5 @@
 # Pixi package manager environment
-PIXI_HOME=/opt/pixi
+PIXI_CACHE_DIR=~/.cache/pixi
+RATTLER_CACHE_DIR=~/.cache/rattler
+PATH+=:~/.pixi/bin
 PATH+=:~/.pixi/envs/default/bin
-PATH+=:/opt/pixi/bin

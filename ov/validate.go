@@ -96,7 +96,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		// Layer must have at least one install file
 		if !layer.HasInstallFiles() {
-			errs.Add("layer %q: must have at least one install file (rpm.list, deb.list, root.yml, pixi.toml, package.json, Cargo.toml, or user.yml)", name)
+			errs.Add("layer %q: must have at least one install file (rpm.list, deb.list, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml)", name)
 		}
 
 		// Cargo.toml requires src/ directory

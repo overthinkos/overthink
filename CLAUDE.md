@@ -17,7 +17,7 @@ Built on `docker buildx bake` (HCL), `supervisord`, and `task` ([taskfile.dev](h
 | `rpm.list` / `deb.list` | System packages -- one per line, `#` comments (parsed by `ov`, inlined into Containerfile) | root | 1st |
 | `copr.repo` | Fedora COPR repos to enable during `dnf install` -- one `owner/project` per line (rpm only, parsed by `ov`) | root | (modifies 1st) |
 | `root.yml` | Custom install logic as root (Taskfile) | root | 2nd |
-| `pixi.toml` | Python/conda packages -- merged into `/home/user` pixi project | user | 3rd |
+| `pixi.toml` / `pyproject.toml` | Python/conda packages -- installed via multi-stage build | user | 3rd |
 | `package.json` | npm packages -- installed globally via `npm install -g` (parsed by `ov`) | user | 4th |
 | `Cargo.toml` | Rust crates -- built and installed to `/home/user/.cargo/bin/` | user | 5th |
 | `user.yml` | Custom install logic as user (Taskfile) | user | 6th |
@@ -95,8 +95,8 @@ When `base` references another Overthink image, the image bootstrap is skipped e
 
 | Layer | What it installs | How | Needed by |
 |---|---|---|---|
-| `pixi` | pixi binary + initializes project at `/home/user` | `root.yml` (binary download) + `user.yml` (pixi init) | Any layer with `pixi.toml` |
-| `supervisord` | supervisord | `rpm.list` or `deb.list` | Any image running services |
+| `pixi` | pixi binary + environment | `pixi.toml` (multi-stage build) | Any layer with `pixi.toml` |
+| `supervisord` | supervisord | `pixi.toml` | Any image running services |
 | `nodejs` | Node.js + npm | `rpm.list` or `deb.list` | Any layer with `package.json` |
 | `rust` | Rust + Cargo | `root.yml` (rustup) | Any layer with `Cargo.toml` |
 
@@ -208,13 +208,21 @@ RUN --mount=type=bind,from=ollama,source=/,target=/ctx \
 
 For custom root logic that system package lists can't express: adding non-COPR repos, downloading binaries, writing system config. For COPR repos, use `copr.repo` instead -- it's simpler and the generator handles the `--enable-repo` flag automatically.
 
-**3. `pixi.toml`** (as user) -- the generator merges the layer's dependencies into the shared pixi project at `/home/user`:
+**3. `pixi.toml` / `pyproject.toml` / `environment.yml`** (as user) -- the generator uses a multi-stage build process. For each layer with a pixi manifest:
+   - A dedicated build stage (`FROM ghcr.io/prefix-dev/pixi:latest AS <layer>-pixi-build`) is created.
+   - The manifest is copied into the build stage.
+   - `pixi install` runs to resolve and install dependencies into the final environment path (e.g., `/home/user/.pixi/envs/default`).
+   - The resulting environment and binary are copied from the build stage into the final image.
 
 ```dockerfile
-USER user
-RUN --mount=type=bind,from=python,source=/,target=/ctx \
-    --mount=type=cache,dst=/home/user/.cache/rattler,uid=1000,gid=1000 \
-    cd /home/user && pixi add --manifest-path /ctx/pixi.toml
+# Build stage
+FROM ghcr.io/prefix-dev/pixi:latest AS python-pixi-build
+WORKDIR /home/user
+COPY layers/python/pixi.toml pixi.toml
+RUN pixi install
+
+# Final image
+COPY --from=python-pixi-build --chown=1000:1000 /home/user/.pixi/envs/default /home/user/.pixi/envs/default
 ```
 
 **4. `package.json`** (as user) -- the generator installs the layer's packages globally from the bind-mounted context:
@@ -260,7 +268,7 @@ All steps share the same scratch stage (`FROM scratch AS <n>` / `COPY layers/<n>
 | `rpm.list` only | dnf install | cuda, system libs |
 | `rpm.list` + `copr.repo` | dnf install --enable-repo=copr:... | packages from COPR |
 | `deb.list` only | apt-get install | cuda on Ubuntu |
-| `pixi.toml` only | pixi add | python, ml-libs |
+| `pixi.toml` only | pixi install (multi-stage) | python, ml-libs |
 | `package.json` only | npm install -g | node.js packages |
 | `Cargo.toml` only | cargo install | rust CLI tool |
 | `root.yml` only | root script | ollama (binary download) |
@@ -315,7 +323,7 @@ The simplest way to add Python packages is a `pixi.toml` file with no Taskfile:
 
 ```toml
 # layers/python/pixi.toml
-[project]
+[workspace]
 name = "python-base"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
@@ -324,9 +332,9 @@ platforms = ["linux-64", "linux-aarch64"]
 python = ">=3.13,<3.14"
 ```
 
-The generator runs `pixi add --manifest-path /ctx/pixi.toml` inside `/home/user`, which merges the layer's dependencies into the shared project. Multiple layers can each contribute their own pixi.toml -- all dependencies are resolved together in the same environment at `/home/user`.
+The generator creates a dedicated build stage for the layer, installs the dependencies using `pixi install`, and copies the resulting environment into the final image.
 
-**The `pixi.toml` in a layer is a standalone pixi manifest.** It requires `[project]`, `channels`, and `platforms` fields. Each layer declares its own `pixi.toml` independently of what other layers need.
+**The `pixi.toml` in a layer is a standalone pixi manifest.** It requires `[workspace]` (or `[project]`), `channels`, and `platforms` fields. Each layer declares its own `pixi.toml` independently of what other layers need.
 
 **Rules:**
 
@@ -701,14 +709,12 @@ project/
 
 ```
 layers/pixi/
-+-- root.yml          # install: download pixi binary to /usr/local/bin
-+-- user.yml          # install: pixi init at /home/user (creates shared project)
++-- pixi.toml         # install: pixi binary via multi-stage build
 ```
 
 ```
 layers/supervisord/
-+-- rpm.list          # supervisor
-+-- deb.list          # supervisor
++-- pixi.toml         # supervisor (conda package)
 ```
 
 ```
@@ -830,7 +836,7 @@ ublue-os/packages → --enable-repo="copr:copr.fedorainfracloud.org:ublue-os:pac
 
 ```toml
 # layers/python/pixi.toml
-[project]
+[workspace]
 name = "python-base"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
@@ -843,7 +849,7 @@ python = ">=3.13,<3.14"
 
 ```toml
 # layers/ml-libs/pixi.toml
-[project]
+[workspace]
 name = "ml-libs"
 channels = ["conda-forge"]
 platforms = ["linux-64", "linux-aarch64"]
@@ -916,15 +922,16 @@ tasks:
         chmod +x /usr/local/bin/ollama
 ```
 
-**Example `user.yml` (pixi init):**
+**Example `user.yml` (user config):**
 
 ```yaml
-# layers/pixi/user.yml
+# layers/code-server/user.yml
 version: '3'
 tasks:
   install:
     cmds:
-      - pixi init /home/user
+      - mkdir -p ~/.config/code-server
+      - echo "bind-addr: 0.0.0.0:8080" > ~/.config/code-server/config.yaml
 ```
 
 ---

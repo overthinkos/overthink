@@ -1,0 +1,42 @@
+{
+  "defaults": {
+    "registry": "ghcr.io/atrawog",
+    "tag": "auto",
+    "base": "fedora:43",
+    "platforms": ["linux/amd64", "linux/arm64"],
+    "pkg": "rpm"
+  },
+  "images": {
+    "base": {
+      "layers": ["pixi"]
+    },
+    "cuda": {
+      "layers": ["pixi", "cuda"],
+      "platforms": ["linux/amd64"]
+    },
+    "ml-cuda": {
+      "base": "cuda",
+      "layers": ["python", "ml-libs"]
+    },
+    "inference": {
+      "base": "ml-cuda",
+      "layers": ["supervisord", "ollama", "vllm"],
+      "tag": "nightly"
+    },
+    "full-stack": {
+      "base": "ml-cuda",
+      "layers": ["supervisord", "ollama", "vllm", "redis"]
+    },
+    "bazzite": {
+      "base": "ghcr.io/ublue-os/bazzite:stable",
+      "bootc": true,
+      "layers": ["custom-packages"],
+      "platforms": ["linux/amd64"]
+    },
+    "ubuntu-dev": {
+      "base": "ubuntu:24.04",
+      "layers": ["pixi", "nodejs", "dev-tools"],
+      "pkg": "deb"
+    }
+  }
+}

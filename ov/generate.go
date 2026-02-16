@@ -167,6 +167,12 @@ func (g *Generator) Generate() error {
 
 // generateContainerfile generates a Containerfile for a single image
 func (g *Generator) generateContainerfile(imageName string) error {
+	// Clean image build directory to remove stale files from previous generations
+	imageDir := filepath.Join(g.BuildDir, imageName)
+	if err := os.RemoveAll(imageDir); err != nil {
+		return err
+	}
+
 	img := g.Images[imageName]
 	var b strings.Builder
 
@@ -380,8 +386,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Final USER directive (use UID for robustness)
 	b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 
-	// Write to file
-	imageDir := filepath.Join(g.BuildDir, imageName)
+	// imageDir was cleaned at the start of this function; ensure it exists
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
 		return err
 	}

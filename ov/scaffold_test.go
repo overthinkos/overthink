@@ -26,10 +26,10 @@ func TestScaffoldLayer(t *testing.T) {
 		t.Error("layer directory was not created")
 	}
 
-	// Check rpm.list was created
-	rpmList := filepath.Join(layerDir, "rpm.list")
-	if _, err := os.Stat(rpmList); os.IsNotExist(err) {
-		t.Error("rpm.list was not created")
+	// Check layer.yml was created
+	layerYml := filepath.Join(layerDir, "layer.yml")
+	if _, err := os.Stat(layerYml); os.IsNotExist(err) {
+		t.Error("layer.yml was not created")
 	}
 }
 

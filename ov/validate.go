@@ -44,8 +44,8 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate env files
 	validateEnvFiles(layers, errs)
 
-	// Validate copr.repo usage
-	validateCoprUsage(cfg, layers, errs)
+	// Validate package config (rpm/deb sections in layer.yml)
+	validatePkgConfig(layers, errs)
 
 	// Validate image base references
 	validateBaseReferences(cfg, errs)
@@ -112,7 +112,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		// Layer must have at least one install file
 		if !layer.HasInstallFiles() {
-			errs.Add("layer %q: must have at least one install file (rpm.list, deb.list, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml)", name)
+			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml)", name)
 		}
 
 		// Cargo.toml requires src/ directory
@@ -134,7 +134,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validateEnvFiles validates env config from layer.yaml
+// validateEnvFiles validates env config from layer.yml
 func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasEnv {
@@ -146,31 +146,35 @@ func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 			continue
 		}
 
-		// PATH must not be set directly (use path_append in layer.yaml)
+		// PATH must not be set directly (use path_append in layer.yml)
 		if _, hasPath := cfg.Vars["PATH"]; hasPath {
-			errs.Add("layer %q layer.yaml: use path_append instead of setting PATH in env", name)
+			errs.Add("layer %q layer.yml: use path_append instead of setting PATH in env", name)
 		}
 	}
 }
 
-// validateCoprUsage validates copr.repo usage
-func validateCoprUsage(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+// validatePkgConfig validates rpm/deb config in layer.yml
+func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		// copr.repo without rpm.list is an error
-		if layer.HasCoprRepo && !layer.HasRpmList {
-			errs.Add("layer %q: copr.repo requires rpm.list", name)
+		rpm := layer.RpmConfig()
+		if rpm != nil {
+			// copr without packages is an error
+			if len(rpm.Copr) > 0 && len(rpm.Packages) == 0 {
+				errs.Add("layer %q layer.yml: rpm.copr requires rpm.packages", name)
+			}
+			// repos without packages is an error
+			if len(rpm.Repos) > 0 && len(rpm.Packages) == 0 {
+				errs.Add("layer %q layer.yml: rpm.repos requires rpm.packages", name)
+			}
 		}
 	}
-
-	// Note: copr.repo with deb images is handled at generation time (ignored with warning)
-	// No validation error needed here
 }
 
 // validateBaseReferences ensures base references resolve
 func validateBaseReferences(cfg *Config, errs *ValidationError) {
 	// Base references can be:
 	// 1. External OCI images (always valid)
-	// 2. Names of other images in images.yaml (validated by image DAG check)
+	// 2. Names of other images in images.yml (validated by image DAG check)
 	// No additional validation needed here
 }
 
@@ -213,7 +217,7 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 
 // validatePorts validates port declarations in layers and images
 func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate layer ports from layer.yaml
+	// Validate layer ports from layer.yml
 	for name, layer := range layers {
 		if !layer.HasPorts {
 			continue
@@ -221,7 +225,7 @@ func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 		ports, _ := layer.Ports()
 		for _, port := range ports {
 			if !isValidPort(port) {
-				errs.Add("layer %q layer.yaml ports: %q is not a valid port number (1-65535)", name, port)
+				errs.Add("layer %q layer.yml ports: %q is not a valid port number (1-65535)", name, port)
 			}
 		}
 	}
@@ -263,7 +267,7 @@ func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 
 // validateRoutes validates route file declarations in layers
 func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate route config from layer.yaml
+	// Validate route config from layer.yml
 	for name, layer := range layers {
 		if !layer.HasRoute {
 			continue
@@ -273,12 +277,12 @@ func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError
 			continue
 		}
 		if route.Host == "" {
-			errs.Add("layer %q layer.yaml route: missing required \"host\" field", name)
+			errs.Add("layer %q layer.yml route: missing required \"host\" field", name)
 		}
 		if route.Port == "" {
-			errs.Add("layer %q layer.yaml route: missing required \"port\" field", name)
+			errs.Add("layer %q layer.yml route: missing required \"port\" field", name)
 		} else if !isValidPort(route.Port) {
-			errs.Add("layer %q layer.yaml route: %q is not a valid port number (1-65535)", name, route.Port)
+			errs.Add("layer %q layer.yml route: %q is not a valid port number (1-65535)", name, route.Port)
 		}
 	}
 

@@ -1,0 +1,10 @@
+rpm:
+  packages:
+    - btop
+    - chromium
+    - cloud-init
+    - cockpit
+    - keepassxc
+    - transmission
+    - vlc
+    - zsh

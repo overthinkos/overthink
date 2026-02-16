@@ -2,6 +2,11 @@ depends:
   - nvidia-python
   - supervisord
 
+rpm:
+  packages:
+    - aria2
+    - git-lfs
+
 ports:
   - 8188
 

@@ -1,0 +1,9 @@
+rpm:
+  packages:
+    - nodejs
+    - npm
+
+deb:
+  packages:
+    - nodejs
+    - npm

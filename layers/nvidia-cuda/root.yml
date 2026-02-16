@@ -1,30 +1,9 @@
-# CUDA toolkit + cuDNN from negativo17 fedora-multimedia repo
+# CUDA post-install config (packages + repo installed via layer.yml)
 version: '3'
 
 tasks:
   install:
     cmds:
-      # Add negativo17 multimedia repo (disabled by default, enabled per-install)
-      - |
-        dnf5 config-manager addrepo \
-          --from-repofile="https://negativo17.org/repos/fedora-multimedia.repo" 2>/dev/null || true
-        dnf5 config-manager setopt "fedora-multimedia.enabled=0"
-        rpm --import https://negativo17.org/repos/RPM-GPG-KEY-slaanesh || true
-      # Base NVIDIA packages
-      - dnf5 install -y libva-nvidia-driver onnxruntime libaio-devel cpio
-      # CUDA toolkit + cuDNN (excluding driver libs for CDI compatibility)
-      - |
-        dnf5 install -y --enable-repo="fedora-multimedia" \
-          --exclude='nvidia-driver*' \
-          cuda-nvcc \
-          cuda-cudart-devel \
-          cuda-cudart-static \
-          cuda-nvrtc-devel \
-          cuda-cupti-devel \
-          libcurand-devel \
-          cuda-cccl-devel \
-          cuda-cudnn \
-          libcufile-devel || echo "Some CUDA packages not available, continuing..."
       # Extract cuDNN headers from cuda-cudnn-devel (bypasses driver dependency)
       - |
         CUDNN_DIR=$(mktemp -d)

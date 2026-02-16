@@ -1,0 +1,12 @@
+path_append:
+  - "~/.cargo/bin"
+
+rpm:
+  packages:
+    - rust
+    - cargo
+
+deb:
+  packages:
+    - rustc
+    - cargo

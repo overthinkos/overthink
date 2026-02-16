@@ -36,8 +36,8 @@ func TestLayerPixi(t *testing.T) {
 	if !pixi.HasUserYml {
 		t.Error("pixi should have user.yml")
 	}
-	if pixi.HasRpmList {
-		t.Error("pixi should not have rpm.list")
+	if pixi.RpmConfig() != nil {
+		t.Error("pixi should not have rpm config")
 	}
 	if pixi.HasPixiToml {
 		t.Error("pixi should not have pixi.toml")
@@ -77,28 +77,21 @@ func TestLayerNodejs(t *testing.T) {
 		t.Fatal("nodejs layer not found")
 	}
 
-	if !nodejs.HasRpmList {
-		t.Error("nodejs should have rpm.list")
+	// Test package config from layer.yml
+	rpm := nodejs.RpmConfig()
+	if rpm == nil {
+		t.Fatal("nodejs should have rpm config")
 	}
-	if !nodejs.HasDebList {
-		t.Error("nodejs should have deb.list")
-	}
-
-	// Test package reading
-	rpms, err := nodejs.RpmPackages()
-	if err != nil {
-		t.Fatalf("RpmPackages() error = %v", err)
-	}
-	if !reflect.DeepEqual(rpms, []string{"nodejs", "npm"}) {
-		t.Errorf("RpmPackages() = %v, want [nodejs npm]", rpms)
+	if !reflect.DeepEqual(rpm.Packages, []string{"nodejs", "npm"}) {
+		t.Errorf("RpmConfig().Packages = %v, want [nodejs npm]", rpm.Packages)
 	}
 
-	debs, err := nodejs.DebPackages()
-	if err != nil {
-		t.Fatalf("DebPackages() error = %v", err)
+	deb := nodejs.DebConfig()
+	if deb == nil {
+		t.Fatal("nodejs should have deb config")
 	}
-	if !reflect.DeepEqual(debs, []string{"nodejs", "npm"}) {
-		t.Errorf("DebPackages() = %v, want [nodejs npm]", debs)
+	if !reflect.DeepEqual(deb.Packages, []string{"nodejs", "npm"}) {
+		t.Errorf("DebConfig().Packages = %v, want [nodejs npm]", deb.Packages)
 	}
 }
 
@@ -322,15 +315,3 @@ func TestRouteLayers(t *testing.T) {
 	}
 }
 
-func TestReadLineFile(t *testing.T) {
-	// Test the function with a known file
-	lines, err := readLineFile("testdata/layers/nodejs/rpm.list")
-	if err != nil {
-		t.Fatalf("readLineFile() error = %v", err)
-	}
-
-	expected := []string{"nodejs", "npm"}
-	if !reflect.DeepEqual(lines, expected) {
-		t.Errorf("readLineFile() = %v, want %v", lines, expected)
-	}
-}

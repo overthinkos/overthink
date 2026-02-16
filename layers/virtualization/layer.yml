@@ -1,0 +1,17 @@
+rpm:
+  packages:
+    - bindfs
+    - genisoimage
+    - guestfs-tools
+    - libguestfs-tools
+    - libvirt-nss
+    - passt
+    - qemu-guest-agent
+    - qemu-img
+    - qemu-kvm
+    - qemu-system-aarch64
+    - qemu-system-arm
+    - qemu-system-x86-core
+    - tigervnc
+    - virt-manager
+    - virt-viewer

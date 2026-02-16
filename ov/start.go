@@ -10,7 +10,7 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image     string `arg:"" help:"Image name from images.yaml"`
+	Image     string `arg:"" help:"Image name from images.yml"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 }
@@ -65,7 +65,7 @@ func (c *StartCmd) Run() error {
 
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
-	Image string `arg:"" help:"Image name from images.yaml"`
+	Image string `arg:"" help:"Image name from images.yml"`
 }
 
 func (c *StopCmd) Run() error {

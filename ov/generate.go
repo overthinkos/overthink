@@ -523,7 +523,7 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string)
 	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
 }
 
-// generateSupervisordFragments writes service fragments from layer.yaml to .build/<image>/fragments/
+// generateSupervisordFragments writes service fragments from layer.yml to .build/<image>/fragments/
 func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []string) error {
 	fragDir := filepath.Join(g.BuildDir, imageName, "fragments")
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
@@ -556,18 +556,13 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Track if we've switched to user mode
 	asUser := false
 
-	// 1. rpm.list or deb.list (root)
-	if img.Pkg == "rpm" && layer.HasRpmList {
-		pkgs, _ := layer.RpmPackages()
-		if len(pkgs) > 0 {
-			coprRepos, _ := layer.CoprRepos()
-			g.writeDnfInstall(b, pkgs, coprRepos)
-		}
-	} else if img.Pkg == "deb" && layer.HasDebList {
-		pkgs, _ := layer.DebPackages()
-		if len(pkgs) > 0 {
-			g.writeAptInstall(b, pkgs)
-		}
+	// 1. rpm or deb packages from layer.yml (root)
+	rpm := layer.RpmConfig()
+	deb := layer.DebConfig()
+	if img.Pkg == "rpm" && rpm != nil && len(rpm.Packages) > 0 {
+		g.writeDnfInstall(b, rpm)
+	} else if img.Pkg == "deb" && deb != nil && len(deb.Packages) > 0 {
+		g.writeAptInstall(b, deb)
 	}
 
 	// 2. root.yml (root)
@@ -612,42 +607,58 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	b.WriteString("\n")
 }
 
-func (g *Generator) writeDnfInstall(b *strings.Builder, pkgs []string, coprRepos []string) {
+func (g *Generator) writeDnfInstall(b *strings.Builder, rpm *RpmConfig) {
 	b.WriteString("RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
 
-	// COPR repos: enable first, install, then disable
-	if len(coprRepos) > 0 {
-		for _, repo := range coprRepos {
-			parts := strings.SplitN(repo, "/", 2)
-			if len(parts) == 2 {
-				b.WriteString(fmt.Sprintf("    dnf5 copr enable -y %s/%s && \\\n", parts[0], parts[1]))
-			}
+	// External repos: add disabled, import GPG keys
+	for _, repo := range rpm.Repos {
+		b.WriteString(fmt.Sprintf("    dnf5 config-manager addrepo --from-repofile=%q 2>/dev/null || true && \\\n", repo.URL))
+		b.WriteString(fmt.Sprintf("    dnf5 config-manager setopt %q && \\\n", repo.Name+".enabled=0"))
+		if repo.GPGKey != "" {
+			b.WriteString(fmt.Sprintf("    rpm --import %s || true && \\\n", repo.GPGKey))
 		}
 	}
 
+	// COPR repos: enable first
+	for _, repo := range rpm.Copr {
+		b.WriteString(fmt.Sprintf("    dnf5 copr enable -y %s && \\\n", repo))
+	}
+
 	b.WriteString("    dnf install -y")
-	for _, pkg := range pkgs {
+
+	// Extra options
+	for _, opt := range rpm.Options {
+		b.WriteString(fmt.Sprintf(" %s", opt))
+	}
+
+	// Enable repos for this install
+	for _, repo := range rpm.Repos {
+		b.WriteString(fmt.Sprintf(" --enable-repo=%q", repo.Name))
+	}
+
+	// Exclude patterns
+	for _, excl := range rpm.Exclude {
+		b.WriteString(fmt.Sprintf(" --exclude='%s'", excl))
+	}
+
+	// Packages
+	for _, pkg := range rpm.Packages {
 		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
 	}
 
 	// Disable COPR repos after install
-	if len(coprRepos) > 0 {
-		for _, repo := range coprRepos {
-			parts := strings.SplitN(repo, "/", 2)
-			if len(parts) == 2 {
-				b.WriteString(fmt.Sprintf(" && \\\n    dnf5 config-manager setopt \"copr:copr.fedorainfracloud.org:%s:%s.enabled=0\"", parts[0], parts[1]))
-			}
-		}
+	for _, repo := range rpm.Copr {
+		b.WriteString(fmt.Sprintf(" && \\\n    dnf5 config-manager setopt \"copr:copr.fedorainfracloud.org:%s.enabled=0\"", strings.ReplaceAll(repo, "/", ":")))
 	}
 
 	b.WriteString("\n")
 }
 
-func (g *Generator) writeAptInstall(b *strings.Builder, pkgs []string) {
+func (g *Generator) writeAptInstall(b *strings.Builder, deb *DebConfig) {
 	b.WriteString("RUN --mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
 	b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
 	b.WriteString("    apt-get update && apt-get install -y --no-install-recommends")
-	for _, pkg := range pkgs {
+	for _, pkg := range deb.Packages {
 		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
 	}
 	b.WriteString("\n")

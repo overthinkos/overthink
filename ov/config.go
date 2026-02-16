@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the images.yaml configuration file
+// Config represents the images.yml configuration file
 type Config struct {
 	Defaults ImageConfig            `yaml:"defaults"`
 	Images   map[string]ImageConfig `yaml:"images"`
@@ -76,17 +76,17 @@ type ResolvedImage struct {
 	FullTag        string // registry/name:tag
 }
 
-// LoadConfig reads and parses images.yaml from the given directory
+// LoadConfig reads and parses images.yml from the given directory
 func LoadConfig(dir string) (*Config, error) {
-	path := filepath.Join(dir, "images.yaml")
+	path := filepath.Join(dir, "images.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading images.yaml: %w", err)
+		return nil, fmt.Errorf("reading images.yml: %w", err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing images.yaml: %w", err)
+		return nil, fmt.Errorf("parsing images.yml: %w", err)
 	}
 
 	return &cfg, nil
@@ -96,7 +96,7 @@ func LoadConfig(dir string) (*Config, error) {
 func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, error) {
 	img, ok := c.Images[name]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in images.yaml", name)
+		return nil, fmt.Errorf("image %q not found in images.yml", name)
 	}
 	if !img.IsEnabled() {
 		return nil, fmt.Errorf("image %q is disabled", name)
@@ -115,7 +115,7 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Base = "quay.io/fedora/fedora:43"
 	}
 
-	// Check if base is internal (another enabled image in images.yaml) or external
+	// Check if base is internal (another enabled image in images.yml) or external
 	if baseImg, isInternal := c.Images[resolved.Base]; isInternal && baseImg.IsEnabled() {
 		resolved.IsExternalBase = false
 	} else {

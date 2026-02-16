@@ -1,0 +1,4 @@
+rpm:
+  packages:
+    - kubernetes-client
+    - helm

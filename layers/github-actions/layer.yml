@@ -1,0 +1,6 @@
+rpm:
+  copr:
+    - goncalossilva/act
+  packages:
+    - act-cli
+    - guestfs-tools

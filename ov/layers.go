@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// LayerYAML represents the parsed layer.yaml file
+// LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
 	Depends    []string          `yaml:"depends,omitempty"`
 	Env        map[string]string `yaml:"env,omitempty"`
@@ -19,21 +18,41 @@ type LayerYAML struct {
 	Ports      []int             `yaml:"ports,omitempty"`
 	Route      *RouteYAML        `yaml:"route,omitempty"`
 	Service    string            `yaml:"service,omitempty"`
+	Rpm        *RpmConfig        `yaml:"rpm,omitempty"`
+	Deb        *DebConfig        `yaml:"deb,omitempty"`
 }
 
-// RouteYAML represents a route declaration in layer.yaml
+// RouteYAML represents a route declaration in layer.yml
 type RouteYAML struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
+}
+
+// RpmConfig represents RPM package configuration in layer.yml
+type RpmConfig struct {
+	Packages []string  `yaml:"packages,omitempty"`
+	Copr     []string  `yaml:"copr,omitempty"`
+	Repos    []RpmRepo `yaml:"repos,omitempty"`
+	Exclude  []string  `yaml:"exclude,omitempty"`
+	Options  []string  `yaml:"options,omitempty"`
+}
+
+// RpmRepo represents an external RPM repository
+type RpmRepo struct {
+	Name   string `yaml:"name"`
+	URL    string `yaml:"url"`
+	GPGKey string `yaml:"gpgkey,omitempty"`
+}
+
+// DebConfig represents Debian package configuration in layer.yml
+type DebConfig struct {
+	Packages []string `yaml:"packages,omitempty"`
 }
 
 // Layer represents a layer directory and its contents
 type Layer struct {
 	Name              string
 	Path              string
-	HasRpmList        bool
-	HasDebList        bool
-	HasCoprRepo       bool
 	HasRootYml        bool
 	HasPixiToml       bool
 	HasPyprojectToml  bool
@@ -49,10 +68,9 @@ type Layer struct {
 	HasPixiLock       bool
 	Depends           []string
 
-	// Cached file contents (loaded on demand or pre-populated from layer.yaml)
-	rpmPackages []string
-	debPackages []string
-	coprRepos   []string
+	// Pre-populated from layer.yml
+	rpmConfig   *RpmConfig
+	debConfig   *DebConfig
 	ports       []string
 	envConfig   *EnvConfig
 	route       *RouteConfig
@@ -87,7 +105,7 @@ func ScanLayers(dir string) (map[string]*Layer, error) {
 	return layers, nil
 }
 
-// parseLayerYAML reads and unmarshals a layer.yaml file
+// parseLayerYAML reads and unmarshals a layer.yml file
 func parseLayerYAML(path string) (*LayerYAML, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -107,10 +125,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		Path: path,
 	}
 
-	// Check for install files (these remain as separate files)
-	layer.HasRpmList = fileExists(filepath.Join(path, "rpm.list"))
-	layer.HasDebList = fileExists(filepath.Join(path, "deb.list"))
-	layer.HasCoprRepo = fileExists(filepath.Join(path, "copr.repo"))
+	// Check for install files
 	layer.HasRootYml = fileExists(filepath.Join(path, "root.yml"))
 	layer.HasPixiToml = fileExists(filepath.Join(path, "pixi.toml"))
 	layer.HasPyprojectToml = fileExists(filepath.Join(path, "pyproject.toml"))
@@ -121,12 +136,12 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
 
-	// Parse layer.yaml if present (replaces depends, env, ports, route, supervisord.conf)
-	yamlPath := filepath.Join(path, "layer.yaml")
+	// Parse layer.yml if present
+	yamlPath := filepath.Join(path, "layer.yml")
 	if fileExists(yamlPath) {
 		ly, err := parseLayerYAML(yamlPath)
 		if err != nil {
-			return nil, fmt.Errorf("parsing layer.yaml: %w", err)
+			return nil, fmt.Errorf("parsing layer.yml: %w", err)
 		}
 
 		layer.Depends = ly.Depends
@@ -135,6 +150,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
 		layer.HasPorts = len(ly.Ports) > 0
 		layer.HasRoute = ly.Route != nil
+
+		// Pre-populate package config
+		layer.rpmConfig = ly.Rpm
+		layer.debConfig = ly.Deb
 
 		// Pre-populate ports cache
 		if layer.HasPorts {
@@ -170,7 +189,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 // HasInstallFiles returns true if the layer has at least one install file
 func (l *Layer) HasInstallFiles() bool {
-	return l.HasRpmList || l.HasDebList || l.HasRootYml ||
+	hasRpm := l.rpmConfig != nil && len(l.rpmConfig.Packages) > 0
+	hasDeb := l.debConfig != nil && len(l.debConfig.Packages) > 0
+	return hasRpm || hasDeb || l.HasRootYml ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml || l.HasUserYml
 }
@@ -189,58 +210,17 @@ func (l *Layer) PixiManifest() string {
 	return ""
 }
 
-// RpmPackages returns the packages from rpm.list (cached)
-func (l *Layer) RpmPackages() ([]string, error) {
-	if l.rpmPackages != nil {
-		return l.rpmPackages, nil
-	}
-	if !l.HasRpmList {
-		return nil, nil
-	}
-
-	pkgs, err := readLineFile(filepath.Join(l.Path, "rpm.list"))
-	if err != nil {
-		return nil, err
-	}
-	l.rpmPackages = pkgs
-	return l.rpmPackages, nil
+// RpmConfig returns the RPM package config (pre-populated from layer.yml)
+func (l *Layer) RpmConfig() *RpmConfig {
+	return l.rpmConfig
 }
 
-// DebPackages returns the packages from deb.list (cached)
-func (l *Layer) DebPackages() ([]string, error) {
-	if l.debPackages != nil {
-		return l.debPackages, nil
-	}
-	if !l.HasDebList {
-		return nil, nil
-	}
-
-	pkgs, err := readLineFile(filepath.Join(l.Path, "deb.list"))
-	if err != nil {
-		return nil, err
-	}
-	l.debPackages = pkgs
-	return l.debPackages, nil
+// DebConfig returns the Debian package config (pre-populated from layer.yml)
+func (l *Layer) DebConfig() *DebConfig {
+	return l.debConfig
 }
 
-// CoprRepos returns the COPR repos from copr.repo (cached)
-func (l *Layer) CoprRepos() ([]string, error) {
-	if l.coprRepos != nil {
-		return l.coprRepos, nil
-	}
-	if !l.HasCoprRepo {
-		return nil, nil
-	}
-
-	repos, err := readLineFile(filepath.Join(l.Path, "copr.repo"))
-	if err != nil {
-		return nil, err
-	}
-	l.coprRepos = repos
-	return l.coprRepos, nil
-}
-
-// EnvConfig returns the environment config (pre-populated from layer.yaml)
+// EnvConfig returns the environment config (pre-populated from layer.yml)
 func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	if l.envConfig != nil {
 		return l.envConfig, nil
@@ -248,7 +228,7 @@ func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	return nil, nil
 }
 
-// Ports returns the ports (pre-populated from layer.yaml)
+// Ports returns the ports (pre-populated from layer.yml)
 func (l *Layer) Ports() ([]string, error) {
 	if l.ports != nil {
 		return l.ports, nil
@@ -256,7 +236,7 @@ func (l *Layer) Ports() ([]string, error) {
 	return nil, nil
 }
 
-// ServiceConf returns the supervisord service fragment from layer.yaml
+// ServiceConf returns the supervisord service fragment from layer.yml
 func (l *Layer) ServiceConf() string {
 	return l.serviceConf
 }
@@ -267,7 +247,7 @@ type RouteConfig struct {
 	Port string
 }
 
-// Route returns the route config (pre-populated from layer.yaml)
+// Route returns the route config (pre-populated from layer.yml)
 func (l *Layer) Route() (*RouteConfig, error) {
 	if l.route != nil {
 		return l.route, nil
@@ -333,38 +313,6 @@ func (l *Layer) HasPypiDeps() bool {
 		return false
 	}
 	return strings.Contains(string(data), "[pypi-dependencies]")
-}
-
-// readLineFile reads a file and returns non-empty, non-comment lines
-func readLineFile(path string) ([]string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	var lines []string
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := scanner.Text()
-		// Remove comments
-		if idx := strings.Index(line, "#"); idx >= 0 {
-			line = line[:idx]
-		}
-		// Trim whitespace
-		line = strings.TrimSpace(line)
-		// Skip empty lines
-		if line == "" {
-			continue
-		}
-		lines = append(lines, line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return lines, nil
 }
 
 // fileExists checks if a file exists

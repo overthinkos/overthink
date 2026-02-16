@@ -1,0 +1,7 @@
+rpm:
+  repos:
+    - name: code
+      url: "https://packages.microsoft.com/yumrepos/vscode"
+      gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
+  packages:
+    - code

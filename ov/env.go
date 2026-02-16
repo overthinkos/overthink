@@ -4,7 +4,7 @@ import (
 	"strings"
 )
 
-// EnvConfig represents environment variables from a layer's layer.yaml
+// EnvConfig represents environment variables from a layer's layer.yml
 type EnvConfig struct {
 	Vars       map[string]string // KEY=value pairs (from env field)
 	PathAppend []string          // PATH append entries (from path_append field)

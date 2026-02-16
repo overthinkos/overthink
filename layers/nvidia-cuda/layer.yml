@@ -1,0 +1,25 @@
+env:
+  CUDA_HOME: "/usr"
+  LD_LIBRARY_PATH: "/usr/lib64"
+
+rpm:
+  repos:
+    - name: fedora-multimedia
+      url: "https://negativo17.org/repos/fedora-multimedia.repo"
+      gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
+  packages:
+    - libva-nvidia-driver
+    - onnxruntime
+    - libaio-devel
+    - cpio
+    - cuda-nvcc
+    - cuda-cudart-devel
+    - cuda-cudart-static
+    - cuda-nvrtc-devel
+    - cuda-cupti-devel
+    - libcurand-devel
+    - cuda-cccl-devel
+    - cuda-cudnn
+    - libcufile-devel
+  exclude:
+    - "nvidia-driver*"

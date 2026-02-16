@@ -123,24 +123,44 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 	}
 }
 
-func TestValidateCoprWithoutRpmList(t *testing.T) {
+func TestValidateCoprWithoutPackages(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{
 		"layer": {
-			Name:        "layer",
-			HasCoprRepo: true,
-			HasRpmList:  false,
-			HasRootYml:  true, // needs some install file
+			Name:       "layer",
+			HasRootYml: true, // needs some install file
+			rpmConfig:  &RpmConfig{Copr: []string{"owner/project"}},
 		},
 	}
 
 	err := Validate(cfg, layers)
 	if err == nil {
-		t.Error("expected error for copr.repo without rpm.list")
+		t.Error("expected error for rpm.copr without rpm.packages")
 	}
-	if !strings.Contains(err.Error(), "copr.repo requires rpm.list") {
+	if !strings.Contains(err.Error(), "rpm.copr requires rpm.packages") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateReposWithoutPackages(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"layer": {
+			Name:       "layer",
+			HasRootYml: true, // needs some install file
+			rpmConfig:  &RpmConfig{Repos: []RpmRepo{{Name: "test", URL: "http://example.com"}}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for rpm.repos without rpm.packages")
+	}
+	if !strings.Contains(err.Error(), "rpm.repos requires rpm.packages") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -289,8 +309,8 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
-	if !strings.Contains(err.Error(), "layer.yaml ports") {
-		t.Errorf("expected layer.yaml reference in error, got: %v", err)
+	if !strings.Contains(err.Error(), "layer.yml ports") {
+		t.Errorf("expected layer.yml reference in error, got: %v", err)
 	}
 }
 

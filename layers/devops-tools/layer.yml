@@ -1,0 +1,8 @@
+depends:
+  - nodejs
+
+rpm:
+  packages:
+    - bind-utils
+    - jq
+    - rsync

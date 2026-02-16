@@ -367,6 +367,11 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	} else {
 		b.WriteString("--mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n    ")
 	}
+	// Remove repos with corrupt zchunk metadata (dnf5 skip_if_unavailable doesn't handle this;
+	// disabling via sed is insufficient because the shared libdnf5 cache mount retains stale metadata)
+	if img.Pkg == "rpm" {
+		b.WriteString("rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true && \\\n    ")
+	}
 	b.WriteString("{ [ -L /usr/local ] && mkdir -p \"$(readlink /usr/local)\"; mkdir -p /usr/local/bin; } && \\\n")
 	b.WriteString("    ARCH=$(uname -m) && \\\n")
 	b.WriteString("    case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac && \\\n")

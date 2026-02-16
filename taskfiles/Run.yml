@@ -11,6 +11,41 @@ tasks:
     cmds:
       - ov shell {{.CLI_ARGS}}
 
+  pod:install:
+    desc: "Install quadlet service. Usage: task run:pod:install -- <image>"
+    cmds:
+      - ov pod install {{.CLI_ARGS}}
+
+  pod:uninstall:
+    desc: "Uninstall quadlet service. Usage: task run:pod:uninstall -- <image>"
+    cmds:
+      - ov pod uninstall {{.CLI_ARGS}}
+
+  pod:start:
+    desc: "Start quadlet service. Usage: task run:pod:start -- <image>"
+    cmds:
+      - ov pod start {{.CLI_ARGS}}
+
+  pod:stop:
+    desc: "Stop quadlet service. Usage: task run:pod:stop -- <image>"
+    cmds:
+      - ov pod stop {{.CLI_ARGS}}
+
+  pod:status:
+    desc: "Show quadlet service status. Usage: task run:pod:status -- <image>"
+    cmds:
+      - ov pod status {{.CLI_ARGS}}
+
+  pod:logs:
+    desc: "Show quadlet service logs. Usage: task run:pod:logs -- <image>"
+    cmds:
+      - ov pod logs {{.CLI_ARGS}}
+
+  pod:update:
+    desc: "Update quadlet image. Usage: task run:pod:update -- <image>"
+    cmds:
+      - ov pod update {{.CLI_ARGS}}
+
   vm:
     desc: "Run a QCOW2 image in QEMU. Usage: task run:vm -- <image> [tag]"
     preconditions:

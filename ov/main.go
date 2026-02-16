@@ -19,6 +19,7 @@ type CLI struct {
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
+	Pod      PodCmd      `cmd:"" help:"Manage podman quadlet systemd services"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
 

@@ -8,7 +8,7 @@ Composable container images from a library of layers. Built on `docker buildx ba
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell`/`ov start`/`ov stop`/`ov merge` exec into `docker run`/`docker stop`/`docker save`/`docker load` as developer conveniences (not part of the build pipeline).
+**`ov` (Go CLI)** -- all computation. Parses `build.json`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov pod` exec into `docker run`/`docker stop`/`docker save`/`docker load`/`systemctl`/`journalctl` as developer conveniences (not part of the build pipeline).
 
 **`task` (Taskfile)** -- all execution. Thin wrappers that call `ov` for generation, `docker`/`podman` for builds. No JSON parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
 
@@ -275,6 +275,14 @@ ov new layer <name>                    # Scaffold a layer directory
 ov shell <image> [-w PATH] [--tag TAG] # Bash shell in a container (mounts cwd at /workspace)
 ov start <image> [-w PATH] [--tag TAG] # Start service container with supervisord (detached)
 ov stop <image>                        # Stop a running service container
+ov pod install <image> [-w PATH] [--tag TAG]   # Generate quadlet .container file, daemon-reload
+                                               # Auto-transfers image from Docker if missing in podman
+ov pod update <image> [--tag TAG]              # Re-transfer image from Docker + restart service
+ov pod uninstall <image>               # Remove quadlet file, daemon-reload
+ov pod start <image>                   # systemctl --user start
+ov pod stop <image>                    # systemctl --user stop
+ov pod status <image>                  # systemctl --user status
+ov pod logs <image> [-f]               # journalctl --user -u
 ov version                             # Print computed CalVer tag
 ```
 
@@ -305,6 +313,7 @@ project/
 |   +-- merge.go                        # `merge` command (post-build layer merging)
 |   +-- registry.go                     # Remote image inspection (go-containerregistry)
 |   +-- shell.go                        # `shell` command (execs docker run)
+|   +-- pod.go                          # `pod` command (podman quadlet systemd services)
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
 |   +-- docker-bake.hcl
@@ -351,6 +360,13 @@ project/
 | `task build:merge -- <image>` | Merge small layers in a built image |
 | `task run:container -- <image>` | `docker run` |
 | `task run:shell -- <image>` | Delegates to `ov shell` |
+| `task run:pod:install -- <image>` | Install quadlet service (auto-transfers image from Docker) |
+| `task run:pod:update -- <image>` | Re-transfer image from Docker, restart service |
+| `task run:pod:uninstall -- <image>` | Uninstall quadlet service |
+| `task run:pod:start -- <image>` | Start quadlet service |
+| `task run:pod:stop -- <image>` | Stop quadlet service |
+| `task run:pod:status -- <image>` | Show quadlet service status |
+| `task run:pod:logs -- <image>` | Show quadlet service logs |
 | `task build:iso -- <image> [tag]` | Build ISO via Bootc Image Builder (bootc only) |
 | `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image (bootc only) |
 | `task build:raw -- <image> [tag]` | Build RAW disk image (bootc only) |
@@ -468,3 +484,33 @@ Set `"bootc": true` on an image. The Containerfile ends with `RUN bootc containe
 Disk images (ISO, QCOW2, RAW) use Bootc Image Builder (BIB). Requires `podman` (rootful). Config files: `config/disk.toml` (QCOW2/RAW layout), `config/iso-gnome.toml` (ISO/Anaconda). The container image must be built first.
 
 Commands: `task build:iso -- <image> [tag]`, `task build:qcow2 -- <image> [tag]`, `task build:raw -- <image> [tag]`, `task run:vm -- <image> [tag]`.
+
+---
+
+## Podman Quadlets
+
+`ov pod` manages containers as systemd user services via podman quadlet `.container` files. Unlike `ov start` (ephemeral `docker run -d`), quadlet services auto-restart on failure, integrate with `journalctl`, and can start at boot via `WantedBy=default.target`.
+
+User-level quadlets only (`~/.config/containers/systemd/`). No root required. Requires `podman` and a systemd user session (`loginctl enable-linger <user>`).
+
+### Image Transfer
+
+Docker and podman have separate image stores. Images built with `docker buildx bake` exist only in Docker's store. `ov pod install` automatically detects if the image is missing from podman and transfers it via `docker save | podman load`. `ov pod update` always re-transfers (e.g., after a rebuild) and restarts the service if active.
+
+### Workflow
+
+```
+ov pod install fedora-test -w ~/project   # Generate .container file, transfer image, daemon-reload
+ov pod start fedora-test                   # systemctl --user start
+ov pod status fedora-test                  # systemctl --user status
+ov pod logs fedora-test -f                 # journalctl --user -u (follow)
+ov pod update fedora-test                  # Re-transfer image after rebuild, restart service
+ov pod stop fedora-test                    # systemctl --user stop
+ov pod uninstall fedora-test               # Remove .container file, daemon-reload
+```
+
+### Generated File
+
+`ov pod install` writes `~/.config/containers/systemd/ov-<image>.container`. The systemd service name is `ov-<image>.service`. Container name is `ov-<image>` (same as `ov start`). Ports are bound to `127.0.0.1` only. The container runs `supervisord -n -c /etc/supervisord.conf` as its entrypoint.
+
+Source: `ov/pod.go`.

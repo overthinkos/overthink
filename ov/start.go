@@ -13,6 +13,7 @@ type StartCmd struct {
 	Image     string `arg:"" help:"Image name from images.yml"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	GPUFlags  `embed:""`
 }
 
 func (c *StartCmd) Run() error {
@@ -54,9 +55,12 @@ func (c *StartCmd) Run() error {
 		return err
 	}
 
+	gpu := ResolveGPU(c.GPUFlags.Mode())
+	LogGPU(gpu)
+
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 	name := containerName(c.Image)
-	args := buildStartArgs(imageRef, absWorkspace, resolved.Ports, name, volumes)
+	args := buildStartArgs(imageRef, absWorkspace, resolved.Ports, name, volumes, gpu)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -92,12 +96,15 @@ func (c *StopCmd) Run() error {
 }
 
 // buildStartArgs constructs the docker run argument list for detached supervisord.
-func buildStartArgs(imageRef, workspace string, ports []string, name string, volumes []VolumeMount) []string {
+func buildStartArgs(imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool) []string {
 	args := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", name,
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
+	}
+	if gpu {
+		args = append(args, "--gpus", "all")
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))

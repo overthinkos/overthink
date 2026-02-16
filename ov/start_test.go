@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildStartArgs(t *testing.T) {
-	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil)
+	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -21,7 +21,7 @@ func TestBuildStartArgs(t *testing.T) {
 }
 
 func TestBuildStartArgsWithPorts(t *testing.T) {
-	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil)
+	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -41,7 +41,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-ollama-models", ContainerPath: "/home/user/.ollama/models"},
 	}
-	args := buildStartArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes)
+	args := buildStartArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -53,6 +53,22 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildStartArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildStartArgsWithGPU(t *testing.T) {
+	args := buildStartArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
+	want := []string{
+		"docker", "run", "-d", "--rm",
+		"--name", "ov-ollama",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--gpus", "all",
+		"ghcr.io/atrawog/ollama:latest",
+		"supervisord", "-n", "-c", "/etc/supervisord.conf",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildStartArgs(gpu=true) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

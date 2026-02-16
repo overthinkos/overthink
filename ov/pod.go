@@ -24,6 +24,7 @@ type PodInstallCmd struct {
 	Image     string `arg:"" help:"Image name from images.yml"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	GPUFlags  `embed:""`
 }
 
 func (c *PodInstallCmd) Run() error {
@@ -71,12 +72,16 @@ func (c *PodInstallCmd) Run() error {
 		return err
 	}
 
+	gpu := ResolveGPU(c.GPUFlags.Mode())
+	LogGPU(gpu)
+
 	qcfg := QuadletConfig{
 		ImageName: c.Image,
 		ImageRef:  imageRef,
 		Workspace: absWorkspace,
 		Ports:     resolved.Ports,
 		Volumes:   volumes,
+		GPU:       gpu,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -215,6 +220,7 @@ type QuadletConfig struct {
 	Workspace string        // absolute host path to mount at /workspace
 	Ports     []string      // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
 	Volumes   []VolumeMount // named volumes from layer.yml declarations
+	GPU       bool          // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -237,6 +243,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 	for _, vol := range cfg.Volumes {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
+	}
+	if cfg.GPU {
+		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
 	}
 	b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
 

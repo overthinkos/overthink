@@ -108,6 +108,36 @@ func TestGenerateQuadletWithVolumes(t *testing.T) {
 	}
 }
 
+func TestGenerateQuadletWithGPU(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "ollama",
+		ImageRef:  "ghcr.io/atrawog/ollama:latest",
+		Workspace: "/home/user/project",
+		GPU:       true,
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "AddDevice=nvidia.com/gpu=all") {
+		t.Errorf("expected AddDevice=nvidia.com/gpu=all when GPU=true, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithoutGPU(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "fedora",
+		ImageRef:  "ghcr.io/atrawog/fedora:latest",
+		Workspace: "/home/user/project",
+		GPU:       false,
+	}
+
+	got := generateQuadlet(cfg)
+
+	if strings.Contains(got, "AddDevice") {
+		t.Errorf("expected no AddDevice when GPU=false, got:\n%s", got)
+	}
+}
+
 func TestServiceName(t *testing.T) {
 	tests := []struct {
 		image string

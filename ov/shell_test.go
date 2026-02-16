@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildShellArgs(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil, nil)
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil, nil, false, "")
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -21,7 +21,7 @@ func TestBuildShellArgs(t *testing.T) {
 }
 
 func TestBuildShellArgsCustomUIDGID(t *testing.T) {
-	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002, nil, nil)
+	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002, nil, nil, false, "")
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/tmp:/workspace",
@@ -36,7 +36,7 @@ func TestBuildShellArgsCustomUIDGID(t *testing.T) {
 }
 
 func TestBuildShellArgsWithPorts(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"}, nil)
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"}, nil, false, "")
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -53,7 +53,7 @@ func TestBuildShellArgsWithPorts(t *testing.T) {
 }
 
 func TestBuildShellArgsWithSinglePort(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"8080"}, nil)
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"8080"}, nil, false, "")
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -72,7 +72,7 @@ func TestBuildShellArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-openclaw-data", ContainerPath: "/home/user/.openclaw"},
 	}
-	args := buildShellArgs("ghcr.io/atrawog/openclaw:latest", "/home/user/project", 1000, 1000, nil, volumes)
+	args := buildShellArgs("ghcr.io/atrawog/openclaw:latest", "/home/user/project", 1000, 1000, nil, volumes, false, "")
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -84,6 +84,31 @@ func TestBuildShellArgsWithVolumes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildShellArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsWithGPU(t *testing.T) {
+	args := buildShellArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", 1000, 1000, nil, nil, true, "")
+	want := []string{
+		"docker", "run", "--rm", "-it",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"--gpus", "all",
+		"--entrypoint", "bash",
+		"ghcr.io/atrawog/ollama:latest",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs(gpu=true) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsWithoutGPU(t *testing.T) {
+	args := buildShellArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", 1000, 1000, nil, nil, false, "")
+	for _, arg := range args {
+		if arg == "--gpus" {
+			t.Error("buildShellArgs(gpu=false) should not contain --gpus")
+		}
 	}
 }
 
@@ -104,6 +129,39 @@ func TestLocalizePort(t *testing.T) {
 				t.Errorf("localizePort(%q) = %q, want %q", tt.input, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuildShellArgsWithCommand(t *testing.T) {
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil, nil, false, "echo hello")
+	want := []string{
+		"docker", "run", "--rm", "-i",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"--entrypoint", "bash",
+		"ghcr.io/atrawog/fedora:latest",
+		"-c", "echo hello",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs(command) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsWithCommandAndGPU(t *testing.T) {
+	args := buildShellArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", 1000, 1000, nil, nil, true, "nvidia-smi")
+	want := []string{
+		"docker", "run", "--rm", "-i",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"--gpus", "all",
+		"--entrypoint", "bash",
+		"ghcr.io/atrawog/ollama:latest",
+		"-c", "nvidia-smi",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs(command+gpu) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

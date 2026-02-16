@@ -13,6 +13,8 @@ type ShellCmd struct {
 	Image     string `arg:"" help:"Image name from images.yml"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Command   string `short:"c" help:"Command to execute instead of interactive shell"`
+	GPUFlags  `embed:""`
 }
 
 func (c *ShellCmd) Run() error {
@@ -56,8 +58,11 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
+	gpu := ResolveGPU(c.GPUFlags.Mode())
+	LogGPU(gpu)
+
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes)
+	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes, gpu, c.Command)
 
 	// Find docker binary
 	dockerPath, err := findExecutable("docker")
@@ -78,12 +83,19 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the docker run argument list.
-func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount) []string {
+func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string) []string {
+	interactive := "-it"
+	if command != "" {
+		interactive = "-i"
+	}
 	args := []string{
-		"docker", "run", "--rm", "-it",
+		"docker", "run", "--rm", interactive,
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
+	}
+	if gpu {
+		args = append(args, "--gpus", "all")
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))
@@ -92,6 +104,9 @@ func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string, vo
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
 	}
 	args = append(args, "--entrypoint", "bash", imageRef)
+	if command != "" {
+		args = append(args, "-c", command)
+	}
 	return args
 }
 

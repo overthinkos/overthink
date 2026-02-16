@@ -1,0 +1,7 @@
+ports:
+  - 8080
+  - 9090
+
+route:
+  host: webservice.localhost
+  port: 8080

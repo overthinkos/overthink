@@ -1,0 +1,7 @@
+env:
+  PIXI_CACHE_DIR: "~/.cache/pixi"
+  RATTLER_CACHE_DIR: "~/.cache/rattler"
+
+path_append:
+  - "~/.pixi/bin"
+  - "~/.pixi/envs/default/bin"

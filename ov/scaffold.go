@@ -39,8 +39,7 @@ func ScaffoldLayer(dir string, name string) error {
 	fmt.Println("  package.json    - npm packages")
 	fmt.Println("  Cargo.toml      - Rust crate (requires src/)")
 	fmt.Println("  user.yml        - Custom user install task")
-	fmt.Println("  depends         - Layer dependencies")
-	fmt.Println("  supervisord.conf - Service configuration")
+	fmt.Println("  layer.yaml      - Layer config (depends, env, ports, route, service)")
 
 	return nil
 }

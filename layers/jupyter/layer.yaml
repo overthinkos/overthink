@@ -1,0 +1,17 @@
+depends:
+  - nvidia-python
+  - supervisord
+
+ports:
+  - 8888
+
+service: |
+  [program:jupyter]
+  command=pixi run start-jupyter
+  directory=%(ENV_HOME)s
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

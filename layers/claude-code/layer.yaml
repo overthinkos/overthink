@@ -1,0 +1,5 @@
+depends:
+  - nodejs
+
+path_append:
+  - "~/.local/bin"

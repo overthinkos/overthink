@@ -5,8 +5,27 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
+
+// LayerYAML represents the parsed layer.yaml file
+type LayerYAML struct {
+	Depends    []string          `yaml:"depends,omitempty"`
+	Env        map[string]string `yaml:"env,omitempty"`
+	PathAppend []string          `yaml:"path_append,omitempty"`
+	Ports      []int             `yaml:"ports,omitempty"`
+	Route      *RouteYAML        `yaml:"route,omitempty"`
+	Service    string            `yaml:"service,omitempty"`
+}
+
+// RouteYAML represents a route declaration in layer.yaml
+type RouteYAML struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
 
 // Layer represents a layer directory and its contents
 type Layer struct {
@@ -30,13 +49,14 @@ type Layer struct {
 	HasPixiLock       bool
 	Depends           []string
 
-	// Cached file contents (loaded on demand)
+	// Cached file contents (loaded on demand or pre-populated from layer.yaml)
 	rpmPackages []string
 	debPackages []string
 	coprRepos   []string
 	ports       []string
 	envConfig   *EnvConfig
 	route       *RouteConfig
+	serviceConf string
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -67,6 +87,19 @@ func ScanLayers(dir string) (map[string]*Layer, error) {
 	return layers, nil
 }
 
+// parseLayerYAML reads and unmarshals a layer.yaml file
+func parseLayerYAML(path string) (*LayerYAML, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var ly LayerYAML
+	if err := yaml.Unmarshal(data, &ly); err != nil {
+		return nil, err
+	}
+	return &ly, nil
+}
+
 // scanLayer scans a single layer directory
 func scanLayer(path string, name string) (*Layer, error) {
 	layer := &Layer{
@@ -74,7 +107,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		Path: path,
 	}
 
-	// Check for each possible file
+	// Check for install files (these remain as separate files)
 	layer.HasRpmList = fileExists(filepath.Join(path, "rpm.list"))
 	layer.HasDebList = fileExists(filepath.Join(path, "deb.list"))
 	layer.HasCoprRepo = fileExists(filepath.Join(path, "copr.repo"))
@@ -86,20 +119,50 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasCargoToml = fileExists(filepath.Join(path, "Cargo.toml"))
 	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
-	layer.HasSupervisord = fileExists(filepath.Join(path, "supervisord.conf"))
-	layer.HasEnv = fileExists(filepath.Join(path, "env"))
-	layer.HasPorts = fileExists(filepath.Join(path, "ports"))
-	layer.HasRoute = fileExists(filepath.Join(path, "route"))
 	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
 
-	// Read depends file if present
-	dependsPath := filepath.Join(path, "depends")
-	if fileExists(dependsPath) {
-		deps, err := readLineFile(dependsPath)
+	// Parse layer.yaml if present (replaces depends, env, ports, route, supervisord.conf)
+	yamlPath := filepath.Join(path, "layer.yaml")
+	if fileExists(yamlPath) {
+		ly, err := parseLayerYAML(yamlPath)
 		if err != nil {
-			return nil, fmt.Errorf("reading depends: %w", err)
+			return nil, fmt.Errorf("parsing layer.yaml: %w", err)
 		}
-		layer.Depends = deps
+
+		layer.Depends = ly.Depends
+		layer.HasSupervisord = ly.Service != ""
+		layer.serviceConf = ly.Service
+		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
+		layer.HasPorts = len(ly.Ports) > 0
+		layer.HasRoute = ly.Route != nil
+
+		// Pre-populate ports cache
+		if layer.HasPorts {
+			layer.ports = make([]string, len(ly.Ports))
+			for i, p := range ly.Ports {
+				layer.ports[i] = strconv.Itoa(p)
+			}
+		}
+
+		// Pre-populate env cache
+		if layer.HasEnv {
+			env := ly.Env
+			if env == nil {
+				env = make(map[string]string)
+			}
+			layer.envConfig = &EnvConfig{
+				Vars:       env,
+				PathAppend: ly.PathAppend,
+			}
+		}
+
+		// Pre-populate route cache
+		if ly.Route != nil {
+			layer.route = &RouteConfig{
+				Host: ly.Route.Host,
+				Port: strconv.Itoa(ly.Route.Port),
+			}
+		}
 	}
 
 	return layer, nil
@@ -177,38 +240,25 @@ func (l *Layer) CoprRepos() ([]string, error) {
 	return l.coprRepos, nil
 }
 
-// EnvConfig returns the environment config from env file (cached)
+// EnvConfig returns the environment config (pre-populated from layer.yaml)
 func (l *Layer) EnvConfig() (*EnvConfig, error) {
 	if l.envConfig != nil {
 		return l.envConfig, nil
 	}
-	if !l.HasEnv {
-		return nil, nil
-	}
-
-	cfg, err := ParseEnvFile(filepath.Join(l.Path, "env"))
-	if err != nil {
-		return nil, err
-	}
-	l.envConfig = cfg
-	return l.envConfig, nil
+	return nil, nil
 }
 
-// Ports returns the ports from the ports file (cached)
+// Ports returns the ports (pre-populated from layer.yaml)
 func (l *Layer) Ports() ([]string, error) {
 	if l.ports != nil {
 		return l.ports, nil
 	}
-	if !l.HasPorts {
-		return nil, nil
-	}
+	return nil, nil
+}
 
-	ports, err := readLineFile(filepath.Join(l.Path, "ports"))
-	if err != nil {
-		return nil, err
-	}
-	l.ports = ports
-	return l.ports, nil
+// ServiceConf returns the supervisord service fragment from layer.yaml
+func (l *Layer) ServiceConf() string {
+	return l.serviceConf
 }
 
 // RouteConfig represents a route file declaration
@@ -217,38 +267,12 @@ type RouteConfig struct {
 	Port string
 }
 
-// Route returns the route config from the route file (cached)
+// Route returns the route config (pre-populated from layer.yaml)
 func (l *Layer) Route() (*RouteConfig, error) {
 	if l.route != nil {
 		return l.route, nil
 	}
-	if !l.HasRoute {
-		return nil, nil
-	}
-
-	lines, err := readLineFile(filepath.Join(l.Path, "route"))
-	if err != nil {
-		return nil, err
-	}
-
-	cfg := &RouteConfig{}
-	for _, line := range lines {
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-		switch key {
-		case "host":
-			cfg.Host = value
-		case "port":
-			cfg.Port = value
-		}
-	}
-
-	l.route = cfg
-	return l.route, nil
+	return nil, nil
 }
 
 // RouteLayers returns layers that have a route file

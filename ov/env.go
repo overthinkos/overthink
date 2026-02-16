@@ -1,71 +1,13 @@
 package main
 
 import (
-	"bufio"
-	"os"
 	"strings"
 )
 
-// EnvConfig represents environment variables from a layer's env file
+// EnvConfig represents environment variables from a layer's layer.yaml
 type EnvConfig struct {
-	Vars       map[string]string // KEY=value pairs
-	PathAppend []string          // PATH+= entries (without the PATH+=: prefix)
-}
-
-// ParseEnvFile reads and parses a layer's env file
-func ParseEnvFile(path string) (*EnvConfig, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	cfg := &EnvConfig{
-		Vars:       make(map[string]string),
-		PathAppend: []string{},
-	}
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-
-		// Skip empty lines and comments
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		// Handle PATH+= specially
-		if strings.HasPrefix(line, "PATH+=") {
-			value := strings.TrimPrefix(line, "PATH+=")
-			// Remove leading colon if present
-			value = strings.TrimPrefix(value, ":")
-			if value != "" {
-				cfg.PathAppend = append(cfg.PathAppend, value)
-			}
-			continue
-		}
-
-		// Parse KEY=value
-		idx := strings.Index(line, "=")
-		if idx == -1 {
-			continue // Invalid line, skip
-		}
-
-		key := strings.TrimSpace(line[:idx])
-		value := strings.TrimSpace(line[idx+1:])
-
-		// Remove quotes if present
-		if len(value) >= 2 {
-			if (value[0] == '"' && value[len(value)-1] == '"') ||
-				(value[0] == '\'' && value[len(value)-1] == '\'') {
-				value = value[1 : len(value)-1]
-			}
-		}
-
-		cfg.Vars[key] = value
-	}
-
-	return cfg, scanner.Err()
+	Vars       map[string]string // KEY=value pairs (from env field)
+	PathAppend []string          // PATH append entries (from path_append field)
 }
 
 // ExpandPath expands ~ and $HOME in a path string to the given home directory

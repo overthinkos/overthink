@@ -134,22 +134,21 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validateEnvFiles validates env file syntax
+// validateEnvFiles validates env config from layer.yaml
 func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasEnv {
 			continue
 		}
 
-		cfg, err := layer.EnvConfig()
-		if err != nil {
-			errs.Add("layer %q: error parsing env file: %v", name, err)
+		cfg, _ := layer.EnvConfig()
+		if cfg == nil {
 			continue
 		}
 
-		// Warn if PATH is set directly (should use PATH+=)
+		// PATH must not be set directly (use path_append in layer.yaml)
 		if _, hasPath := cfg.Vars["PATH"]; hasPath {
-			errs.Add("layer %q env: use PATH+=:/path instead of PATH=/path to append to PATH", name)
+			errs.Add("layer %q layer.yaml: use path_append instead of setting PATH in env", name)
 		}
 	}
 }
@@ -214,19 +213,15 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 
 // validatePorts validates port declarations in layers and images
 func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate layer ports files
+	// Validate layer ports from layer.yaml
 	for name, layer := range layers {
 		if !layer.HasPorts {
 			continue
 		}
-		ports, err := layer.Ports()
-		if err != nil {
-			errs.Add("layer %q: error reading ports file: %v", name, err)
-			continue
-		}
+		ports, _ := layer.Ports()
 		for _, port := range ports {
 			if !isValidPort(port) {
-				errs.Add("layer %q ports: %q is not a valid port number (1-65535)", name, port)
+				errs.Add("layer %q layer.yaml ports: %q is not a valid port number (1-65535)", name, port)
 			}
 		}
 	}
@@ -268,23 +263,22 @@ func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 
 // validateRoutes validates route file declarations in layers
 func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate route file contents
+	// Validate route config from layer.yaml
 	for name, layer := range layers {
 		if !layer.HasRoute {
 			continue
 		}
-		route, err := layer.Route()
-		if err != nil {
-			errs.Add("layer %q: error reading route file: %v", name, err)
+		route, _ := layer.Route()
+		if route == nil {
 			continue
 		}
 		if route.Host == "" {
-			errs.Add("layer %q route: missing required \"host\" field", name)
+			errs.Add("layer %q layer.yaml route: missing required \"host\" field", name)
 		}
 		if route.Port == "" {
-			errs.Add("layer %q route: missing required \"port\" field", name)
+			errs.Add("layer %q layer.yaml route: missing required \"port\" field", name)
 		} else if !isValidPort(route.Port) {
-			errs.Add("layer %q route: %q is not a valid port number (1-65535)", name, route.Port)
+			errs.Add("layer %q layer.yaml route: %q is not a valid port number (1-65535)", name, route.Port)
 		}
 	}
 

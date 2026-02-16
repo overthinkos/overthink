@@ -244,12 +244,15 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Emit supervisord config stage if needed
 	if hasServices {
+		if err := g.generateSupervisordFragments(imageName, layerOrder); err != nil {
+			return err
+		}
 		b.WriteString("FROM scratch AS supervisord-conf\n")
 		b.WriteString("COPY templates/supervisord.header.conf /fragments/00-header.conf\n")
 		for i, layerName := range layerOrder {
 			layer := g.Layers[layerName]
 			if layer.HasSupervisord {
-				b.WriteString(fmt.Sprintf("COPY layers/%s/supervisord.conf /fragments/%02d-%s.conf\n", layerName, i+1, layerName))
+				b.WriteString(fmt.Sprintf("COPY .build/%s/fragments/%02d-%s.conf /fragments/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
 			}
 		}
 		b.WriteString("\n")
@@ -518,6 +521,30 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string)
 	}
 
 	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
+}
+
+// generateSupervisordFragments writes service fragments from layer.yaml to .build/<image>/fragments/
+func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []string) error {
+	fragDir := filepath.Join(g.BuildDir, imageName, "fragments")
+	if err := os.MkdirAll(fragDir, 0755); err != nil {
+		return err
+	}
+
+	for i, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasSupervisord {
+			continue
+		}
+		content := layer.ServiceConf()
+		if !strings.HasSuffix(content, "\n") {
+			content += "\n"
+		}
+		fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
+		if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // writeLayerSteps writes the RUN steps for a single layer

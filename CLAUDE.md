@@ -16,6 +16,7 @@ Two components with a clean split:
 - `.build/docker-bake.hcl` -- one explicit target per image, fully expanded (no HCL variables/matrices)
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
+- `.build/<image>/fragments/*.conf` -- supervisord service fragments (only for images with `service` layers)
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
@@ -37,15 +38,18 @@ A **layer** is a directory under `layers/<name>/` that installs a single concern
 | `Cargo.toml` | user | Rust crate -- built via `cargo install --path`. Requires `src/` directory. |
 | `user.yml` | user | Custom user install logic (Taskfile). Post-install config, workspace setup. |
 
-### Additional Files
+### Layer Config (`layer.yaml`)
 
-| File | Purpose |
-|---|---|
-| `depends` | Layer dependencies, one per line. Resolved transitively; topologically sorted. |
-| `env` | Environment variables. Merged across layers, emitted as `ENV` directives. See [ENV from Layer env Files](#env-from-layer-env-files). |
-| `ports` | Exposed ports, one per line (1-65535). Collected across layers, deduplicated, emitted as `EXPOSE` directives. |
-| `route` | Traefik reverse proxy route. Key=value: `host=<hostname>`, `port=<backend port>`. Generates dynamic traefik config. Requires traefik layer. |
-| `supervisord.conf` | Service fragment (`[program:<name>]`). Triggers supervisord assembly in images. |
+Optional YAML file consolidating layer metadata. Parsed by `ov/layers.go:parseLayerYAML()`.
+
+| Field | Type | Purpose |
+|---|---|---|
+| `depends` | `[]string` | Layer dependencies. Resolved transitively; topologically sorted. |
+| `env` | `map[string]string` | Environment variables (`KEY: "value"`). Merged across layers, emitted as `ENV` directives. See [ENV from layer.yaml](#env-from-layeryaml). |
+| `path_append` | `[]string` | Paths to append to `$PATH`. Accumulated across layers. |
+| `ports` | `[]int` | Exposed ports (1-65535). Collected across layers, deduplicated, emitted as `EXPOSE` directives. |
+| `route` | `{host: string, port: int}` | Traefik reverse proxy route. Generates dynamic traefik config. Requires traefik layer. |
+| `service` | multiline string (`\|`) | Supervisord service fragment (`[program:<name>]`). Triggers supervisord assembly in images. |
 
 ### Root vs User Rule
 
@@ -53,7 +57,7 @@ Only `rpm.list`/`deb.list` and `root.yml` run as root. Everything else (`pixi.to
 
 ### Layer Dependencies
 
-Layers declare dependencies via a `depends` file. The generator resolves transitively, topologically sorts, and pulls in missing dependencies automatically. Circular dependencies are a validation error. Layers already installed by a parent image (via `base` chain) are skipped.
+Layers declare dependencies via the `depends` field in `layer.yaml`. The generator resolves transitively, topologically sorts, and pulls in missing dependencies automatically. Circular dependencies are a validation error. Layers already installed by a parent image (via `base` chain) are skipped.
 
 ---
 
@@ -139,11 +143,11 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
    - `pyproject.toml`: `pixi install --manifest-path pyproject.toml`
    - `environment.yml`: `pixi project import environment.yml && pixi install`
 5. **Traefik routes stage** -- `FROM scratch AS traefik-routes` + `COPY .build/<image>/traefik-routes.yml` (only if image has layers with `route` files). Generated YAML maps hostnames to backend ports.
-6. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service fragments.
+6. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service fragments from `.build/<image>/fragments/` (written at generate time from `layer.yaml` `service` fields).
 7. **`FROM ${BASE_IMAGE}`**
 8. **Bootstrap** (external base only) -- install `task`, create user/group if not exists at configured UID/GID, set `WORKDIR`. For internal base: just `USER root`.
-9. **Layer ENV** -- consolidated `ENV` directives from all layers' `env` files
-10. **EXPOSE** -- deduplicated, sorted port numbers from all layers' `ports` files
+9. **Layer ENV** -- consolidated `ENV` directives from all layers' `layer.yaml` `env` and `path_append` fields
+10. **EXPOSE** -- deduplicated, sorted port numbers from all layers' `layer.yaml` `ports` fields
 11. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
 12. **COPY pixi binary** -- from first pixi build stage
 13. **Per-layer steps** -- for each layer in order: rpm/deb install, root.yml, package.json, Cargo.toml, user.yml (only steps for files that exist)
@@ -178,31 +182,26 @@ RUN getent passwd <UID> >/dev/null 2>&1 || \
 
 ---
 
-## ENV from Layer env Files
+## ENV from layer.yaml
 
-Layers can include an `env` file to declare environment variables. Format:
+Layers declare environment variables in `layer.yaml` using two fields:
 
+```yaml
+env:
+  PIXI_CACHE_DIR: "~/.cache/pixi"
+  RATTLER_CACHE_DIR: "~/.cache/rattler"
+
+path_append:
+  - "~/.pixi/bin"
+  - "~/.pixi/envs/default/bin"
 ```
-# Comment
-KEY=value
-KEY="quoted value"
-PATH+=:~/some/path
-```
 
-- `KEY=value` -- standard variable assignment (later layers override earlier)
-- `PATH+=:path` -- appends to PATH (accumulates across layers)
-- `~` and `$HOME` are expanded to the resolved home directory at generation time
-- Setting `PATH=` directly is a validation error (use `PATH+=`)
+- `env` -- key-value map. Later layers override earlier for the same key.
+- `path_append` -- list of paths appended to `$PATH`. Accumulated across layers.
+- `~` and `$HOME` are expanded to the resolved home directory at generation time.
+- Setting `PATH` directly in `env` is a validation error (use `path_append`).
 
 Source: `ov/env.go`. The generator collects env configs from all layers via `writeLayerEnv()`, merges them (`MergeEnvConfigs`), expands paths (`ExpandEnvConfig`), and emits consolidated `ENV` directives.
-
-Example (`layers/pixi/env`):
-```
-PIXI_CACHE_DIR=~/.cache/pixi
-RATTLER_CACHE_DIR=~/.cache/rattler
-PATH+=:~/.pixi/bin
-PATH+=:~/.pixi/envs/default/bin
-```
 
 ---
 
@@ -246,7 +245,7 @@ Rules: never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is
 | `package.json`, `user.yml` | `<home>/.cache/npm` | `uid=<UID>,gid=<GID>` |
 | `Cargo.toml` | `<home>/.cargo/registry` | `uid=<UID>,gid=<GID>` |
 
-UID/GID in cache mounts are dynamic (from resolved image config, not hardcoded 1000). Pixi builds happen in separate stages; pixi/rattler cache dirs are set via `env` files, not cache mounts.
+UID/GID in cache mounts are dynamic (from resolved image config, not hardcoded 1000). Pixi builds happen in separate stages; pixi/rattler cache dirs are set via `layer.yaml` `env` fields, not cache mounts.
 
 ---
 
@@ -273,8 +272,8 @@ ov inspect <image> [--format FIELD]    # Print resolved config (JSON) or single 
 ov list images                         # Images from images.yaml
 ov list layers                         # Layers from filesystem
 ov list targets                        # Bake targets from generated HCL
-ov list services                       # Layers with supervisord.conf
-ov list routes                         # Layers with route files (host + port)
+ov list services                       # Layers with service in layer.yaml
+ov list routes                         # Layers with route in layer.yaml (host + port)
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
                                        # Merge small layers in a built image
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
@@ -297,7 +296,7 @@ ov version                             # Print computed CalVer tag
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
-**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `copr.repo` requires `rpm.list`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `env` files must use `PATH+=` not `PATH=`, `ports` files must contain valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `route` files must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0.
+**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `copr.repo` requires `rpm.list`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yaml` `env` must not set `PATH` directly (use `path_append`), `layer.yaml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yaml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0.
 
 ---
 
@@ -311,7 +310,7 @@ project/
 |   +-- main.go                         # CLI (Kong)
 |   +-- config.go                       # images.yaml parsing, inheritance resolution
 |   +-- layers.go                       # Layer scanning, file detection
-|   +-- env.go                          # env file parsing, merging, expansion
+|   +-- env.go                          # env config merging, path expansion
 |   +-- graph.go                        # Topological sort (layers + images)
 |   +-- generate.go                     # Containerfile + HCL generation
 |   +-- validate.go                     # All validation rules
@@ -325,6 +324,7 @@ project/
 +-- .build/                             # Generated (gitignored)
 |   +-- docker-bake.hcl
 |   +-- <image>/Containerfile
+|   +-- <image>/fragments/*.conf        # Supervisord fragments (from layer.yaml service)
 +-- images.yaml                         # Configuration
 +-- Taskfile.yml                        # Root: includes + PATH setup
 +-- taskfiles/
@@ -345,13 +345,13 @@ project/
 
 | Layer | Files | Purpose |
 |---|---|---|
-| `pixi` | `env`, `pixi.toml` | Pixi binary + empty default environment. Sets `PIXI_CACHE_DIR`, `RATTLER_CACHE_DIR`, PATH. |
-| `python` | `depends` (pixi), `pixi.toml` | Python 3.13 via pixi. |
-| `nodejs` | `rpm.list`, `deb.list`, `env` | Node.js + npm. Sets `NPM_CONFIG_PREFIX`, `npm_config_cache`, PATH. |
-| `rust` | `rpm.list`, `deb.list`, `env` | Rust + Cargo via system packages. Sets PATH for `~/.cargo/bin`. |
-| `supervisord` | `depends` (python), `pixi.toml` | supervisor package via pixi. |
-| `traefik` | `depends` (supervisord), `root.yml`, `traefik.yml`, `supervisord.conf`, `ports` | Traefik reverse proxy. Web on :8000, dashboard on :8080. Serves routes from `route` files. |
-| `testapi` | `depends` (supervisord), `pixi.toml`, `app.py`, `user.yml`, `supervisord.conf`, `ports`, `route` | Minimal FastAPI test service on port 9090. Routed via `testapi.localhost`. |
+| `pixi` | `layer.yaml` (env, path_append), `pixi.toml` | Pixi binary + empty default environment. Sets `PIXI_CACHE_DIR`, `RATTLER_CACHE_DIR`, PATH. |
+| `python` | `layer.yaml` (depends: pixi), `pixi.toml` | Python 3.13 via pixi. |
+| `nodejs` | `rpm.list`, `deb.list`, `layer.yaml` (env, path_append) | Node.js + npm. Sets `NPM_CONFIG_PREFIX`, `npm_config_cache`, PATH. |
+| `rust` | `rpm.list`, `deb.list`, `layer.yaml` (path_append) | Rust + Cargo via system packages. Sets PATH for `~/.cargo/bin`. |
+| `supervisord` | `layer.yaml` (depends: python), `pixi.toml` | supervisor package via pixi. |
+| `traefik` | `layer.yaml` (depends, ports, service), `root.yml`, `traefik.yml` | Traefik reverse proxy. Web on :8000, dashboard on :8080. Serves routes from `route` configs. |
+| `testapi` | `layer.yaml` (depends, ports, route, service), `pixi.toml`, `app.py`, `user.yml` | Minimal FastAPI test service on port 9090. Routed via `testapi.localhost`. |
 
 ---
 
@@ -385,7 +385,7 @@ Direct `ov` commands (`ov list images`, `ov validate`, etc.) don't need `task`.
 
 ## Workflows
 
-**Add a layer:** `ov new layer <name>` -> add install files + optional `depends`/`env`/`supervisord.conf` -> add to an image in `images.yaml` -> `task build:local -- <image>`
+**Add a layer:** `ov new layer <name>` -> add install files + optional `layer.yaml` (depends, env, ports, route, service) -> add to an image in `images.yaml` -> `task build:local -- <image>`
 
 **Add an image:** add entry to `images.yaml` -> `task build:local -- <image>`
 

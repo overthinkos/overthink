@@ -1,0 +1,19 @@
+depends:
+  - supervisord
+
+ports:
+  - 9090
+
+route:
+  host: testapi.localhost
+  port: 9090
+
+service: |
+  [program:testapi]
+  command=/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090
+  directory=/home/user/testapi
+  autostart=true
+  autorestart=true
+  redirect_stderr=true
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0

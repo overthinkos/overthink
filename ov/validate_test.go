@@ -272,6 +272,28 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 	}
 }
 
+func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"web": {
+			Name:       "web",
+			HasUserYml: true,
+			HasPorts:   true,
+			ports:      []string{"0"},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for invalid port number")
+	}
+	if !strings.Contains(err.Error(), "layer.yaml ports") {
+		t.Errorf("expected layer.yaml reference in error, got: %v", err)
+	}
+}
+
 func TestValidateImagePortsValid(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{

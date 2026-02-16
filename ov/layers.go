@@ -10,6 +10,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// VolumeYAML represents a volume declaration in layer.yml
+type VolumeYAML struct {
+	Name string `yaml:"name"`
+	Path string `yaml:"path"`
+}
+
 // LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
 	Depends    []string          `yaml:"depends,omitempty"`
@@ -20,6 +26,7 @@ type LayerYAML struct {
 	Service    string            `yaml:"service,omitempty"`
 	Rpm        *RpmConfig        `yaml:"rpm,omitempty"`
 	Deb        *DebConfig        `yaml:"deb,omitempty"`
+	Volumes    []VolumeYAML      `yaml:"volumes,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -65,6 +72,7 @@ type Layer struct {
 	HasEnv            bool
 	HasPorts          bool
 	HasRoute          bool
+	HasVolumes        bool
 	HasPixiLock       bool
 	Depends           []string
 
@@ -75,6 +83,7 @@ type Layer struct {
 	envConfig   *EnvConfig
 	route       *RouteConfig
 	serviceConf string
+	volumes     []VolumeYAML
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -182,6 +191,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 				Port: strconv.Itoa(ly.Route.Port),
 			}
 		}
+
+		// Pre-populate volumes
+		layer.HasVolumes = len(ly.Volumes) > 0
+		layer.volumes = ly.Volumes
 	}
 
 	return layer, nil
@@ -276,6 +289,11 @@ func LayerNames(layers map[string]*Layer) []string {
 	return names
 }
 
+// Volumes returns the volume declarations (pre-populated from layer.yml)
+func (l *Layer) Volumes() []VolumeYAML {
+	return l.volumes
+}
+
 // ServiceLayers returns layers that have supervisord.conf
 func ServiceLayers(layers map[string]*Layer) []*Layer {
 	var services []*Layer
@@ -285,6 +303,17 @@ func ServiceLayers(layers map[string]*Layer) []*Layer {
 		}
 	}
 	return services
+}
+
+// VolumeLayers returns layers that have volume declarations
+func VolumeLayers(layers map[string]*Layer) []*Layer {
+	var vols []*Layer
+	for _, layer := range layers {
+		if layer.HasVolumes {
+			vols = append(vols, layer)
+		}
+	}
+	return vols
 }
 
 // NeedsGit returns true if the pixi manifest contains git-based dependencies

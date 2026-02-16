@@ -110,6 +110,18 @@ func (c *InspectCmd) Run() error {
 			for _, p := range resolved.Ports {
 				fmt.Println(p)
 			}
+		case "volumes":
+			layers, err := ScanLayers(dir)
+			if err != nil {
+				return err
+			}
+			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+			if err != nil {
+				return err
+			}
+			for _, vol := range volumes {
+				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
+			}
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
 		}
@@ -132,6 +144,7 @@ type ListCmd struct {
 	Targets  ListTargetsCmd  `cmd:"" help:"Bake targets from generated HCL"`
 	Services ListServicesCmd `cmd:"" help:"Layers with service in layer.yml"`
 	Routes   ListRoutesCmd   `cmd:"" help:"Layers with route in layer.yml"`
+	Volumes  ListVolumesCmd  `cmd:"" help:"Layers with volumes in layer.yml"`
 }
 
 // ListImagesCmd lists images from images.yml
@@ -255,6 +268,37 @@ func (c *ListRoutesCmd) Run() error {
 			return err
 		}
 		fmt.Printf("%s\thost=%s\tport=%s\n", name, route.Host, route.Port)
+	}
+	return nil
+}
+
+// ListVolumesCmd lists layers with volume declarations
+type ListVolumesCmd struct{}
+
+func (c *ListVolumesCmd) Run() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return err
+	}
+
+	vols := VolumeLayers(layers)
+	// Sort by name for deterministic output
+	names := make([]string, 0, len(vols))
+	for _, layer := range vols {
+		names = append(names, layer.Name)
+	}
+	sortStrings(names)
+
+	for _, name := range names {
+		layer := layers[name]
+		for _, vol := range layer.Volumes() {
+			fmt.Printf("%s\t%s\t%s\n", name, vol.Name, vol.Path)
+		}
 	}
 	return nil
 }

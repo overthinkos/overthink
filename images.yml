@@ -50,6 +50,13 @@ images:
       - "8000:8000"
       - "8080:8080"
 
+  openclaw:
+    base: fedora
+    layers:
+      - openclaw
+    ports:
+      - "18789:18789"
+
   base:
     layers:
       - pixi

@@ -5,3 +5,7 @@ ports:
 route:
   host: webservice.localhost
   port: 8080
+
+volumes:
+  - name: data
+    path: "~/.webservice"

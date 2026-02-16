@@ -1,21 +1,20 @@
 depends:
-  - nvidia-cuda
+  - nodejs
   - supervisord
 
 env:
-  OLLAMA_HOST: "0.0.0.0"
-  OLLAMA_MODELS: "~/.ollama/models"
+  NODE_ENV: "production"
 
 ports:
-  - 11434
+  - 18789
 
 volumes:
-  - name: models
-    path: "~/.ollama/models"
+  - name: data
+    path: "~/.openclaw"
 
 service: |
-  [program:ollama]
-  command=ollama serve
+  [program:openclaw]
+  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789 --bind 0.0.0.0
   autostart=true
   autorestart=true
   stdout_logfile=/dev/stdout

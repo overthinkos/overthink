@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -58,6 +59,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 
 	// Validate routes
 	validateRoutes(cfg, layers, errs)
+
+	// Validate volumes
+	validateVolumes(layers, errs)
 
 	// Validate merge config
 	validateMergeConfig(cfg, errs)
@@ -334,6 +338,33 @@ func validateMergeConfig(cfg *Config, errs *ValidationError) {
 			continue
 		}
 		check(fmt.Sprintf("image %q", name), img.Merge)
+	}
+}
+
+// volumeNameRe matches valid volume names: lowercase alphanumeric + hyphens
+var volumeNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// validateVolumes validates volume declarations in layers
+func validateVolumes(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasVolumes {
+			continue
+		}
+		seen := make(map[string]bool)
+		for _, vol := range layer.Volumes() {
+			if vol.Name == "" {
+				errs.Add("layer %q layer.yml volumes: missing required \"name\" field", name)
+			} else if !volumeNameRe.MatchString(vol.Name) {
+				errs.Add("layer %q layer.yml volumes: name %q must be lowercase alphanumeric with hyphens", name, vol.Name)
+			} else if seen[vol.Name] {
+				errs.Add("layer %q layer.yml volumes: duplicate volume name %q", name, vol.Name)
+			} else {
+				seen[vol.Name] = true
+			}
+			if vol.Path == "" {
+				errs.Add("layer %q layer.yml volumes: missing required \"path\" field", name)
+			}
+		}
 	}
 }
 

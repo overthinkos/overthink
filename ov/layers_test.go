@@ -300,6 +300,63 @@ func TestLayerPixiNoLock(t *testing.T) {
 	}
 }
 
+func TestLayerVolumes(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	ws := layers["webservice"]
+	if ws == nil {
+		t.Fatal("webservice layer not found")
+	}
+
+	if !ws.HasVolumes {
+		t.Error("webservice should have volumes")
+	}
+
+	vols := ws.Volumes()
+	if len(vols) != 1 {
+		t.Fatalf("Volumes() returned %d volumes, want 1", len(vols))
+	}
+	if vols[0].Name != "data" {
+		t.Errorf("Volumes()[0].Name = %q, want %q", vols[0].Name, "data")
+	}
+	if vols[0].Path != "~/.webservice" {
+		t.Errorf("Volumes()[0].Path = %q, want %q", vols[0].Path, "~/.webservice")
+	}
+}
+
+func TestLayerVolumesNone(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	pixi := layers["pixi"]
+	if pixi.HasVolumes {
+		t.Error("pixi should not have volumes")
+	}
+	if len(pixi.Volumes()) != 0 {
+		t.Errorf("Volumes() = %v, want nil/empty", pixi.Volumes())
+	}
+}
+
+func TestVolumeLayers(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	vols := VolumeLayers(layers)
+	if len(vols) != 1 {
+		t.Errorf("VolumeLayers() returned %d layers, want 1", len(vols))
+	}
+	if len(vols) > 0 && vols[0].Name != "webservice" {
+		t.Errorf("VolumeLayers()[0].Name = %q, want %q", vols[0].Name, "webservice")
+	}
+}
+
 func TestRouteLayers(t *testing.T) {
 	layers, err := ScanLayers("testdata")
 	if err != nil {

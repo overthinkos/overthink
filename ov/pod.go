@@ -55,6 +55,16 @@ func (c *PodInstallCmd) Run() error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return err
+	}
+
+	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+	if err != nil {
+		return err
+	}
+
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 
 	if err := ensurePodmanImage(imageRef); err != nil {
@@ -66,6 +76,7 @@ func (c *PodInstallCmd) Run() error {
 		ImageRef:  imageRef,
 		Workspace: absWorkspace,
 		Ports:     resolved.Ports,
+		Volumes:   volumes,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -199,10 +210,11 @@ func (c *PodLogsCmd) Run() error {
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	ImageName string   // image name from images.yml (e.g. "fedora-test")
-	ImageRef  string   // full image reference (e.g. "ghcr.io/atrawog/fedora-test:latest")
-	Workspace string   // absolute host path to mount at /workspace
-	Ports     []string // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
+	ImageName string        // image name from images.yml (e.g. "fedora-test")
+	ImageRef  string        // full image reference (e.g. "ghcr.io/atrawog/fedora-test:latest")
+	Workspace string        // absolute host path to mount at /workspace
+	Ports     []string      // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
+	Volumes   []VolumeMount // named volumes from layer.yml declarations
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -222,6 +234,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("WorkingDir=/workspace\n")
 	for _, port := range cfg.Ports {
 		b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port)))
+	}
+	for _, vol := range cfg.Volumes {
+		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
 	}
 	b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
 

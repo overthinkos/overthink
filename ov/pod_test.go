@@ -84,6 +84,30 @@ func TestGenerateQuadletSinglePort(t *testing.T) {
 	}
 }
 
+func TestGenerateQuadletWithVolumes(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "openclaw",
+		ImageRef:  "ghcr.io/atrawog/openclaw:latest",
+		Workspace: "/home/user/project",
+		Ports:     []string{"18789:18789"},
+		Volumes: []VolumeMount{
+			{VolumeName: "ov-openclaw-data", ContainerPath: "/home/user/.openclaw"},
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "Volume=ov-openclaw-data:/home/user/.openclaw") {
+		t.Errorf("expected Volume line for openclaw data, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Volume=/home/user/project:/workspace") {
+		t.Error("expected workspace Volume line")
+	}
+	if !strings.Contains(got, "PublishPort=127.0.0.1:18789:18789") {
+		t.Error("expected PublishPort line")
+	}
+}
+
 func TestServiceName(t *testing.T) {
 	tests := []struct {
 		image string

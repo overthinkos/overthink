@@ -46,8 +46,18 @@ func (c *ShellCmd) Run() error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return err
+	}
+
+	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+	if err != nil {
+		return err
+	}
+
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports)
+	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes)
 
 	// Find docker binary
 	dockerPath, err := findExecutable("docker")
@@ -68,7 +78,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the docker run argument list.
-func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string) []string {
+func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount) []string {
 	args := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
@@ -77,6 +87,9 @@ func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string) []
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))
+	}
+	for _, vol := range volumes {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
 	}
 	args = append(args, "--entrypoint", "bash", imageRef)
 	return args

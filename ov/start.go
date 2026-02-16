@@ -44,9 +44,19 @@ func (c *StartCmd) Run() error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return err
+	}
+
+	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+	if err != nil {
+		return err
+	}
+
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 	name := containerName(c.Image)
-	args := buildStartArgs(imageRef, absWorkspace, resolved.Ports, name)
+	args := buildStartArgs(imageRef, absWorkspace, resolved.Ports, name, volumes)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -82,7 +92,7 @@ func (c *StopCmd) Run() error {
 }
 
 // buildStartArgs constructs the docker run argument list for detached supervisord.
-func buildStartArgs(imageRef, workspace string, ports []string, name string) []string {
+func buildStartArgs(imageRef, workspace string, ports []string, name string, volumes []VolumeMount) []string {
 	args := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", name,
@@ -91,6 +101,9 @@ func buildStartArgs(imageRef, workspace string, ports []string, name string) []s
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))
+	}
+	for _, vol := range volumes {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
 	}
 	args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
 	return args

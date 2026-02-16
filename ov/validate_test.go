@@ -528,6 +528,116 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 	}
 }
 
+func TestValidateVolumesValid(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:       "svc",
+			HasUserYml: true,
+			HasVolumes: true,
+			volumes:    []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestValidateVolumesMissingName(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:       "svc",
+			HasUserYml: true,
+			HasVolumes: true,
+			volumes:    []VolumeYAML{{Name: "", Path: "~/.myapp"}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for missing volume name")
+	}
+	if !strings.Contains(err.Error(), "missing required \"name\"") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateVolumesMissingPath(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:       "svc",
+			HasUserYml: true,
+			HasVolumes: true,
+			volumes:    []VolumeYAML{{Name: "data", Path: ""}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for missing volume path")
+	}
+	if !strings.Contains(err.Error(), "missing required \"path\"") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateVolumesInvalidName(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:       "svc",
+			HasUserYml: true,
+			HasVolumes: true,
+			volumes:    []VolumeYAML{{Name: "My Data!", Path: "~/.myapp"}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for invalid volume name")
+	}
+	if !strings.Contains(err.Error(), "lowercase alphanumeric") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateVolumesDuplicate(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:       "svc",
+			HasUserYml: true,
+			HasVolumes: true,
+			volumes: []VolumeYAML{
+				{Name: "data", Path: "~/.myapp"},
+				{Name: "data", Path: "~/.other"},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for duplicate volume name")
+	}
+	if !strings.Contains(err.Error(), "duplicate volume name") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestIsValidPort(t *testing.T) {
 	tests := []struct {
 		input string

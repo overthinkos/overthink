@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildShellArgs(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil)
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, nil, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -21,7 +21,7 @@ func TestBuildShellArgs(t *testing.T) {
 }
 
 func TestBuildShellArgsCustomUIDGID(t *testing.T) {
-	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002, nil)
+	args := buildShellArgs("fedora:latest", "/tmp", 1001, 1002, nil, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/tmp:/workspace",
@@ -36,7 +36,7 @@ func TestBuildShellArgsCustomUIDGID(t *testing.T) {
 }
 
 func TestBuildShellArgsWithPorts(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"})
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"}, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -53,7 +53,7 @@ func TestBuildShellArgsWithPorts(t *testing.T) {
 }
 
 func TestBuildShellArgsWithSinglePort(t *testing.T) {
-	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"8080"})
+	args := buildShellArgs("ghcr.io/atrawog/fedora:latest", "/home/user/project", 1000, 1000, []string{"8080"}, nil)
 	want := []string{
 		"docker", "run", "--rm", "-it",
 		"-v", "/home/user/project:/workspace",
@@ -62,6 +62,25 @@ func TestBuildShellArgsWithSinglePort(t *testing.T) {
 		"-p", "127.0.0.1:8080:8080",
 		"--entrypoint", "bash",
 		"ghcr.io/atrawog/fedora:latest",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsWithVolumes(t *testing.T) {
+	volumes := []VolumeMount{
+		{VolumeName: "ov-openclaw-data", ContainerPath: "/home/user/.openclaw"},
+	}
+	args := buildShellArgs("ghcr.io/atrawog/openclaw:latest", "/home/user/project", 1000, 1000, nil, volumes)
+	want := []string{
+		"docker", "run", "--rm", "-it",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"-v", "ov-openclaw-data:/home/user/.openclaw",
+		"--entrypoint", "bash",
+		"ghcr.io/atrawog/openclaw:latest",
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildShellArgs() =\n  %v\nwant\n  %v", args, want)

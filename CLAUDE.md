@@ -9,7 +9,7 @@ Built on `supervisord` and `task` ([taskfile.dev](https://taskfile.dev)). Suppor
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov pod` use the configured engine (Docker or Podman).
+**`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov enable` use the configured engine (Docker or Podman).
 
 **`task` (Taskfile)** -- thin wrappers that call `ov` commands. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
 
@@ -290,7 +290,7 @@ volumes:
 - **Path**: container mount path. `~` and `$HOME` expanded to resolved home directory.
 - **Naming convention**: Docker/podman volume names are `ov-<image>-<name>` (e.g. `ov-openclaw-data`).
 - **Collection**: `CollectImageVolumes()` traverses the full image base chain (image -> base -> base's base), collecting volumes from all layers. Deduplicated by name (first declaration wins -- outermost image takes priority).
-- **Integration**: volumes are automatically mounted by `ov shell`, `ov start`, and `ov pod install` via `-v <volume>:<path>` flags.
+- **Integration**: volumes are automatically mounted by `ov shell`, `ov start`, and `ov enable` via `-v <volume>:<path>` flags.
 
 Source: `ov/volumes.go` (collection, expansion), `ov/layers.go` (`VolumeYAML` struct, `HasVolumes`, `Volumes()`).
 
@@ -298,7 +298,7 @@ Source: `ov/volumes.go` (collection, expansion), `ov/layers.go` (`VolumeYAML` st
 
 ## GPU Passthrough
 
-`ov shell`, `ov start`, and `ov pod install` support GPU passthrough via `--gpu` / `--no-gpu` flags.
+`ov shell`, `ov start`, and `ov enable` support GPU passthrough via `--gpu` / `--no-gpu` flags.
 
 | Mode | Behavior |
 |---|---|
@@ -308,9 +308,9 @@ Source: `ov/volumes.go` (collection, expansion), `ov/layers.go` (`VolumeYAML` st
 
 - **Docker** (`engine.run=docker`): passes `--gpus all`
 - **Podman** (`engine.run=podman`): passes `--device nvidia.com/gpu=all`
-- **Podman quadlet** (`ov pod install`): adds `AddDevice=nvidia.com/gpu=all` to the `.container` file
+- **Podman quadlet** (`ov enable`): adds `AddDevice=nvidia.com/gpu=all` to the `.container` file
 
-Source: `ov/gpu.go` (detection), `ov/engine.go` (engine-specific args). `GPUFlags` struct is embedded in `ShellCmd`, `StartCmd`, and `PodInstallCmd`.
+Source: `ov/gpu.go` (detection), `ov/engine.go` (engine-specific args). `GPUFlags` struct is embedded in `ShellCmd`, `StartCmd`, and `EnableCmd`.
 
 ---
 
@@ -332,9 +332,9 @@ When `engine.build` and `engine.run` differ (e.g., build with Docker, run with P
 |---|---|---|
 | `ov shell` | `shell.go:Run()` | `rt.RunEngine` |
 | `ov start` (direct) | `start.go:runDirect()` | `rt.RunEngine` |
-| `ov start` (quadlet) | delegates to pod install | podman (always) |
-| `ov pod install` | `pod.go:PodInstallCmd.Run()` | podman (always) |
-| `ov pod update` | `pod.go:PodUpdateCmd.Run()` | podman (always) |
+| `ov start` (quadlet) | delegates to `ov enable` | podman (always) |
+| `ov enable` | `commands.go:EnableCmd.runEnable()` | podman (always) |
+| `ov update` | `commands.go:UpdateCmd.Run()` | podman (quadlet) or `rt.RunEngine` (direct) |
 | `ov build` | none | N/A |
 | `ov merge` | none | N/A |
 
@@ -377,16 +377,16 @@ ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu]
                                        # Bash shell in a container (mounts cwd at /workspace)
 ov start <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
                                        # Start service container (direct or quadlet per run_mode)
+                                       # Quadlet: auto-enables if auto_enable=true, else requires ov enable first
 ov stop <image>                        # Stop a running service container
-ov pod install <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
-                                       # Generate quadlet .container file, daemon-reload
+ov enable <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
+                                       # Generate quadlet .container file, daemon-reload (quadlet only)
                                        # Auto-transfers image from Docker if build engine is docker
-ov pod update <image> [--tag TAG]      # Re-transfer image + restart service
-ov pod uninstall <image>               # Remove quadlet file, daemon-reload
-ov pod start <image>                   # systemctl --user start
-ov pod stop <image>                    # systemctl --user stop
-ov pod status <image>                  # systemctl --user status
-ov pod logs <image> [-f]               # journalctl --user -u
+ov disable <image>                     # Disable service auto-start (quadlet only)
+ov status <image>                      # Show service status (quadlet: systemctl, direct: engine inspect)
+ov logs <image> [-f]                   # Show service logs (quadlet: journalctl, direct: engine logs)
+ov update <image> [--tag TAG]          # Update image, restart if active (quadlet) or print message (direct)
+ov remove <image>                      # Remove service (quadlet: delete .container, direct: stop + rm)
 ov config get <key>                    # Print resolved value
 ov config set <key> <value>            # Set in user config
 ov config list                         # Show all settings with source
@@ -426,7 +426,8 @@ project/
 |   +-- engine.go                       # Engine abstraction (docker/podman)
 |   +-- shell.go                        # `shell` command (execs engine run)
 |   +-- start.go                        # `start`/`stop` commands (engine run -d)
-|   +-- pod.go                          # `pod` command (podman quadlet systemd services)
+|   +-- commands.go                     # `enable`/`disable`/`status`/`logs`/`update`/`remove` commands
+|   +-- quadlet.go                      # Quadlet .container file generation + helpers
 |   +-- gpu.go                          # GPU auto-detection + passthrough flags
 |   +-- transfer.go                     # Cross-engine image transfer (LocalImageExists, TransferImage, EnsureImage)
 |   +-- volumes.go                      # Named volume collection + mounting
@@ -438,7 +439,7 @@ project/
 +-- Taskfile.yml                        # Root: includes + PATH setup
 +-- taskfiles/
 |   +-- Build.yml                       # ov, all, local, push, merge, iso, qcow2, raw
-|   +-- Run.yml                         # container, shell, vm
+|   +-- Run.yml                         # container, shell, enable, disable, start, stop, status, logs, update, remove, vm
 |   +-- Setup.yml                       # builder, all
 +-- layers/<name>/                      # Layer directories (see Layer Definition)
 +-- templates/
@@ -477,13 +478,14 @@ project/
 | `task build:merge -- <image>` | Merge small layers in a built image |
 | `task run:container -- <image>` | `docker run` |
 | `task run:shell -- <image>` | Delegates to `ov shell` |
-| `task run:pod:install -- <image>` | Install quadlet service (auto-transfers image from Docker) |
-| `task run:pod:update -- <image>` | Re-transfer image from Docker, restart service |
-| `task run:pod:uninstall -- <image>` | Uninstall quadlet service |
-| `task run:pod:start -- <image>` | Start quadlet service |
-| `task run:pod:stop -- <image>` | Stop quadlet service |
-| `task run:pod:status -- <image>` | Show quadlet service status |
-| `task run:pod:logs -- <image>` | Show quadlet service logs |
+| `task run:enable -- <image>` | Enable a service (`ov enable`) |
+| `task run:disable -- <image>` | Disable a service (`ov disable`) |
+| `task run:start -- <image>` | Start a service (`ov start`) |
+| `task run:stop -- <image>` | Stop a service (`ov stop`) |
+| `task run:status -- <image>` | Show service status (`ov status`) |
+| `task run:logs -- <image>` | Show service logs (`ov logs`) |
+| `task run:update -- <image>` | Update image and restart (`ov update`) |
+| `task run:remove -- <image>` | Remove a service (`ov remove`) |
 | `task build:iso -- <image> [tag]` | Build ISO via Bootc Image Builder (bootc only) |
 | `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image (bootc only) |
 | `task build:raw -- <image> [tag]` | Build RAW disk image (bootc only) |
@@ -609,17 +611,21 @@ engine:
   build: docker    # "docker" or "podman"
   run: docker      # "docker" or "podman"
 run_mode: direct   # "direct" or "quadlet"
+auto_enable: false # auto-enable quadlet on first ov start
 ```
 
-**Resolution chain:** env var (`OV_BUILD_ENGINE`, `OV_RUN_ENGINE`, `OV_RUN_MODE`) > config file > default (`docker`/`direct`).
+**Resolution chain:** env var (`OV_BUILD_ENGINE`, `OV_RUN_ENGINE`, `OV_RUN_MODE`, `OV_AUTO_ENABLE`) > config file > default.
 
 | Setting | Values | Default | Purpose |
 |---|---|---|---|
 | `engine.build` | `docker`, `podman` | `docker` | Engine for `ov build` and `ov merge` |
 | `engine.run` | `docker`, `podman` | `docker` | Engine for `ov shell` and `ov start` |
-| `run_mode` | `direct`, `quadlet` | `direct` | How `ov start`/`ov stop` work |
+| `run_mode` | `direct`, `quadlet` | `direct` | How `ov start`/`ov stop` and other service commands dispatch |
+| `auto_enable` | `true`, `false` | `false` | When `run_mode=quadlet`, auto-run `ov enable` on first `ov start` |
 
-When `run_mode=quadlet`, `ov start` delegates to `ov pod install + ov pod start`, and `ov stop` delegates to `ov pod stop`. This requires `engine.run=podman` (a warning is emitted otherwise).
+When `run_mode=quadlet`, `ov start` checks for an existing `.container` file. If none exists and `auto_enable=true`, it auto-enables (generates the quadlet file). If `auto_enable=false`, it errors with a message to run `ov enable` first. `ov stop` uses `systemctl --user stop`. This requires `engine.run=podman` (a warning is emitted otherwise).
+
+When `run_mode=direct`, `ov start`/`ov stop` use `<engine> run -d`/`<engine> stop`. Commands like `ov status`, `ov logs`, and `ov remove` work in both modes. `ov enable` and `ov disable` are quadlet-only.
 
 Source: `ov/runtime_config.go` (config struct, load/save/resolve), `ov/engine.go` (engine binary names, GPU args).
 
@@ -651,30 +657,36 @@ Source: `ov/build.go`.
 
 ---
 
-## Podman Quadlets
+## Quadlet Services
 
-`ov pod` manages containers as systemd user services via podman quadlet `.container` files. Unlike `ov start` (ephemeral `docker run -d`), quadlet services auto-restart on failure, integrate with `journalctl`, and can start at boot via `WantedBy=default.target`.
+`ov enable` manages containers as systemd user services via podman quadlet `.container` files. Unlike direct mode (`<engine> run -d`), quadlet services auto-restart on failure, integrate with `journalctl`, and can start at boot via `WantedBy=default.target`.
 
 User-level quadlets only (`~/.config/containers/systemd/`). No root required. Requires `podman` and a systemd user session (`loginctl enable-linger <user>`).
 
 ### Image Transfer
 
-Docker and podman have separate image stores. When `engine.build=docker`, images built with `ov build` exist only in Docker's store. `ov pod install` automatically detects if the image is missing from podman and transfers it via `docker save | podman load`. When `engine.build=podman`, the image is already in podman's store and no transfer is needed. `ov pod update` re-transfers (if needed) and restarts the service if active.
+Docker and podman have separate image stores. When `engine.build=docker`, images built with `ov build` exist only in Docker's store. `ov enable` automatically detects if the image is missing from podman and transfers it via `docker save | podman load`. When `engine.build=podman`, the image is already in podman's store and no transfer is needed. `ov update` re-transfers (if needed) and restarts the service if active.
 
 ### Workflow
 
 ```
-ov pod install fedora-test -w ~/project   # Generate .container file, transfer image, daemon-reload
-ov pod start fedora-test                   # systemctl --user start
-ov pod status fedora-test                  # systemctl --user status
-ov pod logs fedora-test -f                 # journalctl --user -u (follow)
-ov pod update fedora-test                  # Re-transfer image after rebuild, restart service
-ov pod stop fedora-test                    # systemctl --user stop
-ov pod uninstall fedora-test               # Remove .container file, daemon-reload
+ov config set run_mode quadlet
+ov config set engine.run podman
+
+ov enable fedora-test -w ~/project        # Generate .container file, transfer image, daemon-reload
+ov start fedora-test                       # systemctl --user start
+ov status fedora-test                      # systemctl --user status
+ov logs fedora-test -f                     # journalctl --user -u (follow)
+ov update fedora-test                      # Re-transfer image after rebuild, restart service
+ov stop fedora-test                        # systemctl --user stop
+ov disable fedora-test                     # Disable auto-start
+ov remove fedora-test                      # Stop + remove .container file, daemon-reload
 ```
+
+With `auto_enable=true`, `ov start` auto-generates the quadlet file on first run, so `ov enable` can be skipped.
 
 ### Generated File
 
-`ov pod install` writes `~/.config/containers/systemd/ov-<image>.container`. The systemd service name is `ov-<image>.service`. Container name is `ov-<image>` (same as `ov start`). Ports are bound to `127.0.0.1` only. The container runs `supervisord -n -c /etc/supervisord.conf` as its entrypoint.
+`ov enable` writes `~/.config/containers/systemd/ov-<image>.container`. The systemd service name is `ov-<image>.service`. Container name is `ov-<image>` (same as direct mode). Ports are bound to `127.0.0.1` only. The container runs `supervisord -n -c /etc/supervisord.conf` as its entrypoint.
 
-Source: `ov/pod.go`.
+Source: `ov/quadlet.go` (generation), `ov/commands.go` (command structs).

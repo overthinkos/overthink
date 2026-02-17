@@ -20,7 +20,12 @@ type CLI struct {
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
-	Pod      PodCmd      `cmd:"" help:"Manage podman quadlet systemd services"`
+	Enable   EnableCmd   `cmd:"" help:"Enable a service (quadlet: generate .container + reload)"`
+	Disable  DisableCmd  `cmd:"" help:"Disable service auto-start (quadlet only)"`
+	Status   StatusCmd   `cmd:"" help:"Show service container status"`
+	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
+	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
+	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
@@ -334,7 +339,7 @@ type ConfigCmd struct {
 
 // ConfigGetCmd prints the resolved value for a key
 type ConfigGetCmd struct {
-	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode)"`
+	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode, auto_enable)"`
 }
 
 func (c *ConfigGetCmd) Run() error {
@@ -351,8 +356,14 @@ func (c *ConfigGetCmd) Run() error {
 		fmt.Println(rt.RunEngine)
 	case "run_mode":
 		fmt.Println(rt.RunMode)
+	case "auto_enable":
+		if rt.AutoEnable {
+			fmt.Println("true")
+		} else {
+			fmt.Println("false")
+		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", c.Key)
 	}
 	return nil
 }

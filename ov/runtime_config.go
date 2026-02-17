@@ -10,8 +10,9 @@ import (
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine    EngineConfig `yaml:"engine"`
-	RunMode   string       `yaml:"run_mode,omitempty"`
+	Engine     EngineConfig `yaml:"engine"`
+	RunMode    string       `yaml:"run_mode,omitempty"`
+	AutoEnable *bool        `yaml:"auto_enable,omitempty"`
 }
 
 // EngineConfig specifies which container engine to use
@@ -25,6 +26,7 @@ type ResolvedRuntime struct {
 	BuildEngine string // "docker" or "podman"
 	RunEngine   string // "docker" or "podman"
 	RunMode     string // "direct" or "quadlet"
+	AutoEnable  bool   // auto-enable quadlet on first start
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file.
@@ -91,6 +93,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		BuildEngine: resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "docker"),
 		RunEngine:   resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "docker"),
 		RunMode:     resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
+		AutoEnable:  resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -135,6 +138,16 @@ func validateRunMode(value string) error {
 	return nil
 }
 
+func resolveAutoEnable(envVal string, cfgVal *bool) bool {
+	if envVal != "" {
+		return envVal == "true" || envVal == "1"
+	}
+	if cfgVal != nil {
+		return *cfgVal
+	}
+	return false
+}
+
 // GetConfigValue returns the value for a dot-notation key from the config file.
 func GetConfigValue(key string) (string, error) {
 	cfg, err := LoadRuntimeConfig()
@@ -149,8 +162,16 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.Engine.Run, nil
 	case "run_mode":
 		return cfg.RunMode, nil
+	case "auto_enable":
+		if cfg.AutoEnable != nil {
+			if *cfg.AutoEnable {
+				return "true", nil
+			}
+			return "false", nil
+		}
+		return "", nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
 	}
 }
 
@@ -166,8 +187,12 @@ func SetConfigValue(key, value string) error {
 		if err := validateRunMode(value); err != nil {
 			return err
 		}
+	case "auto_enable":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("auto_enable must be \"true\" or \"false\", got %q", value)
+		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -182,6 +207,9 @@ func SetConfigValue(key, value string) error {
 		cfg.Engine.Run = value
 	case "run_mode":
 		cfg.RunMode = value
+	case "auto_enable":
+		b := value == "true"
+		cfg.AutoEnable = &b
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -207,8 +235,10 @@ func ResetConfigValue(key string) error {
 		cfg.Engine.Run = ""
 	case "run_mode":
 		cfg.RunMode = ""
+	case "auto_enable":
+		cfg.AutoEnable = nil
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -239,9 +269,30 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: key, Value: defaultVal, Source: "default"}
 	}
 
+	// Resolve auto_enable separately since it's a bool pointer
+	autoEnableEntry := func() configKeySource {
+		envVal := os.Getenv("OV_AUTO_ENABLE")
+		if envVal != "" {
+			resolved := "false"
+			if envVal == "true" || envVal == "1" {
+				resolved = "true"
+			}
+			return configKeySource{Key: "auto_enable", Value: resolved, Source: "env (OV_AUTO_ENABLE)"}
+		}
+		if cfg.AutoEnable != nil {
+			val := "false"
+			if *cfg.AutoEnable {
+				val = "true"
+			}
+			return configKeySource{Key: "auto_enable", Value: val, Source: "config"}
+		}
+		return configKeySource{Key: "auto_enable", Value: "false", Source: "default"}
+	}
+
 	return []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "docker"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "docker"),
 		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
+		autoEnableEntry(),
 	}, nil
 }

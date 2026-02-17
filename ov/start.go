@@ -17,14 +17,13 @@ type StartCmd struct {
 }
 
 func (c *StartCmd) Run() error {
-	// Check run_mode — if quadlet, delegate to pod install+start
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
 	if rt.RunMode == "quadlet" {
-		return c.runQuadlet()
+		return c.runQuadlet(rt)
 	}
 
 	return c.runDirect(rt)
@@ -97,19 +96,37 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	return nil
 }
 
-func (c *StartCmd) runQuadlet() error {
-	// Delegate to pod install + start
-	install := &PodInstallCmd{
-		Image:     c.Image,
-		Workspace: c.Workspace,
-		Tag:       c.Tag,
-		GPUFlags:  c.GPUFlags,
-	}
-	if err := install.Run(); err != nil {
+func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
+	exists, err := quadletExists(c.Image)
+	if err != nil {
 		return err
 	}
-	start := &PodStartCmd{Image: c.Image}
-	return start.Run()
+
+	if !exists {
+		if !rt.AutoEnable {
+			return fmt.Errorf("not enabled; run 'ov enable %s' first, or set auto_enable=true", c.Image)
+		}
+		// Auto-enable: generate quadlet file
+		enable := &EnableCmd{
+			Image:     c.Image,
+			Workspace: c.Workspace,
+			Tag:       c.Tag,
+			GPUFlags:  c.GPUFlags,
+		}
+		if err := enable.runEnable(rt); err != nil {
+			return err
+		}
+	}
+
+	svc := serviceName(c.Image)
+	cmd := exec.Command("systemctl", "--user", "start", svc)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("starting %s: %w", svc, err)
+	}
+	fmt.Fprintf(os.Stderr, "Started %s\n", svc)
+	return nil
 }
 
 // StopCmd stops a running container started by StartCmd
@@ -124,8 +141,15 @@ func (c *StopCmd) Run() error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		stop := &PodStopCmd{Image: c.Image}
-		return stop.Run()
+		svc := serviceName(c.Image)
+		cmd := exec.Command("systemctl", "--user", "stop", svc)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("stopping %s: %w", svc, err)
+		}
+		fmt.Fprintf(os.Stderr, "Stopped %s\n", svc)
+		return nil
 	}
 
 	engine := EngineBinary(rt.RunEngine)

@@ -63,7 +63,7 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	}
 
 	// Ensure env vars are clear
-	for _, key := range []string{"OV_BUILD_ENGINE", "OV_RUN_ENGINE", "OV_RUN_MODE"} {
+	for _, key := range []string{"OV_BUILD_ENGINE", "OV_RUN_ENGINE", "OV_RUN_MODE", "OV_AUTO_ENABLE"} {
 		os.Unsetenv(key)
 	}
 
@@ -79,6 +79,9 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	}
 	if rt.RunMode != "direct" {
 		t.Errorf("RunMode = %q, want %q", rt.RunMode, "direct")
+	}
+	if rt.AutoEnable {
+		t.Error("AutoEnable should default to false")
 	}
 }
 
@@ -223,6 +226,7 @@ func TestListConfigValues(t *testing.T) {
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_AUTO_ENABLE")
 
 	SetConfigValue("engine.build", "podman")
 
@@ -230,8 +234,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 3 {
-		t.Fatalf("expected 3 values, got %d", len(vals))
+	if len(vals) != 4 {
+		t.Fatalf("expected 4 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config
@@ -241,6 +245,10 @@ func TestListConfigValues(t *testing.T) {
 	// engine.run should be default
 	if vals[1].Key != "engine.run" || vals[1].Value != "docker" || vals[1].Source != "default" {
 		t.Errorf("engine.run entry: %+v", vals[1])
+	}
+	// auto_enable should be default false
+	if vals[3].Key != "auto_enable" || vals[3].Value != "false" || vals[3].Source != "default" {
+		t.Errorf("auto_enable entry: %+v", vals[3])
 	}
 }
 
@@ -270,5 +278,135 @@ func TestResolveValue(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("resolveValue(%q, %q, %q) = %q, want %q", tt.env, tt.cfg, tt.def, got, tt.want)
 		}
+	}
+}
+
+func TestAutoEnable_SetGetReset(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	// Set to true
+	if err := SetConfigValue("auto_enable", "true"); err != nil {
+		t.Fatalf("SetConfigValue(auto_enable, true) error: %v", err)
+	}
+	val, err := GetConfigValue("auto_enable")
+	if err != nil {
+		t.Fatalf("GetConfigValue(auto_enable) error: %v", err)
+	}
+	if val != "true" {
+		t.Errorf("GetConfigValue(auto_enable) = %q, want %q", val, "true")
+	}
+
+	// Set to false
+	if err := SetConfigValue("auto_enable", "false"); err != nil {
+		t.Fatalf("SetConfigValue(auto_enable, false) error: %v", err)
+	}
+	val, _ = GetConfigValue("auto_enable")
+	if val != "false" {
+		t.Errorf("GetConfigValue(auto_enable) = %q, want %q", val, "false")
+	}
+
+	// Invalid value
+	if err := SetConfigValue("auto_enable", "yes"); err == nil {
+		t.Error("expected error for invalid auto_enable value")
+	}
+
+	// Reset
+	if err := ResetConfigValue("auto_enable"); err != nil {
+		t.Fatalf("ResetConfigValue(auto_enable) error: %v", err)
+	}
+	val, _ = GetConfigValue("auto_enable")
+	if val != "" {
+		t.Errorf("after reset, GetConfigValue(auto_enable) = %q, want empty", val)
+	}
+}
+
+func TestAutoEnable_EnvOverridesConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	os.Unsetenv("OV_BUILD_ENGINE")
+	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_RUN_MODE")
+
+	// Config says false
+	SetConfigValue("auto_enable", "false")
+
+	// Env says true
+	os.Setenv("OV_AUTO_ENABLE", "true")
+	defer os.Unsetenv("OV_AUTO_ENABLE")
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		t.Fatalf("ResolveRuntime() error: %v", err)
+	}
+	if !rt.AutoEnable {
+		t.Error("AutoEnable should be true when OV_AUTO_ENABLE=true overrides config")
+	}
+}
+
+func TestAutoEnable_EnvValue1(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	os.Unsetenv("OV_BUILD_ENGINE")
+	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_RUN_MODE")
+	os.Setenv("OV_AUTO_ENABLE", "1")
+	defer os.Unsetenv("OV_AUTO_ENABLE")
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		t.Fatalf("ResolveRuntime() error: %v", err)
+	}
+	if !rt.AutoEnable {
+		t.Error("AutoEnable should be true when OV_AUTO_ENABLE=1")
+	}
+}
+
+func TestAutoEnable_ListConfigValues(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	os.Unsetenv("OV_BUILD_ENGINE")
+	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_AUTO_ENABLE")
+
+	SetConfigValue("auto_enable", "true")
+
+	vals, err := ListConfigValues()
+	if err != nil {
+		t.Fatalf("ListConfigValues() error: %v", err)
+	}
+
+	// Find auto_enable entry
+	found := false
+	for _, v := range vals {
+		if v.Key == "auto_enable" {
+			found = true
+			if v.Value != "true" || v.Source != "config" {
+				t.Errorf("auto_enable entry: %+v, want value=true source=config", v)
+			}
+		}
+	}
+	if !found {
+		t.Error("auto_enable not found in ListConfigValues output")
 	}
 }

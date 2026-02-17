@@ -68,7 +68,12 @@ func (c *PodInstallCmd) Run() error {
 
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 
-	if err := ensurePodmanImage(imageRef); err != nil {
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	if err := ensurePodmanImage(imageRef, rt.BuildEngine); err != nil {
 		return err
 	}
 
@@ -302,8 +307,21 @@ func (c *PodUpdateCmd) Run() error {
 
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 
-	if err := transferDockerToPodman(imageRef); err != nil {
+	rt, err := ResolveRuntime()
+	if err != nil {
 		return err
+	}
+
+	if rt.BuildEngine == "podman" {
+		// Already in podman store, just verify it exists
+		check := exec.Command("podman", "image", "exists", imageRef)
+		if err := check.Run(); err != nil {
+			return fmt.Errorf("image %s not found in podman", imageRef)
+		}
+	} else {
+		if err := transferDockerToPodman(imageRef); err != nil {
+			return err
+		}
 	}
 
 	svc := serviceName(c.Image)
@@ -324,12 +342,17 @@ func (c *PodUpdateCmd) Run() error {
 	return nil
 }
 
-// ensurePodmanImage checks if an image exists in podman, and if not, transfers it from Docker.
-func ensurePodmanImage(imageRef string) error {
+// ensurePodmanImage checks if an image exists in podman, and if not, transfers it.
+// When buildEngine is "podman", the image is already in the podman store.
+func ensurePodmanImage(imageRef string, buildEngine string) error {
 	check := exec.Command("podman", "image", "exists", imageRef)
 	if err := check.Run(); err == nil {
 		fmt.Fprintf(os.Stderr, "Image %s already in podman\n", imageRef)
 		return nil
+	}
+
+	if buildEngine == "podman" {
+		return fmt.Errorf("image %s not found in podman (build engine is podman, no docker to transfer from)", imageRef)
 	}
 
 	return transferDockerToPodman(imageRef)
@@ -340,7 +363,7 @@ func transferDockerToPodman(imageRef string) error {
 	// Verify image exists in Docker
 	inspect := exec.Command("docker", "image", "inspect", imageRef)
 	if output, err := inspect.CombinedOutput(); err != nil {
-		return fmt.Errorf("image %s not found in docker or podman:\n%s", imageRef, strings.TrimSpace(string(output)))
+		return fmt.Errorf("image %s not found in docker:\n%s", imageRef, strings.TrimSpace(string(output)))
 	}
 
 	fmt.Fprintf(os.Stderr, "Transferring %s from docker to podman\n", imageRef)

@@ -17,32 +17,23 @@ tasks:
       - sh: test -x {{.ROOT_DIR}}/bin/ov
         msg: "ov not found -- run 'task build:ov' first"
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - docker buildx bake -f .build/docker-bake.hcl
-      - "{{.ROOT_DIR}}/bin/ov merge --all"
+      - "{{.ROOT_DIR}}/bin/ov build"
 
   local:
-    desc: Build images for host platform only (uses local docker cache, auto-merges if enabled)
+    desc: Build images for host platform only (auto-merges if enabled)
     preconditions:
       - sh: test -x {{.ROOT_DIR}}/bin/ov
         msg: "ov not found -- run 'task build:ov' first"
-    vars:
-      ARCH:
-        sh: uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/'
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - >-
-        docker buildx bake -f .build/docker-bake.hcl
-        --builder default
-        --set '*.platform=linux/{{.ARCH}}'
-        --load {{.CLI_ARGS}}
-      - "{{.ROOT_DIR}}/bin/ov merge --all"
+      - "{{.ROOT_DIR}}/bin/ov build {{.CLI_ARGS}}"
 
   push:
     desc: Build and push all images
+    preconditions:
+      - sh: test -x {{.ROOT_DIR}}/bin/ov
+        msg: "ov not found -- run 'task build:ov' first"
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - docker buildx bake -f .build/docker-bake.hcl --push
+      - "{{.ROOT_DIR}}/bin/ov build --push"
 
   merge:
     desc: "Merge small layers in a built image. Usage: task build:merge -- <image>"

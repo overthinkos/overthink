@@ -17,6 +17,20 @@ type StartCmd struct {
 }
 
 func (c *StartCmd) Run() error {
+	// Check run_mode — if quadlet, delegate to pod install+start
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	if rt.RunMode == "quadlet" {
+		return c.runQuadlet()
+	}
+
+	return c.runDirect(rt)
+}
+
+func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -58,14 +72,15 @@ func (c *StartCmd) Run() error {
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	LogGPU(gpu)
 
+	engine := rt.RunEngine
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 	name := containerName(c.Image)
-	args := buildStartArgs(imageRef, absWorkspace, resolved.Ports, name, volumes, gpu)
+	args := buildStartArgs(engine, imageRef, absWorkspace, resolved.Ports, name, volumes, gpu)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("docker run failed: %w\n%s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("%s run failed: %w\n%s", EngineBinary(engine), err, strings.TrimSpace(string(output)))
 	}
 
 	containerID := strings.TrimSpace(string(output))
@@ -77,34 +92,61 @@ func (c *StartCmd) Run() error {
 	return nil
 }
 
+func (c *StartCmd) runQuadlet() error {
+	// Delegate to pod install + start
+	install := &PodInstallCmd{
+		Image:     c.Image,
+		Workspace: c.Workspace,
+		Tag:       c.Tag,
+		GPUFlags:  c.GPUFlags,
+	}
+	if err := install.Run(); err != nil {
+		return err
+	}
+	start := &PodStartCmd{Image: c.Image}
+	return start.Run()
+}
+
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
 	Image string `arg:"" help:"Image name from images.yml"`
 }
 
 func (c *StopCmd) Run() error {
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	if rt.RunMode == "quadlet" {
+		stop := &PodStopCmd{Image: c.Image}
+		return stop.Run()
+	}
+
+	engine := EngineBinary(rt.RunEngine)
 	name := containerName(c.Image)
 
-	cmd := exec.Command("docker", "stop", name)
+	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("docker stop failed: %w\n%s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("%s stop failed: %w\n%s", engine, err, strings.TrimSpace(string(output)))
 	}
 
 	fmt.Fprintf(os.Stderr, "Stopped %s\n", name)
 	return nil
 }
 
-// buildStartArgs constructs the docker run argument list for detached supervisord.
-func buildStartArgs(imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool) []string {
+// buildStartArgs constructs the container run argument list for detached supervisord.
+func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool) []string {
+	binary := EngineBinary(engine)
 	args := []string{
-		"docker", "run", "-d", "--rm",
+		binary, "run", "-d", "--rm",
 		"--name", name,
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 	}
 	if gpu {
-		args = append(args, "--gpus", "all")
+		args = append(args, GPURunArgs(engine)...)
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))

@@ -100,7 +100,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 }
 
 // cleanStaleBuildDirs removes image directories in .build/ that don't correspond
-// to any enabled image. This prevents leftovers from renamed/removed images.
+// to any enabled image, and removes leftover files like docker-bake.hcl.
 func (g *Generator) cleanStaleBuildDirs() error {
 	entries, err := os.ReadDir(g.BuildDir)
 	if err != nil {
@@ -110,16 +110,22 @@ func (g *Generator) cleanStaleBuildDirs() error {
 		return err
 	}
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if _, exists := g.Images[name]; !exists {
-			path := filepath.Join(g.BuildDir, name)
-			if err := os.RemoveAll(path); err != nil {
-				return fmt.Errorf("removing stale dir %s: %w", path, err)
+		if entry.IsDir() {
+			name := entry.Name()
+			if _, exists := g.Images[name]; !exists {
+				path := filepath.Join(g.BuildDir, name)
+				if err := os.RemoveAll(path); err != nil {
+					return fmt.Errorf("removing stale dir %s: %w", path, err)
+				}
+				fmt.Fprintf(os.Stderr, "Removed stale build dir: .build/%s\n", name)
 			}
-			fmt.Fprintf(os.Stderr, "Removed stale build dir: .build/%s\n", name)
+		} else if entry.Name() == "docker-bake.hcl" {
+			// Remove leftover HCL file from pre-ov-build era
+			path := filepath.Join(g.BuildDir, entry.Name())
+			if err := os.Remove(path); err != nil {
+				return fmt.Errorf("removing stale file %s: %w", path, err)
+			}
+			fmt.Fprintf(os.Stderr, "Removed stale file: .build/%s\n", entry.Name())
 		}
 	}
 	return nil
@@ -155,11 +161,6 @@ func (g *Generator) Generate() error {
 		if err := g.generateContainerfile(name); err != nil {
 			return fmt.Errorf("generating Containerfile for %s: %w", name, err)
 		}
-	}
-
-	// Generate docker-bake.hcl
-	if err := g.generateBakeHCL(order); err != nil {
-		return fmt.Errorf("generating docker-bake.hcl: %w", err)
 	}
 
 	return nil
@@ -418,25 +419,16 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	return os.WriteFile(containerfile, []byte(b.String()), 0644)
 }
 
-// resolveBaseImage returns the full base image reference
+// resolveBaseImage returns the full base image reference.
+// For internal bases, uses the exact CalVer tag so each image references
+// the precise version of its parent. Both Docker and Podman resolve local
+// images before pulling from registry.
 func (g *Generator) resolveBaseImage(img *ResolvedImage) string {
 	if img.IsExternalBase {
 		return img.Base
 	}
-	// Internal base - use stable :latest reference so Containerfile content
-	// doesn't change on every generate (CalVer tag changes each minute).
-	// The HCL contexts mapping redirects this to the actual target output.
-	return g.stableBaseRef(img.Base)
-}
-
-// stableBaseRef returns a stable image reference for an internal base image.
-// Uses :latest tag instead of CalVer to prevent unnecessary cache invalidation.
-func (g *Generator) stableBaseRef(parentName string) string {
-	parentImg := g.Images[parentName]
-	if parentImg.Registry != "" {
-		return fmt.Sprintf("%s/%s:latest", parentImg.Registry, parentName)
-	}
-	return fmt.Sprintf("%s:latest", parentName)
+	parentImg := g.Images[img.Base]
+	return parentImg.FullTag
 }
 
 // writeBootstrap writes the bootstrap preamble for external base images
@@ -762,63 +754,3 @@ func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *Reso
 	b.WriteString("    cd /ctx && task -t user.yml install\n")
 }
 
-// generateBakeHCL generates the docker-bake.hcl file
-func (g *Generator) generateBakeHCL(order []string) error {
-	var b strings.Builder
-
-	b.WriteString("# .build/docker-bake.hcl (generated -- do not edit)\n\n")
-
-	// Group target for building all
-	b.WriteString("group \"default\" {\n")
-	b.WriteString("  targets = [")
-	for i, name := range order {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString(fmt.Sprintf("%q", name))
-	}
-	b.WriteString("]\n")
-	b.WriteString("}\n\n")
-
-	// Target for each image
-	for _, name := range order {
-		img := g.Images[name]
-		b.WriteString(fmt.Sprintf("target %q {\n", name))
-		b.WriteString("  context = \".\"\n")
-		b.WriteString(fmt.Sprintf("  dockerfile = \".build/%s/Containerfile\"\n", name))
-
-		// Tags
-		b.WriteString("  tags = [")
-		b.WriteString(fmt.Sprintf("%q", img.FullTag))
-		// Add latest tag if using auto versioning
-		if g.Config.Images[name].Tag == "" || g.Config.Images[name].Tag == "auto" {
-			if img.Registry != "" {
-				b.WriteString(fmt.Sprintf(", %q", fmt.Sprintf("%s/%s:latest", img.Registry, name)))
-			} else {
-				b.WriteString(fmt.Sprintf(", %q", fmt.Sprintf("%s:latest", name)))
-			}
-		}
-		b.WriteString("]\n")
-
-		// Platforms
-		b.WriteString("  platforms = [")
-		for i, p := range img.Platforms {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(fmt.Sprintf("%q", p))
-		}
-		b.WriteString("]\n")
-
-		// Dependencies
-		if !img.IsExternalBase {
-			b.WriteString(fmt.Sprintf("  depends_on = [%q]\n", img.Base))
-			stableRef := g.stableBaseRef(img.Base)
-			b.WriteString(fmt.Sprintf("  contexts = {\n    %q = \"target:%s\"\n  }\n", stableRef, img.Base))
-		}
-
-		b.WriteString("}\n\n")
-	}
-
-	return os.WriteFile(filepath.Join(g.BuildDir, "docker-bake.hcl"), []byte(b.String()), 0644)
-}

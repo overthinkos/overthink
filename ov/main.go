@@ -10,20 +10,22 @@ import (
 
 // CLI defines the command-line interface structure
 type CLI struct {
-	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles + HCL)"`
+	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
 	Validate ValidateCmd `cmd:"" help:"Check images.yml + layers, exit 0 or 1"`
 	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
 	List     ListCmd     `cmd:"" help:"List components"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Build    BuildCmd    `cmd:"" help:"Build container images"`
 	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
 	Pod      PodCmd      `cmd:"" help:"Manage podman quadlet systemd services"`
+	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
 
-// GenerateCmd generates Containerfiles and docker-bake.hcl
+// GenerateCmd generates Containerfiles
 type GenerateCmd struct {
 	Tag string `long:"tag" help:"Override tag (default: CalVer)"`
 }
@@ -141,7 +143,7 @@ func (c *InspectCmd) Run() error {
 type ListCmd struct {
 	Images   ListImagesCmd   `cmd:"" help:"Images from images.yml"`
 	Layers   ListLayersCmd   `cmd:"" help:"Layers from filesystem"`
-	Targets  ListTargetsCmd  `cmd:"" help:"Bake targets from generated HCL"`
+	Targets  ListTargetsCmd  `cmd:"" help:"Build targets in dependency order"`
 	Services ListServicesCmd `cmd:"" help:"Layers with service in layer.yml"`
 	Routes   ListRoutesCmd   `cmd:"" help:"Layers with route in layer.yml"`
 	Volumes  ListVolumesCmd  `cmd:"" help:"Layers with volumes in layer.yml"`
@@ -187,7 +189,7 @@ func (c *ListLayersCmd) Run() error {
 	return nil
 }
 
-// ListTargetsCmd lists bake targets
+// ListTargetsCmd lists build targets in dependency order
 type ListTargetsCmd struct{}
 
 func (c *ListTargetsCmd) Run() error {
@@ -319,6 +321,97 @@ func (c *NewLayerCmd) Run() error {
 		return err
 	}
 	return ScaffoldLayer(dir, c.Name)
+}
+
+// ConfigCmd groups config subcommands
+type ConfigCmd struct {
+	Get   ConfigGetCmd   `cmd:"" help:"Print resolved value for a config key"`
+	Set   ConfigSetCmd   `cmd:"" help:"Set a config value"`
+	List  ConfigListCmd  `cmd:"" help:"Show all settings with source"`
+	Reset ConfigResetCmd `cmd:"" help:"Remove a key from config (revert to default)"`
+	Path  ConfigPathCmd  `cmd:"" help:"Print config file path"`
+}
+
+// ConfigGetCmd prints the resolved value for a key
+type ConfigGetCmd struct {
+	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode)"`
+}
+
+func (c *ConfigGetCmd) Run() error {
+	// Show resolved value (env > config > default)
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	switch c.Key {
+	case "engine.build":
+		fmt.Println(rt.BuildEngine)
+	case "engine.run":
+		fmt.Println(rt.RunEngine)
+	case "run_mode":
+		fmt.Println(rt.RunMode)
+	default:
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode)", c.Key)
+	}
+	return nil
+}
+
+// ConfigSetCmd sets a config value
+type ConfigSetCmd struct {
+	Key   string `arg:"" help:"Config key"`
+	Value string `arg:"" help:"Config value"`
+}
+
+func (c *ConfigSetCmd) Run() error {
+	if err := SetConfigValue(c.Key, c.Value); err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "Set %s = %s\n", c.Key, c.Value)
+	return nil
+}
+
+// ConfigListCmd shows all settings
+type ConfigListCmd struct{}
+
+func (c *ConfigListCmd) Run() error {
+	vals, err := ListConfigValues()
+	if err != nil {
+		return err
+	}
+	for _, v := range vals {
+		fmt.Printf("%-15s %-10s (%s)\n", v.Key, v.Value, v.Source)
+	}
+	return nil
+}
+
+// ConfigResetCmd removes a key from config
+type ConfigResetCmd struct {
+	Key string `arg:"" optional:"" help:"Config key to reset (omit to reset all)"`
+}
+
+func (c *ConfigResetCmd) Run() error {
+	if err := ResetConfigValue(c.Key); err != nil {
+		return err
+	}
+	if c.Key == "" {
+		fmt.Fprintln(os.Stderr, "Reset all config to defaults")
+	} else {
+		fmt.Fprintf(os.Stderr, "Reset %s to default\n", c.Key)
+	}
+	return nil
+}
+
+// ConfigPathCmd prints the config file path
+type ConfigPathCmd struct{}
+
+func (c *ConfigPathCmd) Run() error {
+	path, err := RuntimeConfigPath()
+	if err != nil {
+		return err
+	}
+	fmt.Println(path)
+	return nil
 }
 
 // VersionCmd prints the computed CalVer tag

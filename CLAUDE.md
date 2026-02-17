@@ -1,7 +1,7 @@
 # Overthink Build System
 
 Compose container images from a library of fully configurable layers.
-Built on `docker buildx bake` (HCL), `supervisord`, and `task` ([taskfile.dev](https://taskfile.dev)).
+Built on `supervisord` and `task` ([taskfile.dev](https://taskfile.dev)). Supports both Docker and Podman as build/run engines.
 
 ---
 
@@ -9,12 +9,11 @@ Built on `docker buildx bake` (HCL), `supervisord`, and `task` ([taskfile.dev](h
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles and HCL. Source: `ov/`. Registry inspection via go-containerregistry. Exception: `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov pod` exec into `docker run`/`docker stop`/`docker save`/`docker load`/`systemctl`/`journalctl` as developer conveniences (not part of the build pipeline).
+**`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov pod` use the configured engine (Docker or Podman).
 
-**`task` (Taskfile)** -- all execution. Thin wrappers that call `ov` for generation, `docker`/`podman` for builds. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
+**`task` (Taskfile)** -- thin wrappers that call `ov` commands. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
 
 **What gets generated** (`ov generate`):
-- `.build/docker-bake.hcl` -- one explicit target per image, fully expanded (no HCL variables/matrices)
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
 - `.build/<image>/fragments/*.conf` -- supervisord service fragments (only for images with `service` layers)
@@ -307,10 +306,11 @@ Source: `ov/volumes.go` (collection, expansion), `ov/layers.go` (`VolumeYAML` st
 | `--no-gpu` | Disable GPU passthrough |
 | (neither) | Auto-detect via `nvidia-smi` |
 
-- **Docker** (`ov shell`, `ov start`): passes `--gpus all`
+- **Docker** (`engine.run=docker`): passes `--gpus all`
+- **Podman** (`engine.run=podman`): passes `--device nvidia.com/gpu=all`
 - **Podman quadlet** (`ov pod install`): adds `AddDevice=nvidia.com/gpu=all` to the `.container` file
 
-Source: `ov/gpu.go`. `GPUFlags` struct is embedded in `ShellCmd`, `StartCmd`, and `PodInstallCmd`.
+Source: `ov/gpu.go` (detection), `ov/engine.go` (engine-specific args). `GPUFlags` struct is embedded in `ShellCmd`, `StartCmd`, and `PodInstallCmd`.
 
 ---
 
@@ -331,15 +331,18 @@ Override: `ov generate --tag <value>` replaces all `"auto"` resolutions.
 ## ov CLI Reference
 
 ```
-ov generate [--tag TAG]                # Write .build/ (Containerfiles + HCL)
+ov generate [--tag TAG]                # Write .build/ (Containerfiles)
 ov validate                            # Check images.yml + layers, exit 0 or 1
 ov inspect <image> [--format FIELD]    # Print resolved config (JSON) or single field
 ov list images                         # Images from images.yml
 ov list layers                         # Layers from filesystem
-ov list targets                        # Bake targets from generated HCL
+ov list targets                        # Build targets in dependency order
 ov list services                       # Layers with service in layer.yml
 ov list routes                         # Layers with route in layer.yml (host + port)
 ov list volumes                        # Layers with volumes in layer.yml
+ov build [image...]                    # Build for local platform, load into engine store
+ov build --push [image...]             # Build for all platforms and push to registry
+ov build --platform linux/amd64 [image...]  # Specific platform
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
                                        # Merge small layers in a built image
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
@@ -347,17 +350,22 @@ ov new layer <name>                    # Scaffold a layer directory
 ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu]
                                        # Bash shell in a container (mounts cwd at /workspace)
 ov start <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
-                                       # Start service container with supervisord (detached)
+                                       # Start service container (direct or quadlet per run_mode)
 ov stop <image>                        # Stop a running service container
 ov pod install <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
                                        # Generate quadlet .container file, daemon-reload
-                                       # Auto-transfers image from Docker if missing in podman
-ov pod update <image> [--tag TAG]      # Re-transfer image from Docker + restart service
+                                       # Auto-transfers image from Docker if build engine is docker
+ov pod update <image> [--tag TAG]      # Re-transfer image + restart service
 ov pod uninstall <image>               # Remove quadlet file, daemon-reload
 ov pod start <image>                   # systemctl --user start
 ov pod stop <image>                    # systemctl --user stop
 ov pod status <image>                  # systemctl --user status
 ov pod logs <image> [-f]               # journalctl --user -u
+ov config get <key>                    # Print resolved value
+ov config set <key> <value>            # Set in user config
+ov config list                         # Show all settings with source
+ov config reset [key]                  # Remove from user config (revert to default)
+ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
 
@@ -381,20 +389,22 @@ project/
 |   +-- layers.go                       # Layer scanning, file detection
 |   +-- env.go                          # env config merging, path expansion
 |   +-- graph.go                        # Topological sort (layers + images)
-|   +-- generate.go                     # Containerfile + HCL generation
+|   +-- generate.go                     # Containerfile generation
 |   +-- validate.go                     # All validation rules
 |   +-- version.go                      # CalVer computation
 |   +-- scaffold.go                     # `new layer` scaffolding
+|   +-- build.go                        # `build` command (sequential image building)
 |   +-- merge.go                        # `merge` command (post-build layer merging)
 |   +-- registry.go                     # Remote image inspection (go-containerregistry)
-|   +-- shell.go                        # `shell` command (execs docker run)
-|   +-- start.go                        # `start`/`stop` commands (docker run -d)
+|   +-- runtime_config.go              # Runtime config (~/.config/ov/config.yml)
+|   +-- engine.go                       # Engine abstraction (docker/podman)
+|   +-- shell.go                        # `shell` command (execs engine run)
+|   +-- start.go                        # `start`/`stop` commands (engine run -d)
 |   +-- pod.go                          # `pod` command (podman quadlet systemd services)
 |   +-- gpu.go                          # GPU auto-detection + passthrough flags
 |   +-- volumes.go                      # Named volume collection + mounting
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
-|   +-- docker-bake.hcl
 |   +-- <image>/Containerfile
 |   +-- <image>/fragments/*.conf        # Supervisord fragments (from layer.yml service)
 +-- images.yml                          # Configuration
@@ -434,9 +444,9 @@ project/
 |---|---|
 | `task setup:all` | Build `ov` + create buildx builder |
 | `task build:ov` | `go build` -> `bin/ov` |
-| `task build:all` | `ov generate` -> `docker buildx bake` -> `ov merge --all` |
-| `task build:local -- <image>` | Build for host platform only -> `ov merge --all` |
-| `task build:push` | Build and push all images |
+| `task build:all` | `ov build` (generate + build + merge) |
+| `task build:local -- <image>` | `ov build <image>` (host platform) |
+| `task build:push` | `ov build --push` |
 | `task build:merge -- <image>` | Merge small layers in a built image |
 | `task run:container -- <image>` | `docker run` |
 | `task run:shell -- <image>` | Delegates to `ov shell` |
@@ -464,7 +474,7 @@ Direct `ov` commands (`ov list images`, `ov validate`, etc.) don't need `task`.
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Host bootstrap (first time):** requires `task`, `go`, `docker` with buildx. Run `task setup:all` then `task build:all`.
+**Host bootstrap (first time):** requires `task`, `go`, `docker` (or `podman`). Run `task setup:all` then `task build:all`. To use podman: `ov config set engine.build podman`.
 
 ---
 
@@ -518,15 +528,15 @@ CLI flag `--max-mb` overrides `images.yml`. The `auto` field is only used by `ov
 
 ### Algorithm
 
-1. Load image from Docker daemon via `docker save` -> `tarball.ImageFromPath()`
+1. Load image from engine via `<engine> save` -> `tarball.ImageFromPath()`
 2. Get compressed sizes via `layer.Size()`
 3. Group consecutive layers into groups totaling <= `max_mb`
 4. Single-layer "groups" are kept as-is (need 2+ layers to merge)
 5. For each merge group: read uncompressed tarballs, deduplicate entries by path (last writer wins), write combined tar into a single new layer
 6. Reconstruct image with `mutate.Append()`, preserving OCI history alignment (empty-layer entries for ENV/USER/EXPOSE kept in correct positions)
-7. Save via `tarball.WriteToFile()` -> `docker load`
+7. Save via `tarball.WriteToFile()` -> `<engine> load`
 
-Source: `ov/merge.go`. Uses `docker save`/`docker load` via `os/exec` (same pattern as `shell.go`). No new Go dependencies -- uses `pkg/v1/tarball`, `pkg/v1/mutate`, `pkg/v1/empty` from go-containerregistry.
+Source: `ov/merge.go`. Uses the configured build engine (`engine.build` from `ov config`) for save/load. No new Go dependencies -- uses `pkg/v1/tarball`, `pkg/v1/mutate`, `pkg/v1/empty` from go-containerregistry.
 
 ### Usage
 
@@ -547,7 +557,7 @@ ov merge fedora --max-mb 512
 ov merge fedora --tag 2026.46.1415
 ```
 
-When `merge.auto` is set in `images.yml` defaults, `task build:all` and `task build:local` automatically run `ov merge --all` after the build completes.
+When `merge.auto` is set in `images.yml` defaults, `ov build` automatically runs `ov merge --all` after building.
 
 Merge is idempotent -- running again after merging shows all layers as `[keep]`.
 
@@ -563,6 +573,57 @@ Commands: `task build:iso -- <image> [tag]`, `task build:qcow2 -- <image> [tag]`
 
 ---
 
+## Runtime Configuration
+
+`ov config` manages per-machine settings stored in `~/.config/ov/config.yml`.
+
+```yaml
+engine:
+  build: docker    # "docker" or "podman"
+  run: docker      # "docker" or "podman"
+run_mode: direct   # "direct" or "quadlet"
+```
+
+**Resolution chain:** env var (`OV_BUILD_ENGINE`, `OV_RUN_ENGINE`, `OV_RUN_MODE`) > config file > default (`docker`/`direct`).
+
+| Setting | Values | Default | Purpose |
+|---|---|---|---|
+| `engine.build` | `docker`, `podman` | `docker` | Engine for `ov build` and `ov merge` |
+| `engine.run` | `docker`, `podman` | `docker` | Engine for `ov shell` and `ov start` |
+| `run_mode` | `direct`, `quadlet` | `direct` | How `ov start`/`ov stop` work |
+
+When `run_mode=quadlet`, `ov start` delegates to `ov pod install + ov pod start`, and `ov stop` delegates to `ov pod stop`. This requires `engine.run=podman` (a warning is emitted otherwise).
+
+Source: `ov/runtime_config.go` (config struct, load/save/resolve), `ov/engine.go` (engine binary names, GPU args).
+
+---
+
+## Building Images
+
+`ov build` generates Containerfiles and builds images sequentially in dependency order using the configured build engine.
+
+```
+ov build [image...]                    # Build for local platform
+ov build --push [image...]             # Build for all platforms and push
+ov build --platform linux/amd64 [image...]  # Specific platform
+```
+
+**Flow:**
+1. Run `ov generate` internally (produces Containerfiles)
+2. Resolve runtime config to get build engine (`engine.build`)
+3. Get image build order from `ResolveImageOrder()`
+4. Filter to requested images (and their base dependencies)
+5. For each image: `<engine> build -f .build/<image>/Containerfile -t <tags> --platform <platform> .`
+6. After all builds: `ov merge --all` (if merge.auto enabled, skipped for `--push`)
+
+**Internal base images** use exact CalVer tags in Containerfiles (`FROM ghcr.io/atrawog/fedora:2026.46.1415`). This ensures each image references the precise version of its parent. Both Docker and Podman resolve local images before pulling from registry.
+
+**Push mode** uses `docker buildx build --push` (Docker) or `podman build --manifest` + `podman manifest push` (Podman) for multi-platform builds.
+
+Source: `ov/build.go`.
+
+---
+
 ## Podman Quadlets
 
 `ov pod` manages containers as systemd user services via podman quadlet `.container` files. Unlike `ov start` (ephemeral `docker run -d`), quadlet services auto-restart on failure, integrate with `journalctl`, and can start at boot via `WantedBy=default.target`.
@@ -571,7 +632,7 @@ User-level quadlets only (`~/.config/containers/systemd/`). No root required. Re
 
 ### Image Transfer
 
-Docker and podman have separate image stores. Images built with `docker buildx bake` exist only in Docker's store. `ov pod install` automatically detects if the image is missing from podman and transfers it via `docker save | podman load`. `ov pod update` always re-transfers (e.g., after a rebuild) and restarts the service if active.
+Docker and podman have separate image stores. When `engine.build=docker`, images built with `ov build` exist only in Docker's store. `ov pod install` automatically detects if the image is missing from podman and transfers it via `docker save | podman load`. When `engine.build=podman`, the image is already in podman's store and no transfer is needed. `ov pod update` re-transfers (if needed) and restarts the service if active.
 
 ### Workflow
 

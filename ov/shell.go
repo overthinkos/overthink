@@ -61,17 +61,24 @@ func (c *ShellCmd) Run() error {
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	LogGPU(gpu)
 
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	args := buildShellArgs(imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes, gpu, c.Command)
+	// Resolve runtime config
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	engine := rt.RunEngine
 
-	// Find docker binary
-	dockerPath, err := findExecutable("docker")
+	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+	args := buildShellArgs(engine, imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes, gpu, c.Command)
+
+	// Find engine binary
+	enginePath, err := findExecutable(EngineBinary(engine))
 	if err != nil {
 		return err
 	}
 
-	// Replace process with docker
-	return syscall.Exec(dockerPath, args, os.Environ())
+	// Replace process with engine
+	return syscall.Exec(enginePath, args, os.Environ())
 }
 
 // resolveShellImageRef builds the full image reference from registry, name, and tag.
@@ -82,20 +89,21 @@ func resolveShellImageRef(registry, name, tag string) string {
 	return fmt.Sprintf("%s:%s", name, tag)
 }
 
-// buildShellArgs constructs the docker run argument list.
-func buildShellArgs(imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string) []string {
+// buildShellArgs constructs the container run argument list.
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string) []string {
+	binary := EngineBinary(engine)
 	interactive := "-it"
 	if command != "" {
 		interactive = "-i"
 	}
 	args := []string{
-		"docker", "run", "--rm", interactive,
+		binary, "run", "--rm", interactive,
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
 	}
 	if gpu {
-		args = append(args, "--gpus", "all")
+		args = append(args, GPURunArgs(engine)...)
 	}
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port))

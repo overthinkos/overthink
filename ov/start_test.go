@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildStartArgs(t *testing.T) {
-	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
+	args := buildStartArgs("docker", "ghcr.io/atrawog/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -20,8 +20,23 @@ func TestBuildStartArgs(t *testing.T) {
 	}
 }
 
+func TestBuildStartArgsPodman(t *testing.T) {
+	args := buildStartArgs("podman", "ghcr.io/atrawog/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
+	want := []string{
+		"podman", "run", "-d", "--rm",
+		"--name", "ov-fedora-test",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"ghcr.io/atrawog/fedora-test:latest",
+		"supervisord", "-n", "-c", "/etc/supervisord.conf",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildStartArgs(podman) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
 func TestBuildStartArgsWithPorts(t *testing.T) {
-	args := buildStartArgs("ghcr.io/atrawog/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, false)
+	args := buildStartArgs("docker", "ghcr.io/atrawog/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -41,7 +56,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-ollama-models", ContainerPath: "/home/user/.ollama/models"},
 	}
-	args := buildStartArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes, false)
+	args := buildStartArgs("docker", "ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes, false)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -57,7 +72,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPU(t *testing.T) {
-	args := buildStartArgs("ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
+	args := buildStartArgs("docker", "ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -69,6 +84,22 @@ func TestBuildStartArgsWithGPU(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildStartArgs(gpu=true) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildStartArgsWithGPUPodman(t *testing.T) {
+	args := buildStartArgs("podman", "ghcr.io/atrawog/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
+	want := []string{
+		"podman", "run", "-d", "--rm",
+		"--name", "ov-ollama",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--device", "nvidia.com/gpu=all",
+		"ghcr.io/atrawog/ollama:latest",
+		"supervisord", "-n", "-c", "/etc/supervisord.conf",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildStartArgs(podman+gpu) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

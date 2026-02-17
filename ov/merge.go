@@ -106,7 +106,14 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 
-	img, cleanup, err := loadImageFromDaemon(imageRef)
+	// Resolve build engine for save/load
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	engine := rt.BuildEngine
+
+	img, cleanup, err := loadImageFromDaemon(imageRef, engine)
 	if err != nil {
 		return err
 	}
@@ -150,7 +157,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		return err
 	}
 
-	if err := saveImageToDaemon(newImg, imageRef); err != nil {
+	if err := saveImageToDaemon(newImg, imageRef, engine); err != nil {
 		return err
 	}
 
@@ -415,9 +422,9 @@ func executeMerge(img v1.Image, layers []v1.Layer, steps []MergeStep) (v1.Image,
 	return newImg, nil
 }
 
-// loadImageFromDaemon loads an image from the Docker daemon via docker save.
+// loadImageFromDaemon loads an image from the container engine via save.
 // The caller must call cleanup() when done with the image to remove the temp file.
-func loadImageFromDaemon(ref string) (v1.Image, func(), error) {
+func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), error) {
 	tmpFile, err := os.CreateTemp("", "ov-merge-*.tar")
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating temp file: %w", err)
@@ -425,13 +432,14 @@ func loadImageFromDaemon(ref string) (v1.Image, func(), error) {
 
 	cleanup := func() { os.Remove(tmpFile.Name()) }
 
-	cmd := exec.Command("docker", "save", ref)
+	binary := EngineBinary(engine)
+	cmd := exec.Command(binary, "save", ref)
 	cmd.Stdout = tmpFile
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		tmpFile.Close()
 		cleanup()
-		return nil, nil, fmt.Errorf("docker save %s: %w", ref, err)
+		return nil, nil, fmt.Errorf("%s save %s: %w", binary, ref, err)
 	}
 
 	tmpFile.Close()
@@ -445,8 +453,8 @@ func loadImageFromDaemon(ref string) (v1.Image, func(), error) {
 	return img, cleanup, nil
 }
 
-// saveImageToDaemon saves an image to the Docker daemon via docker load.
-func saveImageToDaemon(img v1.Image, ref string) error {
+// saveImageToDaemon saves an image to the container engine via load.
+func saveImageToDaemon(img v1.Image, ref string, engine string) error {
 	tmpFile, err := os.CreateTemp("", "ov-merge-*.tar")
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
@@ -463,11 +471,12 @@ func saveImageToDaemon(img v1.Image, ref string) error {
 		return fmt.Errorf("writing image tarball: %w", err)
 	}
 
-	cmd := exec.Command("docker", "load", "-i", tmpFile.Name())
+	binary := EngineBinary(engine)
+	cmd := exec.Command(binary, "load", "-i", tmpFile.Name())
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("docker load: %w", err)
+		return fmt.Errorf("%s load: %w", binary, err)
 	}
 
 	return nil

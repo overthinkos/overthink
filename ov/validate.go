@@ -69,6 +69,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate aliases
 	validateAliases(cfg, layers, errs)
 
+	// Validate builder
+	validateBuilder(cfg, layers, errs)
+
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
@@ -194,7 +197,7 @@ func validateImageDAG(cfg *Config, errs *ValidationError) {
 		return
 	}
 
-	_, err = ResolveImageOrder(images)
+	_, err = ResolveImageOrder(images, cfg.Defaults.Builder)
 	if err != nil {
 		if cycleErr, ok := err.(*CycleError); ok {
 			errs.Add("image dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
@@ -414,6 +417,65 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 			} else {
 				seen[a.Name] = true
 			}
+		}
+	}
+}
+
+// validateBuilder validates the builder configuration
+func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	builderName := cfg.Defaults.Builder
+
+	if builderName != "" {
+		builderImg, exists := cfg.Images[builderName]
+		if !exists {
+			errs.Add("defaults.builder: image %q not found in images.yml", builderName)
+			return
+		}
+		if !builderImg.IsEnabled() {
+			errs.Add("defaults.builder: image %q is disabled", builderName)
+			return
+		}
+	}
+
+	// Check if any enabled image (other than the builder itself) needs a builder
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if imageName == builderName {
+			continue
+		}
+
+		needsBuilder := false
+		for _, layerName := range img.Layers {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			if layer.PixiManifest() != "" || layer.HasPackageJson {
+				needsBuilder = true
+				break
+			}
+		}
+		// Also check transitive dependencies
+		if !needsBuilder {
+			resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+			if err == nil {
+				for _, layerName := range resolved {
+					layer, ok := layers[layerName]
+					if !ok {
+						continue
+					}
+					if layer.PixiManifest() != "" || layer.HasPackageJson {
+						needsBuilder = true
+						break
+					}
+				}
+			}
+		}
+
+		if needsBuilder && builderName == "" {
+			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder in images.yml)", imageName)
 		}
 	}
 }

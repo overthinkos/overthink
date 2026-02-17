@@ -42,6 +42,7 @@ type ImageConfig struct {
 	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases   []AliasConfig `yaml:"aliases,omitempty"`  // command aliases
+	Builder   string        `yaml:"builder,omitempty"`  // builder image name (defaults only)
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

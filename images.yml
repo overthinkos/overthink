@@ -9,36 +9,28 @@ defaults:
   merge:
     auto: false
     max_mb: 128
+  builder: builder
 
 images:
-  fedora:
+  builder:
     layers:
       - pixi
-      - python
       - nodejs
-      - rust
-      - supervisord
+      - build-toolchain
+
+  fedora:
+    layers: []
 
   ubuntu:
     enabled: false
     base: "ubuntu:24.04"
-    layers:
-      - pixi
-      - python
-      - nodejs
-      - rust
-      - supervisord
+    layers: []
     pkg: deb
 
   debian:
     enabled: false
     base: "debian:13"
-    layers:
-      - pixi
-      - python
-      - nodejs
-      - rust
-      - supervisord
+    layers: []
     pkg: deb
 
   fedora-test:

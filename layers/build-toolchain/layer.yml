@@ -11,6 +11,7 @@ rpm:
     - gcc
     - gcc-c++
     - gdb
+    - git
     - glibc-devel
     - libtool
     - make

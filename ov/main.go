@@ -228,7 +228,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	order, err := ResolveImageOrder(images)
+	order, err := ResolveImageOrder(images, cfg.Defaults.Builder)
 	if err != nil {
 		return err
 	}

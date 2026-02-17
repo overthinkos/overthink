@@ -89,17 +89,24 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 
 // ResolveImageOrder resolves image dependencies and returns them in build order.
 // Images that reference other images via `base` create dependencies.
-func ResolveImageOrder(images map[string]*ResolvedImage) ([]string, error) {
+// When builderName is non-empty, all non-builder images depend on the builder.
+func ResolveImageOrder(images map[string]*ResolvedImage, builderName string) ([]string, error) {
 	// Build adjacency list
 	// Edge from A to B means A depends on B (B must be built before A)
 	graph := make(map[string][]string)
 	for name, img := range images {
+		var deps []string
 		if !img.IsExternalBase {
 			// base is another image in images.yml
-			graph[name] = []string{img.Base}
-		} else {
-			graph[name] = nil
+			deps = append(deps, img.Base)
 		}
+		// Every non-builder image depends on the builder
+		if builderName != "" && name != builderName {
+			if _, ok := images[builderName]; ok {
+				deps = append(deps, builderName)
+			}
+		}
+		graph[name] = deps
 	}
 
 	return topoSort(graph)

@@ -96,25 +96,17 @@ defaults:
   merge:
     auto: true
     max_mb: 128
+  builder: builder
 
 images:
-  fedora:
+  builder:
     layers:
       - pixi
-      - python
       - nodejs
-      - rust
-      - supervisord
+      - build-toolchain
 
-  ubuntu:
-    base: "ubuntu:24.04"
-    layers:
-      - pixi
-      - python
-      - nodejs
-      - rust
-      - supervisord
-    pkg: deb
+  fedora:
+    layers: []
 
   fedora-test:
     base: fedora
@@ -153,6 +145,7 @@ Every setting resolves through: **image -> defaults -> hardcoded fallback** (fir
 | `gid` | `1000` | Group ID |
 | `merge` | `null` | Layer merge settings (`auto: true, max_mb: 128`). See [Layer Merging](#layer-merging). |
 | `aliases` | `[]` | Command aliases (`name` + optional `command`). See [Command Aliases](#command-aliases). |
+| `builder` | `""` | Builder image name (defaults only). See [Builder Image](#builder-image). |
 
 When `base` references another image in `images.yml`, the generator resolves it to the full registry/tag and creates a build dependency. The referenced image must be built first.
 
@@ -165,11 +158,11 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
 1. **Header** -- `# .build/<image>/Containerfile (generated -- do not edit)`
 2. **`ARG BASE_IMAGE=<resolved base>`**
 3. **Scratch stages** -- `FROM scratch AS <layer>` + `COPY layers/<layer>/ /` (one per layer)
-4. **Pixi build stages** -- `FROM ghcr.io/prefix-dev/pixi:latest AS <layer>-pixi-build` (one per pixi layer). Install command varies by manifest type:
+4. **Pixi build stages** -- `FROM <builder> AS <layer>-pixi-build` (one per pixi layer, uses builder image). Install command varies by manifest type:
    - `pixi.toml`: `pixi install` (or `pixi install --frozen` if `pixi.lock` exists)
    - `pyproject.toml`: `pixi install --manifest-path pyproject.toml`
    - `environment.yml`: `pixi project import environment.yml && pixi install`
-5. **npm build stages** -- `FROM node:lts-slim AS <layer>-npm-build` (one per npm layer). Parses `package.json` dependencies, installs globally to `/npm-global`.
+5. **npm build stages** -- `FROM <builder> AS <layer>-npm-build` (one per npm layer, uses builder image). Parses `package.json` dependencies, installs globally to `/npm-global`.
 6. **Traefik routes stage** -- `FROM scratch AS traefik-routes` + `COPY .build/<image>/traefik-routes.yml` (only if image has layers with `route` files). Generated YAML maps hostnames to backend ports.
 7. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service fragments from `.build/<image>/fragments/` (written at generate time from `layer.yml` `service` fields).
 8. **`FROM ${BASE_IMAGE}`**
@@ -284,7 +277,9 @@ Controlled by the `pkg` field. Packages are declared in `layer.yml` under `rpm:`
 
 ### Pixi (Python/Conda)
 
-Multi-stage build: dedicated `FROM ghcr.io/prefix-dev/pixi:latest` build stage per layer. Environment installed to `<home>/.pixi/envs/default`, then `COPY`'d into the final image. Pixi binary also copied. No rattler cache mount in the final image.
+Multi-stage build: dedicated `FROM <builder>` build stage per layer, using the configured builder image. The builder has pixi, gcc, cmake, git pre-installed, so no `apt-get install` is needed. Environment installed to `<home>/.pixi/envs/default`, then `COPY`'d into the final image. Pixi binary also copied from the build stage. No rattler cache mount in the final image.
+
+The `pixi` layer itself installs the pixi binary via `root.yml` (curl + tar download). It does **not** have a `pixi.toml` — it only provides the binary and env/path config.
 
 Supported manifests: `pixi.toml`, `pyproject.toml`, `environment.yml` (checked in that priority order by `layers.go:PixiManifest()`). Only one per layer.
 
@@ -292,7 +287,7 @@ Rules: never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is
 
 ### npm
 
-Multi-stage build: dedicated `FROM node:lts-slim` build stage per npm layer. Packages from `package.json` `dependencies` are installed globally via `npm install -g` into `/npm-global`, then `COPY`'d into the final image at `<home>/.npm-global/`. Requires `nodejs` layer earlier in the image (for PATH/env setup).
+Multi-stage build: dedicated `FROM <builder>` build stage per npm layer, using the configured builder image. The builder has node, npm, git pre-installed. Packages from `package.json` `dependencies` are installed globally via `npm install -g` into `/npm-global`, then `COPY`'d into the final image at `<home>/.npm-global/`. Requires `nodejs` layer earlier in the image (for PATH/env setup).
 
 ### Cargo
 
@@ -498,7 +493,7 @@ ov version                             # Print computed CalVer tag
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
-**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `rpm.copr` requires `rpm.packages`, `rpm.repos` requires `rpm.packages`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yml` `env` must not set `PATH` directly (use `path_append`), `layer.yml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0, volume names must match `^[a-z0-9]+(-[a-z0-9]+)*$`, volume entries require both `name` and `path`, duplicate volume names within a layer rejected, alias names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, layer aliases require both `name` and `command`, duplicate alias names within a layer or image rejected.
+**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `rpm.copr` requires `rpm.packages`, `rpm.repos` requires `rpm.packages`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yml` `env` must not set `PATH` directly (use `path_append`), `layer.yml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0, volume names must match `^[a-z0-9]+(-[a-z0-9]+)*$`, volume entries require both `name` and `path`, duplicate volume names within a layer rejected, alias names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, layer aliases require both `name` and `command`, duplicate alias names within a layer or image rejected, `defaults.builder` must reference an existing enabled image, images with pixi/npm layers require a builder.
 
 ---
 
@@ -556,7 +551,7 @@ project/
 
 | Layer | Files | Purpose |
 |---|---|---|
-| `pixi` | `layer.yml` (env, path_append), `pixi.toml` | Pixi binary + empty default environment. Sets `PIXI_CACHE_DIR`, `RATTLER_CACHE_DIR`, PATH. |
+| `pixi` | `layer.yml` (env, path_append), `root.yml` | Pixi binary (downloaded via curl). Sets `PIXI_CACHE_DIR`, `RATTLER_CACHE_DIR`, PATH. |
 | `python` | `layer.yml` (depends: pixi), `pixi.toml` | Python 3.13 via pixi. |
 | `nodejs` | `layer.yml` (rpm/deb packages, env, path_append) | Node.js + npm. Sets `NPM_CONFIG_PREFIX`, `npm_config_cache`, PATH. |
 | `rust` | `layer.yml` (rpm/deb packages, path_append) | Rust + Cargo via system packages. Sets PATH for `~/.cargo/bin`. |
@@ -757,6 +752,53 @@ ov build --platform linux/amd64 [image...]  # Specific platform
 **Push mode** uses `docker buildx build --push` (Docker) or `podman build --manifest` + `podman manifest push` (Podman) for multi-platform builds.
 
 Source: `ov/build.go`.
+
+---
+
+## Builder Image
+
+A dedicated image used as the base for all pixi and npm multi-stage build stages. Replaces the previous approach of pulling external images (`ghcr.io/prefix-dev/pixi:latest`, `node:lts-slim`) and installing build dependencies on every build.
+
+### Configuration
+
+Set `builder` in `images.yml` defaults:
+
+```yaml
+defaults:
+  builder: builder
+
+images:
+  builder:
+    layers:
+      - pixi            # pixi binary (via root.yml) + env vars/PATH
+      - nodejs          # node + npm (via dnf)
+      - build-toolchain # gcc, cmake, make, git (via dnf)
+```
+
+The builder image itself has **no pixi build stages** (the pixi layer has no pixi.toml) and **no npm build stages** (none of its layers have package.json). It's a straightforward image: bootstrap + system packages + pixi binary download.
+
+### How it works
+
+All pixi/npm build stages in derived images use `FROM <builder>:<tag>` instead of external images:
+
+```dockerfile
+FROM ghcr.io/atrawog/builder:2026.48.1808 AS supervisord-pixi-build
+WORKDIR /home/user
+COPY layers/supervisord/pixi.toml pixi.toml
+RUN pixi install
+```
+
+No `apt-get install` is needed in build stages since the builder has pixi, node, npm, gcc, cmake, git pre-installed. The builder itself is excluded from using builder stages (to avoid circular dependency).
+
+### Build ordering
+
+When a builder is configured, `ResolveImageOrder` adds an implicit dependency edge: every non-builder image depends on the builder. This ensures the builder is always built first.
+
+### Empty base images
+
+The `fedora` base image has `layers: []` — just Fedora + task binary + user creation. Derived images pull in only the layers they need via layer dependencies. All npm-using layers declare `depends: [nodejs]`, supervisord-using layers declare `depends: [supervisord]`, etc. The dependency resolver pulls in transitive deps automatically.
+
+Source: `ov/generate.go` (`BuilderRef`), `ov/graph.go` (`ResolveImageOrder` builder parameter), `ov/validate.go` (`validateBuilder`).
 
 ---
 

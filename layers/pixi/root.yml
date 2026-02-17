@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - |
+        ARCH=$(uname -m)
+        curl -fsSL "https://github.com/prefix-dev/pixi/releases/latest/download/pixi-${ARCH}-unknown-linux-musl.tar.gz" \
+          | tar -xzf - -C /usr/local/bin

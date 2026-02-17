@@ -131,7 +131,7 @@ func TestResolveImageOrder(t *testing.T) {
 		},
 	}
 
-	order, err := ResolveImageOrder(images)
+	order, err := ResolveImageOrder(images, "")
 	if err != nil {
 		t.Fatalf("ResolveImageOrder() error = %v", err)
 	}
@@ -157,6 +157,52 @@ func TestResolveImageOrder(t *testing.T) {
 	}
 }
 
+func TestResolveImageOrderWithBuilder(t *testing.T) {
+	images := map[string]*ResolvedImage{
+		"builder": {
+			Name:           "builder",
+			Base:           "quay.io/fedora/fedora:43",
+			IsExternalBase: true,
+		},
+		"fedora": {
+			Name:           "fedora",
+			Base:           "quay.io/fedora/fedora:43",
+			IsExternalBase: true,
+		},
+		"app": {
+			Name:           "app",
+			Base:           "fedora",
+			IsExternalBase: false,
+		},
+	}
+
+	order, err := ResolveImageOrder(images, "builder")
+	if err != nil {
+		t.Fatalf("ResolveImageOrder() error = %v", err)
+	}
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	// builder must come before fedora and app
+	if indexOf("builder") > indexOf("fedora") {
+		t.Errorf("builder should come before fedora, got order %v", order)
+	}
+	if indexOf("builder") > indexOf("app") {
+		t.Errorf("builder should come before app, got order %v", order)
+	}
+	// fedora must come before app
+	if indexOf("fedora") > indexOf("app") {
+		t.Errorf("fedora should come before app, got order %v", order)
+	}
+}
+
 func TestResolveImageOrderCycle(t *testing.T) {
 	// Create images with a cycle
 	images := map[string]*ResolvedImage{
@@ -165,7 +211,7 @@ func TestResolveImageOrderCycle(t *testing.T) {
 		"c": {Name: "c", Base: "a", IsExternalBase: false},
 	}
 
-	_, err := ResolveImageOrder(images)
+	_, err := ResolveImageOrder(images, "")
 	if err == nil {
 		t.Error("expected cycle error, got nil")
 	}

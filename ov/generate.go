@@ -11,12 +11,13 @@ import (
 
 // Generator holds state for generating build artifacts
 type Generator struct {
-	Dir      string
-	Config   *Config
-	Layers   map[string]*Layer
-	Tag      string
-	Images   map[string]*ResolvedImage
-	BuildDir string
+	Dir        string
+	Config     *Config
+	Layers     map[string]*Layer
+	Tag        string
+	Images     map[string]*ResolvedImage
+	BuildDir   string
+	BuilderRef string // full tag of builder image (e.g. "ghcr.io/atrawog/builder:2026.48.1808")
 }
 
 // resolveUserContext detects existing user in base image or uses configured values
@@ -145,8 +146,16 @@ func (g *Generator) Generate() error {
 		return fmt.Errorf("creating .build directory: %w", err)
 	}
 
+	// Resolve builder reference
+	builderName := g.Config.Defaults.Builder
+	if builderName != "" {
+		if builderImg, ok := g.Images[builderName]; ok {
+			g.BuilderRef = builderImg.FullTag
+		}
+	}
+
 	// Resolve image build order
-	order, err := ResolveImageOrder(g.Images)
+	order, err := ResolveImageOrder(g.Images, builderName)
 	if err != nil {
 		return fmt.Errorf("resolving image order: %w", err)
 	}
@@ -207,34 +216,21 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY layers/%s/ /\n\n", layerName))
 	}
 
+	// Resolve builder ref for this image (builder itself doesn't use builder stages)
+	builderRef := ""
+	if g.BuilderRef != "" && imageName != g.Config.Defaults.Builder {
+		builderRef = g.BuilderRef
+	}
+
 	// Emit per-layer pixi build stages
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		manifest := layer.PixiManifest()
 		if manifest != "" {
-			b.WriteString(fmt.Sprintf("FROM ghcr.io/prefix-dev/pixi:latest AS %s-pixi-build\n", layerName))
-			if layer.NeedsGit() || layer.HasPypiDeps() {
-				var aptPkgs []string
-				if layer.HasPypiDeps() {
-					aptPkgs = append(aptPkgs, "build-essential", "cmake", "ca-certificates")
-				}
-				if layer.NeedsGit() {
-					aptPkgs = append(aptPkgs, "git")
-					if !layer.HasPypiDeps() {
-						aptPkgs = append(aptPkgs, "ca-certificates")
-					}
-				}
-				// Deduplicate (ca-certificates may appear twice)
-				seen := make(map[string]bool)
-				var uniquePkgs []string
-				for _, p := range aptPkgs {
-					if !seen[p] {
-						seen[p] = true
-						uniquePkgs = append(uniquePkgs, p)
-					}
-				}
-				b.WriteString(fmt.Sprintf("RUN apt-get update && apt-get install -y --no-install-recommends %s && rm -rf /var/lib/apt/lists/*\n", strings.Join(uniquePkgs, " ")))
+			if builderRef == "" {
+				return fmt.Errorf("image %q: layer %q has pixi manifest but no builder configured", imageName, layerName)
 			}
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", builderRef, layerName))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			if layer.HasPixiLock {
 				b.WriteString(fmt.Sprintf("COPY layers/%s/pixi.lock pixi.lock\n", layerName))
@@ -256,8 +252,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit per-layer npm build stages
 	for _, layerName := range layerOrder {
 		if g.Layers[layerName].HasPackageJson {
-			b.WriteString(fmt.Sprintf("FROM node:lts-slim AS %s-npm-build\n", layerName))
-			b.WriteString("RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates && rm -rf /var/lib/apt/lists/*\n")
+			if builderRef == "" {
+				return fmt.Errorf("image %q: layer %q has package.json but no builder configured", imageName, layerName)
+			}
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", builderRef, layerName))
 			b.WriteString(fmt.Sprintf("COPY layers/%s/package.json /tmp/package.json\n", layerName))
 			b.WriteString("WORKDIR /tmp\n")
 			b.WriteString("ENV NPM_CONFIG_PREFIX=/npm-global\n")

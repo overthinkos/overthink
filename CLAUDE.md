@@ -176,16 +176,51 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
 9. **Bootstrap** (external base only) -- install `task`, create user/group if not exists at configured UID/GID, set `WORKDIR`. For internal base: just `USER root`.
 10. **Layer ENV** -- consolidated `ENV` directives from all layers' `layer.yml` `env` and `path_append` fields
 11. **EXPOSE** -- deduplicated, sorted port numbers from all layers' `layer.yml` `ports` fields
-12. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
-13. **COPY pixi binary** -- from first pixi build stage
-14. **COPY npm packages** -- `COPY --from=<layer>-npm-build --chown=<UID>:<GID> /npm-global <home>/.npm-global` for each npm layer
-15. **Per-layer steps** -- for each layer in order: rpm/deb install (from `layer.yml`), root.yml, Cargo.toml, user.yml (only steps for files that exist)
-16. **Supervisord assembly** -- `cat /fragments/*.conf > /etc/supervisord.conf` (if services)
-17. **Traefik routes COPY** -- `COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml` (if routes)
-18. **`USER <UID>`** -- final directive (uses numeric UID, not username)
-19. **`RUN bootc container lint`** -- (bootc images only)
+12. **Image metadata LABELs** -- `org.overthink.*` labels with runtime config (see [Image Labels](#image-labels))
+13. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
+14. **COPY pixi binary** -- from first pixi build stage
+15. **COPY npm packages** -- `COPY --from=<layer>-npm-build --chown=<UID>:<GID> /npm-global <home>/.npm-global` for each npm layer
+16. **Per-layer steps** -- for each layer in order: rpm/deb install (from `layer.yml`), root.yml, Cargo.toml, user.yml (only steps for files that exist)
+17. **Supervisord assembly** -- `cat /fragments/*.conf > /etc/supervisord.conf` (if services)
+18. **Traefik routes COPY** -- `COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml` (if routes)
+19. **`USER <UID>`** -- final directive (uses numeric UID, not username)
+20. **`RUN bootc container lint`** -- (bootc images only)
 
 Within per-layer steps, `USER <UID>` is emitted before the first user-mode step, and `USER root` resets after the last user-mode step for the next layer.
+
+---
+
+## Image Labels
+
+Built images embed runtime-relevant metadata as OCI `LABEL` directives (prefix: `org.overthink.`). This makes images self-describing — runtime commands (`ov shell`, `ov start`, `ov enable`, `ov alias install`) can extract configuration from the image itself when `images.yml` is unavailable.
+
+### Label Schema
+
+| Label | Type | Example | Source |
+|---|---|---|---|
+| `org.overthink.version` | string | `"1"` | Schema version for forward compat |
+| `org.overthink.image` | string | `"openclaw"` | Image name from images.yml |
+| `org.overthink.registry` | string | `"ghcr.io/atrawog"` | Registry prefix (omitted if empty) |
+| `org.overthink.uid` | string | `"1000"` | Numeric user ID |
+| `org.overthink.gid` | string | `"1000"` | Numeric group ID |
+| `org.overthink.user` | string | `"user"` | Username |
+| `org.overthink.home` | string | `"/home/user"` | Home directory (resolved at generate time) |
+| `org.overthink.ports` | JSON | `["18789:18789"]` | Runtime port mappings from images.yml |
+| `org.overthink.volumes` | JSON | `[{"name":"data","path":"/home/user/.openclaw"}]` | Pre-computed volumes (short name, `~` expanded) |
+| `org.overthink.aliases` | JSON | `[{"name":"openclaw","command":"openclaw"}]` | Collected aliases (layers + image-level) |
+
+### Design
+
+- Labels are emitted after `EXPOSE` directives and before pixi `COPY` steps in the generated Containerfile.
+- Volumes use **short names** in labels (e.g. `"data"`, not `"ov-openclaw-data"`). The `ov-<image>-` prefix is added at runtime, keeping labels image-name-agnostic.
+- Empty arrays are **omitted** (no label emitted for empty ports/volumes/aliases).
+- JSON arrays are built from deterministically sorted slices to prevent Docker cache invalidation.
+
+### Runtime Fallback
+
+Runtime commands (`ov shell`, `ov start`, `ov enable`, `ov alias install`) try `LoadConfig` (images.yml) first. If unavailable, they fall back to extracting metadata from the image's labels via `<engine> inspect --format '{{json .Config.Labels}}'`. This enables `ov shell myimage` to work from any directory, not just the project checkout.
+
+Source: `ov/labels.go` (constants, `ImageMetadata`, `ExtractMetadata`), `ov/generate.go` (`writeLabels`).
 
 ---
 
@@ -476,6 +511,7 @@ project/
 |   +-- go.mod                          # kong v1.14.0, go-containerregistry v0.20.7
 |   +-- main.go                         # CLI (Kong)
 |   +-- config.go                       # images.yml parsing, inheritance resolution
+|   +-- labels.go                       # OCI label constants, ImageMetadata, ExtractMetadata
 |   +-- layers.go                       # Layer scanning, file detection
 |   +-- env.go                          # env config merging, path expansion
 |   +-- graph.go                        # Topological sort (layers + images)

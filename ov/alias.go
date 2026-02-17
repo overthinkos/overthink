@@ -125,8 +125,8 @@ func parseAliasScript(path string) (*AliasInfo, error) {
 
 // CollectedAlias represents a resolved alias ready for installation.
 type CollectedAlias struct {
-	Name    string
-	Command string
+	Name    string `json:"name"`
+	Command string `json:"command"`
 }
 
 // CollectImageAliases gathers aliases from the image's own layers + image-level config.
@@ -304,24 +304,35 @@ type AliasInstallCmd struct {
 }
 
 func (c *AliasInstallCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
+	var aliases []CollectedAlias
 
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	layers, err := ScanLayers(dir)
-	if err != nil {
-		return err
-	}
-
-	aliases, err := CollectImageAliases(cfg, layers, c.Image)
-	if err != nil {
-		return err
+	// Try images.yml + layers first, fall back to image labels
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		layers, err := ScanLayers(dir)
+		if err != nil {
+			return err
+		}
+		aliases, err = CollectImageAliases(cfg, layers, c.Image)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Fall back to image labels
+		rt, err := ResolveRuntime()
+		if err != nil {
+			return err
+		}
+		imageRef := resolveShellImageRef("", c.Image, "latest")
+		meta, err := ExtractMetadata(rt.RunEngine, imageRef)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+		}
+		aliases = meta.Aliases
 	}
 
 	if len(aliases) == 0 {

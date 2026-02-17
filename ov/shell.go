@@ -18,28 +18,11 @@ type ShellCmd struct {
 }
 
 func (c *ShellCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	// Resolve image to get registry, UID, GID (tag is unused here since we use --tag flag)
-	resolved, err := cfg.ResolveImage(c.Image, "unused")
-	if err != nil {
-		return err
-	}
-
-	// Resolve workspace to absolute path
+	// Resolve workspace to absolute path (needed regardless of config source)
 	absWorkspace, err := filepath.Abs(c.Workspace)
 	if err != nil {
 		return fmt.Errorf("resolving workspace path: %w", err)
 	}
-
 	info, err := os.Stat(absWorkspace)
 	if err != nil {
 		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
@@ -48,33 +31,72 @@ func (c *ShellCmd) Run() error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	layers, err := ScanLayers(dir)
-	if err != nil {
-		return err
-	}
-
-	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
-	if err != nil {
-		return err
-	}
-
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	LogGPU(gpu)
 
-	// Resolve runtime config
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 	engine := rt.RunEngine
 
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+	var imageRef string
+	var uid, gid int
+	var ports []string
+	var volumes []VolumeMount
 
-	if err := EnsureImage(imageRef, rt); err != nil {
-		return err
+	// Try images.yml first (existing path)
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		resolved, err := cfg.ResolveImage(c.Image, "unused")
+		if err != nil {
+			return err
+		}
+		layers, err := ScanLayers(dir)
+		if err != nil {
+			return err
+		}
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		if err != nil {
+			return err
+		}
+		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+		uid = resolved.UID
+		gid = resolved.GID
+		ports = resolved.Ports
+	} else {
+		// Label path: resolve from image labels
+		imageRef = resolveShellImageRef("", c.Image, c.Tag)
+		if err := EnsureImage(imageRef, rt); err != nil {
+			return err
+		}
+		meta, err := ExtractMetadata(engine, imageRef)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+		}
+		uid = meta.UID
+		gid = meta.GID
+		ports = meta.Ports
+		volumes = meta.Volumes
+		// Re-resolve imageRef with registry from labels if available
+		if meta.Registry != "" {
+			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		}
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, resolved.UID, resolved.GID, resolved.Ports, volumes, gpu, c.Command)
+	if cfgErr != nil {
+		// Already ensured above in the label path
+	} else {
+		if err := EnsureImage(imageRef, rt); err != nil {
+			return err
+		}
+	}
+
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, gpu, c.Command)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))

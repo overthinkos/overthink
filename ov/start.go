@@ -30,26 +30,10 @@ func (c *StartCmd) Run() error {
 }
 
 func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	resolved, err := cfg.ResolveImage(c.Image, "unused")
-	if err != nil {
-		return err
-	}
-
 	absWorkspace, err := filepath.Abs(c.Workspace)
 	if err != nil {
 		return fmt.Errorf("resolving workspace path: %w", err)
 	}
-
 	info, err := os.Stat(absWorkspace)
 	if err != nil {
 		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
@@ -58,28 +42,60 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	layers, err := ScanLayers(dir)
-	if err != nil {
-		return err
-	}
-
-	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
-	if err != nil {
-		return err
-	}
-
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	LogGPU(gpu)
 
 	engine := rt.RunEngine
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 
-	if err := EnsureImage(imageRef, rt); err != nil {
-		return err
+	var imageRef string
+	var ports []string
+	var volumes []VolumeMount
+
+	// Try images.yml first, fall back to image labels
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		resolved, err := cfg.ResolveImage(c.Image, "unused")
+		if err != nil {
+			return err
+		}
+		layers, err := ScanLayers(dir)
+		if err != nil {
+			return err
+		}
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		if err != nil {
+			return err
+		}
+		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+		ports = resolved.Ports
+	} else {
+		imageRef = resolveShellImageRef("", c.Image, c.Tag)
+		if err := EnsureImage(imageRef, rt); err != nil {
+			return err
+		}
+		meta, err := ExtractMetadata(engine, imageRef)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+		}
+		ports = meta.Ports
+		volumes = meta.Volumes
+		if meta.Registry != "" {
+			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		}
+	}
+
+	if cfgErr == nil {
+		if err := EnsureImage(imageRef, rt); err != nil {
+			return err
+		}
 	}
 
 	name := containerName(c.Image)
-	args := buildStartArgs(engine, imageRef, absWorkspace, resolved.Ports, name, volumes, gpu)
+	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, gpu)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -324,6 +326,9 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Emit EXPOSE directives for layer ports
 	g.writeExpose(&b, layerOrder)
+
+	// Emit image metadata labels
+	g.writeLabels(&b, imageName, layerOrder, img)
 
 	// Copy pixi environments
 	for _, layerName := range layerOrder {
@@ -752,5 +757,48 @@ func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *Reso
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
 	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/npm,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
 	b.WriteString("    cd /ctx && task -t user.yml install\n")
+}
+
+// writeLabels emits OCI LABEL directives with runtime-relevant metadata.
+func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedImage) {
+	b.WriteString("# Image metadata\n")
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, LabelSchemaVersion))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
+	if img.Registry != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+	}
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelHome, img.Home))
+
+	// Ports from images.yml (runtime mappings)
+	if len(img.Ports) > 0 {
+		portsJSON, _ := json.Marshal(img.Ports)
+		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelPorts, string(portsJSON)))
+	}
+
+	// Volumes: pre-computed from all layers + base chain, ~ expanded.
+	// Use short form names (without ov-<image>- prefix) so labels are image-name-agnostic.
+	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home)
+	if len(volumes) > 0 {
+		var labelVols []LabelVolume
+		for _, v := range volumes {
+			// Strip the "ov-<imageName>-" prefix to get short name
+			shortName := strings.TrimPrefix(v.VolumeName, "ov-"+imageName+"-")
+			labelVols = append(labelVols, LabelVolume{Name: shortName, Path: v.ContainerPath})
+		}
+		volJSON, _ := json.Marshal(labelVols)
+		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelVolumes, string(volJSON)))
+	}
+
+	// Aliases: collected from layers + image-level config.
+	aliases, _ := CollectImageAliases(g.Config, g.Layers, imageName)
+	if len(aliases) > 0 {
+		aliasJSON, _ := json.Marshal(aliases)
+		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelAliases, string(aliasJSON)))
+	}
+
+	b.WriteString("\n")
 }
 

@@ -30,26 +30,10 @@ func (c *EnableCmd) Run() error {
 }
 
 func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	resolved, err := cfg.ResolveImage(c.Image, "unused")
-	if err != nil {
-		return err
-	}
-
 	absWorkspace, err := filepath.Abs(c.Workspace)
 	if err != nil {
 		return fmt.Errorf("resolving workspace path: %w", err)
 	}
-
 	info, err := os.Stat(absWorkspace)
 	if err != nil {
 		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
@@ -58,31 +42,63 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	layers, err := ScanLayers(dir)
-	if err != nil {
-		return err
-	}
-
-	volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
-	if err != nil {
-		return err
-	}
-
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-
-	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-	if err := EnsureImage(imageRef, podmanRT); err != nil {
-		return err
-	}
-
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	LogGPU(gpu)
+
+	var imageRef string
+	var ports []string
+	var volumes []VolumeMount
+
+	// Try images.yml first, fall back to image labels
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		resolved, err := cfg.ResolveImage(c.Image, "unused")
+		if err != nil {
+			return err
+		}
+		layers, err := ScanLayers(dir)
+		if err != nil {
+			return err
+		}
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		if err != nil {
+			return err
+		}
+		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+		ports = resolved.Ports
+	} else {
+		imageRef = resolveShellImageRef("", c.Image, c.Tag)
+		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
+		if err := EnsureImage(imageRef, podmanRT); err != nil {
+			return err
+		}
+		meta, err := ExtractMetadata("podman", imageRef)
+		if err != nil {
+			return err
+		}
+		if meta == nil {
+			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+		}
+		ports = meta.Ports
+		volumes = meta.Volumes
+		if meta.Registry != "" {
+			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		}
+	}
+
+	if cfgErr == nil {
+		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
+		if err := EnsureImage(imageRef, podmanRT); err != nil {
+			return err
+		}
+	}
 
 	qcfg := QuadletConfig{
 		ImageName: c.Image,
 		ImageRef:  imageRef,
 		Workspace: absWorkspace,
-		Ports:     resolved.Ports,
+		Ports:     ports,
 		Volumes:   volumes,
 		GPU:       gpu,
 	}

@@ -1,6 +1,15 @@
 depends:
-  - nvidia-python
+  - cuda
   - supervisord
+
+env:
+  NVIDIA_PYTHON_PROJECT: "~/.pixi"
+  LLAMA_CPP_PATH: "~/llama.cpp"
+  UNSLOTH_SKIP_LLAMA_CPP_INSTALL: "1"
+  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+
+path_append:
+  - "~/llama.cpp"
 
 ports:
   - 8888

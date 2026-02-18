@@ -52,7 +52,7 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	validateBaseReferences(cfg, errs)
 
 	// Validate no circular dependencies in images
-	validateImageDAG(cfg, errs)
+	validateImageDAG(cfg, layers, errs)
 
 	// Validate ports
 	validatePorts(cfg, layers, errs)
@@ -189,7 +189,7 @@ func validateBaseReferences(cfg *Config, errs *ValidationError) {
 }
 
 // validateImageDAG checks for circular image dependencies
-func validateImageDAG(cfg *Config, errs *ValidationError) {
+func validateImageDAG(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	calverTag := "test"
 	images, err := cfg.ResolveAllImages(calverTag)
 	if err != nil {
@@ -197,7 +197,7 @@ func validateImageDAG(cfg *Config, errs *ValidationError) {
 		return
 	}
 
-	_, err = ResolveImageOrder(images, nil, cfg.Defaults.Builder)
+	_, err = ResolveImageOrder(images, layers)
 	if err != nil {
 		if cycleErr, ok := err.(*CycleError); ok {
 			errs.Add("image dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
@@ -423,59 +423,75 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 
 // validateBuilder validates the builder configuration
 func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	builderName := cfg.Defaults.Builder
-
-	if builderName != "" {
-		builderImg, exists := cfg.Images[builderName]
+	// Validate defaults.builder if set
+	if cfg.Defaults.Builder != "" {
+		builderImg, exists := cfg.Images[cfg.Defaults.Builder]
 		if !exists {
-			errs.Add("defaults.builder: image %q not found in images.yml", builderName)
-			return
-		}
-		if !builderImg.IsEnabled() {
-			errs.Add("defaults.builder: image %q is disabled", builderName)
-			return
+			errs.Add("defaults.builder: image %q not found in images.yml", cfg.Defaults.Builder)
+		} else if !builderImg.IsEnabled() {
+			errs.Add("defaults.builder: image %q is disabled", cfg.Defaults.Builder)
 		}
 	}
 
-	// Check if any enabled image (other than the builder itself) needs a builder
+	// Check each enabled image's builder
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		if imageName == builderName {
+
+		// Resolve builder: image -> defaults -> ""
+		resolvedBuilder := img.Builder
+		if resolvedBuilder == "" {
+			resolvedBuilder = cfg.Defaults.Builder
+		}
+
+		// Self-reference check (only for explicitly set builder, not inherited from defaults)
+		if img.Builder == imageName {
+			errs.Add("image %q: cannot be its own builder", imageName)
 			continue
 		}
 
-		needsBuilder := false
-		for _, layerName := range img.Layers {
-			layer, ok := layers[layerName]
-			if !ok {
+		// Skip images where resolved builder is self (inherited from defaults — not an error)
+		if resolvedBuilder == imageName {
+			continue
+		}
+
+		// Validate per-image builder reference (if set on the image itself)
+		if img.Builder != "" {
+			builderImg, exists := cfg.Images[img.Builder]
+			if !exists {
+				errs.Add("image %q: builder %q not found in images.yml", imageName, img.Builder)
 				continue
 			}
-			if layer.PixiManifest() != "" || layer.HasPackageJson {
-				needsBuilder = true
-				break
+			if !builderImg.IsEnabled() {
+				errs.Add("image %q: builder %q is disabled", imageName, img.Builder)
+				continue
 			}
 		}
-		// Also check transitive dependencies
-		if !needsBuilder {
-			resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
-			if err == nil {
-				for _, layerName := range resolved {
-					layer, ok := layers[layerName]
-					if !ok {
-						continue
-					}
-					if layer.PixiManifest() != "" || layer.HasPackageJson {
-						needsBuilder = true
-						break
-					}
+
+		// Skip builder image itself
+		if imageName == resolvedBuilder {
+			continue
+		}
+
+		// Check if this image needs a builder
+		needsBuilder := false
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err == nil {
+			for _, layerName := range resolved {
+				layer, ok := layers[layerName]
+				if !ok {
+					continue
+				}
+				if layer.PixiManifest() != "" || layer.HasPackageJson {
+					needsBuilder = true
+					break
 				}
 			}
 		}
 
-		if needsBuilder && builderName == "" {
-			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder in images.yml)", imageName)
+		if needsBuilder && resolvedBuilder == "" {
+			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder or image builder in images.yml)", imageName)
 		}
 	}
 }

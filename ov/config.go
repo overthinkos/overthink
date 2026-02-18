@@ -42,7 +42,7 @@ type ImageConfig struct {
 	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases   []AliasConfig `yaml:"aliases,omitempty"`  // command aliases
-	Builder   string        `yaml:"builder,omitempty"`  // builder image name (defaults only)
+	Builder   string        `yaml:"builder,omitempty"`  // builder image name (per-image, falls back to defaults)
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -78,6 +78,9 @@ type ResolvedImage struct {
 
 	// Merge configuration
 	Merge *MergeConfig // layer merge settings (nil means use CLI defaults)
+
+	// Builder image name (resolved: image -> defaults -> "")
+	Builder string
 
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
@@ -205,6 +208,12 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Merge = img.Merge
 	} else if c.Defaults.Merge != nil {
 		resolved.Merge = c.Defaults.Merge
+	}
+
+	// Resolve builder: image -> defaults -> ""
+	resolved.Builder = img.Builder
+	if resolved.Builder == "" {
+		resolved.Builder = c.Defaults.Builder
 	}
 
 	// Home directory will be resolved later (after inspecting base image)

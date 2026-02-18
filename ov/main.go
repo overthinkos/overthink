@@ -102,6 +102,8 @@ func (c *InspectCmd) Run() error {
 			fmt.Println(resolved.FullTag)
 		case "base":
 			fmt.Println(resolved.Base)
+		case "builder":
+			fmt.Println(resolved.Builder)
 		case "pkg":
 			fmt.Println(resolved.Pkg)
 		case "registry":
@@ -239,7 +241,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	order, err := ResolveImageOrder(images, layers, cfg.Defaults.Builder)
+	order, err := ResolveImageOrder(images, layers)
 	if err != nil {
 		return err
 	}

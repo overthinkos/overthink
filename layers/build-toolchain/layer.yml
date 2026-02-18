@@ -1,3 +1,6 @@
+env:
+  CCACHE_DISABLE: "1"
+
 rpm:
   packages:
     - autoconf

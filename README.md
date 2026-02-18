@@ -37,7 +37,7 @@ overthink/
 │   ├── rust/               # Rust + Cargo
 │   ├── supervisord/        # Process manager
 │   ├── traefik/            # Reverse proxy
-│   ├── nvidia-cuda/        # NVIDIA CUDA toolkit
+│   ├── cuda/               # NVIDIA CUDA toolkit
 │   ├── openclaw/           # OpenClaw gateway (npm, volumes, service)
 │   └── ...                 # build-toolchain, dev-tools, docker-ce, etc.
 ├── ov/                     # Go CLI source

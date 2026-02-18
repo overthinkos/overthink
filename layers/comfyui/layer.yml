@@ -1,5 +1,5 @@
 depends:
-  - nvidia-python
+  - cuda
   - supervisord
 
 rpm:

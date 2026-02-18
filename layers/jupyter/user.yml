@@ -1,19 +1,42 @@
-# Unsloth + transformers upgrade + MCP server + vLLM patch
+# llama.cpp tools + vLLM wheel + unsloth (--no-deps) + MCP server config + vLLM patch
 version: '3'
 
 tasks:
   install:
     cmds:
-      # Install unsloth-zoo + unsloth (--no-deps to bypass conservative constraints)
+      # Download llama.cpp prebuilt binaries + Python tooling
+      - |
+        LLAMA_CPP_DIR=~/llama.cpp
+        mkdir -p "$LLAMA_CPP_DIR"
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        curl -fsSL -o /tmp/llama-bin.tar.gz \
+          "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_RELEASE}/llama-${LLAMA_RELEASE}-bin-ubuntu-x64.tar.gz"
+        mkdir -p /tmp/llama_extract
+        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-bin.tar.gz -C /tmp/llama_extract
+        EXTRACT_DIR="/tmp/llama_extract/llama-${LLAMA_RELEASE}"
+        cp "$EXTRACT_DIR/llama-quantize" "$EXTRACT_DIR/llama-cli" "$LLAMA_CPP_DIR/"
+        chmod +x "$LLAMA_CPP_DIR/llama-quantize" "$LLAMA_CPP_DIR/llama-cli"
+        cp "$EXTRACT_DIR"/lib*.so* "$EXTRACT_DIR/LICENSE" "$LLAMA_CPP_DIR/"
+        rm -rf /tmp/llama_extract /tmp/llama-bin.tar.gz
+      # Download llama.cpp source for convert_hf_to_gguf.py + gguf-py
+      - |
+        LLAMA_CPP_DIR=~/llama.cpp
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        curl -fsSL -o /tmp/llama-src.tar.gz \
+          "https://github.com/ggerganov/llama.cpp/archive/refs/tags/${LLAMA_RELEASE}.tar.gz"
+        mkdir -p /tmp/llama_src
+        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-src.tar.gz -C /tmp/llama_src
+        SRC_DIR="/tmp/llama_src/llama.cpp-${LLAMA_RELEASE}"
+        cp "$SRC_DIR/convert_hf_to_gguf.py" "$LLAMA_CPP_DIR/"
+        cp -r "$SRC_DIR/gguf-py" "$LLAMA_CPP_DIR/"
+        rm -rf /tmp/llama_src /tmp/llama-src.tar.gz
+      # Install vLLM 0.14.0 cu130 nightly wheel (--no-deps: deps are in pixi.toml)
       - |
         ~/.pixi/envs/default/bin/python -m pip install --no-deps \
-          "unsloth-zoo==2025.12.8" \
-          "unsloth==2025.12.10"
-      # Upgrade transformers to 5.0.0rc1 (pixi installs 4.57.3 for langchain compat)
+          'https://wheels.vllm.ai/adcf682fc7d1835d037da331922751e880c8bc25/vllm-0.14.0rc1.dev201%2Bgadcf682fc.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
+      # Install unsloth + unsloth-zoo (--no-deps: incompatible with transformers 5.x in pixi solve)
       - |
-        ~/.pixi/envs/default/bin/python -m pip uninstall -y transformers huggingface-hub || true
-        ~/.pixi/envs/default/bin/python -m pip install --no-cache-dir \
-          "transformers==5.0.0rc1"
+        ~/.pixi/envs/default/bin/python -m pip install --no-deps unsloth unsloth-zoo
       # Enable jupyter-mcp-server extension
       - |
         JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d

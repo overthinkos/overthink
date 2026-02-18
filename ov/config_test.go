@@ -183,6 +183,66 @@ func TestImageNames(t *testing.T) {
 	}
 }
 
+func TestResolveImageBuilder(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Pkg:       "rpm",
+			Platforms: []string{"linux/amd64"},
+			Builder:   "default-builder",
+		},
+		Images: map[string]ImageConfig{
+			"default-builder": {Layers: []string{}},
+			"custom-builder":  {Layers: []string{}},
+			"uses-default":    {Layers: []string{}},
+			"uses-custom":     {Layers: []string{}, Builder: "custom-builder"},
+			"no-builder":      {Layers: []string{}, Builder: ""},
+		},
+	}
+
+	// Image with no explicit builder inherits defaults.builder
+	resolved, err := cfg.ResolveImage("uses-default", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builder != "default-builder" {
+		t.Errorf("Builder = %q, want %q", resolved.Builder, "default-builder")
+	}
+
+	// Image with explicit builder overrides defaults
+	resolved, err = cfg.ResolveImage("uses-custom", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builder != "custom-builder" {
+		t.Errorf("Builder = %q, want %q", resolved.Builder, "custom-builder")
+	}
+
+	// Image with empty builder gets defaults
+	resolved, err = cfg.ResolveImage("no-builder", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builder != "default-builder" {
+		t.Errorf("Builder = %q, want %q", resolved.Builder, "default-builder")
+	}
+
+	// No defaults.builder → empty
+	cfg2 := &Config{
+		Defaults: ImageConfig{Pkg: "rpm", Platforms: []string{"linux/amd64"}},
+		Images: map[string]ImageConfig{
+			"app": {Layers: []string{}},
+		},
+	}
+	resolved, err = cfg2.ResolveImage("app", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builder != "" {
+		t.Errorf("Builder = %q, want empty", resolved.Builder)
+	}
+}
+
 func TestResolveImagePorts(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{

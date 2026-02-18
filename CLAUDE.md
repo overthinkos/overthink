@@ -145,7 +145,7 @@ Every setting resolves through: **image -> defaults -> hardcoded fallback** (fir
 | `gid` | `1000` | Group ID |
 | `merge` | `null` | Layer merge settings (`auto: true, max_mb: 128`). See [Layer Merging](#layer-merging). |
 | `aliases` | `[]` | Command aliases (`name` + optional `command`). See [Command Aliases](#command-aliases). |
-| `builder` | `""` | Builder image name (defaults only). See [Builder Image](#builder-image). |
+| `builder` | `""` | Builder image name (per-image, falls back to defaults). See [Builder Image](#builder-image). |
 
 When `base` references another image in `images.yml`, the generator resolves it to the full registry/tag and creates a build dependency. The referenced image must be built first.
 
@@ -489,11 +489,11 @@ ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
 
-**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`).
+**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`).
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
-**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `rpm.copr` requires `rpm.packages`, `rpm.repos` requires `rpm.packages`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yml` `env` must not set `PATH` directly (use `path_append`), `layer.yml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0, volume names must match `^[a-z0-9]+(-[a-z0-9]+)*$`, volume entries require both `name` and `path`, duplicate volume names within a layer rejected, alias names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, layer aliases require both `name` and `command`, duplicate alias names within a layer or image rejected, `defaults.builder` must reference an existing enabled image, images with pixi/npm layers require a builder.
+**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `rpm.copr` requires `rpm.packages`, `rpm.repos` requires `rpm.packages`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yml` `env` must not set `PATH` directly (use `path_append`), `layer.yml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0, volume names must match `^[a-z0-9]+(-[a-z0-9]+)*$`, volume entries require both `name` and `path`, duplicate volume names within a layer rejected, alias names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, layer aliases require both `name` and `command`, duplicate alias names within a layer or image rejected, `defaults.builder` must reference an existing enabled image, per-image `builder` must reference an existing enabled image, image cannot be its own builder (explicit self-reference), images with pixi/npm layers require a builder.
 
 ---
 
@@ -761,11 +761,11 @@ A dedicated image used as the base for all pixi and npm multi-stage build stages
 
 ### Configuration
 
-Set `builder` in `images.yml` defaults:
+Set `builder` in `images.yml` defaults (applies to all images) or per-image (overrides defaults):
 
 ```yaml
 defaults:
-  builder: builder
+  builder: builder       # default builder for all images
 
 images:
   builder:
@@ -773,7 +773,14 @@ images:
       - pixi            # pixi binary (via root.yml) + env vars/PATH
       - nodejs          # node + npm (via dnf)
       - build-toolchain # gcc, cmake, make, git (via dnf)
+
+  special-app:
+    builder: special-builder  # per-image override
+    layers:
+      - mylib
 ```
+
+Resolution chain: **image.builder -> defaults.builder -> ""** (first non-empty wins). The builder image itself inherits `defaults.builder` but the generator recognizes self-reference and skips it.
 
 The builder image itself has **no pixi build stages** (the pixi layer has no pixi.toml) and **no npm build stages** (none of its layers have package.json). It's a straightforward image: bootstrap + system packages + pixi binary download.
 
@@ -792,13 +799,13 @@ No `apt-get install` is needed in build stages since the builder has pixi, node,
 
 ### Build ordering
 
-When a builder is configured, `ResolveImageOrder` adds an implicit dependency edge: every non-builder image depends on the builder. This ensures the builder is always built first.
+Each image's resolved `Builder` field determines its builder dependency. `ResolveImageOrder` adds an implicit dependency edge from each image to its builder (if the image needs multi-stage builds). Images that don't need a builder (no pixi/npm layers) have no builder dependency even if `builder` is set.
 
 ### Empty base images
 
 The `fedora` base image has `layers: []` — just Fedora + task binary + user creation. Derived images pull in only the layers they need via layer dependencies. All npm-using layers declare `depends: [nodejs]`, supervisord-using layers declare `depends: [supervisord]`, etc. The dependency resolver pulls in transitive deps automatically.
 
-Source: `ov/generate.go` (`BuilderRef`), `ov/graph.go` (`ResolveImageOrder` builder parameter), `ov/validate.go` (`validateBuilder`).
+Source: `ov/generate.go` (`builderRefForImage`), `ov/graph.go` (`ResolveImageOrder` uses per-image `Builder` field), `ov/validate.go` (`validateBuilder`).
 
 ---
 

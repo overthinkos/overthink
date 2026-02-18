@@ -220,6 +220,8 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	builderRef := g.builderRefForImage(imageName)
 
 	// Emit per-layer pixi build stages
+	// Cache mounts for pixi/rattler caches prevent bloating build stage layers
+	// (e.g. CUDA libraries cached by pixi can add 10GB+ to intermediate layers)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		manifest := layer.PixiManifest()
@@ -233,14 +235,16 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				b.WriteString(fmt.Sprintf("COPY layers/%s/pixi.lock pixi.lock\n", layerName))
 			}
 			b.WriteString(fmt.Sprintf("COPY layers/%s/%s %s\n", layerName, manifest, manifest))
+			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=%s/.cache/pixi,uid=%d,gid=%d \\\n    --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n    ",
+				img.Home, img.UID, img.GID, img.Home, img.UID, img.GID)
 			if manifest == "environment.yml" {
-				b.WriteString(fmt.Sprintf("RUN pixi project import %s && pixi install\n", manifest))
+				b.WriteString(fmt.Sprintf("RUN %spixi project import %s && pixi install\n", cacheMounts, manifest))
 			} else if manifest == "pyproject.toml" {
-				b.WriteString("RUN pixi install --manifest-path pyproject.toml\n")
+				b.WriteString(fmt.Sprintf("RUN %spixi install --manifest-path pyproject.toml\n", cacheMounts))
 			} else if layer.HasPixiLock {
-				b.WriteString("RUN pixi install --frozen\n")
+				b.WriteString(fmt.Sprintf("RUN %spixi install --frozen\n", cacheMounts))
 			} else {
-				b.WriteString("RUN pixi install\n")
+				b.WriteString(fmt.Sprintf("RUN %spixi install\n", cacheMounts))
 			}
 			b.WriteString("\n")
 		}

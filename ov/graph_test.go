@@ -131,7 +131,7 @@ func TestResolveImageOrder(t *testing.T) {
 		},
 	}
 
-	order, err := ResolveImageOrder(images, nil, "")
+	order, err := ResolveImageOrder(images, nil)
 	if err != nil {
 		t.Fatalf("ResolveImageOrder() error = %v", err)
 	}
@@ -168,15 +168,17 @@ func TestResolveImageOrderWithBuilder(t *testing.T) {
 			Name:           "fedora",
 			Base:           "quay.io/fedora/fedora:43",
 			IsExternalBase: true,
+			Builder:        "builder",
 		},
 		"app": {
 			Name:           "app",
 			Base:           "fedora",
 			IsExternalBase: false,
+			Builder:        "builder",
 		},
 	}
 
-	order, err := ResolveImageOrder(images, nil, "builder")
+	order, err := ResolveImageOrder(images, nil)
 	if err != nil {
 		t.Fatalf("ResolveImageOrder() error = %v", err)
 	}
@@ -211,7 +213,7 @@ func TestResolveImageOrderCycle(t *testing.T) {
 		"c": {Name: "c", Base: "a", IsExternalBase: false},
 	}
 
-	_, err := ResolveImageOrder(images, nil, "")
+	_, err := ResolveImageOrder(images, nil)
 	if err == nil {
 		t.Error("expected cycle error, got nil")
 	}

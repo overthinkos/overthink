@@ -1,2 +1,6 @@
 depends:
   - python
+
+rpm:
+  packages:
+    - supervisor

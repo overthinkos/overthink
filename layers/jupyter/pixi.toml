@@ -52,68 +52,76 @@ vl-convert-python = "*"
 black = "*"
 pytest = "*"
 mkdocs = "*"
+dill = "<0.4.1"
 
 [pypi-dependencies]
-# ============================================================
-# CRITICAL: These MUST match nvidia-python EXACTLY
-# Same version specs ensure pixi recognizes them as installed
-# ============================================================
-
-# === PyTorch with CUDA 13.0 (MUST MATCH nvidia-python) ===
+# === PyTorch with CUDA 13.0 ===
 torch = { version = ">=2.9.1", index = "https://download.pytorch.org/whl/cu130" }
 torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 torchaudio = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
-
-# === Memory Optimization (MUST MATCH nvidia-python) ===
 xformers = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 
-# === vLLM (installed via pip in nvidia-python build script) ===
-# vLLM 0.14.0 cu130 is installed from nightly wheels in nvidia-python layer
-# This stacks correctly - no pypi spec needed here
+# === vLLM dependencies (wheel installed --no-deps in user.yml) ===
+blake3 = "*"
+cbor2 = "*"
+compressed-tensors = "==0.13.0"
+depyf = "==0.20.0"
+flashinfer-python = "==0.5.3"
+ijson = "*"
+llguidance = ">=1.3.0, <1.4.0"
+lm-format-enforcer = "==0.11.3"
+mistral-common = ">=1.8.5"
+model-hosting-container-standards = ">=0.1.9, <1.0.0"
+numba = "==0.61.2"
+openai-harmony = ">=0.0.3"
+opencv-python-headless = ">=4.11.0"
+outlines-core = "==0.2.11"
+partial-json-parser = "*"
+prometheus-fastapi-instrumentator = ">=7.0.0"
+ray = ">=2.48.0"
+watchfiles = "*"
+xgrammar = "==0.1.29"
+lark = ">=1.2.2"
+pydantic-extra-types = "*"
+pycountry = "*"
+interegular = "*"
+hf-transfer = "*"
+cut-cross-entropy = "*"
+torchao = "*"
+tyro = "*"
+loguru = "*"
+llvmlite = ">=0.44.0, <0.45"
+apache-tvm-ffi = "*"
+nvidia-cudnn-frontend = "*"
+nvidia-cutlass-dsl = "*"
 
-# === HuggingFace Core (MUST MATCH nvidia-python) ===
-transformers = ">=4.57.3" # Base version; 5.0.0rc1 installed via pip in build script
+# === HuggingFace Core ===
+transformers = ">=5.0.0rc1"
 accelerate = "*"
 safetensors = ">=0.4.2"
 
-# === Core Numerical (MUST MATCH nvidia-python) ===
+# === ML Core ===
 einops = ">=0.7.0"
-
-# === Image Processing (MUST MATCH nvidia-python) ===
 pillow = ">=10.0.0"
-
-# === Video Processing (MUST MATCH nvidia-python) ===
 av = "*"
-
-# === Async & Networking (MUST MATCH nvidia-python) ===
 aiohttp = ">=3.9.0"
-
-# === Computer Vision (MUST MATCH nvidia-python) ===
 kornia = ">=0.7.1"
 spandrel = ">=0.3.4"
-
-# === Diffusion/SDE (MUST MATCH nvidia-python) ===
 torchsde = "*"
-
-# === Utilities (MUST MATCH nvidia-python) ===
 psutil = "*"
 pyyaml = "*"
-
-# === Configuration (MUST MATCH nvidia-python) ===
 pydantic = ">=2.0"
 pydantic-settings = ">=2.0"
 python-dotenv = "*"
 
-# ============================================================
-# JUPYTER-SPECIFIC PACKAGES (not in nvidia-python)
-# ============================================================
+# === Jupyter-specific ===
 
 # Jupyter MCP Server
 jupyter-mcp-server = { git = "https://github.com/atrawog/jupyter-mcp-server.git" }
 jupyter-collaboration = ">=4.0.2"
 
 # HuggingFace ecosystem
-datasets = "==4.3.0"
+datasets = ">=4.3.0"
 huggingface_hub = "*"
 tokenizers = "*"
 sentencepiece = "*"
@@ -133,7 +141,6 @@ langchain = "*"
 langchain-core = "*"
 langchain-openai = "*"
 langchain-community = "*"
-langchain-huggingface = "*"
 langchain-classic = "*"
 langchain-anthropic = "*"
 chromadb = "*"

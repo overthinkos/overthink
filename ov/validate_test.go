@@ -778,6 +778,68 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 	}
 }
 
+func TestValidateSelfBuilder(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myimg": {
+				Layers:  []string{"pixi"},
+				Builder: "myimg",
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"pixi": {Name: "pixi", HasRootYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for self-referencing builder")
+	}
+	if !strings.Contains(err.Error(), "cannot be its own builder") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
+	// Builder image inheriting defaults.builder that points to itself is NOT an error
+	cfg := &Config{
+		Defaults: ImageConfig{Builder: "builder"},
+		Images: map[string]ImageConfig{
+			"builder": {Layers: []string{"pixi"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"pixi": {Name: "pixi", HasRootYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestValidatePerImageBuilderNotFound(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"app": {
+				Layers:  []string{"pixi"},
+				Builder: "nonexistent",
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"pixi": {Name: "pixi", HasRootYml: true},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for nonexistent per-image builder")
+	}
+	if !strings.Contains(err.Error(), "builder \"nonexistent\" not found") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestIsValidPort(t *testing.T) {
 	tests := []struct {
 		input string

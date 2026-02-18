@@ -1,6 +1,5 @@
 depends:
-  - pixi
-  - nvidia-cuda
+  - cuda
 
 env:
   NVIDIA_PYTHON_PROJECT: "~/.pixi"

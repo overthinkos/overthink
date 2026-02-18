@@ -56,13 +56,23 @@ func (c *MergeCmd) Run() error {
 
 // runAll merges all images that have merge.auto enabled.
 func (c *MergeCmd) runAll(cfg *Config) error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return err
+	}
+
 	images, err := cfg.ResolveAllImages("unused")
 	if err != nil {
 		return err
 	}
 
 	// Merge in dependency order so base images are merged before children
-	order, err := ResolveImageOrder(images, nil, cfg.Defaults.Builder)
+	order, err := ResolveImageOrder(images, layers)
 	if err != nil {
 		return err
 	}

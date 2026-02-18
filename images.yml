@@ -1,7 +1,7 @@
 defaults:
   registry: ghcr.io/atrawog
   tag: auto
-  base: "quay.io/fedora/fedora:43"
+
   platforms:
     - linux/amd64
     - linux/arm64
@@ -9,28 +9,29 @@ defaults:
   merge:
     auto: false
     max_mb: 128
-  builder: builder
+  builder: fedora-builder
 
 images:
-  builder:
+
+  fedora:
+    base: "quay.io/fedora/fedora:43"
+    pkg: rpm
+
+  fedora-builder:
+    base: fedora
     layers:
       - pixi
       - nodejs
       - build-toolchain
 
-  fedora:
-    layers: []
-
   ubuntu:
     enabled: false
     base: "ubuntu:24.04"
-    layers: []
     pkg: deb
 
   debian:
     enabled: false
     base: "debian:13"
-    layers: []
     pkg: deb
 
   fedora-test:
@@ -49,39 +50,22 @@ images:
     ports:
       - "18789:18789"
 
-  base:
-    layers:
-      - pixi
-      - python
-      - nodejs
-      - rust
-      - build-toolchain
-      - language-runtimes
-      - dev-tools
-      - ujust
-      - docker-ce
-      - kubernetes
-      - claude-code
-      - supervisord
-    platforms:
-      - linux/amd64
-
   nvidia:
-    base: base
+    base: fedora
     layers:
-      - nvidia-cuda
+      - cuda
     platforms:
       - linux/amd64
 
-  nvidia-python:
+  python-ml:
     base: nvidia
     layers:
-      - nvidia-python
+      - python-ml
     platforms:
       - linux/amd64
 
   jupyter:
-    base: nvidia-python
+    base: nvidia
     layers:
       - jupyter
     ports:
@@ -110,7 +94,7 @@ images:
       - linux/amd64
 
   comfyui:
-    base: nvidia-python
+    base: nvidia
     layers:
       - comfyui
     ports:
@@ -118,19 +102,8 @@ images:
     platforms:
       - linux/amd64
 
-  sandbox:
-    base: base
-    layers:
-      - pre-commit
-      - google-cloud
-      - google-cloud-npm
-      - devops-tools
-      - grafana-tools
-    platforms:
-      - linux/amd64
-
   githubrunner:
-    base: base
+    base: fedora
     layers:
       - github-runner
     platforms:
@@ -156,7 +129,7 @@ images:
       - docker-ce
       - google-cloud
       - vr-streaming
-      - nvidia-cuda
+      - cuda
       - devops-tools
       - grafana-tools
       - desktop-apps

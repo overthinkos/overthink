@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 )
 
 // trieNode represents a node in the layer prefix trie.
@@ -173,90 +174,59 @@ func AbsoluteLayerSequence(imageName string, images map[string]*ResolvedImage, l
 	return seq
 }
 
-// resolveExternalBase walks the base chain to find the ultimate external base.
-func resolveExternalBase(imageName string, images map[string]*ResolvedImage) string {
-	current := imageName
-	for {
-		img, ok := images[current]
-		if !ok || img.IsExternalBase {
-			if ok {
-				return img.Base
-			}
-			return current
-		}
-		current = img.Base
-	}
-}
-
-// ComputeIntermediates analyzes all images, builds a prefix trie of absolute
-// layer sequences, creates intermediates at branching points, and returns
-// updated images map with intermediates injected and existing images' Base updated.
+// ComputeIntermediates analyzes all images, groups them by direct parent (Base),
+// builds prefix tries of relative layer sequences within each sibling group,
+// creates intermediates at branching points, and returns updated images map.
+// User-defined images always take priority over auto-intermediates.
 func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string) (map[string]*ResolvedImage, error) {
-	// Filter to only non-disabled, non-empty-layer images that share external bases
-	// Group images by their ultimate external base
-	baseGroups := make(map[string][]string) // external base → image names
-	for name, img := range images {
-		if len(img.Layers) == 0 && img.IsExternalBase {
-			// Images like "fedora" with no layers — they sit at root
-		}
-		extBase := resolveExternalBase(name, images)
-		baseGroups[extBase] = append(baseGroups[extBase], name)
-	}
-
 	globalOrder, err := GlobalLayerOrder(images, layers)
 	if err != nil {
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
 
-	result := make(map[string]*ResolvedImage)
 	// Copy all existing images
+	result := make(map[string]*ResolvedImage)
 	for name, img := range images {
 		cp := *img
 		result[name] = &cp
 	}
 
-	// Process each base group independently
-	for _, imageNames := range baseGroups {
-		sortStrings(imageNames)
-		if len(imageNames) <= 1 {
-			continue // No branching possible with single image
+	builderName := cfg.Defaults.Builder
+
+	// Group images by their direct parent (Base field)
+	siblingGroups := make(map[string][]string)
+	for name, img := range images {
+		if name == builderName {
+			continue
 		}
+		siblingGroups[img.Base] = append(siblingGroups[img.Base], name)
+	}
 
-		// Build trie from absolute sequences
-		root := newTrieNode("")
+	// Process internal-base groups in topological order (parents before children)
+	// so auto-intermediates from parent groups are visible when processing child groups
+	imageOrder, err := ResolveImageOrder(images, layers)
+	if err != nil {
+		return nil, fmt.Errorf("resolving image order: %w", err)
+	}
 
-		for _, imgName := range imageNames {
-			seq := AbsoluteLayerSequence(imgName, images, layers, globalOrder)
-			node := root
-			for _, layer := range seq {
-				child, ok := node.children[layer]
-				if !ok {
-					child = newTrieNode(layer)
-					node.children[layer] = child
-				}
-				node = child
-			}
-			node.images = append(node.images, imgName)
+	processed := make(map[string]bool)
+	for _, parentName := range imageOrder {
+		children := siblingGroups[parentName]
+		if len(children) < 2 {
+			continue
 		}
-
-		// Find the "root image" — an image with empty layers sitting at the trie root
-		var rootImageName string
-		for _, imgName := range imageNames {
-			if len(images[imgName].Layers) == 0 {
-				rootImageName = imgName
-				break
-			}
+		processed[parentName] = true
+		if err := processSiblingGroup(parentName, children, result, images, layers, cfg, tag, globalOrder); err != nil {
+			return nil, err
 		}
+	}
 
-		// Walk the trie to create intermediates
-		startParent := rootImageName
-		if startParent == "" {
-			// No root image — use the external base directly
-			extBase := resolveExternalBase(imageNames[0], images)
-			startParent = extBase
+	// Process external-base groups (parent is an external OCI ref, not in imageOrder)
+	for parentBase, children := range siblingGroups {
+		if processed[parentBase] || len(children) < 2 {
+			continue
 		}
-
-		if err := walkTrie(root, startParent, result, images, layers, cfg, tag, globalOrder); err != nil {
+		if err := processSiblingGroup(parentBase, children, result, images, layers, cfg, tag, globalOrder); err != nil {
 			return nil, err
 		}
 	}
@@ -264,15 +234,64 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 	return result, nil
 }
 
-// walkTrie walks the trie from a node, creating intermediates at branching points.
-// parentName is the image/base to use as parent for the next intermediate or leaf.
-func walkTrie(node *trieNode, parentName string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string) error {
-	// Follow each child path
+// processSiblingGroup builds a prefix trie from the relative layer sequences
+// of children sharing the same parent, and creates intermediates at branch points.
+func processSiblingGroup(parentName string, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string) error {
+	sortStrings(children)
+
+	// Get layers provided by parent
+	parentProvided := make(map[string]bool)
+	if _, ok := result[parentName]; ok {
+		provided, err := LayersProvidedByImage(parentName, result, layers)
+		if err == nil {
+			parentProvided = provided
+		}
+	}
+
+	// Build trie from relative layer sequences
+	root := newTrieNode("")
+	for _, childName := range children {
+		seq := relativeLayerSequence(childName, parentProvided, result, layers, globalOrder)
+		node := root
+		for _, layer := range seq {
+			child, ok := node.children[layer]
+			if !ok {
+				child = newTrieNode(layer)
+				node.children[layer] = child
+			}
+			node = child
+		}
+		node.images = append(node.images, childName)
+	}
+
+	return walkTrieScoped(root, parentName, result, origImages, layers, cfg, tag, globalOrder)
+}
+
+// relativeLayerSequence returns an image's layers minus what the parent provides,
+// ordered according to the global layer order.
+func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) []string {
+	allLayers := collectAllImageLayers(imageName, images, layers)
+	layerSet := make(map[string]bool, len(allLayers))
+	for _, l := range allLayers {
+		layerSet[l] = true
+	}
+
+	var seq []string
+	for _, l := range globalOrder {
+		if layerSet[l] && !parentProvided[l] {
+			seq = append(seq, l)
+		}
+	}
+	return seq
+}
+
+// walkTrieScoped walks the trie creating intermediates at branch points.
+// User-defined images at branch points are reused as intermediates without rebasing.
+func walkTrieScoped(node *trieNode, parentName string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string) error {
 	for _, childLayerName := range sortedKeys(node.children) {
 		child := node.children[childLayerName]
 
-		// Collect the linear chain: keep walking as long as there's exactly
-		// one child and no terminal images
+		// Collect linear chain: walk as long as exactly one child and no terminal images
 		var pathLayers []string
 		current := child
 		pathLayers = append(pathLayers, childLayerName)
@@ -284,42 +303,39 @@ func walkTrie(node *trieNode, parentName string, result map[string]*ResolvedImag
 			}
 		}
 
-		// current is now at a branch point (2+ children), a leaf, or has terminal images
+		// current is at a branch point, leaf, or has terminal images
 		isBranch := len(current.children) >= 2 || (len(current.children) >= 1 && len(current.images) > 0)
 		isLeaf := len(current.children) == 0
 
 		if isBranch {
-			// Need an intermediate at this point
-			intermediateName := pickIntermediateName(current, pathLayers, result, origImages)
+			// Count user-defined images at this branch point
+			var userImages []string
+			for _, img := range current.images {
+				if _, isOrig := origImages[img]; isOrig {
+					userImages = append(userImages, img)
+				}
+			}
 
-			// Check if an existing image sits exactly here
-			if len(current.images) == 1 && !isExistingImageReusable(current.images[0], pathLayers, origImages, layers, parentName, result, globalOrder) {
-				// Create a new intermediate
+			if len(userImages) == 1 && len(current.images) == 1 {
+				// Single user image at branch: use it as intermediate, preserve its Base
+				intermediateName := userImages[0]
+				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder); err != nil {
+					return err
+				}
+			} else {
+				// 0 or 2+ user images: create auto-intermediate
+				intermediateName := pickAutoName(pathLayers, parentName, result, origImages)
 				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder)
-				// Update the terminal image to use this intermediate as base
-				updateImageBase(current.images[0], intermediateName, result)
-			} else if len(current.images) == 1 {
-				// Reuse existing image as intermediate
-				intermediateName = current.images[0]
-				updateImageBase(intermediateName, parentName, result)
-				assignLayersForIntermediate(intermediateName, parentName, pathLayers, result, origImages, layers, globalOrder)
-			} else if len(current.images) > 1 {
-				// Multiple images at same point — create intermediate, update all
-				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder)
+				// Rebase all terminal images to this intermediate
 				for _, imgName := range current.images {
 					updateImageBase(imgName, intermediateName, result)
 				}
-			} else {
-				// No terminal images at branch — create pure intermediate
-				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder)
-			}
-
-			// Recurse into children
-			if err := walkTrie(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder); err != nil {
-				return err
+				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder); err != nil {
+					return err
+				}
 			}
 		} else if isLeaf {
-			// Terminal image(s) at leaf
+			// Terminal images at leaf — rebase to current parent
 			for _, imgName := range current.images {
 				updateImageBase(imgName, parentName, result)
 			}
@@ -328,54 +344,44 @@ func walkTrie(node *trieNode, parentName string, result map[string]*ResolvedImag
 	return nil
 }
 
-// pickIntermediateName chooses a name for an auto-intermediate.
-// Uses the last layer in the path. Appends -2, -3 etc. if name conflicts.
-func pickIntermediateName(node *trieNode, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage) string {
-	// If there's exactly one terminal image, consider reusing it
-	if len(node.images) == 1 {
-		return node.images[0]
+// pickAutoName chooses a name for an auto-intermediate using {parent}-{lastLayer}.
+// For OCI refs (e.g. "quay.io/fedora/fedora:43"), extracts the short image name.
+// Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
+func pickAutoName(pathLayers []string, parentName string, result, origImages map[string]*ResolvedImage) string {
+	lastLayer := pathLayers[len(pathLayers)-1]
+
+	// Extract short parent name from OCI refs: "quay.io/fedora/fedora:43" → "fedora"
+	shortParent := parentName
+	if i := strings.LastIndex(shortParent, ":"); i >= 0 {
+		shortParent = shortParent[:i]
+	}
+	if i := strings.LastIndex(shortParent, "/"); i >= 0 {
+		shortParent = shortParent[i+1:]
 	}
 
-	baseName := pathLayers[len(pathLayers)-1]
+	baseName := shortParent + "-" + lastLayer
 	name := baseName
 	suffix := 2
 	for {
-		// Check if name conflicts with an existing image or already-created intermediate
-		if _, exists := origImages[name]; exists {
-			name = fmt.Sprintf("%s-%d", baseName, suffix)
-			suffix++
-			continue
+		if _, exists := origImages[name]; !exists {
+			if _, exists := result[name]; !exists {
+				return name
+			}
 		}
-		if _, exists := result[name]; exists {
-			name = fmt.Sprintf("%s-%d", baseName, suffix)
-			suffix++
-			continue
-		}
-		return name
+		name = fmt.Sprintf("%s-%d", baseName, suffix)
+		suffix++
 	}
-}
-
-// isExistingImageReusable checks if an existing image can serve as an intermediate
-// (its full layer set matches what the trie path provides).
-func isExistingImageReusable(imgName string, pathLayers []string, origImages map[string]*ResolvedImage, layers map[string]*Layer, parentName string, result map[string]*ResolvedImage, globalOrder []string) bool {
-	// An existing image is reusable if it already exists in origImages
-	_, exists := origImages[imgName]
-	return exists
 }
 
 // createIntermediate creates an auto-generated intermediate image in the result map.
 func createIntermediate(name, parentName string, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string) {
-	// Determine what layers this intermediate provides
-	// These are the pathLayers that aren't already provided by the parent
 	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder)
 
-	// Determine if parent is external or internal
 	isExternalBase := false
 	if _, ok := result[parentName]; !ok {
 		isExternalBase = true
 	}
 
-	// Inherit settings from defaults
 	img := &ResolvedImage{
 		Name:           name,
 		Base:           parentName,
@@ -384,11 +390,12 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
 		Pkg:            cfg.Defaults.Pkg,
-		Platforms:       resolvePlatforms(cfg),
+		Platforms:      resolvePlatforms(cfg),
 		User:           cfg.Defaults.User,
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
 		GID:            resolveIntPtr(cfg.Defaults.GID, nil, 1000),
 		Merge:          cfg.Defaults.Merge,
+		Builder:        cfg.Defaults.Builder,
 		Auto:           true,
 	}
 	if img.Pkg == "" {
@@ -411,12 +418,11 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 // (pathLayers minus what the parent already provides).
 func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) []string {
 	parentProvided := make(map[string]bool)
-	if parentImg, ok := result[parentName]; ok {
+	if _, ok := result[parentName]; ok {
 		provided, err := LayersProvidedByImage(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
-		_ = parentImg
 	}
 
 	var own []string
@@ -468,19 +474,11 @@ func updateImageBase(imgName, parentName string, result map[string]*ResolvedImag
 		return
 	}
 	img.Base = parentName
-	// Check if parent is an internal image
 	if _, isInternal := result[parentName]; isInternal {
 		img.IsExternalBase = false
 	} else {
 		img.IsExternalBase = true
 	}
-}
-
-// assignLayersForIntermediate updates an existing image being reused as intermediate
-// to have the correct layers for its position.
-func assignLayersForIntermediate(imgName, parentName string, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) {
-	// The image keeps its original Layers from images.yml
-	// ResolveLayerOrder with parentLayers will handle exclusion
 }
 
 // resolvePlatforms returns platforms from config defaults.

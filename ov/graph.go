@@ -90,7 +90,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 // ImageNeedsBuilder returns true if any of the image's own resolved layers
 // (excluding parent-provided) have pixi.toml, package.json, or Cargo.toml.
 // When layers is nil, falls back to unconditional builder dependency.
-func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, layers map[string]*Layer, builderName string) bool {
+func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, layers map[string]*Layer) bool {
 	if layers == nil {
 		return true // conservative fallback
 	}
@@ -125,9 +125,9 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 
 // ResolveImageOrder resolves image dependencies and returns them in build order.
 // Images that reference other images via `base` create dependencies.
-// When builderName is non-empty, images that need multi-stage builds depend on the builder.
+// Each image's Builder field determines its builder dependency.
 // Pass layers to enable conditional builder dependency; nil for unconditional.
-func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Layer, builderName string) ([]string, error) {
+func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Layer) ([]string, error) {
 	// Build adjacency list
 	// Edge from A to B means A depends on B (B must be built before A)
 	graph := make(map[string][]string)
@@ -137,11 +137,11 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 			// base is another image in images.yml
 			deps = append(deps, img.Base)
 		}
-		// Only images that need multi-stage builds depend on the builder
-		if builderName != "" && name != builderName {
-			if _, ok := images[builderName]; ok {
-				if ImageNeedsBuilder(img, images, layers, builderName) {
-					deps = append(deps, builderName)
+		// Only images that need multi-stage builds depend on their builder
+		if img.Builder != "" && img.Builder != name {
+			if _, ok := images[img.Builder]; ok {
+				if ImageNeedsBuilder(img, images, layers) {
+					deps = append(deps, img.Builder)
 				}
 			}
 		}

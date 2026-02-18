@@ -834,3 +834,106 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 		}
 	}
 }
+
+func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
+	// Parent with restricted platforms should propagate to auto-intermediates.
+	// nvidia is amd64-only; nvidia-supervisord should also be amd64-only.
+	layers := map[string]*Layer{
+		"pixi":        {Name: "pixi", Depends: nil, HasRootYml: true},
+		"python":      {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
+		"cuda":        {Name: "cuda", Depends: nil, HasRootYml: true},
+		"appA":        {Name: "appA", Depends: []string{"supervisord"}, HasRootYml: true},
+		"appB":        {Name: "appB", Depends: []string{"supervisord"}, HasRootYml: true},
+	}
+
+	images := map[string]*ResolvedImage{
+		"fedora": {
+			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
+			Layers: []string{}, Tag: "v1", Registry: "r", FullTag: "r/fedora:v1",
+			Pkg: "rpm", Platforms: []string{"linux/amd64", "linux/arm64"},
+			Builder: "builder",
+		},
+		"builder": {
+			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
+			Layers: []string{"pixi"}, Tag: "v1", Registry: "r", FullTag: "r/builder:v1",
+			Pkg: "rpm", Platforms: []string{"linux/amd64", "linux/arm64"},
+		},
+		"nvidia": {
+			Name: "nvidia", Base: "fedora", IsExternalBase: false,
+			Layers: []string{"cuda"}, Tag: "v1", Registry: "r", FullTag: "r/nvidia:v1",
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: "builder",
+		},
+		"appA": {
+			Name: "appA", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"appA"}, Tag: "v1", Registry: "r", FullTag: "r/appA:v1",
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: "builder",
+		},
+		"appB": {
+			Name: "appB", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"appB"}, Tag: "v1", Registry: "r", FullTag: "r/appB:v1",
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: "builder",
+		},
+	}
+
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "r",
+			Pkg:       "rpm",
+			Builder:   "builder",
+			Platforms: []string{"linux/amd64", "linux/arm64"},
+		},
+		Images: map[string]ImageConfig{
+			"builder": {Layers: []string{"pixi"}},
+			"fedora":  {Layers: []string{}},
+			"nvidia":  {Base: "fedora", Layers: []string{"cuda"}, Platforms: []string{"linux/amd64"}},
+			"appA":    {Base: "nvidia", Layers: []string{"appA"}},
+			"appB":    {Base: "nvidia", Layers: []string{"appB"}},
+		},
+	}
+
+	result, err := ComputeIntermediates(images, layers, cfg, "v1")
+	if err != nil {
+		t.Fatalf("ComputeIntermediates() error = %v", err)
+	}
+
+	// Any auto-intermediate based on nvidia must be amd64-only
+	for name, img := range result {
+		if !img.Auto {
+			continue
+		}
+		// Walk base chain to see if nvidia is an ancestor
+		current := img.Base
+		nvidiaAncestor := false
+		for i := 0; i < 10; i++ {
+			if current == "nvidia" {
+				nvidiaAncestor = true
+				break
+			}
+			parent, ok := result[current]
+			if !ok {
+				break
+			}
+			current = parent.Base
+		}
+		if nvidiaAncestor {
+			if !reflect.DeepEqual(img.Platforms, []string{"linux/amd64"}) {
+				t.Errorf("auto-intermediate %q (ancestor: nvidia) has platforms %v, want [linux/amd64]",
+					name, img.Platforms)
+			}
+		}
+	}
+
+	// fedora-based auto-intermediates should keep both platforms
+	for name, img := range result {
+		if !img.Auto {
+			continue
+		}
+		if img.Base == "fedora" {
+			if !reflect.DeepEqual(img.Platforms, []string{"linux/amd64", "linux/arm64"}) {
+				t.Errorf("auto-intermediate %q (base: fedora) has platforms %v, want both",
+					name, img.Platforms)
+			}
+		}
+	}
+}

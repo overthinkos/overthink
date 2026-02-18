@@ -382,6 +382,11 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		isExternalBase = true
 	}
 
+	platforms := resolvePlatforms(cfg)
+	if parent, ok := result[parentName]; ok && len(parent.Platforms) > 0 {
+		platforms = intersectPlatforms(parent.Platforms, platforms)
+	}
+
 	img := &ResolvedImage{
 		Name:           name,
 		Base:           parentName,
@@ -390,7 +395,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
 		Pkg:            cfg.Defaults.Pkg,
-		Platforms:      resolvePlatforms(cfg),
+		Platforms:      platforms,
 		User:           cfg.Defaults.User,
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
 		GID:            resolveIntPtr(cfg.Defaults.GID, nil, 1000),
@@ -487,6 +492,25 @@ func resolvePlatforms(cfg *Config) []string {
 		return cfg.Defaults.Platforms
 	}
 	return []string{"linux/amd64", "linux/arm64"}
+}
+
+// intersectPlatforms returns platforms present in both slices.
+// If the intersection is empty, returns parent (the more restrictive set).
+func intersectPlatforms(parent, defaults []string) []string {
+	set := make(map[string]bool, len(parent))
+	for _, p := range parent {
+		set[p] = true
+	}
+	var result []string
+	for _, p := range defaults {
+		if set[p] {
+			result = append(result, p)
+		}
+	}
+	if len(result) == 0 {
+		return parent
+	}
+	return result
 }
 
 // sortedKeys returns sorted keys from a map.

@@ -69,4 +69,4 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push all images
-        run: bin/ov build --push
+        run: bin/ov build --push --cache gha

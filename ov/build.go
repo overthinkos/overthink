@@ -14,6 +14,7 @@ type BuildCmd struct {
 	Push     bool     `long:"push" help:"Push to registry after building"`
 	Tag      string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform string   `long:"platform" help:"Target platform (default: host platform)"`
+	Cache    string   `long:"cache" help:"Build cache type (gha)" env:"OV_BUILD_CACHE"`
 }
 
 func (c *BuildCmd) Run() error {
@@ -99,9 +100,9 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 	var args []string
 
 	if c.Push {
-		args = c.buildPushArgs(engine, tags, img.Platforms, engineName)
+		args = c.buildPushArgs(engine, tags, img.Platforms, engineName, name)
 	} else {
-		args = c.buildLocalArgs(engine, tags, platform)
+		args = c.buildLocalArgs(engine, tags, platform, name)
 	}
 
 	fmt.Fprintf(os.Stderr, "\n--- Building %s ---\n", name)
@@ -120,7 +121,7 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 
 // buildLocalArgs constructs args for a local (single-platform, load into store) build.
 // Uses -f - to read the Containerfile from stdin.
-func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform string) []string {
+func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name string) []string {
 	args := []string{engine, "build", "-f", "-"}
 	for _, tag := range tags {
 		args = append(args, "-t", tag)
@@ -128,19 +129,20 @@ func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform string)
 	if platform != "" {
 		args = append(args, "--platform", platform)
 	}
+	args = append(args, c.cacheArgs(name)...)
 	args = append(args, ".")
 	return args
 }
 
 // buildPushArgs constructs args for a multi-platform push build.
-func (c *BuildCmd) buildPushArgs(engine string, tags []string, platforms []string, engineName string) []string {
+func (c *BuildCmd) buildPushArgs(engine string, tags []string, platforms []string, engineName, name string) []string {
 	if engineName == "podman" {
 		return c.buildPodmanPushArgs(tags, platforms)
 	}
-	return c.buildDockerPushArgs(tags, platforms)
+	return c.buildDockerPushArgs(tags, platforms, name)
 }
 
-func (c *BuildCmd) buildDockerPushArgs(tags []string, platforms []string) []string {
+func (c *BuildCmd) buildDockerPushArgs(tags []string, platforms []string, name string) []string {
 	args := []string{"docker", "buildx", "build", "--push", "-f", "-"}
 	for _, tag := range tags {
 		args = append(args, "-t", tag)
@@ -148,8 +150,20 @@ func (c *BuildCmd) buildDockerPushArgs(tags []string, platforms []string) []stri
 	if len(platforms) > 0 {
 		args = append(args, "--platform", strings.Join(platforms, ","))
 	}
+	args = append(args, c.cacheArgs(name)...)
 	args = append(args, ".")
 	return args
+}
+
+// cacheArgs returns cache flags for the given image name based on the --cache setting.
+func (c *BuildCmd) cacheArgs(name string) []string {
+	if c.Cache != "gha" {
+		return nil
+	}
+	return []string{
+		"--cache-from", fmt.Sprintf("type=gha,scope=%s", name),
+		"--cache-to", fmt.Sprintf("type=gha,mode=max,scope=%s", name),
+	}
 }
 
 func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string) []string {

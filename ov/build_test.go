@@ -9,7 +9,7 @@ func TestBuildLocalArgs(t *testing.T) {
 	cmd := &BuildCmd{}
 	args := cmd.buildLocalArgs("docker",
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415", "ghcr.io/overthinkos/fedora:latest"},
-		"linux/amd64")
+		"linux/amd64", "fedora")
 	want := []string{
 		"docker", "build", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:2026.46.1415",
@@ -26,7 +26,7 @@ func TestBuildLocalArgsPodman(t *testing.T) {
 	cmd := &BuildCmd{}
 	args := cmd.buildLocalArgs("podman",
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415"},
-		"linux/arm64")
+		"linux/arm64", "fedora")
 	want := []string{
 		"podman", "build", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:2026.46.1415",
@@ -42,7 +42,8 @@ func TestBuildDockerPushArgs(t *testing.T) {
 	cmd := &BuildCmd{}
 	args := cmd.buildDockerPushArgs(
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415", "ghcr.io/overthinkos/fedora:latest"},
-		[]string{"linux/amd64", "linux/arm64"})
+		[]string{"linux/amd64", "linux/arm64"},
+		"fedora")
 	want := []string{
 		"docker", "buildx", "build", "--push", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:2026.46.1415",
@@ -52,6 +53,43 @@ func TestBuildDockerPushArgs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildDockerPushArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildLocalArgsWithGHACache(t *testing.T) {
+	cmd := &BuildCmd{Cache: "gha"}
+	args := cmd.buildLocalArgs("docker",
+		[]string{"ghcr.io/overthinkos/fedora:latest"},
+		"linux/amd64", "fedora")
+	want := []string{
+		"docker", "build", "-f", "-",
+		"-t", "ghcr.io/overthinkos/fedora:latest",
+		"--platform", "linux/amd64",
+		"--cache-from", "type=gha,scope=fedora",
+		"--cache-to", "type=gha,mode=max,scope=fedora",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildLocalArgs(gha) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildDockerPushArgsWithGHACache(t *testing.T) {
+	cmd := &BuildCmd{Cache: "gha"}
+	args := cmd.buildDockerPushArgs(
+		[]string{"ghcr.io/overthinkos/fedora:latest"},
+		[]string{"linux/amd64", "linux/arm64"},
+		"fedora")
+	want := []string{
+		"docker", "buildx", "build", "--push", "-f", "-",
+		"-t", "ghcr.io/overthinkos/fedora:latest",
+		"--platform", "linux/amd64,linux/arm64",
+		"--cache-from", "type=gha,scope=fedora",
+		"--cache-to", "type=gha,mode=max,scope=fedora",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildDockerPushArgs(gha) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

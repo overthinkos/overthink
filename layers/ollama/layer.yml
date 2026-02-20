@@ -11,7 +11,7 @@ ports:
 
 volumes:
   - name: models
-    path: "~/.ollama/models"
+    path: "~/.ollama"
 
 aliases:
   - name: ollama

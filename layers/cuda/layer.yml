@@ -9,6 +9,7 @@ rpm:
       gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   packages:
     - libva-nvidia-driver
+    - ffmpeg-libs
     - onnxruntime
     - libaio-devel
     - cpio

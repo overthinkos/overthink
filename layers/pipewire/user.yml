@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/pipewire-wrapper ~/.local/bin/pipewire-wrapper
+      - chmod +x ~/.local/bin/pipewire-wrapper

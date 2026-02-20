@@ -297,13 +297,23 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Emit supervisord config stage if needed
+	// When a child image adds services, include parent-provided service fragments
+	// too so the assembled supervisord.conf contains all services from the full chain.
 	if hasServices {
-		if err := g.generateSupervisordFragments(imageName, layerOrder); err != nil {
+		supervisordLayerOrder := layerOrder
+		if !img.IsExternalBase {
+			// Collect ALL layers across entire base chain for complete supervisord assembly
+			full := collectAllImageLayers(imageName, g.Images, g.Layers)
+			if len(full) > 0 {
+				supervisordLayerOrder = full
+			}
+		}
+		if err := g.generateSupervisordFragments(imageName, supervisordLayerOrder); err != nil {
 			return err
 		}
 		b.WriteString("FROM scratch AS supervisord-conf\n")
 		b.WriteString("COPY templates/supervisord.header.conf /fragments/00-header.conf\n")
-		for i, layerName := range layerOrder {
+		for i, layerName := range supervisordLayerOrder {
 			layer := g.Layers[layerName]
 			if layer.HasSupervisord {
 				b.WriteString(fmt.Sprintf("COPY .build/%s/fragments/%02d-%s.conf /fragments/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))

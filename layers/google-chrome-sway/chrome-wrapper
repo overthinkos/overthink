@@ -1,0 +1,27 @@
+#!/bin/sh
+SOCKET="${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}"
+TIMEOUT=30
+ELAPSED=0
+while [ ! -e "$SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+if [ ! -e "$SOCKET" ]; then
+    echo "chrome-wrapper: Wayland socket $SOCKET not found after ${TIMEOUT}s" >&2
+    exit 1
+fi
+
+# NVIDIA GPU detection — set EGL/GBM vars so Chrome uses the GPU
+GPU_FLAGS=""
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    export GBM_BACKEND=nvidia-drm
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    GPU_FLAGS="--disable-gpu-sandbox"
+fi
+
+exec google-chrome-stable $CHROME_FLAGS $GPU_FLAGS \
+    --disable-background-networking \
+    --disable-features=VaapiVideoDecoder,VaapiVideoEncoder \
+    --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 \
+    --user-data-dir="$HOME/.chrome-debug"

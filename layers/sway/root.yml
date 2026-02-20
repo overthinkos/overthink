@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      # sway ships with cap_sys_nice file capability which prevents execution
+      # in rootless containers (kernel blocks exec of binaries with file caps
+      # in user namespaces). Strip it — not needed for headless compositor.
+      - setcap -r /usr/bin/sway 2>/dev/null || true
+      # Remove xdg-desktop-portal dbus activation files — the session bus
+      # triggers portal auto-start which spams warnings in a headless container.
+      - rm -f /usr/share/dbus-1/services/org.freedesktop.portal.*.service
+      - rm -f /usr/share/dbus-1/services/org.freedesktop.impl.portal.*.service

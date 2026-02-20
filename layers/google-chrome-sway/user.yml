@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/chrome-wrapper ~/.local/bin/chrome-wrapper
+      - chmod +x ~/.local/bin/chrome-wrapper

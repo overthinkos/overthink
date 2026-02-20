@@ -1,0 +1,13 @@
+#!/bin/sh
+SOCKET="${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}"
+TIMEOUT=30
+ELAPSED=0
+while [ ! -e "$SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+if [ ! -e "$SOCKET" ]; then
+    echo "quickshell-wrapper: Wayland socket $SOCKET not found after ${TIMEOUT}s" >&2
+    exit 1
+fi
+exec quickshell

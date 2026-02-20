@@ -1,0 +1,23 @@
+depends:
+  - supervisord
+
+env:
+  XDG_RUNTIME_DIR: "/tmp"
+
+rpm:
+  packages:
+    - pipewire
+    - pipewire-pulseaudio
+    - wireplumber
+
+service: |
+  [program:pipewire]
+  command=%(ENV_HOME)s/.local/bin/pipewire-wrapper
+  autostart=true
+  autorestart=true
+  priority=5
+  startsecs=2
+  environment=XDG_RUNTIME_DIR="/tmp"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

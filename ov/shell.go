@@ -9,6 +9,18 @@ import (
 	"syscall"
 )
 
+// isTerminal reports whether stdout is connected to a terminal.
+// Package-level var for testability.
+var isTerminal = defaultIsTerminal
+
+func defaultIsTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
+}
+
 // containerRunning checks if a container with the given name is currently running.
 var containerRunning = defaultContainerRunning
 
@@ -145,9 +157,9 @@ func resolveShellImageRef(registry, name, tag string) string {
 // buildShellArgs constructs the container run argument list.
 func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string) []string {
 	binary := EngineBinary(engine)
-	interactive := "-it"
-	if command != "" {
-		interactive = "-i"
+	interactive := "-i"
+	if isTerminal() {
+		interactive = "-it"
 	}
 	args := []string{
 		binary, "run", "--rm", interactive,
@@ -174,9 +186,9 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 // buildExecArgs constructs the container exec argument list for attaching to a running container.
 func buildExecArgs(engine, name string, uid, gid int, command string) []string {
 	binary := EngineBinary(engine)
-	interactive := "-it"
-	if command != "" {
-		interactive = "-i"
+	interactive := "-i"
+	if isTerminal() {
+		interactive = "-it"
 	}
 	args := []string{
 		binary, "exec", interactive,

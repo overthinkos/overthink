@@ -18,7 +18,7 @@ aliases:
 
 service: |
   [program:openclaw]
-  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789 --bind 0.0.0.0
+  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789 --bind lan
   autostart=true
   autorestart=true
   stdout_logfile=/dev/stdout

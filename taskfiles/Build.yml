@@ -11,6 +11,13 @@ tasks:
       - mkdir -p bin
       - cd ov && go build -o ../bin/ov .
 
+  install:
+    desc: Build and install ov to ~/.local/bin
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cd ov && go build -o ~/.local/bin/ov .
+
   all:
     desc: Build all images (respects dependency order, auto-merges if enabled)
     preconditions:

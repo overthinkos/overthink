@@ -3,10 +3,25 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
 )
+
+// containerRunning checks if a container with the given name is currently running.
+var containerRunning = defaultContainerRunning
+
+func defaultContainerRunning(engine, name string) bool {
+	binary := EngineBinary(engine)
+	cmd := exec.Command(binary, "container", "inspect",
+		"--format", "{{.State.Running}}", name)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
+}
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
@@ -88,6 +103,17 @@ func (c *ShellCmd) Run() error {
 		}
 	}
 
+	// If the container is already running, exec into it instead of starting a new one
+	name := containerName(c.Image)
+	if containerRunning(engine, name) {
+		args := buildExecArgs(engine, name, uid, gid, c.Command)
+		enginePath, err := findExecutable(EngineBinary(engine))
+		if err != nil {
+			return err
+		}
+		return syscall.Exec(enginePath, args, os.Environ())
+	}
+
 	if cfgErr != nil {
 		// Already ensured above in the label path
 	} else {
@@ -139,6 +165,26 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
 	}
 	args = append(args, "--entrypoint", "bash", imageRef)
+	if command != "" {
+		args = append(args, "-c", command)
+	}
+	return args
+}
+
+// buildExecArgs constructs the container exec argument list for attaching to a running container.
+func buildExecArgs(engine, name string, uid, gid int, command string) []string {
+	binary := EngineBinary(engine)
+	interactive := "-it"
+	if command != "" {
+		interactive = "-i"
+	}
+	args := []string{
+		binary, "exec", interactive,
+		"--user", fmt.Sprintf("%d:%d", uid, gid),
+		"-w", "/workspace",
+		name,
+		"bash",
+	}
 	if command != "" {
 		args = append(args, "-c", command)
 	}

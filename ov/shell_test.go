@@ -181,6 +181,49 @@ func TestBuildShellArgsWithCommandAndGPU(t *testing.T) {
 	}
 }
 
+func TestBuildExecArgs(t *testing.T) {
+	args := buildExecArgs("docker", "ov-fedora", 1000, 1000, "")
+	want := []string{
+		"docker", "exec", "-it",
+		"--user", "1000:1000",
+		"-w", "/workspace",
+		"ov-fedora",
+		"bash",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildExecArgs() =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildExecArgsWithCommand(t *testing.T) {
+	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "echo hello")
+	want := []string{
+		"docker", "exec", "-i",
+		"--user", "1000:1000",
+		"-w", "/workspace",
+		"ov-openclaw",
+		"bash",
+		"-c", "echo hello",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildExecArgs(command) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildExecArgsCustomUIDGID(t *testing.T) {
+	args := buildExecArgs("podman", "ov-ubuntu", 1001, 1002, "")
+	want := []string{
+		"podman", "exec", "-it",
+		"--user", "1001:1002",
+		"-w", "/workspace",
+		"ov-ubuntu",
+		"bash",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildExecArgs(custom uid/gid) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
 func TestResolveShellImageRef(t *testing.T) {
 	tests := []struct {
 		name     string

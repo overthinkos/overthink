@@ -230,21 +230,24 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				return fmt.Errorf("image %q: layer %q has pixi manifest but no builder configured", imageName, layerName)
 			}
 			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", builderRef, layerName))
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			if layer.HasPixiLock {
-				b.WriteString(fmt.Sprintf("COPY layers/%s/pixi.lock pixi.lock\n", layerName))
+				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/pixi.lock pixi.lock\n", img.UID, img.GID, layerName))
 			}
-			b.WriteString(fmt.Sprintf("COPY layers/%s/%s %s\n", layerName, manifest, manifest))
+			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/%s %s\n", img.UID, img.GID, layerName, manifest, manifest))
 			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=%s/.cache/pixi,uid=%d,gid=%d \\\n    --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n    ",
 				img.Home, img.UID, img.GID, img.Home, img.UID, img.GID)
+			// Install and then remove manifests so they're not included when we COPY the home dir
+			cleanup := fmt.Sprintf(" && rm -f %s pixi.lock", manifest)
 			if manifest == "environment.yml" {
-				b.WriteString(fmt.Sprintf("RUN %spixi project import %s && pixi install\n", cacheMounts, manifest))
+				b.WriteString(fmt.Sprintf("RUN %spixi project import %s && pixi install%s\n", cacheMounts, manifest, cleanup))
 			} else if manifest == "pyproject.toml" {
-				b.WriteString(fmt.Sprintf("RUN %spixi install --manifest-path pyproject.toml\n", cacheMounts))
+				b.WriteString(fmt.Sprintf("RUN %spixi install --manifest-path pyproject.toml%s\n", cacheMounts, cleanup))
 			} else if layer.HasPixiLock {
-				b.WriteString(fmt.Sprintf("RUN %spixi install --frozen\n", cacheMounts))
+				b.WriteString(fmt.Sprintf("RUN %spixi install --frozen%s\n", cacheMounts, cleanup))
 			} else {
-				b.WriteString(fmt.Sprintf("RUN %spixi install\n", cacheMounts))
+				b.WriteString(fmt.Sprintf("RUN %spixi install%s\n", cacheMounts, cleanup))
 			}
 			b.WriteString("\n")
 		}
@@ -257,11 +260,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				return fmt.Errorf("image %q: layer %q has package.json but no builder configured", imageName, layerName)
 			}
 			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", builderRef, layerName))
-			b.WriteString(fmt.Sprintf("COPY layers/%s/package.json /tmp/package.json\n", layerName))
-			b.WriteString("WORKDIR /tmp\n")
-			b.WriteString("USER root\n")
-			b.WriteString("ENV NPM_CONFIG_PREFIX=/npm-global\n")
-			b.WriteString("RUN node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g\n\n")
+			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
+			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/package.json package.json\n", img.UID, img.GID, layerName))
+			b.WriteString("RUN node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g && rm -f package.json\n\n")
 		}
 	}
 
@@ -335,12 +337,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		layer := g.Layers[layerName]
 		if layer.PixiManifest() != "" {
 			b.WriteString(fmt.Sprintf("# Copy pixi environment: %s\n", layerName))
-			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s/.pixi/envs/default %s/.pixi/envs/default\n", layerName, img.UID, img.GID, img.Home, img.Home))
-			// Also copy the binary if it's the first time or just overwrite (pixi is self-contained?)
-			// Wait, the pixi binary itself:
-			// "please use ghcr.io/prefix-dev/pixi:latest as the build image for all pixi build layers"
-			// The final image needs the pixi binary.
-			// We can copy it from the first pixi layer, or just any.
+			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s %s\n", layerName, img.UID, img.GID, img.Home, img.Home))
 		}
 	}
 	
@@ -374,7 +371,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				b.WriteString("# Copy npm packages\n")
 				hasNpm = true
 			}
-			b.WriteString(fmt.Sprintf("COPY --from=%s-npm-build --chown=%d:%d /npm-global %s/.npm-global\n", layerName, img.UID, img.GID, img.Home))
+			b.WriteString(fmt.Sprintf("COPY --from=%s-npm-build --chown=%d:%d %s %s\n", layerName, img.UID, img.GID, img.Home, img.Home))
 		}
 	}
 	if hasNpm {

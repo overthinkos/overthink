@@ -50,6 +50,19 @@ images:
     ports:
       - "18789:18789"
 
+  openclaw-browser:
+    base: fedora
+    layers:
+      - openclaw
+      - wayvnc
+      - google-chrome
+    ports:
+      - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
+    platforms:
+      - linux/amd64
+
   nvidia:
     base: fedora
     layers:

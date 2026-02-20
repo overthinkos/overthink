@@ -1,0 +1,33 @@
+depends:
+  - niri
+
+env:
+  CHROME_FLAGS: "--ozone-platform=wayland --no-sandbox --enable-features=UseOzonePlatform"
+
+ports:
+  - 9222
+
+rpm:
+  packages:
+    - liberation-fonts
+    - vulkan-loader
+    - mesa-dri-drivers
+    - alsa-lib
+    - at-spi2-core
+    - cups-libs
+    - gtk3
+    - libdrm
+    - libxkbcommon
+    - nss
+
+service: |
+  [program:google-chrome]
+  command=%(ENV_HOME)s/.local/bin/chrome-wrapper
+  autostart=true
+  autorestart=true
+  priority=30
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-1"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

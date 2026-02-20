@@ -1,0 +1,9 @@
+depends:
+  - cage
+
+env:
+  XDG_CURRENT_DESKTOP: "niri"
+
+rpm:
+  packages:
+    - niri

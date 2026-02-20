@@ -1,0 +1,20 @@
+#!/bin/sh
+SOCKET="${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}"
+
+cage -- niri &
+CAGE_PID=$!
+
+TIMEOUT=30
+ELAPSED=0
+while [ ! -e "$SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+
+if [ -e "$SOCKET" ]; then
+    sleep 1
+    wlr-randr --output HEADLESS-1 --mode "${RESOLUTION:-1920x1080}" 2>/dev/null || true
+fi
+
+trap "kill $CAGE_PID 2>/dev/null" TERM INT QUIT
+wait $CAGE_PID

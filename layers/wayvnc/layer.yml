@@ -1,0 +1,21 @@
+depends:
+  - cage
+
+ports:
+  - 5900
+
+rpm:
+  packages:
+    - wayvnc
+
+service: |
+  [program:wayvnc]
+  command=%(ENV_HOME)s/.local/bin/wayvnc-wrapper
+  autostart=true
+  autorestart=true
+  priority=20
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/quickshell/noctalia-shell
+      - curl -sL https://github.com/noctalia-dev/noctalia-shell/releases/latest/download/noctalia-latest.tar.gz | tar -xz --strip-components=1 -C ~/.config/quickshell/noctalia-shell
+      - cp /ctx/noctalia-wrapper ~/.local/bin/noctalia-wrapper
+      - chmod +x ~/.local/bin/noctalia-wrapper

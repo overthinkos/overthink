@@ -95,12 +95,13 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	}
 
 	qcfg := QuadletConfig{
-		ImageName: c.Image,
-		ImageRef:  imageRef,
-		Workspace: absWorkspace,
-		Ports:     ports,
-		Volumes:   volumes,
-		GPU:       gpu,
+		ImageName:   c.Image,
+		ImageRef:    imageRef,
+		Workspace:   absWorkspace,
+		Ports:       ports,
+		Volumes:     volumes,
+		GPU:         gpu,
+		BindAddress: rt.BindAddress,
 	}
 
 	content := generateQuadlet(qcfg)

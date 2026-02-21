@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildStartArgs(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false, "127.0.0.1")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -21,7 +21,7 @@ func TestBuildStartArgs(t *testing.T) {
 }
 
 func TestBuildStartArgsPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false)
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", nil, "ov-fedora-test", nil, false, "127.0.0.1")
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -36,7 +36,7 @@ func TestBuildStartArgsPodman(t *testing.T) {
 }
 
 func TestBuildStartArgsWithPorts(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, false)
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, false, "127.0.0.1")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -56,7 +56,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-ollama-models", ContainerPath: "/home/user/.ollama/models"},
 	}
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes, false)
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", volumes, false, "127.0.0.1")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -72,7 +72,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPU(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true, "127.0.0.1")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -88,7 +88,7 @@ func TestBuildStartArgsWithGPU(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPUPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true)
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", nil, "ov-ollama", nil, true, "127.0.0.1")
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-ollama",

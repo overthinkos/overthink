@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.config/sway/config.d
+      - cp /ctx/pcmanfm-qt.conf ~/.config/sway/config.d/pcmanfm-qt.conf

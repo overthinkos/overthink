@@ -57,3 +57,6 @@ mode passthrough {
     bindsym $mod+Pause mode default
 }
 bindsym $mod+Pause mode passthrough
+
+# Include drop-in configs from dependent layers
+include ~/.config/sway/config.d/*

@@ -70,6 +70,7 @@ images:
       - pipewire
       - wayvnc
       - google-chrome-sway
+      - pcmanfm-qt
       - quickshell
     ports:
       - "18789:18789"
@@ -85,6 +86,7 @@ images:
       - pipewire
       - wayvnc
       - google-chrome-sway
+      - pcmanfm-qt
       - quickshell
       - ollama
     ports:

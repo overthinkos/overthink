@@ -63,7 +63,7 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	}
 
 	// Ensure env vars are clear
-	for _, key := range []string{"OV_BUILD_ENGINE", "OV_RUN_ENGINE", "OV_RUN_MODE", "OV_AUTO_ENABLE"} {
+	for _, key := range []string{"OV_BUILD_ENGINE", "OV_RUN_ENGINE", "OV_RUN_MODE", "OV_AUTO_ENABLE", "OV_BIND_ADDRESS"} {
 		os.Unsetenv(key)
 	}
 
@@ -82,6 +82,9 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	}
 	if rt.AutoEnable {
 		t.Error("AutoEnable should default to false")
+	}
+	if rt.BindAddress != "127.0.0.1" {
+		t.Errorf("BindAddress = %q, want %q", rt.BindAddress, "127.0.0.1")
 	}
 }
 
@@ -102,6 +105,7 @@ func TestResolveRuntime_EnvOverridesConfig(t *testing.T) {
 	defer os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -123,6 +127,7 @@ func TestResolveRuntime_InvalidEngine(t *testing.T) {
 	defer os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 
 	_, err := ResolveRuntime()
 	if err == nil {
@@ -139,6 +144,7 @@ func TestResolveRuntime_InvalidRunMode(t *testing.T) {
 
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 	os.Setenv("OV_RUN_MODE", "swarm")
 	defer os.Unsetenv("OV_RUN_MODE")
 
@@ -227,6 +233,7 @@ func TestListConfigValues(t *testing.T) {
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
 	os.Unsetenv("OV_AUTO_ENABLE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 
 	SetConfigValue("engine.build", "podman")
 
@@ -234,8 +241,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 4 {
-		t.Fatalf("expected 4 values, got %d", len(vals))
+	if len(vals) != 5 {
+		t.Fatalf("expected 5 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config
@@ -249,6 +256,10 @@ func TestListConfigValues(t *testing.T) {
 	// auto_enable should be default false
 	if vals[3].Key != "auto_enable" || vals[3].Value != "false" || vals[3].Source != "default" {
 		t.Errorf("auto_enable entry: %+v", vals[3])
+	}
+	// bind_address should be default 127.0.0.1
+	if vals[4].Key != "bind_address" || vals[4].Value != "127.0.0.1" || vals[4].Source != "default" {
+		t.Errorf("bind_address entry: %+v", vals[4])
 	}
 }
 
@@ -336,6 +347,7 @@ func TestAutoEnable_EnvOverridesConfig(t *testing.T) {
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 
 	// Config says false
 	SetConfigValue("auto_enable", "false")
@@ -364,6 +376,7 @@ func TestAutoEnable_EnvValue1(t *testing.T) {
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 	os.Setenv("OV_AUTO_ENABLE", "1")
 	defer os.Unsetenv("OV_AUTO_ENABLE")
 
@@ -388,6 +401,7 @@ func TestAutoEnable_ListConfigValues(t *testing.T) {
 	os.Unsetenv("OV_RUN_ENGINE")
 	os.Unsetenv("OV_RUN_MODE")
 	os.Unsetenv("OV_AUTO_ENABLE")
+	os.Unsetenv("OV_BIND_ADDRESS")
 
 	SetConfigValue("auto_enable", "true")
 
@@ -408,5 +422,99 @@ func TestAutoEnable_ListConfigValues(t *testing.T) {
 	}
 	if !found {
 		t.Error("auto_enable not found in ListConfigValues output")
+	}
+}
+
+func TestBindAddress_SetGetReset(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	// Set to 0.0.0.0
+	if err := SetConfigValue("bind_address", "0.0.0.0"); err != nil {
+		t.Fatalf("SetConfigValue(bind_address, 0.0.0.0) error: %v", err)
+	}
+	val, err := GetConfigValue("bind_address")
+	if err != nil {
+		t.Fatalf("GetConfigValue(bind_address) error: %v", err)
+	}
+	if val != "0.0.0.0" {
+		t.Errorf("GetConfigValue(bind_address) = %q, want %q", val, "0.0.0.0")
+	}
+
+	// Set to 127.0.0.1
+	if err := SetConfigValue("bind_address", "127.0.0.1"); err != nil {
+		t.Fatalf("SetConfigValue(bind_address, 127.0.0.1) error: %v", err)
+	}
+	val, _ = GetConfigValue("bind_address")
+	if val != "127.0.0.1" {
+		t.Errorf("GetConfigValue(bind_address) = %q, want %q", val, "127.0.0.1")
+	}
+
+	// Invalid value
+	if err := SetConfigValue("bind_address", "192.168.1.1"); err == nil {
+		t.Error("expected error for invalid bind_address value")
+	}
+
+	// Reset
+	if err := ResetConfigValue("bind_address"); err != nil {
+		t.Fatalf("ResetConfigValue(bind_address) error: %v", err)
+	}
+	val, _ = GetConfigValue("bind_address")
+	if val != "" {
+		t.Errorf("after reset, GetConfigValue(bind_address) = %q, want empty", val)
+	}
+}
+
+func TestBindAddress_EnvOverridesConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	os.Unsetenv("OV_BUILD_ENGINE")
+	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_AUTO_ENABLE")
+
+	// Config says 127.0.0.1
+	SetConfigValue("bind_address", "127.0.0.1")
+
+	// Env says 0.0.0.0
+	os.Setenv("OV_BIND_ADDRESS", "0.0.0.0")
+	defer os.Unsetenv("OV_BIND_ADDRESS")
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		t.Fatalf("ResolveRuntime() error: %v", err)
+	}
+	if rt.BindAddress != "0.0.0.0" {
+		t.Errorf("BindAddress = %q, want %q (env should override config)", rt.BindAddress, "0.0.0.0")
+	}
+}
+
+func TestBindAddress_InvalidEnv(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yml")
+
+	orig := RuntimeConfigPath
+	defer func() { RuntimeConfigPath = orig }()
+	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	os.Unsetenv("OV_BUILD_ENGINE")
+	os.Unsetenv("OV_RUN_ENGINE")
+	os.Unsetenv("OV_RUN_MODE")
+	os.Unsetenv("OV_AUTO_ENABLE")
+	os.Setenv("OV_BIND_ADDRESS", "10.0.0.1")
+	defer os.Unsetenv("OV_BIND_ADDRESS")
+
+	_, err := ResolveRuntime()
+	if err == nil {
+		t.Error("expected error for invalid bind_address")
 	}
 }

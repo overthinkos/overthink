@@ -9,12 +9,13 @@ import (
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	ImageName string        // image name from images.yml (e.g. "fedora-test")
-	ImageRef  string        // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
-	Workspace string        // absolute host path to mount at /workspace
-	Ports     []string      // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
-	Volumes   []VolumeMount // named volumes from layer.yml declarations
-	GPU       bool          // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
+	ImageName   string        // image name from images.yml (e.g. "fedora-test")
+	ImageRef    string        // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
+	Workspace   string        // absolute host path to mount at /workspace
+	Ports       []string      // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
+	Volumes     []VolumeMount // named volumes from layer.yml declarations
+	GPU         bool          // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
+	BindAddress string        // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -33,7 +34,7 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString(fmt.Sprintf("Volume=%s:/workspace\n", cfg.Workspace))
 	b.WriteString("WorkingDir=/workspace\n")
 	for _, port := range cfg.Ports {
-		b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port)))
+		b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port, cfg.BindAddress)))
 	}
 	for _, vol := range cfg.Volumes {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))

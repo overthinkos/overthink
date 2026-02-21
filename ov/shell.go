@@ -134,7 +134,7 @@ func (c *ShellCmd) Run() error {
 		}
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, gpu, c.Command)
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, gpu, c.Command, rt.BindAddress)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -155,7 +155,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string) []string {
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string, bindAddr string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -171,7 +171,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 		args = append(args, GPURunArgs(engine)...)
 	}
 	for _, port := range ports {
-		args = append(args, "-p", localizePort(port))
+		args = append(args, "-p", localizePort(port, bindAddr))
 	}
 	for _, vol := range volumes {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
@@ -203,13 +203,13 @@ func buildExecArgs(engine, name string, uid, gid int, command string) []string {
 	return args
 }
 
-// localizePort prefixes a port mapping with 127.0.0.1 to bind only to localhost.
-// "80:8000" -> "127.0.0.1:80:8000", "8080" -> "127.0.0.1:8080:8080"
-func localizePort(mapping string) string {
+// localizePort prefixes a port mapping with the given bind address.
+// "80:8000" -> "<bindAddr>:80:8000", "8080" -> "<bindAddr>:8080:8080"
+func localizePort(mapping string, bindAddr string) string {
 	if strings.Contains(mapping, ":") {
-		return "127.0.0.1:" + mapping
+		return bindAddr + ":" + mapping
 	}
-	return fmt.Sprintf("127.0.0.1:%s:%s", mapping, mapping)
+	return fmt.Sprintf("%s:%s:%s", bindAddr, mapping, mapping)
 }
 
 // findExecutable locates an executable in PATH.

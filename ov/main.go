@@ -371,7 +371,7 @@ type ConfigCmd struct {
 
 // ConfigGetCmd prints the resolved value for a key
 type ConfigGetCmd struct {
-	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode, auto_enable)"`
+	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode, auto_enable, bind_address)"`
 }
 
 func (c *ConfigGetCmd) Run() error {
@@ -394,8 +394,10 @@ func (c *ConfigGetCmd) Run() error {
 		} else {
 			fmt.Println("false")
 		}
+	case "bind_address":
+		fmt.Println(rt.BindAddress)
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", c.Key)
 	}
 	return nil
 }

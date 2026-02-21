@@ -95,7 +95,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerName(c.Image)
-	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, gpu)
+	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, gpu, rt.BindAddress)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -182,7 +182,7 @@ func (c *StopCmd) Run() error {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool) []string {
+func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool, bindAddr string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -194,7 +194,7 @@ func buildStartArgs(engine, imageRef, workspace string, ports []string, name str
 		args = append(args, GPURunArgs(engine)...)
 	}
 	for _, port := range ports {
-		args = append(args, "-p", localizePort(port))
+		args = append(args, "-p", localizePort(port, bindAddr))
 	}
 	for _, vol := range volumes {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))

@@ -11,16 +11,21 @@ if [ ! -e "$SOCKET" ]; then
     exit 1
 fi
 
+# Remove stale Chrome lock files from previous container instances.
+# The persistent volume retains Singleton* files that reference old container
+# hostnames, preventing Chrome from starting after a container restart.
+rm -f "$HOME/.chrome-debug/SingletonLock" \
+      "$HOME/.chrome-debug/SingletonSocket" \
+      "$HOME/.chrome-debug/SingletonCookie"
+
 # NVIDIA GPU detection — set EGL/GBM vars so Chrome uses the GPU
-GPU_FLAGS=""
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
     export GBM_BACKEND=nvidia-drm
     export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    GPU_FLAGS="--disable-gpu-sandbox"
 fi
 
-exec google-chrome-stable $CHROME_FLAGS $GPU_FLAGS \
+exec google-chrome-stable $CHROME_FLAGS \
     --disable-background-networking \
     --disable-features=VaapiVideoDecoder,VaapiVideoEncoder \
     --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0 \

@@ -1,0 +1,7 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - pcmanfm-qt
+    - lxqt-archiver

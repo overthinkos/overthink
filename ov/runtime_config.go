@@ -10,9 +10,10 @@ import (
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine     EngineConfig `yaml:"engine"`
-	RunMode    string       `yaml:"run_mode,omitempty"`
-	AutoEnable *bool        `yaml:"auto_enable,omitempty"`
+	Engine      EngineConfig `yaml:"engine"`
+	RunMode     string       `yaml:"run_mode,omitempty"`
+	AutoEnable  *bool        `yaml:"auto_enable,omitempty"`
+	BindAddress string       `yaml:"bind_address,omitempty"`
 }
 
 // EngineConfig specifies which container engine to use
@@ -27,6 +28,7 @@ type ResolvedRuntime struct {
 	RunEngine   string // "docker" or "podman"
 	RunMode     string // "direct" or "quadlet"
 	AutoEnable  bool   // auto-enable quadlet on first start
+	BindAddress string // "127.0.0.1" or "0.0.0.0"
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file.
@@ -94,6 +96,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		RunEngine:   resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "docker"),
 		RunMode:     resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
 		AutoEnable:  resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
+		BindAddress: resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -103,6 +106,9 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		return nil, err
 	}
 	if err := validateRunMode(rt.RunMode); err != nil {
+		return nil, err
+	}
+	if err := validateBindAddress(rt.BindAddress); err != nil {
 		return nil, err
 	}
 
@@ -134,6 +140,13 @@ func validateEngine(value, field string) error {
 func validateRunMode(value string) error {
 	if value != "direct" && value != "quadlet" {
 		return fmt.Errorf("run_mode must be \"direct\" or \"quadlet\", got %q", value)
+	}
+	return nil
+}
+
+func validateBindAddress(value string) error {
+	if value != "127.0.0.1" && value != "0.0.0.0" {
+		return fmt.Errorf("bind_address must be \"127.0.0.1\" or \"0.0.0.0\", got %q", value)
 	}
 	return nil
 }
@@ -170,8 +183,10 @@ func GetConfigValue(key string) (string, error) {
 			return "false", nil
 		}
 		return "", nil
+	case "bind_address":
+		return cfg.BindAddress, nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
 	}
 }
 
@@ -191,8 +206,12 @@ func SetConfigValue(key, value string) error {
 		if value != "true" && value != "false" {
 			return fmt.Errorf("auto_enable must be \"true\" or \"false\", got %q", value)
 		}
+	case "bind_address":
+		if err := validateBindAddress(value); err != nil {
+			return err
+		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -210,6 +229,8 @@ func SetConfigValue(key, value string) error {
 	case "auto_enable":
 		b := value == "true"
 		cfg.AutoEnable = &b
+	case "bind_address":
+		cfg.BindAddress = value
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -237,8 +258,10 @@ func ResetConfigValue(key string) error {
 		cfg.RunMode = ""
 	case "auto_enable":
 		cfg.AutoEnable = nil
+	case "bind_address":
+		cfg.BindAddress = ""
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -294,5 +317,6 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "docker"),
 		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
 		autoEnableEntry(),
+		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 	}, nil
 }

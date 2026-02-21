@@ -7,6 +7,10 @@ env:
 ports:
   - 9222
 
+volumes:
+  - name: chrome-data
+    path: "~/.chrome-debug"
+
 rpm:
   packages:
     - liberation-fonts

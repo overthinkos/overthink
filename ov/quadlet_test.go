@@ -9,10 +9,11 @@ import (
 
 func TestGenerateQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "fedora-test",
-		ImageRef:  "ghcr.io/overthinkos/fedora-test:latest",
-		Workspace: "/home/user/project",
-		Ports:     []string{"8000:8000", "8080:8080"},
+		ImageName:   "fedora-test",
+		ImageRef:    "ghcr.io/overthinkos/fedora-test:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"8000:8000", "8080:8080"},
+		BindAddress: "127.0.0.1",
 	}
 
 	got := generateQuadlet(cfg)
@@ -46,10 +47,11 @@ WantedBy=default.target
 
 func TestGenerateQuadletNoPorts(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "fedora",
-		ImageRef:  "ghcr.io/overthinkos/fedora:latest",
-		Workspace: "/tmp/workspace",
-		Ports:     nil,
+		ImageName:   "fedora",
+		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
+		Workspace:   "/tmp/workspace",
+		Ports:       nil,
+		BindAddress: "127.0.0.1",
 	}
 
 	got := generateQuadlet(cfg)
@@ -67,10 +69,11 @@ func TestGenerateQuadletNoPorts(t *testing.T) {
 
 func TestGenerateQuadletSinglePort(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "myapp",
-		ImageRef:  "myapp:latest",
-		Workspace: "/home/user",
-		Ports:     []string{"9090"},
+		ImageName:   "myapp",
+		ImageRef:    "myapp:latest",
+		Workspace:   "/home/user",
+		Ports:       []string{"9090"},
+		BindAddress: "127.0.0.1",
 	}
 
 	got := generateQuadlet(cfg)
@@ -86,10 +89,11 @@ func TestGenerateQuadletSinglePort(t *testing.T) {
 
 func TestGenerateQuadletWithVolumes(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "openclaw",
-		ImageRef:  "ghcr.io/overthinkos/openclaw:latest",
-		Workspace: "/home/user/project",
-		Ports:     []string{"18789:18789"},
+		ImageName:   "openclaw",
+		ImageRef:    "ghcr.io/overthinkos/openclaw:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"18789:18789"},
+		BindAddress: "127.0.0.1",
 		Volumes: []VolumeMount{
 			{VolumeName: "ov-openclaw-data", ContainerPath: "/home/user/.openclaw"},
 		},
@@ -110,10 +114,11 @@ func TestGenerateQuadletWithVolumes(t *testing.T) {
 
 func TestGenerateQuadletWithGPU(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "ollama",
-		ImageRef:  "ghcr.io/overthinkos/ollama:latest",
-		Workspace: "/home/user/project",
-		GPU:       true,
+		ImageName:   "ollama",
+		ImageRef:    "ghcr.io/overthinkos/ollama:latest",
+		Workspace:   "/home/user/project",
+		GPU:         true,
+		BindAddress: "127.0.0.1",
 	}
 
 	got := generateQuadlet(cfg)
@@ -125,16 +130,36 @@ func TestGenerateQuadletWithGPU(t *testing.T) {
 
 func TestGenerateQuadletWithoutGPU(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "fedora",
-		ImageRef:  "ghcr.io/overthinkos/fedora:latest",
-		Workspace: "/home/user/project",
-		GPU:       false,
+		ImageName:   "fedora",
+		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
+		Workspace:   "/home/user/project",
+		GPU:         false,
+		BindAddress: "127.0.0.1",
 	}
 
 	got := generateQuadlet(cfg)
 
 	if strings.Contains(got, "AddDevice") {
 		t.Errorf("expected no AddDevice when GPU=false, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithLANBindAddress(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "fedora-test",
+		ImageRef:    "ghcr.io/overthinkos/fedora-test:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"8000:8000", "8080"},
+		BindAddress: "0.0.0.0",
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "PublishPort=0.0.0.0:8000:8000") {
+		t.Errorf("expected PublishPort with 0.0.0.0 bind address, got:\n%s", got)
+	}
+	if !strings.Contains(got, "PublishPort=0.0.0.0:8080:8080") {
+		t.Errorf("expected single port expanded with 0.0.0.0, got:\n%s", got)
 	}
 }
 

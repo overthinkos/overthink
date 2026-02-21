@@ -11,7 +11,7 @@ Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov enable` use the configured engine (Docker or Podman).
 
-**`task` (Taskfile)** -- thin wrappers that call `ov` commands. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`.
+**`task` (Taskfile)** -- thin wrappers that call `ov` commands. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`. Run `task -l` for all available commands.
 
 **What gets generated** (`ov generate`):
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
@@ -88,41 +88,64 @@ An **image** is a named build target in `images.yml`. Example configuration:
 defaults:
   registry: ghcr.io/overthinkos
   tag: auto
-  base: "quay.io/fedora/fedora:43"
   platforms:
     - linux/amd64
     - linux/arm64
   pkg: rpm
   merge:
-    auto: true
+    auto: false
     max_mb: 128
-  builder: builder
+  builder: fedora-builder
 
 images:
-  builder:
+  fedora:
+    base: "quay.io/fedora/fedora:43"
+    pkg: rpm
+
+  fedora-builder:
+    base: fedora
     layers:
       - pixi
       - nodejs
       - build-toolchain
 
-  fedora:
-    layers: []
-
-  fedora-test:
+  nvidia:
     base: fedora
     layers:
-      - traefik
-      - testapi
-    ports:
-      - "8000:8000"
-      - "8080:8080"
+      - cuda
+    platforms:
+      - linux/amd64
 
-  openclaw:
+  openclaw-sway-browser:
     base: fedora
     layers:
       - openclaw
+      - pipewire
+      - wayvnc
+      - google-chrome-sway
+      - pcmanfm-qt
+      - quickshell
     ports:
       - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
+    platforms:
+      - linux/amd64
+
+  bazzite-ai:
+    enabled: false
+    base: "ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1"
+    bootc: true
+    platforms:
+      - linux/amd64
+    layers:
+      - build-toolchain
+      - language-runtimes
+      - dev-tools
+      - cuda
+      - desktop-apps
+      - os-config
+      - os-system-files
 ```
 
 ### Inheritance Chain
@@ -153,67 +176,37 @@ When `base` references another image in `images.yml`, the generator resolves it 
 
 ## Generated Containerfile Structure
 
-The actual order emitted by `ov/generate.go:generateContainerfile()`:
+The Containerfile emitted by `ov/generate.go:generateContainerfile()` follows this structure:
 
-1. **Header** -- `# .build/<image>/Containerfile (generated -- do not edit)`
-2. **`ARG BASE_IMAGE=<resolved base>`**
-3. **Scratch stages** -- `FROM scratch AS <layer>` + `COPY layers/<layer>/ /` (one per layer)
-4. **Pixi build stages** -- `FROM <builder> AS <layer>-pixi-build` (one per pixi layer, uses builder image). Install command varies by manifest type:
-   - `pixi.toml`: `pixi install` (or `pixi install --frozen` if `pixi.lock` exists)
-   - `pyproject.toml`: `pixi install --manifest-path pyproject.toml`
-   - `environment.yml`: `pixi project import environment.yml && pixi install`
-5. **npm build stages** -- `FROM <builder> AS <layer>-npm-build` (one per npm layer, uses builder image). Parses `package.json` dependencies, installs globally to `/npm-global`.
-6. **Traefik routes stage** -- `FROM scratch AS traefik-routes` + `COPY .build/<image>/traefik-routes.yml` (only if image has layers with `route` files). Generated YAML maps hostnames to backend ports.
-7. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service configs from `.build/<image>/supervisor/` (written at generate time from `layer.yml` `service` fields).
-8. **`FROM ${BASE_IMAGE}`**
-9. **Bootstrap** (external base only) -- install `task`, create user/group if not exists at configured UID/GID, set `WORKDIR`. For internal base: just `USER root`.
-10. **Layer ENV** -- consolidated `ENV` directives from all layers' `layer.yml` `env` and `path_append` fields
-11. **EXPOSE** -- deduplicated, sorted port numbers from all layers' `layer.yml` `ports` fields
-12. **Image metadata LABELs** -- `org.overthink.*` labels with runtime config (see [Image Labels](#image-labels))
-13. **COPY pixi environments** -- `COPY --from=<layer>-pixi-build --chown=<UID>:<GID>` for each pixi layer
-14. **COPY pixi binary** -- from first pixi build stage
-15. **COPY npm packages** -- `COPY --from=<layer>-npm-build --chown=<UID>:<GID> /npm-global <home>/.npm-global` for each npm layer
-16. **Per-layer steps** -- for each layer in order: rpm/deb install (from `layer.yml`), root.yml, Cargo.toml, user.yml (only steps for files that exist)
-17. **Supervisord assembly** -- `cat /supervisor/*.conf > /etc/supervisord.conf` (if services)
-18. **Traefik routes COPY** -- `COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml` (if routes)
-19. **`USER <UID>`** -- final directive (uses numeric UID, not username)
-20. **`RUN bootc container lint`** -- (bootc images only)
+1. **Multi-stage build stages** -- scratch stages per layer (`COPY layers/<layer>/ /`), pixi build stages (`FROM <builder>`), npm build stages, supervisord config assembly stage, traefik routes stage. Pixi install varies by manifest: `pixi.toml` (`pixi install`), `pyproject.toml` (`--manifest-path`), `environment.yml` (`pixi project import` first).
+2. **`FROM ${BASE_IMAGE}`** -- external bases get bootstrap (install `task`, create user/group at UID/GID, set `WORKDIR`); internal bases get `USER root`.
+3. **Image metadata** -- consolidated `ENV` directives (from all layers' `env`/`path_append`), `EXPOSE` ports, `org.overthink.*` labels.
+4. **COPY build artifacts** -- pixi environments, pixi binary, npm global packages from their respective build stages.
+5. **Per-layer install steps** -- for each layer in order: rpm/deb packages, `root.yml`, `Cargo.toml`, `user.yml` (only files that exist). `USER` directives toggle between root and UID as needed.
+6. **Final assembly** -- supervisord config concatenation (`cat /supervisor/*.conf`), traefik routes COPY, `USER <UID>`, `RUN bootc container lint` (bootc only).
 
-Within per-layer steps, `USER <UID>` is emitted before the first user-mode step, and `USER root` resets after the last user-mode step for the next layer.
+Source: `ov/generate.go`.
 
 ---
 
 ## Image Labels
 
-Built images embed runtime-relevant metadata as OCI `LABEL` directives (prefix: `org.overthink.`). This makes images self-describing — runtime commands (`ov shell`, `ov start`, `ov enable`, `ov alias install`) can extract configuration from the image itself when `images.yml` is unavailable.
+Built images embed runtime metadata as OCI `LABEL` directives (prefix: `org.overthink.`), making images self-describing for runtime commands (`ov shell`, `ov start`, `ov enable`, `ov alias install`).
 
-### Label Schema
+| Label | Type | Example |
+|---|---|---|
+| `org.overthink.version` | string | `"1"` (schema version) |
+| `org.overthink.image` | string | `"openclaw"` |
+| `org.overthink.registry` | string | `"ghcr.io/overthinkos"` (omitted if empty) |
+| `org.overthink.uid` / `.gid` | string | `"1000"` |
+| `org.overthink.user` / `.home` | string | `"user"` / `"/home/user"` |
+| `org.overthink.ports` | JSON | `["18789:18789"]` |
+| `org.overthink.volumes` | JSON | `[{"name":"data","path":"/home/user/.openclaw"}]` |
+| `org.overthink.aliases` | JSON | `[{"name":"openclaw","command":"openclaw"}]` |
 
-| Label | Type | Example | Source |
-|---|---|---|---|
-| `org.overthink.version` | string | `"1"` | Schema version for forward compat |
-| `org.overthink.image` | string | `"openclaw"` | Image name from images.yml |
-| `org.overthink.registry` | string | `"ghcr.io/overthinkos"` | Registry prefix (omitted if empty) |
-| `org.overthink.uid` | string | `"1000"` | Numeric user ID |
-| `org.overthink.gid` | string | `"1000"` | Numeric group ID |
-| `org.overthink.user` | string | `"user"` | Username |
-| `org.overthink.home` | string | `"/home/user"` | Home directory (resolved at generate time) |
-| `org.overthink.ports` | JSON | `["18789:18789"]` | Runtime port mappings from images.yml |
-| `org.overthink.volumes` | JSON | `[{"name":"data","path":"/home/user/.openclaw"}]` | Pre-computed volumes (short name, `~` expanded) |
-| `org.overthink.aliases` | JSON | `[{"name":"openclaw","command":"openclaw"}]` | Collected aliases (layers + image-level) |
+Volumes use short names in labels (prefix `ov-<image>-` added at runtime). Empty arrays are omitted. JSON built from sorted slices for cache stability. Runtime commands try `LoadConfig` (images.yml) first, falling back to `<engine> inspect` labels -- enabling `ov shell myimage` from any directory.
 
-### Design
-
-- Labels are emitted after `EXPOSE` directives and before pixi `COPY` steps in the generated Containerfile.
-- Volumes use **short names** in labels (e.g. `"data"`, not `"ov-openclaw-data"`). The `ov-<image>-` prefix is added at runtime, keeping labels image-name-agnostic.
-- Empty arrays are **omitted** (no label emitted for empty ports/volumes/aliases).
-- JSON arrays are built from deterministically sorted slices to prevent Docker cache invalidation.
-
-### Runtime Fallback
-
-Runtime commands (`ov shell`, `ov start`, `ov enable`, `ov alias install`) try `LoadConfig` (images.yml) first. If unavailable, they fall back to extracting metadata from the image's labels via `<engine> inspect --format '{{json .Config.Labels}}'`. This enables `ov shell myimage` to work from any directory, not just the project checkout.
-
-Source: `ov/labels.go` (constants, `ImageMetadata`, `ExtractMetadata`), `ov/generate.go` (`writeLabels`).
+Source: `ov/labels.go`, `ov/generate.go` (`writeLabels`).
 
 ---
 
@@ -406,25 +399,15 @@ Source: `ov/gpu.go` (detection), `ov/engine.go` (engine-specific args). `GPUFlag
 
 When `engine.build` and `engine.run` differ (e.g., build with Docker, run with Podman), images built by one engine aren't available in the other's store. `ov` automatically transfers images between engines on demand.
 
-### Functions (`ov/transfer.go`)
-
 | Function | Purpose |
 |---|---|
 | `LocalImageExists(engine, imageRef)` | Check if image exists in an engine's local store. Docker: `docker image inspect`. Podman: `podman image exists`. Package-level var for testability. |
 | `TransferImage(srcEngine, dstEngine, imageRef)` | Bidirectional pipe: `<src> save <ref> \| <dst> load`. Logs to stderr. |
 | `EnsureImage(imageRef, rt)` | 1. Image in run engine? Return (no-op). 2. Same engine, missing? Error with "build it first". 3. Missing from both? Error naming both engines. 4. Otherwise: transfer from build engine to run engine. |
 
-### Transfer Points
+Transfer is called automatically by `ov shell`, `ov start`, `ov enable`, and `ov update` before running containers.
 
-| Command | Transfer point | Target engine |
-|---|---|---|
-| `ov shell` | `shell.go:Run()` | `rt.RunEngine` |
-| `ov start` (direct) | `start.go:runDirect()` | `rt.RunEngine` |
-| `ov start` (quadlet) | delegates to `ov enable` | podman (always) |
-| `ov enable` | `commands.go:EnableCmd.runEnable()` | podman (always) |
-| `ov update` | `commands.go:UpdateCmd.Run()` | podman (quadlet) or `rt.RunEngine` (direct) |
-| `ov build` | none | N/A |
-| `ov merge` | none | N/A |
+Source: `ov/transfer.go`.
 
 ---
 
@@ -463,6 +446,7 @@ ov alias uninstall <image>             # Remove all aliases for an image
 ov build [image...]                    # Build for local platform, load into engine store
 ov build --push [image...]             # Build for all platforms and push to registry
 ov build --platform linux/amd64 [image...]  # Specific platform
+ov build --cache registry|gha [image...]   # Enable build cache (registry or GitHub Actions)
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
                                        # Merge small layers in a built image
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
@@ -491,9 +475,7 @@ ov version                             # Print computed CalVer tag
 
 **Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`).
 
-**Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
-
-**Validation rules:** layers must have install files, `Cargo.toml` requires `src/`, `rpm.copr` requires `rpm.packages`, `rpm.repos` requires `rpm.packages`, `pkg` is `"rpm"` or `"deb"`, no circular deps in layers or images, `layer.yml` `env` must not set `PATH` directly (use `path_append`), `layer.yml` `ports` must be valid port numbers (1-65535), image `ports` must be `"port"` or `"host:container"` format, `layer.yml` `route` must have both `host` and `port` (valid number), images with route layers must include traefik, `merge.max_mb` must be > 0, volume names must match `^[a-z0-9]+(-[a-z0-9]+)*$`, volume entries require both `name` and `path`, duplicate volume names within a layer rejected, alias names must match `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, layer aliases require both `name` and `command`, duplicate alias names within a layer or image rejected, `defaults.builder` must reference an existing enabled image, per-image `builder` must reference an existing enabled image, image cannot be its own builder (explicit self-reference), images with pixi/npm layers require a builder.
+**Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error. All validation rules are in `ov/validate.go`.
 
 ---
 
@@ -510,6 +492,7 @@ project/
 |   +-- layers.go                       # Layer scanning, file detection
 |   +-- env.go                          # env config merging, path expansion
 |   +-- graph.go                        # Topological sort (layers + images)
+|   +-- intermediates.go               # Auto-intermediate image computation (trie analysis)
 |   +-- generate.go                     # Containerfile generation
 |   +-- validate.go                     # All validation rules
 |   +-- version.go                      # CalVer computation
@@ -547,47 +530,37 @@ project/
 
 ---
 
-## Shipped Layers
+## Shipped Layers (44 total)
 
-| Layer | Files | Purpose |
-|---|---|---|
-| `pixi` | `layer.yml` (env, path_append), `root.yml` | Pixi binary (downloaded via curl). Sets `PIXI_CACHE_DIR`, `RATTLER_CACHE_DIR`, PATH. |
-| `python` | `layer.yml` (depends: pixi), `pixi.toml` | Python 3.13 via pixi. |
-| `nodejs` | `layer.yml` (rpm/deb packages, env, path_append) | Node.js + npm. Sets `NPM_CONFIG_PREFIX`, `npm_config_cache`, PATH. |
-| `rust` | `layer.yml` (rpm/deb packages, path_append) | Rust + Cargo via system packages. Sets PATH for `~/.cargo/bin`. |
-| `supervisord` | `layer.yml` (depends: python), `pixi.toml` | supervisor package via pixi. |
-| `traefik` | `layer.yml` (depends, ports, service), `root.yml`, `traefik.yml` | Traefik reverse proxy. Web on :8000, dashboard on :8080. Serves routes from `route` configs. |
-| `testapi` | `layer.yml` (depends, ports, route, service), `pixi.toml`, `app.py`, `user.yml` | Minimal FastAPI test service on port 9090. Routed via `testapi.localhost`. |
-| `openclaw` | `layer.yml` (depends, env, ports, volumes, aliases, service), `package.json` | OpenClaw gateway on port 18789. Persistent `data` volume at `~/.openclaw`. Alias: `openclaw`. |
+**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
+
+**Build:** `build-toolchain` (gcc, cmake, autoconf, ninja, git, pkg-config), `pre-commit` (git hooks framework)
+
+**Services:** `supervisord` (process manager via pixi; depends: python), `traefik` (reverse proxy on :8000/:8080; depends: supervisord), `testapi` (FastAPI test service on :9090, routed via `testapi.localhost`)
+
+**Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway)
+
+**Display/Audio:** `wayvnc` (VNC server on :5900), `pipewire` (audio/media server + wireplumber)
+
+**Browser:** `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data), `google-chrome-sway` (Chrome on sway, same ports/volume)
+
+**GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
+
+**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs)
+
+**DevOps/CI:** `docker-ce` (Docker CE + buildx + compose), `kubernetes` (kubectl + Helm), `devops-tools` (bind-utils, jq, rsync; depends: nodejs), `github-runner` (Actions runner as service; uid: 0), `github-actions` (Act CLI via COPR + guestfs), `google-cloud` (Google Cloud SDK), `google-cloud-npm` (GCP npm packages; depends: google-cloud, nodejs), `grafana-tools` (Grafana tooling)
+
+**Dev Tools:** `dev-tools` (bat, ripgrep, neovim, gh, direnv, fd-find, htop, podman-compose), `vscode` (VS Code via Microsoft repo), `pre-commit` (git hooks), `typst` (document processor), `ujust` (task runner)
+
+**Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
+
+**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs)
 
 ---
 
 ## Task Commands
 
-| Command | What it does |
-|---|---|
-| `task setup:all` | Build `ov` + create buildx builder |
-| `task build:ov` | `go build` -> `bin/ov` |
-| `task build:all` | `ov build` (generate + build + merge) |
-| `task build:local -- <image>` | `ov build <image>` (host platform) |
-| `task build:push` | `ov build --push` |
-| `task build:merge -- <image>` | Merge small layers in a built image |
-| `task run:container -- <image>` | `docker run` |
-| `task run:shell -- <image>` | Delegates to `ov shell` |
-| `task run:enable -- <image>` | Enable a service (`ov enable`) |
-| `task run:disable -- <image>` | Disable a service (`ov disable`) |
-| `task run:start -- <image>` | Start a service (`ov start`) |
-| `task run:stop -- <image>` | Stop a service (`ov stop`) |
-| `task run:status -- <image>` | Show service status (`ov status`) |
-| `task run:logs -- <image>` | Show service logs (`ov logs`) |
-| `task run:update -- <image>` | Update image and restart (`ov update`) |
-| `task run:remove -- <image>` | Remove a service (`ov remove`) |
-| `task run:alias-install -- <image>` | Install aliases for an image (`ov alias install`) |
-| `task run:alias-uninstall -- <image>` | Remove aliases for an image (`ov alias uninstall`) |
-| `task build:iso -- <image> [tag]` | Build ISO via Bootc Image Builder (bootc only) |
-| `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image (bootc only) |
-| `task build:raw -- <image> [tag]` | Build RAW disk image (bootc only) |
-| `task run:vm -- <image> [tag]` | Run QCOW2 in QEMU |
+Task commands are thin wrappers around `ov` CLI commands. Run `task -l` for the full list. Key commands: `task setup:all` (build ov + create builder), `task build:all` (generate + build + merge), `task build:local -- <image>`, `task build:push`, `task run:shell -- <image>`, `task run:enable -- <image>`. Disk image tasks: `task build:iso`, `task build:qcow2`, `task build:raw`, `task run:vm`.
 
 Direct `ov` commands (`ov list images`, `ov validate`, etc.) don't need `task`.
 
@@ -710,9 +683,10 @@ engine:
   run: docker      # "docker" or "podman"
 run_mode: direct   # "direct" or "quadlet"
 auto_enable: false # auto-enable quadlet on first ov start
+bind_address: "127.0.0.1"  # port binding address
 ```
 
-**Resolution chain:** env var (`OV_BUILD_ENGINE`, `OV_RUN_ENGINE`, `OV_RUN_MODE`, `OV_AUTO_ENABLE`) > config file > default.
+**Resolution chain:** env var (`OV_BUILD_ENGINE`, `OV_RUN_ENGINE`, `OV_RUN_MODE`, `OV_AUTO_ENABLE`, `OV_BIND_ADDRESS`) > config file > default.
 
 | Setting | Values | Default | Purpose |
 |---|---|---|---|
@@ -720,6 +694,7 @@ auto_enable: false # auto-enable quadlet on first ov start
 | `engine.run` | `docker`, `podman` | `docker` | Engine for `ov shell` and `ov start` |
 | `run_mode` | `direct`, `quadlet` | `direct` | How `ov start`/`ov stop` and other service commands dispatch |
 | `auto_enable` | `true`, `false` | `false` | When `run_mode=quadlet`, auto-run `ov enable` on first `ov start` |
+| `bind_address` | `127.0.0.1`, `0.0.0.0` | `127.0.0.1` | Address for port bindings in `ov shell`, `ov start`, and quadlet |
 
 When `run_mode=quadlet`, `ov start` checks for an existing `.container` file. If none exists and `auto_enable=true`, it auto-enables (generates the quadlet file). If `auto_enable=false`, it errors with a message to run `ov enable` first. `ov stop` uses `systemctl --user stop`. This requires `engine.run=podman` (a warning is emitted otherwise).
 
@@ -737,7 +712,10 @@ Source: `ov/runtime_config.go` (config struct, load/save/resolve), `ov/engine.go
 ov build [image...]                    # Build for local platform
 ov build --push [image...]             # Build for all platforms and push
 ov build --platform linux/amd64 [image...]  # Specific platform
+ov build --cache registry|gha [image...]   # Enable build cache
 ```
+
+**Build cache** (`--cache`, env: `OV_BUILD_CACHE`): `registry` uses `<registry>/cache:<image>` as cache backend (`--cache-from`/`--cache-to type=registry`). `gha` uses GitHub Actions cache scoped by image name. Requires registry to be configured for `registry` mode.
 
 **Flow:**
 1. Run `ov generate` internally (produces Containerfiles)
@@ -757,7 +735,7 @@ Source: `ov/build.go`.
 
 ## Builder Image
 
-A dedicated image used as the base for all pixi and npm multi-stage build stages. Replaces the previous approach of pulling external images (`ghcr.io/prefix-dev/pixi:latest`, `node:lts-slim`) and installing build dependencies on every build.
+A dedicated image used as the base for all pixi, npm, and cargo multi-stage build stages. Replaces the previous approach of pulling external images and installing build dependencies on every build.
 
 ### Configuration
 
@@ -765,10 +743,11 @@ Set `builder` in `images.yml` defaults (applies to all images) or per-image (ove
 
 ```yaml
 defaults:
-  builder: builder       # default builder for all images
+  builder: fedora-builder    # default builder for all images
 
 images:
-  builder:
+  fedora-builder:
+    base: fedora
     layers:
       - pixi            # pixi binary (via root.yml) + env vars/PATH
       - nodejs          # node + npm (via dnf)
@@ -786,10 +765,10 @@ The builder image itself has **no pixi build stages** (the pixi layer has no pix
 
 ### How it works
 
-All pixi/npm build stages in derived images use `FROM <builder>:<tag>` instead of external images:
+All pixi/npm/cargo build stages in derived images use `FROM <builder>:<tag>` instead of external images:
 
 ```dockerfile
-FROM ghcr.io/overthinkos/builder:2026.48.1808 AS supervisord-pixi-build
+FROM ghcr.io/overthinkos/fedora-builder:2026.48.1808 AS supervisord-pixi-build
 WORKDIR /home/user
 COPY layers/supervisord/pixi.toml pixi.toml
 RUN pixi install
@@ -799,13 +778,38 @@ No `apt-get install` is needed in build stages since the builder has pixi, node,
 
 ### Build ordering
 
-Each image's resolved `Builder` field determines its builder dependency. `ResolveImageOrder` adds an implicit dependency edge from each image to its builder (if the image needs multi-stage builds). Images that don't need a builder (no pixi/npm layers) have no builder dependency even if `builder` is set.
+Builder dependency is **conditional**: `ImageNeedsBuilder()` checks whether an image's own layers (excluding parent-provided) have pixi manifests, `package.json`, or `Cargo.toml`. Images that only install system packages or binaries build in parallel with the builder, not blocked waiting for it.
 
-### Empty base images
+Source: `ov/generate.go` (`builderRefForImage`), `ov/graph.go` (`ResolveImageOrder`, `ImageNeedsBuilder`), `ov/validate.go` (`validateBuilder`).
 
-The `fedora` base image has `layers: []` — just Fedora + task binary + user creation. Derived images pull in only the layers they need via layer dependencies. All npm-using layers declare `depends: [nodejs]`, supervisord-using layers declare `depends: [supervisord]`, etc. The dependency resolver pulls in transitive deps automatically.
+---
 
-Source: `ov/generate.go` (`builderRefForImage`), `ov/graph.go` (`ResolveImageOrder` uses per-image `Builder` field), `ov/validate.go` (`validateBuilder`).
+## Intermediate Images
+
+When multiple images share the same base and a common prefix of layers, `ov` auto-generates **intermediate images** at branch points to maximize Docker layer cache reuse.
+
+### How it works
+
+`ComputeIntermediates()` runs during generation:
+1. `GlobalLayerOrder()` computes a deterministic layer ordering across all images, prioritizing layers by popularity (how many images need them) for cache efficiency.
+2. Images are grouped by their direct parent (base). For each sibling group with 2+ images, a **prefix trie** is built from their relative layer sequences.
+3. The trie is walked to detect branch points (where sibling layer sequences diverge). At each branch, an auto-intermediate image is created (e.g., `fedora-supervisord` if multiple images fork after the `supervisord` layer).
+4. Original images are rebased to the nearest intermediate, so shared layers are built once.
+
+### Example
+
+```
+fedora (external)
+  -> fedora-supervisord (auto: pixi + python + supervisord)
+     -> fedora-test (adds: traefik, testapi)
+     -> openclaw (adds: nodejs, openclaw)
+```
+
+Without intermediates, both `fedora-test` and `openclaw` would independently install pixi, python, and supervisord. With intermediates, those layers are built once in `fedora-supervisord` and cached.
+
+Auto-intermediate images are marked with `Auto: true` and appear in `ov list targets`. They are not user-defined in `images.yml`.
+
+Source: `ov/intermediates.go` (`ComputeIntermediates`, `GlobalLayerOrder`, `walkTrieScoped`).
 
 ---
 
@@ -839,6 +843,6 @@ With `auto_enable=true`, `ov start` auto-generates the quadlet file on first run
 
 ### Generated File
 
-`ov enable` writes `~/.config/containers/systemd/ov-<image>.container`. The systemd service name is `ov-<image>.service`. Container name is `ov-<image>` (same as direct mode). Ports are bound to `127.0.0.1` only. The container runs `supervisord -n -c /etc/supervisord.conf` as its entrypoint.
+`ov enable` writes `~/.config/containers/systemd/ov-<image>.container`. The systemd service name is `ov-<image>.service`. Container name is `ov-<image>` (same as direct mode). Ports are bound to the configured `bind_address`. The container runs `supervisord -n -c /etc/supervisord.conf` as its entrypoint.
 
 Source: `ov/quadlet.go` (generation), `ov/commands.go` (command structs).

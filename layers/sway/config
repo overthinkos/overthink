@@ -49,8 +49,21 @@ mode "resize" {
 }
 
 # Appearance
-default_border pixel 2
+default_border normal 2
 gaps inner 4
+title_align center
+font pango:monospace 10
+
+# Catppuccin Mocha window colors
+# class                border  background text    indicator child_border
+client.focused         #89b4fa #1e1e2e    #cdd6f4 #89b4fa   #89b4fa
+client.focused_inactive #585b70 #1e1e2e   #a6adc8 #585b70   #585b70
+client.unfocused       #45475a #1e1e2e    #6c7086 #45475a   #45475a
+client.urgent          #f38ba8 #1e1e2e    #cdd6f4 #f38ba8   #f38ba8
+
+# Scratchpad (minimize/restore)
+bindsym $mod+minus move scratchpad
+bindsym $mod+plus scratchpad show
 
 # VNC passthrough mode
 mode passthrough {

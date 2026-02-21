@@ -1,0 +1,33 @@
+{
+  "settingsVersion": 53,
+  "bar": {
+    "position": "bottom",
+    "displayMode": "always_visible",
+    "floating": false,
+    "widgets": {
+      "left": [
+        { "id": "Launcher" },
+        { "id": "Taskbar" }
+      ],
+      "center": [
+        { "id": "Workspace" }
+      ],
+      "right": [
+        { "id": "Tray" },
+        { "id": "Volume" },
+        { "id": "Clock" },
+        { "id": "ControlCenter" }
+      ]
+    }
+  },
+  "dock": {
+    "enabled": false
+  },
+  "general": {
+    "showChangelogOnStartup": false,
+    "telemetryEnabled": false
+  },
+  "appLauncher": {
+    "enableClipboardHistory": true
+  }
+}

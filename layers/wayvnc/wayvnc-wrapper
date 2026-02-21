@@ -10,4 +10,4 @@ if [ ! -e "$SOCKET" ]; then
     echo "wayvnc-wrapper: Wayland socket $SOCKET not found after ${TIMEOUT}s" >&2
     exit 1
 fi
-exec wayvnc --render-cursor -o HEADLESS-1 0.0.0.0 5900
+exec wayvnc --render-cursor --disable-resizing -o HEADLESS-1 0.0.0.0 5900

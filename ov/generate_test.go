@@ -129,32 +129,32 @@ func TestGenerateSupervisordFragments(t *testing.T) {
 	}
 
 	// svc fragment should be at position 02 (index 1 + 1)
-	data, err := os.ReadFile(tmpDir + "/test-image/fragments/02-svc.conf")
+	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-svc.conf")
 	if err != nil {
-		t.Fatalf("reading svc fragment: %v", err)
+		t.Fatalf("reading svc supervisor config: %v", err)
 	}
 	if !strings.Contains(string(data), "[program:svc]") {
 		t.Error("svc fragment should contain [program:svc]")
 	}
 	if !strings.HasSuffix(string(data), "\n") {
-		t.Error("fragment should end with newline")
+		t.Error("supervisor config should end with newline")
 	}
 
-	// other fragment should be at position 03
-	data, err = os.ReadFile(tmpDir + "/test-image/fragments/03-other.conf")
+	// other supervisor config should be at position 03
+	data, err = os.ReadFile(tmpDir + "/test-image/supervisor/03-other.conf")
 	if err != nil {
-		t.Fatalf("reading other fragment: %v", err)
+		t.Fatalf("reading other supervisor config: %v", err)
 	}
 	if !strings.Contains(string(data), "[program:other]") {
 		t.Error("other fragment should contain [program:other]")
 	}
 	if !strings.HasSuffix(string(data), "\n") {
-		t.Error("fragment without trailing newline should get one added")
+		t.Error("supervisor config without trailing newline should get one added")
 	}
 
-	// python has no supervisord, should not have a fragment
-	_, err = os.ReadFile(tmpDir + "/test-image/fragments/01-python.conf")
+	// python has no supervisord, should not have a supervisor config
+	_, err = os.ReadFile(tmpDir + "/test-image/supervisor/01-python.conf")
 	if err == nil {
-		t.Error("python should not have a supervisord fragment")
+		t.Error("python should not have a supervisor config")
 	}
 }

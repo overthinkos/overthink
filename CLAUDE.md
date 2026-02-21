@@ -16,7 +16,7 @@ Two components with a clean split:
 **What gets generated** (`ov generate`):
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
-- `.build/<image>/fragments/*.conf` -- supervisord service fragments (only for images with `service` layers)
+- `.build/<image>/supervisor/*.conf` -- supervisord service configs (only for images with `service` layers)
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
@@ -164,7 +164,7 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
    - `environment.yml`: `pixi project import environment.yml && pixi install`
 5. **npm build stages** -- `FROM <builder> AS <layer>-npm-build` (one per npm layer, uses builder image). Parses `package.json` dependencies, installs globally to `/npm-global`.
 6. **Traefik routes stage** -- `FROM scratch AS traefik-routes` + `COPY .build/<image>/traefik-routes.yml` (only if image has layers with `route` files). Generated YAML maps hostnames to backend ports.
-7. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service fragments from `.build/<image>/fragments/` (written at generate time from `layer.yml` `service` fields).
+7. **Supervisord config stage** -- `FROM scratch AS supervisord-conf` (only if image has service layers). Gathers header + service configs from `.build/<image>/supervisor/` (written at generate time from `layer.yml` `service` fields).
 8. **`FROM ${BASE_IMAGE}`**
 9. **Bootstrap** (external base only) -- install `task`, create user/group if not exists at configured UID/GID, set `WORKDIR`. For internal base: just `USER root`.
 10. **Layer ENV** -- consolidated `ENV` directives from all layers' `layer.yml` `env` and `path_append` fields
@@ -174,7 +174,7 @@ The actual order emitted by `ov/generate.go:generateContainerfile()`:
 14. **COPY pixi binary** -- from first pixi build stage
 15. **COPY npm packages** -- `COPY --from=<layer>-npm-build --chown=<UID>:<GID> /npm-global <home>/.npm-global` for each npm layer
 16. **Per-layer steps** -- for each layer in order: rpm/deb install (from `layer.yml`), root.yml, Cargo.toml, user.yml (only steps for files that exist)
-17. **Supervisord assembly** -- `cat /fragments/*.conf > /etc/supervisord.conf` (if services)
+17. **Supervisord assembly** -- `cat /supervisor/*.conf > /etc/supervisord.conf` (if services)
 18. **Traefik routes COPY** -- `COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml` (if routes)
 19. **`USER <UID>`** -- final directive (uses numeric UID, not username)
 20. **`RUN bootc container lint`** -- (bootc images only)
@@ -530,7 +530,7 @@ project/
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
 |   +-- <image>/Containerfile
-|   +-- <image>/fragments/*.conf        # Supervisord fragments (from layer.yml service)
+|   +-- <image>/supervisor/*.conf        # Supervisord configs (from layer.yml service)
 +-- images.yml                          # Configuration
 +-- Taskfile.yml                        # Root: includes + PATH setup
 +-- taskfiles/

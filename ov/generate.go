@@ -297,7 +297,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Emit supervisord config stage if needed
-	// When a child image adds services, include parent-provided service fragments
+	// When a child image adds services, include parent-provided supervisor configs
 	// too so the assembled supervisord.conf contains all services from the full chain.
 	if hasServices {
 		supervisordLayerOrder := layerOrder
@@ -312,11 +312,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			return err
 		}
 		b.WriteString("FROM scratch AS supervisord-conf\n")
-		b.WriteString("COPY templates/supervisord.header.conf /fragments/00-header.conf\n")
+		b.WriteString("COPY templates/supervisord.header.conf /supervisor/00-header.conf\n")
 		for i, layerName := range supervisordLayerOrder {
 			layer := g.Layers[layerName]
 			if layer.HasSupervisord {
-				b.WriteString(fmt.Sprintf("COPY .build/%s/fragments/%02d-%s.conf /fragments/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
+				b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%02d-%s.conf /supervisor/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
 			}
 		}
 		b.WriteString("\n")
@@ -401,8 +401,8 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Assemble supervisord config if needed
 	if hasServices {
 		b.WriteString("# Assemble supervisord.conf\n")
-		b.WriteString("RUN --mount=type=bind,from=supervisord-conf,source=/fragments,target=/fragments \\\n")
-		b.WriteString("    cat /fragments/*.conf > /etc/supervisord.conf\n\n")
+		b.WriteString("RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \\\n")
+		b.WriteString("    cat /supervisor/*.conf > /etc/supervisord.conf\n\n")
 	}
 
 	// Copy traefik dynamic routes if needed
@@ -625,9 +625,9 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string)
 	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
 }
 
-// generateSupervisordFragments writes service fragments from layer.yml to .build/<image>/fragments/
+// generateSupervisordFragments writes supervisor configs from layer.yml to .build/<image>/supervisor/
 func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []string) error {
-	fragDir := filepath.Join(g.BuildDir, imageName, "fragments")
+	fragDir := filepath.Join(g.BuildDir, imageName, "supervisor")
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
 		return err
 	}

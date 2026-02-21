@@ -49,7 +49,7 @@ mode "resize" {
 }
 
 # Appearance
-default_border normal 2
+default_border pixel 2
 gaps inner 4
 title_align center
 font pango:monospace 10

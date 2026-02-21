@@ -97,6 +97,24 @@ images:
     platforms:
       - linux/amd64
 
+  openclaw-ollama-sway-browser-dank:
+    base: nvidia
+    layers:
+      - openclaw
+      - pipewire
+      - wayvnc
+      - google-chrome-sway
+      - dank-material-shell
+      - pcmanfm-qt
+      - ollama
+    ports:
+      - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
+      - "11434:11434"
+    platforms:
+      - linux/amd64
+
   nvidia:
     base: fedora
     layers:

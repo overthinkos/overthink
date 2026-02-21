@@ -1,0 +1,15 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/DankMaterialShell ~/.config/sway/config.d
+      - cp /ctx/dms-wrapper ~/.local/bin/dms-wrapper
+      - chmod +x ~/.local/bin/dms-wrapper
+      - cp /ctx/settings.json ~/.config/DankMaterialShell/settings.json
+      - cp /ctx/sway.conf ~/.config/sway/config.d/dms.conf
+      # Suppress first-launch greeter and changelog popup by creating marker files
+      - touch ~/.config/DankMaterialShell/.firstlaunch
+      - |
+        VER=$(grep -oP 'currentVersion:\s*"\K[^"]+' /usr/share/quickshell/dms/Services/ChangelogService.qml 2>/dev/null) && \
+        [ -n "$VER" ] && touch ~/.config/DankMaterialShell/.changelog-$VER

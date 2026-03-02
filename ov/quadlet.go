@@ -102,6 +102,15 @@ func quadletDir() (string, error) {
 	return filepath.Join(home, ".config", "containers", "systemd"), nil
 }
 
+// systemdUserDir returns the user-level systemd unit directory (~/.config/systemd/user/).
+func systemdUserDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("determining home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "systemd", "user"), nil
+}
+
 // quadletFilename returns the quadlet filename for an image.
 func quadletFilename(imageName string) string {
 	return containerName(imageName) + ".container"

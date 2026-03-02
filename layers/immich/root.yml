@@ -1,0 +1,25 @@
+version: '3'
+tasks:
+  install:
+    vars:
+      IMMICH_VERSION: v2.5.6
+    cmds:
+      # Install uv (Python package manager)
+      - curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+
+      # Download and extract immich source
+      - curl -L https://github.com/immich-app/immich/archive/refs/tags/{{.IMMICH_VERSION}}.tar.gz | tar xz -C /tmp
+      - mv /tmp/immich-$(echo {{.IMMICH_VERSION}} | sed 's/^v//') /tmp/immich
+
+      # Build server with pnpm
+      - cd /tmp/immich && pnpm install --frozen-lockfile
+      - cd /tmp/immich && pnpm --filter immich build
+      - cd /tmp/immich && pnpm --filter immich deploy --prod /opt/immich/server
+
+      # Build machine learning with uv
+      - cd /tmp/immich/machine-learning && uv venv /opt/immich/machine-learning/.venv
+      - cd /tmp/immich/machine-learning && /opt/immich/machine-learning/.venv/bin/pip install -e ".[cpu]"
+      - cp -r /tmp/immich/machine-learning/immich_ml /opt/immich/machine-learning/
+
+      # Clean up
+      - rm -rf /tmp/immich

@@ -1,0 +1,13 @@
+depends: []
+
+env:
+  NPM_CONFIG_PREFIX: "~/.npm-global"
+  npm_config_cache: "~/.cache/npm"
+
+path_append:
+  - "~/.npm-global/bin"
+
+rpm:
+  packages:
+    - nodejs24
+    - nodejs24-npm

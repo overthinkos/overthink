@@ -163,13 +163,13 @@ func TestResolveTunnelConfigTailscaleDefaults(t *testing.T) {
 
 func TestResolveTunnelConfigCloudflareDefaults(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "cloudflare"}
-	cfg := ResolveTunnelConfig(tunnel, "immich-cpu", "im.example.com", nil, nil)
+	cfg := ResolveTunnelConfig(tunnel, "immich", "im.example.com", nil, nil)
 
 	if cfg.Provider != "cloudflare" {
 		t.Errorf("Provider = %q, want cloudflare", cfg.Provider)
 	}
-	if cfg.TunnelName != "ov-immich-cpu" {
-		t.Errorf("TunnelName = %q, want ov-immich-cpu", cfg.TunnelName)
+	if cfg.TunnelName != "ov-immich" {
+		t.Errorf("TunnelName = %q, want ov-immich", cfg.TunnelName)
 	}
 	if cfg.Hostname != "im.example.com" {
 		t.Errorf("Hostname = %q, want im.example.com", cfg.Hostname)

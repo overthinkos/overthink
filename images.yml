@@ -17,6 +17,11 @@ images:
     base: "quay.io/fedora/fedora:43"
     pkg: rpm
 
+  fedora-nonfree:
+    base: fedora
+    layers:
+      - rpmfusion
+
   fedora-builder:
     base: fedora
     layers:
@@ -222,22 +227,22 @@ images:
       - os-config
       - os-system-files
 
-  immich-cpu:
-    base: fedora
+  immich:
+    base: fedora-nonfree
     fqdn: "im.atradev.org"
     acme_email: "atrawog@gmail.com"
     tunnel:
       provider: cloudflare
-      port: 3001
+      port: 2283
     layers:
-      - nodejs
+      - node24
       - python
       - supervisord
       - postgresql
       - redis
       - immich
     ports:
-      - "3001:3001"
+      - "2283:2283"
     platforms:
       - linux/amd64
       - linux/arm64
@@ -247,7 +252,7 @@ images:
     fqdn: "immich.example.com"
     acme_email: "admin@example.com"
     layers:
-      - nodejs
+      - node24
       - cuda
       - python-ml
       - supervisord
@@ -255,6 +260,6 @@ images:
       - redis
       - immich
     ports:
-      - "3001:3001"
+      - "2283:2283"
     platforms:
       - linux/amd64

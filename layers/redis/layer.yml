@@ -19,4 +19,3 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=20
-  user=%(ENV_USER)s

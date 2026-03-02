@@ -213,6 +213,19 @@ func TestQuadletDir(t *testing.T) {
 	}
 }
 
+func TestSystemdUserDir(t *testing.T) {
+	got, err := systemdUserDir()
+	if err != nil {
+		t.Fatalf("systemdUserDir() error: %v", err)
+	}
+
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".config", "systemd", "user")
+	if got != want {
+		t.Errorf("systemdUserDir() = %q, want %q", got, want)
+	}
+}
+
 func TestQuadletExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Write a fake .container file
@@ -313,32 +326,32 @@ func TestGenerateQuadletWithCloudflareTunnelNoExecPost(t *testing.T) {
 
 func TestGenerateTunnelUnit(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName: "immich-cpu",
-		ImageRef:  "ghcr.io/test/immich-cpu:latest",
+		ImageName: "immich",
+		ImageRef:  "ghcr.io/test/immich:latest",
 		Workspace: "/home/user/project",
 		Tunnel: &TunnelConfig{
 			Provider:   "cloudflare",
 			Port:       3001,
-			TunnelName: "ov-immich-cpu",
+			TunnelName: "ov-immich",
 			Hostname:   "im.example.com",
 		},
 	}
 
 	got := generateTunnelUnit(cfg)
 
-	if !strings.Contains(got, "ov-immich-cpu-tunnel.service") {
+	if !strings.Contains(got, "ov-immich-tunnel.service") {
 		t.Errorf("expected filename in comment, got:\n%s", got)
 	}
-	if !strings.Contains(got, "BindsTo=ov-immich-cpu.service") {
+	if !strings.Contains(got, "BindsTo=ov-immich.service") {
 		t.Errorf("expected BindsTo, got:\n%s", got)
 	}
-	if !strings.Contains(got, "After=ov-immich-cpu.service") {
+	if !strings.Contains(got, "After=ov-immich.service") {
 		t.Errorf("expected After, got:\n%s", got)
 	}
 	if !strings.Contains(got, "cloudflared tunnel --config") {
 		t.Errorf("expected cloudflared ExecStart, got:\n%s", got)
 	}
-	if !strings.Contains(got, "run ov-immich-cpu") {
+	if !strings.Contains(got, "run ov-immich") {
 		t.Errorf("expected tunnel name in ExecStart, got:\n%s", got)
 	}
 	if !strings.Contains(got, "WantedBy=default.target") {
@@ -364,7 +377,7 @@ func TestTunnelServiceFilename(t *testing.T) {
 		want  string
 	}{
 		{"myapp", "ov-myapp-tunnel.service"},
-		{"immich-cpu", "ov-immich-cpu-tunnel.service"},
+		{"immich", "ov-immich-tunnel.service"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.image, func(t *testing.T) {

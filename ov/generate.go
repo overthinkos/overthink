@@ -421,7 +421,6 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 	if hasExtract {
-		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 		b.WriteString("\n")
 	}
 

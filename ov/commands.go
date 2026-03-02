@@ -140,8 +140,15 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	// Write companion tunnel service if cloudflare tunnel is configured
 	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
+		svcDir, err := systemdUserDir()
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(svcDir, 0755); err != nil {
+			return fmt.Errorf("creating systemd user directory: %w", err)
+		}
 		tunnelContent := generateTunnelUnit(qcfg)
-		tunnelPath := filepath.Join(qdir, tunnelServiceFilename(c.Image))
+		tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(c.Image))
 		if err := os.WriteFile(tunnelPath, []byte(tunnelContent), 0644); err != nil {
 			return fmt.Errorf("writing tunnel service file: %w", err)
 		}
@@ -352,9 +359,12 @@ func (c *RemoveCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Removed %s\n", qpath)
 
 		// Remove companion tunnel service file if it exists
-		tunnelPath := filepath.Join(qdir, tunnelServiceFilename(c.Image))
-		if err := os.Remove(tunnelPath); err == nil {
-			fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
+		svcDir, svcDirErr := systemdUserDir()
+		if svcDirErr == nil {
+			tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(c.Image))
+			if err := os.Remove(tunnelPath); err == nil {
+				fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
+			}
 		}
 
 		cmd := exec.Command("systemctl", "--user", "daemon-reload")

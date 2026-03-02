@@ -4,19 +4,3 @@ tasks:
     cmds:
       # Create required directories
       - mkdir -p ~/.immich/library ~/.immich/cache ~/.immich/models
-
-      # Initialize PostgreSQL database (one-time, idempotent)
-      - |
-        if [ -f ~/.postgresql/init.sql ] && [ ! -f ~/.postgresql/.initialized ]; then
-          # Wait for postgres to be ready (supervisord starts it)
-          for i in {1..30}; do
-            if psql -h ~/.postgresql -U postgres -d postgres -c "SELECT 1" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 1
-          done
-
-          # Execute init script
-          psql -h ~/.postgresql -U postgres -d postgres -f ~/.postgresql/init.sql
-          touch ~/.postgresql/.initialized
-        fi

@@ -3,4 +3,4 @@ tasks:
   install:
     cmds:
       # Create required directories
-      - mkdir -p ~/.immich/library ~/.immich/cache ~/.immich/models
+      - mkdir -p ~/.immich/library ~/.immich/cache

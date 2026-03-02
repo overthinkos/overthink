@@ -236,7 +236,6 @@ images:
       port: 2283
     layers:
       - node24
-      - python
       - supervisord
       - postgresql
       - redis
@@ -259,6 +258,7 @@ images:
       - postgresql
       - redis
       - immich
+      - immich-ml
     ports:
       - "2283:2283"
     platforms:

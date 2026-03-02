@@ -1,0 +1,30 @@
+depends:
+  - immich
+
+env:
+  IMMICH_MACHINE_LEARNING_ENABLED: "true"
+  IMMICH_MACHINE_LEARNING_URL: "http://127.0.0.1:3003"
+  MACHINE_LEARNING_HOST: "0.0.0.0"
+  MACHINE_LEARNING_PORT: "3003"
+  MACHINE_LEARNING_WORKERS: "1"
+  MACHINE_LEARNING_WORKER_TIMEOUT: "120"
+  TRANSFORMERS_CACHE: "~/.immich/models"
+
+ports:
+  - 3003
+
+volumes:
+  - name: models
+    path: "~/.immich/models"
+
+service: |
+  [program:immich-ml]
+  command=bash -c 'export PATH=/opt/immich/machine-learning/.venv/bin:$PATH VIRTUAL_ENV=/opt/immich/machine-learning/.venv && python -m immich_ml'
+  directory=/opt/immich/machine-learning
+  environment=IMMICH_HOST="0.0.0.0",IMMICH_PORT="3003"
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+  priority=40

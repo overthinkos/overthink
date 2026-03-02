@@ -2,4 +2,7 @@ version: '3'
 tasks:
   install:
     cmds:
+      - ln -sf /usr/bin/node-24 /usr/local/bin/node
+      - ln -sf /usr/bin/npm-24 /usr/local/bin/npm
+      - ln -sf /usr/bin/npx-24 /usr/local/bin/npx
       - npm install -g pnpm@10

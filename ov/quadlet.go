@@ -9,14 +9,15 @@ import (
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	ImageName   string        // image name from images.yml (e.g. "fedora-test")
-	ImageRef    string        // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
-	Workspace   string        // absolute host path to mount at /workspace
-	Ports       []string      // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
-	Volumes     []VolumeMount // named volumes from layer.yml declarations
-	GPU         bool          // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
-	BindAddress string        // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
-	Tunnel      *TunnelConfig // tunnel configuration (nil if no tunnel)
+	ImageName   string              // image name from images.yml (e.g. "fedora-test")
+	ImageRef    string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
+	Workspace   string              // absolute host path to mount at /workspace
+	Ports       []string            // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
+	Volumes     []VolumeMount       // named volumes from layer.yml declarations
+	BindMounts  []ResolvedBindMount // bind mounts from images.yml
+	GPU         bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
+	BindAddress string              // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
+	Tunnel      *TunnelConfig       // tunnel configuration (nil if no tunnel)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -28,6 +29,11 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("[Unit]\n")
 	b.WriteString(fmt.Sprintf("Description=Overthink %s\n", cfg.ImageName))
 	b.WriteString("After=network-online.target\n")
+	if hasEncryptedBindMounts(cfg.BindMounts) {
+		cryptoSvc := cryptoServiceFilename(cfg.ImageName)
+		b.WriteString(fmt.Sprintf("Requires=%s\n", cryptoSvc))
+		b.WriteString(fmt.Sprintf("After=%s\n", cryptoSvc))
+	}
 
 	b.WriteString("\n[Container]\n")
 	b.WriteString(fmt.Sprintf("Image=%s\n", cfg.ImageRef))
@@ -40,6 +46,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	for _, vol := range cfg.Volumes {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
 	}
+	for _, bm := range cfg.BindMounts {
+		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", bm.HostPath, bm.ContPath))
+	}
 	if cfg.GPU {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
 	}
@@ -50,8 +59,13 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("TimeoutStartSec=900\n")
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" {
 		httpsPort := fmt.Sprintf("%d", cfg.Tunnel.HTTPS)
-		b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s localhost:%d\n", httpsPort, cfg.Tunnel.Port))
-		b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", httpsPort))
+		if cfg.Tunnel.Funnel {
+			b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
+			b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", httpsPort))
+		} else {
+			b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
+			b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --https=%s off\n", httpsPort))
+		}
 	}
 
 	b.WriteString("\n[Install]\n")

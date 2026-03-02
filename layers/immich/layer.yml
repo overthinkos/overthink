@@ -21,6 +21,10 @@ env:
   NODE_ENV: "production"
 
 rpm:
+  repos:
+    - name: fedora-multimedia
+      url: "https://negativo17.org/repos/fedora-multimedia.repo"
+      gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   packages:
     - vips
     - vips-devel

@@ -41,11 +41,12 @@ type ImageConfig struct {
 	UID       *int          `yaml:"uid,omitempty"`      // user ID (default: 1000)
 	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
-	Aliases   []AliasConfig `yaml:"aliases,omitempty"`  // command aliases
-	Builder   string        `yaml:"builder,omitempty"`  // builder image name (per-image, falls back to defaults)
-	FQDN      string        `yaml:"fqdn,omitempty"`       // fully qualified domain name for traefik routing
-	AcmeEmail string        `yaml:"acme_email,omitempty"` // email for Let's Encrypt notifications
-	Tunnel    *TunnelYAML   `yaml:"tunnel,omitempty"`     // tunnel configuration (tailscale or cloudflare)
+	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
+	Builder    string            `yaml:"builder,omitempty"`      // builder image name (per-image, falls back to defaults)
+	FQDN       string            `yaml:"fqdn,omitempty"`         // fully qualified domain name for traefik routing
+	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
+	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
+	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`  // bind mount declarations (image-level only)
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

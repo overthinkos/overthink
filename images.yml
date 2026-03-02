@@ -248,8 +248,9 @@ images:
 
   immich-cuda:
     base: fedora
-    fqdn: "immich.example.com"
-    acme_email: "admin@example.com"
+    tunnel:
+      provider: tailscale
+      port: 2283
     layers:
       - node24
       - cuda

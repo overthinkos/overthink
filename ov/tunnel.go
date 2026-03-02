@@ -23,7 +23,8 @@ import (
 type TunnelYAML struct {
 	Provider string `yaml:"provider"`
 	Port     int    `yaml:"port,omitempty"`
-	HTTPS    int    `yaml:"https,omitempty"`  // tailscale only: external funnel port
+	HTTPS    int    `yaml:"https,omitempty"`  // tailscale only: external HTTPS port
+	Funnel   bool   `yaml:"funnel,omitempty"` // tailscale only: true=funnel (public), false=serve (tailnet-private)
 	Tunnel   string `yaml:"tunnel,omitempty"` // cloudflare only: tunnel name
 }
 
@@ -47,7 +48,8 @@ func (t *TunnelYAML) UnmarshalYAML(value *yaml.Node) error {
 type TunnelConfig struct {
 	Provider   string // "tailscale" or "cloudflare"
 	Port       int    // container port to tunnel to
-	HTTPS      int    // tailscale: external funnel port (443, 8443, 10000)
+	HTTPS      int    // tailscale: external HTTPS port
+	Funnel     bool   // tailscale: true=funnel (public), false=serve (tailnet-private)
 	TunnelName string // cloudflare: tunnel name
 	Hostname   string // cloudflare: from fqdn
 	ImageName  string // for PID file naming
@@ -63,7 +65,10 @@ var TunnelStart = defaultTunnelStart
 func defaultTunnelStart(cfg TunnelConfig) error {
 	switch cfg.Provider {
 	case "tailscale":
-		return tailscaleFunnelStart(cfg)
+		if cfg.Funnel {
+			return tailscaleFunnelStart(cfg)
+		}
+		return tailscaleServeStart(cfg)
 	case "cloudflare":
 		return cloudflareTunnelStart(cfg)
 	default:
@@ -77,7 +82,10 @@ var TunnelStop = defaultTunnelStop
 func defaultTunnelStop(cfg TunnelConfig) error {
 	switch cfg.Provider {
 	case "tailscale":
-		return tailscaleFunnelStop(cfg)
+		if cfg.Funnel {
+			return tailscaleFunnelStop(cfg)
+		}
+		return tailscaleServeStop(cfg)
 	case "cloudflare":
 		return cloudflareTunnelStop(cfg)
 	default:
@@ -89,7 +97,7 @@ func defaultTunnelStop(cfg TunnelConfig) error {
 
 func tailscaleFunnelStart(cfg TunnelConfig) error {
 	httpsPort := strconv.Itoa(cfg.HTTPS)
-	target := fmt.Sprintf("localhost:%d", cfg.Port)
+	target := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
 	cmd := exec.Command("tailscale", "funnel", "--bg", "--https="+httpsPort, target)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -109,6 +117,48 @@ func tailscaleFunnelStop(cfg TunnelConfig) error {
 		return fmt.Errorf("tailscale funnel stop failed: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Tailscale Funnel disabled on :%s\n", httpsPort)
+	return nil
+}
+
+// --- Tailscale Serve ---
+
+// ValidServePorts are the allowed external ports for Tailscale Serve.
+var ValidServePorts = map[int]bool{
+	80: true, 443: true, 3000: true, 3001: true, 3002: true, 3003: true,
+	4443: true, 5432: true, 6443: true, 8443: true,
+}
+
+// isValidServePort checks if a port is allowed for tailscale serve.
+// Allowed: 80, 443, 3000-10000, 4443, 5432, 6443, 8443.
+func isValidServePort(port int) bool {
+	if port >= 3000 && port <= 10000 {
+		return true
+	}
+	return port == 80 || port == 443 || port == 4443 || port == 5432 || port == 6443 || port == 8443
+}
+
+func tailscaleServeStart(cfg TunnelConfig) error {
+	httpsPort := strconv.Itoa(cfg.HTTPS)
+	target := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
+	cmd := exec.Command("tailscale", "serve", "--bg", "--https="+httpsPort, target)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tailscale serve start failed: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Tailscale Serve enabled on :%s -> %s\n", httpsPort, target)
+	return nil
+}
+
+func tailscaleServeStop(cfg TunnelConfig) error {
+	httpsPort := strconv.Itoa(cfg.HTTPS)
+	cmd := exec.Command("tailscale", "serve", "--https="+httpsPort, "off")
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tailscale serve stop failed: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Tailscale Serve disabled on :%s\n", httpsPort)
 	return nil
 }
 
@@ -338,6 +388,7 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers ma
 
 	switch cfg.Provider {
 	case "tailscale":
+		cfg.Funnel = t.Funnel
 		cfg.HTTPS = t.HTTPS
 		if cfg.HTTPS == 0 {
 			cfg.HTTPS = 443

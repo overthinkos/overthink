@@ -27,6 +27,7 @@ type CLI struct {
 	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
+	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
@@ -146,7 +147,22 @@ func (c *InspectCmd) Run() error {
 			}
 		case "tunnel":
 			if resolved.Tunnel != nil {
-				fmt.Printf("%s:%d\n", resolved.Tunnel.Provider, resolved.Tunnel.Port)
+				mode := "serve"
+				if resolved.Tunnel.Provider == "tailscale" && resolved.Tunnel.Funnel {
+					mode = "funnel"
+				} else if resolved.Tunnel.Provider == "cloudflare" {
+					mode = "tunnel"
+				}
+				fmt.Printf("%s:%s:%d\n", resolved.Tunnel.Provider, mode, resolved.Tunnel.Port)
+			}
+		case "bind_mounts":
+			img := cfg.Images[c.Image]
+			for _, bm := range img.BindMounts {
+				encrypted := "no"
+				if bm.Encrypted {
+					encrypted = "yes"
+				}
+				fmt.Printf("%s\t%s\t%s\t%s\n", bm.Name, bm.Host, bm.Path, encrypted)
 			}
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
@@ -400,8 +416,10 @@ func (c *ConfigGetCmd) Run() error {
 		}
 	case "bind_address":
 		fmt.Println(rt.BindAddress)
+	case "encrypted_storage_path":
+		fmt.Println(rt.EncryptedStoragePath)
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", c.Key)
 	}
 	return nil
 }

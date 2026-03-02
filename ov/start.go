@@ -50,6 +50,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var imageRef string
 	var ports []string
 	var volumes []VolumeMount
+	var bindMounts []ResolvedBindMount
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -66,6 +67,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
 		if err != nil {
 			return err
+		}
+		// Resolve bind mounts
+		img := cfg.Images[c.Image]
+		if len(img.BindMounts) > 0 {
+			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
 		}
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		ports = resolved.Ports
@@ -94,8 +100,13 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		}
 	}
 
+	// Verify bind mounts
+	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
+		return err
+	}
+
 	name := containerName(c.Image)
-	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, gpu, rt.BindAddress)
+	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, bindMounts, gpu, rt.BindAddress)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -247,7 +258,7 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, gpu bool, bindAddr string) []string {
+func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -263,6 +274,9 @@ func buildStartArgs(engine, imageRef, workspace string, ports []string, name str
 	}
 	for _, vol := range volumes {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
+	}
+	for _, bm := range bindMounts {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
 	}
 	args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
 	return args

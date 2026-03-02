@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -77,6 +79,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 
 	// Validate tunnel configuration
 	validateTunnel(cfg, errs)
+
+	// Validate bind mounts
+	validateBindMounts(cfg, layers, errs)
 
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
@@ -549,8 +554,16 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 			errs.Add("%s: tunnel port must be 1-65535, got %d", name, t.Port)
 		}
 		if t.Provider == "tailscale" {
-			if t.HTTPS != 0 && !ValidFunnelPorts[t.HTTPS] {
-				errs.Add("%s: tunnel https must be 443, 8443, or 10000, got %d", name, t.HTTPS)
+			if t.Funnel {
+				// Funnel (public): restricted to 443, 8443, 10000
+				if t.HTTPS != 0 && !ValidFunnelPorts[t.HTTPS] {
+					errs.Add("%s: tunnel https must be 443, 8443, or 10000 for funnel, got %d", name, t.HTTPS)
+				}
+			} else {
+				// Serve (tailnet-private): wider port range
+				if t.HTTPS != 0 && !isValidServePort(t.HTTPS) {
+					errs.Add("%s: tunnel https must be 80, 443, 3000-10000, 4443, 5432, 6443, or 8443 for serve, got %d", name, t.HTTPS)
+				}
 			}
 		}
 		if t.Provider == "cloudflare" {
@@ -574,6 +587,120 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 			fqdn = cfg.Defaults.FQDN
 		}
 		check(fmt.Sprintf("image %q", imageName), img.Tunnel, fqdn)
+	}
+
+	// Cross-image tailscale HTTPS port conflict check
+	portUsers := make(map[int][]string) // https port -> image names
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		// Resolve effective tunnel: image -> defaults
+		tunnel := img.Tunnel
+		if tunnel == nil {
+			tunnel = cfg.Defaults.Tunnel
+		}
+		if tunnel == nil || tunnel.Provider != "tailscale" {
+			continue
+		}
+		httpsPort := tunnel.HTTPS
+		if httpsPort == 0 {
+			httpsPort = 443
+		}
+		portUsers[httpsPort] = append(portUsers[httpsPort], imageName)
+	}
+	for port, names := range portUsers {
+		if len(names) < 2 {
+			continue
+		}
+		sort.Strings(names)
+		errs.Add("images %q and %q: both use tailscale tunnel https port %d (set different https ports to avoid conflict)", names[0], names[1], port)
+	}
+}
+
+// validateBindMounts validates bind mount declarations in images
+func validateBindMounts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if len(img.BindMounts) == 0 {
+			continue
+		}
+
+		seen := make(map[string]bool)
+		for _, bm := range img.BindMounts {
+			// Name is required and must match pattern
+			if bm.Name == "" {
+				errs.Add("image %q bind_mounts: missing required \"name\" field", imageName)
+			} else if !volumeNameRe.MatchString(bm.Name) {
+				errs.Add("image %q bind_mounts: name %q must be lowercase alphanumeric with hyphens", imageName, bm.Name)
+			} else if seen[bm.Name] {
+				errs.Add("image %q bind_mounts: duplicate name %q", imageName, bm.Name)
+			} else {
+				seen[bm.Name] = true
+			}
+
+			// Path is required
+			if bm.Path == "" {
+				errs.Add("image %q bind_mounts: missing required \"path\" field for %q", imageName, bm.Name)
+			}
+
+			// Encrypted vs plain rules
+			if bm.Encrypted {
+				if bm.Host != "" {
+					errs.Add("image %q bind_mounts: encrypted mount %q must not have \"host\" (ov manages storage)", imageName, bm.Name)
+				}
+			} else {
+				if bm.Host == "" {
+					errs.Add("image %q bind_mounts: plain mount %q requires \"host\" path", imageName, bm.Name)
+				}
+			}
+		}
+
+		// Check for name collisions with layer volumes
+		if len(img.Layers) > 0 {
+			resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+			if err == nil {
+				volNames := make(map[string]bool)
+				for _, layerName := range resolved {
+					layer, ok := layers[layerName]
+					if !ok || !layer.HasVolumes {
+						continue
+					}
+					for _, vol := range layer.Volumes() {
+						volNames[vol.Name] = true
+					}
+				}
+				for _, bm := range img.BindMounts {
+					if bm.Name != "" && volNames[bm.Name] {
+						errs.Add("image %q bind_mounts: name %q collides with a layer volume name", imageName, bm.Name)
+					}
+				}
+			}
+		}
+	}
+
+	// Non-fatal warning if gocryptfs not in PATH when encrypted mounts exist
+	hasEncrypted := false
+	for _, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		for _, bm := range img.BindMounts {
+			if bm.Encrypted {
+				hasEncrypted = true
+				break
+			}
+		}
+		if hasEncrypted {
+			break
+		}
+	}
+	if hasEncrypted {
+		if _, err := exec_LookPath("gocryptfs"); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: gocryptfs not found in PATH (required for encrypted bind mounts)\n")
+		}
 	}
 }
 

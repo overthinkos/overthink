@@ -313,7 +313,7 @@ func TestValidateTunnelInvalidFunnelPort(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "tailscale", HTTPS: 8080},
+				Tunnel: &TunnelYAML{Provider: "tailscale", Funnel: true, HTTPS: 8080},
 				Layers: []string{},
 			},
 		},
@@ -324,7 +324,7 @@ func TestValidateTunnelInvalidFunnelPort(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for invalid funnel port")
 	}
-	if !strings.Contains(err.Error(), "tunnel https must be 443, 8443, or 10000") {
+	if !strings.Contains(err.Error(), "tunnel https must be 443, 8443, or 10000 for funnel") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -430,5 +430,217 @@ func TestValidateTunnelInvalidPort(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "tunnel port must be 1-65535") {
 		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestTunnelYAMLUnmarshalFunnel(t *testing.T) {
+	input := `
+provider: tailscale
+funnel: true
+port: 8080
+`
+	var tunnel TunnelYAML
+	if err := yaml.Unmarshal([]byte(input), &tunnel); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if tunnel.Provider != "tailscale" {
+		t.Errorf("Provider = %q, want tailscale", tunnel.Provider)
+	}
+	if !tunnel.Funnel {
+		t.Error("Funnel = false, want true")
+	}
+	if tunnel.Port != 8080 {
+		t.Errorf("Port = %d, want 8080", tunnel.Port)
+	}
+}
+
+func TestTunnelYAMLUnmarshalServeDefault(t *testing.T) {
+	// When funnel is not set, it defaults to false (serve mode)
+	input := `
+provider: tailscale
+port: 2283
+`
+	var tunnel TunnelYAML
+	if err := yaml.Unmarshal([]byte(input), &tunnel); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if tunnel.Funnel {
+		t.Error("Funnel = true, want false (serve is default)")
+	}
+}
+
+func TestResolveTunnelConfigFunnelFlag(t *testing.T) {
+	tunnel := &TunnelYAML{Provider: "tailscale", Funnel: true}
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil)
+
+	if !cfg.Funnel {
+		t.Error("Funnel = false, want true")
+	}
+
+	// Serve mode (default)
+	tunnel2 := &TunnelYAML{Provider: "tailscale"}
+	cfg2 := ResolveTunnelConfig(tunnel2, "myapp", "", nil, nil)
+
+	if cfg2.Funnel {
+		t.Error("Funnel = true, want false (serve is default)")
+	}
+}
+
+func TestIsValidServePort(t *testing.T) {
+	valid := []int{80, 443, 3000, 3001, 5000, 8080, 8443, 10000, 4443, 5432, 6443}
+	invalid := []int{0, 79, 81, 442, 444, 2999, 10001, 65535}
+
+	for _, p := range valid {
+		if !isValidServePort(p) {
+			t.Errorf("port %d should be valid for serve", p)
+		}
+	}
+	for _, p := range invalid {
+		if isValidServePort(p) {
+			t.Errorf("port %d should be invalid for serve", p)
+		}
+	}
+}
+
+func TestValidateTunnelServeInvalidPort(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				// Serve mode (funnel: false, the default) with port outside allowed range
+				Tunnel: &TunnelYAML{Provider: "tailscale", HTTPS: 2000},
+				Layers: []string{},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Fatal("expected error for invalid serve port")
+	}
+	if !strings.Contains(err.Error(), "for serve") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateTunnelServeValidPort(t *testing.T) {
+	// Port 8080 is valid for serve (3000-10000 range) but invalid for funnel
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Tunnel: &TunnelYAML{Provider: "tailscale", HTTPS: 8080},
+				Layers: []string{},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	err := Validate(cfg, layers)
+	// Should have no tunnel errors
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "tunnel") {
+			t.Errorf("unexpected tunnel error: %v", err)
+		}
+	}
+}
+
+func TestValidateTunnelHTTPSPortConflict(t *testing.T) {
+	tests := []struct {
+		name      string
+		cfg       *Config
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name: "two tailscale images default port 443",
+			cfg: &Config{
+				Images: map[string]ImageConfig{
+					"app-a": {
+						Tunnel: &TunnelYAML{Provider: "tailscale"},
+						Layers: []string{},
+					},
+					"app-b": {
+						Tunnel: &TunnelYAML{Provider: "tailscale"},
+						Layers: []string{},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "both use tailscale tunnel https port 443",
+		},
+		{
+			name: "two tailscale images different https ports",
+			cfg: &Config{
+				Images: map[string]ImageConfig{
+					"app-a": {
+						Tunnel: &TunnelYAML{Provider: "tailscale", HTTPS: 443},
+						Layers: []string{},
+					},
+					"app-b": {
+						Tunnel: &TunnelYAML{Provider: "tailscale", HTTPS: 8443},
+						Layers: []string{},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "tailscale and cloudflare no conflict",
+			cfg: &Config{
+				Images: map[string]ImageConfig{
+					"app-a": {
+						Tunnel: &TunnelYAML{Provider: "tailscale"},
+						Layers: []string{},
+					},
+					"app-b": {
+						FQDN:   "app.example.com",
+						Tunnel: &TunnelYAML{Provider: "cloudflare"},
+						Layers: []string{},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "inherited tailscale from defaults conflicts",
+			cfg: &Config{
+				Defaults: ImageConfig{
+					Tunnel: &TunnelYAML{Provider: "tailscale"},
+				},
+				Images: map[string]ImageConfig{
+					"app-a": {
+						Layers: []string{},
+					},
+					"app-b": {
+						Layers: []string{},
+					},
+				},
+			},
+			wantErr:   true,
+			errSubstr: "both use tailscale tunnel https port 443",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			layers := map[string]*Layer{}
+			err := Validate(tt.cfg, layers)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected validation error")
+				}
+				if !strings.Contains(err.Error(), tt.errSubstr) {
+					t.Errorf("error %q should contain %q", err.Error(), tt.errSubstr)
+				}
+			} else {
+				if err != nil {
+					errStr := err.Error()
+					if strings.Contains(errStr, "tunnel https port") {
+						t.Errorf("unexpected tunnel port conflict error: %v", err)
+					}
+				}
+			}
+		})
 	}
 }

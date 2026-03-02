@@ -48,6 +48,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	var imageRef string
 	var ports []string
 	var volumes []VolumeMount
+	var bindMounts []ResolvedBindMount
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -64,6 +65,11 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
 		if err != nil {
 			return err
+		}
+		// Resolve bind mounts
+		img := cfg.Images[c.Image]
+		if len(img.BindMounts) > 0 {
+			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
 		}
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		ports = resolved.Ports
@@ -116,6 +122,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Workspace:   absWorkspace,
 		Ports:       ports,
 		Volumes:     volumes,
+		BindMounts:  bindMounts,
 		GPU:         gpu,
 		BindAddress: rt.BindAddress,
 		Tunnel:      tunnelCfg,
@@ -153,6 +160,25 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 			return fmt.Errorf("writing tunnel service file: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Wrote %s\n", tunnelPath)
+	}
+
+	// Write companion crypto service if encrypted bind mounts are configured
+	if hasEncryptedBindMounts(bindMounts) {
+		cryptoContent := generateCryptoUnit(c.Image, bindMounts, rt.EncryptedStoragePath)
+		if cryptoContent != "" {
+			svcDir, err := systemdUserDir()
+			if err != nil {
+				return err
+			}
+			if err := os.MkdirAll(svcDir, 0755); err != nil {
+				return fmt.Errorf("creating systemd user directory: %w", err)
+			}
+			cryptoPath := filepath.Join(svcDir, cryptoServiceFilename(c.Image))
+			if err := os.WriteFile(cryptoPath, []byte(cryptoContent), 0644); err != nil {
+				return fmt.Errorf("writing crypto service file: %w", err)
+			}
+			fmt.Fprintf(os.Stderr, "Wrote %s\n", cryptoPath)
+		}
 	}
 
 	cmd := exec.Command("systemctl", "--user", "daemon-reload")
@@ -364,6 +390,11 @@ func (c *RemoveCmd) Run() error {
 			tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(c.Image))
 			if err := os.Remove(tunnelPath); err == nil {
 				fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
+			}
+			// Remove companion crypto service file if it exists
+			cryptoPath := filepath.Join(svcDir, cryptoServiceFilename(c.Image))
+			if err := os.Remove(cryptoPath); err == nil {
+				fmt.Fprintf(os.Stderr, "Removed %s\n", cryptoPath)
 			}
 		}
 

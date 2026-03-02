@@ -255,7 +255,7 @@ func TestQuadletExists(t *testing.T) {
 	}
 }
 
-func TestGenerateQuadletWithTailscaleTunnel(t *testing.T) {
+func TestGenerateQuadletWithTailscaleFunnel(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
@@ -266,12 +266,13 @@ func TestGenerateQuadletWithTailscaleTunnel(t *testing.T) {
 			Provider: "tailscale",
 			Port:     8080,
 			HTTPS:    443,
+			Funnel:   true,
 		},
 	}
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 localhost:8080") {
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 http://127.0.0.1:8080") {
 		t.Errorf("expected ExecStartPost for tailscale funnel, got:\n%s", got)
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 443 off") {
@@ -279,7 +280,7 @@ func TestGenerateQuadletWithTailscaleTunnel(t *testing.T) {
 	}
 }
 
-func TestGenerateQuadletWithTailscaleTunnelCustomPort(t *testing.T) {
+func TestGenerateQuadletWithTailscaleFunnelCustomPort(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
@@ -289,16 +290,46 @@ func TestGenerateQuadletWithTailscaleTunnelCustomPort(t *testing.T) {
 			Provider: "tailscale",
 			Port:     3001,
 			HTTPS:    8443,
+			Funnel:   true,
 		},
 	}
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 localhost:3001") {
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 http://127.0.0.1:3001") {
 		t.Errorf("expected ExecStartPost with port 8443, got:\n%s", got)
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 8443 off") {
 		t.Errorf("expected ExecStopPost with port 8443, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithTailscaleServe(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "immich-cuda",
+		ImageRef:    "ghcr.io/overthinkos/immich-cuda:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"2283:2283"},
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Port:     2283,
+			HTTPS:    443,
+			Funnel:   false, // serve mode
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=443 http://127.0.0.1:2283") {
+		t.Errorf("expected ExecStartPost for tailscale serve, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=443 off") {
+		t.Errorf("expected ExecStopPost for tailscale serve, got:\n%s", got)
+	}
+	// Ensure it does NOT contain funnel
+	if strings.Contains(got, "tailscale funnel") {
+		t.Errorf("serve mode should not contain 'tailscale funnel', got:\n%s", got)
 	}
 }
 

@@ -4,16 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine      EngineConfig `yaml:"engine"`
-	RunMode     string       `yaml:"run_mode,omitempty"`
-	AutoEnable  *bool        `yaml:"auto_enable,omitempty"`
-	BindAddress string       `yaml:"bind_address,omitempty"`
+	Engine               EngineConfig `yaml:"engine"`
+	RunMode              string       `yaml:"run_mode,omitempty"`
+	AutoEnable           *bool        `yaml:"auto_enable,omitempty"`
+	BindAddress          string       `yaml:"bind_address,omitempty"`
+	EncryptedStoragePath string       `yaml:"encrypted_storage_path,omitempty"`
 }
 
 // EngineConfig specifies which container engine to use
@@ -24,11 +26,12 @@ type EngineConfig struct {
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
-	BuildEngine string // "docker" or "podman"
-	RunEngine   string // "docker" or "podman"
-	RunMode     string // "direct" or "quadlet"
-	AutoEnable  bool   // auto-enable quadlet on first start
-	BindAddress string // "127.0.0.1" or "0.0.0.0"
+	BuildEngine          string // "docker" or "podman"
+	RunEngine            string // "docker" or "podman"
+	RunMode              string // "direct" or "quadlet"
+	AutoEnable           bool   // auto-enable quadlet on first start
+	BindAddress          string // "127.0.0.1" or "0.0.0.0"
+	EncryptedStoragePath string // path for gocryptfs encrypted storage
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file.
@@ -92,11 +95,12 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	rt := &ResolvedRuntime{
-		BuildEngine: resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "docker"),
-		RunEngine:   resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "docker"),
-		RunMode:     resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
-		AutoEnable:  resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
-		BindAddress: resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
+		BuildEngine:          resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "docker"),
+		RunEngine:            resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "docker"),
+		RunMode:              resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
+		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
+		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
+		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -151,6 +155,36 @@ func validateBindAddress(value string) error {
 	return nil
 }
 
+func resolveEncryptedStoragePath(envVal, cfgVal string) string {
+	if envVal != "" {
+		return expandHostHome(envVal)
+	}
+	if cfgVal != "" {
+		return expandHostHome(cfgVal)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".local", "share", "ov", "encrypted")
+	}
+	return filepath.Join(home, ".local", "share", "ov", "encrypted")
+}
+
+// expandHostHome expands ~ and $HOME in a path using the actual user's home directory.
+func expandHostHome(path string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	if strings.HasPrefix(path, "~/") {
+		return home + path[1:]
+	}
+	if path == "~" {
+		return home
+	}
+	path = strings.ReplaceAll(path, "$HOME", home)
+	return path
+}
+
 func resolveAutoEnable(envVal string, cfgVal *bool) bool {
 	if envVal != "" {
 		return envVal == "true" || envVal == "1"
@@ -185,8 +219,10 @@ func GetConfigValue(key string) (string, error) {
 		return "", nil
 	case "bind_address":
 		return cfg.BindAddress, nil
+	case "encrypted_storage_path":
+		return cfg.EncryptedStoragePath, nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
 	}
 }
 
@@ -210,8 +246,10 @@ func SetConfigValue(key, value string) error {
 		if err := validateBindAddress(value); err != nil {
 			return err
 		}
+	case "encrypted_storage_path":
+		// Any non-empty path is valid
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -231,6 +269,8 @@ func SetConfigValue(key, value string) error {
 		cfg.AutoEnable = &b
 	case "bind_address":
 		cfg.BindAddress = value
+	case "encrypted_storage_path":
+		cfg.EncryptedStoragePath = value
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -260,8 +300,10 @@ func ResetConfigValue(key string) error {
 		cfg.AutoEnable = nil
 	case "bind_address":
 		cfg.BindAddress = ""
+	case "encrypted_storage_path":
+		cfg.EncryptedStoragePath = ""
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -312,11 +354,15 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: "auto_enable", Value: "false", Source: "default"}
 	}
 
+	// Resolve encrypted_storage_path default
+	defaultStoragePath := resolveEncryptedStoragePath("", "")
+
 	return []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "docker"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "docker"),
 		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
+		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
 	}, nil
 }

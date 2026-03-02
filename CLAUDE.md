@@ -169,6 +169,7 @@ Every setting resolves through: **image -> defaults -> hardcoded fallback** (fir
 | `merge` | `null` | Layer merge settings (`auto: true, max_mb: 128`). See [Layer Merging](#layer-merging). |
 | `aliases` | `[]` | Command aliases (`name` + optional `command`). See [Command Aliases](#command-aliases). |
 | `builder` | `""` | Builder image name (per-image, falls back to defaults). See [Builder Image](#builder-image). |
+| `bind_mounts` | `[]` | Bind mount declarations (`name` + `host`/`path` + optional `encrypted`). Image-level only, not inherited. See [Bind Mounts](#bind-mounts). |
 
 When `base` references another image in `images.yml`, the generator resolves it to the full registry/tag and creates a build dependency. The referenced image must be built first.
 
@@ -321,6 +322,76 @@ Source: `ov/volumes.go` (collection, expansion), `ov/layers.go` (`VolumeYAML` st
 
 ---
 
+## Bind Mounts
+
+Image-level host-path bind mounts, declared in `images.yml`. Two modes: plain (direct bind) and encrypted (gocryptfs-managed). Not inherited from defaults -- deployment-specific.
+
+### Configuration
+
+```yaml
+images:
+  myapp:
+    layers: [nodejs, myapp]
+    bind_mounts:
+      - name: data
+        host: "~/data/myapp"        # host dir, required for plain mounts
+        path: "~/.myapp"            # container path, ~ expanded to resolved home
+
+      - name: secrets
+        path: "~/.myapp/secrets"    # container path
+        encrypted: true             # gocryptfs, host managed by ov
+```
+
+**Rules:**
+- `encrypted: false` (default): `host` is required -- direct bind mount
+- `encrypted: true`: `host` is forbidden -- ov manages cipher/plain dirs at `encrypted_storage_path`
+- `path`: container mount path (required). `~`/`$HOME` expanded to the image's resolved home dir
+- `host`: host mount path (plain mounts only). `~`/`$HOME` expanded to the user's actual home
+- `name`: unique identifier, same regex as volumes: `^[a-z0-9]+(-[a-z0-9]+)*$`
+- Bind mount names must not collide with layer volume names (same namespace)
+
+### Runtime Config
+
+| Setting | Env | Default |
+|---------|-----|---------|
+| `encrypted_storage_path` | `OV_ENCRYPTED_STORAGE_PATH` | `~/.local/share/ov/encrypted` |
+
+Encrypted storage layout:
+```
+~/.local/share/ov/encrypted/
+  ov-myapp-secrets/
+    cipher/     # gocryptfs encrypted data
+    plain/      # FUSE mount point (bind-mounted into container)
+```
+
+### CLI Commands
+
+```
+ov crypto init <image> [--volume NAME]     # Initialize gocryptfs cipher dirs
+ov crypto mount <image> [--volume NAME]    # Mount encrypted volumes (interactive password)
+ov crypto unmount <image> [--volume NAME]  # Unmount encrypted volumes
+ov crypto status <image>                   # Show status of all encrypted bind mounts
+```
+
+### Integration
+
+- **`ov shell` / `ov start` (direct)**: resolves bind mounts, verifies plain dirs exist and encrypted volumes are mounted, appends `-v <host>:<container>` flags
+- **`ov enable` (quadlet)**: plain mounts as `Volume=` lines; encrypted mounts generate a companion `ov-<image>-crypto.service` with `Requires=`/`After=` in the `.container` file
+- **`ov remove`**: removes companion crypto service file alongside tunnel service file
+- **`ov inspect --format bind_mounts`**: outputs `NAME\tHOST\tPATH\tENCRYPTED`
+
+### Validation
+
+- Name, path required; name must match volume name regex
+- No duplicate names within an image
+- Encrypted: host must be empty; plain: host required
+- Names must not collide with layer volume names
+- Warning if `gocryptfs` not in PATH (when encrypted mounts exist)
+
+Source: `ov/crypto.go` (types, commands, resolution, crypto unit generation), `ov/validate.go` (`validateBindMounts`).
+
+---
+
 ## Command Aliases
 
 Distrobox-style wrapper scripts that let you run container commands transparently from the host. Type `openclaw` on the host and it runs inside the right container automatically.
@@ -469,11 +540,15 @@ ov config get <key>                    # Print resolved value
 ov config set <key> <value>            # Set in user config
 ov config list                         # Show all settings with source
 ov config reset [key]                  # Remove from user config (revert to default)
+ov crypto init <image> [--volume NAME]  # Initialize gocryptfs cipher directories
+ov crypto mount <image> [--volume NAME] # Mount encrypted volumes
+ov crypto unmount <image> [--volume NAME] # Unmount encrypted volumes
+ov crypto status <image>               # Show status of encrypted bind mounts
 ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
 
-**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`).
+**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`).
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error. All validation rules are in `ov/validate.go`.
 
@@ -510,6 +585,7 @@ project/
 |   +-- transfer.go                     # Cross-engine image transfer (LocalImageExists, TransferImage, EnsureImage)
 |   +-- volumes.go                      # Named volume collection + mounting
 |   +-- alias.go                        # Command aliases (wrapper scripts, collection, CLI commands)
+|   +-- crypto.go                       # Bind mounts (plain + gocryptfs encrypted), crypto CLI commands
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
 |   +-- <image>/Containerfile
@@ -695,12 +771,70 @@ bind_address: "127.0.0.1"  # port binding address
 | `run_mode` | `direct`, `quadlet` | `direct` | How `ov start`/`ov stop` and other service commands dispatch |
 | `auto_enable` | `true`, `false` | `false` | When `run_mode=quadlet`, auto-run `ov enable` on first `ov start` |
 | `bind_address` | `127.0.0.1`, `0.0.0.0` | `127.0.0.1` | Address for port bindings in `ov shell`, `ov start`, and quadlet |
+| `encrypted_storage_path` | path string | `~/.local/share/ov/encrypted` | Base directory for gocryptfs encrypted bind mount storage |
 
 When `run_mode=quadlet`, `ov start` checks for an existing `.container` file. If none exists and `auto_enable=true`, it auto-enables (generates the quadlet file). If `auto_enable=false`, it errors with a message to run `ov enable` first. `ov stop` uses `systemctl --user stop`. This requires `engine.run=podman` (a warning is emitted otherwise).
 
 When `run_mode=direct`, `ov start`/`ov stop` use `<engine> run -d`/`<engine> stop`. Commands like `ov status`, `ov logs`, and `ov remove` work in both modes. `ov enable` and `ov disable` are quadlet-only.
 
 Source: `ov/runtime_config.go` (config struct, load/save/resolve), `ov/engine.go` (engine binary names, GPU args).
+
+---
+
+## Tunnel Configuration
+
+Images can expose services outside the container host via tunnels. Three modes are supported:
+
+### Tailscale Serve (tailnet-private, default)
+
+Exposes a port to your Tailscale network only. All tailnet nodes can access it via MagicDNS (`https://<machine>.tailnet.ts.net`). No FQDN or ACME email needed -- Tailscale handles TLS certificates automatically.
+
+```yaml
+# Bare string (serve mode with default https=443)
+tunnel: tailscale
+
+# Expanded form
+tunnel:
+  provider: tailscale
+  port: 2283          # container port to proxy to
+  https: 443          # external HTTPS port (default: 443)
+```
+
+Allowed HTTPS ports for serve: 80, 443, 3000-10000, 4443, 5432, 6443, 8443.
+
+CLI: `tailscale serve --bg --https=PORT localhost:PORT` / `tailscale serve --https=PORT off`.
+
+### Tailscale Funnel (public internet)
+
+Exposes a port to the public internet via Tailscale's edge network. Requires `funnel: true`.
+
+```yaml
+tunnel:
+  provider: tailscale
+  funnel: true
+  port: 8080
+  https: 443          # must be 443, 8443, or 10000
+```
+
+CLI: `tailscale funnel --bg --https=PORT localhost:PORT` / `tailscale funnel PORT off`.
+
+### Cloudflare Tunnel
+
+Routes traffic through Cloudflare's network. Requires `fqdn` and optionally `acme_email`.
+
+```yaml
+tunnel:
+  provider: cloudflare
+  port: 3001
+  tunnel: my-tunnel   # optional, defaults to ov-<image>
+fqdn: "app.example.com"
+```
+
+### Resolution
+
+`tunnel` inherits from defaults (image -> defaults -> nil). The `port` field defaults to the first route port from layers if not specified. For tailscale, `https` defaults to 443.
+
+Source: `ov/tunnel.go` (TunnelYAML, TunnelConfig, start/stop dispatch), `ov/validate.go` (`validateTunnel`), `ov/quadlet.go` (systemd integration).
 
 ---
 

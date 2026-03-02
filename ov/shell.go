@@ -71,6 +71,7 @@ func (c *ShellCmd) Run() error {
 	var uid, gid int
 	var ports []string
 	var volumes []VolumeMount
+	var bindMounts []ResolvedBindMount
 
 	// Try images.yml first (existing path)
 	dir, _ := os.Getwd()
@@ -87,6 +88,11 @@ func (c *ShellCmd) Run() error {
 		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
 		if err != nil {
 			return err
+		}
+		// Resolve bind mounts
+		img := cfg.Images[c.Image]
+		if len(img.BindMounts) > 0 {
+			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
 		}
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
@@ -134,7 +140,12 @@ func (c *ShellCmd) Run() error {
 		}
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, gpu, c.Command, rt.BindAddress)
+	// Verify bind mounts
+	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
+		return err
+	}
+
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -155,7 +166,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, gpu bool, command string, bindAddr string) []string {
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -175,6 +186,9 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	}
 	for _, vol := range volumes {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", vol.VolumeName, vol.ContainerPath))
+	}
+	for _, bm := range bindMounts {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
 	}
 	args = append(args, "--entrypoint", "bash", imageRef)
 	if command != "" {

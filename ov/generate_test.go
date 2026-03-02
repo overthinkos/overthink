@@ -61,7 +61,7 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		},
 	}
 
-	err := g.generateTraefikRoutes("test-image", []string{"traefik", "svc"})
+	err := g.generateTraefikRoutes("test-image", []string{"traefik", "svc"}, &ResolvedImage{})
 	if err != nil {
 		t.Fatalf("generateTraefikRoutes() error = %v", err)
 	}

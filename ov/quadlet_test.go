@@ -241,3 +241,137 @@ func TestQuadletExists(t *testing.T) {
 		t.Error("expected quadletExists to return false for nonexistent file")
 	}
 }
+
+func TestGenerateQuadletWithTailscaleTunnel(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"8080:8080"},
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Port:     8080,
+			HTTPS:    443,
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 localhost:8080") {
+		t.Errorf("expected ExecStartPost for tailscale funnel, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 443 off") {
+		t.Errorf("expected ExecStopPost for tailscale funnel, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithTailscaleTunnelCustomPort(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Port:     3001,
+			HTTPS:    8443,
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 localhost:3001") {
+		t.Errorf("expected ExecStartPost with port 8443, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 8443 off") {
+		t.Errorf("expected ExecStopPost with port 8443, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithCloudflareTunnelNoExecPost(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider:   "cloudflare",
+			Port:       3001,
+			TunnelName: "ov-myapp",
+			Hostname:   "app.example.com",
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	// Cloudflare uses a companion service, not ExecStartPost
+	if strings.Contains(got, "ExecStartPost") {
+		t.Errorf("cloudflare tunnel should not have ExecStartPost in container file, got:\n%s", got)
+	}
+}
+
+func TestGenerateTunnelUnit(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "immich-cpu",
+		ImageRef:  "ghcr.io/test/immich-cpu:latest",
+		Workspace: "/home/user/project",
+		Tunnel: &TunnelConfig{
+			Provider:   "cloudflare",
+			Port:       3001,
+			TunnelName: "ov-immich-cpu",
+			Hostname:   "im.example.com",
+		},
+	}
+
+	got := generateTunnelUnit(cfg)
+
+	if !strings.Contains(got, "ov-immich-cpu-tunnel.service") {
+		t.Errorf("expected filename in comment, got:\n%s", got)
+	}
+	if !strings.Contains(got, "BindsTo=ov-immich-cpu.service") {
+		t.Errorf("expected BindsTo, got:\n%s", got)
+	}
+	if !strings.Contains(got, "After=ov-immich-cpu.service") {
+		t.Errorf("expected After, got:\n%s", got)
+	}
+	if !strings.Contains(got, "cloudflared tunnel --config") {
+		t.Errorf("expected cloudflared ExecStart, got:\n%s", got)
+	}
+	if !strings.Contains(got, "run ov-immich-cpu") {
+		t.Errorf("expected tunnel name in ExecStart, got:\n%s", got)
+	}
+	if !strings.Contains(got, "WantedBy=default.target") {
+		t.Errorf("expected WantedBy, got:\n%s", got)
+	}
+}
+
+func TestGenerateTunnelUnitNilTunnel(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "myapp",
+		Tunnel:    nil,
+	}
+
+	got := generateTunnelUnit(cfg)
+	if got != "" {
+		t.Errorf("expected empty string for nil tunnel, got: %s", got)
+	}
+}
+
+func TestTunnelServiceFilename(t *testing.T) {
+	tests := []struct {
+		image string
+		want  string
+	}{
+		{"myapp", "ov-myapp-tunnel.service"},
+		{"immich-cpu", "ov-immich-cpu-tunnel.service"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.image, func(t *testing.T) {
+			got := tunnelServiceFilename(tt.image)
+			if got != tt.want {
+				t.Errorf("tunnelServiceFilename(%q) = %q, want %q", tt.image, got, tt.want)
+			}
+		})
+	}
+}

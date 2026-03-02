@@ -43,8 +43,9 @@ type ImageConfig struct {
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases   []AliasConfig `yaml:"aliases,omitempty"`  // command aliases
 	Builder   string        `yaml:"builder,omitempty"`  // builder image name (per-image, falls back to defaults)
-	FQDN      string        `yaml:"fqdn,omitempty"`     // fully qualified domain name for traefik routing
+	FQDN      string        `yaml:"fqdn,omitempty"`       // fully qualified domain name for traefik routing
 	AcmeEmail string        `yaml:"acme_email,omitempty"` // email for Let's Encrypt notifications
+	Tunnel    *TunnelYAML   `yaml:"tunnel,omitempty"`     // tunnel configuration (tailscale or cloudflare)
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -90,6 +91,9 @@ type ResolvedImage struct {
 	// FQDN and ACME configuration
 	FQDN      string // fully qualified domain name for traefik routing
 	AcmeEmail string // email for Let's Encrypt notifications
+
+	// Tunnel configuration
+	Tunnel *TunnelConfig `json:",omitempty"` // resolved tunnel config (nil if no tunnel)
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -232,6 +236,13 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	resolved.AcmeEmail = img.AcmeEmail
 	if resolved.AcmeEmail == "" {
 		resolved.AcmeEmail = c.Defaults.AcmeEmail
+	}
+
+	// Resolve tunnel: image -> defaults -> nil
+	if img.Tunnel != nil {
+		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.FQDN, nil, nil)
+	} else if c.Defaults.Tunnel != nil {
+		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil)
 	}
 
 	// Home directory will be resolved later (after inspecting base image)

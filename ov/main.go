@@ -144,6 +144,10 @@ func (c *InspectCmd) Run() error {
 			for _, a := range aliases {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
+		case "tunnel":
+			if resolved.Tunnel != nil {
+				fmt.Printf("%s:%d\n", resolved.Tunnel.Provider, resolved.Tunnel.Port)
+			}
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
 		}

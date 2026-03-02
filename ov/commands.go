@@ -94,6 +94,22 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		}
 	}
 
+	// Resolve tunnel config if available
+	var tunnelCfg *TunnelConfig
+	if cfgErr == nil {
+		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
+		if resolveErr == nil && resolved.Tunnel != nil {
+			layers, scanErr := ScanLayers(dir)
+			if scanErr == nil {
+				tunnelYAML := cfg.Images[c.Image].Tunnel
+				if tunnelYAML == nil {
+					tunnelYAML = cfg.Defaults.Tunnel
+				}
+				tunnelCfg = ResolveTunnelConfig(tunnelYAML, c.Image, resolved.FQDN, layers, resolved.Layers)
+			}
+		}
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   c.Image,
 		ImageRef:    imageRef,
@@ -102,6 +118,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Volumes:     volumes,
 		GPU:         gpu,
 		BindAddress: rt.BindAddress,
+		Tunnel:      tunnelCfg,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -120,6 +137,16 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)
+
+	// Write companion tunnel service if cloudflare tunnel is configured
+	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
+		tunnelContent := generateTunnelUnit(qcfg)
+		tunnelPath := filepath.Join(qdir, tunnelServiceFilename(c.Image))
+		if err := os.WriteFile(tunnelPath, []byte(tunnelContent), 0644); err != nil {
+			return fmt.Errorf("writing tunnel service file: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s\n", tunnelPath)
+	}
 
 	cmd := exec.Command("systemctl", "--user", "daemon-reload")
 	if output, err := cmd.CombinedOutput(); err != nil {
@@ -299,6 +326,9 @@ type RemoveCmd struct {
 }
 
 func (c *RemoveCmd) Run() error {
+	// Stop tunnel before removing container (best-effort)
+	stopTunnelForImage(c.Image)
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -319,8 +349,13 @@ func (c *RemoveCmd) Run() error {
 		if err := os.Remove(qpath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing quadlet file: %w", err)
 		}
-
 		fmt.Fprintf(os.Stderr, "Removed %s\n", qpath)
+
+		// Remove companion tunnel service file if it exists
+		tunnelPath := filepath.Join(qdir, tunnelServiceFilename(c.Image))
+		if err := os.Remove(tunnelPath); err == nil {
+			fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
+		}
 
 		cmd := exec.Command("systemctl", "--user", "daemon-reload")
 		if output, err := cmd.CombinedOutput(); err != nil {

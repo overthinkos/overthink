@@ -75,6 +75,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate FQDN and ACME email
 	validateFQDN(cfg, errs)
 
+	// Validate tunnel configuration
+	validateTunnel(cfg, errs)
+
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
@@ -553,6 +556,51 @@ func validateFQDN(cfg *Config, errs *ValidationError) {
 		if img.AcmeEmail != "" && !strings.Contains(img.AcmeEmail, "@") {
 			errs.Add("image %q: acme_email must be a valid email address (got %q)", imageName, img.AcmeEmail)
 		}
+	}
+}
+
+// tunnelNameRe matches valid cloudflare tunnel names
+var tunnelNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]*$`)
+
+// validateTunnel validates tunnel configuration in defaults and images
+func validateTunnel(cfg *Config, errs *ValidationError) {
+	check := func(name string, t *TunnelYAML, fqdn string) {
+		if t == nil {
+			return
+		}
+		if t.Provider != "tailscale" && t.Provider != "cloudflare" {
+			errs.Add("%s: tunnel provider must be \"tailscale\" or \"cloudflare\", got %q", name, t.Provider)
+			return
+		}
+		if t.Port != 0 && (t.Port < 1 || t.Port > 65535) {
+			errs.Add("%s: tunnel port must be 1-65535, got %d", name, t.Port)
+		}
+		if t.Provider == "tailscale" {
+			if t.HTTPS != 0 && !ValidFunnelPorts[t.HTTPS] {
+				errs.Add("%s: tunnel https must be 443, 8443, or 10000, got %d", name, t.HTTPS)
+			}
+		}
+		if t.Provider == "cloudflare" {
+			if fqdn == "" {
+				errs.Add("%s: tunnel provider \"cloudflare\" requires fqdn to be set", name)
+			}
+			if t.Tunnel != "" && !tunnelNameRe.MatchString(t.Tunnel) {
+				errs.Add("%s: tunnel name must match [a-zA-Z0-9][a-zA-Z0-9-]*, got %q", name, t.Tunnel)
+			}
+		}
+	}
+
+	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.FQDN)
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		// Resolve FQDN for the image (image -> defaults)
+		fqdn := img.FQDN
+		if fqdn == "" {
+			fqdn = cfg.Defaults.FQDN
+		}
+		check(fmt.Sprintf("image %q", imageName), img.Tunnel, fqdn)
 	}
 }
 

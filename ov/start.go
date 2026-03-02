@@ -109,7 +109,37 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 	fmt.Println(containerID)
 	fmt.Fprintf(os.Stderr, "Started %s as %s\n", name, containerID)
+
+	// Start tunnel if configured
+	if cfgErr == nil {
+		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
+		if resolveErr == nil && resolved.Tunnel != nil {
+			// Re-resolve with layers for port defaulting
+			layers, scanErr := ScanLayers(dir)
+			if scanErr == nil {
+				tc := ResolveTunnelConfig(
+					c.findTunnelYAML(cfg),
+					c.Image, resolved.FQDN, layers, resolved.Layers,
+				)
+				if tc != nil {
+					if err := TunnelStart(*tc); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
+					}
+				}
+			}
+		}
+	}
+
 	return nil
+}
+
+// findTunnelYAML returns the raw TunnelYAML from config for this image.
+func (c *StartCmd) findTunnelYAML(cfg *Config) *TunnelYAML {
+	img := cfg.Images[c.Image]
+	if img.Tunnel != nil {
+		return img.Tunnel
+	}
+	return cfg.Defaults.Tunnel
 }
 
 func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
@@ -151,6 +181,9 @@ type StopCmd struct {
 }
 
 func (c *StopCmd) Run() error {
+	// Stop tunnel before stopping container (best-effort)
+	stopTunnelForImage(c.Image)
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -179,6 +212,38 @@ func (c *StopCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Stopped %s\n", name)
 	return nil
+}
+
+// stopTunnelForImage attempts to stop any tunnel for the given image (best-effort).
+func stopTunnelForImage(imageName string) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return
+	}
+	resolved, err := cfg.ResolveImage(imageName, "unused")
+	if err != nil || resolved.Tunnel == nil {
+		return
+	}
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return
+	}
+	// Get the raw TunnelYAML
+	img := cfg.Images[imageName]
+	tunnelYAML := img.Tunnel
+	if tunnelYAML == nil {
+		tunnelYAML = cfg.Defaults.Tunnel
+	}
+	tc := ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers)
+	if tc != nil {
+		if err := TunnelStop(*tc); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: tunnel teardown failed: %v\n", err)
+		}
+	}
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.

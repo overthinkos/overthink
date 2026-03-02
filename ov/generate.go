@@ -236,8 +236,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/pixi.lock pixi.lock\n", img.UID, img.GID, layerName))
 			}
 			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/%s %s\n", img.UID, img.GID, layerName, manifest, manifest))
-			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=%s/.cache/pixi,uid=%d,gid=%d \\\n    --mount=type=cache,dst=%s/.cache/rattler,uid=%d,gid=%d \\\n    ",
-				img.Home, img.UID, img.GID, img.Home, img.UID, img.GID)
+			cacheMounts := ""
 			// Install and then remove manifests so they're not included when we COPY the home dir
 			cleanup := fmt.Sprintf(" && rm -f %s pixi.lock", manifest)
 			if manifest == "environment.yml" {

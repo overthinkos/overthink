@@ -221,3 +221,43 @@ images:
       - copr-desktop
       - os-config
       - os-system-files
+
+  immich-cpu:
+    base: fedora
+    fqdn: "immich.example.com"
+    acme_email: "admin@example.com"
+    layers:
+      - nodejs
+      - python
+      - supervisord
+      - postgresql
+      - redis
+      - traefik
+      - immich
+    ports:
+      - "80:8000"
+      - "443:443"
+      - "8080:8080"
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+  immich-cuda:
+    base: fedora
+    fqdn: "immich.example.com"
+    acme_email: "admin@example.com"
+    layers:
+      - nodejs
+      - cuda
+      - python-ml
+      - supervisord
+      - postgresql
+      - redis
+      - traefik
+      - immich
+    ports:
+      - "80:8000"
+      - "443:443"
+      - "8080:8080"
+    platforms:
+      - linux/amd64

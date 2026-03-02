@@ -43,6 +43,8 @@ type ImageConfig struct {
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases   []AliasConfig `yaml:"aliases,omitempty"`  // command aliases
 	Builder   string        `yaml:"builder,omitempty"`  // builder image name (per-image, falls back to defaults)
+	FQDN      string        `yaml:"fqdn,omitempty"`     // fully qualified domain name for traefik routing
+	AcmeEmail string        `yaml:"acme_email,omitempty"` // email for Let's Encrypt notifications
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -84,6 +86,10 @@ type ResolvedImage struct {
 
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
+
+	// FQDN and ACME configuration
+	FQDN      string // fully qualified domain name for traefik routing
+	AcmeEmail string // email for Let's Encrypt notifications
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -214,6 +220,18 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	resolved.Builder = img.Builder
 	if resolved.Builder == "" {
 		resolved.Builder = c.Defaults.Builder
+	}
+
+	// Resolve FQDN: image -> defaults -> ""
+	resolved.FQDN = img.FQDN
+	if resolved.FQDN == "" {
+		resolved.FQDN = c.Defaults.FQDN
+	}
+
+	// Resolve AcmeEmail: image -> defaults -> ""
+	resolved.AcmeEmail = img.AcmeEmail
+	if resolved.AcmeEmail == "" {
+		resolved.AcmeEmail = c.Defaults.AcmeEmail
 	}
 
 	// Home directory will be resolved later (after inspecting base image)

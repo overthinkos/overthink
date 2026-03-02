@@ -1,0 +1,18 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      # Initialize database cluster as user (PostgreSQL refuses to run as root)
+      - |
+        mkdir -p /home/user/.postgresql
+        chown 1000:1000 /home/user/.postgresql
+        su - user -c "initdb -D /home/user/.postgresql/data --auth=trust --encoding=UTF8 --locale=C"
+
+        # Create init SQL script (executed by immich layer on first start)
+        cat > /home/user/.postgresql/init.sql <<'EOF'
+        CREATE DATABASE immich;
+        CREATE USER immich WITH PASSWORD 'immich';
+        GRANT ALL PRIVILEGES ON DATABASE immich TO immich;
+        ALTER DATABASE immich OWNER TO immich;
+        EOF
+        chown 1000:1000 /home/user/.postgresql/init.sql

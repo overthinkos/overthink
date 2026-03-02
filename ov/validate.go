@@ -72,6 +72,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate builder
 	validateBuilder(cfg, layers, errs)
 
+	// Validate FQDN and ACME email
+	validateFQDN(cfg, errs)
+
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
@@ -139,6 +142,25 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 				} else {
 					errs.Add("layer %q depends: unknown layer %q", name, dep)
 				}
+			}
+		}
+
+		// Validate extract field
+		for _, ext := range layer.Extract() {
+			if ext.Source == "" {
+				errs.Add("layer %q: extract source cannot be empty", name)
+			}
+			if ext.Path == "" {
+				errs.Add("layer %q: extract path cannot be empty", name)
+			}
+			if ext.Dest == "" {
+				errs.Add("layer %q: extract dest cannot be empty", name)
+			}
+			if ext.Path != "" && !strings.HasPrefix(ext.Path, "/") {
+				errs.Add("layer %q: extract path must be absolute (got %q)", name, ext.Path)
+			}
+			if ext.Dest != "" && !strings.HasPrefix(ext.Dest, "/") {
+				errs.Add("layer %q: extract dest must be absolute (got %q)", name, ext.Dest)
 			}
 		}
 	}
@@ -492,6 +514,44 @@ func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 
 		if needsBuilder && resolvedBuilder == "" {
 			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder or image builder in images.yml)", imageName)
+		}
+	}
+}
+
+// validateFQDN validates FQDN and ACME email fields
+func validateFQDN(cfg *Config, errs *ValidationError) {
+	// Validate defaults.fqdn if set
+	if cfg.Defaults.FQDN != "" {
+		if !strings.Contains(cfg.Defaults.FQDN, ".") {
+			errs.Add("defaults.fqdn: must be a valid domain name (got %q)", cfg.Defaults.FQDN)
+		}
+		if strings.HasPrefix(cfg.Defaults.FQDN, ".") || strings.HasSuffix(cfg.Defaults.FQDN, ".") {
+			errs.Add("defaults.fqdn: cannot start or end with a dot (got %q)", cfg.Defaults.FQDN)
+		}
+	}
+
+	// Validate defaults.acme_email if set
+	if cfg.Defaults.AcmeEmail != "" && !strings.Contains(cfg.Defaults.AcmeEmail, "@") {
+		errs.Add("defaults.acme_email: must be a valid email address (got %q)", cfg.Defaults.AcmeEmail)
+	}
+
+	// Validate each enabled image's FQDN and ACME email
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+
+		if img.FQDN != "" {
+			if !strings.Contains(img.FQDN, ".") {
+				errs.Add("image %q: fqdn must be a valid domain name (got %q)", imageName, img.FQDN)
+			}
+			if strings.HasPrefix(img.FQDN, ".") || strings.HasSuffix(img.FQDN, ".") {
+				errs.Add("image %q: fqdn cannot start or end with a dot (got %q)", imageName, img.FQDN)
+			}
+		}
+
+		if img.AcmeEmail != "" && !strings.Contains(img.AcmeEmail, "@") {
+			errs.Add("image %q: acme_email must be a valid email address (got %q)", imageName, img.AcmeEmail)
 		}
 	}
 }

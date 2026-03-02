@@ -22,6 +22,13 @@ type AliasYAML struct {
 	Command string `yaml:"command"`
 }
 
+// ExtractYAML represents a file extraction from a Docker image
+type ExtractYAML struct {
+	Source string `yaml:"source"` // Source image (e.g., "ghcr.io/immich-app/immich-server:v1.106.4")
+	Path   string `yaml:"path"`   // Path to extract (e.g., "/usr/src/app")
+	Dest   string `yaml:"dest"`   // Destination in target image (e.g., "/opt/immich/server")
+}
+
 // LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
 	Depends    []string          `yaml:"depends,omitempty"`
@@ -34,6 +41,7 @@ type LayerYAML struct {
 	Deb        *DebConfig        `yaml:"deb,omitempty"`
 	Volumes    []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases    []AliasYAML       `yaml:"aliases,omitempty"`
+	Extract    []ExtractYAML     `yaml:"extract,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -82,6 +90,7 @@ type Layer struct {
 	HasVolumes        bool
 	HasAliases        bool
 	HasPixiLock       bool
+	HasExtract        bool
 	Depends           []string
 
 	// Pre-populated from layer.yml
@@ -93,6 +102,7 @@ type Layer struct {
 	serviceConf string
 	volumes     []VolumeYAML
 	aliases     []AliasYAML
+	extract     []ExtractYAML
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -208,6 +218,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate aliases
 		layer.HasAliases = len(ly.Aliases) > 0
 		layer.aliases = ly.Aliases
+
+		// Pre-populate extract
+		layer.HasExtract = len(ly.Extract) > 0
+		layer.extract = ly.Extract
 	}
 
 	return layer, nil
@@ -305,6 +319,11 @@ func LayerNames(layers map[string]*Layer) []string {
 // Volumes returns the volume declarations (pre-populated from layer.yml)
 func (l *Layer) Volumes() []VolumeYAML {
 	return l.volumes
+}
+
+// Extract returns the extract declarations (pre-populated from layer.yml)
+func (l *Layer) Extract() []ExtractYAML {
+	return l.extract
 }
 
 // ServiceLayers returns layers that have supervisord.conf

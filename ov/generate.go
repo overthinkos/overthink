@@ -267,6 +267,18 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
+	// Emit extraction stages for layers with extract field
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasExtract {
+			continue
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			b.WriteString(fmt.Sprintf("FROM %s AS %s\n\n", ext.Source, stageName))
+		}
+	}
+
 	// Check if this is a service image (has supervisord layers)
 	hasServices := false
 	for _, layerName := range layerOrder {
@@ -289,7 +301,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Generate traefik routes file and scratch stage if needed
 	if hasRoutes {
-		if err := g.generateTraefikRoutes(imageName, layerOrder); err != nil {
+		if err := g.generateTraefikRoutes(imageName, layerOrder, img); err != nil {
 			return err
 		}
 		b.WriteString("FROM scratch AS traefik-routes\n")
@@ -385,6 +397,29 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 	if hasNpm {
+		b.WriteString("\n")
+	}
+
+	// Copy extracted files from multi-stage builds
+	hasExtract := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasExtract {
+			continue
+		}
+		if !hasExtract {
+			b.WriteString("# Copy extracted files from Docker images\n")
+			b.WriteString("USER root\n")
+			hasExtract = true
+		}
+		for i, ext := range layer.Extract() {
+			stageName := fmt.Sprintf("%s-extract-%d", layerName, i)
+			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
+				stageName, img.UID, img.GID, ext.Path, ext.Dest))
+		}
+	}
+	if hasExtract {
+		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 		b.WriteString("\n")
 	}
 
@@ -576,7 +611,7 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route layers
-func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string) error {
+func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string, img *ResolvedImage) error {
 	var b strings.Builder
 
 	b.WriteString("# .build/" + imageName + "/traefik-routes.yml (generated -- do not edit)\n")
@@ -602,11 +637,19 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string)
 	}
 
 	for _, r := range routes {
+		// Use image FQDN if configured, otherwise layer's host
+		host := r.cfg.Host
+		if img.FQDN != "" {
+			host = img.FQDN
+		}
+
 		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
-		b.WriteString(fmt.Sprintf("      rule: \"Host(`%s`)\"\n", r.cfg.Host))
+		b.WriteString(fmt.Sprintf("      rule: \"Host(`%s`)\"\n", host))
 		b.WriteString(fmt.Sprintf("      service: %s\n", r.name))
 		b.WriteString("      entryPoints:\n")
-		b.WriteString("        - web\n")
+		b.WriteString("        - websecure\n")
+		b.WriteString("      tls:\n")
+		b.WriteString("        certResolver: letsencrypt\n")
 	}
 
 	b.WriteString("  services:\n")

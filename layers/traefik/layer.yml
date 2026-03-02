@@ -4,6 +4,11 @@ depends:
 ports:
   - 8000
   - 8080
+  - 443
+
+volumes:
+  - name: certs
+    path: "~/.traefik/acme"
 
 service: |
   [program:traefik]

@@ -1,0 +1,73 @@
+depends:
+  - supervisord
+  - nodejs
+  - python
+  - postgresql
+  - redis
+
+extract:
+  - source: "ghcr.io/immich-app/immich-server:v1.106.4"
+    path: "/usr/src/app"
+    dest: "/opt/immich/server"
+  - source: "ghcr.io/immich-app/immich-machine-learning:v1.106.4"
+    path: "/usr/src/app"
+    dest: "/opt/immich/machine-learning"
+
+env:
+  IMMICH_VERSION: "v1.106.4"
+  IMMICH_HOST: "0.0.0.0"
+  IMMICH_PORT: "3001"
+  IMMICH_MEDIA_LOCATION: "~/.immich/library"
+  IMMICH_MACHINE_LEARNING_URL: "http://127.0.0.1:3003"
+  DB_HOSTNAME: "127.0.0.1"
+  DB_PORT: "5432"
+  DB_USERNAME: "immich"
+  DB_PASSWORD: "immich"
+  DB_DATABASE_NAME: "immich"
+  REDIS_HOSTNAME: "127.0.0.1"
+  REDIS_PORT: "6379"
+  NODE_ENV: "production"
+  MACHINE_LEARNING_HOST: "0.0.0.0"
+  MACHINE_LEARNING_PORT: "3003"
+  MACHINE_LEARNING_WORKERS: "1"
+  MACHINE_LEARNING_WORKER_TIMEOUT: "120"
+  TRANSFORMERS_CACHE: "~/.immich/models"
+
+ports:
+  - 3001
+  - 3003
+
+volumes:
+  - name: library
+    path: "~/.immich/library"
+  - name: cache
+    path: "~/.immich/cache"
+  - name: models
+    path: "~/.immich/models"
+
+route:
+  host: "immich.localhost"
+  port: 3001
+
+service: |
+  [program:immich-server]
+  command=node /opt/immich/server/dist/main
+  directory=/opt/immich/server
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+  priority=30
+  user=%(ENV_USER)s
+
+  [program:immich-ml]
+  command=python -m uvicorn app.main:app --host 0.0.0.0 --port 3003 --workers 1
+  directory=/opt/immich/machine-learning
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+  priority=40
+  user=%(ENV_USER)s

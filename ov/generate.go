@@ -289,18 +289,21 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	// Check if this image has route layers
+	// Check if this image has route layers and traefik
 	hasRoutes := false
+	hasTraefik := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasRoute {
 			hasRoutes = true
-			break
+		}
+		if layerName == "traefik" {
+			hasTraefik = true
 		}
 	}
 
-	// Generate traefik routes file and scratch stage if needed
-	if hasRoutes {
+	// Generate traefik routes only when traefik is actually present
+	if hasRoutes && hasTraefik {
 		if err := g.generateTraefikRoutes(imageName, layerOrder, img); err != nil {
 			return err
 		}
@@ -426,7 +429,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Process each layer
 	// Post-layer steps (supervisord, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
-	needsRootAfter := hasServices || hasRoutes || img.Bootc
+	needsRootAfter := hasServices || (hasRoutes && hasTraefik) || img.Bootc
 	inUserMode := false
 	for i, layerName := range layerOrder {
 		isLast := i == len(layerOrder)-1
@@ -441,7 +444,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Copy traefik dynamic routes if needed
-	if hasRoutes {
+	if hasRoutes && hasTraefik {
 		b.WriteString("# Traefik dynamic routes\n")
 		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
 	}

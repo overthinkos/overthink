@@ -449,6 +449,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 }
 
 func TestValidateRouteWithoutTraefik(t *testing.T) {
+	// Route without traefik is valid — routes are generic metadata consumed by traefik or tunnel
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"test": {Layers: []string{"svc"}},
@@ -456,19 +457,16 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:     "svc",
-			HasRoute: true,
+			Name:       "svc",
+			HasRoute:   true,
 			HasUserYml: true,
-			route:    &RouteConfig{Host: "svc.localhost", Port: "8080"},
+			route:      &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
 
 	err := Validate(cfg, layers)
-	if err == nil {
-		t.Error("expected error for route without traefik")
-	}
-	if !strings.Contains(err.Error(), "traefik layer is not reachable") {
-		t.Errorf("unexpected error: %v", err)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
 	}
 }
 

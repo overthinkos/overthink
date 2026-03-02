@@ -321,35 +321,8 @@ func validateRoutes(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		}
 	}
 
-	// For each image with route layers, traefik must be reachable
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		hasRoute := false
-		hasTraefik := false
-
-		// Resolve full layer order for this image (includes transitive deps)
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
-		if err != nil {
-			continue // layer DAG validation will catch this
-		}
-
-		for _, layerName := range resolved {
-			if layer, ok := layers[layerName]; ok {
-				if layer.HasRoute {
-					hasRoute = true
-				}
-				if layerName == "traefik" {
-					hasTraefik = true
-				}
-			}
-		}
-
-		if hasRoute && !hasTraefik {
-			errs.Add("image %q: has layers with route files but traefik layer is not reachable", imageName)
-		}
-	}
+	// Route is generic service metadata consumed by traefik, tunnel, or both.
+	// No validation requiring traefik — images may use tunnels instead.
 }
 
 // validateMergeConfig validates merge configuration

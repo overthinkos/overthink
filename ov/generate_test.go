@@ -98,6 +98,59 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 	}
 }
 
+func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
+	// When an image has route layers but no traefik layer,
+	// traefik-routes.yml should NOT be generated
+	tmpDir := t.TempDir()
+
+	g := &Generator{
+		BuildDir: tmpDir,
+		Config:   &Config{},
+		Layers: map[string]*Layer{
+			"svc": {
+				Name:       "svc",
+				HasRoute:   true,
+				HasUserYml: true,
+				route:      &RouteConfig{Host: "svc.localhost", Port: "9090"},
+			},
+		},
+		Images: map[string]*ResolvedImage{
+			"test-image": {
+				Name:           "test-image",
+				Base:           "quay.io/fedora/fedora:43",
+				IsExternalBase: true,
+				Registry:       "ghcr.io/test",
+				Tag:            "latest",
+				FullTag:        "ghcr.io/test/test-image:latest",
+				Layers:         []string{"svc"},
+				Pkg:            "rpm",
+				User:           "user",
+				UID:            1000,
+				GID:            1000,
+				Home:           "/home/user",
+			},
+		},
+		Containerfiles: make(map[string]string),
+	}
+
+	err := g.generateContainerfile("test-image")
+	if err != nil {
+		t.Fatalf("generateContainerfile() error = %v", err)
+	}
+
+	// traefik-routes.yml should NOT exist
+	_, err = os.ReadFile(tmpDir + "/test-image/traefik-routes.yml")
+	if err == nil {
+		t.Error("traefik-routes.yml should NOT be generated when traefik layer is absent")
+	}
+
+	// Containerfile should NOT reference traefik-routes
+	content := g.Containerfiles["test-image"]
+	if strings.Contains(content, "traefik-routes") {
+		t.Error("Containerfile should not reference traefik-routes when traefik layer is absent")
+	}
+}
+
 func TestGenerateSupervisordFragments(t *testing.T) {
 	tmpDir := t.TempDir()
 

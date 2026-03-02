@@ -235,10 +235,9 @@ images:
       - supervisord
       - postgresql
       - redis
-      - traefik
       - immich
     ports:
-      - "8080:8080"
+      - "3001:3001"
     platforms:
       - linux/amd64
       - linux/arm64
@@ -254,11 +253,8 @@ images:
       - supervisord
       - postgresql
       - redis
-      - traefik
       - immich
     ports:
-      - "80:8000"
-      - "443:443"
-      - "8080:8080"
+      - "3001:3001"
     platforms:
       - linux/amd64

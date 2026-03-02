@@ -20,7 +20,7 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "myapp", "/home/user")
+	mounts, err := CollectImageVolumes(cfg, layers, "myapp", "/home/user", nil)
 	if err != nil {
 		t.Fatalf("CollectImageVolumes() error = %v", err)
 	}
@@ -55,7 +55,7 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user")
+	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
 		t.Fatalf("CollectImageVolumes() error = %v", err)
 	}
@@ -92,7 +92,7 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user")
+	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
 		t.Fatalf("CollectImageVolumes() error = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestCollectImageVolumesNoVolumes(t *testing.T) {
 		"plain": {Name: "plain", HasUserYml: true},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "base", "/home/user")
+	mounts, err := CollectImageVolumes(cfg, layers, "base", "/home/user", nil)
 	if err != nil {
 		t.Fatalf("CollectImageVolumes() error = %v", err)
 	}

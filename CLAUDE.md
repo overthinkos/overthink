@@ -385,10 +385,57 @@ ov crypto status <image>                   # Show status of all encrypted bind m
 - Name, path required; name must match volume name regex
 - No duplicate names within an image
 - Encrypted: host must be empty; plain: host required
-- Names must not collide with layer volume names
+- Names matching layer volume names override the volume (note on stderr, not an error)
 - Warning if `gocryptfs` not in PATH (when encrypted mounts exist)
 
 Source: `ov/crypto.go` (types, commands, resolution, crypto unit generation), `ov/validate.go` (`validateBindMounts`).
+
+### Bind Mount / Volume Override
+
+When a bind mount has the same name as a layer volume, the bind mount **overrides** the volume. The named volume is not created for that name -- the bind mount is used instead. This is reported as an informational note on stderr, not a validation error. This allows deploy.yml to replace layer-declared volumes with encrypted bind mounts.
+
+### Single Password for Encrypted Volumes
+
+When an image has multiple encrypted bind mounts, `ov crypto init`, `ov crypto mount`, and the generated crypto systemd unit all use `systemd-ask-password --id=ov-<image>` to cache the passphrase in the kernel keyring. The password is prompted once and reused for all volumes of the same image.
+
+---
+
+## Deploy Overlay (`deploy.yml`)
+
+Per-machine deployment overrides stored at `~/.config/ov/deploy.yml`. NOT checked into git. Only runtime/deployment fields are supported -- build-time fields are structurally excluded.
+
+### Configuration
+
+```yaml
+images:
+  immich-cuda:
+    tunnel:
+      provider: cloudflare
+      port: 2283
+    fqdn: "im.example.com"
+    acme_email: "admin@example.com"
+    bind_mounts:
+      - name: library
+        path: "~/.immich/library"
+        encrypted: true
+      - name: cache
+        path: "~/.immich/cache"
+        encrypted: true
+    ports:
+      - "2283:2283"
+```
+
+### Allowed Fields
+
+Only deployment/runtime fields: `tunnel`, `fqdn`, `acme_email`, `bind_mounts`, `ports`. Build-time fields (`base`, `layers`, `platforms`, `pkg`, `builder`, etc.) are structurally excluded by the `DeployImageConfig` type.
+
+### Merge Semantics
+
+- Field-level **replace** (not deep-merge). Deploy.yml value fully replaces images.yml value.
+- Unknown images in deploy.yml are silently ignored.
+- Merge happens in `LoadConfig()` so all commands (`ov validate`, `ov shell`, `ov enable`, etc.) see the merged view.
+
+Source: `ov/deploy.go` (`DeployConfig`, `DeployImageConfig`, `LoadDeployConfig`, `MergeDeployOverlay`, `BindMountNames`).
 
 ---
 
@@ -585,6 +632,7 @@ project/
 |   +-- transfer.go                     # Cross-engine image transfer (LocalImageExists, TransferImage, EnsureImage)
 |   +-- volumes.go                      # Named volume collection + mounting
 |   +-- alias.go                        # Command aliases (wrapper scripts, collection, CLI commands)
+|   +-- deploy.go                       # Per-deployment config overlay (~/.config/ov/deploy.yml)
 |   +-- crypto.go                       # Bind mounts (plain + gocryptfs encrypted), crypto CLI commands
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)

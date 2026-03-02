@@ -86,12 +86,12 @@ func defaultIsEncryptedMounted(plainDir string) bool {
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 2 {
+		if len(fields) >= 3 {
 			mountPoint, err := filepath.EvalSymlinks(fields[1])
 			if err != nil {
 				mountPoint = fields[1]
 			}
-			if mountPoint == resolved {
+			if mountPoint == resolved && fields[2] == "fuse.gocryptfs" {
 				return true
 			}
 		}
@@ -104,7 +104,35 @@ type CryptoCmd struct {
 	Init    CryptoInitCmd    `cmd:"" help:"Initialize gocryptfs cipher directories"`
 	Mount   CryptoMountCmd   `cmd:"" help:"Mount encrypted volumes (interactive password)"`
 	Unmount CryptoUnmountCmd `cmd:"" help:"Unmount encrypted volumes"`
+	Passwd  CryptoPasswdCmd  `cmd:"" help:"Change encryption password"`
 	Status  CryptoStatusCmd  `cmd:"" help:"Show status of all encrypted bind mounts"`
+}
+
+// cryptoExtpassArgs returns gocryptfs -extpass arguments for CLI commands.
+// Uses a temp script file because gocryptfs's flag parser normalizes multi-flag
+// values (turns -c into --c). The script checks GOCRYPTFS_PASSWORD env var first
+// (for testing/CI), then falls back to systemd-ask-password with /dev/tty redirect
+// so it works regardless of whether gocryptfs connects stdin to the child process.
+// Caller must defer the returned cleanup function.
+func cryptoExtpassArgs(imageID string) ([]string, func()) {
+	script := "#!/bin/bash\n" +
+		"if [ -n \"$GOCRYPTFS_PASSWORD\" ]; then\n" +
+		"  printf '%s' \"$GOCRYPTFS_PASSWORD\"\n" +
+		"else\n" +
+		"  exec 0</dev/tty\n" +
+		"  systemd-ask-password --id=" + imageID + " --timeout=0 --echo=masked 'Passphrase for " + imageID + ":'\n" +
+		"fi\n"
+
+	f, err := os.CreateTemp("", "ov-extpass-*.sh")
+	if err != nil {
+		// Fall back to inline systemd-ask-password (won't work headlessly)
+		ep := "systemd-ask-password --id=" + imageID + " --timeout=0 --echo=masked Passphrase"
+		return []string{"-extpass", ep}, func() {}
+	}
+	f.WriteString(script)
+	f.Chmod(0700)
+	f.Close()
+	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()) }
 }
 
 // CryptoInitCmd initializes gocryptfs cipher directories
@@ -118,6 +146,10 @@ func (c *CryptoInitCmd) Run() error {
 	if err != nil {
 		return err
 	}
+
+	volID := "ov-" + c.Image
+	extpassArgs, cleanup := cryptoExtpassArgs(volID)
+	defer cleanup()
 
 	for _, m := range mounts {
 		if c.Volume != "" && m.Name != c.Volume {
@@ -140,9 +172,10 @@ func (c *CryptoInitCmd) Run() error {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
-		// Run gocryptfs -init
-		cmd := exec.Command("gocryptfs", "-init", cipherDir)
-		cmd.Stdin = os.Stdin
+		// Run gocryptfs -init with shared password
+		args := append([]string{"-init"}, extpassArgs...)
+		args = append(args, cipherDir)
+		cmd := exec.Command("gocryptfs", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -164,6 +197,11 @@ func (c *CryptoMountCmd) Run() error {
 	if err != nil {
 		return err
 	}
+
+	// Use per-image password ID so all volumes share a single prompt
+	volID := "ov-" + c.Image
+	extpassArgs, cleanup := cryptoExtpassArgs(volID)
+	defer cleanup()
 
 	for _, m := range mounts {
 		if c.Volume != "" && m.Name != c.Volume {
@@ -187,10 +225,8 @@ func (c *CryptoMountCmd) Run() error {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
-		volName := encryptedVolumeName(c.Image, m.Name)
-		extpass := fmt.Sprintf("systemd-ask-password --timeout=0 --echo=masked 'Passphrase for %s:'", volName)
-		cmd := exec.Command("gocryptfs", "-extpass", extpass, "-allow_other", cipherDir, plainDir)
-		cmd.Stdin = os.Stdin
+		args := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+		cmd := exec.Command("gocryptfs", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -270,6 +306,99 @@ func (c *CryptoStatusCmd) Run() error {
 	return nil
 }
 
+// askPassword prompts for a password using systemd-ask-password.
+// id is a unique identifier for kernel keyring caching, prompt is shown to the user.
+var askPassword = defaultAskPassword
+
+func defaultAskPassword(id, prompt string) (string, error) {
+	cmd := exec.Command("systemd-ask-password",
+		"--id="+id, "--timeout=0", "--echo=masked", prompt)
+	// Ensure tty access for interactive prompt
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("systemd-ask-password: %w", err)
+	}
+	return strings.TrimRight(string(out), "\n"), nil
+}
+
+// CryptoPasswdCmd changes the encryption password for all encrypted volumes of an image.
+type CryptoPasswdCmd struct {
+	Image string `arg:"" help:"Image name from images.yml"`
+}
+
+func (c *CryptoPasswdCmd) Run() error {
+	mounts, storagePath, err := loadEncryptedMounts(c.Image)
+	if err != nil {
+		return err
+	}
+
+	if len(mounts) == 0 {
+		return fmt.Errorf("image %q has no encrypted bind mounts", c.Image)
+	}
+
+	// All volumes must be unmounted before changing password
+	for _, m := range mounts {
+		plainDir := encryptedPlainDir(storagePath, c.Image, m.Name)
+		if isEncryptedMounted(plainDir) {
+			return fmt.Errorf("encrypted volume %q is still mounted; run 'ov crypto unmount %s' first", m.Name, c.Image)
+		}
+	}
+
+	volID := "ov-" + c.Image
+
+	oldPass, err := askPassword(volID+"-old", "Current passphrase:")
+	if err != nil {
+		return err
+	}
+
+	newPass, err := askPassword(volID+"-new", "New passphrase:")
+	if err != nil {
+		return err
+	}
+
+	confirmPass, err := askPassword(volID+"-confirm", "Confirm new passphrase:")
+	if err != nil {
+		return err
+	}
+
+	if newPass != confirmPass {
+		return fmt.Errorf("new passphrase and confirmation do not match")
+	}
+
+	for _, m := range mounts {
+		cipherDir := encryptedCipherDir(storagePath, c.Image, m.Name)
+
+		if !isEncryptedInitialized(cipherDir) {
+			fmt.Fprintf(os.Stderr, "%s: not initialized, skipping\n", m.Name)
+			continue
+		}
+
+		// Create temp extpass script that supplies the old password
+		oldScript, err := os.CreateTemp("", "ov-oldpass-*.sh")
+		if err != nil {
+			return fmt.Errorf("creating temp script for %s: %w", m.Name, err)
+		}
+		oldScript.WriteString("#!/bin/bash\nprintf '%s' '" + strings.ReplaceAll(oldPass, "'", "'\\''") + "'\n")
+		oldScript.Chmod(0700)
+		oldScript.Close()
+
+		// Pipe new password via stdin to gocryptfs -passwd
+		cmd := exec.Command("gocryptfs", "-passwd", "-extpass", oldScript.Name(), cipherDir)
+		cmd.Stdin = strings.NewReader(newPass)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		runErr := cmd.Run()
+		os.Remove(oldScript.Name())
+		if runErr != nil {
+			return fmt.Errorf("changing password for %s: %w", m.Name, runErr)
+		}
+		fmt.Fprintf(os.Stderr, "Password changed for %s\n", m.Name)
+	}
+	return nil
+}
+
 // loadEncryptedMounts loads the encrypted bind mounts for an image and returns them
 // along with the resolved encrypted storage path.
 func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
@@ -326,12 +455,17 @@ func generateCryptoUnit(imageName string, mounts []ResolvedBindMount, storagePat
 	b.WriteString("Type=oneshot\n")
 	b.WriteString("RemainAfterExit=yes\n")
 
+	// Use per-image password ID so all volumes share a single prompt.
+	// Each ExecStart checks if already FUSE-mounted (e.g. via ov crypto mount) and skips if so.
+	// Quoting: outer double-quotes (systemd), inner single-quotes (bash → gocryptfs extpass).
+	volID := "ov-" + imageName
+	extpass := fmt.Sprintf("systemd-ask-password --id=%s --timeout=0 --echo=masked Passphrase:", volID)
+
 	for _, m := range encrypted {
-		volName := encryptedVolumeName(imageName, m.Name)
 		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
 		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
-		extpass := fmt.Sprintf("systemd-ask-password --timeout=0 --echo=masked 'Passphrase for %s:'", volName)
-		b.WriteString(fmt.Sprintf("ExecStart=gocryptfs -extpass \"%s\" -allow_other %s %s\n", extpass, cipherDir, plainDir))
+		b.WriteString(fmt.Sprintf("ExecStart=/bin/bash -c \"findmnt -n -o FSTYPE %s 2>/dev/null | grep -q fuse.gocryptfs && exit 0; gocryptfs -extpass '%s' -allow_other %s %s\"\n",
+			plainDir, extpass, cipherDir, plainDir))
 	}
 	for _, m := range encrypted {
 		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)

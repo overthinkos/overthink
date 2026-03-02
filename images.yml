@@ -229,11 +229,6 @@ images:
 
   immich:
     base: fedora-nonfree
-    fqdn: "im.atradev.org"
-    acme_email: "atrawog@gmail.com"
-    tunnel:
-      provider: cloudflare
-      port: 2283
     layers:
       - node24
       - supervisord
@@ -248,9 +243,6 @@ images:
 
   immich-cuda:
     base: fedora
-    tunnel:
-      provider: tailscale
-      port: 2283
     layers:
       - node24
       - cuda

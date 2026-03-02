@@ -49,6 +49,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
+	uid, gid := 1000, 1000 // defaults
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -58,11 +59,12 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
+		uid, gid = resolved.UID, resolved.GID
 		layers, err := ScanLayers(dir)
 		if err != nil {
 			return err
 		}
-		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 		if err != nil {
 			return err
 		}
@@ -126,6 +128,8 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		GPU:         gpu,
 		BindAddress: rt.BindAddress,
 		Tunnel:      tunnelCfg,
+		UID:         uid,
+		GID:         gid,
 	}
 
 	content := generateQuadlet(qcfg)

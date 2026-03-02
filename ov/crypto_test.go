@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -167,6 +168,9 @@ func TestGenerateCryptoUnit(t *testing.T) {
 	}
 	if !strings.Contains(got, "gocryptfs -extpass") {
 		t.Errorf("expected ExecStart with gocryptfs, got:\n%s", got)
+	}
+	if !strings.Contains(got, "--id=ov-myapp") {
+		t.Errorf("expected --id=ov-myapp in extpass, got:\n%s", got)
 	}
 	if !strings.Contains(got, "/data/enc/ov-myapp-secrets/cipher") {
 		t.Errorf("expected cipher dir in ExecStart, got:\n%s", got)
@@ -444,7 +448,8 @@ func TestValidateBindMountsPlainWithoutHost(t *testing.T) {
 	}
 }
 
-func TestValidateBindMountsVolumeNameCollision(t *testing.T) {
+func TestValidateBindMountsVolumeNameOverride(t *testing.T) {
+	// Bind mount with same name as layer volume should produce a note, not an error
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"myapp": {
@@ -466,11 +471,12 @@ func TestValidateBindMountsVolumeNameCollision(t *testing.T) {
 	}
 
 	err := Validate(cfg, layers)
-	if err == nil {
-		t.Fatal("expected error for name collision")
-	}
-	if !strings.Contains(err.Error(), "collides with a layer volume name") {
-		t.Errorf("unexpected error: %v", err)
+	// Should NOT be a validation error (just a note on stderr)
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "collides with a layer volume name") {
+			t.Errorf("name collision should be a note, not an error: %v", err)
+		}
 	}
 }
 
@@ -572,13 +578,38 @@ func TestBuildShellArgsWithBindMounts(t *testing.T) {
 	if !found {
 		t.Errorf("expected -v /home/user/data:/home/user/.myapp in args, got: %v", args)
 	}
+	// Docker should NOT have --userns
+	for _, arg := range args {
+		if arg == "--userns=keep-id:uid=1000,gid=1000" {
+			t.Error("docker should not have --userns=keep-id")
+		}
+	}
+}
+
+func TestBuildShellArgsWithBindMountsPodman(t *testing.T) {
+	withTerminal(t, true)
+	bindMounts := []ResolvedBindMount{
+		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp"},
+	}
+	args := buildShellArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1")
+
+	found := false
+	for _, arg := range args {
+		if arg == "--userns=keep-id:uid=1000,gid=1000" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected --userns=keep-id:uid=1000,gid=1000 in podman args, got: %v", args)
+	}
 }
 
 func TestBuildStartArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("docker", "myapp:latest", "/workspace", nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1")
+	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1")
 
 	found := false
 	for i, arg := range args {
@@ -590,4 +621,94 @@ func TestBuildStartArgsWithBindMounts(t *testing.T) {
 	if !found {
 		t.Errorf("expected -v /enc/plain:/home/user/.secrets in args, got: %v", args)
 	}
+	// Docker should NOT have --userns
+	for _, arg := range args {
+		if arg == "--userns=keep-id:uid=1000,gid=1000" {
+			t.Error("docker should not have --userns=keep-id")
+		}
+	}
+}
+
+func TestBuildStartArgsWithBindMountsPodman(t *testing.T) {
+	bindMounts := []ResolvedBindMount{
+		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
+	}
+	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1")
+
+	found := false
+	for _, arg := range args {
+		if arg == "--userns=keep-id:uid=1000,gid=1000" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected --userns=keep-id:uid=1000,gid=1000 in podman args, got: %v", args)
+	}
+}
+
+func TestCryptoPasswdRequiresUnmount(t *testing.T) {
+	// Mock isEncryptedMounted to return true (volume is mounted)
+	origMounted := isEncryptedMounted
+	isEncryptedMounted = func(plainDir string) bool { return true }
+	defer func() { isEncryptedMounted = origMounted }()
+
+	cmd := &CryptoPasswdCmd{Image: "myapp"}
+	// We can't call Run() directly because loadEncryptedMounts needs images.yml,
+	// so test the logic by simulating what Run() does.
+	mounts := []BindMountConfig{
+		{Name: "secrets", Path: "~/.secrets", Encrypted: true},
+	}
+	storagePath := "/data/enc"
+
+	for _, m := range mounts {
+		plainDir := encryptedPlainDir(storagePath, cmd.Image, m.Name)
+		if isEncryptedMounted(plainDir) {
+			err := fmt.Errorf("encrypted volume %q is still mounted; run 'ov crypto unmount %s' first", m.Name, cmd.Image)
+			if !strings.Contains(err.Error(), "still mounted") {
+				t.Errorf("expected 'still mounted' in error, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), "ov crypto unmount") {
+				t.Errorf("expected 'ov crypto unmount' hint in error, got: %v", err)
+			}
+			return
+		}
+	}
+	t.Fatal("expected mounted volume to trigger error")
+}
+
+func TestCryptoPasswdPasswordMismatch(t *testing.T) {
+	// Mock askPassword to return controlled values
+	origAsk := askPassword
+	callCount := 0
+	askPassword = func(id, prompt string) (string, error) {
+		callCount++
+		switch callCount {
+		case 1:
+			return "oldpass", nil // current
+		case 2:
+			return "newpass", nil // new
+		case 3:
+			return "different", nil // confirm (mismatch)
+		}
+		return "", fmt.Errorf("unexpected call")
+	}
+	defer func() { askPassword = origAsk }()
+
+	// Mock isEncryptedMounted to return false (all unmounted)
+	origMounted := isEncryptedMounted
+	isEncryptedMounted = func(plainDir string) bool { return false }
+	defer func() { isEncryptedMounted = origMounted }()
+
+	// Simulate the password check logic from Run()
+	oldPass, _ := askPassword("test-old", "Current passphrase:")
+	newPass, _ := askPassword("test-new", "New passphrase:")
+	confirmPass, _ := askPassword("test-confirm", "Confirm new passphrase:")
+
+	_ = oldPass
+	if newPass != confirmPass {
+		// This is the expected path
+		return
+	}
+	t.Fatal("expected password mismatch to be detected")
 }

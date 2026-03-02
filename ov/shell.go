@@ -85,7 +85,7 @@ func (c *ShellCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 		if err != nil {
 			return err
 		}
@@ -189,6 +189,9 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	}
 	for _, bm := range bindMounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
+	}
+	if engine == "podman" && len(bindMounts) > 0 {
+		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))
 	}
 	args = append(args, "--entrypoint", "bash", imageRef)
 	if command != "" {

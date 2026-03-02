@@ -114,6 +114,13 @@ func LoadConfig(dir string) (*Config, error) {
 		return nil, fmt.Errorf("parsing images.yml: %w", err)
 	}
 
+	// Merge per-deployment overrides from deploy.yml
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		return nil, err
+	}
+	MergeDeployOverlay(&cfg, dc)
+
 	return &cfg, nil
 }
 

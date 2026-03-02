@@ -14,7 +14,7 @@ type VolumeMount struct {
 // full image chain (image → base → base's base) and collecting volume
 // declarations from all layers. Volumes are deduplicated by name (first
 // declaration wins — outermost image takes priority).
-func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string, home string) ([]VolumeMount, error) {
+func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
 	// Collect all layer names from the image chain (outermost first)
 	var allLayerNames []string
 	current := imageName
@@ -39,7 +39,7 @@ func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string
 		}
 	}
 
-	// Collect volumes, dedup by name (first wins)
+	// Collect volumes, dedup by name (first wins), skip excluded names
 	seen := make(map[string]bool)
 	var mounts []VolumeMount
 	for _, layerName := range allLayerNames {
@@ -48,7 +48,7 @@ func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string
 			continue
 		}
 		for _, vol := range layer.Volumes() {
-			if seen[vol.Name] {
+			if seen[vol.Name] || excludeNames[vol.Name] {
 				continue
 			}
 			seen[vol.Name] = true

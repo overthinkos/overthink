@@ -48,6 +48,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	engine := rt.RunEngine
 
 	var imageRef string
+	var uid, gid int
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
@@ -64,7 +65,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
-		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 		if err != nil {
 			return err
 		}
@@ -74,6 +75,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
 		}
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+		uid = resolved.UID
+		gid = resolved.GID
 		ports = resolved.Ports
 	} else {
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
@@ -87,6 +90,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if meta == nil {
 			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
 		}
+		uid = meta.UID
+		gid = meta.GID
 		ports = meta.Ports
 		volumes = meta.Volumes
 		if meta.Registry != "" {
@@ -106,7 +111,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerName(c.Image)
-	args := buildStartArgs(engine, imageRef, absWorkspace, ports, name, volumes, bindMounts, gpu, rt.BindAddress)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -258,7 +263,7 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string) []string {
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -277,6 +282,9 @@ func buildStartArgs(engine, imageRef, workspace string, ports []string, name str
 	}
 	for _, bm := range bindMounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
+	}
+	if engine == "podman" && len(bindMounts) > 0 {
+		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))
 	}
 	args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
 	return args

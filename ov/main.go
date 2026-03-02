@@ -28,6 +28,7 @@ type CLI struct {
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
 	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
+	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
@@ -126,7 +127,7 @@ func (c *InspectCmd) Run() error {
 			if err != nil {
 				return err
 			}
-			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home)
+			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 			if err != nil {
 				return err
 			}

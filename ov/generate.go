@@ -847,7 +847,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Volumes: pre-computed from all layers + base chain, ~ expanded.
 	// Use short form names (without ov-<image>- prefix) so labels are image-name-agnostic.
-	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home)
+	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolume
 		for _, v := range volumes {

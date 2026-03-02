@@ -674,7 +674,7 @@ func validateBindMounts(cfg *Config, layers map[string]*Layer, errs *ValidationE
 				}
 				for _, bm := range img.BindMounts {
 					if bm.Name != "" && volNames[bm.Name] {
-						errs.Add("image %q bind_mounts: name %q collides with a layer volume name", imageName, bm.Name)
+						fmt.Fprintf(os.Stderr, "Note: image %q bind mount %q overrides layer volume with same name\n", imageName, bm.Name)
 					}
 				}
 			}

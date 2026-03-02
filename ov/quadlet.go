@@ -18,6 +18,8 @@ type QuadletConfig struct {
 	GPU         bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
 	BindAddress string              // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
 	Tunnel      *TunnelConfig       // tunnel configuration (nil if no tunnel)
+	UID         int                 // container user UID (for UserNS keep-id mapping)
+	GID         int                 // container user GID (for UserNS keep-id mapping)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -51,6 +53,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 	if cfg.GPU {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
+	}
+	if len(cfg.BindMounts) > 0 {
+		b.WriteString(fmt.Sprintf("UserNS=keep-id:uid=%d,gid=%d\n", cfg.UID, cfg.GID))
 	}
 	b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
 

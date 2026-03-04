@@ -124,6 +124,20 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 		return fmt.Errorf("%s build failed: %w", engine, err)
 	}
 
+	// Podman --manifest builds locally; push each tag separately
+	if c.Push && engineName == "podman" {
+		for _, tag := range tags {
+			fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
+			pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+tag)
+			pushCmd.Dir = dir
+			pushCmd.Stdout = os.Stderr
+			pushCmd.Stderr = os.Stderr
+			if err := pushCmd.Run(); err != nil {
+				return fmt.Errorf("podman manifest push %s failed: %w", tag, err)
+			}
+		}
+	}
+
 	return nil
 }
 

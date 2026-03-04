@@ -1,0 +1,14 @@
+{
+  "enabledPlugins": {
+    "overthink@overthink-plugins": true,
+    "overthink-dev@overthink-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "overthink-plugins": {
+      "source": {
+        "source": "directory",
+        "path": "./plugins"
+      }
+    }
+  }
+}

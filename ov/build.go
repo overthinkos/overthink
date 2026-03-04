@@ -145,7 +145,7 @@ func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, 
 // buildPushArgs constructs args for a multi-platform push build.
 func (c *BuildCmd) buildPushArgs(engine string, tags []string, platforms []string, engineName, name, registry string) []string {
 	if engineName == "podman" {
-		return c.buildPodmanPushArgs(tags, platforms)
+		return c.buildPodmanPushArgs(tags, platforms, name, registry)
 	}
 	return c.buildDockerPushArgs(tags, platforms, name, registry)
 }
@@ -180,12 +180,18 @@ func (c *BuildCmd) cacheArgs(name, registry string) []string {
 			"--cache-from", fmt.Sprintf("type=gha,scope=%s", name),
 			"--cache-to", fmt.Sprintf("type=gha,mode=max,scope=%s", name),
 		}
+	case "image":
+		if registry == "" {
+			return nil
+		}
+		ref := fmt.Sprintf("%s/%s:latest", registry, name)
+		return []string{"--cache-from", ref}
 	default:
 		return nil
 	}
 }
 
-func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string) []string {
+func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, registry string) []string {
 	// Podman uses --manifest for multi-platform builds
 	args := []string{"podman", "build", "-f", "-"}
 	if len(tags) > 0 {
@@ -194,6 +200,7 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string) []stri
 	if len(platforms) > 0 {
 		args = append(args, "--platform", strings.Join(platforms, ","))
 	}
+	args = append(args, c.cacheArgs(name, registry)...)
 	args = append(args, ".")
 	return args
 }

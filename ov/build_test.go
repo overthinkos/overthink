@@ -150,7 +150,8 @@ func TestBuildPodmanPushArgs(t *testing.T) {
 	cmd := &BuildCmd{}
 	args := cmd.buildPodmanPushArgs(
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415"},
-		[]string{"linux/amd64", "linux/arm64"})
+		[]string{"linux/amd64", "linux/arm64"},
+		"fedora", "ghcr.io/overthinkos")
 	want := []string{
 		"podman", "build", "-f", "-",
 		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
@@ -231,6 +232,75 @@ func TestFilterImagesIncludesBuilder(t *testing.T) {
 	want := []string{"builder", "fedora", "app"}
 	if !reflect.DeepEqual(filtered, want) {
 		t.Errorf("filterImages() = %v, want %v", filtered, want)
+	}
+}
+
+func TestBuildLocalArgsWithImageCache(t *testing.T) {
+	cmd := &BuildCmd{Cache: "image"}
+	args := cmd.buildLocalArgs("podman",
+		[]string{"ghcr.io/overthinkos/fedora:latest"},
+		"linux/amd64", "fedora", "ghcr.io/overthinkos")
+	want := []string{
+		"podman", "build", "-f", "-",
+		"-t", "ghcr.io/overthinkos/fedora:latest",
+		"--platform", "linux/amd64",
+		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildLocalArgs(image) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildDockerPushArgsWithImageCache(t *testing.T) {
+	cmd := &BuildCmd{Cache: "image"}
+	args := cmd.buildDockerPushArgs(
+		[]string{"ghcr.io/overthinkos/fedora:latest"},
+		[]string{"linux/amd64"},
+		"fedora", "ghcr.io/overthinkos")
+	want := []string{
+		"docker", "buildx", "build", "--push", "-f", "-",
+		"-t", "ghcr.io/overthinkos/fedora:latest",
+		"--platform", "linux/amd64",
+		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildDockerPushArgs(image) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildPodmanPushArgsWithImageCache(t *testing.T) {
+	cmd := &BuildCmd{Cache: "image"}
+	args := cmd.buildPodmanPushArgs(
+		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415"},
+		[]string{"linux/amd64"},
+		"fedora", "ghcr.io/overthinkos")
+	want := []string{
+		"podman", "build", "-f", "-",
+		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
+		"--platform", "linux/amd64",
+		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildPodmanPushArgs(image) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildImageCacheNoRegistry(t *testing.T) {
+	cmd := &BuildCmd{Cache: "image"}
+	args := cmd.buildLocalArgs("podman",
+		[]string{"fedora:latest"},
+		"linux/amd64", "fedora", "")
+	want := []string{
+		"podman", "build", "-f", "-",
+		"-t", "fedora:latest",
+		"--platform", "linux/amd64",
+		".",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildLocalArgs(image, no registry) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

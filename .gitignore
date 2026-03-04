@@ -31,6 +31,9 @@ go.work.sum
 # .idea/
 # .vscode/
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Overthink build artifacts
 .build/
 bin/

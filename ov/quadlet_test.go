@@ -419,3 +419,94 @@ func TestTunnelServiceFilename(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateQuadletWithEnvVars(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "githubrunner",
+		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Env:         []string{"RUNNER_TOKEN=abc123", "RUNNER_NAME=r1"},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "Environment=RUNNER_TOKEN=abc123") {
+		t.Errorf("expected Environment=RUNNER_TOKEN=abc123, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Environment=RUNNER_NAME=r1") {
+		t.Errorf("expected Environment=RUNNER_NAME=r1, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithEnvFile(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "githubrunner",
+		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		EnvFile:     "/home/user/.config/ov/githubrunner.env",
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "EnvironmentFile=/home/user/.config/ov/githubrunner.env") {
+		t.Errorf("expected EnvironmentFile line, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithInstance(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "githubrunner",
+		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Instance:    "runner-1",
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ContainerName=ov-githubrunner-runner-1") {
+		t.Errorf("expected instance container name, got:\n%s", got)
+	}
+	if !strings.Contains(got, "Description=Overthink githubrunner (runner-1)") {
+		t.Errorf("expected instance description, got:\n%s", got)
+	}
+	if !strings.Contains(got, "# ov-githubrunner-runner-1.container") {
+		t.Errorf("expected instance filename in comment, got:\n%s", got)
+	}
+}
+
+func TestServiceNameInstance(t *testing.T) {
+	tests := []struct {
+		image    string
+		instance string
+		want     string
+	}{
+		{"fedora", "", "ov-fedora.service"},
+		{"githubrunner", "runner-1", "ov-githubrunner-runner-1.service"},
+	}
+	for _, tt := range tests {
+		got := serviceNameInstance(tt.image, tt.instance)
+		if got != tt.want {
+			t.Errorf("serviceNameInstance(%q, %q) = %q, want %q", tt.image, tt.instance, got, tt.want)
+		}
+	}
+}
+
+func TestQuadletFilenameInstance(t *testing.T) {
+	tests := []struct {
+		image    string
+		instance string
+		want     string
+	}{
+		{"fedora", "", "ov-fedora.container"},
+		{"githubrunner", "runner-2", "ov-githubrunner-runner-2.container"},
+	}
+	for _, tt := range tests {
+		got := quadletFilenameInstance(tt.image, tt.instance)
+		if got != tt.want {
+			t.Errorf("quadletFilenameInstance(%q, %q) = %q, want %q", tt.image, tt.instance, got, tt.want)
+		}
+	}
+}

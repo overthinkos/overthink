@@ -37,11 +37,14 @@ func defaultContainerRunning(engine, name string) bool {
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
-	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
-	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	Command   string `short:"c" help:"Command to execute instead of interactive shell"`
-	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
+	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Command   string   `short:"c" help:"Command to execute instead of interactive shell"`
+	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
+	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
+	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	GPUFlags  `embed:""`
 }
 
@@ -128,10 +131,26 @@ func (c *ShellCmd) Run() error {
 		}
 	}
 
+	// Apply instance-specific volume naming
+	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+
+	// Resolve env vars
+	var deployEnv []string
+	var deployEnvFile string
+	if cfgErr == nil {
+		img := cfg.Images[c.Image]
+		deployEnv = img.Env
+		deployEnvFile = img.EnvFile
+	}
+	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	if err != nil {
+		return err
+	}
+
 	// If the container is already running, exec into it instead of starting a new one
-	name := containerName(c.Image)
+	name := containerNameInstance(c.Image, c.Instance)
 	if containerRunning(engine, name) {
-		args := buildExecArgs(engine, name, uid, gid, c.Command)
+		args := buildExecArgs(engine, name, uid, gid, c.Command, envVars)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -152,7 +171,7 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress)
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -191,10 +210,16 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return err
 	}
 
+	// Resolve env vars
+	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	if envErr != nil {
+		return envErr
+	}
+
 	// If the container is already running, exec into it
-	name := ctx.ContainerName()
+	name := containerNameInstance(ctx.ImageName, c.Instance)
 	if containerRunning(engine, name) {
-		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command)
+		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, envVars)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -219,7 +244,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 
 	args := buildShellArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		volumes, bindMounts, gpu, c.Command, rt.BindAddress)
+		volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars)
 
 	enginePath, err := findExecutable(EngineBinary(engine))
 	if err != nil {
@@ -237,7 +262,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string) []string {
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -264,6 +289,9 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	if engine == "podman" && len(bindMounts) > 0 {
 		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))
 	}
+	for _, e := range envVars {
+		args = append(args, "-e", e)
+	}
 	args = append(args, "--entrypoint", "bash", imageRef)
 	if command != "" {
 		args = append(args, "-c", command)
@@ -272,7 +300,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 }
 
 // buildExecArgs constructs the container exec argument list for attaching to a running container.
-func buildExecArgs(engine, name string, uid, gid int, command string) []string {
+func buildExecArgs(engine, name string, uid, gid int, command string, envVars []string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -282,9 +310,11 @@ func buildExecArgs(engine, name string, uid, gid int, command string) []string {
 		binary, "exec", interactive,
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
 		"-w", "/workspace",
-		name,
-		"bash",
 	}
+	for _, e := range envVars {
+		args = append(args, "-e", e)
+	}
+	args = append(args, name, "bash")
 	if command != "" {
 		args = append(args, "-c", command)
 	}

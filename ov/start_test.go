@@ -6,7 +6,7 @@ import (
 )
 
 func TestBuildStartArgs(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -21,7 +21,7 @@ func TestBuildStartArgs(t *testing.T) {
 }
 
 func TestBuildStartArgsPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil)
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -36,7 +36,7 @@ func TestBuildStartArgsPodman(t *testing.T) {
 }
 
 func TestBuildStartArgsWithPorts(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, nil, false, "127.0.0.1")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", "/home/user/project", 1000, 1000, []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
@@ -56,7 +56,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-ollama-models", ContainerPath: "/home/user/.ollama/models"},
 	}
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", volumes, nil, false, "127.0.0.1")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", volumes, nil, false, "127.0.0.1", nil)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -72,7 +72,7 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPU(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil)
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -88,7 +88,7 @@ func TestBuildStartArgsWithGPU(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPUPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", "/home/user/project", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil)
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-ollama",
@@ -117,5 +117,41 @@ func TestContainerName(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("containerName(%q) = %q, want %q", tt.image, got, tt.want)
 		}
+	}
+}
+
+func TestContainerNameInstance(t *testing.T) {
+	tests := []struct {
+		image    string
+		instance string
+		want     string
+	}{
+		{"githubrunner", "", "ov-githubrunner"},
+		{"githubrunner", "runner-1", "ov-githubrunner-runner-1"},
+		{"ollama", "gpu2", "ov-ollama-gpu2"},
+	}
+	for _, tt := range tests {
+		got := containerNameInstance(tt.image, tt.instance)
+		if got != tt.want {
+			t.Errorf("containerNameInstance(%q, %q) = %q, want %q", tt.image, tt.instance, got, tt.want)
+		}
+	}
+}
+
+func TestBuildStartArgsWithEnvVars(t *testing.T) {
+	envVars := []string{"FOO=bar", "TOKEN=secret"}
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora:latest", "/home/user", 1000, 1000, nil, "ov-fedora", nil, nil, false, "127.0.0.1", envVars)
+	want := []string{
+		"docker", "run", "-d", "--rm",
+		"--name", "ov-fedora",
+		"-v", "/home/user:/workspace",
+		"-w", "/workspace",
+		"-e", "FOO=bar",
+		"-e", "TOKEN=secret",
+		"ghcr.io/overthinkos/fedora:latest",
+		"supervisord", "-n", "-c", "/etc/supervisord.conf",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildStartArgs(envVars) =\n  %v\nwant\n  %v", args, want)
 	}
 }

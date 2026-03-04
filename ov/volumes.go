@@ -76,6 +76,24 @@ func expandHome(path, home string) string {
 	return path
 }
 
+// InstanceVolumes renames volume mounts for a specific instance.
+// e.g. "ov-githubrunner-state" -> "ov-githubrunner-runner-1-state"
+func InstanceVolumes(mounts []VolumeMount, imageName, instance string) []VolumeMount {
+	if instance == "" {
+		return mounts
+	}
+	prefix := "ov-" + imageName + "-"
+	newPrefix := "ov-" + imageName + "-" + instance + "-"
+	result := make([]VolumeMount, len(mounts))
+	for i, m := range mounts {
+		result[i] = VolumeMount{
+			VolumeName:    strings.Replace(m.VolumeName, prefix, newPrefix, 1),
+			ContainerPath: m.ContainerPath,
+		}
+	}
+	return result
+}
+
 // sortVolumeMounts sorts volume mounts by name for deterministic output
 func sortVolumeMounts(mounts []VolumeMount) {
 	for i := 0; i < len(mounts)-1; i++ {

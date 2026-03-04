@@ -10,10 +10,13 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
-	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
+	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
+	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
+	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	GPUFlags  `embed:""`
 }
 
@@ -112,13 +115,29 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		}
 	}
 
+	// Apply instance-specific volume naming
+	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+
 	// Verify bind mounts
 	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
 		return err
 	}
 
-	name := containerName(c.Image)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress)
+	// Resolve env vars
+	var deployEnv []string
+	var deployEnvFile string
+	if cfgErr == nil {
+		img := cfg.Images[c.Image]
+		deployEnv = img.Env
+		deployEnvFile = img.EnvFile
+	}
+	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	if err != nil {
+		return err
+	}
+
+	name := containerNameInstance(c.Image, c.Instance)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -202,10 +221,16 @@ func (c *StartCmd) runRemote(ref string) error {
 		return err
 	}
 
-	name := ctx.ContainerName()
+	// Resolve env vars
+	envVars, err := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	if err != nil {
+		return err
+	}
+
+	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, gpu, rt.BindAddress)
+		name, volumes, bindMounts, gpu, rt.BindAddress, envVars)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -236,6 +261,12 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return err
 	}
 
+	// Resolve env vars
+	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	if envErr != nil {
+		return envErr
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   ctx.ImageName,
 		ImageRef:    ctx.ImageRef,
@@ -247,6 +278,8 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		BindAddress: rt.BindAddress,
 		UID:         ctx.Resolved.UID,
 		GID:         ctx.Resolved.GID,
+		Env:         envVars,
+		Instance:    c.Instance,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -259,7 +292,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return fmt.Errorf("creating quadlet directory: %w", err)
 	}
 
-	qpath := filepath.Join(qdir, quadletFilename(ctx.ImageName))
+	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
 	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
@@ -270,7 +303,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return fmt.Errorf("systemctl daemon-reload failed: %w\n%s", err, strings.TrimSpace(string(output)))
 	}
 
-	svc := serviceName(ctx.ImageName)
+	svc := serviceNameInstance(ctx.ImageName, c.Instance)
 	startCmd := exec.Command("systemctl", "--user", "start", svc)
 	startCmd.Stdout = os.Stdout
 	startCmd.Stderr = os.Stderr
@@ -291,7 +324,7 @@ func (c *StartCmd) findTunnelYAML(cfg *Config) *TunnelYAML {
 }
 
 func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
-	exists, err := quadletExists(c.Image)
+	exists, err := quadletExistsInstance(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -305,6 +338,9 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 			Image:     c.Image,
 			Workspace: c.Workspace,
 			Tag:       c.Tag,
+			Env:       c.Env,
+			EnvFile:   c.EnvFile,
+			Instance:  c.Instance,
 			GPUFlags:  c.GPUFlags,
 		}
 		if err := enable.runEnable(rt); err != nil {
@@ -312,7 +348,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 		}
 	}
 
-	svc := serviceName(c.Image)
+	svc := serviceNameInstance(c.Image, c.Instance)
 	cmd := exec.Command("systemctl", "--user", "start", svc)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -325,7 +361,8 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
-	Image string `arg:"" help:"Image name or remote ref"`
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *StopCmd) Run() error {
@@ -345,7 +382,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceName(imageName)
+		svc := serviceNameInstance(imageName, c.Instance)
 		cmd := exec.Command("systemctl", "--user", "stop", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -357,7 +394,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	engine := EngineBinary(rt.RunEngine)
-	name := containerName(imageName)
+	name := containerNameInstance(imageName, c.Instance)
 
 	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()
@@ -402,7 +439,7 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string) []string {
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -425,6 +462,9 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	if engine == "podman" && len(bindMounts) > 0 {
 		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))
 	}
+	for _, e := range envVars {
+		args = append(args, "-e", e)
+	}
 	args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
 	return args
 }
@@ -432,4 +472,12 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 // containerName returns the deterministic container name for an image.
 func containerName(imageName string) string {
 	return "ov-" + imageName
+}
+
+// containerNameInstance returns the container name with optional instance suffix.
+func containerNameInstance(imageName, instance string) string {
+	if instance == "" {
+		return containerName(imageName)
+	}
+	return "ov-" + imageName + "-" + instance
 }

@@ -21,6 +21,8 @@ type DeployImageConfig struct {
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`
 	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`
 	Ports      []string          `yaml:"ports,omitempty"`
+	Env        []string          `yaml:"env,omitempty"`
+	EnvFile    string            `yaml:"env_file,omitempty"`
 }
 
 // DeployConfigPath returns the path to the deploy overlay file.
@@ -86,6 +88,12 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		}
 		if overlay.Ports != nil {
 			img.Ports = overlay.Ports
+		}
+		if overlay.Env != nil {
+			img.Env = overlay.Env
+		}
+		if overlay.EnvFile != "" {
+			img.EnvFile = overlay.EnvFile
 		}
 
 		cfg.Images[name] = img

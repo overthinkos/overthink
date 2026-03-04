@@ -47,6 +47,8 @@ type ImageConfig struct {
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
 	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`  // bind mount declarations (image-level only)
+	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE)
+	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

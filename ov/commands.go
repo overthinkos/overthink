@@ -10,10 +10,13 @@ import (
 
 // EnableCmd generates a quadlet .container file and reloads systemd (quadlet only)
 type EnableCmd struct {
-	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
-	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
+	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
+	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
+	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	GPUFlags  `embed:""`
 }
 
@@ -125,6 +128,39 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		}
 	}
 
+	// Apply instance-specific volume naming
+	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+
+	// Resolve env vars
+	var deployEnv []string
+	var deployEnvFile string
+	if cfgErr == nil {
+		img := cfg.Images[c.Image]
+		deployEnv = img.Env
+		deployEnvFile = img.EnvFile
+	}
+	envVars, envErr := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	if envErr != nil {
+		return envErr
+	}
+
+	// For quadlet, resolve env file to absolute path for EnvironmentFile=
+	var quadletEnvFile string
+	if c.EnvFile != "" {
+		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
+	} else if deployEnvFile != "" {
+		quadletEnvFile = expandHostHome(deployEnvFile)
+	}
+	// Also check workspace .env for quadlet EnvironmentFile
+	if quadletEnvFile == "" {
+		wsEnvPath := filepath.Join(absWorkspace, ".env")
+		if _, statErr := os.Stat(wsEnvPath); statErr == nil {
+			quadletEnvFile = wsEnvPath
+		}
+	}
+
+	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
+	// Only pass CLI -e vars as inline Environment= entries.
 	qcfg := QuadletConfig{
 		ImageName:   c.Image,
 		ImageRef:    imageRef,
@@ -137,6 +173,15 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Tunnel:      tunnelCfg,
 		UID:         uid,
 		GID:         gid,
+		Env:         envVars,
+		EnvFile:     quadletEnvFile,
+		Instance:    c.Instance,
+	}
+
+	// Suppress Env if we're using EnvFile (avoid duplication)
+	// Only keep CLI -e flags as inline env vars
+	if quadletEnvFile != "" {
+		qcfg.Env = c.Env
 	}
 
 	content := generateQuadlet(qcfg)
@@ -149,7 +194,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		return fmt.Errorf("creating quadlet directory: %w", err)
 	}
 
-	qpath := filepath.Join(qdir, quadletFilename(c.Image))
+	qpath := filepath.Join(qdir, quadletFilenameInstance(c.Image, c.Instance))
 	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
@@ -234,6 +279,12 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return err
 	}
 
+	// Resolve env vars
+	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	if envErr != nil {
+		return envErr
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   ctx.ImageName,
 		ImageRef:    ctx.ImageRef,
@@ -245,6 +296,8 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		BindAddress: rt.BindAddress,
 		UID:         ctx.Resolved.UID,
 		GID:         ctx.Resolved.GID,
+		Env:         envVars,
+		Instance:    c.Instance,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -257,7 +310,7 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return fmt.Errorf("creating quadlet directory: %w", err)
 	}
 
-	qpath := filepath.Join(qdir, quadletFilename(ctx.ImageName))
+	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
 	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
@@ -275,7 +328,8 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 
 // DisableCmd disables a quadlet service from auto-starting (quadlet only)
 type DisableCmd struct {
-	Image string `arg:"" help:"Image name or remote ref"`
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *DisableCmd) Run() error {
@@ -289,7 +343,7 @@ func (c *DisableCmd) Run() error {
 	}
 
 	imageName := resolveImageName(c.Image)
-	svc := serviceName(imageName)
+	svc := serviceNameInstance(imageName, c.Instance)
 	cmd := exec.Command("systemctl", "--user", "disable", "--now", svc)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -301,7 +355,8 @@ func (c *DisableCmd) Run() error {
 
 // StatusCmd shows the status of a service container
 type StatusCmd struct {
-	Image string `arg:"" help:"Image name or remote ref"`
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *StatusCmd) Run() error {
@@ -313,7 +368,7 @@ func (c *StatusCmd) Run() error {
 	imageName := resolveImageName(c.Image)
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceName(imageName)
+		svc := serviceNameInstance(imageName, c.Instance)
 		cmd := exec.Command("systemctl", "--user", "status", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -322,7 +377,7 @@ func (c *StatusCmd) Run() error {
 	}
 
 	engine := EngineBinary(rt.RunEngine)
-	name := containerName(imageName)
+	name := containerNameInstance(imageName, c.Instance)
 	cmd := exec.Command(engine, "inspect", name)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -334,8 +389,9 @@ func (c *StatusCmd) Run() error {
 
 // LogsCmd shows service container logs
 type LogsCmd struct {
-	Image  string `arg:"" help:"Image name or remote ref"`
-	Follow bool   `short:"f" long:"follow" help:"Follow log output"`
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Follow   bool   `short:"f" long:"follow" help:"Follow log output"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *LogsCmd) Run() error {
@@ -347,7 +403,7 @@ func (c *LogsCmd) Run() error {
 	imageName := resolveImageName(c.Image)
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceName(imageName)
+		svc := serviceNameInstance(imageName, c.Instance)
 		args := []string{"--user", "-u", svc}
 		if c.Follow {
 			args = append(args, "-f")
@@ -362,7 +418,7 @@ func (c *LogsCmd) Run() error {
 	}
 
 	engine := EngineBinary(rt.RunEngine)
-	name := containerName(imageName)
+	name := containerNameInstance(imageName, c.Instance)
 	args := []string{"logs"}
 	if c.Follow {
 		args = append(args, "-f")
@@ -379,9 +435,10 @@ func (c *LogsCmd) Run() error {
 
 // UpdateCmd updates an image and restarts the service if active
 type UpdateCmd struct {
-	Image string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag   string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	Build bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Image    string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag      string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Build    bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *UpdateCmd) Run() error {
@@ -419,7 +476,7 @@ func (c *UpdateCmd) Run() error {
 			return err
 		}
 
-		svc := serviceName(c.Image)
+		svc := serviceNameInstance(c.Image, c.Instance)
 		check := exec.Command("systemctl", "--user", "is-active", svc)
 		if err := check.Run(); err == nil {
 			fmt.Fprintf(os.Stderr, "Restarting %s\n", svc)
@@ -461,7 +518,7 @@ func (c *UpdateCmd) runRemoteUpdate(ref string) error {
 			return err
 		}
 
-		svc := serviceName(ctx.ImageName)
+		svc := serviceNameInstance(ctx.ImageName, c.Instance)
 		check := exec.Command("systemctl", "--user", "is-active", svc)
 		if err := check.Run(); err == nil {
 			fmt.Fprintf(os.Stderr, "Restarting %s\n", svc)
@@ -488,7 +545,8 @@ func (c *UpdateCmd) runRemoteUpdate(ref string) error {
 
 // RemoveCmd removes a service container
 type RemoveCmd struct {
-	Image string `arg:"" help:"Image name or remote ref"`
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
 func (c *RemoveCmd) Run() error {
@@ -503,7 +561,7 @@ func (c *RemoveCmd) Run() error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceName(imageName)
+		svc := serviceNameInstance(imageName, c.Instance)
 		stop := exec.Command("systemctl", "--user", "stop", svc)
 		_ = stop.Run()
 
@@ -512,7 +570,7 @@ func (c *RemoveCmd) Run() error {
 			return err
 		}
 
-		qpath := filepath.Join(qdir, quadletFilename(imageName))
+		qpath := filepath.Join(qdir, quadletFilenameInstance(imageName, c.Instance))
 		if err := os.Remove(qpath); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing quadlet file: %w", err)
 		}
@@ -541,7 +599,7 @@ func (c *RemoveCmd) Run() error {
 
 	// Direct mode: stop + rm
 	engine := EngineBinary(rt.RunEngine)
-	name := containerName(imageName)
+	name := containerNameInstance(imageName, c.Instance)
 
 	stop := exec.Command(engine, "stop", name)
 	_ = stop.Run()

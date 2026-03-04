@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os/exec"
 	"strings"
 	"testing"
 )
@@ -77,6 +78,10 @@ func TestEnsureImage(t *testing.T) {
 	})
 
 	t.Run("podman to docker transfer", func(t *testing.T) {
+		// This test requires docker to be in PATH (it execs "docker load")
+		if _, err := exec.LookPath("docker"); err != nil {
+			t.Skip("docker not available, skipping cross-engine transfer test")
+		}
 		LocalImageExists = func(engine, ref string) bool {
 			return engine == "podman" // only in build engine
 		}

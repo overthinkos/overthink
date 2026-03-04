@@ -6,81 +6,6 @@ import (
 	"testing"
 )
 
-func TestParseModFile(t *testing.T) {
-	dir := t.TempDir()
-
-	// No layers.mod -- should return nil
-	mf, err := ParseModFile(dir)
-	if err != nil {
-		t.Fatalf("ParseModFile() error = %v", err)
-	}
-	if mf != nil {
-		t.Fatal("expected nil for missing layers.mod")
-	}
-
-	// Write a layers.mod
-	content := `module: github.com/overthinkos/overthink
-require:
-  - module: github.com/overthinkos/ml-layers
-    version: v1.0.0
-  - module: github.com/myorg/service-layers
-    version: abc1234def
-replace:
-  - module: github.com/overthinkos/ml-layers
-    path: ../ml-layers
-`
-	os.WriteFile(filepath.Join(dir, "layers.mod"), []byte(content), 0644)
-
-	mf, err = ParseModFile(dir)
-	if err != nil {
-		t.Fatalf("ParseModFile() error = %v", err)
-	}
-	if mf.Module != "github.com/overthinkos/overthink" {
-		t.Errorf("module = %q, want %q", mf.Module, "github.com/overthinkos/overthink")
-	}
-	if len(mf.Require) != 2 {
-		t.Fatalf("len(require) = %d, want 2", len(mf.Require))
-	}
-	if mf.Require[0].Module != "github.com/overthinkos/ml-layers" {
-		t.Errorf("require[0].module = %q", mf.Require[0].Module)
-	}
-	if mf.Require[0].Version != "v1.0.0" {
-		t.Errorf("require[0].version = %q", mf.Require[0].Version)
-	}
-	if len(mf.Replace) != 1 {
-		t.Fatalf("len(replace) = %d, want 1", len(mf.Replace))
-	}
-	if mf.Replace[0].Path != "../ml-layers" {
-		t.Errorf("replace[0].path = %q", mf.Replace[0].Path)
-	}
-}
-
-func TestWriteAndParseModFile(t *testing.T) {
-	dir := t.TempDir()
-
-	mf := &ModFile{
-		Module: "github.com/test/project",
-		Require: []ModRequire{
-			{Module: "github.com/test/dep", Version: "v2.0.0"},
-		},
-	}
-
-	if err := WriteModFile(dir, mf); err != nil {
-		t.Fatalf("WriteModFile() error = %v", err)
-	}
-
-	parsed, err := ParseModFile(dir)
-	if err != nil {
-		t.Fatalf("ParseModFile() error = %v", err)
-	}
-	if parsed.Module != mf.Module {
-		t.Errorf("module = %q, want %q", parsed.Module, mf.Module)
-	}
-	if len(parsed.Require) != 1 || parsed.Require[0].Module != "github.com/test/dep" {
-		t.Errorf("unexpected require: %+v", parsed.Require)
-	}
-}
-
 func TestParseLockFile(t *testing.T) {
 	dir := t.TempDir()
 
@@ -155,6 +80,52 @@ func TestWriteAndParseLockFile(t *testing.T) {
 	}
 }
 
+func TestStripVersion(t *testing.T) {
+	tests := []struct {
+		ref     string
+		wantRef string
+		wantVer string
+	}{
+		{"github.com/org/repo/layer@v1.0.0", "github.com/org/repo/layer", "v1.0.0"},
+		{"github.com/org/repo/layer@main", "github.com/org/repo/layer", "main"},
+		{"github.com/org/repo/layer", "github.com/org/repo/layer", ""},
+		{"pixi", "pixi", ""},
+		{"module@v2", "module", "v2"},
+	}
+
+	for _, tt := range tests {
+		gotRef, gotVer := StripVersion(tt.ref)
+		if gotRef != tt.wantRef || gotVer != tt.wantVer {
+			t.Errorf("StripVersion(%q) = (%q, %q), want (%q, %q)", tt.ref, gotRef, gotVer, tt.wantRef, tt.wantVer)
+		}
+	}
+}
+
+func TestParseRemoteRef(t *testing.T) {
+	tests := []struct {
+		ref        string
+		wantModule string
+		wantName   string
+		wantVer    string
+	}{
+		{"github.com/org/repo/layer@v1.0.0", "github.com/org/repo", "layer", "v1.0.0"},
+		{"github.com/org/repo/image@main", "github.com/org/repo", "image", "main"},
+		{"github.com/org/repo/name", "github.com/org/repo", "name", ""},
+		{"pixi", "", "pixi", ""},
+	}
+
+	for _, tt := range tests {
+		got := ParseRemoteRef(tt.ref)
+		if got.ModulePath != tt.wantModule || got.Name != tt.wantName || got.Version != tt.wantVer {
+			t.Errorf("ParseRemoteRef(%q) = {Module: %q, Name: %q, Version: %q}, want {%q, %q, %q}",
+				tt.ref, got.ModulePath, got.Name, got.Version, tt.wantModule, tt.wantName, tt.wantVer)
+		}
+		if got.Raw != tt.ref {
+			t.Errorf("ParseRemoteRef(%q).Raw = %q", tt.ref, got.Raw)
+		}
+	}
+}
+
 func TestIsRemoteLayerRef(t *testing.T) {
 	tests := []struct {
 		ref  string
@@ -166,12 +137,32 @@ func TestIsRemoteLayerRef(t *testing.T) {
 		{"github.com/overthinkos/ml-layers/cuda", true},
 		{"gitlab.com/org/repo/layer", true},
 		{"org/repo/layer", false}, // only 2 slashes
+		{"github.com/org/repo/layer@v1.0.0", true},
+		{"github.com/org/repo/layer@main", true},
 	}
 
 	for _, tt := range tests {
 		got := IsRemoteLayerRef(tt.ref)
 		if got != tt.want {
 			t.Errorf("IsRemoteLayerRef(%q) = %v, want %v", tt.ref, got, tt.want)
+		}
+	}
+}
+
+func TestIsRemoteImageRef(t *testing.T) {
+	tests := []struct {
+		ref  string
+		want bool
+	}{
+		{"ollama", false},
+		{"github.com/org/repo/image", true},
+		{"github.com/org/repo/image@v1.0.0", true},
+	}
+
+	for _, tt := range tests {
+		got := IsRemoteImageRef(tt.ref)
+		if got != tt.want {
+			t.Errorf("IsRemoteImageRef(%q) = %v, want %v", tt.ref, got, tt.want)
 		}
 	}
 }
@@ -185,6 +176,7 @@ func TestSplitRemoteLayerRef(t *testing.T) {
 		{"github.com/overthinkos/ml-layers/cuda", "github.com/overthinkos/ml-layers", "cuda"},
 		{"github.com/myorg/service-layers/my-service", "github.com/myorg/service-layers", "my-service"},
 		{"pixi", "", "pixi"},
+		{"github.com/org/repo/layer@v1.0.0", "github.com/org/repo", "layer"},
 	}
 
 	for _, tt := range tests {
@@ -192,42 +184,6 @@ func TestSplitRemoteLayerRef(t *testing.T) {
 		if gotModule != tt.wantModule || gotLayer != tt.wantLayer {
 			t.Errorf("SplitRemoteLayerRef(%q) = (%q, %q), want (%q, %q)", tt.ref, gotModule, gotLayer, tt.wantModule, tt.wantLayer)
 		}
-	}
-}
-
-func TestModFileFindReplace(t *testing.T) {
-	mf := &ModFile{
-		Replace: []ModReplace{
-			{Module: "github.com/test/dep", Path: "../dep"},
-		},
-	}
-
-	if rep := mf.FindReplace("github.com/test/dep"); rep == nil {
-		t.Error("expected to find replace entry")
-	} else if rep.Path != "../dep" {
-		t.Errorf("path = %q, want %q", rep.Path, "../dep")
-	}
-
-	if rep := mf.FindReplace("github.com/test/other"); rep != nil {
-		t.Error("expected nil for unknown module")
-	}
-}
-
-func TestModFileFindRequire(t *testing.T) {
-	mf := &ModFile{
-		Require: []ModRequire{
-			{Module: "github.com/test/dep", Version: "v1.0.0"},
-		},
-	}
-
-	if req := mf.FindRequire("github.com/test/dep"); req == nil {
-		t.Error("expected to find require entry")
-	} else if req.Version != "v1.0.0" {
-		t.Errorf("version = %q, want %q", req.Version, "v1.0.0")
-	}
-
-	if req := mf.FindRequire("github.com/test/other"); req != nil {
-		t.Error("expected nil for unknown module")
 	}
 }
 
@@ -293,14 +249,13 @@ func TestScanModuleLayers(t *testing.T) {
 	}
 }
 
-func TestScanAllLayersNoMod(t *testing.T) {
-	// With no layers.mod, ScanAllLayers should behave like ScanLayers
+func TestScanAllLayersNoRemote(t *testing.T) {
+	// With no @version refs, ScanAllLayers should behave like ScanLayers
 	layers, err := ScanAllLayers("testdata")
 	if err != nil {
 		t.Fatalf("ScanAllLayers() error = %v", err)
 	}
 
-	// Should have the same layers as ScanLayers
 	localLayers, err := ScanLayers("testdata")
 	if err != nil {
 		t.Fatalf("ScanLayers() error = %v", err)
@@ -308,42 +263,6 @@ func TestScanAllLayersNoMod(t *testing.T) {
 
 	if len(layers) != len(localLayers) {
 		t.Errorf("len(layers) = %d, want %d", len(layers), len(localLayers))
-	}
-}
-
-func TestScanAllLayersWithReplace(t *testing.T) {
-	// Create project with layers.mod that uses a local replace
-	dir := t.TempDir()
-
-	// Create local layers dir
-	localLayersDir := filepath.Join(dir, "layers", "local-layer")
-	os.MkdirAll(localLayersDir, 0755)
-	os.WriteFile(filepath.Join(localLayersDir, "layer.yml"), []byte("rpm:\n  packages:\n    - vim\n"), 0644)
-
-	// Create a "remote" module directory (local replacement)
-	modDir := t.TempDir()
-	modLayersDir := filepath.Join(modDir, "layers", "remote-layer")
-	os.MkdirAll(modLayersDir, 0755)
-	os.WriteFile(filepath.Join(modLayersDir, "layer.yml"), []byte("rpm:\n  packages:\n    - git\n"), 0644)
-
-	// Write layers.mod with replace
-	modContent := "module: github.com/test/project\nrequire:\n  - module: github.com/test/mod\n    version: v1.0.0\nreplace:\n  - module: github.com/test/mod\n    path: " + modDir + "\n"
-	os.WriteFile(filepath.Join(dir, "layers.mod"), []byte(modContent), 0644)
-
-	layers, err := ScanAllLayers(dir)
-	if err != nil {
-		t.Fatalf("ScanAllLayers() error = %v", err)
-	}
-
-	// Should have local-layer (short name) and github.com/test/mod/remote-layer (full path)
-	if _, ok := layers["local-layer"]; !ok {
-		t.Error("local-layer not found")
-	}
-	if _, ok := layers["github.com/test/mod/remote-layer"]; !ok {
-		t.Error("github.com/test/mod/remote-layer not found")
-	}
-	if layer := layers["github.com/test/mod/remote-layer"]; !layer.Remote {
-		t.Error("remote-layer should be marked as Remote")
 	}
 }
 
@@ -442,6 +361,7 @@ func TestCollectRequiredModules(t *testing.T) {
 					"pixi",
 					"github.com/overthinkos/ml-layers/cuda",
 					"github.com/myorg/service-layers/my-service",
+					"github.com/overthinkos/ml-layers/python@v1.0.0",
 				},
 			},
 		},
@@ -456,6 +376,61 @@ func TestCollectRequiredModules(t *testing.T) {
 	}
 	if !modules["github.com/myorg/service-layers"] {
 		t.Error("expected github.com/myorg/service-layers")
+	}
+}
+
+func TestCollectRequiredModulesVersioned(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Layers: []string{
+					"pixi",
+					"github.com/overthinkos/ml-layers/cuda@v1.0.0",
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"pixi": {Name: "pixi", Depends: []string{}},
+		"my-layer": {Name: "my-layer", Depends: []string{
+			"github.com/myorg/service-layers/svc@v2.0.0",
+		}},
+	}
+
+	modules, err := CollectRequiredModulesVersioned(cfg, layers)
+	if err != nil {
+		t.Fatalf("CollectRequiredModulesVersioned() error = %v", err)
+	}
+	if len(modules) != 2 {
+		t.Fatalf("len(modules) = %d, want 2", len(modules))
+	}
+	if modules["github.com/overthinkos/ml-layers"] != "v1.0.0" {
+		t.Errorf("ml-layers version = %q, want %q", modules["github.com/overthinkos/ml-layers"], "v1.0.0")
+	}
+	if modules["github.com/myorg/service-layers"] != "v2.0.0" {
+		t.Errorf("service-layers version = %q, want %q", modules["github.com/myorg/service-layers"], "v2.0.0")
+	}
+}
+
+func TestCollectRequiredModulesVersionedConflict(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Layers: []string{
+					"github.com/org/mod/a@v1.0.0",
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"local": {Name: "local", Depends: []string{
+			"github.com/org/mod/b@v2.0.0",
+		}},
+	}
+
+	_, err := CollectRequiredModulesVersioned(cfg, layers)
+	if err == nil {
+		t.Fatal("expected version conflict error")
 	}
 }
 

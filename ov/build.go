@@ -10,7 +10,7 @@ import (
 
 // BuildCmd builds container images
 type BuildCmd struct {
-	Images   []string `arg:"" optional:"" help:"Images to build (default: all enabled)"`
+	Images   []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
 	Push     bool     `long:"push" help:"Push to registry after building"`
 	Tag      string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform string   `long:"platform" help:"Target platform (default: host platform)"`
@@ -18,6 +18,14 @@ type BuildCmd struct {
 }
 
 func (c *BuildCmd) Run() error {
+	// Check if any image arg is a remote ref
+	for _, img := range c.Images {
+		ref := StripURLScheme(img)
+		if IsRemoteImageRef(ref) {
+			return c.buildRemote(ref)
+		}
+	}
+
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -194,6 +202,21 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string) []stri
 func hostPlatform() string {
 	arch := runtime.GOARCH
 	return "linux/" + arch
+}
+
+// buildRemote builds a remote image ref locally from its cached source.
+func (c *BuildCmd) buildRemote(ref string) error {
+	tag := c.Tag
+	if tag == "" {
+		tag = "latest"
+	}
+
+	ctx, err := ResolveRemoteImage(ref, tag)
+	if err != nil {
+		return err
+	}
+
+	return ctx.BuildImage(nil, tag)
 }
 
 // filterImages filters the build order to only include the requested images

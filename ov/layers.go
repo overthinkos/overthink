@@ -91,7 +91,8 @@ type Layer struct {
 	HasAliases        bool
 	HasPixiLock       bool
 	HasExtract        bool
-	Depends           []string
+	Depends           []string // bare refs (version stripped) for resolution
+	RawDepends        []string // original refs with @version for module collection
 
 	// Remote module metadata
 	Remote     bool   // true if from a remote module
@@ -176,7 +177,13 @@ func scanLayer(path string, name string) (*Layer, error) {
 			return nil, fmt.Errorf("parsing layer.yml: %w", err)
 		}
 
-		layer.Depends = ly.Depends
+		// Keep raw depends for module version collection
+		layer.RawDepends = ly.Depends
+		// Strip @version from depends for layer resolution (map keys use bare refs)
+		layer.Depends = make([]string, len(ly.Depends))
+		for i, dep := range ly.Depends {
+			layer.Depends[i], _ = StripVersion(dep)
+		}
 		layer.HasSupervisord = ly.Service != ""
 		layer.serviceConf = ly.Service
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
@@ -432,20 +439,28 @@ func ScanModuleLayers(moduleDir string, modulePath string) (map[string]*Layer, e
 
 // ScanAllLayers scans local layers and all remote module layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
-// If no layers.mod exists, behaves identically to ScanLayers.
+// Module versions are collected from inline @version refs in layer.yml depends fields.
 func ScanAllLayers(dir string) (map[string]*Layer, error) {
+	return ScanAllLayersWithConfig(dir, nil)
+}
+
+// ScanAllLayersWithConfig scans local and remote module layers.
+// Collects module versions from inline @version refs in layer.yml depends
+// and (when cfg is provided) images.yml layer references.
+func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
 	// 1. Scan local layers
 	layers, err := ScanLayers(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Parse layers.mod -- if absent, return local-only
-	mf, err := ParseModFile(dir)
+	// 2. Collect module versions from inline @version refs
+	versions, err := CollectRequiredModulesVersioned(cfg, layers)
 	if err != nil {
 		return nil, err
 	}
-	if mf == nil || len(mf.Require) == 0 {
+
+	if len(versions) == 0 {
 		return layers, nil
 	}
 
@@ -455,52 +470,36 @@ func ScanAllLayers(dir string) (map[string]*Layer, error) {
 		return nil, err
 	}
 
-	// 4. For each required module, scan its layers
-	for _, req := range mf.Require {
-		// Check for replace directive (local development override)
-		var moduleDir string
-		if replace := mf.FindReplace(req.Module); replace != nil {
-			// Use local replacement path
-			replacePath := replace.Path
-			if !filepath.IsAbs(replacePath) {
-				replacePath = filepath.Join(dir, replacePath)
+	// 4. For each required module, scan its layers from cache
+	for modPath, version := range versions {
+		// If lock file has a resolved version, prefer it as the cache key
+		cacheVersion := version
+		if lf != nil {
+			if lm := lf.FindLockModule(modPath); lm != nil {
+				cacheVersion = lm.Version
 			}
-			moduleDir = replacePath
-		} else {
-			// Use cached module
-			version := req.Version
-			// If lock file has a resolved commit for this module, use that as the cache key
-			if lf != nil {
-				if lm := lf.FindLockModule(req.Module); lm != nil {
-					version = lm.Version
-				}
-			}
+		}
 
-			cachePath, err := ModuleCachePath(req.Module, version)
-			if err != nil {
-				return nil, fmt.Errorf("resolving cache path for %s: %w", req.Module, err)
-			}
+		cachePath, err := ModuleCachePath(modPath, cacheVersion)
+		if err != nil {
+			return nil, fmt.Errorf("resolving cache path for %s: %w", modPath, err)
+		}
 
-			// Check if module is cached
-			if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-				return nil, fmt.Errorf("module %s@%s not downloaded (run 'ov mod download')", req.Module, req.Version)
-			}
-			moduleDir = cachePath
+		if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("module %s@%s not downloaded (run 'ov mod download')", modPath, version)
 		}
 
 		// Scan the module's layers
-		modLayers, err := ScanModuleLayers(moduleDir, req.Module)
+		modLayers, err := ScanModuleLayers(cachePath, modPath)
 		if err != nil {
-			return nil, fmt.Errorf("scanning module %s: %w", req.Module, err)
+			return nil, fmt.Errorf("scanning module %s: %w", modPath, err)
 		}
 
 		// Merge into main map
 		for ref, layer := range modLayers {
-			// Check for conflicts: two remote modules exporting the same full ref
 			if existing, ok := layers[ref]; ok && existing.Remote {
 				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.ModulePath, layer.ModulePath)
 			}
-			// Local layers shadow remote layers with same short name (emit note)
 			_, shortName := SplitRemoteLayerRef(ref)
 			if _, ok := layers[shortName]; ok {
 				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", shortName, ref)

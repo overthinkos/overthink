@@ -86,7 +86,10 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
-	// Validate module consistency (layers.mod / layers.lock)
+	// Validate inline @version consistency (no version conflicts)
+	validateInlineVersions(cfg, layers, errs)
+
+	// Validate remote module consistency
 	validateModules(cfg, layers, errs)
 
 	if errs.HasErrors() {
@@ -117,14 +120,14 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 		if !img.IsEnabled() {
 			continue
 		}
-		for _, layerName := range img.Layers {
+		for _, layerRef := range img.Layers {
+			// Strip @version before lookup (layers are keyed by bare ref)
+			layerName, _ := StripVersion(layerRef)
 			if _, ok := layers[layerName]; !ok {
-				if IsRemoteLayerRef(layerName) {
-					// Remote layer ref -- give a more specific error
-					modPath, name := SplitRemoteLayerRef(layerName)
-					errs.Add("image %q: remote layer %q not found (module %s may need 'ov mod get' or layer %q doesn't exist in it)", imageName, layerName, modPath, name)
+				if IsRemoteLayerRef(layerRef) {
+					modPath, name := SplitRemoteLayerRef(layerRef)
+					errs.Add("image %q: remote layer %q not found (module %s may need 'ov mod get' or layer %q doesn't exist in it)", imageName, layerRef, modPath, name)
 				} else {
-					// Check for typo suggestions among local layers
 					suggestion := findSimilarName(layerName, LayerNames(layers))
 					if suggestion != "" {
 						errs.Add("image %q: layer %q not found (did you mean %q?)", imageName, layerName, suggestion)
@@ -134,6 +137,15 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 				}
 			}
 		}
+	}
+}
+
+// validateInlineVersions checks that the same module is not referenced with
+// different versions across images.yml and layer.yml depends.
+func validateInlineVersions(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	_, err := CollectRequiredModulesVersioned(cfg, layers)
+	if err != nil {
+		errs.Add("%v", err)
 	}
 }
 
@@ -726,7 +738,7 @@ func validateBindMounts(cfg *Config, layers map[string]*Layer, errs *ValidationE
 	}
 }
 
-// validateModules checks layers.mod / layers.lock consistency
+// validateModules checks remote module consistency
 func validateModules(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Find all modules referenced by remote layer refs in images
 	usedModules := CollectRequiredModules(cfg)
@@ -745,9 +757,8 @@ func validateModules(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 		return // No remote layers, no validation needed
 	}
 
-	// If remote layers are used, layers.mod must exist
-	// (ScanAllLayers would have already errored if module not cached, but
-	// we double-check that require entries exist for all used modules)
+	// If remote layers are used, check for naming conflicts
+	// (ScanAllLayers would have already errored if module not cached)
 	for _, layer := range layers {
 		if !layer.Remote {
 			continue

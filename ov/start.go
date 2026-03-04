@@ -10,13 +10,20 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image     string `arg:"" help:"Image name from images.yml"`
+	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	GPUFlags  `embed:""`
 }
 
 func (c *StartCmd) Run() error {
+	// Handle remote image refs
+	ref := StripURLScheme(c.Image)
+	if IsRemoteImageRef(ref) {
+		return c.runRemote(ref)
+	}
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -149,6 +156,131 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	return nil
 }
 
+func (c *StartCmd) runRemote(ref string) error {
+	absWorkspace, err := filepath.Abs(c.Workspace)
+	if err != nil {
+		return fmt.Errorf("resolving workspace path: %w", err)
+	}
+	info, err := os.Stat(absWorkspace)
+	if err != nil {
+		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
+	}
+
+	gpu := ResolveGPU(c.GPUFlags.Mode())
+	LogGPU(gpu)
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	engine := rt.RunEngine
+
+	ctx, err := ResolveRemoteImage(ref, c.Tag)
+	if err != nil {
+		return err
+	}
+
+	if rt.RunMode == "quadlet" {
+		return c.runRemoteQuadlet(rt, ctx, absWorkspace, gpu)
+	}
+
+	// Pull or build
+	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
+		return err
+	}
+
+	volumes, err := ctx.CollectVolumes()
+	if err != nil {
+		return err
+	}
+	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+
+	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
+		return err
+	}
+
+	name := ctx.ContainerName()
+	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
+		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
+		name, volumes, bindMounts, gpu, rt.BindAddress)
+
+	cmd := exec.Command(args[0], args[1:]...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s run failed: %w\n%s", EngineBinary(engine), err, strings.TrimSpace(string(output)))
+	}
+
+	containerID := strings.TrimSpace(string(output))
+	if len(containerID) > 12 {
+		containerID = containerID[:12]
+	}
+	fmt.Println(containerID)
+	fmt.Fprintf(os.Stderr, "Started %s as %s\n", name, containerID)
+	return nil
+}
+
+func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, absWorkspace string, gpu bool) error {
+	// For quadlet with remote refs: resolve and generate quadlet file
+	volumes, err := ctx.CollectVolumes()
+	if err != nil {
+		return err
+	}
+	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+
+	// Ensure image is in podman
+	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
+	if err := ctx.PullOrBuild(podmanRT, c.Tag, c.Build); err != nil {
+		return err
+	}
+
+	qcfg := QuadletConfig{
+		ImageName:   ctx.ImageName,
+		ImageRef:    ctx.ImageRef,
+		Workspace:   absWorkspace,
+		Ports:       ctx.Resolved.Ports,
+		Volumes:     volumes,
+		BindMounts:  bindMounts,
+		GPU:         gpu,
+		BindAddress: rt.BindAddress,
+		UID:         ctx.Resolved.UID,
+		GID:         ctx.Resolved.GID,
+	}
+
+	content := generateQuadlet(qcfg)
+
+	qdir, err := quadletDir()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(qdir, 0755); err != nil {
+		return fmt.Errorf("creating quadlet directory: %w", err)
+	}
+
+	qpath := filepath.Join(qdir, quadletFilename(ctx.ImageName))
+	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("writing quadlet file: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)
+
+	reloadCmd := exec.Command("systemctl", "--user", "daemon-reload")
+	if output, err := reloadCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("systemctl daemon-reload failed: %w\n%s", err, strings.TrimSpace(string(output)))
+	}
+
+	svc := serviceName(ctx.ImageName)
+	startCmd := exec.Command("systemctl", "--user", "start", svc)
+	startCmd.Stdout = os.Stdout
+	startCmd.Stderr = os.Stderr
+	if err := startCmd.Run(); err != nil {
+		return fmt.Errorf("starting %s: %w", svc, err)
+	}
+	fmt.Fprintf(os.Stderr, "Started %s\n", svc)
+	return nil
+}
+
 // findTunnelYAML returns the raw TunnelYAML from config for this image.
 func (c *StartCmd) findTunnelYAML(cfg *Config) *TunnelYAML {
 	img := cfg.Images[c.Image]
@@ -193,12 +325,19 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
-	Image string `arg:"" help:"Image name from images.yml"`
+	Image string `arg:"" help:"Image name or remote ref"`
 }
 
 func (c *StopCmd) Run() error {
+	// Resolve the image name (handle remote refs)
+	imageName := c.Image
+	ref := StripURLScheme(c.Image)
+	if IsRemoteImageRef(ref) {
+		imageName = ParseRemoteRef(ref).Name
+	}
+
 	// Stop tunnel before stopping container (best-effort)
-	stopTunnelForImage(c.Image)
+	stopTunnelForImage(imageName)
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -206,7 +345,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		svc := serviceName(c.Image)
+		svc := serviceName(imageName)
 		cmd := exec.Command("systemctl", "--user", "stop", svc)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -218,7 +357,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	engine := EngineBinary(rt.RunEngine)
-	name := containerName(c.Image)
+	name := containerName(imageName)
 
 	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()

@@ -31,7 +31,6 @@ project/
 +-- ov/                       # Go module (go 1.25.6, kong CLI, go-containerregistry)
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
-+-- layers.mod                # Remote module dependencies (optional)
 +-- layers.lock               # Locked module versions (generated, checked in)
 +-- Taskfile.yml              # Root: includes + PATH setup
 +-- taskfiles/                # Build.yml, Run.yml, Setup.yml
@@ -66,11 +65,9 @@ ov build --platform linux/amd64 [image...]  # Specific platform
 ov build --cache registry|gha [image...]   # Enable build cache
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
-ov mod init                            # Create layers.mod with module path from git remote
-ov mod get <module>@<version>          # Add/update a require entry, download, update lock
-ov mod remove <module>                 # Remove from layers.mod and layers.lock
-ov mod download                        # Download all required modules to cache
-ov mod tidy                            # Remove unused requires, add missing ones
+ov mod get <module>@<version>          # Download module, update layers.lock
+ov mod download                        # Download all modules from inline @version refs
+ov mod tidy                            # Remove unused lock entries
 ov mod verify                          # Verify cached modules against layers.lock hashes
 ov mod update [module]                 # Update to latest version
 ov mod list                            # List modules with versions and their layers
@@ -176,7 +173,7 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache |
 | Runtime operations | `/overthink:run` | ov shell, start/stop, GPU passthrough, aliases, runtime config, image transfer |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, bootc disk images, encryption |
-| Remote modules | `/overthink:module` | layers.mod, layers.lock, cache, cross-module deps |
+| Remote modules | `/overthink:module` | inline @version refs, layers.lock, cache, cross-module deps |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
 | Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |

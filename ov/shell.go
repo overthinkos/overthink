@@ -37,14 +37,21 @@ func defaultContainerRunning(engine, name string) bool {
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
-	Image     string `arg:"" help:"Image name from images.yml"`
+	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Workspace string `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag       string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Command   string `short:"c" help:"Command to execute instead of interactive shell"`
+	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	GPUFlags  `embed:""`
 }
 
 func (c *ShellCmd) Run() error {
+	// Handle remote image refs
+	ref := StripURLScheme(c.Image)
+	if IsRemoteImageRef(ref) {
+		return c.runRemote(ref)
+	}
+
 	// Resolve workspace to absolute path (needed regardless of config source)
 	absWorkspace, err := filepath.Abs(c.Workspace)
 	if err != nil {
@@ -154,6 +161,70 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Replace process with engine
+	return syscall.Exec(enginePath, args, os.Environ())
+}
+
+func (c *ShellCmd) runRemote(ref string) error {
+	absWorkspace, err := filepath.Abs(c.Workspace)
+	if err != nil {
+		return fmt.Errorf("resolving workspace path: %w", err)
+	}
+	info, err := os.Stat(absWorkspace)
+	if err != nil {
+		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
+	}
+
+	gpu := ResolveGPU(c.GPUFlags.Mode())
+	LogGPU(gpu)
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	engine := rt.RunEngine
+
+	ctx, err := ResolveRemoteImage(ref, c.Tag)
+	if err != nil {
+		return err
+	}
+
+	// If the container is already running, exec into it
+	name := ctx.ContainerName()
+	if containerRunning(engine, name) {
+		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command)
+		enginePath, err := findExecutable(EngineBinary(engine))
+		if err != nil {
+			return err
+		}
+		return syscall.Exec(enginePath, args, os.Environ())
+	}
+
+	// Pull or build
+	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
+		return err
+	}
+
+	volumes, err := ctx.CollectVolumes()
+	if err != nil {
+		return err
+	}
+	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+
+	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
+		return err
+	}
+
+	args := buildShellArgs(engine, ctx.ImageRef, absWorkspace,
+		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
+		volumes, bindMounts, gpu, c.Command, rt.BindAddress)
+
+	enginePath, err := findExecutable(EngineBinary(engine))
+	if err != nil {
+		return err
+	}
 	return syscall.Exec(enginePath, args, os.Environ())
 }
 

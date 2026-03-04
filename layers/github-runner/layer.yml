@@ -17,10 +17,22 @@ rpm:
     - passt
     - guestfs-tools
     - libguestfs-xfs
+    - podman
+    - buildah
+    - golang
+    - git
+    - qemu-user-static-aarch64
+
+volumes:
+  - name: state
+    path: /opt/actions-runner
 
 env:
+  RUNNER_ALLOW_RUNASROOT: "1"
   RUNNER_WORK_DIR: "/opt/actions-runner/_work"
   RUNNER_GROUP: "Default"
+  OV_BUILD_ENGINE: "podman"
+  OV_RUN_ENGINE: "podman"
 
 service: |
   [program:github-runner]

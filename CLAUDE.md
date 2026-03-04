@@ -17,6 +17,7 @@ Two components with a clean split:
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
 - `.build/<image>/supervisor/*.conf` -- supervisord service configs (only for images with `service` layers)
+- `.build/_layers/<name>` -- symlinks to remote module layer directories (only when remote layers used)
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
@@ -543,6 +544,93 @@ Override: `ov generate --tag <value>` replaces all `"auto"` resolutions.
 
 ---
 
+## Remote Layer Modules
+
+Go-module-style dependency management for layers. Any git repository with a `layers/` directory can serve as a layer module.
+
+### Layer Referencing
+
+In `images.yml`, remote layers use fully qualified paths. Local layers remain short names:
+
+```yaml
+images:
+  my-app:
+    layers:
+      - pixi                                        # local: layers/pixi/
+      - github.com/overthinkos/ml-layers/cuda        # remote: module/layer
+```
+
+### Module Manifest (`layers.mod`)
+
+Project root, YAML. Maps module paths to versions:
+
+```yaml
+module: github.com/overthinkos/overthink
+require:
+  - module: github.com/overthinkos/ml-layers
+    version: v1.0.0
+replace:
+  - module: github.com/overthinkos/ml-layers
+    path: ../ml-layers    # local development override
+```
+
+### Lock File (`layers.lock`)
+
+Project root, YAML, checked into git. Records resolved state:
+
+```yaml
+# layers.lock (generated -- do not edit)
+modules:
+  - module: github.com/overthinkos/ml-layers
+    version: v1.0.0
+    commit: a1b2c3d4e5f6...
+    hash: sha256:abc123...
+    layers: [cuda, python-ml]
+```
+
+### Remote Module Structure
+
+Any git repo with `layers/` directory and optional `module.yml`:
+
+```
+module.yml              # declares canonical module path
+layers/
+  cuda/
+    layer.yml
+    root.yml
+```
+
+### Cache
+
+Location: `~/.cache/ov/mod/` (override: `$OV_MODULE_CACHE`). Downloaded via `git clone --depth 1`. Read-only after download.
+
+### Build Context
+
+Remote layers live outside the Docker build context. During `ov generate`, symlinks are created:
+```
+.build/_layers/cuda -> ~/.cache/ov/mod/github.com/.../layers/cuda
+```
+
+### Cross-Module Dependencies
+
+Within a module, `depends` uses short names (siblings). Cross-module uses full paths:
+
+```yaml
+# In github.com/overthinkos/ml-layers/layers/python-ml/layer.yml
+depends:
+  - cuda                                    # same module
+  - github.com/overthinkos/overthink/pixi   # cross-module
+```
+
+### Name Conflicts
+
+- Local layers always shadow remote layers with same short name (note emitted)
+- Two remote modules exporting the same layer name is a validation error
+
+Source: `ov/mod.go` (types, parsing), `ov/mod_git.go` (git ops, cache), `ov/mod_cmd.go` (CLI commands).
+
+---
+
 ## ov CLI Reference
 
 ```
@@ -568,6 +656,14 @@ ov build --cache registry|gha [image...]   # Enable build cache (registry or Git
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
                                        # Merge small layers in a built image
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
+ov mod init                         # Create layers.mod with module path from git remote
+ov mod get <module>@<version>       # Add/update a require entry, download, update lock
+ov mod remove <module>              # Remove from layers.mod and layers.lock
+ov mod download                     # Download all required modules to cache
+ov mod tidy                         # Remove unused requires, add missing ones
+ov mod verify                       # Verify cached modules against layers.lock hashes
+ov mod update [module]              # Update to latest version (re-resolve branches/tags)
+ov mod list                         # List modules with versions and their layers
 ov new layer <name>                    # Scaffold a layer directory
 ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu]
                                        # Bash shell in a container (mounts cwd at /workspace)
@@ -633,12 +729,17 @@ project/
 |   +-- volumes.go                      # Named volume collection + mounting
 |   +-- alias.go                        # Command aliases (wrapper scripts, collection, CLI commands)
 |   +-- deploy.go                       # Per-deployment config overlay (~/.config/ov/deploy.yml)
+|   +-- mod.go                          # Remote module types (ModFile, LockFile), parsing
+|   +-- mod_cmd.go                      # CLI commands: mod init/get/remove/download/tidy/verify/update/list
+|   +-- mod_git.go                      # Git operations: clone, resolve ref, compute hash, cache management
 |   +-- crypto.go                       # Bind mounts (plain + gocryptfs encrypted), crypto CLI commands
 |   +-- *_test.go                       # Tests for each file
 +-- .build/                             # Generated (gitignored)
 |   +-- <image>/Containerfile
 |   +-- <image>/supervisor/*.conf        # Supervisord configs (from layer.yml service)
 +-- images.yml                          # Configuration
++-- layers.mod                          # Remote module dependencies (optional)
++-- layers.lock                         # Locked module versions (generated, checked in)
 +-- Taskfile.yml                        # Root: includes + PATH setup
 +-- taskfiles/
 |   +-- Build.yml                       # ov, all, local, push, merge, iso, qcow2, raw

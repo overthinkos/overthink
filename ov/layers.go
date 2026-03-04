@@ -93,6 +93,10 @@ type Layer struct {
 	HasExtract        bool
 	Depends           []string
 
+	// Remote module metadata
+	Remote     bool   // true if from a remote module
+	ModulePath string // e.g. "github.com/overthinkos/ml-layers" (empty for local)
+
 	// Pre-populated from layer.yml
 	rpmConfig   *RpmConfig
 	debConfig   *DebConfig
@@ -390,6 +394,122 @@ func (l *Layer) HasPypiDeps() bool {
 		return false
 	}
 	return strings.Contains(string(data), "[pypi-dependencies]")
+}
+
+// ScanModuleLayers scans a module directory's layers/ subdirectory and returns
+// layers keyed by their fully-qualified reference (modulePath/layerName).
+func ScanModuleLayers(moduleDir string, modulePath string) (map[string]*Layer, error) {
+	layersDir := filepath.Join(moduleDir, "layers")
+	entries, err := os.ReadDir(layersDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return make(map[string]*Layer), nil
+		}
+		return nil, fmt.Errorf("reading module layers directory %s: %w", layersDir, err)
+	}
+
+	layers := make(map[string]*Layer)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		name := entry.Name()
+		layer, err := scanLayer(filepath.Join(layersDir, name), name)
+		if err != nil {
+			return nil, fmt.Errorf("scanning module layer %s/%s: %w", modulePath, name, err)
+		}
+		layer.Remote = true
+		layer.ModulePath = modulePath
+
+		// Key by fully-qualified path
+		fullRef := modulePath + "/" + name
+		layers[fullRef] = layer
+	}
+
+	return layers, nil
+}
+
+// ScanAllLayers scans local layers and all remote module layers, returning a merged map.
+// Local layers are keyed by short name, remote layers by fully-qualified path.
+// If no layers.mod exists, behaves identically to ScanLayers.
+func ScanAllLayers(dir string) (map[string]*Layer, error) {
+	// 1. Scan local layers
+	layers, err := ScanLayers(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Parse layers.mod -- if absent, return local-only
+	mf, err := ParseModFile(dir)
+	if err != nil {
+		return nil, err
+	}
+	if mf == nil || len(mf.Require) == 0 {
+		return layers, nil
+	}
+
+	// 3. Parse layers.lock for resolved commits/hashes
+	lf, err := ParseLockFile(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. For each required module, scan its layers
+	for _, req := range mf.Require {
+		// Check for replace directive (local development override)
+		var moduleDir string
+		if replace := mf.FindReplace(req.Module); replace != nil {
+			// Use local replacement path
+			replacePath := replace.Path
+			if !filepath.IsAbs(replacePath) {
+				replacePath = filepath.Join(dir, replacePath)
+			}
+			moduleDir = replacePath
+		} else {
+			// Use cached module
+			version := req.Version
+			// If lock file has a resolved commit for this module, use that as the cache key
+			if lf != nil {
+				if lm := lf.FindLockModule(req.Module); lm != nil {
+					version = lm.Version
+				}
+			}
+
+			cachePath, err := ModuleCachePath(req.Module, version)
+			if err != nil {
+				return nil, fmt.Errorf("resolving cache path for %s: %w", req.Module, err)
+			}
+
+			// Check if module is cached
+			if _, err := os.Stat(cachePath); os.IsNotExist(err) {
+				return nil, fmt.Errorf("module %s@%s not downloaded (run 'ov mod download')", req.Module, req.Version)
+			}
+			moduleDir = cachePath
+		}
+
+		// Scan the module's layers
+		modLayers, err := ScanModuleLayers(moduleDir, req.Module)
+		if err != nil {
+			return nil, fmt.Errorf("scanning module %s: %w", req.Module, err)
+		}
+
+		// Merge into main map
+		for ref, layer := range modLayers {
+			// Check for conflicts: two remote modules exporting the same full ref
+			if existing, ok := layers[ref]; ok && existing.Remote {
+				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.ModulePath, layer.ModulePath)
+			}
+			// Local layers shadow remote layers with same short name (emit note)
+			_, shortName := SplitRemoteLayerRef(ref)
+			if _, ok := layers[shortName]; ok {
+				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", shortName, ref)
+			}
+			layers[ref] = layer
+		}
+	}
+
+	return layers, nil
 }
 
 // fileExists checks if a file exists

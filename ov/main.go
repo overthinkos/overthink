@@ -29,6 +29,7 @@ type CLI struct {
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
 	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
+	Mod      ModCmd      `cmd:"" help:"Manage remote layer modules"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
@@ -66,7 +67,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}
@@ -123,7 +124,7 @@ func (c *InspectCmd) Run() error {
 				fmt.Println(p)
 			}
 		case "volumes":
-			layers, err := ScanLayers(dir)
+			layers, err := ScanAllLayers(dir)
 			if err != nil {
 				return err
 			}
@@ -135,7 +136,7 @@ func (c *InspectCmd) Run() error {
 				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
 			}
 		case "aliases":
-			layers, err := ScanLayers(dir)
+			layers, err := ScanAllLayers(dir)
 			if err != nil {
 				return err
 			}
@@ -220,13 +221,18 @@ func (c *ListLayersCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}
 
 	for _, name := range LayerNames(layers) {
-		fmt.Println(name)
+		layer := layers[name]
+		if layer.Remote {
+			fmt.Printf("%s [%s]\n", name, layer.ModulePath)
+		} else {
+			fmt.Println(name)
+		}
 	}
 	return nil
 }
@@ -251,7 +257,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}
@@ -287,7 +293,7 @@ func (c *ListServicesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}
@@ -308,7 +314,7 @@ func (c *ListRoutesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}
@@ -341,7 +347,7 @@ func (c *ListVolumesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}

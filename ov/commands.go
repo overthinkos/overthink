@@ -60,7 +60,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 			return err
 		}
 		uid, gid = resolved.UID, resolved.GID
-		layers, err := ScanLayers(dir)
+		layers, err := ScanAllLayers(dir)
 		if err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	if cfgErr == nil {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
 		if resolveErr == nil && resolved.Tunnel != nil {
-			layers, scanErr := ScanLayers(dir)
+			layers, scanErr := ScanAllLayers(dir)
 			if scanErr == nil {
 				tunnelYAML := cfg.Images[c.Image].Tunnel
 				if tunnelYAML == nil {

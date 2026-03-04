@@ -73,7 +73,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -154,6 +154,11 @@ func (g *Generator) Generate() error {
 		return fmt.Errorf("creating .build directory: %w", err)
 	}
 
+	// Create symlinks for remote layers in .build/_layers/
+	if err := g.createRemoteLayerSymlinks(); err != nil {
+		return fmt.Errorf("creating remote layer symlinks: %w", err)
+	}
+
 	// Resolve image build order
 	order, err := ResolveImageOrder(g.Images, g.Layers)
 	if err != nil {
@@ -212,8 +217,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Emit scratch stages for each layer
 	for _, layerName := range layerOrder {
-		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layerName))
-		b.WriteString(fmt.Sprintf("COPY layers/%s/ /\n\n", layerName))
+		layer := g.Layers[layerName]
+		stageName := layer.Name // use short name for stage alias
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", stageName))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
 	}
 
 	// Resolve builder ref for this image (builder itself doesn't use builder stages)
@@ -229,13 +236,14 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			if builderRef == "" {
 				return fmt.Errorf("image %q: layer %q has pixi manifest but no builder configured", imageName, layerName)
 			}
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", builderRef, layerName))
+			copySrc := g.layerCopySource(layerName)
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", builderRef, layer.Name))
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			if layer.HasPixiLock {
-				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/pixi.lock pixi.lock\n", img.UID, img.GID, layerName))
+				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/pixi.lock pixi.lock\n", img.UID, img.GID, copySrc))
 			}
-			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/%s %s\n", img.UID, img.GID, layerName, manifest, manifest))
+			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/%s %s\n", img.UID, img.GID, copySrc, manifest, manifest))
 			cacheMounts := ""
 			// Install and then remove manifests so they're not included when we COPY the home dir
 			cleanup := fmt.Sprintf(" && rm -f %s pixi.lock", manifest)
@@ -254,14 +262,16 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Emit per-layer npm build stages
 	for _, layerName := range layerOrder {
-		if g.Layers[layerName].HasPackageJson {
+		layer := g.Layers[layerName]
+		if layer.HasPackageJson {
 			if builderRef == "" {
 				return fmt.Errorf("image %q: layer %q has package.json but no builder configured", imageName, layerName)
 			}
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", builderRef, layerName))
+			copySrc := g.layerCopySource(layerName)
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", builderRef, layer.Name))
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
-			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d layers/%s/package.json package.json\n", img.UID, img.GID, layerName))
+			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/package.json package.json\n", img.UID, img.GID, copySrc))
 			b.WriteString("RUN node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g && rm -f package.json\n\n")
 		}
 	}
@@ -361,10 +371,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		layer := g.Layers[layerName]
 		if layer.PixiManifest() != "" {
 			b.WriteString(fmt.Sprintf("# Copy pixi environment: %s\n", layerName))
-			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s %s\n", layerName, img.UID, img.GID, img.Home, img.Home))
+			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s %s\n", layer.Name, img.UID, img.GID, img.Home, img.Home))
 		}
 	}
-	
+
 	// Ensure pixi binary is present if any pixi layer exists
 	hasPixi := false
 	for _, layerName := range layerOrder {
@@ -374,14 +384,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 	if hasPixi {
-		// Just take it from the first one available or explicitly from the image if we could refer to it.
-		// Since we have build stages, we can pick the last one.
-		// Or better, just COPY --from=ghcr.io/prefix-dev/pixi:latest if we could.
-		// But we don't have that alias in the final stage context unless we define it.
-		// We'll copy from the first pixi layer found.
 		for _, layerName := range layerOrder {
-			if g.Layers[layerName].PixiManifest() != "" {
-				b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build /usr/local/bin/pixi /usr/local/bin/pixi\n\n", layerName))
+			layer := g.Layers[layerName]
+			if layer.PixiManifest() != "" {
+				b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build /usr/local/bin/pixi /usr/local/bin/pixi\n\n", layer.Name))
 				break
 			}
 		}
@@ -390,12 +396,13 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Copy npm environments from build stages
 	hasNpm := false
 	for _, layerName := range layerOrder {
-		if g.Layers[layerName].HasPackageJson {
+		layer := g.Layers[layerName]
+		if layer.HasPackageJson {
 			if !hasNpm {
 				b.WriteString("# Copy npm packages\n")
 				hasNpm = true
 			}
-			b.WriteString(fmt.Sprintf("COPY --from=%s-npm-build --chown=%d:%d %s %s\n", layerName, img.UID, img.GID, img.Home, img.Home))
+			b.WriteString(fmt.Sprintf("COPY --from=%s-npm-build --chown=%d:%d %s %s\n", layer.Name, img.UID, img.GID, img.Home, img.Home))
 		}
 	}
 	if hasNpm {
@@ -699,6 +706,7 @@ func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []
 // Returns true if the layer ended in user mode.
 func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *ResolvedImage, skipRootReset bool) bool {
 	layer := g.Layers[layerName]
+	stageName := layer.Name // short name used as scratch stage alias
 
 	b.WriteString(fmt.Sprintf("# Layer: %s\n", layerName))
 
@@ -716,7 +724,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 
 	// 2. root.yml (root)
 	if layer.HasRootYml {
-		g.writeRootYml(b, layerName, img.Pkg)
+		g.writeRootYml(b, stageName, img.Pkg)
 	}
 
 	// 4. Cargo.toml (user)
@@ -725,7 +733,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writeCargoToml(b, layerName, img)
+		g.writeCargoToml(b, stageName, img)
 	}
 
 	// 5. user.yml (user)
@@ -734,7 +742,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writeUserYml(b, layerName, img)
+		g.writeUserYml(b, stageName, img)
 	}
 
 	// Reset to root for next layer (skip for last layer when no root steps follow)
@@ -867,5 +875,52 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	b.WriteString("\n")
+}
+
+// createRemoteLayerSymlinks creates symlinks in .build/_layers/ for each remote layer
+// so that Docker/Podman can access them from the build context.
+func (g *Generator) createRemoteLayerSymlinks() error {
+	hasRemote := false
+	for _, layer := range g.Layers {
+		if layer.Remote {
+			hasRemote = true
+			break
+		}
+	}
+	if !hasRemote {
+		// Clean up _layers dir if it exists from a previous run
+		os.RemoveAll(filepath.Join(g.BuildDir, "_layers"))
+		return nil
+	}
+
+	layersDir := filepath.Join(g.BuildDir, "_layers")
+	// Remove and recreate to ensure clean state
+	os.RemoveAll(layersDir)
+	if err := os.MkdirAll(layersDir, 0755); err != nil {
+		return err
+	}
+
+	for ref, layer := range g.Layers {
+		if !layer.Remote {
+			continue
+		}
+		// Create symlink: .build/_layers/<layer-name> -> <cache-path>/layers/<layer-name>/
+		linkPath := filepath.Join(layersDir, layer.Name)
+		if err := os.Symlink(layer.Path, linkPath); err != nil {
+			return fmt.Errorf("creating symlink for %s: %w", ref, err)
+		}
+	}
+
+	return nil
+}
+
+// layerCopySource returns the COPY source path for a layer in the Containerfile.
+// Local layers use "layers/<name>/", remote layers use ".build/_layers/<name>/".
+func (g *Generator) layerCopySource(layerRef string) string {
+	layer := g.Layers[layerRef]
+	if layer.Remote {
+		return ".build/_layers/" + layer.Name
+	}
+	return "layers/" + layerRef
 }
 

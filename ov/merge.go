@@ -61,7 +61,7 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		return err
 	}
 
-	layers, err := ScanLayers(dir)
+	layers, err := ScanAllLayers(dir)
 	if err != nil {
 		return err
 	}

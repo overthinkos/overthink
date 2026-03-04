@@ -81,7 +81,7 @@ func (c *ShellCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		layers, err := ScanLayers(dir)
+		layers, err := ScanAllLayers(dir)
 		if err != nil {
 			return err
 		}

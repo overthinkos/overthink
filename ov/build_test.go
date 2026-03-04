@@ -244,7 +244,7 @@ func TestBuildLocalArgsWithImageCache(t *testing.T) {
 		"podman", "build", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
-		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -262,7 +262,7 @@ func TestBuildDockerPushArgsWithImageCache(t *testing.T) {
 		"docker", "buildx", "build", "--push", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
-		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -280,7 +280,7 @@ func TestBuildPodmanPushArgsWithImageCache(t *testing.T) {
 		"podman", "build", "-f", "-",
 		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"--platform", "linux/amd64",
-		"--cache-from", "ghcr.io/overthinkos/fedora:latest",
+		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {

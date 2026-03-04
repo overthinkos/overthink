@@ -184,7 +184,7 @@ func (c *BuildCmd) cacheArgs(name, registry string) []string {
 		if registry == "" {
 			return nil
 		}
-		ref := fmt.Sprintf("%s/%s:latest", registry, name)
+		ref := fmt.Sprintf("%s/%s", registry, name)
 		return []string{"--cache-from", ref}
 	default:
 		return nil

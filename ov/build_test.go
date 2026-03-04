@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestBuildLocalArgs(t *testing.T) {
@@ -301,6 +303,51 @@ func TestBuildImageCacheNoRegistry(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildLocalArgs(image, no registry) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestRetryCmdSucceedsFirstAttempt(t *testing.T) {
+	calls := 0
+	err := retryCmd(3, time.Millisecond, func() error {
+		calls++
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calls != 1 {
+		t.Errorf("expected 1 call, got %d", calls)
+	}
+}
+
+func TestRetryCmdSucceedsAfterRetries(t *testing.T) {
+	calls := 0
+	err := retryCmd(3, time.Millisecond, func() error {
+		calls++
+		if calls < 3 {
+			return fmt.Errorf("transient error")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls, got %d", calls)
+	}
+}
+
+func TestRetryCmdExhaustsAttempts(t *testing.T) {
+	calls := 0
+	err := retryCmd(3, time.Millisecond, func() error {
+		calls++
+		return fmt.Errorf("persistent error")
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if calls != 3 {
+		t.Errorf("expected 3 calls, got %d", calls)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // BuildCmd builds container images
@@ -124,15 +125,18 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 		return fmt.Errorf("%s build failed: %w", engine, err)
 	}
 
-	// Podman --manifest builds locally; push each tag separately
+	// Podman --manifest builds locally; push each tag separately with retry
 	if c.Push && engineName == "podman" {
 		for _, tag := range tags {
 			fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
-			pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+tag)
-			pushCmd.Dir = dir
-			pushCmd.Stdout = os.Stderr
-			pushCmd.Stderr = os.Stderr
-			if err := pushCmd.Run(); err != nil {
+			pushTag := tag
+			if err := retryCmd(3, 5*time.Second, func() error {
+				pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
+				pushCmd.Dir = dir
+				pushCmd.Stdout = os.Stderr
+				pushCmd.Stderr = os.Stderr
+				return pushCmd.Run()
+			}); err != nil {
 				return fmt.Errorf("podman manifest push %s failed: %w", tag, err)
 			}
 		}
@@ -217,6 +221,24 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, 
 	args = append(args, c.cacheArgs(name, registry)...)
 	args = append(args, ".")
 	return args
+}
+
+// retryCmd retries fn up to maxAttempts times with exponential backoff starting at baseDelay.
+func retryCmd(maxAttempts int, baseDelay time.Duration, fn func() error) error {
+	var err error
+	for i := 0; i < maxAttempts; i++ {
+		if i > 0 {
+			delay := baseDelay * time.Duration(1<<(i-1))
+			fmt.Fprintf(os.Stderr, "Retry %d/%d after %v...\n", i, maxAttempts-1, delay)
+			time.Sleep(delay)
+		}
+		err = fn()
+		if err == nil {
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "Attempt %d/%d failed: %v\n", i+1, maxAttempts, err)
+	}
+	return err
 }
 
 // hostPlatform returns the host platform in OCI format.

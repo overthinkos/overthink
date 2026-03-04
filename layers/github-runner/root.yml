@@ -32,3 +32,7 @@ tasks:
       # Set file capabilities for rootless container support
       - setcap cap_setuid=ep /usr/bin/newuidmap
       - setcap cap_setgid=ep /usr/bin/newgidmap
+
+      # Configure subuid/subgid for rootless podman inside container
+      - echo "root:100000:65536" >> /etc/subuid
+      - echo "root:100000:65536" >> /etc/subgid

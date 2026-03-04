@@ -42,6 +42,7 @@ type LayerYAML struct {
 	Volumes    []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases    []AliasYAML       `yaml:"aliases,omitempty"`
 	Extract    []ExtractYAML     `yaml:"extract,omitempty"`
+	Security   *SecurityConfig   `yaml:"security,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -108,6 +109,7 @@ type Layer struct {
 	volumes     []VolumeYAML
 	aliases     []AliasYAML
 	extract     []ExtractYAML
+	security    *SecurityConfig
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -233,6 +235,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate extract
 		layer.HasExtract = len(ly.Extract) > 0
 		layer.extract = ly.Extract
+
+		// Pre-populate security
+		layer.security = ly.Security
 	}
 
 	return layer, nil
@@ -335,6 +340,11 @@ func (l *Layer) Volumes() []VolumeYAML {
 // Extract returns the extract declarations (pre-populated from layer.yml)
 func (l *Layer) Extract() []ExtractYAML {
 	return l.extract
+}
+
+// Security returns the security config (pre-populated from layer.yml, nil if not set)
+func (l *Layer) Security() *SecurityConfig {
+	return l.security
 }
 
 // ServiceLayers returns layers that have supervisord.conf

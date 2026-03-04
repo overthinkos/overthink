@@ -26,6 +26,14 @@ type AliasConfig struct {
 	Command string `yaml:"command,omitempty"` // defaults to Name if empty
 }
 
+// SecurityConfig holds container security options (privileged, capabilities, devices).
+type SecurityConfig struct {
+	Privileged  bool     `yaml:"privileged,omitempty" json:"privileged,omitempty"`
+	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
+	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
+	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
+}
+
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
 	Enabled   *bool         `yaml:"enabled,omitempty"`
@@ -49,6 +57,7 @@ type ImageConfig struct {
 	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`  // bind mount declarations (image-level only)
 	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE)
 	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
+	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

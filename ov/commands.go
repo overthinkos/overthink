@@ -59,6 +59,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
+	var security SecurityConfig
 	uid, gid := 1000, 1000 // defaults
 
 	// Try images.yml first, fall back to image labels
@@ -78,6 +79,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
+		security = CollectSecurity(cfg, layers, c.Image)
 		// Resolve bind mounts
 		img := cfg.Images[c.Image]
 		if len(img.BindMounts) > 0 {
@@ -176,6 +178,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Env:         envVars,
 		EnvFile:     quadletEnvFile,
 		Instance:    c.Instance,
+		Security:    security,
 	}
 
 	// Suppress Env if we're using EnvFile (avoid duplication)

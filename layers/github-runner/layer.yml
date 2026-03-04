@@ -27,6 +27,9 @@ volumes:
   - name: state
     path: /opt/actions-runner
 
+security:
+  privileged: true
+
 env:
   RUNNER_ALLOW_RUNASROOT: "1"
   RUNNER_WORK_DIR: "/opt/actions-runner/_work"

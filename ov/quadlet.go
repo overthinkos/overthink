@@ -23,6 +23,7 @@ type QuadletConfig struct {
 	Env         []string            // runtime env vars (KEY=VALUE pairs)
 	EnvFile     string              // absolute path to env file for EnvironmentFile= directive
 	Instance    string              // instance name for running multiple containers of same image
+	Security    SecurityConfig      // container security options
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -60,6 +61,24 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 	if cfg.GPU {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
+	}
+	if cfg.Security.Privileged {
+		b.WriteString("SecurityLabelDisable=true\n")
+		b.WriteString("PodmanArgs=--privileged\n")
+	} else {
+		for _, cap := range cfg.Security.CapAdd {
+			b.WriteString(fmt.Sprintf("AddCapability=%s\n", cap))
+		}
+		for _, dev := range cfg.Security.Devices {
+			b.WriteString(fmt.Sprintf("AddDevice=%s\n", dev))
+		}
+		for _, opt := range cfg.Security.SecurityOpt {
+			if opt == "label=disable" {
+				b.WriteString("SecurityLabelDisable=true\n")
+			} else {
+				b.WriteString(fmt.Sprintf("PodmanArgs=--security-opt %s\n", opt))
+			}
+		}
 	}
 	if len(cfg.BindMounts) > 0 {
 		b.WriteString(fmt.Sprintf("UserNS=keep-id:uid=%d,gid=%d\n", cfg.UID, cfg.GID))

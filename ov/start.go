@@ -62,6 +62,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
+	var security SecurityConfig
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -79,6 +80,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
+		security = CollectSecurity(cfg, layers, c.Image)
 		// Resolve bind mounts
 		img := cfg.Images[c.Image]
 		if len(img.BindMounts) > 0 {
@@ -137,7 +139,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars, security)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -230,7 +232,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, gpu, rt.BindAddress, envVars)
+		name, volumes, bindMounts, gpu, rt.BindAddress, envVars, SecurityConfig{})
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -439,7 +441,7 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string) []string {
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -450,6 +452,7 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	if gpu {
 		args = append(args, GPURunArgs(engine)...)
 	}
+	args = append(args, SecurityArgs(security)...)
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port, bindAddr))
 	}

@@ -82,6 +82,7 @@ func (c *ShellCmd) Run() error {
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
+	var security SecurityConfig
 
 	// Try images.yml first (existing path)
 	dir, _ := os.Getwd()
@@ -99,6 +100,7 @@ func (c *ShellCmd) Run() error {
 		if err != nil {
 			return err
 		}
+		security = CollectSecurity(cfg, layers, c.Image)
 		// Resolve bind mounts
 		img := cfg.Images[c.Image]
 		if len(img.BindMounts) > 0 {
@@ -171,7 +173,7 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars)
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars, security)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -244,7 +246,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 
 	args := buildShellArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars)
+		volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars, SecurityConfig{})
 
 	enginePath, err := findExecutable(EngineBinary(engine))
 	if err != nil {
@@ -262,7 +264,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string) []string {
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -277,6 +279,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	if gpu {
 		args = append(args, GPURunArgs(engine)...)
 	}
+	args = append(args, SecurityArgs(security)...)
 	for _, port := range ports {
 		args = append(args, "-p", localizePort(port, bindAddr))
 	}

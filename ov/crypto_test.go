@@ -566,7 +566,7 @@ func TestBuildShellArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp"},
 	}
-	args := buildShellArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil)
+	args := buildShellArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{})
 
 	found := false
 	for i, arg := range args {
@@ -591,7 +591,7 @@ func TestBuildShellArgsWithBindMountsPodman(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp"},
 	}
-	args := buildShellArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil)
+	args := buildShellArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{})
 
 	found := false
 	for _, arg := range args {
@@ -609,7 +609,7 @@ func TestBuildStartArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil)
+	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{})
 
 	found := false
 	for i, arg := range args {
@@ -633,7 +633,7 @@ func TestBuildStartArgsWithBindMountsPodman(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil)
+	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{})
 
 	found := false
 	for _, arg := range args {

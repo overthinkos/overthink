@@ -1,7 +1,7 @@
 # Overthink Build System
 
 Compose container images from a library of fully configurable layers.
-Built on `supervisord` and `task` ([taskfile.dev](https://taskfile.dev)). Supports both Docker and Podman as build/run engines.
+Built on `supervisord` and `ov` (Go CLI). Supports both Docker and Podman as build/run engines.
 
 ---
 
@@ -11,7 +11,7 @@ Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov enable` use the configured engine (Docker or Podman).
 
-**`task` (Taskfile)** -- thin wrappers that call `ov` commands. No YAML parsing, no graph logic. Source: `Taskfile.yml` + `taskfiles/{Build,Run,Setup}.yml`. Run `task -l` for all available commands.
+**`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
 **What gets generated** (`ov generate`):
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
@@ -32,8 +32,9 @@ project/
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
 +-- layers.lock               # Locked module versions (generated, checked in)
-+-- Taskfile.yml              # Root: includes + PATH setup
-+-- taskfiles/                # Build.yml, Run.yml, Setup.yml
++-- setup.sh                  # Bootstrap: downloads task, builds ov
++-- Taskfile.yml              # Bootstrap tasks only
++-- taskfiles/                # Build.yml, Setup.yml
 +-- layers/<name>/            # Layer directories
 +-- templates/                # supervisord.header.conf
 ```
@@ -146,7 +147,7 @@ ov version                             # Print computed CalVer tag
 ## Style Guide
 
 - Lowercase-hyphenated names for layers and images
-- No shell scripts -- Taskfiles for automation, Go for logic
+- Taskfiles for bootstrap only (building ov), Go for all other logic
 - No Docker layer cleanup -- cache mounts handle it
 - `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - Layer Taskfiles (`root.yml`/`user.yml`): single `install` task, no parameters, idempotent
@@ -155,27 +156,30 @@ ov version                             # Print computed CalVer tag
 - Never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is the only Python package manager
 - Binary downloads: detect arch with `uname -m`, map via `case`, fail on unsupported
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
-- Tasks are thin wrappers. Complex logic belongs in `ov`. Every public task has `desc:`
+- All logic belongs in `ov`. Tasks are only for bootstrap (building ov). Every public task has `desc:`
 
 ---
 
 ## Workflows
 
-**Add a layer:** `ov new layer <name>` -> edit `layer.yml` -> add install files -> add to an image in `images.yml` -> `task build:local -- <image>`
+**Add a layer:** `ov new layer <name>` -> edit `layer.yml` -> add install files -> add to an image in `images.yml` -> `ov build <image>`
 
-**Add an image:** add entry to `images.yml` -> `task build:local -- <image>`
+**Add an image:** add entry to `images.yml` -> `ov build <image>`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Host bootstrap (first time):** requires `task`, `go`, `docker` (or `podman`). Run `task setup:all` then `task build:all`. To use podman: `ov config set engine.build podman`.
+**Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov config set engine.build podman`.
 
 ---
 
-## Task Commands
+## Task Commands (bootstrap only)
 
-Task commands are thin wrappers around `ov` CLI commands. Run `task -l` for the full list. Key commands: `task setup:all` (build ov + create builder), `task build:all` (generate + build + merge), `task build:local -- <image>`, `task build:push`, `task run:shell -- <image>`, `task run:enable -- <image>`. Disk image tasks: `task build:qcow2`, `task build:raw`. VM management: `task run:vm -- <image>` (create), `task run:vm-start`, `task run:vm-stop`, `task run:vm-destroy`, `task run:vm-list`, `task run:vm-console`, `task run:vm-ssh`.
+Task is used only for bootstrapping. All other operations use `ov` directly.
 
-Direct `ov` commands (`ov list images`, `ov validate`, etc.) don't need `task`.
+- `task build:ov` — Build ov from source into `bin/ov`
+- `task build:install` — Build and install ov to `~/.local/bin`
+- `task setup:builder` — Create multi-platform buildx builder
+- `task setup:all` — Full setup (build ov + create builder)
 
 ---
 

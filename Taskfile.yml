@@ -6,9 +6,6 @@ includes:
   build:
     taskfile: ./taskfiles/Build.yml
     dir: "{{.ROOT_DIR}}"
-  run:
-    taskfile: ./taskfiles/Run.yml
-    dir: "{{.ROOT_DIR}}"
   setup:
     taskfile: ./taskfiles/Setup.yml
     dir: "{{.ROOT_DIR}}"

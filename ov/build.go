@@ -242,7 +242,13 @@ func (c *BuildCmd) cacheArgs(name, registry, engine string) []string {
 	// Auto-detect: default to "image" for local, "registry" for push
 	if cacheType == "" && registry != "" {
 		if c.Push {
-			cacheType = "registry"
+			if engine == "podman" {
+				// Podman --cache-to doesn't support type=registry syntax.
+				// Use image cache (read-only from published image) instead.
+				cacheType = "image"
+			} else {
+				cacheType = "registry"
+			}
 		} else {
 			cacheType = "image"
 		}
@@ -254,13 +260,6 @@ func (c *BuildCmd) cacheArgs(name, registry, engine string) []string {
 			return nil
 		}
 		ref := fmt.Sprintf("%s/cache:%s", registry, name)
-		if engine == "podman" {
-			// Podman uses plain image refs for --cache-from/--cache-to
-			return []string{
-				"--cache-from", ref,
-				"--cache-to", ref,
-			}
-		}
 		return []string{
 			"--cache-from", fmt.Sprintf("type=registry,ref=%s", ref),
 			"--cache-to", fmt.Sprintf("type=registry,ref=%s,mode=max,compression=zstd", ref),

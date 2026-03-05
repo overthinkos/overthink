@@ -293,7 +293,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/pixi.lock pixi.lock\n", img.UID, img.GID, copySrc))
 			}
 			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/%s %s\n", img.UID, img.GID, copySrc, manifest, manifest))
-			cacheMounts := ""
+			b.WriteString("ENV PIXI_CACHE_DIR=/tmp/pixi-cache\n")
+			b.WriteString("ENV RATTLER_CACHE_DIR=/tmp/rattler-cache\n")
+			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=/tmp/pixi-cache,uid=%d,gid=%d "+
+				"--mount=type=cache,dst=/tmp/rattler-cache,uid=%d,gid=%d ",
+				img.UID, img.GID, img.UID, img.GID)
 			// Install and then remove manifests so they're not included when we COPY the home dir
 			cleanup := fmt.Sprintf(" && rm -f %s pixi.lock", manifest)
 			if manifest == "environment.yml" {
@@ -321,7 +325,8 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/package.json package.json\n", img.UID, img.GID, copySrc))
-			b.WriteString("RUN node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g && rm -f package.json\n\n")
+				b.WriteString(fmt.Sprintf("RUN --mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
+			b.WriteString("    node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g && rm -f package.json\n\n")
 		}
 	}
 
@@ -975,13 +980,13 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg strin
 
 func (g *Generator) writeCargoToml(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cargo/registry,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=/tmp/cargo-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
 	b.WriteString("    cargo install --path /ctx\n")
 }
 
 func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s/.cache/npm,uid=%d,gid=%d \\\n", img.Home, img.UID, img.GID))
+	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
 	b.WriteString("    cd /ctx && task -t user.yml install\n")
 }
 

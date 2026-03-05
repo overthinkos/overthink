@@ -90,11 +90,8 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
-	// Validate inline @version consistency (no version conflicts)
-	validateInlineVersions(cfg, layers, errs)
-
-	// Validate remote module consistency
-	validateModules(cfg, layers, errs)
+	// Validate remote layer consistency
+	validateRemoteLayers(cfg, layers, errs)
 
 	// Validate systemd service files
 	validateSystemdServices(cfg, layers, errs)
@@ -134,12 +131,11 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 			continue
 		}
 		for _, layerRef := range img.Layers {
-			// Strip @version before lookup (layers are keyed by bare ref)
-			layerName, _ := StripVersion(layerRef)
+			layerName := BareRef(layerRef)
 			if _, ok := layers[layerName]; !ok {
 				if IsRemoteLayerRef(layerRef) {
-					modPath, name := SplitRemoteLayerRef(layerRef)
-					errs.Add("image %q: remote layer %q not found (module %s may need 'ov mod get' or layer %q doesn't exist in it)", imageName, layerRef, modPath, name)
+					parsed := ParseRemoteRef(layerRef)
+					errs.Add("image %q: remote layer %q not found (layer %q doesn't exist in %s)", imageName, layerRef, parsed.Name, parsed.RepoPath)
 				} else {
 					suggestion := findSimilarName(layerName, LayerNames(layers))
 					if suggestion != "" {
@@ -153,14 +149,6 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 	}
 }
 
-// validateInlineVersions checks that the same module is not referenced with
-// different versions across images.yml and layer.yml depends.
-func validateInlineVersions(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	_, err := CollectRequiredModulesVersioned(cfg, layers)
-	if err != nil {
-		errs.Add("%v", err)
-	}
-}
 
 // validateLayerContents validates each layer has required files
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
@@ -178,23 +166,18 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 		// Validate depends references
 		for _, dep := range layer.Depends {
 			resolved := dep
-			// Within a remote module, short-name depends resolve to siblings in the same module
+			// Within a remote repo, short-name depends resolve to siblings in the same repo
 			if layer.Remote && !IsRemoteLayerRef(dep) {
 				resolved = layer.ModulePath + "/" + dep
 			}
 			if _, ok := layers[resolved]; !ok {
-				// Try original name too (for cross-module deps using full paths)
+				// Try original name too (for cross-repo deps using full paths)
 				if _, ok := layers[dep]; !ok {
-					if IsRemoteLayerRef(dep) {
-						modPath, lname := SplitRemoteLayerRef(dep)
-						errs.Add("layer %q depends: unknown remote layer %q (module %s, layer %q)", name, dep, modPath, lname)
+					suggestion := findSimilarName(dep, LayerNames(layers))
+					if suggestion != "" {
+						errs.Add("layer %q depends: unknown layer %q (did you mean %q?)", name, dep, suggestion)
 					} else {
-						suggestion := findSimilarName(dep, LayerNames(layers))
-						if suggestion != "" {
-							errs.Add("layer %q depends: unknown layer %q (did you mean %q?)", name, dep, suggestion)
-						} else {
-							errs.Add("layer %q depends: unknown layer %q", name, dep)
-						}
+						errs.Add("layer %q depends: unknown layer %q", name, dep)
 					}
 				}
 			}
@@ -826,33 +809,19 @@ func validateBindMounts(cfg *Config, layers map[string]*Layer, errs *ValidationE
 	}
 }
 
-// validateModules checks remote module consistency
-func validateModules(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Find all modules referenced by remote layer refs in images
-	usedModules := CollectRequiredModules(cfg)
-
-	// Also collect from layer dependencies
-	for _, layer := range layers {
-		for _, dep := range layer.Depends {
-			if IsRemoteLayerRef(dep) {
-				modPath, _ := SplitRemoteLayerRef(dep)
-				usedModules[modPath] = true
-			}
-		}
+// validateRemoteLayers checks remote layer consistency
+func validateRemoteLayers(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// Check version conflicts (same repo referenced with different versions)
+	_, err := CollectRemoteRefs(cfg, layers)
+	if err != nil {
+		errs.Add("%v", err)
 	}
 
-	if len(usedModules) == 0 {
-		return // No remote layers, no validation needed
-	}
-
-	// If remote layers are used, check for naming conflicts
-	// (ScanAllLayers would have already errored if module not cached)
+	// Check for naming conflicts between remote layers from different repos
 	for _, layer := range layers {
 		if !layer.Remote {
 			continue
 		}
-		// Remote layer exists in the map, so its module was found.
-		// Just verify no naming conflicts between remote layers from different modules.
 		for _, other := range layers {
 			if !other.Remote || other == layer {
 				continue
@@ -914,12 +883,12 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 			continue
 		}
 		for _, layerRef := range img.Layers {
-			layerName, _ := StripVersion(layerRef)
-			layer, ok := layers[layerName]
+			bare := BareRef(layerRef)
+			layer, ok := layers[bare]
 			if !ok || !layer.HasSystemServices {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (system_services will be ignored)\n", imageName, layerName)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (system_services will be ignored)\n", imageName, bare)
 		}
 	}
 }
@@ -1011,8 +980,8 @@ func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 			hasLibvirt := len(img.Libvirt) > 0
 			if !hasLibvirt {
 				for _, layerRef := range img.Layers {
-					layerName, _ := StripVersion(layerRef)
-					layer, ok := layers[layerName]
+					bare := BareRef(layerRef)
+					layer, ok := layers[bare]
 					if ok && layer.HasLibvirt {
 						hasLibvirt = true
 						break

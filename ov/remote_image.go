@@ -20,45 +20,47 @@ type RemoteImageContext struct {
 }
 
 // ResolveRemoteImage resolves a remote image reference to a full context.
-// 1. Parse the ref into module path + image name + version
-// 2. Download/cache the repo
-// 3. Load the remote images.yml
-// 4. Resolve the image config (ports, volumes, uid, etc.)
-// 5. Scan layers from the cached module
+// Format: @github.com/org/repo/image:version
 func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	parsed := ParseRemoteRef(ref)
-	if parsed.ModulePath == "" || parsed.Name == "" {
-		return nil, fmt.Errorf("invalid remote image ref %q: expected github.com/org/repo/image[@version]", ref)
+	if parsed.RepoPath == "" || parsed.Name == "" {
+		return nil, fmt.Errorf("invalid remote image ref %q: expected @github.com/org/repo/image:version", ref)
 	}
 
 	version := parsed.Version
 	if version == "" {
-		version = "main"
+		repoURL := ModuleGitURL(parsed.RepoPath)
+		tag, err := GitLatestTag(repoURL)
+		if err != nil {
+			return nil, fmt.Errorf("resolving latest version for %s: %w", parsed.RepoPath, err)
+		}
+		version = tag
+		fmt.Fprintf(os.Stderr, "Resolved @%s -> %s\n", parsed.RepoPath, version)
 	}
 
-	// Download/cache the module
-	cachePath, err := DownloadModule(parsed.ModulePath, version)
+	// Download/cache the repo
+	cachePath, err := EnsureModuleDownloaded(parsed.RepoPath, version)
 	if err != nil {
-		return nil, fmt.Errorf("downloading %s@%s: %w", parsed.ModulePath, version, err)
+		return nil, fmt.Errorf("downloading %s:%s: %w", parsed.RepoPath, version, err)
 	}
 
 	// Load the remote images.yml
 	cfg, err := LoadConfig(cachePath)
 	if err != nil {
-		return nil, fmt.Errorf("loading config from %s: %w", parsed.ModulePath, err)
+		return nil, fmt.Errorf("loading config from %s: %w", parsed.RepoPath, err)
 	}
 
 	// Resolve the image
 	calverTag := ComputeCalVer()
 	resolved, err := cfg.ResolveImage(parsed.Name, calverTag)
 	if err != nil {
-		return nil, fmt.Errorf("resolving image %q in %s: %w", parsed.Name, parsed.ModulePath, err)
+		return nil, fmt.Errorf("resolving image %q in %s: %w", parsed.Name, parsed.RepoPath, err)
 	}
 
-	// Scan layers from the cached module
+	// Scan layers from the cached repo
 	layers, err := ScanAllLayersWithConfig(cachePath, cfg)
 	if err != nil {
-		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.ModulePath, err)
+		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.RepoPath, err)
 	}
 
 	// Build the registry image ref for pulling
@@ -76,7 +78,6 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 }
 
 // PullImage attempts to pull the image from the registry.
-// Returns nil on success, error if pull fails.
 func (ctx *RemoteImageContext) PullImage(engine string) error {
 	binary := EngineBinary(engine)
 	fmt.Fprintf(os.Stderr, "Pulling %s...\n", ctx.ImageRef)
@@ -91,21 +92,18 @@ func (ctx *RemoteImageContext) PullImage(engine string) error {
 
 // BuildImage builds the image locally from the cached source.
 func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error {
-	// Generate Containerfiles from the cached module
 	gen, err := NewGenerator(ctx.CacheDir, "")
 	if err != nil {
-		return fmt.Errorf("creating generator for %s: %w", ctx.Ref.ModulePath, err)
+		return fmt.Errorf("creating generator for %s: %w", ctx.Ref.RepoPath, err)
 	}
 	if err := gen.Generate(); err != nil {
-		return fmt.Errorf("generating build files for %s: %w", ctx.Ref.ModulePath, err)
+		return fmt.Errorf("generating build files for %s: %w", ctx.Ref.RepoPath, err)
 	}
 
-	// Build the specific image
 	buildCmd := &BuildCmd{
 		Images: []string{ctx.ImageName},
 		Tag:    tag,
 	}
-	// Save and restore cwd since BuildCmd uses os.Getwd()
 	origDir, _ := os.Getwd()
 	if err := os.Chdir(ctx.CacheDir); err != nil {
 		return fmt.Errorf("changing to cache dir: %w", err)
@@ -119,7 +117,6 @@ func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error
 // If pull fails or forceBuild is true, builds locally from cached source.
 func (ctx *RemoteImageContext) PullOrBuild(rt *ResolvedRuntime, tag string, forceBuild bool) error {
 	if !forceBuild {
-		// Try pulling from registry first
 		if ctx.Resolved.Registry != "" {
 			if err := ctx.PullImage(rt.RunEngine); err == nil {
 				return nil
@@ -132,7 +129,6 @@ func (ctx *RemoteImageContext) PullOrBuild(rt *ResolvedRuntime, tag string, forc
 }
 
 // ContainerName returns the container name for a remote image.
-// Strips the module path prefix to use just the image name.
 func (ctx *RemoteImageContext) ContainerName() string {
 	return containerName(ctx.ImageName)
 }
@@ -156,7 +152,6 @@ func (ctx *RemoteImageContext) CollectBindMounts(encryptedStoragePath string) []
 }
 
 // RemoteContainerName returns the container name for a remote ref.
-// Extracts the short image name from the full ref.
 func RemoteContainerName(ref string) string {
 	parsed := ParseRemoteRef(ref)
 	return containerName(parsed.Name)

@@ -228,11 +228,10 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	}
 
 	// Layers are not inherited, they're image-specific
-	// Strip @version suffixes — versions are used for module resolution
-	// but layer map keys use bare refs (without version)
+	// Strip @ prefix and :version suffixes — layer map keys use bare refs
 	resolved.Layers = make([]string, len(img.Layers))
 	for i, ref := range img.Layers {
-		resolved.Layers[i], _ = StripVersion(ref)
+		resolved.Layers[i] = BareRef(ref)
 	}
 
 	// Resolve ports: image -> defaults -> nil

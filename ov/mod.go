@@ -5,140 +5,81 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
-// LockFile represents the layers.lock file
-type LockFile struct {
-	Modules []LockModule `yaml:"modules,omitempty"`
-}
-
-// LockModule represents a locked module entry
-type LockModule struct {
-	Module  string   `yaml:"module"`
-	Version string   `yaml:"version"`
-	Commit  string   `yaml:"commit"`
-	Hash    string   `yaml:"hash"`
-	Layers  []string `yaml:"layers"`
-}
-
-// ModuleManifest represents a module.yml file in a remote module
-type ModuleManifest struct {
-	Module string `yaml:"module"`
-}
-
-// ParsedRef represents a parsed remote reference with optional version.
+// ParsedRef represents a parsed remote reference with version.
 // Works for both layer refs and image refs.
+// Format: @host/org/repo/name:version
 type ParsedRef struct {
-	Raw        string // original string, e.g. "github.com/org/repo/name@v1.0.0"
-	ModulePath string // e.g. "github.com/org/repo"
+	Raw        string // original string, e.g. "@github.com/org/repo/name:v1.0.0"
+	RepoPath   string // e.g. "github.com/org/repo"
 	Name       string // e.g. "name" (layer name or image name)
-	Version    string // e.g. "v1.0.0" (empty if not specified)
+	Version    string // e.g. "v1.0.0"
 }
 
-// StripVersion removes the @version suffix from a ref.
-// e.g. "github.com/org/repo/name@v1.0.0" -> ("github.com/org/repo/name", "v1.0.0")
-// If no @ is present, returns (ref, "").
+// StripVersion removes the :version suffix from a remote ref.
+// For non-remote refs (no @ prefix), returns (ref, "").
+// e.g. "@github.com/org/repo/name:v1.0.0" -> ("@github.com/org/repo/name", "v1.0.0")
 func StripVersion(ref string) (string, string) {
-	if idx := strings.LastIndex(ref, "@"); idx != -1 {
+	if !strings.HasPrefix(ref, "@") {
+		return ref, ""
+	}
+	if idx := strings.LastIndex(ref, ":"); idx != -1 {
 		return ref[:idx], ref[idx+1:]
 	}
 	return ref, ""
 }
 
-// ParseRemoteRef parses a remote reference into module path, name, and optional version.
-// e.g. "github.com/org/repo/name@v1.0.0" -> ParsedRef{ModulePath: "github.com/org/repo", Name: "name", Version: "v1.0.0"}
-func ParseRemoteRef(ref string) *ParsedRef {
-	bare, version := StripVersion(ref)
-	modPath, name := SplitRemoteLayerRef(bare)
-	return &ParsedRef{
-		Raw:        ref,
-		ModulePath: modPath,
-		Name:       name,
-		Version:    version,
-	}
-}
-
-// IsRemoteLayerRef returns true if a layer reference is a fully-qualified remote path
-// (contains at least three slashes, e.g. "github.com/org/repo/layer-name" or "github.com/org/repo/layer@v1")
+// IsRemoteLayerRef returns true if a layer reference is a remote ref (starts with @)
 func IsRemoteLayerRef(ref string) bool {
-	bare, _ := StripVersion(ref)
-	return strings.Count(bare, "/") >= 3
+	return strings.HasPrefix(ref, "@")
 }
 
-// IsRemoteImageRef returns true if a ref looks like a remote image reference.
-// Same structural rule as IsRemoteLayerRef (3+ slashes after stripping version).
+// IsRemoteImageRef returns true if a ref looks like a remote image reference (starts with @)
 func IsRemoteImageRef(ref string) bool {
-	return IsRemoteLayerRef(ref)
+	return strings.HasPrefix(ref, "@")
 }
 
-// SplitRemoteLayerRef splits a remote layer reference into module path and layer name.
-// Strips any @version suffix before splitting.
-// e.g. "github.com/overthinkos/ml-layers/cuda@v1" -> ("github.com/overthinkos/ml-layers", "cuda")
-func SplitRemoteLayerRef(ref string) (modulePath string, layerName string) {
-	bare, _ := StripVersion(ref)
-	lastSlash := strings.LastIndex(bare, "/")
+// ParseRemoteRef parses a remote reference into repo path, name, and version.
+// e.g. "@github.com/org/repo/name:v1.0.0" -> ParsedRef{RepoPath: "github.com/org/repo", Name: "name", Version: "v1.0.0"}
+func ParseRemoteRef(ref string) *ParsedRef {
+	raw := ref
+
+	// Strip @ prefix
+	ref = strings.TrimPrefix(ref, "@")
+
+	// Split version
+	version := ""
+	if idx := strings.LastIndex(ref, ":"); idx != -1 {
+		version = ref[idx+1:]
+		ref = ref[:idx]
+	}
+
+	// Split into repo path and name (last segment)
+	repoPath, name := splitRepoAndName(ref)
+
+	return &ParsedRef{
+		Raw:      raw,
+		RepoPath: repoPath,
+		Name:     name,
+		Version:  version,
+	}
+}
+
+// splitRepoAndName splits "github.com/org/repo/name" into ("github.com/org/repo", "name")
+func splitRepoAndName(ref string) (repoPath string, name string) {
+	lastSlash := strings.LastIndex(ref, "/")
 	if lastSlash == -1 {
-		return "", bare
+		return "", ref
 	}
-	return bare[:lastSlash], bare[lastSlash+1:]
+	return ref[:lastSlash], ref[lastSlash+1:]
 }
 
-// ParseLockFile reads and parses a layers.lock file
-func ParseLockFile(dir string) (*LockFile, error) {
-	path := filepath.Join(dir, "layers.lock")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading layers.lock: %w", err)
-	}
-
-	var lf LockFile
-	if err := yaml.Unmarshal(data, &lf); err != nil {
-		return nil, fmt.Errorf("parsing layers.lock: %w", err)
-	}
-	return &lf, nil
-}
-
-// WriteLockFile writes a layers.lock file
-func WriteLockFile(dir string, lf *LockFile) error {
-	header := "# layers.lock (generated -- do not edit)\n"
-	data, err := yaml.Marshal(lf)
-	if err != nil {
-		return fmt.Errorf("marshaling layers.lock: %w", err)
-	}
-	return os.WriteFile(filepath.Join(dir, "layers.lock"), []byte(header+string(data)), 0644)
-}
-
-// ParseModuleManifest reads and parses a module.yml file
-func ParseModuleManifest(dir string) (*ModuleManifest, error) {
-	path := filepath.Join(dir, "module.yml")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("reading module.yml: %w", err)
-	}
-
-	var mm ModuleManifest
-	if err := yaml.Unmarshal(data, &mm); err != nil {
-		return nil, fmt.Errorf("parsing module.yml: %w", err)
-	}
-	return &mm, nil
-}
-
-// FindLockModule returns the lock entry for a module, or nil if not found
-func (lf *LockFile) FindLockModule(modulePath string) *LockModule {
-	for i := range lf.Modules {
-		if lf.Modules[i].Module == modulePath {
-			return &lf.Modules[i]
-		}
-	}
-	return nil
+// BareRef returns the layer map key for a remote ref (without @ prefix and without :version).
+// e.g. "@github.com/org/repo/name:v1.0.0" -> "github.com/org/repo/name"
+func BareRef(ref string) string {
+	bare, _ := StripVersion(ref)
+	return strings.TrimPrefix(bare, "@")
 }
 
 // ModuleCacheDir returns the cache directory for modules.
@@ -154,19 +95,19 @@ func ModuleCacheDir() (string, error) {
 	return filepath.Join(home, ".cache", "ov", "mod"), nil
 }
 
-// ModuleCachePath returns the cache path for a specific module version.
-// e.g. ~/.cache/ov/mod/github.com/overthinkos/ml-layers@v1.0.0/
-func ModuleCachePath(modulePath, version string) (string, error) {
+// ModuleCachePath returns the cache path for a specific repo version.
+// e.g. ~/.cache/ov/mod/github.com/org/repo@v1.0.0/
+func ModuleCachePath(repoPath, version string) (string, error) {
 	cacheDir, err := ModuleCacheDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cacheDir, modulePath+"@"+version), nil
+	return filepath.Join(cacheDir, repoPath+"@"+version), nil
 }
 
-// IsModuleCached checks if a module version is already in the cache
-func IsModuleCached(modulePath, version string) (bool, error) {
-	cachePath, err := ModuleCachePath(modulePath, version)
+// IsModuleCached checks if a repo version is already in the cache
+func IsModuleCached(repoPath, version string) (bool, error) {
+	cachePath, err := ModuleCachePath(repoPath, version)
 	if err != nil {
 		return false, err
 	}
@@ -180,42 +121,54 @@ func IsModuleCached(modulePath, version string) (bool, error) {
 	return true, nil
 }
 
-// CollectRequiredModules scans image layers in a config to find which modules are needed.
-// Returns a set of module paths referenced by remote layer refs.
-func CollectRequiredModules(cfg *Config) map[string]bool {
-	modules := make(map[string]bool)
-	for _, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		for _, layerRef := range img.Layers {
-			if IsRemoteLayerRef(layerRef) {
-				modPath, _ := SplitRemoteLayerRef(layerRef)
-				modules[modPath] = true
-			}
-		}
+// EnsureModuleDownloaded downloads the module if not already cached.
+// Returns the cache path.
+func EnsureModuleDownloaded(repoPath, version string) (string, error) {
+	cached, err := IsModuleCached(repoPath, version)
+	if err != nil {
+		return "", err
 	}
-	return modules
+	if cached {
+		path, err := ModuleCachePath(repoPath, version)
+		if err != nil {
+			return "", err
+		}
+		return path, nil
+	}
+	return DownloadModule(repoPath, version)
 }
 
-// CollectRequiredModulesVersioned scans image layers and layer depends for remote refs
-// with @version suffixes. Returns module path -> version map.
-// Errors if the same module is referenced with different versions.
-func CollectRequiredModulesVersioned(cfg *Config, layers map[string]*Layer) (map[string]string, error) {
-	modules := make(map[string]string) // modulePath -> version
+// CollectRemoteRefs collects all unique remote refs (repo+version pairs) from
+// images.yml layer lists and layer.yml depends/layers fields.
+// Returns a map of repoPath -> version.
+func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) (map[string]string, error) {
+	repos := make(map[string]string) // repoPath -> version
 
 	addRef := func(ref, source string) error {
 		if !IsRemoteLayerRef(ref) {
 			return nil
 		}
 		parsed := ParseRemoteRef(ref)
-		if parsed.Version == "" {
-			return nil
+		version := parsed.Version
+		if version == "" {
+			// No version specified -- resolve latest git tag
+			if existing, ok := repos[parsed.RepoPath]; ok {
+				// Already resolved for this repo, reuse
+				version = existing
+			} else {
+				repoURL := ModuleGitURL(parsed.RepoPath)
+				tag, err := GitLatestTag(repoURL)
+				if err != nil {
+					return fmt.Errorf("%s: cannot resolve version for %s: %w", source, parsed.RepoPath, err)
+				}
+				version = tag
+				fmt.Fprintf(os.Stderr, "Resolved @%s -> %s\n", parsed.RepoPath, version)
+			}
 		}
-		if existing, ok := modules[parsed.ModulePath]; ok && existing != parsed.Version {
-			return fmt.Errorf("version conflict for module %s: %s vs %s (from %s)", parsed.ModulePath, existing, parsed.Version, source)
+		if existing, ok := repos[parsed.RepoPath]; ok && existing != version {
+			return fmt.Errorf("version conflict for repo %s: %s vs %s (from %s)", parsed.RepoPath, existing, version, source)
 		}
-		modules[parsed.ModulePath] = parsed.Version
+		repos[parsed.RepoPath] = version
 		return nil
 	}
 
@@ -233,18 +186,13 @@ func CollectRequiredModulesVersioned(cfg *Config, layers map[string]*Layer) (map
 		}
 	}
 
-	// Scan layer.yml depends (use RawDepends to get @version info)
+	// Scan layer.yml depends and layers: fields
 	for layerName, layer := range layers {
-		deps := layer.RawDepends
-		if len(deps) == 0 {
-			deps = layer.Depends // fallback for layers without RawDepends
-		}
-		for _, dep := range deps {
+		for _, dep := range layer.RawDepends {
 			if err := addRef(dep, fmt.Sprintf("layer %s depends", layerName)); err != nil {
 				return nil, err
 			}
 		}
-		// Scan layers: field for remote refs
 		for _, ref := range layer.RawIncludedLayers {
 			if err := addRef(ref, fmt.Sprintf("layer %s layers", layerName)); err != nil {
 				return nil, err
@@ -252,5 +200,5 @@ func CollectRequiredModulesVersioned(cfg *Config, layers map[string]*Layer) (map
 		}
 	}
 
-	return modules, nil
+	return repos, nil
 }

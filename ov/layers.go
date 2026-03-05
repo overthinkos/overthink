@@ -102,12 +102,12 @@ type Layer struct {
 	HasLibvirt         bool
 
 	Depends           []string // bare refs (version stripped) for resolution
-	RawDepends        []string // original refs with @version for module collection
+	RawDepends        []string // original refs with :version for remote ref collection
 	IncludedLayers    []string // bare refs from layers: field (version stripped)
-	RawIncludedLayers []string // original layers: refs with @version
+	RawIncludedLayers []string // original layers: refs with :version
 
-	// Remote module metadata
-	Remote     bool   // true if from a remote module
+	// Remote layer metadata
+	Remote     bool   // true if from a remote repo
 	ModulePath string // e.g. "github.com/overthinkos/ml-layers" (empty for local)
 
 	// Pre-populated from layer.yml
@@ -198,19 +198,19 @@ func scanLayer(path string, name string) (*Layer, error) {
 			return nil, fmt.Errorf("parsing layer.yml: %w", err)
 		}
 
-		// Keep raw depends for module version collection
+		// Keep raw depends for remote ref collection
 		layer.RawDepends = ly.Depends
-		// Strip @version from depends for layer resolution (map keys use bare refs)
+		// Strip :version from remote refs for layer resolution (map keys use bare refs)
 		layer.Depends = make([]string, len(ly.Depends))
 		for i, dep := range ly.Depends {
-			layer.Depends[i], _ = StripVersion(dep)
+			layer.Depends[i] = BareRef(dep)
 		}
 
 		// Parse layers: field for layer composition
 		layer.RawIncludedLayers = ly.Layers
 		layer.IncludedLayers = make([]string, len(ly.Layers))
 		for i, ref := range ly.Layers {
-			layer.IncludedLayers[i], _ = StripVersion(ref)
+			layer.IncludedLayers[i] = BareRef(ref)
 		}
 		layer.HasSupervisord = ly.Service != ""
 		layer.serviceConf = ly.Service
@@ -476,8 +476,8 @@ func (l *Layer) HasPypiDeps() bool {
 }
 
 // ScanModuleLayers scans a module directory's layers/ subdirectory and returns
-// layers keyed by their fully-qualified reference (modulePath/layerName).
-func ScanModuleLayers(moduleDir string, modulePath string) (map[string]*Layer, error) {
+// layers keyed by their fully-qualified reference (repoPath/layerName).
+func ScanModuleLayers(moduleDir string, repoPath string) (map[string]*Layer, error) {
 	layersDir := filepath.Join(moduleDir, "layers")
 	entries, err := os.ReadDir(layersDir)
 	if err != nil {
@@ -496,29 +496,28 @@ func ScanModuleLayers(moduleDir string, modulePath string) (map[string]*Layer, e
 		name := entry.Name()
 		layer, err := scanLayer(filepath.Join(layersDir, name), name)
 		if err != nil {
-			return nil, fmt.Errorf("scanning module layer %s/%s: %w", modulePath, name, err)
+			return nil, fmt.Errorf("scanning remote layer %s/%s: %w", repoPath, name, err)
 		}
 		layer.Remote = true
-		layer.ModulePath = modulePath
+		layer.ModulePath = repoPath
 
 		// Key by fully-qualified path
-		fullRef := modulePath + "/" + name
+		fullRef := repoPath + "/" + name
 		layers[fullRef] = layer
 	}
 
 	return layers, nil
 }
 
-// ScanAllLayers scans local layers and all remote module layers, returning a merged map.
+// ScanAllLayers scans local layers and all remote layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
-// Module versions are collected from inline @version refs in layer.yml depends fields.
+// Remote refs are collected from @-prefixed refs in layer.yml and images.yml.
 func ScanAllLayers(dir string) (map[string]*Layer, error) {
 	return ScanAllLayersWithConfig(dir, nil)
 }
 
-// ScanAllLayersWithConfig scans local and remote module layers.
-// Collects module versions from inline @version refs in layer.yml depends
-// and (when cfg is provided) images.yml layer references.
+// ScanAllLayersWithConfig scans local and remote layers.
+// Collects remote refs from @-prefixed layer references and auto-downloads repos.
 func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
 	// 1. Scan local layers
 	layers, err := ScanLayers(dir)
@@ -526,45 +525,27 @@ func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error)
 		return nil, err
 	}
 
-	// 2. Collect module versions from inline @version refs
-	versions, err := CollectRequiredModulesVersioned(cfg, layers)
+	// 2. Collect remote refs from @-prefixed layer references
+	repos, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(versions) == 0 {
+	if len(repos) == 0 {
 		return layers, nil
 	}
 
-	// 3. Parse layers.lock for resolved commits/hashes
-	lf, err := ParseLockFile(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. For each required module, scan its layers from cache
-	for modPath, version := range versions {
-		// If lock file has a resolved version, prefer it as the cache key
-		cacheVersion := version
-		if lf != nil {
-			if lm := lf.FindLockModule(modPath); lm != nil {
-				cacheVersion = lm.Version
-			}
-		}
-
-		cachePath, err := ModuleCachePath(modPath, cacheVersion)
+	// 3. Auto-download and scan each required repo
+	for repoPath, version := range repos {
+		cachePath, err := EnsureModuleDownloaded(repoPath, version)
 		if err != nil {
-			return nil, fmt.Errorf("resolving cache path for %s: %w", modPath, err)
+			return nil, fmt.Errorf("downloading %s:%s: %w", repoPath, version, err)
 		}
 
-		if _, err := os.Stat(cachePath); os.IsNotExist(err) {
-			return nil, fmt.Errorf("module %s@%s not downloaded (run 'ov mod download')", modPath, version)
-		}
-
-		// Scan the module's layers
-		modLayers, err := ScanModuleLayers(cachePath, modPath)
+		// Scan the repo's layers
+		modLayers, err := ScanModuleLayers(cachePath, repoPath)
 		if err != nil {
-			return nil, fmt.Errorf("scanning module %s: %w", modPath, err)
+			return nil, fmt.Errorf("scanning %s: %w", repoPath, err)
 		}
 
 		// Merge into main map
@@ -572,9 +553,8 @@ func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error)
 			if existing, ok := layers[ref]; ok && existing.Remote {
 				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.ModulePath, layer.ModulePath)
 			}
-			_, shortName := SplitRemoteLayerRef(ref)
-			if _, ok := layers[shortName]; ok {
-				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", shortName, ref)
+			if _, ok := layers[layer.Name]; ok {
+				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)
 			}
 			layers[ref] = layer
 		}

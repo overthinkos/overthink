@@ -10,7 +10,7 @@ func TestStripURLScheme(t *testing.T) {
 		{"https://github.com/org/repo/image", "github.com/org/repo/image"},
 		{"http://github.com/org/repo/image", "github.com/org/repo/image"},
 		{"github.com/org/repo/image", "github.com/org/repo/image"},
-		{"https://github.com/org/repo/image@v1.0.0", "github.com/org/repo/image@v1.0.0"},
+		{"@github.com/org/repo/image:v1.0.0", "@github.com/org/repo/image:v1.0.0"},
 		{"myimage", "myimage"},
 	}
 
@@ -27,9 +27,9 @@ func TestRemoteContainerName(t *testing.T) {
 		ref  string
 		want string
 	}{
-		{"github.com/org/repo/myapp@v1.0.0", "ov-myapp"},
-		{"github.com/org/repo/myapp", "ov-myapp"},
-		{"github.com/overthinkos/overthink/openclaw-browser@main", "ov-openclaw-browser"},
+		{"@github.com/org/repo/myapp:v1.0.0", "ov-myapp"},
+		{"@github.com/org/repo/myapp", "ov-myapp"},
+		{"@github.com/overthinkos/overthink/openclaw-browser:main", "ov-openclaw-browser"},
 	}
 
 	for _, tt := range tests {
@@ -46,9 +46,7 @@ func TestResolveImageName(t *testing.T) {
 		want  string
 	}{
 		{"myapp", "myapp"},
-		{"github.com/org/repo/myapp@v1.0.0", "myapp"},
-		{"https://github.com/org/repo/myapp@v1.0.0", "myapp"},
-		{"http://github.com/org/repo/myapp", "myapp"},
+		{"@github.com/org/repo/myapp:v1.0.0", "myapp"},
 		{"simple-image", "simple-image"},
 	}
 

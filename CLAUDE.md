@@ -17,7 +17,7 @@ Two components with a clean split:
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
 - `.build/<image>/supervisor/*.conf` -- supervisord service configs (only for images with `service` layers)
-- `.build/_layers/<name>` -- symlinks to remote module layer directories (only when remote layers used)
+- `.build/_layers/<name>` -- symlinks to remote layer directories (only when remote layers used)
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
@@ -31,7 +31,6 @@ project/
 +-- ov/                       # Go module (go 1.25.6, kong CLI, go-containerregistry)
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
-+-- layers.lock               # Locked module versions (generated, checked in)
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
@@ -69,12 +68,6 @@ ov build --cache gha [image...]            # GitHub Actions cache
 ov build --cache none [image...]           # Same as --no-cache
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
-ov mod get <module>@<version>          # Download module, update layers.lock
-ov mod download                        # Download all modules from inline @version refs
-ov mod tidy                            # Remove unused lock entries
-ov mod verify                          # Verify cached modules against layers.lock hashes
-ov mod update [module]                 # Update to latest version
-ov mod list                            # List modules with versions and their layers
 ov new layer <name>                    # Scaffold a layer directory
 ov seed <image> [--tag TAG]                # Seed empty bind mount dirs from image data
 ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
@@ -109,7 +102,9 @@ ov version                             # Print computed CalVer tag
 
 **Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`).
 
-**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
+**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `@github.com/org/repo/image:version`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
+
+**Remote layer refs:** Layer references starting with `@` are remote: `@github.com/org/repo/layer-name:version`. Auto-downloaded to `~/.cache/ov/mod/` on first use. Version is optional -- when omitted, the latest semver git tag is resolved automatically. Used in `images.yml` layers and `layer.yml` depends/layers fields.
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
@@ -195,7 +190,6 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache |
 | Runtime operations | `/overthink:run` | ov shell, start/stop, GPU passthrough, aliases, env vars, instances, remote refs, seed |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, bootc disk images, encryption |
-| Remote modules | `/overthink:module` | inline @version refs, layers.lock, cache, cross-module deps |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
 | Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |

@@ -194,10 +194,9 @@ ov inspect <image> [--format FIELD]
 ov version
 ```
 
-### Modules & Layers
+### Layers & Tools
 
 ```
-ov mod get/download/tidy/verify/update/list   # Remote layer modules
 ov new layer <name>                            # Scaffold a new layer
 ov seed <image>                                # Seed bind mount dirs
 ov alias install/uninstall <image>             # Host command aliases

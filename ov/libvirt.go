@@ -73,7 +73,7 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Layer, imageName str
 		return nil
 	}
 	for _, layerRef := range img.Layers {
-		layerName, _ := StripVersion(layerRef)
+		layerName := BareRef(layerRef)
 		layer, ok := layers[layerName]
 		if !ok || !layer.HasLibvirt {
 			continue

@@ -1,9 +1,7 @@
 package main
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,7 +79,6 @@ func GitClone(repoURL string, ref string, commit string, targetDir string) error
 
 // gitCloneByCommit clones a repo and checks out a specific commit
 func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
-	// Init bare repo, fetch specific commit, checkout
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return err
 	}
@@ -106,70 +103,24 @@ func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
 	return nil
 }
 
-// ModuleGitURL converts a module path to a git clone URL.
+// ModuleGitURL converts a repo path to a git clone URL.
 // e.g. "github.com/overthinkos/ml-layers" -> "https://github.com/overthinkos/ml-layers.git"
-func ModuleGitURL(modulePath string) string {
-	return "https://" + modulePath + ".git"
-}
-
-// ComputeModuleHash computes a SHA-256 hash of a module's layers/ directory contents.
-// This is used to verify cache integrity in layers.lock.
-func ComputeModuleHash(moduleDir string) (string, error) {
-	layersDir := filepath.Join(moduleDir, "layers")
-	if _, err := os.Stat(layersDir); os.IsNotExist(err) {
-		return "", fmt.Errorf("no layers/ directory in module %s", moduleDir)
-	}
-
-	h := sha256.New()
-
-	// Walk files deterministically (sorted)
-	var files []string
-	err := filepath.WalkDir(layersDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(layersDir, path)
-		if err != nil {
-			return err
-		}
-		files = append(files, rel)
-		return nil
-	})
-	if err != nil {
-		return "", fmt.Errorf("walking layers directory: %w", err)
-	}
-
-	sort.Strings(files)
-
-	for _, rel := range files {
-		// Write filename to hash
-		h.Write([]byte(rel))
-		// Write file contents to hash
-		data, err := os.ReadFile(filepath.Join(layersDir, rel))
-		if err != nil {
-			return "", err
-		}
-		h.Write(data)
-	}
-
-	return fmt.Sprintf("sha256:%x", h.Sum(nil)), nil
+func ModuleGitURL(repoPath string) string {
+	return "https://" + repoPath + ".git"
 }
 
 // DownloadModule downloads a module to the cache.
 // Returns the cache path where the module was stored.
-func DownloadModule(modulePath string, version string) (string, error) {
-	repoURL := ModuleGitURL(modulePath)
+func DownloadModule(repoPath string, version string) (string, error) {
+	repoURL := ModuleGitURL(repoPath)
 
 	// Resolve the ref to a commit hash
 	commit, err := GitResolveRef(repoURL, version)
 	if err != nil {
-		return "", fmt.Errorf("resolving %s@%s: %w", modulePath, version, err)
+		return "", fmt.Errorf("resolving %s:%s: %w", repoPath, version, err)
 	}
 
-	cachePath, err := ModuleCachePath(modulePath, version)
+	cachePath, err := ModuleCachePath(repoPath, version)
 	if err != nil {
 		return "", err
 	}
@@ -179,11 +130,11 @@ func DownloadModule(modulePath string, version string) (string, error) {
 		return cachePath, nil
 	}
 
-	fmt.Fprintf(os.Stderr, "Downloading %s@%s...\n", modulePath, version)
+	fmt.Fprintf(os.Stderr, "Downloading %s:%s...\n", repoPath, version)
 
 	// Clone into cache
 	if err := GitClone(repoURL, version, commit, cachePath); err != nil {
-		return "", fmt.Errorf("downloading %s@%s: %w", modulePath, version, err)
+		return "", fmt.Errorf("downloading %s:%s: %w", repoPath, version, err)
 	}
 
 	// Remove .git directory to save space (cache is read-only)
@@ -211,6 +162,107 @@ func DiscoverModuleLayers(moduleDir string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// GitLatestTag queries a remote repo for tags and returns the highest semver tag.
+// Looks for tags matching v* pattern, sorts by semver, returns the highest.
+// Returns an error if no version tags are found.
+func GitLatestTag(repoURL string) (string, error) {
+	cmd := exec.Command("git", "ls-remote", "--tags", repoURL)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote --tags %s: %w", repoURL, err)
+	}
+
+	tags := parseTagRefs(string(out))
+	if len(tags) == 0 {
+		return "", fmt.Errorf("no version tags found in %s", repoURL)
+	}
+
+	sort.Slice(tags, func(i, j int) bool {
+		return compareSemver(tags[i], tags[j]) < 0
+	})
+
+	return tags[len(tags)-1], nil
+}
+
+// parseTagRefs extracts tag names from git ls-remote --tags output.
+// Filters for v* tags and excludes peeled refs (^{}).
+func parseTagRefs(output string) []string {
+	var tags []string
+	seen := make(map[string]bool)
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		ref := parts[1]
+		// Skip peeled refs
+		if strings.HasSuffix(ref, "^{}") {
+			continue
+		}
+		tag := strings.TrimPrefix(ref, "refs/tags/")
+		if !strings.HasPrefix(tag, "v") {
+			continue
+		}
+		if !seen[tag] {
+			seen[tag] = true
+			tags = append(tags, tag)
+		}
+	}
+	return tags
+}
+
+// compareSemver compares two semver-like version strings (e.g. "v1.2.3").
+// Returns -1 if a < b, 0 if equal, 1 if a > b.
+// Handles v-prefixed versions and falls back to string comparison for non-numeric parts.
+func compareSemver(a, b string) int {
+	aParts := parseSemverParts(a)
+	bParts := parseSemverParts(b)
+
+	for i := 0; i < len(aParts) || i < len(bParts); i++ {
+		var av, bv int
+		if i < len(aParts) {
+			av = aParts[i]
+		}
+		if i < len(bParts) {
+			bv = bParts[i]
+		}
+		if av < bv {
+			return -1
+		}
+		if av > bv {
+			return 1
+		}
+	}
+	return 0
+}
+
+// parseSemverParts extracts numeric parts from a version string like "v1.2.3".
+func parseSemverParts(v string) []int {
+	v = strings.TrimPrefix(v, "v")
+	// Strip pre-release suffix (e.g. "-rc1")
+	if idx := strings.IndexByte(v, '-'); idx != -1 {
+		v = v[:idx]
+	}
+	parts := strings.Split(v, ".")
+	nums := make([]int, 0, len(parts))
+	for _, p := range parts {
+		n := 0
+		for _, c := range p {
+			if c >= '0' && c <= '9' {
+				n = n*10 + int(c-'0')
+			} else {
+				break
+			}
+		}
+		nums = append(nums, n)
+	}
+	return nums
 }
 
 // isHex returns true if s contains only hexadecimal characters

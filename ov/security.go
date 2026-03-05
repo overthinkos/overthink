@@ -15,7 +15,7 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 
 	// Collect from layers
 	for _, layerName := range img.Layers {
-		bare, _ := StripVersion(layerName)
+		bare := BareRef(layerName)
 		ly, ok := layers[bare]
 		if !ok {
 			continue

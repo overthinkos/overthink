@@ -1,157 +1,223 @@
 # Overthink
 
-Composable container images from a library of layers. Build any combination into images that can layer on top of each other, across multiple platforms and package managers.
+**Composable container images from a library of snap-together layers.**
 
-Built on `supervisord` and `ov` (Go CLI). Supports both Docker and Podman.
+Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-## Quick Start
+58 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+
+## Why Overthink?
+
+Every container project starts the same way: copy a Dockerfile, paste in package installs, fight with layer ordering, repeat for the next variant. Need GPU support? Another Dockerfile. Want a desktop environment inside the container? Good luck.
+
+Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, and dependencies declared in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order.
+
+Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition, done. Need to add Ollama for local LLMs? Drop in the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? That's still just a list of layers in `images.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, and GPU passthrough.
+
+## Key Concepts
+
+### Layers, Images, and Multi-Service Containers
+
+A layer is a reusable building block — packages, config, services. An image is layers stacked on a base. The key insight: **you can combine multiple services into a single container image** just by listing layers. Need PostgreSQL, Redis, a Python API, and a reverse proxy in one container? Add those four layers to your image. `ov` resolves dependencies, generates an optimized Containerfile, and wires up supervisord to run all services together when the container starts.
+
+### Building Layers: Package Managers & Config Files
+
+Each layer lives in its own directory under `layers/` and can use any combination of these files:
+
+- **`layer.yml`** — The layer's manifest: system packages (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu), dependencies on other layers, environment variables, ports, services, volumes, and routes
+- **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user)
+- **`package.json`** — npm packages for Node.js (multi-stage build, runs as user)
+- **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user)
+- **`root.yml`** — Custom install script (Taskfile format) that runs as root — for anything packages can't cover
+- **`user.yml`** — Custom install script (Taskfile format) that runs as the container user
+
+`ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
+
+### Docker or Podman — Your Choice
+
+Docker is the container tool most people know. Podman is a newer alternative from Red Hat that runs without a background daemon and integrates natively with Linux systemd. `ov` works with either — same commands, same images, same results. Switch with `ov config set engine.build podman`.
+
+### Two Process Managers, Two Levels
+
+**Inside containers**, Overthink uses **supervisord** — a lightweight process manager that runs multiple services within a single container. When a layer declares a `service:` in its `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container.
+
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and supervisord manages the services inside it. Two levels, cleanly separated.
+
+**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level, running services like sshd and cloud-init directly. No supervisord needed because it's a real operating system, not a container.
+
+### Quadlets: Containers as System Services
+
+With Docker, you'd use `docker compose` or a restart policy to keep a container running. Podman quadlets are different: they describe a container as a native systemd service — the same system that manages SSH, networking, and everything else on your Linux box. `ov enable <image>` generates the quadlet file and registers it. After that, `systemctl start/stop/status` just work — your container starts on boot, restarts on failure, and shows up in `journalctl` logs like any other service.
+
+### Bootc: The Container *Is* the OS
+
+Normally a container runs *inside* an operating system. Bootc flips this: the container image *becomes* the operating system. Fedora publishes bootc base images that are full Linux systems packaged as container images. Add layers with Overthink just like any other image — install packages, configure services, add a desktop — and the result can boot directly as a real OS.
+
+### Containers That Become Virtual Machines
+
+This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `images.yml`, use it everywhere.
+
+## Install
+
+**Recommended — Go install** (requires Go 1.25.6+):
 
 ```bash
-# Prerequisites: go, docker (or podman) with buildx
+go install github.com/overthinkos/overthink/ov@latest
+```
 
-# Setup (one-time) -- downloads task, builds ov
-bash setup.sh
+This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `images.yml` and a `layers/` directory.
 
-# Build all images
-ov build
+**Full project bootstrap** (to build images from this repo):
 
-# Build single image for host platform
+```bash
+git clone https://github.com/overthinkos/overthink.git
+cd overthink
+bash setup.sh    # downloads task, builds ov into bin/
+ov build         # build all images
+```
+
+**From source:**
+
+```bash
+cd ov && go build -o ../bin/ov .
+```
+
+## Quick Taste
+
+```bash
+# Build a single image for your platform
 ov build fedora
 
-# Shell into a built image
+# Drop into an interactive shell
 ov shell fedora
 
-# Start a service container
-ov start fedora-test
+# Build and run a GPU-accelerated Jupyter server
+ov build jupyter
+ov start jupyter
+
+# Deploy as a systemd service
+ov enable jupyter
+
+# Build a bootable VM disk image
+ov vm build openclaw-browser-bootc --type qcow2
+ov vm create openclaw-browser-bootc --ram 8G --cpus 4 --gpu
+ov vm start openclaw-browser-bootc
 ```
 
-## Project Structure
+## The Layer Library
+
+Layers compose. Pick what you need, and dependencies resolve automatically.
+
+### Foundations
+
+**pixi** — The Pixi package manager, foundation for Python and conda environments.
+**python** — Python 3.13 via Pixi. **nodejs** / **node24** — Node.js + npm. **rust** — Rust + Cargo. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config.
+
+### Services & Infrastructure
+
+**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
+
+### GPU & Machine Learning
+
+**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **python-ml** — ML Python environment on top of CUDA. **jupyter** — Jupyter + ML libraries on `:8888`. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
+
+### Desktop Environments
+
+**sway** / **niri** / **cage** — Wayland compositors (full desktop, tiling, kiosk mode). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **google-chrome** / **google-chrome-sway** — Chrome with DevTools on `:9222`. **quickshell** / **dank-material-shell** / **noctalia** — Desktop shells and launchers.
+
+### Applications
+
+**openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
+
+### OS / Bootc
+
+**sshd** — SSH server. **cloud-init** — Cloud instance initialization. **bootc-config** — Bootc system configuration (autologin, graphical target). **bcvk** — Bootc virtualization kit for building disk images. **qemu-guest-agent** — VM guest agent with libvirt channel.
+
+### Composing Layers
+
+Some layers are pure composition — they pull in a curated set of other layers:
+**sway-desktop** = pipewire + wayvnc + chrome + file manager + shell.
+**bootc-base** = sshd + guest agent + bootc config.
+
+## The Lifecycle
+
+Overthink covers the full journey from development to production:
+
+**Develop** — `ov shell <image>` drops you into an interactive container with all your layers, volumes mounted, GPU passed through. Change code, rebuild, iterate.
+
+**Run** — `ov start <image>` launches a detached service container with supervisord managing your processes, traefik routing your services, and persistent volumes for data.
+
+**Deploy** — `ov enable <image>` generates a quadlet and registers it with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`.
+
+**Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
+
+**Manage** — `ov update` pulls new images and restarts services. `ov crypto init/mount` handles encrypted bind-mount volumes. `ov alias install` creates host-level command aliases that transparently run inside containers.
+
+## Command Reference
+
+### Build & Generate
 
 ```
-overthink/
-├── images.yml              # Image definitions (base, layers, ports, merge)
-├── layers/                 # Reusable layer components (~58 layers)
-│   ├── pixi/               # Pixi binary + default env
-│   ├── python/             # Python 3.13 via pixi
-│   ├── nodejs/             # Node.js + npm
-│   ├── rust/               # Rust + Cargo
-│   ├── supervisord/        # Process manager
-│   ├── traefik/            # Reverse proxy
-│   ├── cuda/               # NVIDIA CUDA toolkit
-│   ├── openclaw/           # OpenClaw gateway (npm, volumes, service)
-│   └── ...                 # build-toolchain, dev-tools, docker-ce, etc.
-├── ov/                     # Go CLI source
-│   ├── main.go             # CLI (Kong)
-│   ├── config.go           # images.yml parsing, inheritance
-│   ├── layers.go           # Layer scanning, file detection
-│   ├── generate.go         # Containerfile generation
-│   ├── validate.go         # All validation rules
-│   ├── graph.go            # Topological sort (layers + images)
-│   ├── env.go              # ENV config merging, path expansion
-│   ├── merge.go            # Post-build layer merging
-│   ├── shell.go            # Shell command (docker run)
-│   ├── start.go            # Start/stop service containers
-│   ├── quadlet.go          # Podman quadlet systemd services
-│   ├── security.go         # Container security config
-│   ├── envfile.go          # .env file parsing, env var resolution
-│   ├── seed.go             # Bind mount data seeding
-│   ├── remote_image.go     # Remote image ref resolution
-│   ├── gpu.go              # GPU auto-detection + passthrough
-│   ├── volumes.go          # Named volume collection + mounting
-│   ├── registry.go         # Remote image inspection
-│   ├── version.go          # CalVer computation
-│   ├── scaffold.go         # Layer scaffolding
-│   ├── vm.go               # VM lifecycle (create, start, stop, destroy, list, console, ssh)
-│   ├── vm_build.go         # VM disk image builds (qcow2, raw via bcvk)
-│   └── libvirt.go          # Libvirt XML snippet injection
-├── setup.sh                # Bootstrap: downloads task, builds ov
-├── Taskfile.yml            # Bootstrap tasks only
-├── taskfiles/              # Build.yml, Setup.yml
-├── templates/              # Supervisord header
-└── config/                 # Bootc Image Builder configs
+ov build [image...]                    # Build for local platform
+ov build --push [image...]             # Build + push (all platforms)
+ov build --no-cache [image...]         # Clean build
+ov generate [--tag TAG]                # Write Containerfiles to .build/
+ov validate                            # Check everything
+ov merge <image> [--dry-run]           # Merge small layers in built images
 ```
 
-## Commands
+### Run & Manage
 
-### Bootstrap (task)
+```
+ov shell <image> [-c CMD] [--gpu]      # Interactive shell
+ov start <image> [--gpu] [--build]     # Start service container
+ov stop <image>                        # Stop container
+ov enable <image>                      # Systemd quadlet service
+ov disable/status/logs/update/remove   # Service lifecycle
+```
 
-Task is used only for bootstrapping. All other operations use `ov` directly.
+### Virtual Machines
 
-| Command | Description |
-|---------|-------------|
-| `task build:ov` | Build ov from source into `bin/ov` |
-| `task build:install` | Build and install ov to `~/.local/bin` |
-| `task setup:builder` | Create multi-platform buildx builder |
-| `task setup:all` | Full setup (build ov + create builder) |
+```
+ov vm build <image> [--type qcow2|raw] # Build disk image
+ov vm create <image> [--ram] [--cpus] [--gpu]
+ov vm start/stop/destroy <image>
+ov vm console/ssh <image>
+ov vm list [-a]
+```
 
-### ov Commands
+### Inspect & Discover
 
-| Command | Description |
-|---------|-------------|
-| `ov generate [--tag TAG]` | Write .build/ (Containerfiles) |
-| `ov validate` | Check images.yml + layers |
-| `ov inspect <image> [--format FIELD]` | Print resolved config (JSON or single field) |
-| `ov list images` | List images from images.yml |
-| `ov list layers` | List layers from filesystem |
-| `ov list targets` | Build targets in dependency order |
-| `ov list services` | List layers with service definitions |
-| `ov list routes` | List layers with route definitions |
-| `ov list volumes` | List layers with volume declarations |
-| `ov list aliases` | List layers with alias declarations |
-| `ov build [image...]` | Build for local platform |
-| `ov build --push [image...]` | Build for all platforms and push |
-| `ov build --no-cache [image...]` | Build without any cache |
-| `ov build --cache registry [image...]` | Build with registry cache (read+write) |
-| `ov build --cache image [image...]` | Use registry image as cache source (read-only) |
-| `ov build --cache gha [image...]` | GitHub Actions cache |
-| `ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]` | Merge small layers in a built image |
-| `ov merge --all [--dry-run]` | Merge all images with merge.auto enabled |
-| `ov mod get/download/tidy/verify/update/list` | Remote module management |
-| `ov new layer <name>` | Scaffold a new layer |
-| `ov seed <image> [--tag TAG]` | Seed empty bind mount dirs from image |
-| `ov shell <image> [-w PATH] [-c CMD] [-e K=V] [--env-file] [-i INST] [--build]` | Bash shell in a container |
-| `ov start <image> [-w PATH] [-e K=V] [--env-file] [-i INST] [--build]` | Start service container (detached) |
-| `ov stop <image> [-i INST]` | Stop a running service container |
-| `ov enable <image> [-w PATH] [-e K=V] [--env-file] [-i INST] [--build]` | Generate quadlet file, daemon-reload |
-| `ov disable <image> [-i INST]` | Disable quadlet auto-start |
-| `ov status <image> [-i INST]` | Show service status |
-| `ov logs <image> [-f] [-i INST]` | Show service logs |
-| `ov update <image> [--tag TAG] [-i INST] [--build]` | Update image + restart |
-| `ov remove <image> [-i INST]` | Stop + remove service |
-| `ov alias install/uninstall/add/remove/list <image>` | Host command aliases |
-| `ov crypto init/mount/unmount/status/passwd <image>` | Encrypted bind mounts |
-| `ov vm build <image> [--type qcow2\|raw] [--ssh-keygen] [--console]` | Build disk image from bootc container |
-| `ov vm create <image> [--ram SIZE] [--cpus N] [--gpu]` | Create VM from disk image |
-| `ov vm start/stop/destroy <image>` | VM lifecycle management |
-| `ov vm list [-a]` | List VMs |
-| `ov vm console/ssh <image>` | VM access |
-| `ov config get/set/list/reset/path` | Runtime configuration |
-| `ov version` | Print CalVer tag |
+```
+ov list images/layers/targets/services/routes/volumes/aliases
+ov inspect <image> [--format FIELD]
+ov version
+```
+
+### Modules & Layers
+
+```
+ov mod get/download/tidy/verify/update/list   # Remote layer modules
+ov new layer <name>                            # Scaffold a new layer
+ov seed <image>                                # Seed bind mount dirs
+ov alias install/uninstall <image>             # Host command aliases
+ov crypto init/mount/unmount/status <image>    # Encrypted volumes
+```
 
 ## Adding a Layer
 
 ```bash
-# Create layer directory
-ov new layer my-layer
+ov new layer my-layer                  # Scaffold the directory
+# Edit layers/my-layer/layer.yml      # Declare packages, deps, env, ports
+# Add pixi.toml, package.json, root.yml, user.yml as needed
 
-# Edit layers/my-layer/layer.yml for packages, deps, env, ports, etc.
-# Add pixi.toml, package.json, Cargo.toml, root.yml, user.yml as needed
+# Add to an image in images.yml:
+#   layers: [..., my-layer]
 
-# Add to an image in images.yml
-# Build
-ov build my-image
+ov build my-image                      # Build it
 ```
 
-## Layer Files
-
-| File | Purpose | Runs as |
-|------|---------|---------|
-| `layer.yml` | Layer config: rpm/deb packages, depends, env, path_append, ports, route, service, volumes, security | root (packages) / metadata |
-| `root.yml` | Custom root install (Taskfile) | root |
-| `pixi.toml` / `pyproject.toml` / `environment.yml` | Python/conda packages (multi-stage build) | user |
-| `package.json` | npm packages (multi-stage build) | user |
-| `Cargo.toml` | Rust crate (requires `src/`) | user |
-| `user.yml` | Custom user install (Taskfile) | user |
+See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files.
 
 ## Documentation
 

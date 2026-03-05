@@ -168,8 +168,8 @@ func TestBuildPodmanPushArgs(t *testing.T) {
 		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"--platform", "linux/amd64,linux/arm64",
 		"--jobs", cpuJobs,
-		"--cache-from", "type=registry,ref=ghcr.io/overthinkos/cache:fedora",
-		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max,compression=zstd",
+		"--cache-from", "ghcr.io/overthinkos/cache:fedora",
+		"--cache-to", "ghcr.io/overthinkos/cache:fedora",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {

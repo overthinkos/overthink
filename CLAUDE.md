@@ -36,7 +36,6 @@ project/
 +-- taskfiles/                # Build.yml, Run.yml, Setup.yml
 +-- layers/<name>/            # Layer directories
 +-- templates/                # supervisord.header.conf
-+-- config/                   # disk.toml, iso-gnome.toml
 ```
 
 ---
@@ -62,7 +61,7 @@ ov alias uninstall <image>             # Remove all aliases for an image
 ov build [image...]                    # Build for local platform, load into engine store
 ov build --push [image...]             # Build for all platforms and push to registry
 ov build --platform linux/amd64 [image...]  # Specific platform
-ov build --cache registry|gha [image...]   # Enable build cache
+ov build --cache registry [image...]       # Enable build cache
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov mod get <module>@<version>          # Download module, update layers.lock
@@ -72,15 +71,16 @@ ov mod verify                          # Verify cached modules against layers.lo
 ov mod update [module]                 # Update to latest version
 ov mod list                            # List modules with versions and their layers
 ov new layer <name>                    # Scaffold a layer directory
-ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu]
-ov start <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
-ov stop <image>                        # Stop a running service container
-ov enable <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu]
-ov disable <image>                     # Disable service auto-start (quadlet only)
-ov status <image>                      # Show service status
-ov logs <image> [-f]                   # Show service logs
-ov update <image> [--tag TAG]          # Update image, restart if active
-ov remove <image>                      # Remove service
+ov seed <image> [--tag TAG]                # Seed empty bind mount dirs from image data
+ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov start <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov stop <image> [-i INSTANCE]          # Stop a running service container
+ov enable <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov disable <image> [-i INSTANCE]       # Disable service auto-start (quadlet only)
+ov status <image> [-i INSTANCE]        # Show service status
+ov logs <image> [-f] [-i INSTANCE]     # Show service logs
+ov update <image> [--tag TAG] [-i INSTANCE] [--build]  # Update image, restart if active
+ov remove <image> [-i INSTANCE]        # Remove service
 ov config get <key>                    # Print resolved value
 ov config set <key> <value>            # Set in user config
 ov config list                         # Show all settings with source
@@ -89,25 +89,28 @@ ov crypto init <image> [--volume NAME]
 ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
 ov crypto status <image>
+ov crypto passwd <image>               # Change encryption password
 ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
 
-**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`).
+**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`).
+
+**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 
 ---
 
-## Shipped Layers (44 total)
+## Shipped Layers (52 total)
 
-**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
+**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
 **Build:** `build-toolchain` (gcc, cmake, autoconf, ninja, git, pkg-config), `pre-commit` (git hooks framework)
 
-**Services:** `supervisord` (process manager via pixi; depends: python), `traefik` (reverse proxy on :8000/:8080; depends: supervisord), `testapi` (FastAPI test service on :9090, routed via `testapi.localhost`)
+**Services:** `supervisord` (process manager via pixi; depends: python), `traefik` (reverse proxy on :8000/:8080; depends: supervisord), `testapi` (FastAPI test service on :9090, routed via `testapi.localhost`), `postgresql` (PostgreSQL server on :5432; volume: pgdata), `redis` (Redis on :6379; service)
 
-**Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway)
+**Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway), `dank-material-shell` (DMS shell/launcher via COPR; depends: sway), `noctalia` (Quickshell-based shell via COPR; depends: sway)
 
 **Display/Audio:** `wayvnc` (VNC server on :5900), `pipewire` (audio/media server + wireplumber)
 
@@ -115,7 +118,7 @@ ov version                             # Print computed CalVer tag
 
 **GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
 
-**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs)
+**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs), `immich` (photo management on :2283; depends: node24, postgresql, redis, supervisord), `immich-ml` (ML backend on :3003; depends: immich; volume: models)
 
 **DevOps/CI:** `docker-ce` (Docker CE + buildx + compose), `kubernetes` (kubectl + Helm), `devops-tools` (bind-utils, jq, rsync; depends: nodejs), `github-runner` (Actions runner as service; uid: 0), `github-actions` (Act CLI via COPR + guestfs), `google-cloud` (Google Cloud SDK), `google-cloud-npm` (GCP npm packages; depends: google-cloud, nodejs), `grafana-tools` (Grafana tooling)
 
@@ -123,7 +126,7 @@ ov version                             # Print computed CalVer tag
 
 **Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
 
-**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs)
+**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration)
 
 ---
 
@@ -171,7 +174,7 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Layer authoring | `/overthink:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts |
 | Image composition | `/overthink:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
 | Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache |
-| Runtime operations | `/overthink:run` | ov shell, start/stop, GPU passthrough, aliases, runtime config, image transfer |
+| Runtime operations | `/overthink:run` | ov shell, start/stop, GPU passthrough, aliases, env vars, instances, remote refs, seed |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, bootc disk images, encryption |
 | Remote modules | `/overthink:module` | inline @version refs, layers.lock, cache, cross-module deps |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules |

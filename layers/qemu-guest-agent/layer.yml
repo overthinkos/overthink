@@ -1,0 +1,9 @@
+rpm:
+  packages:
+    - qemu-guest-agent
+
+system_services:
+  - qemu-guest-agent
+
+libvirt:
+  - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>

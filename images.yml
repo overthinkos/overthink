@@ -193,11 +193,29 @@ images:
     base: fedora
     layers:
       - github-runner
+      - ov-cli
+      - bcvk
     platforms:
       - linux/amd64
     uid: 0
     gid: 0
     user: root
+
+  openclaw-browser-bootc:
+    base: "quay.io/fedora/fedora-bootc:43"
+    bootc: true
+    layers:
+      - sshd
+      - qemu-guest-agent
+      - openclaw
+      - pipewire
+      - wayvnc
+      - google-chrome-sway
+      - bootc-config
+    platforms:
+      - linux/amd64
+    vm:
+      ssh_port: 2222
 
   bazzite-ai:
     enabled: false

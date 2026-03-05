@@ -298,6 +298,20 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
+	// Check if this image has systemd service files (for bootc images)
+	hasSystemdServices := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSystemdServices {
+			hasSystemdServices = true
+			break
+		}
+	}
+
+	// For bootc images with systemd services, skip supervisord assembly
+	useSystemd := img.Bootc && hasSystemdServices
+	useSupervisord := hasServices && !useSystemd
+
 	// Check if this image has route layers and traefik
 	hasRoutes := false
 	hasTraefik := false
@@ -323,7 +337,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit supervisord config stage if needed
 	// When a child image adds services, include parent-provided supervisor configs
 	// too so the assembled supervisord.conf contains all services from the full chain.
-	if hasServices {
+	if useSupervisord {
 		supervisordLayerOrder := layerOrder
 		if !img.IsExternalBase {
 			// Collect ALL layers across entire base chain for complete supervisord assembly
@@ -341,6 +355,32 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			layer := g.Layers[layerName]
 			if layer.HasSupervisord {
 				b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%02d-%s.conf /supervisor/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
+			}
+		}
+		b.WriteString("\n")
+	}
+
+	// Emit systemd services stage for bootc images
+	if useSystemd {
+		systemdLayerOrder := layerOrder
+		if !img.IsExternalBase {
+			full := collectAllImageLayers(imageName, g.Images, g.Layers)
+			if len(full) > 0 {
+				systemdLayerOrder = full
+			}
+		}
+		if err := g.generateSystemdFragments(imageName, systemdLayerOrder); err != nil {
+			return err
+		}
+		b.WriteString("FROM scratch AS systemd-services\n")
+		for _, layerName := range systemdLayerOrder {
+			layer := g.Layers[layerName]
+			if !layer.HasSystemdServices {
+				continue
+			}
+			for _, svcPath := range layer.SystemdServices {
+				svcName := filepath.Base(svcPath)
+				b.WriteString(fmt.Sprintf("COPY .build/%s/systemd/%s /systemd/%s\n", imageName, svcName, svcName))
 			}
 		}
 		b.WriteString("\n")
@@ -434,7 +474,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Process each layer
 	// Post-layer steps (supervisord, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
-	needsRootAfter := hasServices || (hasRoutes && hasTraefik) || img.Bootc
+	needsRootAfter := useSupervisord || useSystemd || (hasRoutes && hasTraefik) || img.Bootc
 	inUserMode := false
 	for i, layerName := range layerOrder {
 		isLast := i == len(layerOrder)-1
@@ -442,10 +482,18 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Assemble supervisord config if needed
-	if hasServices {
+	if useSupervisord {
 		b.WriteString("# Assemble supervisord.conf\n")
 		b.WriteString("RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \\\n")
 		b.WriteString("    cat /supervisor/*.conf > /etc/supervisord.conf\n\n")
+	}
+
+	// Install systemd service files for bootc images
+	if useSystemd {
+		b.WriteString("# Install systemd user services\n")
+		b.WriteString("RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \\\n")
+		b.WriteString("    cp /systemd/*.service /usr/lib/systemd/user/ && \\\n")
+		b.WriteString("    for svc in /systemd/*.service; do systemctl --global enable \"$(basename \"$svc\")\"; done\n\n")
 	}
 
 	// Copy traefik dynamic routes if needed
@@ -454,14 +502,42 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
 	}
 
+	// Enable system-level services (sshd, qemu-guest-agent, cloud-init, etc.)
+	if img.Bootc {
+		var systemUnits []string
+		for _, layerName := range layerOrder {
+			layer := g.Layers[layerName]
+			if layer.HasSystemServices {
+				systemUnits = append(systemUnits, layer.SystemServiceUnits...)
+			}
+		}
+		if len(systemUnits) > 0 {
+			b.WriteString("# Enable system-level services\n")
+			b.WriteString("RUN")
+			for i, unit := range systemUnits {
+				if i > 0 {
+					b.WriteString(" && \\\n   ")
+				} else {
+					b.WriteString(" ")
+				}
+				b.WriteString(fmt.Sprintf("systemctl enable %s", unit))
+			}
+			b.WriteString("\n\n")
+		}
+	}
+
 	// Bootc lint if applicable (must run as root)
 	if img.Bootc {
 		b.WriteString("RUN bootc container lint\n\n")
 	}
 
 	// Final USER directive (use UID for robustness)
-	// Skip if already in user mode and no root steps followed
-	if !inUserMode || needsRootAfter {
+	// Bootc images boot with systemd which manages users via login —
+	// the container USER directive is irrelevant and breaks bcvk (bwrap
+	// rejects ambient capabilities on non-root users).
+	if img.Bootc {
+		// leave as root — systemd handles user sessions
+	} else if !inUserMode || needsRootAfter {
 		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 	}
 
@@ -695,6 +771,32 @@ func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []
 		fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
 		if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// generateSystemdFragments copies systemd .service files from layers to .build/<image>/systemd/
+func (g *Generator) generateSystemdFragments(imageName string, layerOrder []string) error {
+	fragDir := filepath.Join(g.BuildDir, imageName, "systemd")
+	if err := os.MkdirAll(fragDir, 0755); err != nil {
+		return err
+	}
+
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasSystemdServices {
+			continue
+		}
+		for _, svcPath := range layer.SystemdServices {
+			content, err := os.ReadFile(svcPath)
+			if err != nil {
+				return fmt.Errorf("reading systemd service %s: %w", svcPath, err)
+			}
+			destFile := filepath.Join(fragDir, filepath.Base(svcPath))
+			if err := os.WriteFile(destFile, content, 0644); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

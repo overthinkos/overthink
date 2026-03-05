@@ -30,6 +30,7 @@ type CLI struct {
 	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Mod      ModCmd      `cmd:"" help:"Manage remote layer modules"`
+	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
@@ -425,8 +426,10 @@ func (c *ConfigGetCmd) Run() error {
 		fmt.Println(rt.BindAddress)
 	case "encrypted_storage_path":
 		fmt.Println(rt.EncryptedStoragePath)
+	case "vm.backend":
+		fmt.Println(rt.VmBackend)
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.ram, vm.cpus)", c.Key)
 	}
 	return nil
 }

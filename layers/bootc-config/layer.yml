@@ -1,0 +1,3 @@
+rpm:
+  packages:
+    - sway-systemd

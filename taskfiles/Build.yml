@@ -1,15 +1,13 @@
 version: '3'
 
-vars:
-  BIB_IMAGE: quay.io/centos-bootc/bootc-image-builder:latest
-
 tasks:
   ov:
     desc: Build ov from source
     dir: "{{.ROOT_DIR}}"
     cmds:
-      - mkdir -p bin
+      - mkdir -p bin layers/ov-cli/bin
       - cd ov && go build -o ../bin/ov .
+      - cp bin/ov layers/ov-cli/bin/ov
 
   install:
     desc: Build and install ov to ~/.local/bin
@@ -51,85 +49,25 @@ tasks:
       - "{{.ROOT_DIR}}/bin/ov merge {{.CLI_ARGS}}"
 
   iso:
-    desc: "Build ISO disk image (bootc only). Usage: task build:iso -- <image> [tag]"
+    desc: "Build ISO disk image (bootc only). Usage: task build:iso -- <image>"
     preconditions:
       - sh: test -x {{.ROOT_DIR}}/bin/ov
         msg: "ov not found -- run 'task build:ov' first"
-      - sh: command -v podman
-        msg: "podman required for disk image builds"
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - |
-        set -- {{.CLI_ARGS}}
-        IMAGE="$1"; TAG="${2:-latest}"
-        IMAGE_REF=$({{.ROOT_DIR}}/bin/ov inspect --format tag "$IMAGE")
-        echo "Building ISO for $IMAGE_REF"
-        mkdir -p output/iso
-        docker save "$IMAGE_REF" | sudo podman load
-        sudo podman run --rm --privileged \
-          --pull=newer \
-          --security-opt label=type:unconfined_t \
-          -v ./config/iso-gnome.toml:/config.toml:ro \
-          -v ./output/iso:/output \
-          -v /var/lib/containers/storage:/var/lib/containers/storage \
-          {{.BIB_IMAGE}} \
-          --type iso \
-          --config /config.toml \
-          "$IMAGE_REF"
-        echo "ISO written to output/iso/"
+      - "{{.ROOT_DIR}}/bin/ov vm build --type iso {{.CLI_ARGS}}"
 
   qcow2:
-    desc: "Build QCOW2 virtual machine image (bootc only). Usage: task build:qcow2 -- <image> [tag]"
+    desc: "Build QCOW2 virtual machine image (bootc only). Usage: task build:qcow2 -- <image>"
     preconditions:
       - sh: test -x {{.ROOT_DIR}}/bin/ov
         msg: "ov not found -- run 'task build:ov' first"
-      - sh: command -v podman
-        msg: "podman required for disk image builds"
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - |
-        set -- {{.CLI_ARGS}}
-        IMAGE="$1"; TAG="${2:-latest}"
-        IMAGE_REF=$({{.ROOT_DIR}}/bin/ov inspect --format tag "$IMAGE")
-        echo "Building QCOW2 for $IMAGE_REF"
-        mkdir -p output/qcow2
-        docker save "$IMAGE_REF" | sudo podman load
-        sudo podman run --rm --privileged \
-          --pull=newer \
-          --security-opt label=type:unconfined_t \
-          -v ./config/disk.toml:/config.toml:ro \
-          -v ./output/qcow2:/output \
-          -v /var/lib/containers/storage:/var/lib/containers/storage \
-          {{.BIB_IMAGE}} \
-          --type qcow2 \
-          --config /config.toml \
-          "$IMAGE_REF"
-        echo "QCOW2 written to output/qcow2/"
+      - "{{.ROOT_DIR}}/bin/ov vm build {{.CLI_ARGS}}"
 
   raw:
-    desc: "Build RAW disk image (bootc only). Usage: task build:raw -- <image> [tag]"
+    desc: "Build RAW disk image (bootc only). Usage: task build:raw -- <image>"
     preconditions:
       - sh: test -x {{.ROOT_DIR}}/bin/ov
         msg: "ov not found -- run 'task build:ov' first"
-      - sh: command -v podman
-        msg: "podman required for disk image builds"
     cmds:
-      - "{{.ROOT_DIR}}/bin/ov generate"
-      - |
-        set -- {{.CLI_ARGS}}
-        IMAGE="$1"; TAG="${2:-latest}"
-        IMAGE_REF=$({{.ROOT_DIR}}/bin/ov inspect --format tag "$IMAGE")
-        echo "Building RAW for $IMAGE_REF"
-        mkdir -p output/raw
-        docker save "$IMAGE_REF" | sudo podman load
-        sudo podman run --rm --privileged \
-          --pull=newer \
-          --security-opt label=type:unconfined_t \
-          -v ./config/disk.toml:/config.toml:ro \
-          -v ./output/raw:/output \
-          -v /var/lib/containers/storage:/var/lib/containers/storage \
-          {{.BIB_IMAGE}} \
-          --type raw \
-          --config /config.toml \
-          "$IMAGE_REF"
-        echo "RAW image written to output/raw/"
+      - "{{.ROOT_DIR}}/bin/ov vm build --type raw {{.CLI_ARGS}}"

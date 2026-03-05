@@ -26,6 +26,20 @@ type AliasConfig struct {
 	Command string `yaml:"command,omitempty"` // defaults to Name if empty
 }
 
+// VmConfig configures virtual machine settings for bootc images
+type VmConfig struct {
+	DiskSize   string `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`     // e.g. "10 GiB"
+	RootSize   string `yaml:"root_size,omitempty" json:"root_size,omitempty"`     // root partition size (e.g. "10G")
+	Ram        string `yaml:"ram,omitempty" json:"ram,omitempty"`                 // e.g. "4G"
+	Cpus       int    `yaml:"cpus,omitempty" json:"cpus,omitempty"`              // e.g. 2
+	KernelArgs string `yaml:"kernel_args,omitempty" json:"kernel_args,omitempty"` // extra kernel cmdline
+	Rootfs     string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`          // root filesystem type (ext4, xfs, btrfs)
+	Transport  string `yaml:"transport,omitempty" json:"transport,omitempty"`     // image transport (registry, containers-storage)
+	SshPort    int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`       // host SSH port (default: 2222)
+	Firmware   string `yaml:"firmware,omitempty" json:"firmware,omitempty"`       // uefi-secure, uefi-insecure, bios
+	Network    string `yaml:"network,omitempty" json:"network,omitempty"`         // network mode: user, bridge name
+}
+
 // SecurityConfig holds container security options (privileged, capabilities, devices).
 type SecurityConfig struct {
 	Privileged  bool     `yaml:"privileged,omitempty" json:"privileged,omitempty"`
@@ -58,6 +72,8 @@ type ImageConfig struct {
 	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE)
 	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
 	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
+	Vm         *VmConfig         `yaml:"vm,omitempty"`           // virtual machine settings (bootc images)
+	Libvirt    []string          `yaml:"libvirt,omitempty"`      // raw libvirt XML snippets for VM configuration
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -106,6 +122,9 @@ type ResolvedImage struct {
 
 	// Tunnel configuration
 	Tunnel *TunnelConfig `json:",omitempty"` // resolved tunnel config (nil if no tunnel)
+
+	// VM configuration (bootc images)
+	Vm *VmConfig `json:",omitempty"` // resolved VM settings
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -269,6 +288,9 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil)
 	}
 
+	// Resolve VM config: image -> defaults -> hardcoded defaults
+	resolved.Vm = resolveVmConfig(img.Vm, c.Defaults.Vm)
+
 	// Home directory will be resolved later (after inspecting base image)
 	if resolved.User == "root" {
 		resolved.Home = "/root"
@@ -330,6 +352,84 @@ func resolveIntPtr(value, fallback *int, defaultVal int) int {
 // intPtr returns a pointer to an int value
 func intPtr(v int) *int {
 	return &v
+}
+
+// resolveVmConfig merges image-level and default-level VM config with hardcoded fallbacks.
+func resolveVmConfig(img, defaults *VmConfig) *VmConfig {
+	vm := &VmConfig{
+		DiskSize:   "10 GiB",
+		Ram:        "4G",
+		Cpus:       2,
+		KernelArgs: "console=ttyS0,115200n8",
+		Rootfs:     "ext4",
+	}
+	// Apply defaults first
+	if defaults != nil {
+		if defaults.DiskSize != "" {
+			vm.DiskSize = defaults.DiskSize
+		}
+		if defaults.RootSize != "" {
+			vm.RootSize = defaults.RootSize
+		}
+		if defaults.Ram != "" {
+			vm.Ram = defaults.Ram
+		}
+		if defaults.Cpus > 0 {
+			vm.Cpus = defaults.Cpus
+		}
+		if defaults.KernelArgs != "" {
+			vm.KernelArgs = defaults.KernelArgs
+		}
+		if defaults.Rootfs != "" {
+			vm.Rootfs = defaults.Rootfs
+		}
+		if defaults.Transport != "" {
+			vm.Transport = defaults.Transport
+		}
+		if defaults.SshPort > 0 {
+			vm.SshPort = defaults.SshPort
+		}
+		if defaults.Firmware != "" {
+			vm.Firmware = defaults.Firmware
+		}
+		if defaults.Network != "" {
+			vm.Network = defaults.Network
+		}
+	}
+	// Apply image-level overrides
+	if img != nil {
+		if img.DiskSize != "" {
+			vm.DiskSize = img.DiskSize
+		}
+		if img.RootSize != "" {
+			vm.RootSize = img.RootSize
+		}
+		if img.Ram != "" {
+			vm.Ram = img.Ram
+		}
+		if img.Cpus > 0 {
+			vm.Cpus = img.Cpus
+		}
+		if img.KernelArgs != "" {
+			vm.KernelArgs = img.KernelArgs
+		}
+		if img.Rootfs != "" {
+			vm.Rootfs = img.Rootfs
+		}
+		if img.Transport != "" {
+			vm.Transport = img.Transport
+		}
+		if img.SshPort > 0 {
+			vm.SshPort = img.SshPort
+		}
+		if img.Firmware != "" {
+			vm.Firmware = img.Firmware
+		}
+		if img.Network != "" {
+			vm.Network = img.Network
+		}
+	}
+	return vm
 }
 
 // sortStrings sorts a slice of strings in place

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -11,11 +12,23 @@ import (
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine               EngineConfig `yaml:"engine"`
-	RunMode              string       `yaml:"run_mode,omitempty"`
-	AutoEnable           *bool        `yaml:"auto_enable,omitempty"`
-	BindAddress          string       `yaml:"bind_address,omitempty"`
-	EncryptedStoragePath string       `yaml:"encrypted_storage_path,omitempty"`
+	Engine               EngineConfig    `yaml:"engine"`
+	RunMode              string          `yaml:"run_mode,omitempty"`
+	AutoEnable           *bool           `yaml:"auto_enable,omitempty"`
+	BindAddress          string          `yaml:"bind_address,omitempty"`
+	EncryptedStoragePath string          `yaml:"encrypted_storage_path,omitempty"`
+	Vm                   RuntimeVmConfig `yaml:"vm,omitempty"`
+}
+
+// RuntimeVmConfig holds user-level VM defaults
+type RuntimeVmConfig struct {
+	Backend   string `yaml:"backend,omitempty"`   // "auto", "libvirt", or "qemu"
+	DiskSize  string `yaml:"disk_size,omitempty"` // default disk size
+	RootSize  string `yaml:"root_size,omitempty"` // root partition size
+	Ram       string `yaml:"ram,omitempty"`       // default RAM
+	Cpus      int    `yaml:"cpus,omitempty"`      // default CPU count
+	Rootfs    string `yaml:"rootfs,omitempty"`    // root filesystem type
+	Transport string `yaml:"transport,omitempty"` // image transport (registry, containers-storage)
 }
 
 // EngineConfig specifies which container engine to use
@@ -32,6 +45,7 @@ type ResolvedRuntime struct {
 	AutoEnable           bool   // auto-enable quadlet on first start
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
+	VmBackend            string // "auto", "libvirt", or "qemu"
 }
 
 // RuntimeConfigPath returns the path to the user's runtime config file.
@@ -101,6 +115,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
+		VmBackend:            resolveValue(os.Getenv("OV_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -221,8 +236,25 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.BindAddress, nil
 	case "encrypted_storage_path":
 		return cfg.EncryptedStoragePath, nil
+	case "vm.backend":
+		return cfg.Vm.Backend, nil
+	case "vm.disk_size":
+		return cfg.Vm.DiskSize, nil
+	case "vm.ram":
+		return cfg.Vm.Ram, nil
+	case "vm.cpus":
+		if cfg.Vm.Cpus > 0 {
+			return fmt.Sprintf("%d", cfg.Vm.Cpus), nil
+		}
+		return "", nil
+	case "vm.rootfs":
+		return cfg.Vm.Rootfs, nil
+	case "vm.root_size":
+		return cfg.Vm.RootSize, nil
+	case "vm.transport":
+		return cfg.Vm.Transport, nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 }
 
@@ -248,8 +280,31 @@ func SetConfigValue(key, value string) error {
 		}
 	case "encrypted_storage_path":
 		// Any non-empty path is valid
+	case "vm.backend":
+		if value != "auto" && value != "bcvk" && value != "libvirt" && value != "qemu" {
+			return fmt.Errorf("vm.backend must be \"auto\", \"bcvk\", \"libvirt\", or \"qemu\", got %q", value)
+		}
+	case "vm.disk_size":
+		// Any non-empty size string is valid (e.g. "10 GiB", "20G")
+	case "vm.ram":
+		// Any non-empty size string is valid (e.g. "4G", "8192M")
+	case "vm.cpus":
+		if _, err := strconv.Atoi(value); err != nil {
+			return fmt.Errorf("vm.cpus must be an integer, got %q", value)
+		}
+	case "vm.rootfs":
+		if value != "ext4" && value != "xfs" && value != "btrfs" {
+			return fmt.Errorf("vm.rootfs must be \"ext4\", \"xfs\", or \"btrfs\", got %q", value)
+		}
+	case "vm.root_size":
+		// Any non-empty size string is valid (e.g. "10G", "5120M")
+	case "vm.transport":
+		valid := map[string]bool{"registry": true, "containers-storage": true, "oci": true, "oci-archive": true}
+		if !valid[value] {
+			return fmt.Errorf("vm.transport must be \"registry\", \"containers-storage\", \"oci\", or \"oci-archive\", got %q", value)
+		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -271,6 +326,21 @@ func SetConfigValue(key, value string) error {
 		cfg.BindAddress = value
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = value
+	case "vm.backend":
+		cfg.Vm.Backend = value
+	case "vm.disk_size":
+		cfg.Vm.DiskSize = value
+	case "vm.root_size":
+		cfg.Vm.RootSize = value
+	case "vm.ram":
+		cfg.Vm.Ram = value
+	case "vm.cpus":
+		cpus, _ := strconv.Atoi(value)
+		cfg.Vm.Cpus = cpus
+	case "vm.rootfs":
+		cfg.Vm.Rootfs = value
+	case "vm.transport":
+		cfg.Vm.Transport = value
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -302,8 +372,22 @@ func ResetConfigValue(key string) error {
 		cfg.BindAddress = ""
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = ""
+	case "vm.backend":
+		cfg.Vm.Backend = ""
+	case "vm.disk_size":
+		cfg.Vm.DiskSize = ""
+	case "vm.ram":
+		cfg.Vm.Ram = ""
+	case "vm.cpus":
+		cfg.Vm.Cpus = 0
+	case "vm.rootfs":
+		cfg.Vm.Rootfs = ""
+	case "vm.root_size":
+		cfg.Vm.RootSize = ""
+	case "vm.transport":
+		cfg.Vm.Transport = ""
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -357,6 +441,18 @@ func ListConfigValues() ([]configKeySource, error) {
 	// Resolve encrypted_storage_path default
 	defaultStoragePath := resolveEncryptedStoragePath("", "")
 
+	// Resolve vm.cpus separately since it's an int
+	vmCpusEntry := func() configKeySource {
+		envVal := os.Getenv("OV_VM_CPUS")
+		if envVal != "" {
+			return configKeySource{Key: "vm.cpus", Value: envVal, Source: "env (OV_VM_CPUS)"}
+		}
+		if cfg.Vm.Cpus > 0 {
+			return configKeySource{Key: "vm.cpus", Value: fmt.Sprintf("%d", cfg.Vm.Cpus), Source: "config"}
+		}
+		return configKeySource{Key: "vm.cpus", Value: "2", Source: "default"}
+	}
+
 	return []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "docker"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "docker"),
@@ -364,5 +460,12 @@ func ListConfigValues() ([]configKeySource, error) {
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
+		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),
+		resolve("vm.disk_size", "OV_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
+		resolve("vm.root_size", "OV_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),
+		resolve("vm.ram", "OV_VM_RAM", cfg.Vm.Ram, "4G"),
+		vmCpusEntry(),
+		resolve("vm.rootfs", "OV_VM_ROOTFS", cfg.Vm.Rootfs, "ext4"),
+		resolve("vm.transport", "OV_VM_TRANSPORT", cfg.Vm.Transport, ""),
 	}, nil
 }

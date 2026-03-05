@@ -1,0 +1,10 @@
+rpm:
+  packages:
+    - openssh-server
+    - openssh-clients
+
+ports:
+  - 22
+
+system_services:
+  - sshd

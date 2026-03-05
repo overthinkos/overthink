@@ -1,0 +1,6 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - install -m 755 /ctx/bin/ov /usr/local/bin/ov

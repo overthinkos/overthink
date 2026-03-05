@@ -1,0 +1,13 @@
+depends:
+  - sshd
+
+rpm:
+  packages:
+    - cloud-init
+    - cloud-utils-growpart
+
+system_services:
+  - cloud-init-local
+  - cloud-init
+  - cloud-config
+  - cloud-final

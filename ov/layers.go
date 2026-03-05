@@ -31,18 +31,20 @@ type ExtractYAML struct {
 
 // LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
-	Depends    []string          `yaml:"depends,omitempty"`
-	Env        map[string]string `yaml:"env,omitempty"`
-	PathAppend []string          `yaml:"path_append,omitempty"`
-	Ports      []int             `yaml:"ports,omitempty"`
-	Route      *RouteYAML        `yaml:"route,omitempty"`
-	Service    string            `yaml:"service,omitempty"`
-	Rpm        *RpmConfig        `yaml:"rpm,omitempty"`
-	Deb        *DebConfig        `yaml:"deb,omitempty"`
-	Volumes    []VolumeYAML      `yaml:"volumes,omitempty"`
-	Aliases    []AliasYAML       `yaml:"aliases,omitempty"`
-	Extract    []ExtractYAML     `yaml:"extract,omitempty"`
-	Security   *SecurityConfig   `yaml:"security,omitempty"`
+	Depends        []string          `yaml:"depends,omitempty"`
+	Env            map[string]string `yaml:"env,omitempty"`
+	PathAppend     []string          `yaml:"path_append,omitempty"`
+	Ports          []int             `yaml:"ports,omitempty"`
+	Route          *RouteYAML        `yaml:"route,omitempty"`
+	Service        string            `yaml:"service,omitempty"`
+	Rpm            *RpmConfig        `yaml:"rpm,omitempty"`
+	Deb            *DebConfig        `yaml:"deb,omitempty"`
+	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
+	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
+	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
+	Security       *SecurityConfig   `yaml:"security,omitempty"`
+	SystemServices []string          `yaml:"system_services,omitempty"`
+	Libvirt        []string          `yaml:"libvirt,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -92,6 +94,12 @@ type Layer struct {
 	HasAliases        bool
 	HasPixiLock       bool
 	HasExtract        bool
+	HasSystemdServices  bool
+	SystemdServices    []string // paths to *.service files in layer dir (user-level)
+	HasSystemServices  bool
+	SystemServiceUnits []string // system-level systemd units to enable (e.g. "sshd")
+	HasLibvirt         bool
+
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with @version for module collection
 
@@ -110,6 +118,7 @@ type Layer struct {
 	aliases     []AliasYAML
 	extract     []ExtractYAML
 	security    *SecurityConfig
+	libvirt     []string
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -170,6 +179,13 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
+
+	// Scan for systemd service files
+	serviceFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
+	if len(serviceFiles) > 0 {
+		layer.HasSystemdServices = true
+		layer.SystemdServices = serviceFiles
+	}
 
 	// Parse layer.yml if present
 	yamlPath := filepath.Join(path, "layer.yml")
@@ -238,6 +254,18 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate security
 		layer.security = ly.Security
+
+		// Pre-populate system services
+		if len(ly.SystemServices) > 0 {
+			layer.HasSystemServices = true
+			layer.SystemServiceUnits = ly.SystemServices
+		}
+
+		// Pre-populate libvirt snippets
+		if len(ly.Libvirt) > 0 {
+			layer.HasLibvirt = true
+			layer.libvirt = ly.Libvirt
+		}
 	}
 
 	return layer, nil
@@ -347,11 +375,27 @@ func (l *Layer) Security() *SecurityConfig {
 	return l.security
 }
 
+// Libvirt returns the libvirt XML snippets (pre-populated from layer.yml)
+func (l *Layer) Libvirt() []string {
+	return l.libvirt
+}
+
 // ServiceLayers returns layers that have supervisord.conf
 func ServiceLayers(layers map[string]*Layer) []*Layer {
 	var services []*Layer
 	for _, layer := range layers {
 		if layer.HasSupervisord {
+			services = append(services, layer)
+		}
+	}
+	return services
+}
+
+// SystemdServiceLayers returns layers that have systemd .service files
+func SystemdServiceLayers(layers map[string]*Layer) []*Layer {
+	var services []*Layer
+	for _, layer := range layers {
+		if layer.HasSystemdServices {
 			services = append(services, layer)
 		}
 	}

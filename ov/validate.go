@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -91,6 +92,15 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 
 	// Validate remote module consistency
 	validateModules(cfg, layers, errs)
+
+	// Validate systemd service files
+	validateSystemdServices(cfg, layers, errs)
+
+	// Validate system_services entries
+	validateSystemServices(cfg, layers, errs)
+
+	// Validate libvirt snippets
+	validateLibvirt(cfg, layers, errs)
 
 	if errs.HasErrors() {
 		return errs
@@ -776,6 +786,66 @@ func validateModules(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 }
 
+// validateSystemdServices validates systemd .service files in layers
+func validateSystemdServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasSystemdServices {
+			continue
+		}
+		for _, svcPath := range layer.SystemdServices {
+			info, err := os.Stat(svcPath)
+			if err != nil {
+				errs.Add("layer %q: systemd service file %q not readable: %v", name, filepath.Base(svcPath), err)
+				continue
+			}
+			if info.Size() == 0 {
+				errs.Add("layer %q: systemd service file %q is empty", name, filepath.Base(svcPath))
+			}
+		}
+	}
+}
+
+// validateSystemServices validates system_services entries in layers
+func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// system_services requires rpm packages to provide the units
+	for name, layer := range layers {
+		if !layer.HasSystemServices {
+			continue
+		}
+		for _, unit := range layer.SystemServiceUnits {
+			if unit == "" {
+				errs.Add("layer %q: system_services entry cannot be empty", name)
+			}
+			if strings.Contains(unit, "/") || strings.Contains(unit, " ") {
+				errs.Add("layer %q: system_services entry %q must be a unit name (no paths or spaces)", name, unit)
+			}
+		}
+		// Warn if layer has system_services but no RPM packages
+		rpm := layer.RpmConfig()
+		if rpm == nil || len(rpm.Packages) == 0 {
+			errs.Add("layer %q: system_services requires rpm packages that provide those units", name)
+		}
+	}
+
+	// Warn if system_services are used in non-bootc images
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if img.Bootc {
+			continue
+		}
+		for _, layerRef := range img.Layers {
+			layerName, _ := StripVersion(layerRef)
+			layer, ok := layers[layerName]
+			if !ok || !layer.HasSystemServices {
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (system_services will be ignored)\n", imageName, layerName)
+		}
+	}
+}
+
 // isValidPort checks if a string is a valid port number (1-65535)
 func isValidPort(s string) bool {
 	n, err := strconv.Atoi(s)
@@ -831,6 +901,51 @@ func levenshteinDistance(a, b string) int {
 	}
 
 	return matrix[len(a)][len(b)]
+}
+
+// validateLibvirt validates libvirt XML snippets in layers and images
+func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// Validate layer-level snippets
+	for name, layer := range layers {
+		if !layer.HasLibvirt {
+			continue
+		}
+		for i, snippet := range layer.Libvirt() {
+			if err := ValidateLibvirtSnippet(snippet); err != nil {
+				errs.Add("layer %q libvirt[%d]: %v", name, i, err)
+			}
+		}
+	}
+
+	// Validate image-level snippets
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		for i, snippet := range img.Libvirt {
+			if err := ValidateLibvirtSnippet(snippet); err != nil {
+				errs.Add("image %q libvirt[%d]: %v", imageName, i, err)
+			}
+		}
+
+		// Warn if libvirt snippets used in non-bootc images
+		if !img.Bootc {
+			hasLibvirt := len(img.Libvirt) > 0
+			if !hasLibvirt {
+				for _, layerRef := range img.Layers {
+					layerName, _ := StripVersion(layerRef)
+					layer, ok := layers[layerName]
+					if ok && layer.HasLibvirt {
+						hasLibvirt = true
+						break
+					}
+				}
+			}
+			if hasLibvirt {
+				fmt.Fprintf(os.Stderr, "Warning: image %q has libvirt snippets but is not a bootc image (snippets will be ignored)\n", imageName)
+			}
+		}
+	}
 }
 
 func min(a, b, c int) int {

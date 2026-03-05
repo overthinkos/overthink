@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - |
+        mkdir -p /etc/cloud/cloud.cfg.d
+        cat > /etc/cloud/cloud.cfg.d/99-nocloud.cfg <<'CFG'
+        datasource_list: [ NoCloud, None ]
+        CFG

@@ -1,0 +1,13 @@
+[Unit]
+Description=D-Bus Session Bus (custom socket path)
+Before=sway.service
+
+[Service]
+Type=simple
+ExecStart=dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session
+Environment=XDG_RUNTIME_DIR=/tmp
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

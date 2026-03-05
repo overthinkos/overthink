@@ -235,6 +235,10 @@ func TestListConfigValues(t *testing.T) {
 	os.Unsetenv("OV_AUTO_ENABLE")
 	os.Unsetenv("OV_BIND_ADDRESS")
 	os.Unsetenv("OV_ENCRYPTED_STORAGE_PATH")
+	os.Unsetenv("OV_VM_BACKEND")
+	os.Unsetenv("OV_VM_DISK_SIZE")
+	os.Unsetenv("OV_VM_RAM")
+	os.Unsetenv("OV_VM_CPUS")
 
 	SetConfigValue("engine.build", "podman")
 
@@ -242,8 +246,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 6 {
-		t.Fatalf("expected 6 values, got %d", len(vals))
+	if len(vals) != 13 {
+		t.Fatalf("expected 13 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config

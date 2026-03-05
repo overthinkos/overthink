@@ -62,41 +62,39 @@ tasks:
       - "{{.ROOT_DIR}}/bin/ov alias uninstall {{.CLI_ARGS}}"
 
   vm:
-    desc: "Run a QCOW2 image in QEMU. Usage: task run:vm -- <image> [tag]"
+    desc: "Create and start a VM. Usage: task run:vm -- <image>"
     preconditions:
-      - sh: command -v qemu-system-x86_64 || command -v qemu-system-aarch64
-        msg: "qemu not found -- install qemu-system"
-      - sh: test -d output/qcow2
-        msg: "No QCOW2 output found -- run 'task build:qcow2' first"
-    vars:
-      QEMU_RAM: '{{default "4G" .QEMU_RAM}}'
-      QEMU_CPUS: '{{default "2" .QEMU_CPUS}}'
+      - sh: test -x {{.ROOT_DIR}}/bin/ov
+        msg: "ov not found -- run 'task build:ov' first"
     cmds:
-      - |
-        set -- {{.CLI_ARGS}}
-        IMAGE="$1"; TAG="${2:-latest}"
-        DISK="output/qcow2/disk.qcow2"
-        if [ ! -f "$DISK" ]; then
-          echo "error: $DISK not found" >&2
-          exit 1
-        fi
-        ARCH=$(uname -m)
-        case "$ARCH" in
-          x86_64)
-            qemu-system-x86_64 \
-              -m {{.QEMU_RAM}} -smp {{.QEMU_CPUS}} \
-              -cpu host -enable-kvm \
-              -drive file="$DISK",format=qcow2,if=virtio \
-              -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \
-              -serial mon:stdio -nographic
-            ;;
-          aarch64)
-            qemu-system-aarch64 \
-              -m {{.QEMU_RAM}} -smp {{.QEMU_CPUS}} \
-              -cpu host -machine virt -enable-kvm \
-              -drive file="$DISK",format=qcow2,if=virtio \
-              -nic user,model=virtio-net-pci,hostfwd=tcp::2222-:22 \
-              -serial mon:stdio -nographic
-            ;;
-          *) echo "Unsupported architecture: $ARCH" >&2; exit 1 ;;
-        esac
+      - "{{.ROOT_DIR}}/bin/ov vm create {{.CLI_ARGS}}"
+
+  vm-start:
+    desc: "Start an existing VM. Usage: task run:vm-start -- <image>"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm start {{.CLI_ARGS}}"
+
+  vm-stop:
+    desc: "Stop a running VM. Usage: task run:vm-stop -- <image>"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm stop {{.CLI_ARGS}}"
+
+  vm-destroy:
+    desc: "Destroy a VM. Usage: task run:vm-destroy -- <image>"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm destroy {{.CLI_ARGS}}"
+
+  vm-list:
+    desc: "List VMs"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm list"
+
+  vm-console:
+    desc: "Attach to VM console. Usage: task run:vm-console -- <image>"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm console {{.CLI_ARGS}}"
+
+  vm-ssh:
+    desc: "SSH into a VM. Usage: task run:vm-ssh -- <image>"
+    cmds:
+      - "{{.ROOT_DIR}}/bin/ov vm ssh {{.CLI_ARGS}}"

@@ -30,7 +30,7 @@ ov start fedora-test
 ```
 overthink/
 ├── images.yml              # Image definitions (base, layers, ports, merge)
-├── layers/                 # Reusable layer components (~52 layers)
+├── layers/                 # Reusable layer components (~58 layers)
 │   ├── pixi/               # Pixi binary + default env
 │   ├── python/             # Python 3.13 via pixi
 │   ├── nodejs/             # Node.js + npm
@@ -60,10 +60,13 @@ overthink/
 │   ├── volumes.go          # Named volume collection + mounting
 │   ├── registry.go         # Remote image inspection
 │   ├── version.go          # CalVer computation
-│   └── scaffold.go         # Layer scaffolding
+│   ├── scaffold.go         # Layer scaffolding
+│   ├── vm.go               # VM lifecycle (create, start, stop, destroy, list, console, ssh)
+│   ├── vm_build.go         # VM disk image builds (qcow2, raw via bcvk)
+│   └── libvirt.go          # Libvirt XML snippet injection
 ├── taskfiles/              # Task automation
-│   ├── Build.yml           # ov, all, local, push, merge, iso, qcow2, raw
-│   ├── Run.yml             # container, shell, pod:*
+│   ├── Build.yml           # ov, all, local, push, merge, qcow2, raw
+│   ├── Run.yml             # shell, start/stop, vm:*
 │   └── Setup.yml           # builder, all
 ├── templates/              # Supervisord header
 └── config/                 # Bootc Image Builder configs
@@ -80,9 +83,8 @@ overthink/
 | `task build:local -- <image>` | Build single image (host platform) + merge |
 | `task build:push` | Build + push all images |
 | `task build:merge -- <image>` | Merge small layers in a built image |
-| `task build:iso -- <image> [tag]` | Build ISO via Bootc Image Builder |
-| `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image |
-| `task build:raw -- <image> [tag]` | Build RAW disk image |
+| `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image via `ov vm build` |
+| `task build:raw -- <image> [tag]` | Build RAW disk image via `ov vm build --type raw` |
 | `task run:shell -- <image>` | Shell into image (delegates to `ov shell`) |
 | `task run:start -- <image>` | Start service |
 | `task run:stop -- <image>` | Stop service |
@@ -92,7 +94,13 @@ overthink/
 | `task run:remove -- <image>` | Remove service |
 | `task run:enable -- <image>` | Enable quadlet service |
 | `task run:disable -- <image>` | Disable quadlet service |
-| `task run:vm -- <image> [tag]` | Run QCOW2 in QEMU |
+| `task run:vm -- <image>` | Create VM via `ov vm create` |
+| `task run:vm-start -- <image>` | Start VM via `ov vm start` |
+| `task run:vm-stop -- <image>` | Stop VM via `ov vm stop` |
+| `task run:vm-destroy -- <image>` | Destroy VM via `ov vm destroy` |
+| `task run:vm-list` | List VMs via `ov vm list` |
+| `task run:vm-console -- <image>` | VM console via `ov vm console` |
+| `task run:vm-ssh -- <image>` | SSH into VM via `ov vm ssh` |
 
 ### ov Commands
 
@@ -111,6 +119,7 @@ overthink/
 | `ov build [image...]` | Build for local platform |
 | `ov build --push [image...]` | Build for all platforms and push |
 | `ov build --cache registry [image...]` | Build with registry cache |
+| `ov build --cache image [image...]` | Use registry image as cache source |
 | `ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]` | Merge small layers in a built image |
 | `ov merge --all [--dry-run]` | Merge all images with merge.auto enabled |
 | `ov mod get/download/tidy/verify/update/list` | Remote module management |
@@ -127,6 +136,11 @@ overthink/
 | `ov remove <image> [-i INST]` | Stop + remove service |
 | `ov alias install/uninstall/add/remove/list <image>` | Host command aliases |
 | `ov crypto init/mount/unmount/status/passwd <image>` | Encrypted bind mounts |
+| `ov vm build <image> [--type qcow2\|raw]` | Build disk image from bootc container |
+| `ov vm create <image> [--ram SIZE] [--cpus N]` | Create VM from disk image |
+| `ov vm start/stop/destroy <image>` | VM lifecycle management |
+| `ov vm list [-a]` | List VMs |
+| `ov vm console/ssh <image>` | VM access |
 | `ov config get/set/list/reset/path` | Runtime configuration |
 | `ov version` | Print CalVer tag |
 

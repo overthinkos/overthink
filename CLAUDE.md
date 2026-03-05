@@ -61,7 +61,8 @@ ov alias uninstall <image>             # Remove all aliases for an image
 ov build [image...]                    # Build for local platform, load into engine store
 ov build --push [image...]             # Build for all platforms and push to registry
 ov build --platform linux/amd64 [image...]  # Specific platform
-ov build --cache registry [image...]       # Enable build cache
+ov build --cache registry [image...]       # Enable registry build cache
+ov build --cache image [image...]          # Use registry image as cache source
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov mod get <module>@<version>          # Download module, update layers.lock
@@ -90,6 +91,14 @@ ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
 ov crypto status <image>
 ov crypto passwd <image>               # Change encryption password
+ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--ssh-keygen]
+ov vm create <image> [--ram SIZE] [--cpus N] [--gpu|--no-gpu] [-i INSTANCE]
+ov vm start <image> [-i INSTANCE]      # Start a VM
+ov vm stop <image> [-i INSTANCE] [--force]  # Stop a VM
+ov vm destroy <image> [-i INSTANCE] [--disk]  # Remove VM, optionally delete disk
+ov vm list [-a]                        # List VMs (--all includes stopped)
+ov vm console <image> [-i INSTANCE]    # Attach to VM serial console
+ov vm ssh <image> [-i INSTANCE] [-p PORT] [-l USER] [args...]
 ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
@@ -102,7 +111,7 @@ ov version                             # Print computed CalVer tag
 
 ---
 
-## Shipped Layers (52 total)
+## Shipped Layers (58 total)
 
 **Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
@@ -126,7 +135,7 @@ ov version                             # Print computed CalVer tag
 
 **Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
 
-**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration)
+**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bcvk` (bootc virtualization kit + qemu-kvm + virtiofsd), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov-cli` (ov binary for container/VM use)
 
 ---
 
@@ -159,7 +168,7 @@ ov version                             # Print computed CalVer tag
 
 ## Task Commands
 
-Task commands are thin wrappers around `ov` CLI commands. Run `task -l` for the full list. Key commands: `task setup:all` (build ov + create builder), `task build:all` (generate + build + merge), `task build:local -- <image>`, `task build:push`, `task run:shell -- <image>`, `task run:enable -- <image>`. Disk image tasks: `task build:iso`, `task build:qcow2`, `task build:raw`, `task run:vm`.
+Task commands are thin wrappers around `ov` CLI commands. Run `task -l` for the full list. Key commands: `task setup:all` (build ov + create builder), `task build:all` (generate + build + merge), `task build:local -- <image>`, `task build:push`, `task run:shell -- <image>`, `task run:enable -- <image>`. Disk image tasks: `task build:qcow2`, `task build:raw`. VM management: `task run:vm -- <image>` (create), `task run:vm-start`, `task run:vm-stop`, `task run:vm-destroy`, `task run:vm-list`, `task run:vm-console`, `task run:vm-ssh`.
 
 Direct `ov` commands (`ov list images`, `ov validate`, etc.) don't need `task`.
 

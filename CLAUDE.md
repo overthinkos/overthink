@@ -65,6 +65,7 @@ ov build --no-cache [image...]         # Build without any cache
 ov build --platform linux/amd64 [image...]  # Specific platform
 ov build --cache registry [image...]       # Explicit registry cache (read+write)
 ov build --cache image [image...]          # Explicit image cache (read-only)
+ov build --cache gha [image...]            # GitHub Actions cache
 ov build --cache none [image...]           # Same as --no-cache
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
@@ -94,7 +95,7 @@ ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
 ov crypto status <image>
 ov crypto passwd <image>               # Change encryption password
-ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--ssh-keygen]
+ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--ssh-keygen] [--console] [--transport TRANSPORT]
 ov vm create <image> [--ram SIZE] [--cpus N] [--gpu|--no-gpu] [-i INSTANCE]
 ov vm start <image> [-i INSTANCE]      # Start a VM
 ov vm stop <image> [-i INSTANCE] [--force]  # Stop a VM

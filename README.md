@@ -2,21 +2,21 @@
 
 Composable container images from a library of layers. Build any combination into images that can layer on top of each other, across multiple platforms and package managers.
 
-Built on `supervisord` and `task` ([taskfile.dev](https://taskfile.dev)). Supports both Docker and Podman.
+Built on `supervisord` and `ov` (Go CLI). Supports both Docker and Podman.
 
 ## Quick Start
 
 ```bash
-# Prerequisites: task, go, docker with buildx
+# Prerequisites: go, docker (or podman) with buildx
 
-# Setup (one-time)
-task setup:all
+# Setup (one-time) -- downloads task, builds ov
+bash setup.sh
 
 # Build all images
-task build:all
+ov build
 
 # Build single image for host platform
-task build:local -- fedora
+ov build fedora
 
 # Shell into a built image
 ov shell fedora
@@ -64,43 +64,25 @@ overthink/
 │   ├── vm.go               # VM lifecycle (create, start, stop, destroy, list, console, ssh)
 │   ├── vm_build.go         # VM disk image builds (qcow2, raw via bcvk)
 │   └── libvirt.go          # Libvirt XML snippet injection
-├── taskfiles/              # Task automation
-│   ├── Build.yml           # ov, all, local, push, merge, qcow2, raw
-│   ├── Run.yml             # shell, start/stop, vm:*
-│   └── Setup.yml           # builder, all
+├── setup.sh                # Bootstrap: downloads task, builds ov
+├── Taskfile.yml            # Bootstrap tasks only
+├── taskfiles/              # Build.yml, Setup.yml
 ├── templates/              # Supervisord header
 └── config/                 # Bootc Image Builder configs
 ```
 
 ## Commands
 
-### Task Commands
+### Bootstrap (task)
+
+Task is used only for bootstrapping. All other operations use `ov` directly.
 
 | Command | Description |
 |---------|-------------|
-| `task setup:all` | Build ov + create buildx builder |
-| `task build:all` | Generate + build all images + merge |
-| `task build:local -- <image>` | Build single image (host platform) + merge |
-| `task build:push` | Build + push all images |
-| `task build:merge -- <image>` | Merge small layers in a built image |
-| `task build:qcow2 -- <image> [tag]` | Build QCOW2 VM image via `ov vm build` |
-| `task build:raw -- <image> [tag]` | Build RAW disk image via `ov vm build --type raw` |
-| `task run:shell -- <image>` | Shell into image (delegates to `ov shell`) |
-| `task run:start -- <image>` | Start service |
-| `task run:stop -- <image>` | Stop service |
-| `task run:status -- <image>` | Service status |
-| `task run:logs -- <image>` | Service logs |
-| `task run:update -- <image>` | Update and restart |
-| `task run:remove -- <image>` | Remove service |
-| `task run:enable -- <image>` | Enable quadlet service |
-| `task run:disable -- <image>` | Disable quadlet service |
-| `task run:vm -- <image>` | Create VM via `ov vm create` |
-| `task run:vm-start -- <image>` | Start VM via `ov vm start` |
-| `task run:vm-stop -- <image>` | Stop VM via `ov vm stop` |
-| `task run:vm-destroy -- <image>` | Destroy VM via `ov vm destroy` |
-| `task run:vm-list` | List VMs via `ov vm list` |
-| `task run:vm-console -- <image>` | VM console via `ov vm console` |
-| `task run:vm-ssh -- <image>` | SSH into VM via `ov vm ssh` |
+| `task build:ov` | Build ov from source into `bin/ov` |
+| `task build:install` | Build and install ov to `~/.local/bin` |
+| `task setup:builder` | Create multi-platform buildx builder |
+| `task setup:all` | Full setup (build ov + create builder) |
 
 ### ov Commands
 
@@ -118,8 +100,10 @@ overthink/
 | `ov list aliases` | List layers with alias declarations |
 | `ov build [image...]` | Build for local platform |
 | `ov build --push [image...]` | Build for all platforms and push |
-| `ov build --cache registry [image...]` | Build with registry cache |
-| `ov build --cache image [image...]` | Use registry image as cache source |
+| `ov build --no-cache [image...]` | Build without any cache |
+| `ov build --cache registry [image...]` | Build with registry cache (read+write) |
+| `ov build --cache image [image...]` | Use registry image as cache source (read-only) |
+| `ov build --cache gha [image...]` | GitHub Actions cache |
 | `ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]` | Merge small layers in a built image |
 | `ov merge --all [--dry-run]` | Merge all images with merge.auto enabled |
 | `ov mod get/download/tidy/verify/update/list` | Remote module management |
@@ -136,8 +120,8 @@ overthink/
 | `ov remove <image> [-i INST]` | Stop + remove service |
 | `ov alias install/uninstall/add/remove/list <image>` | Host command aliases |
 | `ov crypto init/mount/unmount/status/passwd <image>` | Encrypted bind mounts |
-| `ov vm build <image> [--type qcow2\|raw]` | Build disk image from bootc container |
-| `ov vm create <image> [--ram SIZE] [--cpus N]` | Create VM from disk image |
+| `ov vm build <image> [--type qcow2\|raw] [--ssh-keygen] [--console]` | Build disk image from bootc container |
+| `ov vm create <image> [--ram SIZE] [--cpus N] [--gpu]` | Create VM from disk image |
 | `ov vm start/stop/destroy <image>` | VM lifecycle management |
 | `ov vm list [-a]` | List VMs |
 | `ov vm console/ssh <image>` | VM access |
@@ -155,7 +139,7 @@ ov new layer my-layer
 
 # Add to an image in images.yml
 # Build
-task build:local -- my-image
+ov build my-image
 ```
 
 ## Layer Files

@@ -47,6 +47,9 @@ jobs:
         run: go build -o "$GITHUB_WORKSPACE/bin/ov" .
         working-directory: ov
 
+      - name: Stage ov binary for ov-cli layer
+        run: mkdir -p layers/ov-cli/bin && cp bin/ov layers/ov-cli/bin/ov
+
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 

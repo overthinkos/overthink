@@ -29,7 +29,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 
 	version := parsed.Version
 	if version == "" {
-		repoURL := ModuleGitURL(parsed.RepoPath)
+		repoURL := RepoGitURL(parsed.RepoPath)
 		tag, err := GitLatestTag(repoURL)
 		if err != nil {
 			return nil, fmt.Errorf("resolving latest version for %s: %w", parsed.RepoPath, err)
@@ -39,7 +39,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	}
 
 	// Download/cache the repo
-	cachePath, err := EnsureModuleDownloaded(parsed.RepoPath, version)
+	cachePath, err := EnsureRepoDownloaded(parsed.RepoPath, version)
 	if err != nil {
 		return nil, fmt.Errorf("downloading %s:%s: %w", parsed.RepoPath, version, err)
 	}

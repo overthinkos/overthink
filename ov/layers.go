@@ -107,8 +107,9 @@ type Layer struct {
 	RawIncludedLayers []string // original layers: refs with :version
 
 	// Remote layer metadata
-	Remote     bool   // true if from a remote repo
-	ModulePath string // e.g. "github.com/overthinkos/ml-layers" (empty for local)
+	Remote         bool   // true if from a remote repo
+	RepoPath       string // e.g. "github.com/overthinkos/overthink" (empty for local)
+	SubPathPrefix  string // e.g. "layers/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from layer.yml
 	rpmConfig   *RpmConfig
@@ -475,35 +476,39 @@ func (l *Layer) HasPypiDeps() bool {
 	return strings.Contains(string(data), "[pypi-dependencies]")
 }
 
-// ScanModuleLayers scans a module directory's layers/ subdirectory and returns
-// layers keyed by their fully-qualified reference (repoPath/layerName).
-func ScanModuleLayers(moduleDir string, repoPath string) (map[string]*Layer, error) {
-	layersDir := filepath.Join(moduleDir, "layers")
-	entries, err := os.ReadDir(layersDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return make(map[string]*Layer), nil
-		}
-		return nil, fmt.Errorf("reading module layers directory %s: %w", layersDir, err)
-	}
-
+// ScanRemoteLayers scans specific layers from a downloaded remote repository.
+// Only imports layers whose bare refs are in the wantRefs set.
+// Bare refs use the full path format: "github.com/org/repo/layers/name".
+func ScanRemoteLayers(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Layer, error) {
 	layers := make(map[string]*Layer)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+
+	for bareRef := range wantRefs {
+		// Extract sub-path from bare ref: "github.com/org/repo/layers/name" -> "layers/name"
+		subPath := strings.TrimPrefix(bareRef, repoPath+"/")
+		layerDir := filepath.Join(repoDir, subPath)
+
+		// Derive name from last segment
+		name := subPath
+		if idx := strings.LastIndex(subPath, "/"); idx != -1 {
+			name = subPath[idx+1:]
 		}
 
-		name := entry.Name()
-		layer, err := scanLayer(filepath.Join(layersDir, name), name)
+		if _, err := os.Stat(layerDir); os.IsNotExist(err) {
+			return nil, fmt.Errorf("remote layer %s not found at %s", bareRef, layerDir)
+		}
+
+		layer, err := scanLayer(layerDir, name)
 		if err != nil {
-			return nil, fmt.Errorf("scanning remote layer %s/%s: %w", repoPath, name, err)
+			return nil, fmt.Errorf("scanning remote layer %s: %w", bareRef, err)
 		}
 		layer.Remote = true
-		layer.ModulePath = repoPath
+		layer.RepoPath = repoPath
+		// Compute sub-path prefix for sibling dep resolution (e.g. "layers/")
+		if idx := strings.LastIndex(subPath, "/"); idx != -1 {
+			layer.SubPathPrefix = subPath[:idx+1]
+		}
 
-		// Key by fully-qualified path
-		fullRef := repoPath + "/" + name
-		layers[fullRef] = layer
+		layers[bareRef] = layer
 	}
 
 	return layers, nil
@@ -526,32 +531,38 @@ func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error)
 	}
 
 	// 2. Collect remote refs from @-prefixed layer references
-	repos, err := CollectRemoteRefs(cfg, layers)
+	downloads, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(repos) == 0 {
+	if len(downloads) == 0 {
 		return layers, nil
 	}
 
-	// 3. Auto-download and scan each required repo
-	for repoPath, version := range repos {
-		cachePath, err := EnsureModuleDownloaded(repoPath, version)
+	// 3. Auto-download and scan each required (repo, version) pair
+	for _, dl := range downloads {
+		cachePath, err := EnsureRepoDownloaded(dl.RepoPath, dl.Version)
 		if err != nil {
-			return nil, fmt.Errorf("downloading %s:%s: %w", repoPath, version, err)
+			return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
 		}
 
-		// Scan the repo's layers
-		modLayers, err := ScanModuleLayers(cachePath, repoPath)
+		// Build set of wanted bare refs
+		wantRefs := make(map[string]bool)
+		for _, ref := range dl.Refs {
+			wantRefs[ref] = true
+		}
+
+		// Scan only the specific layers referenced
+		remoteLayers, err := ScanRemoteLayers(cachePath, dl.RepoPath, wantRefs)
 		if err != nil {
-			return nil, fmt.Errorf("scanning %s: %w", repoPath, err)
+			return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
 		}
 
 		// Merge into main map
-		for ref, layer := range modLayers {
+		for ref, layer := range remoteLayers {
 			if existing, ok := layers[ref]; ok && existing.Remote {
-				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.ModulePath, layer.ModulePath)
+				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.RepoPath, layer.RepoPath)
 			}
 			if _, ok := layers[layer.Name]; ok {
 				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)

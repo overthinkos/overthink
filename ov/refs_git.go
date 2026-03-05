@@ -103,16 +103,16 @@ func gitCloneByCommit(repoURL string, commit string, targetDir string) error {
 	return nil
 }
 
-// ModuleGitURL converts a repo path to a git clone URL.
+// RepoGitURL converts a repo path to a git clone URL.
 // e.g. "github.com/overthinkos/ml-layers" -> "https://github.com/overthinkos/ml-layers.git"
-func ModuleGitURL(repoPath string) string {
+func RepoGitURL(repoPath string) string {
 	return "https://" + repoPath + ".git"
 }
 
-// DownloadModule downloads a module to the cache.
-// Returns the cache path where the module was stored.
-func DownloadModule(repoPath string, version string) (string, error) {
-	repoURL := ModuleGitURL(repoPath)
+// DownloadRepo downloads a remote repo to the cache.
+// Returns the cache path where the repo was stored.
+func DownloadRepo(repoPath string, version string) (string, error) {
+	repoURL := RepoGitURL(repoPath)
 
 	// Resolve the ref to a commit hash
 	commit, err := GitResolveRef(repoURL, version)
@@ -120,7 +120,7 @@ func DownloadModule(repoPath string, version string) (string, error) {
 		return "", fmt.Errorf("resolving %s:%s: %w", repoPath, version, err)
 	}
 
-	cachePath, err := ModuleCachePath(repoPath, version)
+	cachePath, err := RepoCachePath(repoPath, version)
 	if err != nil {
 		return "", err
 	}
@@ -143,9 +143,9 @@ func DownloadModule(repoPath string, version string) (string, error) {
 	return cachePath, nil
 }
 
-// DiscoverModuleLayers returns the list of layer names in a module directory
-func DiscoverModuleLayers(moduleDir string) ([]string, error) {
-	layersDir := filepath.Join(moduleDir, "layers")
+// DiscoverRemoteLayers returns the list of layer names in a remote repo directory
+func DiscoverRemoteLayers(repoDir string) ([]string, error) {
+	layersDir := filepath.Join(repoDir, "layers")
 	entries, err := os.ReadDir(layersDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -162,6 +162,38 @@ func DiscoverModuleLayers(moduleDir string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// GitDefaultBranch detects the default branch of a remote repository.
+// Uses git ls-remote --symref to find what HEAD points to.
+// Returns the branch name (e.g., "main", "master").
+func GitDefaultBranch(repoURL string) (string, error) {
+	cmd := exec.Command("git", "ls-remote", "--symref", repoURL, "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git ls-remote --symref %s HEAD: %w", repoURL, err)
+	}
+	branch := parseDefaultBranch(string(out))
+	if branch == "" {
+		return "", fmt.Errorf("could not determine default branch for %s", repoURL)
+	}
+	return branch, nil
+}
+
+// parseDefaultBranch extracts the branch name from git ls-remote --symref output.
+// Example line: "ref: refs/heads/main\tHEAD"
+func parseDefaultBranch(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			// "ref: refs/heads/main\tHEAD" -> "main"
+			ref := strings.TrimPrefix(line, "ref: refs/heads/")
+			if idx := strings.IndexByte(ref, '\t'); idx != -1 {
+				return ref[:idx]
+			}
+		}
+	}
+	return ""
 }
 
 // GitLatestTag queries a remote repo for tags and returns the highest semver tag.

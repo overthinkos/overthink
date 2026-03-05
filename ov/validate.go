@@ -168,7 +168,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 			resolved := dep
 			// Within a remote repo, short-name depends resolve to siblings in the same repo
 			if layer.Remote && !IsRemoteLayerRef(dep) {
-				resolved = layer.ModulePath + "/" + dep
+				resolved = layer.RepoPath + "/" + layer.SubPathPrefix + dep
 			}
 			if _, ok := layers[resolved]; !ok {
 				// Try original name too (for cross-repo deps using full paths)
@@ -226,7 +226,7 @@ func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 			// Check ref exists
 			resolved := ref
 			if layer.Remote && !IsRemoteLayerRef(ref) {
-				resolved = layer.ModulePath + "/" + ref
+				resolved = layer.RepoPath + "/" + layer.SubPathPrefix + ref
 			}
 			if _, ok := layers[resolved]; !ok {
 				if _, ok := layers[ref]; !ok {
@@ -349,7 +349,12 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 		if !img.IsEnabled() {
 			continue
 		}
-		_, err := ResolveLayerOrder(img.Layers, layers, nil)
+		// Convert raw refs to bare refs for layer map lookup
+		bareLayers := make([]string, len(img.Layers))
+		for i, ref := range img.Layers {
+			bareLayers[i] = BareRef(ref)
+		}
+		_, err := ResolveLayerOrder(bareLayers, layers, nil)
 		if err != nil {
 			if cycleErr, ok := err.(*CycleError); ok {
 				errs.Add("image %q: layer dependency cycle: %s", imageName, strings.Join(cycleErr.Cycle, " -> "))
@@ -826,8 +831,8 @@ func validateRemoteLayers(cfg *Config, layers map[string]*Layer, errs *Validatio
 			if !other.Remote || other == layer {
 				continue
 			}
-			if other.Name == layer.Name && other.ModulePath != layer.ModulePath {
-				errs.Add("remote layer name conflict: %q provided by both %s and %s", layer.Name, layer.ModulePath, other.ModulePath)
+			if other.Name == layer.Name && other.RepoPath != layer.RepoPath {
+				errs.Add("remote layer name conflict: %q provided by both %s and %s", layer.Name, layer.RepoPath, other.RepoPath)
 			}
 		}
 	}

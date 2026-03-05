@@ -12,9 +12,9 @@ func TestStripVersion(t *testing.T) {
 		wantRef string
 		wantVer string
 	}{
-		{"@github.com/org/repo/layer:v1.0.0", "@github.com/org/repo/layer", "v1.0.0"},
-		{"@github.com/org/repo/layer:main", "@github.com/org/repo/layer", "main"},
-		{"@github.com/org/repo/layer", "@github.com/org/repo/layer", ""},
+		{"@github.com/org/repo/layers/cuda:v1.0.0", "@github.com/org/repo/layers/cuda", "v1.0.0"},
+		{"@github.com/org/repo/layers/cuda:main", "@github.com/org/repo/layers/cuda", "main"},
+		{"@github.com/org/repo/layers/cuda", "@github.com/org/repo/layers/cuda", ""},
 		{"pixi", "pixi", ""},
 		{"my-layer", "my-layer", ""},
 	}
@@ -32,8 +32,8 @@ func TestBareRef(t *testing.T) {
 		ref  string
 		want string
 	}{
-		{"@github.com/org/repo/layer:v1.0.0", "github.com/org/repo/layer"},
-		{"@github.com/org/repo/layer", "github.com/org/repo/layer"},
+		{"@github.com/org/repo/layers/cuda:v1.0.0", "github.com/org/repo/layers/cuda"},
+		{"@github.com/org/repo/layers/cuda", "github.com/org/repo/layers/cuda"},
 		{"pixi", "pixi"},
 		{"my-layer", "my-layer"},
 	}
@@ -48,22 +48,24 @@ func TestBareRef(t *testing.T) {
 
 func TestParseRemoteRef(t *testing.T) {
 	tests := []struct {
-		ref      string
-		wantRepo string
-		wantName string
-		wantVer  string
+		ref        string
+		wantRepo   string
+		wantSub    string
+		wantName   string
+		wantVer    string
 	}{
-		{"@github.com/org/repo/layer:v1.0.0", "github.com/org/repo", "layer", "v1.0.0"},
-		{"@github.com/org/repo/image:main", "github.com/org/repo", "image", "main"},
-		{"@github.com/org/repo/name", "github.com/org/repo", "name", ""},
-		{"pixi", "", "pixi", ""},
+		{"@github.com/org/repo/layers/cuda:v1.0.0", "github.com/org/repo", "layers/cuda", "cuda", "v1.0.0"},
+		{"@github.com/org/repo/layers/image:main", "github.com/org/repo", "layers/image", "image", "main"},
+		{"@github.com/org/repo/layers/name", "github.com/org/repo", "layers/name", "name", ""},
+		{"@github.com/org/repo/image", "github.com/org/repo", "image", "image", ""},
+		{"pixi", "", "", "pixi", ""},
 	}
 
 	for _, tt := range tests {
 		got := ParseRemoteRef(tt.ref)
-		if got.RepoPath != tt.wantRepo || got.Name != tt.wantName || got.Version != tt.wantVer {
-			t.Errorf("ParseRemoteRef(%q) = {Repo: %q, Name: %q, Version: %q}, want {%q, %q, %q}",
-				tt.ref, got.RepoPath, got.Name, got.Version, tt.wantRepo, tt.wantName, tt.wantVer)
+		if got.RepoPath != tt.wantRepo || got.SubPath != tt.wantSub || got.Name != tt.wantName || got.Version != tt.wantVer {
+			t.Errorf("ParseRemoteRef(%q) = {Repo: %q, SubPath: %q, Name: %q, Version: %q}, want {%q, %q, %q, %q}",
+				tt.ref, got.RepoPath, got.SubPath, got.Name, got.Version, tt.wantRepo, tt.wantSub, tt.wantName, tt.wantVer)
 		}
 		if got.Raw != tt.ref {
 			t.Errorf("ParseRemoteRef(%q).Raw = %q", tt.ref, got.Raw)
@@ -78,11 +80,11 @@ func TestIsRemoteLayerRef(t *testing.T) {
 	}{
 		{"pixi", false},
 		{"my-layer", false},
-		{"@github.com/org/repo/layer", true},
-		{"@github.com/overthinkos/ml-layers/cuda", true},
-		{"@gitlab.com/org/repo/layer", true},
-		{"@github.com/org/repo/layer:v1.0.0", true},
-		{"github.com/org/repo/layer", false}, // no @ prefix = not remote
+		{"@github.com/org/repo/layers/cuda", true},
+		{"@github.com/overthinkos/overthink/layers/cuda", true},
+		{"@gitlab.com/org/repo/layers/cuda", true},
+		{"@github.com/org/repo/layers/cuda:v1.0.0", true},
+		{"github.com/org/repo/layers/cuda", false}, // no @ prefix = not remote
 	}
 
 	for _, tt := range tests {
@@ -112,7 +114,7 @@ func TestIsRemoteImageRef(t *testing.T) {
 	}
 }
 
-func TestScanModuleLayers(t *testing.T) {
+func TestScanRemoteLayers(t *testing.T) {
 	dir := t.TempDir()
 	layersDir := filepath.Join(dir, "layers")
 	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
@@ -122,30 +124,37 @@ func TestScanModuleLayers(t *testing.T) {
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("depends:\n  - cuda\n"), 0644)
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
-	layers, err := ScanModuleLayers(dir, "github.com/overthinkos/ml-layers")
+	wantRefs := map[string]bool{
+		"github.com/overthinkos/ml-layers/layers/cuda":      true,
+		"github.com/overthinkos/ml-layers/layers/python-ml": true,
+	}
+	layers, err := ScanRemoteLayers(dir, "github.com/overthinkos/ml-layers", wantRefs)
 	if err != nil {
-		t.Fatalf("ScanModuleLayers() error = %v", err)
+		t.Fatalf("ScanRemoteLayers() error = %v", err)
 	}
 
 	if len(layers) != 2 {
 		t.Fatalf("len(layers) = %d, want 2", len(layers))
 	}
 
-	cuda, ok := layers["github.com/overthinkos/ml-layers/cuda"]
+	cuda, ok := layers["github.com/overthinkos/ml-layers/layers/cuda"]
 	if !ok {
 		t.Fatal("cuda layer not found")
 	}
 	if !cuda.Remote {
 		t.Error("cuda should be remote")
 	}
-	if cuda.ModulePath != "github.com/overthinkos/ml-layers" {
-		t.Errorf("cuda.ModulePath = %q", cuda.ModulePath)
+	if cuda.RepoPath != "github.com/overthinkos/ml-layers" {
+		t.Errorf("cuda.RepoPath = %q", cuda.RepoPath)
 	}
 	if cuda.Name != "cuda" {
 		t.Errorf("cuda.Name = %q, want %q", cuda.Name, "cuda")
 	}
+	if cuda.SubPathPrefix != "layers/" {
+		t.Errorf("cuda.SubPathPrefix = %q, want %q", cuda.SubPathPrefix, "layers/")
+	}
 
-	pyml := layers["github.com/overthinkos/ml-layers/python-ml"]
+	pyml := layers["github.com/overthinkos/ml-layers/layers/python-ml"]
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
@@ -176,7 +185,7 @@ func TestCollectRemoteRefs(t *testing.T) {
 			"myapp": {
 				Layers: []string{
 					"pixi",
-					"@github.com/overthinkos/ml-layers/cuda:v1.0.0",
+					"@github.com/overthinkos/ml-layers/layers/cuda:v1.0.0",
 				},
 			},
 		},
@@ -184,44 +193,94 @@ func TestCollectRemoteRefs(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi": {Name: "pixi", Depends: []string{}},
 		"my-layer": {Name: "my-layer", RawDepends: []string{
-			"@github.com/myorg/service-layers/svc:v2.0.0",
+			"@github.com/myorg/service-layers/layers/svc:v2.0.0",
 		}},
 	}
 
-	repos, err := CollectRemoteRefs(cfg, layers)
+	downloads, err := CollectRemoteRefs(cfg, layers)
 	if err != nil {
 		t.Fatalf("CollectRemoteRefs() error = %v", err)
 	}
-	if len(repos) != 2 {
-		t.Fatalf("len(repos) = %d, want 2", len(repos))
+	if len(downloads) != 2 {
+		t.Fatalf("len(downloads) = %d, want 2", len(downloads))
 	}
-	if repos["github.com/overthinkos/ml-layers"] != "v1.0.0" {
-		t.Errorf("ml-layers version = %q, want %q", repos["github.com/overthinkos/ml-layers"], "v1.0.0")
+	// Check that both repos are present
+	found := make(map[string]string)
+	for _, dl := range downloads {
+		found[dl.RepoPath] = dl.Version
 	}
-	if repos["github.com/myorg/service-layers"] != "v2.0.0" {
-		t.Errorf("service-layers version = %q, want %q", repos["github.com/myorg/service-layers"], "v2.0.0")
+	if found["github.com/overthinkos/ml-layers"] != "v1.0.0" {
+		t.Errorf("ml-layers version = %q, want %q", found["github.com/overthinkos/ml-layers"], "v1.0.0")
+	}
+	if found["github.com/myorg/service-layers"] != "v2.0.0" {
+		t.Errorf("service-layers version = %q, want %q", found["github.com/myorg/service-layers"], "v2.0.0")
 	}
 }
 
-func TestCollectRemoteRefsVersionConflict(t *testing.T) {
+func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
+	// Same bare ref at different versions should error
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"myapp": {
 				Layers: []string{
-					"@github.com/org/mod/a:v1.0.0",
+					"@github.com/org/repo/layers/cuda:v1.0.0",
 				},
 			},
 		},
 	}
 	layers := map[string]*Layer{
 		"local": {Name: "local", RawDepends: []string{
-			"@github.com/org/mod/b:v2.0.0",
+			"@github.com/org/repo/layers/cuda:v2.0.0",
 		}},
 	}
 
 	_, err := CollectRemoteRefs(cfg, layers)
 	if err == nil {
-		t.Fatal("expected version conflict error")
+		t.Fatal("expected version conflict error for same bare ref")
+	}
+}
+
+func TestCollectRemoteRefsDifferentLayersSameRepo(t *testing.T) {
+	// Different layers from same repo at different versions should be OK
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Layers: []string{
+					"@github.com/org/repo/layers/cuda:v1.0.0",
+					"@github.com/org/repo/layers/python:v2.0.0",
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	downloads, err := CollectRemoteRefs(cfg, layers)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefs() unexpected error: %v", err)
+	}
+	// Should have 2 downloads (same repo, different versions)
+	if len(downloads) != 2 {
+		t.Fatalf("len(downloads) = %d, want 2", len(downloads))
+	}
+}
+
+func TestParseDefaultBranch(t *testing.T) {
+	tests := []struct {
+		output string
+		want   string
+	}{
+		{"ref: refs/heads/main\tHEAD\nabc123\tHEAD\n", "main"},
+		{"ref: refs/heads/master\tHEAD\ndef456\tHEAD\n", "master"},
+		{"ref: refs/heads/develop\tHEAD\n789abc\tHEAD\n", "develop"},
+		{"abc123\tHEAD\n", ""},     // no symref line
+		{"", ""},                    // empty output
+	}
+
+	for _, tt := range tests {
+		got := parseDefaultBranch(tt.output)
+		if got != tt.want {
+			t.Errorf("parseDefaultBranch(%q) = %q, want %q", tt.output, got, tt.want)
+		}
 	}
 }
 
@@ -290,24 +349,24 @@ func TestIsHex(t *testing.T) {
 	}
 }
 
-func TestModuleGitURL(t *testing.T) {
-	got := ModuleGitURL("github.com/overthinkos/ml-layers")
+func TestRepoGitURL(t *testing.T) {
+	got := RepoGitURL("github.com/overthinkos/ml-layers")
 	want := "https://github.com/overthinkos/ml-layers.git"
 	if got != want {
-		t.Errorf("ModuleGitURL() = %q, want %q", got, want)
+		t.Errorf("RepoGitURL() = %q, want %q", got, want)
 	}
 }
 
-func TestDiscoverModuleLayers(t *testing.T) {
+func TestDiscoverRemoteLayers(t *testing.T) {
 	dir := t.TempDir()
 	layersDir := filepath.Join(dir, "layers")
 	os.MkdirAll(filepath.Join(layersDir, "beta"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "alpha"), 0755)
 	os.WriteFile(filepath.Join(layersDir, "README.md"), []byte("test"), 0644)
 
-	names, err := DiscoverModuleLayers(dir)
+	names, err := DiscoverRemoteLayers(dir)
 	if err != nil {
-		t.Fatalf("DiscoverModuleLayers() error = %v", err)
+		t.Fatalf("DiscoverRemoteLayers() error = %v", err)
 	}
 	if len(names) != 2 {
 		t.Fatalf("len(names) = %d, want 2", len(names))
@@ -321,14 +380,14 @@ func TestLayerCopySource(t *testing.T) {
 	g := &Generator{
 		Layers: map[string]*Layer{
 			"pixi": {Name: "pixi", Remote: false},
-			"github.com/test/mod/cuda": {Name: "cuda", Remote: true, ModulePath: "github.com/test/mod"},
+			"github.com/test/repo/layers/cuda": {Name: "cuda", Remote: true, RepoPath: "github.com/test/repo"},
 		},
 	}
 
 	if got := g.layerCopySource("pixi"); got != "layers/pixi" {
 		t.Errorf("local layer: got %q, want %q", got, "layers/pixi")
 	}
-	if got := g.layerCopySource("github.com/test/mod/cuda"); got != ".build/_layers/cuda" {
+	if got := g.layerCopySource("github.com/test/repo/layers/cuda"); got != ".build/_layers/cuda" {
 		t.Errorf("remote layer: got %q, want %q", got, ".build/_layers/cuda")
 	}
 }

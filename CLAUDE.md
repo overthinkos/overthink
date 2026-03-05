@@ -104,7 +104,7 @@ ov version                             # Print computed CalVer tag
 
 **Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `@github.com/org/repo/image:version`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
 
-**Remote layer refs:** Layer references starting with `@` are remote: `@github.com/org/repo/layer-name:version`. Auto-downloaded to `~/.cache/ov/mod/` on first use. Version is optional -- when omitted, the latest semver git tag is resolved automatically. Used in `images.yml` layers and `layer.yml` depends/layers fields.
+**Remote layer refs:** Layer references starting with `@` are remote: `@github.com/org/repo/layers/name:version`. The path after the repo maps directly to the directory in the repo (e.g., `layers/name`). Auto-downloaded to `~/.cache/ov/repos/` on first use. Version is optional -- when omitted, the repo's default branch is used. Different layers from the same repo can use different versions. Used in `images.yml` layers and `layer.yml` depends/layers fields.
 
 **Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
 

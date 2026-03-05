@@ -256,6 +256,15 @@ images:
       ram: "8G"
       cpus: 4
 
+  fedora-remote:
+    base: "quay.io/fedora/fedora:43"
+    layers:
+      - "@github.com/overthinkos/overthink/layers/dev-tools:main"
+      - "@github.com/overthinkos/overthink/layers/build-toolchain:v2026.64.1937"
+      - "@github.com/overthinkos/overthink/layers/nodejs"
+    platforms:
+      - linux/amd64
+
   immich-cuda:
     base: fedora
     layers:

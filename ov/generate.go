@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -115,7 +116,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +205,7 @@ func (g *Generator) Generate() error {
 	}
 
 	// Create symlinks for remote layers in .build/_layers/
-	if err := g.createRemoteLayerSymlinks(); err != nil {
+	if err := g.createRemoteLayerCopies(); err != nil {
 		return fmt.Errorf("creating remote layer symlinks: %w", err)
 	}
 
@@ -1033,9 +1034,11 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	b.WriteString("\n")
 }
 
-// createRemoteLayerSymlinks creates symlinks in .build/_layers/ for each remote layer
+// createRemoteLayerCopies copies remote layer directories into .build/_layers/
 // so that Docker/Podman can access them from the build context.
-func (g *Generator) createRemoteLayerSymlinks() error {
+// Uses hard copies instead of symlinks because Podman doesn't follow symlinks
+// that point outside the build context.
+func (g *Generator) createRemoteLayerCopies() error {
 	hasRemote := false
 	for _, layer := range g.Layers {
 		if layer.Remote {
@@ -1060,10 +1063,10 @@ func (g *Generator) createRemoteLayerSymlinks() error {
 		if !layer.Remote {
 			continue
 		}
-		// Create symlink: .build/_layers/<layer-name> -> <cache-path>/layers/<layer-name>/
-		linkPath := filepath.Join(layersDir, layer.Name)
-		if err := os.Symlink(layer.Path, linkPath); err != nil {
-			return fmt.Errorf("creating symlink for %s: %w", ref, err)
+		destPath := filepath.Join(layersDir, layer.Name)
+		cmd := exec.Command("cp", "-a", layer.Path, destPath)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("copying remote layer %s: %s: %w", ref, string(out), err)
 		}
 	}
 

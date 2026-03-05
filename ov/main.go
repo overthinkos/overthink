@@ -67,7 +67,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -229,7 +229,7 @@ func (c *ListLayersCmd) Run() error {
 	for _, name := range LayerNames(layers) {
 		layer := layers[name]
 		if layer.Remote {
-			fmt.Printf("%s [%s]\n", name, layer.ModulePath)
+			fmt.Printf("%s [%s]\n", name, layer.RepoPath)
 		} else {
 			fmt.Println(name)
 		}

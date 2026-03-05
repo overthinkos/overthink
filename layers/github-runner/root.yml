@@ -36,3 +36,15 @@ tasks:
       # Configure subuid/subgid for rootless podman inside container
       - echo "root:100000:65536" >> /etc/subuid
       - echo "root:100000:65536" >> /etc/subgid
+
+      # Configure registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
+      - mkdir -p /etc/containers/registries.conf.d
+      - |
+        cat > /etc/containers/registries.conf.d/ghcr-mirror.conf <<'TOML'
+        [[registry]]
+        prefix = "ghcr.io"
+        location = "ghcr.io"
+        [[registry.mirror]]
+        location = "127.0.0.1:5000"
+        insecure = true
+        TOML

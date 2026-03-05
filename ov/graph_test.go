@@ -405,6 +405,140 @@ func TestDependsOnComposingLayer(t *testing.T) {
 	}
 }
 
+func TestTopoLevels(t *testing.T) {
+	tests := []struct {
+		name    string
+		graph   map[string][]string
+		want    [][]string
+		wantErr bool
+	}{
+		{
+			name: "linear chain",
+			graph: map[string][]string{
+				"a": nil,
+				"b": {"a"},
+				"c": {"b"},
+			},
+			want: [][]string{{"a"}, {"b"}, {"c"}},
+		},
+		{
+			name: "two independent roots",
+			graph: map[string][]string{
+				"a": nil,
+				"b": nil,
+				"c": {"a"},
+				"d": {"b"},
+			},
+			want: [][]string{{"a", "b"}, {"c", "d"}},
+		},
+		{
+			name: "diamond dependency",
+			graph: map[string][]string{
+				"a": nil,
+				"b": {"a"},
+				"c": {"a"},
+				"d": {"b", "c"},
+			},
+			want: [][]string{{"a"}, {"b", "c"}, {"d"}},
+		},
+		{
+			name: "single node",
+			graph: map[string][]string{
+				"a": nil,
+			},
+			want: [][]string{{"a"}},
+		},
+		{
+			name: "cycle",
+			graph: map[string][]string{
+				"a": {"b"},
+				"b": {"a"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "wide first level",
+			graph: map[string][]string{
+				"a": nil,
+				"b": nil,
+				"c": nil,
+				"d": {"a", "b"},
+				"e": {"c"},
+			},
+			want: [][]string{{"a", "b", "c"}, {"d", "e"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			levels, err := topoLevels(tt.graph)
+			if tt.wantErr {
+				if err == nil {
+					t.Error("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(levels, tt.want) {
+				t.Errorf("topoLevels() = %v, want %v", levels, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveImageLevels(t *testing.T) {
+	images := map[string]*ResolvedImage{
+		"base": {
+			Name:           "base",
+			Base:           "quay.io/fedora/fedora:43",
+			IsExternalBase: true,
+		},
+		"cuda": {
+			Name:           "cuda",
+			Base:           "quay.io/fedora/fedora:43",
+			IsExternalBase: true,
+		},
+		"app": {
+			Name:           "app",
+			Base:           "base",
+			IsExternalBase: false,
+		},
+		"ml": {
+			Name:           "ml",
+			Base:           "cuda",
+			IsExternalBase: false,
+		},
+		"inference": {
+			Name:           "inference",
+			Base:           "ml",
+			IsExternalBase: false,
+		},
+	}
+
+	levels, err := ResolveImageLevels(images, nil)
+	if err != nil {
+		t.Fatalf("ResolveImageLevels() error = %v", err)
+	}
+
+	// Level 0: base, cuda (no deps)
+	// Level 1: app (depends on base), ml (depends on cuda)
+	// Level 2: inference (depends on ml)
+	if len(levels) != 3 {
+		t.Fatalf("expected 3 levels, got %d: %v", len(levels), levels)
+	}
+	if !reflect.DeepEqual(levels[0], []string{"base", "cuda"}) {
+		t.Errorf("level 0 = %v, want [base cuda]", levels[0])
+	}
+	if !reflect.DeepEqual(levels[1], []string{"app", "ml"}) {
+		t.Errorf("level 1 = %v, want [app ml]", levels[1])
+	}
+	if !reflect.DeepEqual(levels[2], []string{"inference"}) {
+		t.Errorf("level 2 = %v, want [inference]", levels[2])
+	}
+}
+
 func TestTopoSortDeterministic(t *testing.T) {
 	// Run multiple times to ensure deterministic output
 	graph := map[string][]string{

@@ -26,6 +26,8 @@ rpm:
 volumes:
   - name: state
     path: /opt/actions-runner
+  - name: storage
+    path: /var/lib/containers/storage
 
 security:
   privileged: true

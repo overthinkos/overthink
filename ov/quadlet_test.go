@@ -420,6 +420,41 @@ func TestTunnelServiceFilename(t *testing.T) {
 	}
 }
 
+func TestGenerateQuadletWithNetwork(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "githubrunner",
+		ImageRef:    "ghcr.io/overthinkos/githubrunner:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Network:     "host",
+		Security:    SecurityConfig{Privileged: true},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "Network=host\n") {
+		t.Errorf("expected Network=host, got:\n%s", got)
+	}
+	if !strings.Contains(got, "PodmanArgs=--privileged") {
+		t.Errorf("expected PodmanArgs=--privileged, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithoutNetwork(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "fedora",
+		ImageRef:    "ghcr.io/overthinkos/fedora:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+	}
+
+	got := generateQuadlet(cfg)
+
+	if strings.Contains(got, "Network=") {
+		t.Errorf("expected no Network= when network is empty, got:\n%s", got)
+	}
+}
+
 func TestGenerateQuadletWithEnvVars(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "githubrunner",

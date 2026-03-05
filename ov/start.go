@@ -63,6 +63,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
+	var network string
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -90,6 +91,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		uid = resolved.UID
 		gid = resolved.GID
 		ports = resolved.Ports
+		network = resolved.Network
 	} else {
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
 		if err := EnsureImage(imageRef, rt); err != nil {
@@ -139,7 +141,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars, security)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars, security, network)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -441,13 +443,16 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig) []string {
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, network ...string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
 		"--name", name,
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
+	}
+	if len(network) > 0 && network[0] != "" {
+		args = append(args, "--network", network[0])
 	}
 	if gpu {
 		args = append(args, GPURunArgs(engine)...)

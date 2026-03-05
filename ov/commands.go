@@ -60,6 +60,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
+	var network string
 	uid, gid := 1000, 1000 // defaults
 
 	// Try images.yml first, fall back to image labels
@@ -87,6 +88,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		}
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		ports = resolved.Ports
+		network = resolved.Network
 	} else {
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
 		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
@@ -179,6 +181,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		EnvFile:     quadletEnvFile,
 		Instance:    c.Instance,
 		Security:    security,
+		Network:     network,
 	}
 
 	// Suppress Env if we're using EnvFile (avoid duplication)

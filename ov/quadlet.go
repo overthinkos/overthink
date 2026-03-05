@@ -24,6 +24,7 @@ type QuadletConfig struct {
 	EnvFile     string              // absolute path to env file for EnvironmentFile= directive
 	Instance    string              // instance name for running multiple containers of same image
 	Security    SecurityConfig      // container security options
+	Network     string              // container network mode (e.g. "host", "none")
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -50,6 +51,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString(fmt.Sprintf("ContainerName=%s\n", name))
 	b.WriteString(fmt.Sprintf("Volume=%s:/workspace\n", cfg.Workspace))
 	b.WriteString("WorkingDir=/workspace\n")
+	if cfg.Network != "" {
+		b.WriteString(fmt.Sprintf("Network=%s\n", cfg.Network))
+	}
 	for _, port := range cfg.Ports {
 		b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port, cfg.BindAddress)))
 	}

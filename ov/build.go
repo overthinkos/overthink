@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 // BuildCmd builds container images
@@ -17,6 +21,7 @@ type BuildCmd struct {
 	Platform string   `long:"platform" help:"Target platform (default: host platform)"`
 	Cache    string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
 	NoCache  bool     `long:"no-cache" help:"Disable build cache entirely"`
+	Jobs     int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
 }
 
 func (c *BuildCmd) Run() error {
@@ -50,33 +55,73 @@ func (c *BuildCmd) Run() error {
 
 	engine := EngineBinary(rt.BuildEngine)
 
-	// Determine build order
-	order, err := ResolveImageOrder(gen.Images, gen.Layers)
-	if err != nil {
-		return err
-	}
-
-	// Filter to requested images (or all)
-	if len(c.Images) > 0 {
-		order, err = filterImages(order, c.Images, gen.Images)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Determine platform
 	platform := c.Platform
 	if platform == "" && !c.Push {
 		platform = hostPlatform()
 	}
 
-	// Build each image in order, piping Containerfile content via stdin
-	// to avoid race conditions with concurrent ov generate overwrites
-	for _, name := range order {
-		img := gen.Images[name]
-		content := gen.Containerfiles[name]
-		if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-			return fmt.Errorf("building %s: %w", name, err)
+	if len(c.Images) > 0 {
+		// Filtered build: use sequential order
+		order, err := ResolveImageOrder(gen.Images, gen.Layers)
+		if err != nil {
+			return err
+		}
+		order, err = filterImages(order, c.Images, gen.Images)
+		if err != nil {
+			return err
+		}
+		for _, name := range order {
+			img := gen.Images[name]
+			content := gen.Containerfiles[name]
+			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+				return fmt.Errorf("building %s: %w", name, err)
+			}
+		}
+	} else {
+		// Full build: use level-based parallelism
+		levels, err := ResolveImageLevels(gen.Images, gen.Layers)
+		if err != nil {
+			return err
+		}
+
+		jobs := c.Jobs
+		if jobs < 1 {
+			jobs = 1
+		}
+
+		for i, level := range levels {
+			fmt.Fprintf(os.Stderr, "\n=== Build level %d/%d (%d images) ===\n", i+1, len(levels), len(level))
+
+			if len(level) == 1 {
+				// Single image, no need for goroutine overhead
+				name := level[0]
+				img := gen.Images[name]
+				content := gen.Containerfiles[name]
+				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+					return fmt.Errorf("building %s: %w", name, err)
+				}
+				continue
+			}
+
+			g, _ := errgroup.WithContext(context.Background())
+			g.SetLimit(jobs)
+
+			for _, name := range level {
+				name := name
+				img := gen.Images[name]
+				content := gen.Containerfiles[name]
+				g.Go(func() error {
+					if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+						return fmt.Errorf("building %s: %w", name, err)
+					}
+					return nil
+				})
+			}
+
+			if err := g.Wait(); err != nil {
+				return err
+			}
 		}
 	}
 
@@ -149,12 +194,15 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 // buildLocalArgs constructs args for a local (single-platform, load into store) build.
 // Uses -f - to read the Containerfile from stdin.
 func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, registry string) []string {
-	args := []string{engine, "build", "-f", "-"}
+	args := []string{engine, "build", "--layers=true", "-f", "-"}
 	for _, tag := range tags {
 		args = append(args, "-t", tag)
 	}
 	if platform != "" {
 		args = append(args, "--platform", platform)
+	}
+	if engine == "podman" {
+		args = append(args, "--jobs", strconv.Itoa(runtime.NumCPU()))
 	}
 	args = append(args, c.cacheArgs(name, registry)...)
 	args = append(args, ".")
@@ -207,7 +255,7 @@ func (c *BuildCmd) cacheArgs(name, registry string) []string {
 		ref := fmt.Sprintf("%s/cache:%s", registry, name)
 		return []string{
 			"--cache-from", fmt.Sprintf("type=registry,ref=%s", ref),
-			"--cache-to", fmt.Sprintf("type=registry,ref=%s,mode=max", ref),
+			"--cache-to", fmt.Sprintf("type=registry,ref=%s,mode=max,compression=zstd", ref),
 		}
 	case "gha":
 		return []string{
@@ -227,13 +275,14 @@ func (c *BuildCmd) cacheArgs(name, registry string) []string {
 
 func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, registry string) []string {
 	// Podman uses --manifest for multi-platform builds
-	args := []string{"podman", "build", "-f", "-"}
+	args := []string{"podman", "build", "--layers=true", "-f", "-"}
 	if len(tags) > 0 {
 		args = append(args, "--manifest", tags[0])
 	}
 	if len(platforms) > 0 {
 		args = append(args, "--platform", strings.Join(platforms, ","))
 	}
+	args = append(args, "--jobs", strconv.Itoa(runtime.NumCPU()))
 	args = append(args, c.cacheArgs(name, registry)...)
 	args = append(args, ".")
 	return args

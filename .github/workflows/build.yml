@@ -53,5 +53,12 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
+      - name: Prune old images
+        run: podman image prune -af --filter "until=168h" || true
+
       - name: Build and push all images
-        run: bin/ov build --push --cache image
+        run: bin/ov build --push
+
+      - name: Prune dangling images
+        if: always()
+        run: podman image prune -f || true

@@ -157,6 +157,8 @@ func (c *InspectCmd) Run() error {
 				}
 				fmt.Printf("%s:%s:%d\n", resolved.Tunnel.Provider, mode, resolved.Tunnel.Port)
 			}
+		case "network":
+			fmt.Println(resolved.Network)
 		case "bind_mounts":
 			img := cfg.Images[c.Image]
 			for _, bm := range img.BindMounts {

@@ -313,6 +313,86 @@ func topoSort(graph map[string][]string) ([]string, error) {
 	return result, nil
 }
 
+// topoLevels performs topological sort and groups nodes by level.
+// Nodes at the same level have no dependencies on each other and can be processed concurrently.
+// Returns levels in dependency order (level 0 has no dependencies).
+func topoLevels(graph map[string][]string) ([][]string, error) {
+	// Calculate in-degrees
+	inDegree := make(map[string]int)
+	reverseGraph := make(map[string][]string)
+	for node := range graph {
+		inDegree[node] = len(graph[node])
+		for _, dep := range graph[node] {
+			reverseGraph[dep] = append(reverseGraph[dep], node)
+		}
+	}
+
+	// Find all nodes with no dependencies (in-degree 0)
+	var queue []string
+	for node, degree := range inDegree {
+		if degree == 0 {
+			queue = append(queue, node)
+		}
+	}
+	sortStrings(queue)
+
+	var levels [][]string
+	for len(queue) > 0 {
+		// All nodes in queue form the current level
+		level := make([]string, len(queue))
+		copy(level, queue)
+		levels = append(levels, level)
+
+		var nextQueue []string
+		for _, node := range queue {
+			dependents := reverseGraph[node]
+			sortStrings(dependents)
+			for _, dependent := range dependents {
+				inDegree[dependent]--
+				if inDegree[dependent] == 0 {
+					nextQueue = append(nextQueue, dependent)
+				}
+			}
+		}
+		sortStrings(nextQueue)
+		queue = nextQueue
+	}
+
+	// Check for cycles
+	total := 0
+	for _, level := range levels {
+		total += len(level)
+	}
+	if total != len(graph) {
+		cycle := findCycle(graph, inDegree)
+		return nil, &CycleError{Cycle: cycle}
+	}
+
+	return levels, nil
+}
+
+// ResolveImageLevels resolves image dependencies and returns them grouped by build level.
+// Images at the same level can be built concurrently.
+func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Layer) ([][]string, error) {
+	graph := make(map[string][]string)
+	for name, img := range images {
+		var deps []string
+		if !img.IsExternalBase {
+			deps = append(deps, img.Base)
+		}
+		if img.Builder != "" && img.Builder != name {
+			if _, ok := images[img.Builder]; ok {
+				if ImageNeedsBuilder(img, images, layers) {
+					deps = append(deps, img.Builder)
+				}
+			}
+		}
+		graph[name] = deps
+	}
+
+	return topoLevels(graph)
+}
+
 // findCycle finds a cycle in the graph for error reporting
 func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 	// Start from any node still in the graph (non-zero in-degree)

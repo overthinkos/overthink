@@ -3,9 +3,13 @@ package main
 import (
 	"fmt"
 	"reflect"
+	"runtime"
+	"strconv"
 	"testing"
 	"time"
 )
+
+var cpuJobs = strconv.Itoa(runtime.NumCPU())
 
 func TestBuildLocalArgs(t *testing.T) {
 	cmd := &BuildCmd{}
@@ -13,7 +17,7 @@ func TestBuildLocalArgs(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415", "ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
@@ -31,9 +35,10 @@ func TestBuildLocalArgsPodman(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:2026.46.1415"},
 		"linux/arm64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"podman", "build", "-f", "-",
+		"podman", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"--platform", "linux/arm64",
+		"--jobs", cpuJobs,
 		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
@@ -54,7 +59,7 @@ func TestBuildDockerPushArgs(t *testing.T) {
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64,linux/arm64",
 		"--cache-from", "type=registry,ref=ghcr.io/overthinkos/cache:fedora",
-		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max",
+		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max,compression=zstd",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -68,7 +73,7 @@ func TestBuildLocalArgsWithGHACache(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
 		"--cache-from", "type=gha,scope=fedora",
@@ -105,11 +110,11 @@ func TestBuildLocalArgsWithRegistryCache(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
 		"--cache-from", "type=registry,ref=ghcr.io/overthinkos/cache:fedora",
-		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max",
+		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max,compression=zstd",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -128,7 +133,7 @@ func TestBuildDockerPushArgsWithRegistryCache(t *testing.T) {
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64,linux/arm64",
 		"--cache-from", "type=registry,ref=ghcr.io/overthinkos/cache:fedora",
-		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max",
+		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max,compression=zstd",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -142,7 +147,7 @@ func TestBuildRegistryCacheNoRegistry(t *testing.T) {
 		[]string{"fedora:latest"},
 		"linux/amd64", "fedora", "")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "fedora:latest",
 		"--platform", "linux/amd64",
 		".",
@@ -159,11 +164,12 @@ func TestBuildPodmanPushArgs(t *testing.T) {
 		[]string{"linux/amd64", "linux/arm64"},
 		"fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"podman", "build", "-f", "-",
+		"podman", "build", "--layers=true", "-f", "-",
 		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"--platform", "linux/amd64,linux/arm64",
+		"--jobs", cpuJobs,
 		"--cache-from", "type=registry,ref=ghcr.io/overthinkos/cache:fedora",
-		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max",
+		"--cache-to", "type=registry,ref=ghcr.io/overthinkos/cache:fedora,mode=max,compression=zstd",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -249,9 +255,10 @@ func TestBuildLocalArgsWithImageCache(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"podman", "build", "-f", "-",
+		"podman", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
+		"--jobs", cpuJobs,
 		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
@@ -285,9 +292,10 @@ func TestBuildPodmanPushArgsWithImageCache(t *testing.T) {
 		[]string{"linux/amd64"},
 		"fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"podman", "build", "-f", "-",
+		"podman", "build", "--layers=true", "-f", "-",
 		"--manifest", "ghcr.io/overthinkos/fedora:2026.46.1415",
 		"--platform", "linux/amd64",
+		"--jobs", cpuJobs,
 		"--cache-from", "ghcr.io/overthinkos/fedora",
 		".",
 	}
@@ -302,9 +310,10 @@ func TestBuildImageCacheNoRegistry(t *testing.T) {
 		[]string{"fedora:latest"},
 		"linux/amd64", "fedora", "")
 	want := []string{
-		"podman", "build", "-f", "-",
+		"podman", "build", "--layers=true", "-f", "-",
 		"-t", "fedora:latest",
 		"--platform", "linux/amd64",
+		"--jobs", cpuJobs,
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {
@@ -363,7 +372,7 @@ func TestBuildDefaultCacheNoRegistry(t *testing.T) {
 		[]string{"fedora:latest"},
 		"linux/amd64", "fedora", "")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "fedora:latest",
 		"--platform", "linux/amd64",
 		".",
@@ -379,7 +388,7 @@ func TestBuildNoCache(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
 		".",
@@ -395,7 +404,7 @@ func TestBuildCacheNone(t *testing.T) {
 		[]string{"ghcr.io/overthinkos/fedora:latest"},
 		"linux/amd64", "fedora", "ghcr.io/overthinkos")
 	want := []string{
-		"docker", "build", "-f", "-",
+		"docker", "build", "--layers=true", "-f", "-",
 		"-t", "ghcr.io/overthinkos/fedora:latest",
 		"--platform", "linux/amd64",
 		".",

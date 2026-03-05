@@ -184,6 +184,7 @@ images:
     uid: 0
     gid: 0
     user: root
+    network: host
 
   openclaw-browser-bootc:
     base: "quay.io/fedora/fedora-bootc:43"

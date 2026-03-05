@@ -71,11 +71,7 @@ images:
     base: fedora
     layers:
       - openclaw
-      - pipewire
-      - wayvnc
-      - google-chrome-sway
-      - pcmanfm-qt
-      - quickshell
+      - sway-desktop
     ports:
       - "18789:18789"
       - "5900:5900"
@@ -87,11 +83,7 @@ images:
     base: nvidia
     layers:
       - openclaw
-      - pipewire
-      - wayvnc
-      - google-chrome-sway
-      - pcmanfm-qt
-      - quickshell
+      - sway-desktop
       - ollama
     ports:
       - "18789:18789"
@@ -105,11 +97,7 @@ images:
     base: nvidia
     layers:
       - openclaw
-      - pipewire
-      - wayvnc
-      - google-chrome-sway
-      - dank-material-shell
-      - pcmanfm-qt
+      - sway-desktop-dank
       - ollama
     ports:
       - "18789:18789"
@@ -123,11 +111,7 @@ images:
     base: nvidia
     layers:
       - openclaw
-      - pipewire
-      - wayvnc
-      - google-chrome-sway
-      - noctalia
-      - pcmanfm-qt
+      - sway-desktop-noctalia
       - ollama
     ports:
       - "18789:18789"
@@ -205,13 +189,11 @@ images:
     base: "quay.io/fedora/fedora-bootc:43"
     bootc: true
     layers:
-      - sshd
-      - qemu-guest-agent
+      - bootc-base
       - openclaw
       - pipewire
       - wayvnc
       - google-chrome-sway
-      - bootc-config
     platforms:
       - linux/amd64
     vm:

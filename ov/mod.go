@@ -244,6 +244,12 @@ func CollectRequiredModulesVersioned(cfg *Config, layers map[string]*Layer) (map
 				return nil, err
 			}
 		}
+		// Scan layers: field for remote refs
+		for _, ref := range layer.RawIncludedLayers {
+			if err := addRef(ref, fmt.Sprintf("layer %s layers", layerName)); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return modules, nil

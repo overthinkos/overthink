@@ -48,7 +48,7 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 		}
 	}
 
-	// Build dependency graph from layer depends
+	// Build dependency graph from layer depends and included layers
 	// Only include layers that appear in at least one image
 	graph := make(map[string][]string)
 	for name := range popularity {
@@ -60,6 +60,11 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 		for _, dep := range layer.Depends {
 			if _, inUse := popularity[dep]; inUse {
 				deps = append(deps, dep)
+			}
+		}
+		for _, included := range layer.IncludedLayers {
+			if _, inUse := popularity[included]; inUse {
+				deps = append(deps, included)
 			}
 		}
 		graph[name] = deps
@@ -469,6 +474,13 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 		}
 		needed[dep] = true
 		addTransitiveDeps(dep, layers, needed, excluded)
+	}
+	for _, included := range layer.IncludedLayers {
+		if excluded[included] || needed[included] {
+			continue
+		}
+		needed[included] = true
+		addTransitiveDeps(included, layers, needed, excluded)
 	}
 }
 

@@ -862,6 +862,53 @@ func TestIsValidPort(t *testing.T) {
 	}
 }
 
+func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {Layers: []string{"sway-desktop"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"pipewire":     {Name: "pipewire", HasRootYml: true},
+		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("expected no error for composing layer without install files, got: %v", err)
+	}
+}
+
+func TestValidateLayerIncludesCycle(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"a": {Name: "a", HasRootYml: true, IncludedLayers: []string{"b"}},
+		"b": {Name: "b", HasRootYml: true, IncludedLayers: []string{"a"}},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for circular layer composition")
+	}
+}
+
+func TestValidateLayerIncludesMissing(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"desktop": {Name: "desktop", IncludedLayers: []string{"nonexistent"}},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for unknown layer in includes")
+	}
+}
+
 func TestLevenshteinDistance(t *testing.T) {
 	tests := []struct {
 		a, b string

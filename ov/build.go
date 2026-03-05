@@ -15,7 +15,8 @@ type BuildCmd struct {
 	Push     bool     `long:"push" help:"Push to registry after building"`
 	Tag      string   `long:"tag" help:"Override tag (default: CalVer)"`
 	Platform string   `long:"platform" help:"Target platform (default: host platform)"`
-	Cache    string   `long:"cache" help:"Build cache type (registry)" env:"OV_BUILD_CACHE"`
+	Cache    string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
+	NoCache  bool     `long:"no-cache" help:"Disable build cache entirely"`
 }
 
 func (c *BuildCmd) Run() error {
@@ -182,8 +183,23 @@ func (c *BuildCmd) buildDockerPushArgs(tags []string, platforms []string, name, 
 }
 
 // cacheArgs returns cache flags for the given image name based on the --cache setting.
+// Default: "image" (read-only from registry) for local builds, "registry" (read+write) for push builds.
 func (c *BuildCmd) cacheArgs(name, registry string) []string {
-	switch c.Cache {
+	if c.NoCache || c.Cache == "none" {
+		return nil
+	}
+
+	cacheType := c.Cache
+	// Auto-detect: default to "image" for local, "registry" for push
+	if cacheType == "" && registry != "" {
+		if c.Push {
+			cacheType = "registry"
+		} else {
+			cacheType = "image"
+		}
+	}
+
+	switch cacheType {
 	case "registry":
 		if registry == "" {
 			return nil

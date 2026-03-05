@@ -14,15 +14,77 @@ func (e *CycleError) Error() string {
 	return fmt.Sprintf("circular dependency: %s", strings.Join(e.Cycle, " -> "))
 }
 
+// ExpandLayers expands layer composition references (layers: field in layer.yml).
+// For each layer that has IncludedLayers, recursively inserts them into the result.
+// Layers without content (no install files, no env/ports/etc.) are omitted.
+// Returns a flat, deduplicated layer list.
+func ExpandLayers(requested []string, layers map[string]*Layer) ([]string, error) {
+	var result []string
+	seen := make(map[string]bool)
+	expanding := make(map[string]bool)
+
+	var expand func(name string) error
+	expand = func(name string) error {
+		if seen[name] {
+			return nil
+		}
+		if expanding[name] {
+			return fmt.Errorf("circular layer composition: %s", name)
+		}
+
+		layer, ok := layers[name]
+		if !ok {
+			// Unknown layer — pass through for ResolveLayerOrder to report
+			seen[name] = true
+			result = append(result, name)
+			return nil
+		}
+
+		if len(layer.IncludedLayers) > 0 {
+			expanding[name] = true
+			for _, included := range layer.IncludedLayers {
+				if err := expand(included); err != nil {
+					return err
+				}
+			}
+			expanding[name] = false
+			seen[name] = true
+			// Composing layers only appear in result if they also have content
+			if layer.HasContent() {
+				result = append(result, name)
+			}
+		} else {
+			// Regular layer — always include
+			seen[name] = true
+			result = append(result, name)
+		}
+		return nil
+	}
+
+	for _, name := range requested {
+		if err := expand(name); err != nil {
+			return nil, err
+		}
+	}
+	return result, nil
+}
+
 // ResolveLayerOrder resolves layer dependencies and returns them in topological order.
 // It takes the explicitly requested layers and the full layer map, then:
-// 1. Transitively resolves all dependencies
-// 2. Topologically sorts the result
-// 3. Returns layers in install order (dependencies before dependents)
+// 1. Expands layer composition (layers: field)
+// 2. Transitively resolves all dependencies
+// 3. Topologically sorts the result
+// 4. Returns layers in install order (dependencies before dependents)
 //
 // parentLayers contains layers already installed by parent images (via base chain).
 // These are excluded from the returned order.
 func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayers map[string]bool) ([]string, error) {
+	// Expand layer composition first
+	expanded, err := ExpandLayers(requested, layers)
+	if err != nil {
+		return nil, err
+	}
+
 	// Build the set of all layers we need (transitive closure)
 	needed := make(map[string]bool)
 	visiting := make(map[string]bool) // Track current path for cycle detection
@@ -51,7 +113,14 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		visiting[name] = true
 		newPath := append(path, name)
 
-		// Add dependencies first
+		// Add included layers (composition)
+		for _, included := range layer.IncludedLayers {
+			if err := addTransitive(included, newPath); err != nil {
+				return err
+			}
+		}
+
+		// Add dependencies
 		for _, dep := range layer.Depends {
 			if err := addTransitive(dep, newPath); err != nil {
 				return err
@@ -59,11 +128,14 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		}
 
 		visiting[name] = false
-		needed[name] = true
+		// Composing layers without content don't need to be built
+		if len(layer.IncludedLayers) == 0 || layer.HasContent() {
+			needed[name] = true
+		}
 		return nil
 	}
 
-	for _, name := range requested {
+	for _, name := range expanded {
 		if err := addTransitive(name, nil); err != nil {
 			return nil, err
 		}
@@ -72,13 +144,35 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 	// Build adjacency list for topological sort
 	// Edge from A to B means A depends on B (B must come before A)
 	graph := make(map[string][]string)
+
+	// resolveDepEdges returns the effective dependencies for a dep reference,
+	// expanding through composing layers that aren't in the needed set.
+	var resolveDepEdges func(dep string) []string
+	resolveDepEdges = func(dep string) []string {
+		if needed[dep] {
+			return []string{dep}
+		}
+		// dep is a composing layer not in needed — inherit its included layers
+		layer, ok := layers[dep]
+		if !ok {
+			return nil
+		}
+		var edges []string
+		for _, included := range layer.IncludedLayers {
+			edges = append(edges, resolveDepEdges(included)...)
+		}
+		return edges
+	}
+
 	for name := range needed {
 		layer := layers[name]
 		var deps []string
 		for _, dep := range layer.Depends {
-			if needed[dep] { // Only include deps that are in our needed set
-				deps = append(deps, dep)
-			}
+			deps = append(deps, resolveDepEdges(dep)...)
+		}
+		// Included layers that have content are also dependencies (must install before)
+		for _, included := range layer.IncludedLayers {
+			deps = append(deps, resolveDepEdges(included)...)
 		}
 		graph[name] = deps
 	}
@@ -284,7 +378,12 @@ func LayersProvidedByImage(imageName string, images map[string]*ResolvedImage, l
 			}
 		}
 
-		// Add this image's layers
+		// Add this image's layers (expand composition)
+		expanded, _ := ExpandLayers(img.Layers, layers)
+		for _, layerName := range expanded {
+			provided[layerName] = true
+		}
+		// Also mark composing layer names as provided
 		for _, layerName := range img.Layers {
 			provided[layerName] = true
 		}

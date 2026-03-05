@@ -1,0 +1,6 @@
+layers:
+  - pipewire
+  - wayvnc
+  - google-chrome-sway
+  - pcmanfm-qt
+  - noctalia

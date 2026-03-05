@@ -1,0 +1,4 @@
+layers:
+  - sshd
+  - qemu-guest-agent
+  - bootc-config

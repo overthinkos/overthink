@@ -58,11 +58,13 @@ ov alias remove <name>                 # Remove an alias
 ov alias list                          # List all installed aliases
 ov alias install <image>               # Install default aliases from layer.yml / images.yml
 ov alias uninstall <image>             # Remove all aliases for an image
-ov build [image...]                    # Build for local platform, load into engine store
-ov build --push [image...]             # Build for all platforms and push to registry
+ov build [image...]                    # Build with auto cache (image cache from registry)
+ov build --push [image...]             # Build+push with registry cache (read+write)
+ov build --no-cache [image...]         # Build without any cache
 ov build --platform linux/amd64 [image...]  # Specific platform
-ov build --cache registry [image...]       # Enable registry build cache
-ov build --cache image [image...]          # Use registry image as cache source
+ov build --cache registry [image...]       # Explicit registry cache (read+write)
+ov build --cache image [image...]          # Explicit image cache (read-only)
+ov build --cache none [image...]           # Same as --no-cache
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov mod get <module>@<version>          # Download module, update layers.lock
@@ -137,6 +139,8 @@ ov version                             # Print computed CalVer tag
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bcvk` (bootc virtualization kit + qemu-kvm + virtiofsd), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov-cli` (ov binary for container/VM use)
 
+**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + pcmanfm-qt + quickshell), `sway-desktop-dank` (same with dank-material-shell), `sway-desktop-noctalia` (same with noctalia), `bootc-base` (sshd + qemu-guest-agent + bootc-config)
+
 ---
 
 ## Style Guide
@@ -147,6 +151,7 @@ ov version                             # Print computed CalVer tag
 - `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - Layer Taskfiles (`root.yml`/`user.yml`): single `install` task, no parameters, idempotent
 - System packages in `layer.yml` `rpm:`/`deb:` sections. Python in `pixi.toml`. npm in `package.json`. Rust in `Cargo.toml`
+- Composing layers: use `layers:` in `layer.yml` to include other layers. Layers with `layers:` and no install files are valid (pure composition). Build cache defaults to `image` (read-only from registry); use `--no-cache` to disable
 - Never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is the only Python package manager
 - Binary downloads: detect arch with `uname -m`, map via `case`, fail on unsupported
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles

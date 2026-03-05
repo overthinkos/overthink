@@ -84,6 +84,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate bind mounts
 	validateBindMounts(cfg, layers, errs)
 
+	// Validate layer composition (layers: field)
+	validateLayerIncludes(layers, errs)
+
 	// Validate no circular dependencies in layers
 	validateLayerDAG(cfg, layers, errs)
 
@@ -162,9 +165,9 @@ func validateInlineVersions(cfg *Config, layers map[string]*Layer, errs *Validat
 // validateLayerContents validates each layer has required files
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		// Layer must have at least one install file
-		if !layer.HasInstallFiles() {
-			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml)", name)
+		// Layer must have at least one install file, unless it has a layers: field (composition)
+		if !layer.HasInstallFiles() && len(layer.IncludedLayers) == 0 {
+			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
 		}
 
 		// Cargo.toml requires src/ directory
@@ -216,6 +219,81 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 			}
 		}
 	}
+}
+
+// validateLayerIncludes validates layer composition (layers: field in layer.yml)
+func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if len(layer.IncludedLayers) == 0 {
+			continue
+		}
+
+		depSet := make(map[string]bool)
+		for _, d := range layer.Depends {
+			depSet[d] = true
+		}
+
+		for _, ref := range layer.IncludedLayers {
+			// Self-inclusion
+			if ref == name {
+				errs.Add("layer %q layers: cannot include itself", name)
+				continue
+			}
+
+			// Check ref exists
+			resolved := ref
+			if layer.Remote && !IsRemoteLayerRef(ref) {
+				resolved = layer.ModulePath + "/" + ref
+			}
+			if _, ok := layers[resolved]; !ok {
+				if _, ok := layers[ref]; !ok {
+					suggestion := findSimilarName(ref, LayerNames(layers))
+					if suggestion != "" {
+						errs.Add("layer %q layers: unknown layer %q (did you mean %q?)", name, ref, suggestion)
+					} else {
+						errs.Add("layer %q layers: unknown layer %q", name, ref)
+					}
+				}
+			}
+
+			// Overlap with depends
+			if depSet[ref] {
+				errs.Add("layer %q: %q appears in both 'layers' and 'depends'", name, ref)
+			}
+		}
+	}
+
+	// Check for circular composition
+	for name, layer := range layers {
+		if len(layer.IncludedLayers) == 0 {
+			continue
+		}
+		if err := checkIncludeCycle(name, layers, nil); err != nil {
+			errs.Add("layer %q: %v", name, err)
+		}
+	}
+}
+
+// checkIncludeCycle detects circular layer composition
+func checkIncludeCycle(name string, layers map[string]*Layer, visited map[string]bool) error {
+	if visited == nil {
+		visited = make(map[string]bool)
+	}
+	if visited[name] {
+		return fmt.Errorf("circular layer composition involving %q", name)
+	}
+	layer, ok := layers[name]
+	if !ok || len(layer.IncludedLayers) == 0 {
+		return nil
+	}
+	visited[name] = true
+	for _, ref := range layer.IncludedLayers {
+		if err := checkIncludeCycle(ref, layers, visited); err != nil {
+			return err
+		}
+	}
+	delete(visited, name)
+	return nil
 }
 
 // validateEnvFiles validates env config from layer.yml

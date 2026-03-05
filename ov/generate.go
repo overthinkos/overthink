@@ -18,6 +18,48 @@ type Generator struct {
 	Images         map[string]*ResolvedImage
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by ov build to pipe via stdin)
+	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
+}
+
+// globalOrderForImage returns the layer order for an image by filtering the
+// global order to only include the image's needed layers. This ensures shared
+// layers appear in the same order across all images, maximizing cache reuse.
+func (g *Generator) globalOrderForImage(imageLayers []string, parentLayers map[string]bool) ([]string, error) {
+	// Resolve needed layers (expand composition + transitive deps)
+	needed, err := ResolveLayerOrder(imageLayers, g.Layers, parentLayers)
+	if err != nil {
+		return nil, err
+	}
+
+	neededSet := make(map[string]bool, len(needed))
+	for _, l := range needed {
+		neededSet[l] = true
+	}
+
+	// Filter global order to only include this image's needed layers
+	var order []string
+	for _, l := range g.GlobalOrder {
+		if neededSet[l] {
+			order = append(order, l)
+		}
+	}
+
+	// Safety: if global order is missing some needed layers (shouldn't happen),
+	// append them in their original order
+	for _, l := range needed {
+		found := false
+		for _, o := range order {
+			if o == l {
+				found = true
+				break
+			}
+		}
+		if !found {
+			order = append(order, l)
+		}
+	}
+
+	return order, nil
 }
 
 // resolveUserContext detects existing user in base image or uses configured values
@@ -99,6 +141,12 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 	}
 	images = updated
 
+	// Compute global layer order for consistent cross-image ordering
+	globalOrder, err := GlobalLayerOrder(images, layers)
+	if err != nil {
+		return nil, fmt.Errorf("computing global layer order: %w", err)
+	}
+
 	return &Generator{
 		Dir:            dir,
 		Config:         cfg,
@@ -107,6 +155,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		Images:         images,
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
+		GlobalOrder:    globalOrder,
 	}, nil
 }
 
@@ -206,7 +255,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	layerOrder, err := ResolveLayerOrder(img.Layers, g.Layers, parentLayers)
+	layerOrder, err := g.globalOrderForImage(img.Layers, parentLayers)
 	if err != nil {
 		return err
 	}

@@ -31,6 +31,7 @@ type ExtractYAML struct {
 
 // LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
+	Layers         []string          `yaml:"layers,omitempty"`
 	Depends        []string          `yaml:"depends,omitempty"`
 	Env            map[string]string `yaml:"env,omitempty"`
 	PathAppend     []string          `yaml:"path_append,omitempty"`
@@ -102,6 +103,8 @@ type Layer struct {
 
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with @version for module collection
+	IncludedLayers    []string // bare refs from layers: field (version stripped)
+	RawIncludedLayers []string // original layers: refs with @version
 
 	// Remote module metadata
 	Remote     bool   // true if from a remote module
@@ -202,6 +205,13 @@ func scanLayer(path string, name string) (*Layer, error) {
 		for i, dep := range ly.Depends {
 			layer.Depends[i], _ = StripVersion(dep)
 		}
+
+		// Parse layers: field for layer composition
+		layer.RawIncludedLayers = ly.Layers
+		layer.IncludedLayers = make([]string, len(ly.Layers))
+		for i, ref := range ly.Layers {
+			layer.IncludedLayers[i], _ = StripVersion(ref)
+		}
 		layer.HasSupervisord = ly.Service != ""
 		layer.serviceConf = ly.Service
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
@@ -278,6 +288,14 @@ func (l *Layer) HasInstallFiles() bool {
 	return hasRpm || hasDeb || l.HasRootYml ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml || l.HasUserYml
+}
+
+// HasContent returns true if the layer has install files or any configuration
+// that contributes to the Containerfile (env, ports, volumes, etc.)
+func (l *Layer) HasContent() bool {
+	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
+		l.HasVolumes || l.HasAliases || l.HasSupervisord || l.HasExtract ||
+		l.HasSystemdServices || l.HasSystemServices || l.HasLibvirt
 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists

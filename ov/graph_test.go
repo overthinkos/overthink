@@ -278,6 +278,133 @@ func TestLayersProvidedByImage(t *testing.T) {
 	}
 }
 
+func TestExpandLayers(t *testing.T) {
+	layers := map[string]*Layer{
+		"pipewire":         {Name: "pipewire", HasRootYml: true},
+		"wayvnc":           {Name: "wayvnc", HasRootYml: true},
+		"chrome":           {Name: "chrome", HasRootYml: true},
+		"quickshell":       {Name: "quickshell", HasRootYml: true},
+		"sway-desktop":     {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "quickshell"}},
+		"openclaw":         {Name: "openclaw", HasUserYml: true},
+	}
+
+	// Basic expansion
+	result, err := ExpandLayers([]string{"openclaw", "sway-desktop"}, layers)
+	if err != nil {
+		t.Fatalf("ExpandLayers() error: %v", err)
+	}
+	want := []string{"openclaw", "pipewire", "wayvnc", "chrome", "quickshell"}
+	if !reflect.DeepEqual(result, want) {
+		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+	}
+}
+
+func TestExpandLayersDedup(t *testing.T) {
+	layers := map[string]*Layer{
+		"pipewire":     {Name: "pipewire", HasRootYml: true},
+		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
+	}
+
+	// pipewire referenced directly AND via sway-desktop — should appear once
+	result, err := ExpandLayers([]string{"pipewire", "sway-desktop"}, layers)
+	if err != nil {
+		t.Fatalf("ExpandLayers() error: %v", err)
+	}
+	want := []string{"pipewire", "wayvnc"}
+	if !reflect.DeepEqual(result, want) {
+		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+	}
+}
+
+func TestExpandLayersNested(t *testing.T) {
+	layers := map[string]*Layer{
+		"pipewire":     {Name: "pipewire", HasRootYml: true},
+		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"chrome":       {Name: "chrome", HasRootYml: true},
+		"vnc-stack":    {Name: "vnc-stack", IncludedLayers: []string{"pipewire", "wayvnc"}},
+		"browser-desk": {Name: "browser-desk", IncludedLayers: []string{"vnc-stack", "chrome"}},
+	}
+
+	result, err := ExpandLayers([]string{"browser-desk"}, layers)
+	if err != nil {
+		t.Fatalf("ExpandLayers() error: %v", err)
+	}
+	want := []string{"pipewire", "wayvnc", "chrome"}
+	if !reflect.DeepEqual(result, want) {
+		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+	}
+}
+
+func TestExpandLayersCycle(t *testing.T) {
+	layers := map[string]*Layer{
+		"a": {Name: "a", IncludedLayers: []string{"b"}},
+		"b": {Name: "b", IncludedLayers: []string{"a"}},
+	}
+
+	_, err := ExpandLayers([]string{"a"}, layers)
+	if err == nil {
+		t.Error("expected circular composition error, got nil")
+	}
+}
+
+func TestExpandLayersWithContent(t *testing.T) {
+	layers := map[string]*Layer{
+		"pipewire": {Name: "pipewire", HasRootYml: true},
+		"wayvnc":   {Name: "wayvnc", HasRootYml: true},
+		// Composing layer that also has its own install content
+		"desktop": {Name: "desktop", HasUserYml: true, IncludedLayers: []string{"pipewire", "wayvnc"}},
+	}
+
+	result, err := ExpandLayers([]string{"desktop"}, layers)
+	if err != nil {
+		t.Fatalf("ExpandLayers() error: %v", err)
+	}
+	// desktop should stay because it has content
+	want := []string{"pipewire", "wayvnc", "desktop"}
+	if !reflect.DeepEqual(result, want) {
+		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+	}
+}
+
+func TestResolveLayerOrderWithComposition(t *testing.T) {
+	layers := map[string]*Layer{
+		"pixi":         {Name: "pixi", HasRootYml: true},
+		"python":       {Name: "python", HasRootYml: true, Depends: []string{"pixi"}},
+		"supervisord":  {Name: "supervisord", HasRootYml: true, Depends: []string{"python"}},
+		"svc-stack":    {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
+	}
+
+	order, err := ResolveLayerOrder([]string{"svc-stack"}, layers, nil)
+	if err != nil {
+		t.Fatalf("ResolveLayerOrder() error: %v", err)
+	}
+	// pixi (dep of python) → python → supervisord
+	want := []string{"pixi", "python", "supervisord"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("order = %v, want %v", order, want)
+	}
+}
+
+func TestDependsOnComposingLayer(t *testing.T) {
+	layers := map[string]*Layer{
+		"pipewire":     {Name: "pipewire", HasRootYml: true},
+		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
+		"myapp":        {Name: "myapp", HasRootYml: true, Depends: []string{"sway-desktop"}},
+	}
+
+	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)
+	if err != nil {
+		t.Fatalf("ResolveLayerOrder() error: %v", err)
+	}
+	// pipewire and wayvnc should be pulled in via sway-desktop dependency
+	want := []string{"pipewire", "wayvnc", "myapp"}
+	if !reflect.DeepEqual(order, want) {
+		t.Errorf("order = %v, want %v", order, want)
+	}
+}
+
 func TestTopoSortDeterministic(t *testing.T) {
 	// Run multiple times to ensure deterministic output
 	graph := map[string][]string{

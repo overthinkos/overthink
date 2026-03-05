@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-58 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+65 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -59,7 +59,7 @@ This is where it all comes together. Take a bootc-based image, and `ov vm build`
 
 ## Install
 
-**Recommended — Go install** (requires Go 1.25.6+):
+**Recommended — Go install** (requires Go 1.25.3+):
 
 ```bash
 go install github.com/overthinkos/overthink/ov@latest
@@ -111,7 +111,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Foundations
 
 **pixi** — The Pixi package manager, foundation for Python and conda environments.
-**python** — Python 3.13 via Pixi. **nodejs** / **node24** — Node.js + npm. **rust** — Rust + Cargo. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config.
+**python** — Python 3.13 via Pixi. **nodejs** / **node24** — Node.js + npm. **rust** — Rust + Cargo. **golang** — Go compiler. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config.
 
 ### Services & Infrastructure
 
@@ -128,6 +128,10 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Applications
 
 **openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
+
+### Utilities
+
+**gocryptfs** — Encrypted filesystem for `ov crypto` operations. **socat** — Socket relay for VM console access.
 
 ### OS / Bootc
 
@@ -161,6 +165,7 @@ Overthink covers the full journey from development to production:
 ov build [image...]                    # Build for local platform
 ov build --push [image...]             # Build + push (all platforms)
 ov build --no-cache [image...]         # Clean build
+ov build --jobs N [image...]           # Max concurrent builds (default: 4)
 ov generate [--tag TAG]                # Write Containerfiles to .build/
 ov validate                            # Check everything
 ov merge <image> [--dry-run]           # Merge small layers in built images
@@ -173,7 +178,8 @@ ov shell <image> [-c CMD] [--gpu]      # Interactive shell
 ov start <image> [--gpu] [--build]     # Start service container
 ov stop <image>                        # Stop container
 ov enable <image>                      # Systemd quadlet service
-ov disable/status/logs/update/remove   # Service lifecycle
+ov disable/status/logs/update <image>  # Service lifecycle
+ov remove <image> [--volumes]          # Remove service (optionally with volumes)
 ```
 
 ### Virtual Machines
@@ -201,6 +207,8 @@ ov new layer <name>                            # Scaffold a new layer
 ov seed <image>                                # Seed bind mount dirs
 ov alias install/uninstall <image>             # Host command aliases
 ov crypto init/mount/unmount/status <image>    # Encrypted volumes
+ov crypto passwd <image>                       # Change encryption password
+ov config get/set/list/reset/path              # Runtime configuration
 ```
 
 ## Adding a Layer

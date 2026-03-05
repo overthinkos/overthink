@@ -28,7 +28,7 @@ Generation is idempotent. `.build/` is disposable and gitignored.
 ```
 project/
 +-- bin/ov                    # Built by `task build:ov` (gitignored)
-+-- ov/                       # Go module (go 1.25.6, kong CLI, go-containerregistry)
++-- ov/                       # Go module (go 1.25.3, kong CLI, go-containerregistry)
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
@@ -66,6 +66,7 @@ ov build --cache registry [image...]       # Explicit registry cache (read+write
 ov build --cache image [image...]          # Explicit image cache (read-only)
 ov build --cache gha [image...]            # GitHub Actions cache
 ov build --cache none [image...]           # Same as --no-cache
+ov build --jobs N [image...]               # Max concurrent builds per level (default: 4)
 ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov new layer <name>                    # Scaffold a layer directory
@@ -78,7 +79,7 @@ ov disable <image> [-i INSTANCE]       # Disable service auto-start (quadlet onl
 ov status <image> [-i INSTANCE]        # Show service status
 ov logs <image> [-f] [-i INSTANCE]     # Show service logs
 ov update <image> [--tag TAG] [-i INSTANCE] [--build]  # Update image, restart if active
-ov remove <image> [-i INSTANCE]        # Remove service
+ov remove <image> [-i INSTANCE] [--volumes] [-e KEY=VALUE]  # Remove service (--volumes removes named volumes)
 ov config get <key>                    # Print resolved value
 ov config set <key> <value>            # Set in user config
 ov config list                         # Show all settings with source
@@ -102,7 +103,7 @@ ov version                             # Print computed CalVer tag
 
 **Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`).
 
-**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `@github.com/org/repo/image:version`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
+**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
 
 **Remote layer refs:** Layer references starting with `@` are remote: `@github.com/org/repo/layers/name:version`. The path after the repo maps directly to the directory in the repo (e.g., `layers/name`). Auto-downloaded to `~/.cache/ov/repos/` on first use. Version is optional -- when omitted, the repo's default branch is used. Different layers from the same repo can use different versions. Used in `images.yml` layers and `layer.yml` depends/layers fields.
 
@@ -110,9 +111,9 @@ ov version                             # Print computed CalVer tag
 
 ---
 
-## Shipped Layers (58 total)
+## Shipped Layers (65 total)
 
-**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
+**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
 **Build:** `build-toolchain` (gcc, cmake, autoconf, ninja, git, pkg-config), `pre-commit` (git hooks framework)
 
@@ -133,6 +134,8 @@ ov version                             # Print computed CalVer tag
 **Dev Tools:** `dev-tools` (bat, ripgrep, neovim, gh, direnv, fd-find, htop, podman-compose), `vscode` (VS Code via Microsoft repo), `pre-commit` (git hooks), `typst` (document processor), `ujust` (task runner)
 
 **Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
+
+**Utilities:** `gocryptfs` (encrypted filesystem for ov crypto operations), `socat` (socket relay for VM console access)
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bcvk` (bootc virtualization kit + qemu-kvm + virtiofsd), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov-cli` (ov binary for container/VM use)
 

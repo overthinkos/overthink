@@ -249,6 +249,32 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
+
+	// Run post_enable hooks if any
+	if cfgErr == nil {
+		layers, scanErr := ScanAllLayers(dir)
+		if scanErr == nil {
+			hooks := CollectHooks(cfg, layers, c.Image)
+			if hooks != nil && hooks.PostEnable != "" {
+				containerName := containerNameInstance(c.Image, c.Instance)
+				svc := serviceNameInstance(c.Image, c.Instance)
+
+				// Start the service so the hook can exec into it
+				start := exec.Command("systemctl", "--user", "start", svc)
+				start.Stdout = os.Stderr
+				start.Stderr = os.Stderr
+				if err := start.Run(); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to start %s for post_enable hook: %v\n", svc, err)
+				} else {
+					engine := EngineBinary(rt.RunEngine)
+					if err := RunHook(engine, containerName, hooks.PostEnable, c.Env); err != nil {
+						fmt.Fprintf(os.Stderr, "Warning: post_enable hook failed: %v\n", err)
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -551,8 +577,10 @@ func (c *UpdateCmd) runRemoteUpdate(ref string) error {
 
 // RemoveCmd removes a service container
 type RemoveCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Image       string   `arg:"" help:"Image name or remote ref"`
+	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	WithVolumes bool     `name:"volumes" help:"Also remove named volumes"`
+	Env         []string `short:"e" long:"env" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
 func (c *RemoveCmd) Run() error {
@@ -565,6 +593,12 @@ func (c *RemoveCmd) Run() error {
 	if err != nil {
 		return err
 	}
+
+	engine := EngineBinary(rt.RunEngine)
+	containerName := containerNameInstance(imageName, c.Instance)
+
+	// Run pre_remove hooks (best-effort, before stopping)
+	c.runPreRemoveHook(engine, containerName, imageName)
 
 	if rt.RunMode == "quadlet" {
 		svc := serviceNameInstance(imageName, c.Instance)
@@ -600,11 +634,14 @@ func (c *RemoveCmd) Run() error {
 		}
 
 		fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
+
+		if c.WithVolumes {
+			removeVolumes(engine, imageName, c.Instance)
+		}
 		return nil
 	}
 
 	// Direct mode: stop + rm
-	engine := EngineBinary(rt.RunEngine)
 	name := containerNameInstance(imageName, c.Instance)
 
 	stop := exec.Command(engine, "stop", name)
@@ -614,7 +651,34 @@ func (c *RemoveCmd) Run() error {
 	_ = rm.Run()
 
 	fmt.Fprintf(os.Stderr, "Removed container %s\n", name)
+
+	if c.WithVolumes {
+		removeVolumes(engine, imageName, c.Instance)
+	}
 	return nil
+}
+
+// runPreRemoveHook runs pre_remove hooks from layer.yml (best-effort).
+func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return
+	}
+	layers, err := ScanAllLayers(dir)
+	if err != nil {
+		return
+	}
+	hooks := CollectHooks(cfg, layers, imageName)
+	if hooks == nil || hooks.PreRemove == "" {
+		return
+	}
+	if err := RunHook(engine, containerName, hooks.PreRemove, c.Env); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
+	}
 }
 
 // resolveImageName extracts the short image name from a ref that may be

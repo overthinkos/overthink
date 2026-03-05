@@ -46,6 +46,7 @@ type LayerYAML struct {
 	Security       *SecurityConfig   `yaml:"security,omitempty"`
 	SystemServices []string          `yaml:"system_services,omitempty"`
 	Libvirt        []string          `yaml:"libvirt,omitempty"`
+	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -123,6 +124,7 @@ type Layer struct {
 	extract     []ExtractYAML
 	security    *SecurityConfig
 	libvirt     []string
+	hooks       *HooksConfig
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -277,6 +279,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 			layer.HasLibvirt = true
 			layer.libvirt = ly.Libvirt
 		}
+
+		// Pre-populate hooks
+		layer.hooks = ly.Hooks
 	}
 
 	return layer, nil
@@ -397,6 +402,11 @@ func (l *Layer) Security() *SecurityConfig {
 // Libvirt returns the libvirt XML snippets (pre-populated from layer.yml)
 func (l *Layer) Libvirt() []string {
 	return l.libvirt
+}
+
+// Hooks returns the lifecycle hooks config (pre-populated from layer.yml, nil if not set)
+func (l *Layer) Hooks() *HooksConfig {
+	return l.hooks
 }
 
 // ServiceLayers returns layers that have supervisord.conf

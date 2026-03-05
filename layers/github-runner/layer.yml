@@ -48,3 +48,14 @@ service: |
   redirect_stderr=true
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
+
+hooks:
+  post_enable: |
+    /opt/actions-runner/config.sh --unattended \
+      --url "https://github.com/${RUNNER_ORG}" \
+      --token "${RUNNER_TOKEN}" \
+      --name "${RUNNER_NAME}" \
+      --replace --work _work
+  pre_remove: |
+    /opt/actions-runner/config.sh remove \
+      --token "${RUNNER_TOKEN}"

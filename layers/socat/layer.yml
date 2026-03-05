@@ -1,0 +1,5 @@
+description: Socket relay tool for VM console access
+
+rpm:
+  packages:
+    - socat

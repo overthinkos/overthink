@@ -257,6 +257,23 @@ images:
     platforms:
       - linux/amd64
 
+  aurora:
+    base: "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305"
+    bootc: true
+    platforms:
+      - linux/amd64
+    layers:
+      - sshd
+      - ov-cli
+      - golang
+      - bcvk
+      - gocryptfs
+      - socat
+    vm:
+      disk_size: "30 GiB"
+      ram: "8G"
+      cpus: 4
+
   immich-cuda:
     base: fedora
     layers:

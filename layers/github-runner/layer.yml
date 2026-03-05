@@ -51,10 +51,13 @@ service: |
 
 hooks:
   post_enable: |
+    : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
+    : "${RUNNER_LABELS:=overthink}"
     /opt/actions-runner/config.sh --unattended \
       --url "https://github.com/${RUNNER_ORG}" \
       --token "${RUNNER_TOKEN}" \
       --name "${RUNNER_NAME}" \
+      --labels "${RUNNER_LABELS}" \
       --replace --work _work
   pre_remove: |
     /opt/actions-runner/config.sh remove \

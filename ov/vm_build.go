@@ -1,16 +1,11 @@
 package main
 
 import (
-	"crypto/ed25519"
-	"crypto/rand"
-	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/crypto/ssh"
 )
 
 // VmBuildCmd builds a QCOW2/RAW disk image from a bootc container image.
@@ -22,7 +17,6 @@ type VmBuildCmd struct {
 	Type      string `long:"type" default:"qcow2" help:"Output format: qcow2, raw"`
 	Transport string `long:"transport" help:"Image transport: registry, containers-storage, oci, oci-archive"`
 	Console   bool   `long:"console" help:"Enable console output for debugging"`
-	SshKeygen bool   `long:"ssh-keygen" short:"K" help:"Generate SSH keypair and inject via systemd credentials"`
 }
 
 func (c *VmBuildCmd) Run() error {
@@ -152,16 +146,6 @@ func (c *VmBuildCmd) Run() error {
 		return fmt.Errorf("creating disk image: %w", err)
 	}
 
-	// Handle SSH key generation
-	var sshKeyDir string
-	if c.SshKeygen {
-		sshKeyDir, err = generateSSHKeys(rawOutputDir)
-		if err != nil {
-			return fmt.Errorf("generating SSH keys: %w", err)
-		}
-		defer os.RemoveAll(sshKeyDir)
-	}
-
 	// Resolve rootful engine (podman machine, sudo, or native)
 	engineCmd, err := RootfulEngine(engine, rt.Rootful)
 	if err != nil {
@@ -176,12 +160,6 @@ func (c *VmBuildCmd) Run() error {
 		"--security-opt", "label=type:unconfined_t",
 		"-v", rawDiskPath + ":/output/disk.raw",
 		"-v", "/var/lib/containers:/var/lib/containers",
-	}
-
-	if c.SshKeygen && sshKeyDir != "" {
-		args = append(args,
-			"-v", filepath.Join(sshKeyDir, "ssh.authorized_keys.d_default")+":/usr/lib/credstore/ssh.authorized_keys.d/default:ro",
-		)
 	}
 
 	args = append(args, imageRef)
@@ -217,17 +195,6 @@ func (c *VmBuildCmd) Run() error {
 
 		// Clean up raw intermediate
 		os.Remove(rawDiskPath)
-	}
-
-	if c.SshKeygen && sshKeyDir != "" {
-		// Copy the private key to the output directory
-		privateKeyPath := filepath.Join(sshKeyDir, "id_ed25519")
-		destKeyPath := filepath.Join("output", c.Type, "id_ed25519")
-		data, err := os.ReadFile(privateKeyPath)
-		if err == nil {
-			os.WriteFile(destKeyPath, data, 0600)
-			fmt.Fprintf(os.Stderr, "SSH private key written to %s\n", destKeyPath)
-		}
 	}
 
 	fmt.Fprintf(os.Stderr, "%s written to %s\n", strings.ToUpper(c.Type), outputPath)
@@ -278,47 +245,6 @@ func parseSizeToBytes(size string) (int64, error) {
 		return 0, fmt.Errorf("invalid size %q: %w", size, err)
 	}
 	return val * multiplier, nil
-}
-
-// generateSSHKeys creates an ed25519 keypair and returns the directory containing them.
-// Keys are created under outputDir (not /tmp) so they are accessible from podman machine.
-func generateSSHKeys(outputDir string) (string, error) {
-	tmpDir, err := os.MkdirTemp(outputDir, "ssh-keys-*")
-	if err != nil {
-		return "", err
-	}
-
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("generating ed25519 key: %w", err)
-	}
-
-	// Write private key in OpenSSH format
-	privKey, err := ssh.MarshalPrivateKey(priv, "")
-	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("marshaling private key: %w", err)
-	}
-	privPEM := pem.EncodeToMemory(privKey)
-	if err := os.WriteFile(filepath.Join(tmpDir, "id_ed25519"), privPEM, 0600); err != nil {
-		os.RemoveAll(tmpDir)
-		return "", err
-	}
-
-	// Write public key in authorized_keys format for systemd credential
-	sshPub, err := ssh.NewPublicKey(pub)
-	if err != nil {
-		os.RemoveAll(tmpDir)
-		return "", fmt.Errorf("creating SSH public key: %w", err)
-	}
-	authorizedKey := ssh.MarshalAuthorizedKey(sshPub)
-	if err := os.WriteFile(filepath.Join(tmpDir, "ssh.authorized_keys.d_default"), authorizedKey, 0644); err != nil {
-		os.RemoveAll(tmpDir)
-		return "", err
-	}
-
-	return tmpDir, nil
 }
 
 // parseImageArg splits "image:tag" into (image, tag). If no colon, tag is empty.

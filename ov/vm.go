@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net"
@@ -12,6 +15,7 @@ import (
 	"strings"
 	"syscall"
 
+	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
 
@@ -82,6 +86,16 @@ func qemuSystemBinary() string {
 	}
 }
 
+// qemuMachineType returns the architecture-appropriate QEMU machine type.
+func qemuMachineType() string {
+	switch runtime.GOARCH {
+	case "arm64":
+		return "virt"
+	default:
+		return "q35"
+	}
+}
+
 // resolveQcow2Path finds the QCOW2 disk image for the given image name.
 func resolveQcow2Path(image string) (string, error) {
 	path := filepath.Join("output", "qcow2", "disk.qcow2")
@@ -100,6 +114,7 @@ type VmCreateCmd struct {
 	Ram      string `long:"ram" help:"Override RAM size (e.g. 4G, 8192M)"`
 	Cpus     int    `long:"cpus" help:"Override CPU count"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
+	SshKey   string `long:"ssh-key" default:"auto" help:"SSH public key: path to .pub file, 'auto' (default ~/.ssh key), 'generate', or 'none'"`
 	GPUFlags `embed:""`
 }
 
@@ -164,13 +179,19 @@ func (c *VmCreateCmd) Run() error {
 
 	name := vmName(c.Image, c.Instance)
 
+	// Resolve SSH public key for SMBIOS credential injection
+	sshPubKey, err := resolveSSHPubKey(c.SshKey, name)
+	if err != nil {
+		return err
+	}
+
 	switch backend {
 	case "libvirt":
 		qcow2, err := resolveQcow2Path(c.Image)
 		if err != nil {
 			return err
 		}
-		if err := c.createLibvirt(name, qcow2, ram, cpus, ports); err != nil {
+		if err := c.createLibvirt(name, qcow2, ram, cpus, ports, sshPubKey); err != nil {
 			return err
 		}
 	case "qemu":
@@ -181,7 +202,7 @@ func (c *VmCreateCmd) Run() error {
 		if len(libvirtSnippets) > 0 {
 			fmt.Fprintf(os.Stderr, "Warning: libvirt snippets are not supported with the QEMU backend (skipping %d snippet(s))\n", len(libvirtSnippets))
 		}
-		return c.createQemu(name, qcow2, ram, cpus, ports)
+		return c.createQemu(name, qcow2, ram, cpus, ports, sshPubKey)
 	}
 
 	// Inject libvirt XML snippets for libvirt backend
@@ -194,7 +215,7 @@ func (c *VmCreateCmd) Run() error {
 	return nil
 }
 
-func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []string) error {
+func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []string, sshPubKey string) error {
 	ramMB := parseRAMtoMB(ram)
 
 	gpu := ResolveGPU(c.GPUFlags.Mode())
@@ -202,7 +223,13 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []s
 		fmt.Fprintf(os.Stderr, "Warning: GPU passthrough for libvirt VMs requires manual --host-device configuration\n")
 	}
 
-	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, ports, gpu)
+	var smbiosCreds []string
+	if sshPubKey != "" {
+		smbiosCreds = append(smbiosCreds, SmbiosCredForRootSSH(sshPubKey))
+		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
+	}
+
+	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, ports, gpu, smbiosCreds...)
 
 	conn, err := connectLibvirt()
 	if err != nil {
@@ -219,7 +246,7 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []s
 	return nil
 }
 
-func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []string) error {
+func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []string, sshPubKey string) error {
 	dir, err := vmDir()
 	if err != nil {
 		return err
@@ -234,6 +261,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 	qmpSocket := filepath.Join(stateDir, "qmp.sock")
 
 	args := []string{
+		"-machine", qemuMachineType(),
 		"-m", ram,
 		"-smp", strconv.Itoa(cpus),
 		"-cpu", "host",
@@ -247,6 +275,13 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		"-pidfile", filepath.Join(stateDir, "qemu.pid"),
 	}
 
+	// SSH key injection via systemd credentials (SMBIOS type 11)
+	if sshPubKey != "" {
+		cred := SmbiosCredForRootSSH(sshPubKey)
+		args = append(args, "-smbios", fmt.Sprintf("type=11,value=%s", cred))
+		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
+	}
+
 	// Port forwarding
 	hostfwds := "hostfwd=tcp::2222-:22"
 	for _, p := range ports {
@@ -254,10 +289,6 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		if len(parts) == 2 {
 			hostfwds += fmt.Sprintf(",hostfwd=tcp::%s-:%s", parts[0], parts[1])
 		}
-	}
-
-	if runtime.GOARCH == "arm64" {
-		args = append([]string{"-machine", "virt"}, args...)
 	}
 
 	args = append(args, "-nic", "user,model=virtio-net-pci,"+hostfwds)
@@ -670,6 +701,80 @@ func connectUnixConsole(socketPath string) error {
 	return nil
 }
 
+// resolveSSHPubKey resolves the --ssh-key flag to a public key string.
+// Values: "auto" (default ~/.ssh key), "none", "generate", or a file path.
+func resolveSSHPubKey(flag, vmName string) (string, error) {
+	switch flag {
+	case "none":
+		return "", nil
+	case "auto":
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("cannot determine home directory: %w", err)
+		}
+		for _, name := range []string{"id_ed25519.pub", "id_rsa.pub", "id_ecdsa.pub"} {
+			path := filepath.Join(home, ".ssh", name)
+			if data, err := os.ReadFile(path); err == nil {
+				pubkey := strings.TrimSpace(string(data))
+				fmt.Fprintf(os.Stderr, "Using SSH key from %s\n", path)
+				return pubkey, nil
+			}
+		}
+		return "", fmt.Errorf("no SSH public key found in ~/.ssh/ — use --ssh-key <path> or --ssh-key generate")
+	case "generate":
+		dir, err := vmDir()
+		if err != nil {
+			return "", err
+		}
+		stateDir := filepath.Join(dir, vmName)
+		if err := os.MkdirAll(stateDir, 0755); err != nil {
+			return "", err
+		}
+		pubkey, err := generateSSHKeypair(stateDir)
+		if err != nil {
+			return "", err
+		}
+		fmt.Fprintf(os.Stderr, "Generated SSH keypair in %s\n", stateDir)
+		return pubkey, nil
+	default:
+		// Treat as file path
+		data, err := os.ReadFile(flag)
+		if err != nil {
+			return "", fmt.Errorf("reading SSH public key %s: %w", flag, err)
+		}
+		return strings.TrimSpace(string(data)), nil
+	}
+}
+
+// generateSSHKeypair creates an ed25519 keypair in the given directory.
+// Returns the public key in authorized_keys format.
+func generateSSHKeypair(dir string) (string, error) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return "", fmt.Errorf("generating ed25519 key: %w", err)
+	}
+
+	privKey, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		return "", fmt.Errorf("marshaling private key: %w", err)
+	}
+	privPEM := pem.EncodeToMemory(privKey)
+	if err := os.WriteFile(filepath.Join(dir, "id_ed25519"), privPEM, 0600); err != nil {
+		return "", err
+	}
+
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		return "", fmt.Errorf("creating SSH public key: %w", err)
+	}
+	authorizedKey := strings.TrimSpace(string(ssh.MarshalAuthorizedKey(sshPub)))
+	if err := os.WriteFile(filepath.Join(dir, "id_ed25519.pub"), []byte(authorizedKey+"\n"), 0644); err != nil {
+		return "", err
+	}
+
+	return authorizedKey, nil
+}
+
 // --- VmSshCmd ---
 
 type VmSshCmd struct {
@@ -705,16 +810,12 @@ func (c *VmSshCmd) Run() error {
 		"-p", strconv.Itoa(c.Port),
 	}
 
-	// Auto-detect SSH key from vm build output
-	for _, keyPath := range []string{
-		filepath.Join("output", "qcow2", "id_ed25519"),
-		filepath.Join("output", "raw", "id_ed25519"),
-	} {
-		if absKey, err := filepath.Abs(keyPath); err == nil {
-			if _, err := os.Stat(absKey); err == nil {
-				args = append(args, "-i", absKey)
-				break
-			}
+	// Auto-detect generated SSH key from VM state dir
+	name := vmName(c.Image, c.Instance)
+	if dir, err := vmDir(); err == nil {
+		keyPath := filepath.Join(dir, name, "id_ed25519")
+		if _, err := os.Stat(keyPath); err == nil {
+			args = append(args, "-i", keyPath)
 		}
 	}
 

@@ -155,7 +155,7 @@ func libvirtSessionSocket() string {
 }
 
 // buildDomainXML constructs a minimal libvirt domain XML for a VM.
-func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu bool) string {
+func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu bool, smbiosCredentials ...string) string {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf(`<domain type='kvm'>
@@ -163,7 +163,7 @@ func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu boo
   <memory unit='MiB'>%d</memory>
   <vcpu>%d</vcpu>
   <os>
-    <type arch='x86_64' machine='pc'>hvm</type>
+    <type arch='x86_64' machine='q35'>hvm</type>
     <boot dev='hd'/>
   </os>
   <features>
@@ -206,8 +206,19 @@ func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu boo
 		b.WriteString("    <!-- GPU passthrough requires manual --host-device configuration -->\n")
 	}
 
-	b.WriteString(`  </devices>
-</domain>
-`)
+	b.WriteString("  </devices>\n")
+
+	// SMBIOS credentials for systemd (SSH keys, etc.)
+	if len(smbiosCredentials) > 0 {
+		b.WriteString("  <sysinfo type='smbios'>\n")
+		b.WriteString("    <oemStrings>\n")
+		for _, cred := range smbiosCredentials {
+			b.WriteString(fmt.Sprintf("      <entry>%s</entry>\n", cred))
+		}
+		b.WriteString("    </oemStrings>\n")
+		b.WriteString("  </sysinfo>\n")
+	}
+
+	b.WriteString("</domain>\n")
 	return b.String()
 }

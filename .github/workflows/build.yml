@@ -53,9 +53,6 @@ jobs:
       - name: Log in to GHCR
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
-      - name: Prune old images
-        run: podman image prune -af --filter "until=168h" || true
-
       - name: Build and push all images
         run: |
           set -euo pipefail
@@ -65,6 +62,6 @@ jobs:
             bin/ov build --push --jobs 1 "$image"
           done
 
-      - name: Prune dangling images
+      - name: Prune images older than 7 days
         if: always()
-        run: podman image prune -af || true
+        run: podman image prune -af --filter "until=168h" || true

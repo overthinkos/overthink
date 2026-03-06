@@ -58,7 +58,9 @@ jobs:
 
       - name: Build and push all images
         run: |
-          for image in $(bin/ov list targets); do
+          set -euo pipefail
+          targets=$(bin/ov list targets)
+          for image in $targets; do
             echo "--- Building $image ---"
             bin/ov build --push --jobs 1 "$image"
             echo "--- Pruning after $image ---"

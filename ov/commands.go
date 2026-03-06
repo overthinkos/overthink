@@ -72,7 +72,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 			return err
 		}
 		uid, gid = resolved.UID, resolved.GID
-		layers, err := ScanAllLayers(dir)
+		layers, err := ScanAllLayersWithConfig(dir, cfg)
 		if err != nil {
 			return err
 		}
@@ -121,7 +121,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	if cfgErr == nil {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
 		if resolveErr == nil && resolved.Tunnel != nil {
-			layers, scanErr := ScanAllLayers(dir)
+			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 			if scanErr == nil {
 				tunnelYAML := cfg.Images[c.Image].Tunnel
 				if tunnelYAML == nil {
@@ -252,7 +252,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	// Run post_enable hooks if any
 	if cfgErr == nil {
-		layers, scanErr := ScanAllLayers(dir)
+		layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 		if scanErr == nil {
 			hooks := CollectHooks(cfg, layers, c.Image)
 			if hooks != nil && hooks.PostEnable != "" {
@@ -668,7 +668,7 @@ func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
 	if err != nil {
 		return
 	}
-	layers, err := ScanAllLayers(dir)
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return
 	}

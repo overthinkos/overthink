@@ -73,7 +73,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
-		layers, err := ScanAllLayers(dir)
+		layers, err := ScanAllLayersWithConfig(dir, cfg)
 		if err != nil {
 			return err
 		}
@@ -161,7 +161,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
 		if resolveErr == nil && resolved.Tunnel != nil {
 			// Re-resolve with layers for port defaulting
-			layers, scanErr := ScanAllLayers(dir)
+			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 			if scanErr == nil {
 				tc := ResolveTunnelConfig(
 					c.findTunnelYAML(cfg),
@@ -424,7 +424,7 @@ func stopTunnelForImage(imageName string) {
 	if err != nil || resolved.Tunnel == nil {
 		return
 	}
-	layers, err := ScanAllLayers(dir)
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return
 	}

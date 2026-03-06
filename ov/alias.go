@@ -310,7 +310,7 @@ func (c *AliasInstallCmd) Run() error {
 	dir, _ := os.Getwd()
 	cfg, cfgErr := LoadConfig(dir)
 	if cfgErr == nil {
-		layers, err := ScanAllLayers(dir)
+		layers, err := ScanAllLayersWithConfig(dir, cfg)
 		if err != nil {
 			return err
 		}
@@ -402,7 +402,12 @@ func (c *ListAliasesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}

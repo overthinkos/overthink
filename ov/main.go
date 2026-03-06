@@ -124,7 +124,7 @@ func (c *InspectCmd) Run() error {
 				fmt.Println(p)
 			}
 		case "volumes":
-			layers, err := ScanAllLayers(dir)
+			layers, err := ScanAllLayersWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -136,7 +136,7 @@ func (c *InspectCmd) Run() error {
 				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
 			}
 		case "aliases":
-			layers, err := ScanAllLayers(dir)
+			layers, err := ScanAllLayersWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -223,7 +223,12 @@ func (c *ListLayersCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -259,7 +264,7 @@ func (c *ListTargetsCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -295,7 +300,12 @@ func (c *ListServicesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -316,7 +326,12 @@ func (c *ListRoutesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -349,7 +364,12 @@ func (c *ListVolumesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayers(dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
+	}
+
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}

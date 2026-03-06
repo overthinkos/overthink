@@ -39,6 +39,7 @@ images:
     pkg: deb
 
   fedora-test:
+    enabled: false
     base: fedora
     layers:
       - traefik
@@ -55,6 +56,7 @@ images:
       - "18789:18789"
 
   openclaw-browser:
+    enabled: false
     base: fedora
     layers:
       - openclaw
@@ -94,6 +96,7 @@ images:
       - linux/amd64
 
   openclaw-ollama-sway-browser-dank:
+    enabled: false
     base: nvidia
     layers:
       - openclaw
@@ -108,6 +111,7 @@ images:
       - linux/amd64
 
   openclaw-ollama-sway-browser-noctalia:
+    enabled: false
     base: nvidia
     layers:
       - openclaw

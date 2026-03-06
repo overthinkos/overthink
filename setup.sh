@@ -26,6 +26,53 @@ else
     echo "task already installed at $(command -v task)"
 fi
 
+# Ensure podman machine and VM dependencies are available
+if command -v podman &>/dev/null; then
+    MISSING_PKGS=()
+
+    # gvproxy (networking for podman machine)
+    if ! command -v gvproxy &>/dev/null && [ ! -f /usr/libexec/podman/gvproxy ]; then
+        MISSING_PKGS+=(gvisor-tap-vsock)
+    fi
+
+    # qemu-kvm (VM backend for podman machine and ov vm)
+    if [ ! -f /usr/libexec/qemu-kvm ] && ! command -v qemu-system-x86_64 &>/dev/null; then
+        MISSING_PKGS+=(qemu-kvm)
+    fi
+
+    # qemu-img (disk image conversion for ov vm build)
+    if ! command -v qemu-img &>/dev/null; then
+        MISSING_PKGS+=(qemu-img)
+    fi
+
+    # virtiofsd (filesystem sharing for VMs)
+    if ! command -v virtiofsd &>/dev/null; then
+        MISSING_PKGS+=(virtiofsd)
+    fi
+
+    if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
+        echo "Installing VM dependencies: ${MISSING_PKGS[*]}..."
+        if command -v dnf &>/dev/null; then
+            sudo dnf install -y "${MISSING_PKGS[@]}"
+        elif command -v apt-get &>/dev/null; then
+            sudo apt-get install -y "${MISSING_PKGS[@]}"
+        else
+            echo "Warning: could not install ${MISSING_PKGS[*]} — install manually"
+        fi
+    fi
+
+    # On RHEL/CentOS, binaries install under /usr/libexec/ but podman machine
+    # expects them in PATH. Create symlinks as needed.
+    if [ -f /usr/libexec/qemu-kvm ] && ! command -v qemu-system-x86_64 &>/dev/null; then
+        echo "Creating qemu-system-x86_64 symlink for podman machine..."
+        sudo ln -sf /usr/libexec/qemu-kvm /usr/local/bin/qemu-system-x86_64
+    fi
+    if [ -f /usr/libexec/virtiofsd ] && ! command -v virtiofsd &>/dev/null; then
+        echo "Creating virtiofsd symlink for podman machine..."
+        sudo ln -sf /usr/libexec/virtiofsd /usr/local/bin/virtiofsd
+    fi
+fi
+
 # Build and install ov
 echo "Building and installing ov..."
 task -d "$PROJECT_DIR" build:install

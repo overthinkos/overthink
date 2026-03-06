@@ -182,7 +182,7 @@ images:
     layers:
       - github-runner
       - ov-cli
-      - bcvk
+      - virtualization
     platforms:
       - linux/amd64
     uid: 0
@@ -260,7 +260,7 @@ images:
       - sshd
       - ov-cli
       - golang
-      - bcvk
+      - virtualization
       - gocryptfs
       - socat
     vm:

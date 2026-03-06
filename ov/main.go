@@ -511,6 +511,8 @@ func (c *ConfigGetCmd) Run() error {
 		fmt.Println(rt.BuildEngine)
 	case "engine.run":
 		fmt.Println(rt.RunEngine)
+	case "engine.rootful":
+		fmt.Println(rt.Rootful)
 	case "run_mode":
 		fmt.Println(rt.RunMode)
 	case "auto_enable":
@@ -526,7 +528,7 @@ func (c *ConfigGetCmd) Run() error {
 	case "vm.backend":
 		fmt.Println(rt.VmBackend)
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.ram, vm.cpus)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.ram, vm.cpus)", c.Key)
 	}
 	return nil
 }

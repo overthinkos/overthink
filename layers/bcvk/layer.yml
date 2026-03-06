@@ -1,7 +1,0 @@
-description: Bootc virtualization kit (bcvk) for building disk images from bootc containers
-
-rpm:
-  packages:
-    - bcvk
-    - virtiofsd
-    - qemu-kvm

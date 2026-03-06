@@ -34,14 +34,16 @@ type RuntimeVmConfig struct {
 
 // EngineConfig specifies which container engine to use
 type EngineConfig struct {
-	Build string `yaml:"build,omitempty"`
-	Run   string `yaml:"run,omitempty"`
+	Build   string `yaml:"build,omitempty"`
+	Run     string `yaml:"run,omitempty"`
+	Rootful string `yaml:"rootful,omitempty"` // "auto", "machine", "sudo", "native"
 }
 
 // ResolvedRuntime holds the fully resolved runtime configuration
 type ResolvedRuntime struct {
 	BuildEngine          string // "docker" or "podman"
 	RunEngine            string // "docker" or "podman"
+	Rootful              string // "auto", "machine", "sudo", "native"
 	RunMode              string // "direct" or "quadlet"
 	AutoEnable           bool   // auto-enable quadlet on first start
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
@@ -112,6 +114,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	rt := &ResolvedRuntime{
 		BuildEngine:          resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
 		RunEngine:            resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "auto"),
+		Rootful:              resolveValue(os.Getenv("OV_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
 		RunMode:              resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
 		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
@@ -249,6 +252,8 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.Engine.Build, nil
 	case "engine.run":
 		return cfg.Engine.Run, nil
+	case "engine.rootful":
+		return cfg.Engine.Rootful, nil
 	case "run_mode":
 		return cfg.RunMode, nil
 	case "auto_enable":
@@ -281,7 +286,7 @@ func GetConfigValue(key string) (string, error) {
 	case "vm.transport":
 		return cfg.Vm.Transport, nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 }
 
@@ -294,6 +299,10 @@ func SetConfigValue(key, value string) error {
 			if err := validateEngine(value, key); err != nil {
 				return fmt.Errorf("%s must be \"auto\", \"docker\", or \"podman\", got %q", key, value)
 			}
+		}
+	case "engine.rootful":
+		if value != "auto" && value != "machine" && value != "sudo" && value != "native" {
+			return fmt.Errorf("engine.rootful must be \"auto\", \"machine\", \"sudo\", or \"native\", got %q", value)
 		}
 	case "run_mode":
 		if err := validateRunMode(value); err != nil {
@@ -333,7 +342,7 @@ func SetConfigValue(key, value string) error {
 			return fmt.Errorf("vm.transport must be \"registry\", \"containers-storage\", \"oci\", or \"oci-archive\", got %q", value)
 		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -346,6 +355,8 @@ func SetConfigValue(key, value string) error {
 		cfg.Engine.Build = value
 	case "engine.run":
 		cfg.Engine.Run = value
+	case "engine.rootful":
+		cfg.Engine.Rootful = value
 	case "run_mode":
 		cfg.RunMode = value
 	case "auto_enable":
@@ -393,6 +404,8 @@ func ResetConfigValue(key string) error {
 		cfg.Engine.Build = ""
 	case "engine.run":
 		cfg.Engine.Run = ""
+	case "engine.rootful":
+		cfg.Engine.Rootful = ""
 	case "run_mode":
 		cfg.RunMode = ""
 	case "auto_enable":
@@ -416,7 +429,7 @@ func ResetConfigValue(key string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = ""
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -485,6 +498,7 @@ func ListConfigValues() ([]configKeySource, error) {
 	return []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
+		resolve("engine.rootful", "OV_ENGINE_ROOTFUL", cfg.Engine.Rootful, "auto"),
 		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),

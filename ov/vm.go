@@ -50,10 +50,6 @@ func vmDir() (string, error) {
 // resolveVmBackend detects the available VM backend.
 // Priority: libvirt → qemu
 func resolveVmBackend(configured string) (string, error) {
-	if configured == "bcvk" {
-		fmt.Fprintf(os.Stderr, "Warning: bcvk backend has been removed; using libvirt instead\n")
-		configured = "libvirt"
-	}
 	if configured == "libvirt" || configured == "auto" {
 		// Check for libvirt session socket
 		sockPath := libvirtSessionSocket()
@@ -245,7 +241,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio", qcow2),
 		"-monitor", fmt.Sprintf("unix:%s,server,nowait", monitorSocket),
 		"-qmp", fmt.Sprintf("unix:%s,server,nowait", qmpSocket),
-		"-serial", "mon:stdio",
+		"-serial", fmt.Sprintf("unix:%s,server,nowait", filepath.Join(stateDir, "console.sock")),
 		"-nographic",
 		"-daemonize",
 		"-pidfile", filepath.Join(stateDir, "qemu.pid"),
@@ -707,8 +703,22 @@ func (c *VmSshCmd) Run() error {
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "LogLevel=ERROR",
 		"-p", strconv.Itoa(c.Port),
-		fmt.Sprintf("%s@localhost", c.User),
 	}
+
+	// Auto-detect SSH key from vm build output
+	for _, keyPath := range []string{
+		filepath.Join("output", "qcow2", "id_ed25519"),
+		filepath.Join("output", "raw", "id_ed25519"),
+	} {
+		if absKey, err := filepath.Abs(keyPath); err == nil {
+			if _, err := os.Stat(absKey); err == nil {
+				args = append(args, "-i", absKey)
+				break
+			}
+		}
+	}
+
+	args = append(args, fmt.Sprintf("%s@localhost", c.User))
 	args = append(args, c.Args...)
 
 	return syscall.Exec(sshBin, args, os.Environ())

@@ -248,8 +248,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 13 {
-		t.Fatalf("expected 13 values, got %d", len(vals))
+	if len(vals) != 14 {
+		t.Fatalf("expected 14 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config
@@ -260,13 +260,17 @@ func TestListConfigValues(t *testing.T) {
 	if vals[1].Key != "engine.run" || vals[1].Value != "auto" || vals[1].Source != "default" {
 		t.Errorf("engine.run entry: %+v", vals[1])
 	}
+	// engine.rootful should be default "auto"
+	if vals[2].Key != "engine.rootful" || vals[2].Value != "auto" || vals[2].Source != "default" {
+		t.Errorf("engine.rootful entry: %+v", vals[2])
+	}
 	// auto_enable should be default false
-	if vals[3].Key != "auto_enable" || vals[3].Value != "false" || vals[3].Source != "default" {
-		t.Errorf("auto_enable entry: %+v", vals[3])
+	if vals[4].Key != "auto_enable" || vals[4].Value != "false" || vals[4].Source != "default" {
+		t.Errorf("auto_enable entry: %+v", vals[4])
 	}
 	// bind_address should be default 127.0.0.1
-	if vals[4].Key != "bind_address" || vals[4].Value != "127.0.0.1" || vals[4].Source != "default" {
-		t.Errorf("bind_address entry: %+v", vals[4])
+	if vals[5].Key != "bind_address" || vals[5].Value != "127.0.0.1" || vals[5].Source != "default" {
+		t.Errorf("bind_address entry: %+v", vals[5])
 	}
 }
 

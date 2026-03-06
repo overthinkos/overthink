@@ -135,7 +135,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### OS / Bootc
 
-**sshd** — SSH server. **cloud-init** — Cloud instance initialization. **bootc-config** — Bootc system configuration (autologin, graphical target). **bcvk** — Bootc virtualization kit for building disk images. **qemu-guest-agent** — VM guest agent with libvirt channel.
+**sshd** — SSH server. **cloud-init** — Cloud instance initialization. **bootc-config** — Bootc system configuration (autologin, graphical target). **qemu-guest-agent** — VM guest agent with libvirt channel.
 
 ### Composing Layers
 

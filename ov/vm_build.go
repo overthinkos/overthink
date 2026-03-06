@@ -130,12 +130,12 @@ func (c *VmBuildCmd) Run() error {
 	rawDiskPath := filepath.Join(rawOutputDir, "disk.raw")
 
 	// Build bootc install to-disk args inside the container
-	bootcArgs := []string{"bootc", "install", "to-disk", "--generic-image"}
+	bootcArgs := []string{"bootc", "install", "to-disk", "--generic-image", "--via-loopback"}
 	if rootSize != "" {
 		bootcArgs = append(bootcArgs, "--root-size", rootSize)
 	}
 	if vmCfg.Rootfs != "" {
-		bootcArgs = append(bootcArgs, "--root-fs-type", vmCfg.Rootfs)
+		bootcArgs = append(bootcArgs, "--filesystem", vmCfg.Rootfs)
 	}
 	if vmCfg.KernelArgs != "" {
 		for _, karg := range strings.Fields(vmCfg.KernelArgs) {
@@ -162,8 +162,14 @@ func (c *VmBuildCmd) Run() error {
 		defer os.RemoveAll(sshKeyDir)
 	}
 
+	// Resolve rootful engine (podman machine, sudo, or native)
+	engineCmd, err := RootfulEngine(engine, rt.Rootful)
+	if err != nil {
+		return fmt.Errorf("resolving rootful engine: %w", err)
+	}
+	fmt.Fprintf(os.Stderr, "Running bootc install to-disk via %s...\n", strings.Join(engineCmd, " "))
+
 	// Build container run args
-	fmt.Fprintf(os.Stderr, "Running bootc install to-disk via %s...\n", engine)
 	args := []string{
 		"run", "--rm", "--privileged",
 		"--pid=host",
@@ -181,7 +187,8 @@ func (c *VmBuildCmd) Run() error {
 	args = append(args, imageRef)
 	args = append(args, bootcArgs...)
 
-	cmd := exec.Command(engine, args...)
+	cmdArgs := append(engineCmd[1:], args...)
+	cmd := exec.Command(engineCmd[0], cmdArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if !c.Console {
@@ -199,6 +206,7 @@ func (c *VmBuildCmd) Run() error {
 			return fmt.Errorf("creating qcow2 output directory: %w", err)
 		}
 		absQcow2, _ := filepath.Abs(outputPath)
+		os.Remove(absQcow2) // remove any existing file to avoid lock conflicts
 
 		fmt.Fprintf(os.Stderr, "Converting raw → qcow2...\n")
 		convertCmd := exec.Command("qemu-img", "convert", "-f", "raw", "-O", "qcow2", rawDiskPath, absQcow2)
@@ -273,8 +281,9 @@ func parseSizeToBytes(size string) (int64, error) {
 }
 
 // generateSSHKeys creates an ed25519 keypair and returns the directory containing them.
+// Keys are created under outputDir (not /tmp) so they are accessible from podman machine.
 func generateSSHKeys(outputDir string) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "ov-ssh-keys-*")
+	tmpDir, err := os.MkdirTemp(outputDir, "ssh-keys-*")
 	if err != nil {
 		return "", err
 	}

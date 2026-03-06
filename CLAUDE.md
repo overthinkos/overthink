@@ -111,7 +111,7 @@ ov version                             # Print computed CalVer tag
 
 ---
 
-## Shipped Layers (65 total)
+## Shipped Layers (64 total)
 
 **Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
@@ -137,7 +137,7 @@ ov version                             # Print computed CalVer tag
 
 **Utilities:** `gocryptfs` (encrypted filesystem for ov crypto operations), `socat` (socket relay for VM console access)
 
-**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bcvk` (bootc virtualization kit + qemu-kvm + virtiofsd), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov-cli` (ov binary for container/VM use)
+**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov-cli` (ov binary for container/VM use)
 
 **Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + pcmanfm-qt + quickshell), `sway-desktop-dank` (same with dank-material-shell), `sway-desktop-noctalia` (same with noctalia), `bootc-base` (sshd + qemu-guest-agent + bootc-config)
 

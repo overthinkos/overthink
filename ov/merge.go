@@ -86,7 +86,9 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		}
 		fmt.Fprintf(os.Stderr, "\n--- %s ---\n", name)
 		if err := c.runOne(cfg, name); err != nil {
-			return fmt.Errorf("merging %s: %w", name, err)
+			// Per-image merge failures are non-fatal
+			fmt.Fprintf(os.Stderr, "Warning: skipping merge for %s: %v\n", name, err)
+			continue
 		}
 		merged++
 	}

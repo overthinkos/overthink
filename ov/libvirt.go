@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	libvirt "github.com/digitalocean/go-libvirt"
 )
 
 // libvirtDeviceElements lists element names that belong inside <devices> in libvirt domain XML.
@@ -98,13 +100,22 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 		return nil
 	}
 
-	// 1. Dump current XML
-	cmd := virshCmd("dumpxml", vmName)
-	out, err := cmd.Output()
+	conn, err := connectLibvirt()
 	if err != nil {
-		return fmt.Errorf("virsh dumpxml %s failed: %w", vmName, err)
+		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
-	domainXML := string(out)
+	defer conn.Close()
+
+	dom, err := conn.lookupDomain(vmName)
+	if err != nil {
+		return fmt.Errorf("looking up VM %s: %w", vmName, err)
+	}
+
+	// 1. Get current XML
+	domainXML, err := conn.getDomainXML(dom)
+	if err != nil {
+		return fmt.Errorf("getting XML for %s: %w", vmName, err)
+	}
 
 	// 2. Classify and inject snippets
 	var deviceSnippets, domainSnippets []string
@@ -128,56 +139,42 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 		domainXML = strings.Replace(domainXML, "</domain>", insertion+"</domain>", 1)
 	}
 
-	// 3. Write modified XML to temp file
-	tmpFile, err := os.CreateTemp("", "ov-libvirt-*.xml")
-	if err != nil {
-		return fmt.Errorf("creating temp file: %w", err)
-	}
-	defer os.Remove(tmpFile.Name())
-
-	if _, err := tmpFile.WriteString(domainXML); err != nil {
-		tmpFile.Close()
-		return fmt.Errorf("writing temp XML: %w", err)
-	}
-	tmpFile.Close()
-
-	// 4. Check if VM is running and force-stop it for redefinition
+	// 3. Check if VM is running and force-stop it for redefinition
 	wasRunning := false
-	stateCmd := virshCmd("domstate", vmName)
-	stateOut, err := stateCmd.Output()
-	if err == nil && strings.TrimSpace(string(stateOut)) == "running" {
+	state, _ := conn.domainState(dom)
+	if state == libvirt.DomainRunning {
 		wasRunning = true
 		fmt.Fprintf(os.Stderr, "Stopping VM %s to apply libvirt config...\n", vmName)
-		// Use destroy (force stop) since the VM may still be booting
-		// and won't respond to graceful shutdown
-		destroyCmd := virshCmd("destroy", vmName)
-		if err := destroyCmd.Run(); err != nil {
-			return fmt.Errorf("virsh destroy %s failed: %w", vmName, err)
+		if err := conn.destroyDomain(dom); err != nil {
+			return fmt.Errorf("stopping VM %s: %w", vmName, err)
 		}
-		// Wait for shutoff (up to 10 seconds)
+		// Wait for shutoff
 		for i := 0; i < 10; i++ {
-			checkCmd := virshCmd("domstate", vmName)
-			checkOut, err := checkCmd.Output()
-			if err != nil || strings.TrimSpace(string(checkOut)) == "shut off" {
+			dom, err = conn.lookupDomain(vmName)
+			if err != nil {
+				break
+			}
+			s, _ := conn.domainState(dom)
+			if s == libvirt.DomainShutoff {
 				break
 			}
 			time.Sleep(time.Second)
 		}
 	}
 
-	// 5. Redefine the domain with modified XML
-	defineCmd := virshCmd("define", tmpFile.Name())
-	defineCmd.Stderr = os.Stderr
-	if err := defineCmd.Run(); err != nil {
-		return fmt.Errorf("virsh define failed: %w", err)
+	// 4. Redefine the domain with modified XML
+	if err := conn.redefineDomain(domainXML); err != nil {
+		return fmt.Errorf("redefining VM %s: %w", vmName, err)
 	}
 
-	// 6. Restart VM if it was running before
+	// 5. Restart VM if it was running before
 	if wasRunning {
-		startCmd := virshCmd("start", vmName)
-		startCmd.Stderr = os.Stderr
-		if err := startCmd.Run(); err != nil {
-			return fmt.Errorf("virsh start failed after libvirt config injection: %w", err)
+		dom, err = conn.lookupDomain(vmName)
+		if err != nil {
+			return fmt.Errorf("looking up VM %s after redefine: %w", vmName, err)
+		}
+		if err := conn.startDomain(dom); err != nil {
+			return fmt.Errorf("restarting VM %s after config injection: %w", vmName, err)
 		}
 	}
 
@@ -209,4 +206,3 @@ func ValidateLibvirtSnippet(snippet string) error {
 		}
 	}
 }
-

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,7 +23,7 @@ type RuntimeConfig struct {
 
 // RuntimeVmConfig holds user-level VM defaults
 type RuntimeVmConfig struct {
-	Backend   string `yaml:"backend,omitempty"`   // "auto", "libvirt", or "qemu"
+	Backend   string `yaml:"backend,omitempty"`   // "auto", "libvirt", "qemu"
 	DiskSize  string `yaml:"disk_size,omitempty"` // default disk size
 	RootSize  string `yaml:"root_size,omitempty"` // root partition size
 	Ram       string `yaml:"ram,omitempty"`       // default RAM
@@ -109,13 +110,28 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 	}
 
 	rt := &ResolvedRuntime{
-		BuildEngine:          resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "docker"),
-		RunEngine:            resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "docker"),
+		BuildEngine:          resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
+		RunEngine:            resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "auto"),
 		RunMode:              resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
 		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
 		VmBackend:            resolveValue(os.Getenv("OV_VM_BACKEND"), cfg.Vm.Backend, "auto"),
+	}
+
+	// Auto-detect engines
+	var detectErr error
+	if rt.BuildEngine == "auto" {
+		rt.BuildEngine, detectErr = detectEngine()
+		if detectErr != nil {
+			return nil, fmt.Errorf("engine.build: %w", detectErr)
+		}
+	}
+	if rt.RunEngine == "auto" {
+		rt.RunEngine, detectErr = detectEngine()
+		if detectErr != nil {
+			return nil, fmt.Errorf("engine.run: %w", detectErr)
+		}
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -147,6 +163,17 @@ func resolveValue(envVal, cfgVal, defaultVal string) string {
 		return cfgVal
 	}
 	return defaultVal
+}
+
+// detectEngine auto-detects the container engine: prefers podman, falls back to docker.
+func detectEngine() (string, error) {
+	if _, err := exec.LookPath("podman"); err == nil {
+		return "podman", nil
+	}
+	if _, err := exec.LookPath("docker"); err == nil {
+		return "docker", nil
+	}
+	return "", fmt.Errorf("no container engine found (install podman or docker)")
 }
 
 func validateEngine(value, field string) error {
@@ -263,8 +290,10 @@ func SetConfigValue(key, value string) error {
 	// Validate value before writing
 	switch key {
 	case "engine.build", "engine.run":
-		if err := validateEngine(value, key); err != nil {
-			return err
+		if value != "auto" {
+			if err := validateEngine(value, key); err != nil {
+				return fmt.Errorf("%s must be \"auto\", \"docker\", or \"podman\", got %q", key, value)
+			}
 		}
 	case "run_mode":
 		if err := validateRunMode(value); err != nil {
@@ -281,8 +310,8 @@ func SetConfigValue(key, value string) error {
 	case "encrypted_storage_path":
 		// Any non-empty path is valid
 	case "vm.backend":
-		if value != "auto" && value != "bcvk" && value != "libvirt" && value != "qemu" {
-			return fmt.Errorf("vm.backend must be \"auto\", \"bcvk\", \"libvirt\", or \"qemu\", got %q", value)
+		if value != "auto" && value != "libvirt" && value != "qemu" {
+			return fmt.Errorf("vm.backend must be \"auto\", \"libvirt\", or \"qemu\", got %q", value)
 		}
 	case "vm.disk_size":
 		// Any non-empty size string is valid (e.g. "10 GiB", "20G")
@@ -454,8 +483,8 @@ func ListConfigValues() ([]configKeySource, error) {
 	}
 
 	return []configKeySource{
-		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "docker"),
-		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "docker"),
+		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
+		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
 		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),

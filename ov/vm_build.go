@@ -1,12 +1,16 @@
 package main
 
 import (
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"golang.org/x/crypto/ssh"
 )
 
 // VmBuildCmd builds a QCOW2/RAW disk image from a bootc container image.
@@ -26,7 +30,7 @@ func (c *VmBuildCmd) Run() error {
 	switch c.Type {
 	case "qcow2", "raw":
 	case "iso":
-		return fmt.Errorf("iso format is not supported by bcvk — use qcow2 or raw")
+		return fmt.Errorf("iso format is not supported — use qcow2 or raw")
 	default:
 		return fmt.Errorf("unsupported disk type %q (valid: qcow2, raw)", c.Type)
 	}
@@ -46,6 +50,11 @@ func (c *VmBuildCmd) Run() error {
 		return err
 	}
 
+	rt, rtErr := ResolveRuntime()
+	if rtErr != nil {
+		return rtErr
+	}
+
 	var vmCfg *VmConfig
 	var imageRef string
 
@@ -62,10 +71,6 @@ func (c *VmBuildCmd) Run() error {
 		imageRef = resolved.FullTag
 	} else {
 		// Label path
-		rt, rtErr := ResolveRuntime()
-		if rtErr != nil {
-			return rtErr
-		}
 		ref := fmt.Sprintf("%s:%s", imageName, calverTag)
 		meta, metaErr := ExtractMetadata(rt.RunEngine, ref)
 		if metaErr != nil {
@@ -89,21 +94,21 @@ func (c *VmBuildCmd) Run() error {
 		vmCfg = &VmConfig{}
 	}
 
-	// Require bcvk
-	if _, err := exec.LookPath("bcvk"); err != nil {
-		return fmt.Errorf("bcvk is required for disk image builds (dnf install bcvk): %w", err)
-	}
+	engine := rt.RunEngine
 
 	// CLI --size overrides config
-	diskSize := normalizeSizeForBcvk(vmCfg.DiskSize)
+	diskSize := normalizeSize(vmCfg.DiskSize)
+	if diskSize == "" {
+		diskSize = "10G"
+	}
 	if c.Size != "" {
-		diskSize = normalizeSizeForBcvk(c.Size)
+		diskSize = normalizeSize(c.Size)
 	}
 
 	// CLI --root-size overrides config
-	rootSize := normalizeSizeForBcvk(vmCfg.RootSize)
+	rootSize := normalizeSize(vmCfg.RootSize)
 	if c.RootSize != "" {
-		rootSize = normalizeSizeForBcvk(c.RootSize)
+		rootSize = normalizeSize(c.RootSize)
 	}
 
 	// CLI --transport overrides config
@@ -114,59 +119,197 @@ func (c *VmBuildCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Building %s for %s\n", c.Type, imageRef)
 
-	// Create output directory and resolve output path
-	outputPath := filepath.Join("output", c.Type, "disk."+c.Type)
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0755); err != nil {
-		return fmt.Errorf("creating output directory: %w", err)
-	}
-
-	absOutputPath, err := filepath.Abs(outputPath)
+	// Always build as raw first, convert to qcow2 after if needed
+	rawOutputDir, err := filepath.Abs(filepath.Join("output", "raw"))
 	if err != nil {
 		return err
 	}
-
-	// Build bcvk args
-	fmt.Fprintf(os.Stderr, "Running bcvk to-disk...\n")
-	args := []string{
-		"to-disk",
-		"--format", c.Type,
-		"--disk-size", diskSize,
-		"--filesystem", vmCfg.Rootfs,
+	if err := os.MkdirAll(rawOutputDir, 0755); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
 	}
+	rawDiskPath := filepath.Join(rawOutputDir, "disk.raw")
+
+	// Build bootc install to-disk args inside the container
+	bootcArgs := []string{"bootc", "install", "to-disk", "--generic-image"}
 	if rootSize != "" {
-		args = append(args, "--root-size", rootSize)
+		bootcArgs = append(bootcArgs, "--root-size", rootSize)
+	}
+	if vmCfg.Rootfs != "" {
+		bootcArgs = append(bootcArgs, "--root-fs-type", vmCfg.Rootfs)
 	}
 	if vmCfg.KernelArgs != "" {
 		for _, karg := range strings.Fields(vmCfg.KernelArgs) {
-			args = append(args, "--karg", karg)
+			bootcArgs = append(bootcArgs, "--karg", karg)
 		}
 	}
-	if vmCfg.Ram != "" {
-		args = append(args, "--memory", normalizeSizeForBcvk(vmCfg.Ram))
-	}
-	if vmCfg.Cpus > 0 {
-		args = append(args, "--vcpus", strconv.Itoa(vmCfg.Cpus))
-	}
 	if transport != "" {
-		args = append(args, "--target-transport", transport)
+		bootcArgs = append(bootcArgs, "--target-imgref", transport+"://"+imageRef)
 	}
-	if c.Console {
-		args = append(args, "--console")
-	}
-	if c.SshKeygen {
-		args = append(args, "-K")
-	}
-	args = append(args, imageRef, absOutputPath)
+	bootcArgs = append(bootcArgs, "/output/disk.raw")
 
-	cmd := exec.Command("bcvk", args...)
+	// Create a sparse raw disk image of the requested size
+	if err := createSparseFile(rawDiskPath, diskSize); err != nil {
+		return fmt.Errorf("creating disk image: %w", err)
+	}
+
+	// Handle SSH key generation
+	var sshKeyDir string
+	if c.SshKeygen {
+		sshKeyDir, err = generateSSHKeys(rawOutputDir)
+		if err != nil {
+			return fmt.Errorf("generating SSH keys: %w", err)
+		}
+		defer os.RemoveAll(sshKeyDir)
+	}
+
+	// Build container run args
+	fmt.Fprintf(os.Stderr, "Running bootc install to-disk via %s...\n", engine)
+	args := []string{
+		"run", "--rm", "--privileged",
+		"--pid=host",
+		"--security-opt", "label=type:unconfined_t",
+		"-v", rawDiskPath + ":/output/disk.raw",
+		"-v", "/var/lib/containers:/var/lib/containers",
+	}
+
+	if c.SshKeygen && sshKeyDir != "" {
+		args = append(args,
+			"-v", filepath.Join(sshKeyDir, "ssh.authorized_keys.d_default")+":/usr/lib/credstore/ssh.authorized_keys.d/default:ro",
+		)
+	}
+
+	args = append(args, imageRef)
+	args = append(args, bootcArgs...)
+
+	cmd := exec.Command(engine, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if !c.Console {
+		cmd.Stdout = nil
+	}
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bcvk failed: %w", err)
+		return fmt.Errorf("bootc install to-disk failed: %w", err)
+	}
+
+	// Convert raw → qcow2 if requested
+	outputPath := filepath.Join("output", c.Type, "disk."+c.Type)
+	if c.Type == "qcow2" {
+		qcow2Dir := filepath.Join("output", "qcow2")
+		if err := os.MkdirAll(qcow2Dir, 0755); err != nil {
+			return fmt.Errorf("creating qcow2 output directory: %w", err)
+		}
+		absQcow2, _ := filepath.Abs(outputPath)
+
+		fmt.Fprintf(os.Stderr, "Converting raw → qcow2...\n")
+		convertCmd := exec.Command("qemu-img", "convert", "-f", "raw", "-O", "qcow2", rawDiskPath, absQcow2)
+		convertCmd.Stderr = os.Stderr
+		if err := convertCmd.Run(); err != nil {
+			return fmt.Errorf("qemu-img convert failed: %w", err)
+		}
+
+		// Clean up raw intermediate
+		os.Remove(rawDiskPath)
+	}
+
+	if c.SshKeygen && sshKeyDir != "" {
+		// Copy the private key to the output directory
+		privateKeyPath := filepath.Join(sshKeyDir, "id_ed25519")
+		destKeyPath := filepath.Join("output", c.Type, "id_ed25519")
+		data, err := os.ReadFile(privateKeyPath)
+		if err == nil {
+			os.WriteFile(destKeyPath, data, 0600)
+			fmt.Fprintf(os.Stderr, "SSH private key written to %s\n", destKeyPath)
+		}
 	}
 
 	fmt.Fprintf(os.Stderr, "%s written to %s\n", strings.ToUpper(c.Type), outputPath)
 	return nil
+}
+
+// createSparseFile creates a sparse file of the given size (e.g. "10G", "20G").
+func createSparseFile(path, size string) error {
+	// Parse size to bytes
+	sizeBytes, err := parseSizeToBytes(size)
+	if err != nil {
+		return err
+	}
+
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	return f.Truncate(sizeBytes)
+}
+
+// parseSizeToBytes converts "10G", "20M", "1T" etc. to bytes.
+func parseSizeToBytes(size string) (int64, error) {
+	size = strings.TrimSpace(size)
+	if size == "" {
+		return 0, fmt.Errorf("empty size")
+	}
+
+	multiplier := int64(1)
+	numStr := size
+
+	switch {
+	case strings.HasSuffix(size, "T") || strings.HasSuffix(size, "t"):
+		multiplier = 1024 * 1024 * 1024 * 1024
+		numStr = size[:len(size)-1]
+	case strings.HasSuffix(size, "G") || strings.HasSuffix(size, "g"):
+		multiplier = 1024 * 1024 * 1024
+		numStr = size[:len(size)-1]
+	case strings.HasSuffix(size, "M") || strings.HasSuffix(size, "m"):
+		multiplier = 1024 * 1024
+		numStr = size[:len(size)-1]
+	}
+
+	var val int64
+	if _, err := fmt.Sscanf(numStr, "%d", &val); err != nil {
+		return 0, fmt.Errorf("invalid size %q: %w", size, err)
+	}
+	return val * multiplier, nil
+}
+
+// generateSSHKeys creates an ed25519 keypair and returns the directory containing them.
+func generateSSHKeys(outputDir string) (string, error) {
+	tmpDir, err := os.MkdirTemp("", "ov-ssh-keys-*")
+	if err != nil {
+		return "", err
+	}
+
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("generating ed25519 key: %w", err)
+	}
+
+	// Write private key in OpenSSH format
+	privKey, err := ssh.MarshalPrivateKey(priv, "")
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("marshaling private key: %w", err)
+	}
+	privPEM := pem.EncodeToMemory(privKey)
+	if err := os.WriteFile(filepath.Join(tmpDir, "id_ed25519"), privPEM, 0600); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+
+	// Write public key in authorized_keys format for systemd credential
+	sshPub, err := ssh.NewPublicKey(pub)
+	if err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("creating SSH public key: %w", err)
+	}
+	authorizedKey := ssh.MarshalAuthorizedKey(sshPub)
+	if err := os.WriteFile(filepath.Join(tmpDir, "ssh.authorized_keys.d_default"), authorizedKey, 0644); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", err
+	}
+
+	return tmpDir, nil
 }
 
 // parseImageArg splits "image:tag" into (image, tag). If no colon, tag is empty.
@@ -177,9 +320,9 @@ func parseImageArg(arg string) (string, string) {
 	return arg, ""
 }
 
-// normalizeSizeForBcvk converts size strings like "10 GiB" or "20 MiB" to bcvk-compatible
-// format like "10G" or "20M". Strips spaces and converts GiB→G, MiB→M, etc.
-func normalizeSizeForBcvk(size string) string {
+// normalizeSize converts size strings like "10 GiB" or "20 MiB" to
+// compact format like "10G" or "20M". Strips spaces and converts GiB→G, MiB→M, etc.
+func normalizeSize(size string) string {
 	s := strings.ReplaceAll(size, " ", "")
 	s = strings.ReplaceAll(s, "GiB", "G")
 	s = strings.ReplaceAll(s, "MiB", "M")

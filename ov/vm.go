@@ -1,8 +1,9 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"golang.org/x/term"
 )
 
 const libvirtSessionURI = "qemu:///session"
@@ -24,12 +27,6 @@ type VmCmd struct {
 	List    VmListCmd    `cmd:"" help:"List VMs and their status"`
 	Console VmConsoleCmd `cmd:"" help:"Attach to VM serial console"`
 	Ssh     VmSshCmd     `cmd:"" help:"SSH into a VM"`
-}
-
-// virshCmd creates an exec.Cmd for virsh with the session connection URI.
-func virshCmd(args ...string) *exec.Cmd {
-	fullArgs := append([]string{"-c", libvirtSessionURI}, args...)
-	return exec.Command("virsh", fullArgs...)
 }
 
 // vmName returns the VM name for an image and optional instance.
@@ -51,26 +48,20 @@ func vmDir() (string, error) {
 }
 
 // resolveVmBackend detects the available VM backend.
-// Priority: bcvk → libvirt → qemu
+// Priority: libvirt → qemu
 func resolveVmBackend(configured string) (string, error) {
-	if configured == "bcvk" || configured == "auto" {
-		if _, err := exec.LookPath("bcvk"); err == nil {
-			if _, err := exec.LookPath("virsh"); err == nil {
-				return "bcvk", nil
-			}
-		}
-		if configured == "bcvk" {
-			return "", fmt.Errorf("bcvk backend requires bcvk and virsh")
-		}
+	if configured == "bcvk" {
+		fmt.Fprintf(os.Stderr, "Warning: bcvk backend has been removed; using libvirt instead\n")
+		configured = "libvirt"
 	}
 	if configured == "libvirt" || configured == "auto" {
-		if _, err := exec.LookPath("virsh"); err == nil {
-			if _, err := exec.LookPath("virt-install"); err == nil {
-				return "libvirt", nil
-			}
+		// Check for libvirt session socket
+		sockPath := libvirtSessionSocket()
+		if _, err := os.Stat(sockPath); err == nil {
+			return "libvirt", nil
 		}
 		if configured == "libvirt" {
-			return "", fmt.Errorf("libvirt backend requires virsh and virt-install")
+			return "", fmt.Errorf("libvirt backend requires libvirt session daemon (socket not found at %s)", sockPath)
 		}
 	}
 	if configured == "qemu" || configured == "auto" {
@@ -82,7 +73,7 @@ func resolveVmBackend(configured string) (string, error) {
 			return "", fmt.Errorf("qemu backend requires %s", qemuBin)
 		}
 	}
-	return "", fmt.Errorf("no VM backend available (install bcvk, virsh+virt-install, or qemu-system)")
+	return "", fmt.Errorf("no VM backend available (install libvirt or qemu-system)")
 }
 
 // qemuSystemBinary returns the architecture-appropriate QEMU binary name.
@@ -132,8 +123,6 @@ func (c *VmCreateCmd) Run() error {
 	ram := "4G"
 	cpus := 2
 	var ports []string
-	var imageRef string
-	var vmCfg *VmConfig
 	var libvirtSnippets []string
 
 	var cfg *Config
@@ -144,10 +133,8 @@ func (c *VmCreateCmd) Run() error {
 			if resolved.Vm != nil {
 				ram = resolved.Vm.Ram
 				cpus = resolved.Vm.Cpus
-				vmCfg = resolved.Vm
 			}
 			ports = resolved.Ports
-			imageRef = resolved.FullTag
 		}
 
 		// Collect libvirt snippets from layers and image config
@@ -165,15 +152,9 @@ func (c *VmCreateCmd) Run() error {
 			if meta.Vm != nil {
 				ram = meta.Vm.Ram
 				cpus = meta.Vm.Cpus
-				vmCfg = meta.Vm
 			}
 			ports = meta.Ports
 			libvirtSnippets = meta.Libvirt
-			if meta.Registry != "" {
-				imageRef = fmt.Sprintf("%s/%s:latest", meta.Registry, c.Image)
-			} else {
-				imageRef = ref
-			}
 		}
 	}
 
@@ -188,10 +169,6 @@ func (c *VmCreateCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	switch backend {
-	case "bcvk":
-		if err := c.createBcvk(name, imageRef, ram, cpus, ports, vmCfg); err != nil {
-			return err
-		}
 	case "libvirt":
 		qcow2, err := resolveQcow2Path(c.Image)
 		if err != nil {
@@ -211,7 +188,7 @@ func (c *VmCreateCmd) Run() error {
 		return c.createQemu(name, qcow2, ram, cpus, ports)
 	}
 
-	// Inject libvirt XML snippets for bcvk/libvirt backends
+	// Inject libvirt XML snippets for libvirt backend
 	if len(libvirtSnippets) > 0 {
 		if err := InjectLibvirtXML(name, libvirtSnippets); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to inject libvirt config: %v\n", err)
@@ -221,84 +198,27 @@ func (c *VmCreateCmd) Run() error {
 	return nil
 }
 
-func (c *VmCreateCmd) createBcvk(name, imageRef, ram string, cpus int, ports []string, vmCfg *VmConfig) error {
-	args := []string{
-		"libvirt", "run",
-		"--name", name,
-		"--memory", normalizeSizeForBcvk(ram),
-		"--cpus", strconv.Itoa(cpus),
-		"--detach",
-	}
-	if vmCfg != nil {
-		if vmCfg.Rootfs != "" {
-			args = append(args, "--filesystem", vmCfg.Rootfs)
-		}
-		if vmCfg.DiskSize != "" {
-			args = append(args, "--disk-size", normalizeSizeForBcvk(vmCfg.DiskSize))
-		}
-		if vmCfg.RootSize != "" {
-			args = append(args, "--root-size", normalizeSizeForBcvk(vmCfg.RootSize))
-		}
-		if vmCfg.KernelArgs != "" {
-			for _, karg := range strings.Fields(vmCfg.KernelArgs) {
-				args = append(args, "--karg", karg)
-			}
-		}
-		if vmCfg.Firmware != "" {
-			args = append(args, "--firmware", vmCfg.Firmware)
-		}
-	}
-	for _, p := range ports {
-		args = append(args, "-p", p)
-	}
-	args = append(args, imageRef)
-
-	fmt.Fprintf(os.Stderr, "Creating VM %s via bcvk...\n", name)
-	cmd := exec.Command("bcvk", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bcvk libvirt run failed: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Created VM %s (bcvk)\n", name)
-	fmt.Fprintf(os.Stderr, "SSH: ov vm ssh %s\n", c.Image)
-	return nil
-}
-
 func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []string) error {
-	// Convert RAM to MB for virt-install
 	ramMB := parseRAMtoMB(ram)
-
-	args := []string{
-		"--connect", libvirtSessionURI,
-		"--name", name,
-		"--memory", strconv.Itoa(ramMB),
-		"--vcpus", strconv.Itoa(cpus),
-		"--disk", fmt.Sprintf("path=%s,format=qcow2,bus=virtio", qcow2),
-		"--import",
-		"--noautoconsole",
-		"--os-variant", "fedora-unknown",
-		"--network", fmt.Sprintf("user,model=virtio,%s", libvirtPortForwards(ports)),
-		"--graphics", "none",
-		"--serial", "pty",
-		"--console", "pty,target_type=serial",
-	}
 
 	gpu := ResolveGPU(c.GPUFlags.Mode())
 	if gpu {
-		// TODO: PCI passthrough for GPU requires device identification
 		fmt.Fprintf(os.Stderr, "Warning: GPU passthrough for libvirt VMs requires manual --host-device configuration\n")
 	}
 
-	cmd := exec.Command("virt-install", args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("virt-install failed: %w", err)
+	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, ports, gpu)
+
+	conn, err := connectLibvirt()
+	if err != nil {
+		return fmt.Errorf("connecting to libvirt: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.defineAndStartDomain(xmlStr); err != nil {
+		return fmt.Errorf("creating VM: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Created VM %s (session connection)\n", name)
+	fmt.Fprintf(os.Stderr, "Created VM %s (libvirt session)\n", name)
 	fmt.Fprintf(os.Stderr, "Console: ov vm console %s\n", c.Image)
 	return nil
 }
@@ -315,6 +235,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 
 	qemuBin := qemuSystemBinary()
 	monitorSocket := filepath.Join(stateDir, "monitor.sock")
+	qmpSocket := filepath.Join(stateDir, "qmp.sock")
 
 	args := []string{
 		"-m", ram,
@@ -323,6 +244,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		"-enable-kvm",
 		"-drive", fmt.Sprintf("file=%s,format=qcow2,if=virtio", qcow2),
 		"-monitor", fmt.Sprintf("unix:%s,server,nowait", monitorSocket),
+		"-qmp", fmt.Sprintf("unix:%s,server,nowait", qmpSocket),
 		"-serial", "mon:stdio",
 		"-nographic",
 		"-daemonize",
@@ -330,7 +252,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 	}
 
 	// Port forwarding
-	hostfwds := "hostfwd=tcp::2222-:22" // always forward SSH
+	hostfwds := "hostfwd=tcp::2222-:22"
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) == 2 {
@@ -363,18 +285,6 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 	fmt.Fprintf(os.Stderr, "SSH: ssh -p 2222 user@localhost\n")
 	fmt.Fprintf(os.Stderr, "Console: ov vm console %s\n", c.Image)
 	return nil
-}
-
-// libvirtPortForwards builds the hostfwd string for libvirt user-mode networking.
-func libvirtPortForwards(ports []string) string {
-	hostfwds := "hostfwd=tcp::2222-:22" // always forward SSH
-	for _, p := range ports {
-		parts := strings.SplitN(p, ":", 2)
-		if len(parts) == 2 {
-			hostfwds += fmt.Sprintf(",hostfwd=tcp::%s-:%s", parts[0], parts[1])
-		}
-	}
-	return hostfwds
 }
 
 // parseRAMtoMB converts a RAM string like "4G" or "8192M" to megabytes.
@@ -421,20 +331,19 @@ func (c *VmStartCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	switch backend {
-	case "bcvk":
-		cmd := exec.Command("bcvk", "libvirt", "start", name)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("bcvk libvirt start failed: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "Started VM %s\n", name)
 	case "libvirt":
-		cmd := virshCmd("start", name)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("virsh start failed: %w", err)
+		conn, err := connectLibvirt()
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		dom, err := conn.lookupDomain(name)
+		if err != nil {
+			return fmt.Errorf("VM %s not found: %w", name, err)
+		}
+		if err := conn.startDomain(dom); err != nil {
+			return fmt.Errorf("starting VM %s: %w", name, err)
 		}
 		fmt.Fprintf(os.Stderr, "Started VM %s\n", name)
 	case "qemu":
@@ -485,31 +394,22 @@ func (c *VmStopCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	switch backend {
-	case "bcvk":
-		args := []string{"libvirt", "stop"}
-		if c.Force {
-			args = append(args, "-f")
-		}
-		args = append(args, name)
-		cmd := exec.Command("bcvk", args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("bcvk libvirt stop failed: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "Stopped VM %s\n", name)
 	case "libvirt":
+		conn, err := connectLibvirt()
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		dom, err := conn.lookupDomain(name)
+		if err != nil {
+			return fmt.Errorf("VM %s not found: %w", name, err)
+		}
 		if c.Force {
-			cmd := virshCmd("destroy", name)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			_ = cmd.Run()
+			_ = conn.destroyDomain(dom)
 		} else {
-			cmd := virshCmd("shutdown", name)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("virsh shutdown failed: %w", err)
+			if err := conn.shutdownDomain(dom); err != nil {
+				return fmt.Errorf("shutting down VM %s: %w", name, err)
 			}
 		}
 		fmt.Fprintf(os.Stderr, "Stopped VM %s\n", name)
@@ -518,26 +418,27 @@ func (c *VmStopCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		pidFile := filepath.Join(dir, name, "qemu.pid")
-		data, err := os.ReadFile(pidFile)
-		if err != nil {
-			return fmt.Errorf("VM %s is not running (no PID file)", name)
-		}
-		pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
-		if err != nil {
-			return fmt.Errorf("invalid PID file for VM %s", name)
-		}
-		proc, err := os.FindProcess(pid)
-		if err != nil {
-			return fmt.Errorf("process %d not found", pid)
-		}
+		stateDir := filepath.Join(dir, name)
 		if c.Force {
-			proc.Kill()
+			// Try QMP quit first, fall back to process kill
+			if err := qemuForceShutdown(stateDir); err != nil {
+				// Fallback: kill via PID
+				killQemuByPID(stateDir)
+			}
 		} else {
-			// Send SIGTERM for graceful shutdown
-			proc.Signal(syscall.SIGTERM)
+			// Graceful ACPI shutdown via QMP
+			if err := qemuGracefulShutdown(stateDir); err != nil {
+				// Fallback: SIGTERM via PID
+				pidFile := filepath.Join(stateDir, "qemu.pid")
+				if data, readErr := os.ReadFile(pidFile); readErr == nil {
+					if pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data))); parseErr == nil {
+						if proc, findErr := os.FindProcess(pid); findErr == nil {
+							proc.Signal(syscall.SIGTERM)
+						}
+					}
+				}
+			}
 		}
-		os.Remove(pidFile)
 		fmt.Fprintf(os.Stderr, "Stopped VM %s\n", name)
 	}
 	return nil
@@ -565,30 +466,27 @@ func (c *VmDestroyCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	switch backend {
-	case "bcvk":
-		cmd := exec.Command("bcvk", "libvirt", "rm", "-f", name)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("bcvk libvirt rm failed: %w", err)
-		}
-		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
-
 	case "libvirt":
+		conn, err := connectLibvirt()
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+
+		dom, err := conn.lookupDomain(name)
+		if err != nil {
+			return fmt.Errorf("VM %s not found: %w", name, err)
+		}
+
 		// Stop if running
-		stop := virshCmd("destroy", name)
-		_ = stop.Run()
+		state, _ := conn.domainState(dom)
+		if state == domainStateRunning {
+			_ = conn.destroyDomain(dom)
+		}
 
 		// Undefine
-		args := []string{"undefine", name}
-		if c.Disk {
-			args = append(args, "--remove-all-storage")
-		}
-		cmd := virshCmd(args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("virsh undefine failed: %w", err)
+		if err := conn.undefineDomain(dom, c.Disk); err != nil {
+			return fmt.Errorf("undefining VM %s: %w", name, err)
 		}
 		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 
@@ -599,14 +497,9 @@ func (c *VmDestroyCmd) Run() error {
 		}
 		stateDir := filepath.Join(dir, name)
 
-		// Kill process if running
-		pidFile := filepath.Join(stateDir, "qemu.pid")
-		if data, err := os.ReadFile(pidFile); err == nil {
-			if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
-				if proc, err := os.FindProcess(pid); err == nil {
-					proc.Kill()
-				}
-			}
+		// Kill process — try QMP quit first, fall back to PID kill
+		if err := qemuForceShutdown(stateDir); err != nil {
+			killQemuByPID(stateDir)
 		}
 
 		// Remove state directory
@@ -642,41 +535,24 @@ func (c *VmListCmd) Run() error {
 	}
 
 	switch backend {
-	case "bcvk":
-		args := []string{"libvirt", "list"}
-		if c.All {
-			args = append(args, "--all")
-		}
-		cmd := exec.Command("bcvk", args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
 	case "libvirt":
-		cmd := virshCmd("list", "--all")
-		out, err := cmd.Output()
+		conn, err := connectLibvirt()
 		if err != nil {
-			return fmt.Errorf("virsh list failed: %w", err)
+			return err
 		}
-		// Filter for ov- prefixed VMs
-		scanner := bufio.NewScanner(strings.NewReader(string(out)))
-		headerPrinted := false
-		for scanner.Scan() {
-			line := scanner.Text()
-			if strings.Contains(line, "ov-") {
-				if !headerPrinted {
-					fmt.Println("NAME\tSTATE")
-					headerPrinted = true
-				}
-				fields := strings.Fields(line)
-				if len(fields) >= 3 {
-					name := fields[1]
-					state := strings.Join(fields[2:], " ")
-					fmt.Printf("%s\t%s\n", name, state)
-				}
-			}
+		defer conn.Close()
+
+		domains, err := conn.listOvDomains()
+		if err != nil {
+			return fmt.Errorf("listing VMs: %w", err)
 		}
-		if !headerPrinted {
+		if len(domains) == 0 {
 			fmt.Fprintln(os.Stderr, "No VMs found")
+			return nil
+		}
+		fmt.Println("NAME\tSTATE")
+		for _, d := range domains {
+			fmt.Printf("%s\t%s\n", d.Name, d.State)
 		}
 
 	case "qemu":
@@ -745,21 +621,16 @@ func (c *VmConsoleCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	switch backend {
-	case "bcvk":
-		// bcvk uses libvirt, so delegate to virsh console
-		bin, err := exec.LookPath("virsh")
-		if err != nil {
-			return err
-		}
-		return syscall.Exec(bin, []string{"virsh", "-c", libvirtSessionURI, "console", name}, os.Environ())
 	case "libvirt":
+		// Keep virsh console for interactive serial — libvirt console streams are complex
 		bin, err := exec.LookPath("virsh")
 		if err != nil {
-			return err
+			return fmt.Errorf("virsh is required for libvirt console access: %w", err)
 		}
 		return syscall.Exec(bin, []string{"virsh", "-c", libvirtSessionURI, "console", name}, os.Environ())
 
 	case "qemu":
+		// Pure Go unix socket relay (replaces socat)
 		dir, err := vmDir()
 		if err != nil {
 			return err
@@ -768,13 +639,38 @@ func (c *VmConsoleCmd) Run() error {
 		if _, err := os.Stat(monitorSocket); err != nil {
 			return fmt.Errorf("VM %s monitor socket not found — is the VM running?", name)
 		}
-		// Use socat to connect to the monitor socket
-		socatBin, err := exec.LookPath("socat")
-		if err != nil {
-			return fmt.Errorf("socat is required for QEMU console access: %w", err)
-		}
-		return syscall.Exec(socatBin, []string{"socat", "stdio", "unix-connect:" + monitorSocket}, os.Environ())
+		return connectUnixConsole(monitorSocket)
 	}
+	return nil
+}
+
+// connectUnixConsole connects stdin/stdout to a unix socket in raw terminal mode.
+// This replaces the socat dependency for QEMU console access.
+func connectUnixConsole(socketPath string) error {
+	conn, err := net.Dial("unix", socketPath)
+	if err != nil {
+		return fmt.Errorf("connecting to %s: %w", socketPath, err)
+	}
+	defer conn.Close()
+
+	// Switch terminal to raw mode
+	fd := int(os.Stdin.Fd())
+	if term.IsTerminal(fd) {
+		oldState, err := term.MakeRaw(fd)
+		if err != nil {
+			return fmt.Errorf("setting raw terminal mode: %w", err)
+		}
+		defer term.Restore(fd, oldState)
+	}
+
+	// Bidirectional copy
+	done := make(chan struct{})
+	go func() {
+		io.Copy(conn, os.Stdin)
+		close(done)
+	}()
+	io.Copy(os.Stdout, conn)
+	<-done
 	return nil
 }
 
@@ -789,16 +685,6 @@ type VmSshCmd struct {
 }
 
 func (c *VmSshCmd) Run() error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	backend, err := resolveVmBackend(rt.VmBackend)
-	if err != nil {
-		return err
-	}
-
 	// Resolve SSH port and user from images.yml if not explicitly overridden
 	dir, _ := os.Getwd()
 	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
@@ -809,28 +695,7 @@ func (c *VmSshCmd) Run() error {
 		}
 	}
 
-	name := vmName(c.Image, c.Instance)
-
-	if backend == "bcvk" {
-		bcvkBin, err := exec.LookPath("bcvk")
-		if err != nil {
-			return fmt.Errorf("bcvk not found: %w", err)
-		}
-		args := []string{"bcvk", "libvirt", "ssh"}
-		if c.User != "user" {
-			args = append(args, "--user", c.User)
-		}
-		args = append(args, name)
-		// Pass through remaining args, filtering out the "--" separator
-		for _, a := range c.Args {
-			if a != "--" {
-				args = append(args, a)
-			}
-		}
-		return syscall.Exec(bcvkBin, args, os.Environ())
-	}
-
-	// libvirt and qemu backends use direct SSH
+	// All backends use direct SSH
 	sshBin, err := exec.LookPath("ssh")
 	if err != nil {
 		return fmt.Errorf("ssh not found: %w", err)

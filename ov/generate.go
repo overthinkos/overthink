@@ -588,8 +588,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Final USER directive (use UID for robustness)
 	// Bootc images boot with systemd which manages users via login —
-	// the container USER directive is irrelevant and breaks bcvk (bwrap
-	// rejects ambient capabilities on non-root users).
+	// the container USER directive is irrelevant (bootc+systemd handles sessions).
 	if img.Bootc {
 		// leave as root — systemd handles user sessions
 	} else if !inUserMode || needsRootAfter {

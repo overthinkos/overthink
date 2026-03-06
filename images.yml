@@ -6,7 +6,7 @@ defaults:
     - linux/amd64
   pkg: rpm
   merge:
-    auto: false
+    auto: true
     max_mb: 128
   builder: fedora-builder
 

@@ -3,7 +3,6 @@ package main
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -458,8 +457,8 @@ func executeMerge(img v1.Image, layers []v1.Layer, steps []MergeStep) (v1.Image,
 }
 
 // loadImageFromDaemon loads an image from the container engine via save.
-// If the ref is a manifest list (from podman build --manifest), it extracts
-// the platform-specific image for the host architecture.
+// If the ref is a manifest list (from podman build --manifest), it uses
+// skopeo to extract the platform-specific image into a temp tag, then saves that.
 // The caller must call cleanup() when done with the image to remove the temp file.
 // Returns the image, a cleanup function, and whether the source was a manifest list.
 func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), bool, error) {
@@ -471,16 +470,36 @@ func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), bool, err
 		return img, cleanup, false, nil
 	}
 
-	// May be a manifest list — resolve the platform-specific digest
-	digest, manifestErr := resolveManifestDigest(binary, ref)
-	if manifestErr != nil {
-		// Not a manifest either — return original error
+	// May be a manifest list — use skopeo to extract the platform image
+	// into a temp tag that podman save can handle.
+	tmpRef := ref
+	if idx := strings.LastIndex(tmpRef, ":"); idx != -1 {
+		tmpRef = tmpRef[:idx]
+	}
+	tmpRef += ":ov-merge-tmp"
+
+	hostArch := runtime.GOARCH
+	cmd := exec.Command("skopeo", "copy",
+		"--override-arch", hostArch, "--override-os", "linux",
+		"containers-storage:"+ref,
+		"containers-storage:"+tmpRef)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if skoErr := cmd.Run(); skoErr != nil {
+		// Not a manifest either — return original save error
 		return nil, nil, false, fmt.Errorf("%s save %s: %w", binary, ref, err)
 	}
 
-	img, cleanup, err = saveAndLoad(binary, digest)
+	img, cleanup, err = saveAndLoad(binary, tmpRef)
+
+	// Clean up the temp tag regardless of success
+	rmCmd := exec.Command(binary, "rmi", tmpRef)
+	rmCmd.Stdout = io.Discard
+	rmCmd.Stderr = io.Discard
+	rmCmd.Run()
+
 	if err != nil {
-		return nil, nil, false, fmt.Errorf("%s save %s (from manifest): %w", binary, digest, err)
+		return nil, nil, false, fmt.Errorf("saving extracted manifest image: %w", err)
 	}
 
 	return img, cleanup, true, nil
@@ -513,45 +532,6 @@ func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 	}
 
 	return img, cleanup, nil
-}
-
-// resolveManifestDigest inspects a manifest list and returns the image digest
-// for the host platform (linux/<arch>).
-func resolveManifestDigest(binary, ref string) (string, error) {
-	cmd := exec.Command(binary, "manifest", "inspect", ref)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s manifest inspect %s: %w", binary, ref, err)
-	}
-
-	var manifest struct {
-		Manifests []struct {
-			Digest   string `json:"digest"`
-			Platform struct {
-				Architecture string `json:"architecture"`
-				OS           string `json:"os"`
-			} `json:"platform"`
-		} `json:"manifests"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
-		return "", fmt.Errorf("parsing manifest: %w", err)
-	}
-
-	hostArch := runtime.GOARCH
-	for _, m := range manifest.Manifests {
-		if m.Platform.OS == "linux" && m.Platform.Architecture == hostArch {
-			// Strip tag from ref and append digest
-			base := ref
-			if idx := strings.LastIndex(base, ":"); idx != -1 {
-				base = base[:idx]
-			}
-			return base + "@" + m.Digest, nil
-		}
-	}
-
-	return "", fmt.Errorf("no linux/%s image found in manifest %s", hostArch, ref)
 }
 
 // rebuildManifest removes the old manifest list and creates a new one

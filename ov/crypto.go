@@ -402,33 +402,50 @@ func (c *CryptoPasswdCmd) Run() error {
 // loadEncryptedMounts loads the encrypted bind mounts for an image and returns them
 // along with the resolved encrypted storage path.
 func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, "", err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return nil, "", err
-	}
-
-	img, ok := cfg.Images[imageName]
-	if !ok {
-		return nil, "", fmt.Errorf("image %q not found in images.yml", imageName)
-	}
-
-	var encrypted []BindMountConfig
-	for _, m := range img.BindMounts {
-		if m.Encrypted {
-			encrypted = append(encrypted, m)
-		}
-	}
-
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return nil, "", err
 	}
 
+	// Try images.yml first
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		img, ok := cfg.Images[imageName]
+		if !ok {
+			return nil, "", fmt.Errorf("image %q not found in images.yml", imageName)
+		}
+
+		var encrypted []BindMountConfig
+		for _, m := range img.BindMounts {
+			if m.Encrypted {
+				encrypted = append(encrypted, m)
+			}
+		}
+		return encrypted, rt.EncryptedStoragePath, nil
+	}
+
+	// Label fallback
+	engine := rt.RunEngine
+	imageRef := fmt.Sprintf("%s:latest", imageName)
+	meta, metaErr := ExtractMetadata(engine, imageRef)
+	if metaErr != nil {
+		return nil, "", metaErr
+	}
+	if meta == nil {
+		return nil, "", fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	}
+
+	var encrypted []BindMountConfig
+	for _, m := range meta.BindMounts {
+		if m.Encrypted {
+			encrypted = append(encrypted, BindMountConfig{
+				Name:      m.Name,
+				Path:      m.Path,
+				Encrypted: true,
+			})
+		}
+	}
 	return encrypted, rt.EncryptedStoragePath, nil
 }
 

@@ -83,6 +83,8 @@ func (c *ShellCmd) Run() error {
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
+	var deployEnv []string
+	var deployEnvFile string
 
 	// Try images.yml first (existing path)
 	dir, _ := os.Getwd()
@@ -101,7 +103,6 @@ func (c *ShellCmd) Run() error {
 			return err
 		}
 		security = CollectSecurity(cfg, layers, c.Image)
-		// Resolve bind mounts
 		img := cfg.Images[c.Image]
 		if len(img.BindMounts) > 0 {
 			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
@@ -110,6 +111,8 @@ func (c *ShellCmd) Run() error {
 		uid = resolved.UID
 		gid = resolved.GID
 		ports = resolved.Ports
+		deployEnv = img.Env
+		deployEnvFile = img.EnvFile
 	} else {
 		// Label path: resolve from image labels
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
@@ -121,13 +124,28 @@ func (c *ShellCmd) Run() error {
 			return err
 		}
 		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
+		// Apply deploy.yml overrides
+		dc, _ := LoadDeployConfig()
+		MergeDeployOntoMetadata(meta, dc)
+
 		uid = meta.UID
 		gid = meta.GID
 		ports = meta.Ports
 		volumes = meta.Volumes
-		// Re-resolve imageRef with registry from labels if available
+		security = meta.Security
+		deployEnv = meta.Env
+
+		// Resolve bind mounts from labels
+		var deployMounts []BindMountConfig
+		if dc != nil {
+			if overlay, ok := dc.Images[c.Image]; ok {
+				deployMounts = overlay.BindMounts
+			}
+		}
+		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 		}
@@ -135,15 +153,6 @@ func (c *ShellCmd) Run() error {
 
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
-
-	// Resolve env vars
-	var deployEnv []string
-	var deployEnvFile string
-	if cfgErr == nil {
-		img := cfg.Images[c.Image]
-		deployEnv = img.Env
-		deployEnvFile = img.EnvFile
-	}
 	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
 	if err != nil {
 		return err

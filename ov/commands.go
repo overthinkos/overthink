@@ -100,10 +100,28 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 			return err
 		}
 		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
+		// Apply deploy.yml overrides
+		dc, _ := LoadDeployConfig()
+		MergeDeployOntoMetadata(meta, dc)
+
+		uid = meta.UID
+		gid = meta.GID
 		ports = meta.Ports
 		volumes = meta.Volumes
+		security = meta.Security
+		network = meta.Network
+
+		// Resolve bind mounts from labels
+		var deployMounts []BindMountConfig
+		if dc != nil {
+			if overlay, ok := dc.Images[c.Image]; ok {
+				deployMounts = overlay.BindMounts
+			}
+		}
+		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 		}
@@ -116,7 +134,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Resolve tunnel config if available
+	// Resolve tunnel config
 	var tunnelCfg *TunnelConfig
 	if cfgErr == nil {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
@@ -130,6 +148,14 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 				tunnelCfg = ResolveTunnelConfig(tunnelYAML, c.Image, resolved.FQDN, layers, resolved.Layers)
 			}
 		}
+	} else {
+		// Label path: tunnel from metadata
+		meta, metaErr := ExtractMetadata("podman", imageRef)
+		if metaErr == nil && meta != nil && meta.Tunnel != nil {
+			dc, _ := LoadDeployConfig()
+			MergeDeployOntoMetadata(meta, dc)
+			tunnelCfg = TunnelConfigFromMetadata(meta)
+		}
 	}
 
 	// Apply instance-specific volume naming
@@ -142,6 +168,14 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		img := cfg.Images[c.Image]
 		deployEnv = img.Env
 		deployEnvFile = img.EnvFile
+	} else {
+		// Use env from labels (deploy.yml already merged above)
+		meta, metaErr := ExtractMetadata("podman", imageRef)
+		if metaErr == nil && meta != nil {
+			dc, _ := LoadDeployConfig()
+			MergeDeployOntoMetadata(meta, dc)
+			deployEnv = meta.Env
+		}
 	}
 	envVars, envErr := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
 	if envErr != nil {
@@ -250,27 +284,33 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
 
-	// Run post_enable hooks if any
+	// Run post_enable hooks
+	var hooks *HooksConfig
 	if cfgErr == nil {
 		layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 		if scanErr == nil {
-			hooks := CollectHooks(cfg, layers, c.Image)
-			if hooks != nil && hooks.PostEnable != "" {
-				containerName := containerNameInstance(c.Image, c.Instance)
-				svc := serviceNameInstance(c.Image, c.Instance)
+			hooks = CollectHooks(cfg, layers, c.Image)
+		}
+	} else {
+		// Label path: hooks from metadata
+		meta, metaErr := ExtractMetadata("podman", imageRef)
+		if metaErr == nil && meta != nil {
+			hooks = meta.Hooks
+		}
+	}
+	if hooks != nil && hooks.PostEnable != "" {
+		containerName := containerNameInstance(c.Image, c.Instance)
+		svc := serviceNameInstance(c.Image, c.Instance)
 
-				// Start the service so the hook can exec into it
-				start := exec.Command("systemctl", "--user", "start", svc)
-				start.Stdout = os.Stderr
-				start.Stderr = os.Stderr
-				if err := start.Run(); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to start %s for post_enable hook: %v\n", svc, err)
-				} else {
-					engine := EngineBinary(rt.RunEngine)
-					if err := RunHook(engine, containerName, hooks.PostEnable, c.Env); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: post_enable hook failed: %v\n", err)
-					}
-				}
+		start := exec.Command("systemctl", "--user", "start", svc)
+		start.Stdout = os.Stderr
+		start.Stderr = os.Stderr
+		if err := start.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to start %s for post_enable hook: %v\n", svc, err)
+		} else {
+			engine := EngineBinary(rt.RunEngine)
+			if err := RunHook(engine, containerName, hooks.PostEnable, c.Env); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: post_enable hook failed: %v\n", err)
 			}
 		}
 	}
@@ -480,26 +520,30 @@ func (c *UpdateCmd) Run() error {
 		return c.runRemoteUpdate(ref)
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	resolved, err := cfg.ResolveImage(c.Image, "unused")
-	if err != nil {
-		return err
-	}
-
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
+	}
+
+	var imageRef string
+	dir, _ := os.Getwd()
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
+		if resolveErr != nil {
+			return resolveErr
+		}
+		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+	} else {
+		// Label path
+		engine := rt.RunEngine
+		ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
+		meta, metaErr := ExtractMetadata(engine, ref)
+		if metaErr == nil && meta != nil && meta.Registry != "" {
+			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		} else {
+			imageRef = ref
+		}
 	}
 
 	if rt.RunMode == "quadlet" {
@@ -658,27 +702,52 @@ func (c *RemoveCmd) Run() error {
 	return nil
 }
 
-// runPreRemoveHook runs pre_remove hooks from layer.yml (best-effort).
+// runPreRemoveHook runs pre_remove hooks (best-effort).
+// Tries images.yml first, then falls back to image labels.
 func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
+	var hooks *HooksConfig
+
+	// Try images.yml
 	dir, err := os.Getwd()
-	if err != nil {
-		return
+	if err == nil {
+		cfg, cfgErr := LoadConfig(dir)
+		if cfgErr == nil {
+			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
+			if scanErr == nil {
+				hooks = CollectHooks(cfg, layers, imageName)
+			}
+		}
 	}
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return
+
+	// Fall back to image labels
+	if hooks == nil {
+		// Inspect the running container's image for labels
+		imageRef := containerImage(engine, containerName)
+		if imageRef != "" {
+			meta, metaErr := ExtractMetadata(engine, imageRef)
+			if metaErr == nil && meta != nil {
+				hooks = meta.Hooks
+			}
+		}
 	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
-	if err != nil {
-		return
-	}
-	hooks := CollectHooks(cfg, layers, imageName)
+
 	if hooks == nil || hooks.PreRemove == "" {
 		return
 	}
 	if err := RunHook(engine, containerName, hooks.PreRemove, c.Env); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
 	}
+}
+
+// containerImage returns the image name for a running container (best-effort).
+func containerImage(engine, containerName string) string {
+	binary := EngineBinary(engine)
+	cmd := exec.Command(binary, "inspect", "--format", "{{.Config.Image}}", containerName)
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // resolveImageName extracts the short image name from a ref that may be

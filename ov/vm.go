@@ -127,7 +127,7 @@ func (c *VmCreateCmd) Run() error {
 		return err
 	}
 
-	// Resolve VM settings from images.yml
+	// Resolve VM settings from images.yml or image labels
 	dir, _ := os.Getwd()
 	ram := "4G"
 	cpus := 2
@@ -153,6 +153,27 @@ func (c *VmCreateCmd) Run() error {
 		// Collect libvirt snippets from layers and image config
 		if layers, scanErr := ScanAllLayersWithConfig(dir, cfg); scanErr == nil {
 			libvirtSnippets = CollectLibvirtSnippets(cfg, layers, c.Image)
+		}
+	} else {
+		// Label path
+		engine := rt.RunEngine
+		ref := fmt.Sprintf("%s:latest", c.Image)
+		meta, metaErr := ExtractMetadata(engine, ref)
+		if metaErr == nil && meta != nil {
+			dc, _ := LoadDeployConfig()
+			MergeDeployOntoMetadata(meta, dc)
+			if meta.Vm != nil {
+				ram = meta.Vm.Ram
+				cpus = meta.Vm.Cpus
+				vmCfg = meta.Vm
+			}
+			ports = meta.Ports
+			libvirtSnippets = meta.Libvirt
+			if meta.Registry != "" {
+				imageRef = fmt.Sprintf("%s/%s:latest", meta.Registry, c.Image)
+			} else {
+				imageRef = ref
+			}
 		}
 	}
 

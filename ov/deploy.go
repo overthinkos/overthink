@@ -108,6 +108,93 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	}
 }
 
+// MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
+// Same field-level replace semantics as MergeDeployOverlay.
+func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
+	if dc == nil || dc.Images == nil || meta == nil {
+		return
+	}
+
+	overlay, ok := dc.Images[meta.Image]
+	if !ok {
+		return
+	}
+
+	if overlay.Tunnel != nil {
+		meta.Tunnel = overlay.Tunnel
+	}
+	if overlay.FQDN != "" {
+		meta.FQDN = overlay.FQDN
+	}
+	if overlay.AcmeEmail != "" {
+		meta.AcmeEmail = overlay.AcmeEmail
+	}
+	if overlay.BindMounts != nil {
+		var labelMounts []LabelBindMount
+		for _, bm := range overlay.BindMounts {
+			labelMounts = append(labelMounts, LabelBindMount{
+				Name:      bm.Name,
+				Path:      bm.Path,
+				Encrypted: bm.Encrypted,
+			})
+		}
+		meta.BindMounts = labelMounts
+	}
+	if overlay.Ports != nil {
+		meta.Ports = overlay.Ports
+	}
+	if overlay.Env != nil {
+		meta.Env = overlay.Env
+	}
+	if overlay.Security != nil {
+		meta.Security = *overlay.Security
+	}
+	if overlay.Network != "" {
+		meta.Network = overlay.Network
+	}
+}
+
+// resolveBindMountsFromLabels resolves host paths for label-derived bind mounts.
+// Plain mounts use deploy.yml host path or convention (~/.local/share/ov/bind/<image>/<name>).
+// Encrypted mounts use the encrypted storage path.
+func resolveBindMountsFromLabels(imageName string, mounts []LabelBindMount, home string, encStoragePath string, deployMounts []BindMountConfig) []ResolvedBindMount {
+	if len(mounts) == 0 {
+		return nil
+	}
+
+	// Index deploy.yml mounts by name for host path lookups
+	deployByName := make(map[string]BindMountConfig, len(deployMounts))
+	for _, dm := range deployMounts {
+		deployByName[dm.Name] = dm
+	}
+
+	var resolved []ResolvedBindMount
+	for _, m := range mounts {
+		containerPath := ExpandPath(m.Path, home)
+		var hostPath string
+
+		if m.Encrypted {
+			// Encrypted mounts use gocryptfs storage
+			hostPath = filepath.Join(encStoragePath, imageName, m.Name)
+		} else if dm, ok := deployByName[m.Name]; ok && dm.Host != "" {
+			// Plain mount with deploy.yml host override
+			hostPath = expandHostHome(dm.Host)
+		} else {
+			// Convention: ~/.local/share/ov/bind/<image>/<name>
+			userHome, _ := os.UserHomeDir()
+			hostPath = filepath.Join(userHome, ".local", "share", "ov", "bind", imageName, m.Name)
+		}
+
+		resolved = append(resolved, ResolvedBindMount{
+			Name:      m.Name,
+			HostPath:  hostPath,
+			ContPath:  containerPath,
+			Encrypted: m.Encrypted,
+		})
+	}
+	return resolved
+}
+
 // BindMountNames returns a set of bind mount names for use as an exclusion filter.
 func BindMountNames(mounts []BindMountConfig) map[string]bool {
 	if len(mounts) == 0 {

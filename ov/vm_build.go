@@ -31,16 +31,6 @@ func (c *VmBuildCmd) Run() error {
 		return fmt.Errorf("unsupported disk type %q (valid: qcow2, raw)", c.Type)
 	}
 
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
 	// Parse image:tag format from positional arg
 	imageName, imageTag := parseImageArg(c.Image)
 
@@ -51,22 +41,58 @@ func (c *VmBuildCmd) Run() error {
 		calverTag = c.Tag
 	}
 
-	resolved, err := cfg.ResolveImage(imageName, calverTag)
+	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 
-	if !resolved.Bootc {
-		return fmt.Errorf("image %q is not a bootc image (bootc: true required)", imageName)
+	var vmCfg *VmConfig
+	var imageRef string
+
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		resolved, err := cfg.ResolveImage(imageName, calverTag)
+		if err != nil {
+			return err
+		}
+		if !resolved.Bootc {
+			return fmt.Errorf("image %q is not a bootc image (bootc: true required)", imageName)
+		}
+		vmCfg = resolved.Vm
+		imageRef = resolved.FullTag
+	} else {
+		// Label path
+		rt, rtErr := ResolveRuntime()
+		if rtErr != nil {
+			return rtErr
+		}
+		ref := fmt.Sprintf("%s:%s", imageName, calverTag)
+		meta, metaErr := ExtractMetadata(rt.RunEngine, ref)
+		if metaErr != nil {
+			return metaErr
+		}
+		if meta == nil {
+			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", ref)
+		}
+		if !meta.Bootc {
+			return fmt.Errorf("image %q is not a bootc image (bootc: true required)", imageName)
+		}
+		vmCfg = meta.Vm
+		if meta.Registry != "" {
+			imageRef = fmt.Sprintf("%s/%s:%s", meta.Registry, imageName, calverTag)
+		} else {
+			imageRef = ref
+		}
+	}
+
+	if vmCfg == nil {
+		vmCfg = &VmConfig{}
 	}
 
 	// Require bcvk
 	if _, err := exec.LookPath("bcvk"); err != nil {
 		return fmt.Errorf("bcvk is required for disk image builds (dnf install bcvk): %w", err)
 	}
-
-	// Resolve VM config (image → defaults → hardcoded defaults)
-	vmCfg := resolved.Vm
 
 	// CLI --size overrides config
 	diskSize := normalizeSizeForBcvk(vmCfg.DiskSize)
@@ -85,8 +111,6 @@ func (c *VmBuildCmd) Run() error {
 	if c.Transport != "" {
 		transport = c.Transport
 	}
-
-	imageRef := resolved.FullTag
 
 	fmt.Fprintf(os.Stderr, "Building %s for %s\n", c.Type, imageRef)
 

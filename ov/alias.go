@@ -330,7 +330,7 @@ func (c *AliasInstallCmd) Run() error {
 			return err
 		}
 		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
 		aliases = meta.Aliases
 	}

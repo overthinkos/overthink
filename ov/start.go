@@ -102,12 +102,28 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 			return err
 		}
 		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; run from project directory or rebuild with latest ov", imageRef)
+			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
+		// Apply deploy.yml overrides
+		dc, _ := LoadDeployConfig()
+		MergeDeployOntoMetadata(meta, dc)
+
 		uid = meta.UID
 		gid = meta.GID
 		ports = meta.Ports
 		volumes = meta.Volumes
+		security = meta.Security
+		network = meta.Network
+
+		// Resolve bind mounts from labels
+		var deployMounts []BindMountConfig
+		if dc != nil {
+			if overlay, ok := dc.Images[c.Image]; ok {
+				deployMounts = overlay.BindMounts
+			}
+		}
+		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 		}
@@ -160,7 +176,6 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	if cfgErr == nil {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
 		if resolveErr == nil && resolved.Tunnel != nil {
-			// Re-resolve with layers for port defaulting
 			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 			if scanErr == nil {
 				tc := ResolveTunnelConfig(
@@ -171,6 +186,19 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 					if err := TunnelStart(*tc); err != nil {
 						fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
 					}
+				}
+			}
+		}
+	} else {
+		// Label path: start tunnel from metadata
+		meta, metaErr := ExtractMetadata(engine, imageRef)
+		if metaErr == nil && meta != nil && meta.Tunnel != nil {
+			dc, _ := LoadDeployConfig()
+			MergeDeployOntoMetadata(meta, dc)
+			tc := TunnelConfigFromMetadata(meta)
+			if tc != nil {
+				if err := TunnelStart(*tc); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
 				}
 			}
 		}
@@ -412,29 +440,41 @@ func (c *StopCmd) Run() error {
 
 // stopTunnelForImage attempts to stop any tunnel for the given image (best-effort).
 func stopTunnelForImage(imageName string) {
+	var tc *TunnelConfig
+
+	// Try images.yml
 	dir, err := os.Getwd()
-	if err != nil {
-		return
+	if err == nil {
+		cfg, cfgErr := LoadConfig(dir)
+		if cfgErr == nil {
+			resolved, resolveErr := cfg.ResolveImage(imageName, "unused")
+			if resolveErr == nil && resolved.Tunnel != nil {
+				layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
+				if scanErr == nil {
+					tunnelYAML := cfg.Images[imageName].Tunnel
+					if tunnelYAML == nil {
+						tunnelYAML = cfg.Defaults.Tunnel
+					}
+					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers)
+				}
+			}
+		}
 	}
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return
+
+	// Fall back to image labels
+	if tc == nil {
+		containerName := containerNameInstance(imageName, "")
+		imageRef := containerImage("podman", containerName)
+		if imageRef != "" {
+			meta, metaErr := ExtractMetadata("podman", imageRef)
+			if metaErr == nil && meta != nil && meta.Tunnel != nil {
+				dc, _ := LoadDeployConfig()
+				MergeDeployOntoMetadata(meta, dc)
+				tc = TunnelConfigFromMetadata(meta)
+			}
+		}
 	}
-	resolved, err := cfg.ResolveImage(imageName, "unused")
-	if err != nil || resolved.Tunnel == nil {
-		return
-	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
-	if err != nil {
-		return
-	}
-	// Get the raw TunnelYAML
-	img := cfg.Images[imageName]
-	tunnelYAML := img.Tunnel
-	if tunnelYAML == nil {
-		tunnelYAML = cfg.Defaults.Tunnel
-	}
-	tc := ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers)
+
 	if tc != nil {
 		if err := TunnelStop(*tc); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: tunnel teardown failed: %v\n", err)

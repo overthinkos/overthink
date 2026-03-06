@@ -87,11 +87,16 @@ func (c *InspectCmd) Run() error {
 		return err
 	}
 
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
+	cfg, cfgErr := LoadConfig(dir)
+	if cfgErr == nil {
+		return c.runFromConfig(cfg, dir)
 	}
 
+	// Label path: inspect from image labels
+	return c.runFromLabels()
+}
+
+func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	calverTag := ComputeCalVer()
 	resolved, err := cfg.ResolveImage(c.Image, calverTag)
 	if err != nil {
@@ -99,7 +104,6 @@ func (c *InspectCmd) Run() error {
 	}
 
 	if c.Format != "" {
-		// Output single field
 		switch c.Format {
 		case "tag":
 			fmt.Println(resolved.FullTag)
@@ -174,8 +178,79 @@ func (c *InspectCmd) Run() error {
 		return nil
 	}
 
-	// Output full JSON
 	data, err := json.MarshalIndent(resolved, "", "  ")
+	if err != nil {
+		return err
+	}
+	fmt.Println(string(data))
+	return nil
+}
+
+func (c *InspectCmd) runFromLabels() error {
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+	engine := rt.RunEngine
+
+	imageRef := fmt.Sprintf("%s:latest", c.Image)
+	meta, err := ExtractMetadata(engine, imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	}
+
+	// Apply deploy.yml overrides
+	dc, _ := LoadDeployConfig()
+	MergeDeployOntoMetadata(meta, dc)
+
+	if c.Format != "" {
+		switch c.Format {
+		case "registry":
+			fmt.Println(meta.Registry)
+		case "ports":
+			for _, p := range meta.Ports {
+				fmt.Println(p)
+			}
+		case "volumes":
+			for _, vol := range meta.Volumes {
+				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
+			}
+		case "aliases":
+			for _, a := range meta.Aliases {
+				fmt.Printf("%s\t%s\n", a.Name, a.Command)
+			}
+		case "tunnel":
+			if meta.Tunnel != nil {
+				mode := "serve"
+				if meta.Tunnel.Provider == "tailscale" && meta.Tunnel.Funnel {
+					mode = "funnel"
+				} else if meta.Tunnel.Provider == "cloudflare" {
+					mode = "tunnel"
+				}
+				fmt.Printf("%s:%s:%d\n", meta.Tunnel.Provider, mode, meta.Tunnel.Port)
+			}
+		case "network":
+			fmt.Println(meta.Network)
+		case "bind_mounts":
+			for _, bm := range meta.BindMounts {
+				encrypted := "no"
+				if bm.Encrypted {
+					encrypted = "yes"
+				}
+				fmt.Printf("%s\t\t%s\t%s\n", bm.Name, bm.Path, encrypted)
+			}
+		case "tag", "base", "builder", "pkg", "platforms", "layers":
+			return fmt.Errorf("format field %q is only available from project directory (build-time field)", c.Format)
+		default:
+			return fmt.Errorf("unknown format field: %s", c.Format)
+		}
+		return nil
+	}
+
+	data, err := json.MarshalIndent(meta, "", "  ")
 	if err != nil {
 		return err
 	}

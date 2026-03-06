@@ -8,22 +8,37 @@ import (
 	"strings"
 )
 
-// OCI label key constants (all namespaced under org.overthink.)
+// OCI label key constants (all namespaced under org.overthinkos.)
 const (
-	LabelVersion  = "org.overthink.version"
-	LabelImage    = "org.overthink.image"
-	LabelRegistry = "org.overthink.registry"
-	LabelUID      = "org.overthink.uid"
-	LabelGID      = "org.overthink.gid"
-	LabelUser     = "org.overthink.user"
-	LabelHome     = "org.overthink.home"
-	LabelPorts    = "org.overthink.ports"
-	LabelVolumes  = "org.overthink.volumes"
-	LabelAliases  = "org.overthink.aliases"
+	LabelVersion        = "org.overthinkos.version"
+	LabelImage          = "org.overthinkos.image"
+	LabelRegistry       = "org.overthinkos.registry"
+	LabelBootc          = "org.overthinkos.bootc"
+	LabelUID            = "org.overthinkos.uid"
+	LabelGID            = "org.overthinkos.gid"
+	LabelUser           = "org.overthinkos.user"
+	LabelHome           = "org.overthinkos.home"
+	LabelPorts          = "org.overthinkos.ports"
+	LabelVolumes        = "org.overthinkos.volumes"
+	LabelAliases        = "org.overthinkos.aliases"
+	LabelBindMounts     = "org.overthinkos.bind_mounts"
+	LabelSecurity       = "org.overthinkos.security"
+	LabelNetwork        = "org.overthinkos.network"
+	LabelTunnel         = "org.overthinkos.tunnel"
+	LabelFQDN           = "org.overthinkos.fqdn"
+	LabelAcmeEmail      = "org.overthinkos.acme_email"
+	LabelEnv            = "org.overthinkos.env"
+	LabelHooks          = "org.overthinkos.hooks"
+	LabelVm             = "org.overthinkos.vm"
+	LabelLibvirt        = "org.overthinkos.libvirt"
+	LabelRoutes         = "org.overthinkos.routes"
+	LabelSystemServices = "org.overthinkos.system_services"
+	LabelEnvLayers      = "org.overthinkos.env_layers"
+	LabelPathAppend     = "org.overthinkos.path_append"
 )
 
 // LabelSchemaVersion is the current label schema version.
-const LabelSchemaVersion = "1"
+const LabelSchemaVersion = "2"
 
 // LabelVolume represents a volume in the label JSON (short name form).
 type LabelVolume struct {
@@ -31,17 +46,45 @@ type LabelVolume struct {
 	Path string `json:"path"`
 }
 
+// LabelBindMount represents a bind mount in the label JSON (host-path-agnostic).
+type LabelBindMount struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Encrypted bool   `json:"encrypted,omitempty"`
+}
+
+// LabelRoute represents a traefik route in the label JSON.
+type LabelRoute struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
+}
+
 // ImageMetadata is the runtime-relevant config extracted from image labels.
 type ImageMetadata struct {
-	Image    string
-	Registry string
-	UID      int
-	GID      int
-	User     string
-	Home     string
-	Ports    []string
-	Volumes  []VolumeMount
-	Aliases  []CollectedAlias
+	Image          string
+	Registry       string
+	Bootc          bool
+	UID            int
+	GID            int
+	User           string
+	Home           string
+	Ports          []string
+	Volumes        []VolumeMount
+	Aliases        []CollectedAlias
+	BindMounts     []LabelBindMount
+	Security       SecurityConfig
+	Network        string
+	Tunnel         *TunnelYAML
+	FQDN           string
+	AcmeEmail      string
+	Env            []string
+	Hooks          *HooksConfig
+	Vm             *VmConfig
+	Libvirt        []string
+	Routes         []LabelRoute
+	SystemServices []string
+	EnvLayers      map[string]string
+	PathAppend     []string
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -69,7 +112,7 @@ func defaultInspectLabels(engine, imageRef string) (map[string]string, error) {
 }
 
 // ExtractMetadata reads OCI labels from a local image and returns parsed ImageMetadata.
-// Returns nil if the image has no org.overthink labels.
+// Returns nil if the image has no org.overthinkos labels.
 func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	labels, err := InspectLabels(engine, imageRef)
 	if err != nil {
@@ -82,12 +125,21 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	meta := &ImageMetadata{
-		Image:    labels[LabelImage],
-		Registry: labels[LabelRegistry],
-		User:     labels[LabelUser],
-		Home:     labels[LabelHome],
+		Image:     labels[LabelImage],
+		Registry:  labels[LabelRegistry],
+		User:      labels[LabelUser],
+		Home:      labels[LabelHome],
+		FQDN:      labels[LabelFQDN],
+		AcmeEmail: labels[LabelAcmeEmail],
+		Network:   labels[LabelNetwork],
 	}
 
+	// Bootc
+	if labels[LabelBootc] == "true" {
+		meta.Bootc = true
+	}
+
+	// UID
 	if v := labels[LabelUID]; v != "" {
 		uid, err := strconv.Atoi(v)
 		if err != nil {
@@ -96,6 +148,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		meta.UID = uid
 	}
 
+	// GID
 	if v := labels[LabelGID]; v != "" {
 		gid, err := strconv.Atoi(v)
 		if err != nil {
@@ -104,12 +157,14 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		meta.GID = gid
 	}
 
+	// Ports
 	if v := labels[LabelPorts]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Ports); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelPorts, err)
 		}
 	}
 
+	// Volumes
 	if v := labels[LabelVolumes]; v != "" {
 		var labelVols []LabelVolume
 		if err := json.Unmarshal([]byte(v), &labelVols); err != nil {
@@ -123,9 +178,93 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
+	// Aliases
 	if v := labels[LabelAliases]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Aliases); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelAliases, err)
+		}
+	}
+
+	// Bind mounts
+	if v := labels[LabelBindMounts]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.BindMounts); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBindMounts, err)
+		}
+	}
+
+	// Security
+	if v := labels[LabelSecurity]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Security); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecurity, err)
+		}
+	}
+
+	// Tunnel
+	if v := labels[LabelTunnel]; v != "" {
+		var tunnel TunnelYAML
+		if err := json.Unmarshal([]byte(v), &tunnel); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelTunnel, err)
+		}
+		meta.Tunnel = &tunnel
+	}
+
+	// Env
+	if v := labels[LabelEnv]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Env); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnv, err)
+		}
+	}
+
+	// Hooks
+	if v := labels[LabelHooks]; v != "" {
+		var hooks HooksConfig
+		if err := json.Unmarshal([]byte(v), &hooks); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelHooks, err)
+		}
+		meta.Hooks = &hooks
+	}
+
+	// VM config
+	if v := labels[LabelVm]; v != "" {
+		var vm VmConfig
+		if err := json.Unmarshal([]byte(v), &vm); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelVm, err)
+		}
+		meta.Vm = &vm
+	}
+
+	// Libvirt
+	if v := labels[LabelLibvirt]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Libvirt); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelLibvirt, err)
+		}
+	}
+
+	// Routes
+	if v := labels[LabelRoutes]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Routes); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelRoutes, err)
+		}
+	}
+
+	// System services
+	if v := labels[LabelSystemServices]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.SystemServices); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSystemServices, err)
+		}
+	}
+
+	// Layer env vars
+	if v := labels[LabelEnvLayers]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvLayers); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvLayers, err)
+		}
+	}
+
+	// Path append
+	if v := labels[LabelPathAppend]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.PathAppend); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPathAppend, err)
 		}
 	}
 

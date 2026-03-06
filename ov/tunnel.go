@@ -21,11 +21,11 @@ import (
 //	  provider: cloudflare
 //	  port: 3001
 type TunnelYAML struct {
-	Provider string `yaml:"provider"`
-	Port     int    `yaml:"port,omitempty"`
-	HTTPS    int    `yaml:"https,omitempty"`  // tailscale only: external HTTPS port
-	Funnel   bool   `yaml:"funnel,omitempty"` // tailscale only: true=funnel (public), false=serve (tailnet-private)
-	Tunnel   string `yaml:"tunnel,omitempty"` // cloudflare only: tunnel name
+	Provider string `yaml:"provider" json:"provider"`
+	Port     int    `yaml:"port,omitempty" json:"port,omitempty"`
+	HTTPS    int    `yaml:"https,omitempty" json:"https,omitempty"`    // tailscale only: external HTTPS port
+	Funnel   bool   `yaml:"funnel,omitempty" json:"funnel,omitempty"` // tailscale only: true=funnel (public), false=serve (tailnet-private)
+	Tunnel   string `yaml:"tunnel,omitempty" json:"tunnel,omitempty"` // cloudflare only: tunnel name
 }
 
 // UnmarshalYAML handles bare string ("tailscale"/"cloudflare") or expanded form.
@@ -399,6 +399,44 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers ma
 			cfg.TunnelName = "ov-" + imageName
 		}
 		cfg.Hostname = fqdn
+	}
+
+	return cfg
+}
+
+// TunnelConfigFromMetadata creates a TunnelConfig from image label metadata.
+// Unlike ResolveTunnelConfig, this doesn't need layer access since the tunnel port
+// is already resolved and stored in the label.
+func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
+	if meta == nil || meta.Tunnel == nil {
+		return nil
+	}
+
+	t := meta.Tunnel
+	cfg := &TunnelConfig{
+		Provider:  t.Provider,
+		Port:      t.Port,
+		ImageName: meta.Image,
+	}
+
+	// If port is still 0, try first route from label metadata
+	if cfg.Port == 0 && len(meta.Routes) > 0 {
+		cfg.Port = meta.Routes[0].Port
+	}
+
+	switch cfg.Provider {
+	case "tailscale":
+		cfg.Funnel = t.Funnel
+		cfg.HTTPS = t.HTTPS
+		if cfg.HTTPS == 0 {
+			cfg.HTTPS = 443
+		}
+	case "cloudflare":
+		cfg.TunnelName = t.Tunnel
+		if cfg.TunnelName == "" {
+			cfg.TunnelName = "ov-" + meta.Image
+		}
+		cfg.Hostname = meta.FQDN
 	}
 
 	return cfg

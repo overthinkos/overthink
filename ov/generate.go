@@ -991,47 +991,152 @@ func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *Reso
 	b.WriteString("    cd /ctx && task -t user.yml install\n")
 }
 
-// writeLabels emits OCI LABEL directives with runtime-relevant metadata.
+// writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
+// Every runtime config option is embedded so images are fully self-contained.
 func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedImage) {
 	b.WriteString("# Image metadata\n")
+
+	// Always-present labels
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, LabelSchemaVersion))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
-	if img.Registry != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
-	}
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUser, img.User))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelHome, img.Home))
 
-	// Ports from images.yml (runtime mappings)
-	if len(img.Ports) > 0 {
-		portsJSON, _ := json.Marshal(img.Ports)
-		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelPorts, string(portsJSON)))
+	// Conditional string labels (omitted when empty)
+	if img.Registry != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+	}
+	if img.Bootc {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
+	}
+	if img.Network != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
+	}
+	if img.FQDN != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelFQDN, img.FQDN))
+	}
+	if img.AcmeEmail != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))
 	}
 
-	// Volumes: pre-computed from all layers + base chain, ~ expanded.
-	// Use short form names (without ov-<image>- prefix) so labels are image-name-agnostic.
+	// JSON array labels (omitted when empty)
+	writeJSONLabel(b, LabelPorts, img.Ports)
+
+	// Volumes: short form names (without ov-<image>- prefix)
 	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolume
 		for _, v := range volumes {
-			// Strip the "ov-<imageName>-" prefix to get short name
 			shortName := strings.TrimPrefix(v.VolumeName, "ov-"+imageName+"-")
 			labelVols = append(labelVols, LabelVolume{Name: shortName, Path: v.ContainerPath})
 		}
-		volJSON, _ := json.Marshal(labelVols)
-		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelVolumes, string(volJSON)))
+		writeJSONLabel(b, LabelVolumes, labelVols)
 	}
 
-	// Aliases: collected from layers + image-level config.
+	// Aliases: collected from layers + image-level config
 	aliases, _ := CollectImageAliases(g.Config, g.Layers, imageName)
-	if len(aliases) > 0 {
-		aliasJSON, _ := json.Marshal(aliases)
-		b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", LabelAliases, string(aliasJSON)))
+	writeJSONLabel(b, LabelAliases, aliases)
+
+	// Bind mounts: strip host paths (host-specific), keep name/path/encrypted
+	imgCfg := g.Config.Images[imageName]
+	if len(imgCfg.BindMounts) > 0 {
+		var labelMounts []LabelBindMount
+		for _, bm := range imgCfg.BindMounts {
+			labelMounts = append(labelMounts, LabelBindMount{
+				Name:      bm.Name,
+				Path:      bm.Path,
+				Encrypted: bm.Encrypted,
+			})
+		}
+		writeJSONLabel(b, LabelBindMounts, labelMounts)
+	}
+
+	// Security: collected from layers + image config
+	security := CollectSecurity(g.Config, g.Layers, imageName)
+	if security.Privileged || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 {
+		writeJSONLabel(b, LabelSecurity, security)
+	}
+
+	// Tunnel config
+	if imgCfg.Tunnel != nil {
+		writeJSONLabel(b, LabelTunnel, imgCfg.Tunnel)
+	}
+
+	// Image-level env vars
+	writeJSONLabel(b, LabelEnv, imgCfg.Env)
+
+	// Hooks: collected from layers
+	hooks := CollectHooks(g.Config, g.Layers, imageName)
+	if hooks != nil {
+		writeJSONLabel(b, LabelHooks, hooks)
+	}
+
+	// VM config (bootc images)
+	if img.Vm != nil {
+		writeJSONLabel(b, LabelVm, img.Vm)
+	}
+
+	// Libvirt snippets: collected from layers + image config
+	libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
+	writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
+
+	// Routes: collected from layers
+	var routes []LabelRoute
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasRoute {
+			rc, err := layer.Route()
+			if err == nil && rc != nil {
+				port, _ := strconv.Atoi(rc.Port)
+				routes = append(routes, LabelRoute{Host: rc.Host, Port: port})
+			}
+		}
+	}
+	writeJSONLabel(b, LabelRoutes, routes)
+
+	// System services: collected from layers
+	var systemServices []string
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSystemServices {
+			systemServices = append(systemServices, layer.SystemServiceUnits...)
+		}
+	}
+	writeJSONLabel(b, LabelSystemServices, systemServices)
+
+	// Layer env vars: merged from all layers
+	var envConfigs []*EnvConfig
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.envConfig != nil {
+			envConfigs = append(envConfigs, layer.envConfig)
+		}
+	}
+	if len(envConfigs) > 0 {
+		merged := MergeEnvConfigs(envConfigs)
+		if len(merged.Vars) > 0 {
+			writeJSONLabel(b, LabelEnvLayers, merged.Vars)
+		}
+		writeJSONLabel(b, LabelPathAppend, merged.PathAppend)
 	}
 
 	b.WriteString("\n")
+}
+
+// writeJSONLabel writes a JSON-encoded LABEL directive. Omits the label if the value is nil/empty.
+func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
+	// Check for nil/empty slices and maps via JSON
+	data, err := json.Marshal(value)
+	if err != nil {
+		return
+	}
+	s := string(data)
+	if s == "null" || s == "[]" || s == "{}" {
+		return
+	}
+	b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", key, s))
 }
 
 // createRemoteLayerCopies copies remote layer directories into .build/_layers/

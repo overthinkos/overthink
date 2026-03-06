@@ -3,10 +3,12 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/google/go-containerregistry/pkg/name"
@@ -123,7 +125,7 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 	}
 	engine := rt.BuildEngine
 
-	img, cleanup, err := loadImageFromDaemon(imageRef, engine)
+	img, cleanup, isManifest, err := loadImageFromDaemon(imageRef, engine)
 	if err != nil {
 		return err
 	}
@@ -167,8 +169,31 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		return err
 	}
 
-	if err := saveImageToDaemon(newImg, imageRef, engine); err != nil {
+	// Save merged image. For manifest sources, use a temp tag then rebuild the manifest.
+	saveRef := imageRef
+	if isManifest {
+		// Strip tag and add a temp tag to avoid conflicting with the manifest list
+		base := imageRef
+		if idx := strings.LastIndex(base, ":"); idx != -1 {
+			base = base[:idx]
+		}
+		saveRef = base + ":ov-merged-tmp"
+	}
+
+	if err := saveImageToDaemon(newImg, saveRef, engine); err != nil {
 		return err
+	}
+
+	if isManifest {
+		binary := EngineBinary(engine)
+		if err := rebuildManifest(binary, imageRef, saveRef); err != nil {
+			return err
+		}
+		// Clean up temp tag
+		cmd := exec.Command(binary, "rmi", saveRef)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		cmd.Run()
 	}
 
 	newLayers, _ := newImg.Layers()
@@ -433,8 +458,36 @@ func executeMerge(img v1.Image, layers []v1.Layer, steps []MergeStep) (v1.Image,
 }
 
 // loadImageFromDaemon loads an image from the container engine via save.
+// If the ref is a manifest list (from podman build --manifest), it extracts
+// the platform-specific image for the host architecture.
 // The caller must call cleanup() when done with the image to remove the temp file.
-func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), error) {
+// Returns the image, a cleanup function, and whether the source was a manifest list.
+func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), bool, error) {
+	binary := EngineBinary(engine)
+
+	// Try saving as a regular image first
+	img, cleanup, err := saveAndLoad(binary, ref)
+	if err == nil {
+		return img, cleanup, false, nil
+	}
+
+	// May be a manifest list — resolve the platform-specific digest
+	digest, manifestErr := resolveManifestDigest(binary, ref)
+	if manifestErr != nil {
+		// Not a manifest either — return original error
+		return nil, nil, false, fmt.Errorf("%s save %s: %w", binary, ref, err)
+	}
+
+	img, cleanup, err = saveAndLoad(binary, digest)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("%s save %s (from manifest): %w", binary, digest, err)
+	}
+
+	return img, cleanup, true, nil
+}
+
+// saveAndLoad saves an image ref to a temp tarball and loads it as v1.Image.
+func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 	tmpFile, err := os.CreateTemp("", "ov-merge-*.tar")
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating temp file: %w", err)
@@ -442,14 +495,13 @@ func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), error) {
 
 	cleanup := func() { os.Remove(tmpFile.Name()) }
 
-	binary := EngineBinary(engine)
 	cmd := exec.Command(binary, "save", ref)
 	cmd.Stdout = tmpFile
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = io.Discard
 	if err := cmd.Run(); err != nil {
 		tmpFile.Close()
 		cleanup()
-		return nil, nil, fmt.Errorf("%s save %s: %w", binary, ref, err)
+		return nil, nil, err
 	}
 
 	tmpFile.Close()
@@ -461,6 +513,65 @@ func loadImageFromDaemon(ref string, engine string) (v1.Image, func(), error) {
 	}
 
 	return img, cleanup, nil
+}
+
+// resolveManifestDigest inspects a manifest list and returns the image digest
+// for the host platform (linux/<arch>).
+func resolveManifestDigest(binary, ref string) (string, error) {
+	cmd := exec.Command(binary, "manifest", "inspect", ref)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = io.Discard
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%s manifest inspect %s: %w", binary, ref, err)
+	}
+
+	var manifest struct {
+		Manifests []struct {
+			Digest   string `json:"digest"`
+			Platform struct {
+				Architecture string `json:"architecture"`
+				OS           string `json:"os"`
+			} `json:"platform"`
+		} `json:"manifests"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &manifest); err != nil {
+		return "", fmt.Errorf("parsing manifest: %w", err)
+	}
+
+	hostArch := runtime.GOARCH
+	for _, m := range manifest.Manifests {
+		if m.Platform.OS == "linux" && m.Platform.Architecture == hostArch {
+			// Strip tag from ref and append digest
+			base := ref
+			if idx := strings.LastIndex(base, ":"); idx != -1 {
+				base = base[:idx]
+			}
+			return base + "@" + m.Digest, nil
+		}
+	}
+
+	return "", fmt.Errorf("no linux/%s image found in manifest %s", hostArch, ref)
+}
+
+// rebuildManifest removes the old manifest list and creates a new one
+// pointing to the merged image.
+func rebuildManifest(binary, manifestRef, imageRef string) error {
+	// Remove old manifest
+	cmd := exec.Command(binary, "manifest", "rm", manifestRef)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Run() // ignore error if manifest doesn't exist
+
+	// Create new manifest from merged image
+	cmd = exec.Command(binary, "manifest", "create", manifestRef, imageRef)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("creating manifest %s from %s: %w", manifestRef, imageRef, err)
+	}
+
+	return nil
 }
 
 // saveImageToDaemon saves an image to the container engine via load.

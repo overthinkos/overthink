@@ -136,12 +136,24 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 	}
 
 	sizes := make([]int64, len(layers))
+	var totalSize int64
 	for i, layer := range layers {
 		size, err := layer.Size()
 		if err != nil {
 			return fmt.Errorf("reading layer %d size: %w", i, err)
 		}
 		sizes[i] = size
+		totalSize += size
+	}
+
+	// Skip merge for very large images to avoid OOM during layer decompression.
+	// The merge process decompresses layers in memory; images over 2GB compressed
+	// can exceed available memory on CI runners.
+	const maxTotalBytes = 2 * 1024 * 1024 * 1024 // 2 GB
+	if totalSize > maxTotalBytes {
+		fmt.Fprintf(os.Stderr, "Skipping merge: image too large (%.1f GB > 2 GB limit)\n",
+			float64(totalSize)/(1024*1024*1024))
+		return nil
 	}
 
 	steps := planMerge(sizes, maxBytes)

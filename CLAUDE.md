@@ -127,7 +127,7 @@ ov version                             # Print computed CalVer tag
 
 **Display/Audio:** `wayvnc` (VNC server on :5900), `pipewire` (audio/media server + wireplumber)
 
-**Browser:** `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data), `google-chrome-sway` (Chrome on sway, same ports/volume)
+**Browser:** `chrome-deps` (Chrome runtime dependencies: fonts, graphics, audio libs), `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data; layers: chrome-deps), `google-chrome-sway` (Chrome on sway, same ports/volume; layers: chrome-deps)
 
 **GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
 

@@ -45,7 +45,7 @@ type ShellCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	GPUFlags  `embed:""`
+	AutoDetectFlags `embed:""`
 }
 
 func (c *ShellCmd) Run() error {
@@ -68,8 +68,11 @@ func (c *ShellCmd) Run() error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -83,6 +86,7 @@ func (c *ShellCmd) Run() error {
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
+	var network string
 	var deployEnv []string
 	var deployEnvFile string
 
@@ -111,6 +115,7 @@ func (c *ShellCmd) Run() error {
 		uid = resolved.UID
 		gid = resolved.GID
 		ports = resolved.Ports
+		network = resolved.Network
 		deployEnv = img.Env
 		deployEnvFile = img.EnvFile
 	} else {
@@ -135,6 +140,7 @@ func (c *ShellCmd) Run() error {
 		ports = meta.Ports
 		volumes = meta.Volumes
 		security = meta.Security
+		network = meta.Network
 		deployEnv = meta.Env
 
 		// Resolve bind mounts from labels
@@ -182,7 +188,18 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars, security)
+	// Merge auto-detected devices into security config
+	if !security.Privileged {
+		security.Devices = appendUnique(security.Devices, detected.Devices...)
+	}
+
+	// Resolve network (default to shared "ov" network)
+	resolvedNetwork, err := ResolveNetwork(network, engine)
+	if err != nil {
+		return err
+	}
+
+	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, resolvedNetwork)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -207,8 +224,11 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -253,9 +273,19 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return err
 	}
 
+	// Merge auto-detected devices
+	security := SecurityConfig{}
+	security.Devices = appendUnique(security.Devices, detected.Devices...)
+
+	// Resolve network
+	resolvedNetwork, netErr := ResolveNetwork("", engine)
+	if netErr != nil {
+		return netErr
+	}
+
 	args := buildShellArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		volumes, bindMounts, gpu, c.Command, rt.BindAddress, envVars, SecurityConfig{})
+		volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, resolvedNetwork)
 
 	enginePath, err := findExecutable(EngineBinary(engine))
 	if err != nil {
@@ -273,7 +303,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig) []string {
+func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig, network ...string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if isTerminal() {
@@ -284,6 +314,9 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 		"-v", fmt.Sprintf("%s:/workspace", workspace),
 		"-w", "/workspace",
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
+	}
+	if len(network) > 0 && network[0] != "" {
+		args = append(args, "--network", network[0])
 	}
 	if gpu {
 		args = append(args, GPURunArgs(engine)...)

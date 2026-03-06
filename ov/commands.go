@@ -17,7 +17,7 @@ type EnableCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	GPUFlags  `embed:""`
+	AutoDetectFlags `embed:""`
 }
 
 func (c *EnableCmd) Run() error {
@@ -52,8 +52,11 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	var imageRef string
 	var ports []string
@@ -197,6 +200,17 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		}
 	}
 
+	// Merge auto-detected devices into security config
+	if !security.Privileged {
+		security.Devices = appendUnique(security.Devices, detected.Devices...)
+	}
+
+	// Resolve network (default to shared "ov" network)
+	resolvedNetwork, netErr := ResolveNetwork(network, rt.RunEngine)
+	if netErr != nil {
+		return netErr
+	}
+
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
 	qcfg := QuadletConfig{
@@ -206,7 +220,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Ports:       ports,
 		Volumes:     volumes,
 		BindMounts:  bindMounts,
-		GPU:         gpu,
+		GPU:         detected.GPU,
 		BindAddress: rt.BindAddress,
 		Tunnel:      tunnelCfg,
 		UID:         uid,
@@ -215,7 +229,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		EnvFile:     quadletEnvFile,
 		Instance:    c.Instance,
 		Security:    security,
-		Network:     network,
+		Network:     resolvedNetwork,
 	}
 
 	// Suppress Env if we're using EnvFile (avoid duplication)
@@ -331,8 +345,11 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	ctx, err := ResolveRemoteImage(ref, c.Tag)
 	if err != nil {
@@ -357,6 +374,16 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return envErr
 	}
 
+	// Merge auto-detected devices
+	security := SecurityConfig{}
+	security.Devices = appendUnique(security.Devices, detected.Devices...)
+
+	// Resolve network
+	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
+	if netErr != nil {
+		return netErr
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   ctx.ImageName,
 		ImageRef:    ctx.ImageRef,
@@ -364,12 +391,14 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		Ports:       ctx.Resolved.Ports,
 		Volumes:     volumes,
 		BindMounts:  bindMounts,
-		GPU:         gpu,
+		GPU:         detected.GPU,
 		BindAddress: rt.BindAddress,
 		UID:         ctx.Resolved.UID,
 		GID:         ctx.Resolved.GID,
 		Env:         envVars,
 		Instance:    c.Instance,
+		Security:    security,
+		Network:     resolvedNetwork,
 	}
 
 	content := generateQuadlet(qcfg)

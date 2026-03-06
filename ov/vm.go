@@ -115,7 +115,7 @@ type VmCreateCmd struct {
 	Cpus     int    `long:"cpus" help:"Override CPU count"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	SshKey   string `long:"ssh-key" default:"auto" help:"SSH public key: path to .pub file, 'auto' (default ~/.ssh key), 'generate', or 'none'"`
-	GPUFlags `embed:""`
+	AutoDetectFlags `embed:""`
 }
 
 func (c *VmCreateCmd) Run() error {
@@ -218,7 +218,11 @@ func (c *VmCreateCmd) Run() error {
 func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []string, sshPubKey string) error {
 	ramMB := parseRAMtoMB(ram)
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+	}
+	gpu := detected.GPU
 	if gpu {
 		fmt.Fprintf(os.Stderr, "Warning: GPU passthrough for libvirt VMs requires manual --host-device configuration\n")
 	}

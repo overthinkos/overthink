@@ -17,7 +17,7 @@ type StartCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	GPUFlags  `embed:""`
+	AutoDetectFlags `embed:""`
 }
 
 func (c *StartCmd) Run() error {
@@ -52,8 +52,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	engine := rt.RunEngine
 
@@ -156,8 +159,19 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return err
 	}
 
+	// Merge auto-detected devices into security config
+	if !security.Privileged {
+		security.Devices = appendUnique(security.Devices, detected.Devices...)
+	}
+
+	// Resolve network (default to shared "ov" network)
+	resolvedNetwork, netErr := ResolveNetwork(network, engine)
+	if netErr != nil {
+		return netErr
+	}
+
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, gpu, rt.BindAddress, envVars, security, network)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -220,8 +234,11 @@ func (c *StartCmd) runRemote(ref string) error {
 		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
-	gpu := ResolveGPU(c.GPUFlags.Mode())
-	LogGPU(gpu)
+	var detected DetectedDevices
+	if !c.NoAutoDetect {
+		detected = DetectHostDevices()
+		LogDetectedDevices(detected)
+	}
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -235,7 +252,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		return c.runRemoteQuadlet(rt, ctx, absWorkspace, gpu)
+		return c.runRemoteQuadlet(rt, ctx, absWorkspace, detected)
 	}
 
 	// Pull or build
@@ -259,10 +276,20 @@ func (c *StartCmd) runRemote(ref string) error {
 		return err
 	}
 
+	// Merge auto-detected devices
+	security := SecurityConfig{}
+	security.Devices = appendUnique(security.Devices, detected.Devices...)
+
+	// Resolve network
+	resolvedNetwork, netErr := ResolveNetwork("", engine)
+	if netErr != nil {
+		return netErr
+	}
+
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, gpu, rt.BindAddress, envVars, SecurityConfig{})
+		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -279,7 +306,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	return nil
 }
 
-func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, absWorkspace string, gpu bool) error {
+func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, absWorkspace string, detected DetectedDevices) error {
 	// For quadlet with remote refs: resolve and generate quadlet file
 	volumes, err := ctx.CollectVolumes()
 	if err != nil {
@@ -299,6 +326,16 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return envErr
 	}
 
+	// Merge auto-detected devices
+	security := SecurityConfig{}
+	security.Devices = appendUnique(security.Devices, detected.Devices...)
+
+	// Resolve network
+	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
+	if netErr != nil {
+		return netErr
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   ctx.ImageName,
 		ImageRef:    ctx.ImageRef,
@@ -306,12 +343,14 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		Ports:       ctx.Resolved.Ports,
 		Volumes:     volumes,
 		BindMounts:  bindMounts,
-		GPU:         gpu,
+		GPU:         detected.GPU,
 		BindAddress: rt.BindAddress,
 		UID:         ctx.Resolved.UID,
 		GID:         ctx.Resolved.GID,
 		Env:         envVars,
 		Instance:    c.Instance,
+		Security:    security,
+		Network:     resolvedNetwork,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -367,13 +406,13 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 		}
 		// Auto-enable: generate quadlet file
 		enable := &EnableCmd{
-			Image:     c.Image,
-			Workspace: c.Workspace,
-			Tag:       c.Tag,
-			Env:       c.Env,
-			EnvFile:   c.EnvFile,
-			Instance:  c.Instance,
-			GPUFlags:  c.GPUFlags,
+			Image:           c.Image,
+			Workspace:       c.Workspace,
+			Tag:             c.Tag,
+			Env:             c.Env,
+			EnvFile:         c.EnvFile,
+			Instance:        c.Instance,
+			AutoDetectFlags: c.AutoDetectFlags,
 		}
 		if err := enable.runEnable(rt); err != nil {
 			return err

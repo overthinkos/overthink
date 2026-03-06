@@ -57,7 +57,7 @@ jobs:
         run: podman image prune -af --filter "until=168h" || true
 
       - name: Build and push all images
-        run: bin/ov build --push
+        run: bin/ov build --push --jobs 1
 
       - name: Prune dangling images
         if: always()

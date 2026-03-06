@@ -264,7 +264,7 @@ images:
       - gocryptfs
       - socat
     vm:
-      disk_size: "60 GiB"
+      disk_size: "80 GiB"
       ram: "12G"
       cpus: 4
 

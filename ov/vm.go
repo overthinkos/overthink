@@ -274,7 +274,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		"-monitor", fmt.Sprintf("unix:%s,server,nowait", monitorSocket),
 		"-qmp", fmt.Sprintf("unix:%s,server,nowait", qmpSocket),
 		"-serial", fmt.Sprintf("unix:%s,server,nowait", filepath.Join(stateDir, "console.sock")),
-		"-nographic",
+		"-display", "none",
 		"-daemonize",
 		"-pidfile", filepath.Join(stateDir, "qemu.pid"),
 	}
@@ -313,7 +313,7 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 	}
 
 	fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", name)
-	fmt.Fprintf(os.Stderr, "SSH: ssh -p 2222 user@localhost\n")
+	fmt.Fprintf(os.Stderr, "SSH: ssh -p 2222 root@localhost\n")
 	fmt.Fprintf(os.Stderr, "Console: ov vm console %s\n", c.Image)
 	return nil
 }
@@ -785,7 +785,7 @@ type VmSshCmd struct {
 	Image    string   `arg:"" help:"Image name"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 	Port     int      `short:"p" long:"port" default:"2222" help:"SSH port on host"`
-	User     string   `short:"l" long:"user" default:"user" help:"SSH username"`
+	User     string   `short:"l" long:"user" default:"root" help:"SSH username"`
 	Args     []string `arg:"" optional:"" help:"Additional SSH arguments or command"`
 }
 

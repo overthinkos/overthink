@@ -62,6 +62,6 @@ jobs:
             bin/ov build --push --jobs 1 "$image"
           done
 
-      - name: Prune images older than 7 days
+      - name: Prune images older than 24h
         if: always()
-        run: podman image prune -af --filter "until=168h" || true
+        run: podman image prune -af --filter "until=24h" || true

@@ -71,11 +71,13 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveRuntime() error: %v", err)
 	}
-	if rt.BuildEngine != "docker" {
-		t.Errorf("BuildEngine = %q, want %q", rt.BuildEngine, "docker")
+	// With auto-detection, the resolved engine should be "podman" or "docker"
+	// depending on what's available on the system (not "auto")
+	if rt.BuildEngine != "podman" && rt.BuildEngine != "docker" {
+		t.Errorf("BuildEngine = %q, want \"podman\" or \"docker\"", rt.BuildEngine)
 	}
-	if rt.RunEngine != "docker" {
-		t.Errorf("RunEngine = %q, want %q", rt.RunEngine, "docker")
+	if rt.RunEngine != "podman" && rt.RunEngine != "docker" {
+		t.Errorf("RunEngine = %q, want \"podman\" or \"docker\"", rt.RunEngine)
 	}
 	if rt.RunMode != "direct" {
 		t.Errorf("RunMode = %q, want %q", rt.RunMode, "direct")
@@ -254,8 +256,8 @@ func TestListConfigValues(t *testing.T) {
 	if vals[0].Key != "engine.build" || vals[0].Value != "podman" || vals[0].Source != "config" {
 		t.Errorf("engine.build entry: %+v", vals[0])
 	}
-	// engine.run should be default
-	if vals[1].Key != "engine.run" || vals[1].Value != "docker" || vals[1].Source != "default" {
+	// engine.run should be default "auto"
+	if vals[1].Key != "engine.run" || vals[1].Value != "auto" || vals[1].Source != "default" {
 		t.Errorf("engine.run entry: %+v", vals[1])
 	}
 	// auto_enable should be default false

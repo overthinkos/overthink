@@ -201,8 +201,15 @@ images:
       - google-chrome-sway
     platforms:
       - linux/amd64
+    ports:
+      - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
     vm:
       ssh_port: 2222
+      disk_size: "20 GiB"
+      ram: "4G"
+      cpus: 2
 
   bazzite-ai:
     enabled: false
@@ -257,8 +264,8 @@ images:
       - gocryptfs
       - socat
     vm:
-      disk_size: "30 GiB"
-      ram: "8G"
+      disk_size: "60 GiB"
+      ram: "12G"
       cpus: 4
 
   fedora-remote:

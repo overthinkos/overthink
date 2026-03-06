@@ -57,7 +57,13 @@ jobs:
         run: podman image prune -af --filter "until=168h" || true
 
       - name: Build and push all images
-        run: bin/ov build --push --jobs 1
+        run: |
+          for image in $(bin/ov list targets); do
+            echo "--- Building $image ---"
+            bin/ov build --push --jobs 1 "$image"
+            echo "--- Pruning after $image ---"
+            podman image prune -af --filter "until=1m" || true
+          done
 
       - name: Prune dangling images
         if: always()

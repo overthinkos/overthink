@@ -232,7 +232,8 @@ func (c *BuildCmd) buildDockerPushArgs(tags []string, platforms []string, name, 
 
 // cacheArgs returns cache flags for the given image name based on the --cache setting.
 // Default: "image" (read-only from registry) for local builds, "registry" (read+write) for push builds.
-// Podman uses plain image refs; Docker buildx uses type=registry,ref=... syntax.
+// Podman uses plain image refs for --cache-from/--cache-to (no tags allowed for --cache-to).
+// Docker buildx uses type=registry,ref=... syntax with a separate cache repo.
 func (c *BuildCmd) cacheArgs(name, registry, engine string) []string {
 	if c.NoCache || c.Cache == "none" {
 		return nil
@@ -242,13 +243,7 @@ func (c *BuildCmd) cacheArgs(name, registry, engine string) []string {
 	// Auto-detect: default to "image" for local, "registry" for push
 	if cacheType == "" && registry != "" {
 		if c.Push {
-			if engine == "podman" {
-				// Podman --cache-to doesn't support type=registry syntax.
-				// Use image cache (read-only from published image) instead.
-				cacheType = "image"
-			} else {
-				cacheType = "registry"
-			}
+			cacheType = "registry"
 		} else {
 			cacheType = "image"
 		}
@@ -259,10 +254,20 @@ func (c *BuildCmd) cacheArgs(name, registry, engine string) []string {
 		if registry == "" {
 			return nil
 		}
-		ref := fmt.Sprintf("%s/cache:%s", registry, name)
+		ref := fmt.Sprintf("%s/%s", registry, name)
+		if engine == "podman" {
+			// Podman --cache-to takes a plain repo ref (no tag, no type= syntax).
+			// Intermediate build layers are pushed to the same repo as the image.
+			return []string{
+				"--cache-from", ref,
+				"--cache-to", ref,
+			}
+		}
+		// Docker buildx uses a separate cache repo with type=registry syntax
+		cacheRef := fmt.Sprintf("%s/cache:%s", registry, name)
 		return []string{
-			"--cache-from", fmt.Sprintf("type=registry,ref=%s", ref),
-			"--cache-to", fmt.Sprintf("type=registry,ref=%s,mode=max,compression=zstd", ref),
+			"--cache-from", fmt.Sprintf("type=registry,ref=%s", cacheRef),
+			"--cache-to", fmt.Sprintf("type=registry,ref=%s,mode=max,compression=zstd", cacheRef),
 		}
 	case "gha":
 		return []string{

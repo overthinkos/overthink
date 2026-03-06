@@ -169,6 +169,7 @@ func TestBuildPodmanPushArgs(t *testing.T) {
 		"--platform", "linux/amd64,linux/arm64",
 		"--jobs", cpuJobs,
 		"--cache-from", "ghcr.io/overthinkos/fedora",
+		"--cache-to", "ghcr.io/overthinkos/fedora",
 		".",
 	}
 	if !reflect.DeepEqual(args, want) {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"runtime"
@@ -207,19 +208,43 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 	return nil
 }
 
-// pushImage pushes a Podman manifest to the registry for each tag with retry.
+// pushImage pushes a Podman image to the registry for each tag with retry.
+// Detects whether the primary tag is a manifest list or a regular image
+// and uses the appropriate push command.
 func (c *BuildCmd) pushImage(dir string, tags []string) error {
+	if len(tags) == 0 {
+		return nil
+	}
+
+	// Check if the primary tag is a manifest list
+	isManifest := false
+	checkCmd := exec.Command("podman", "manifest", "inspect", tags[0])
+	checkCmd.Stdout = io.Discard
+	checkCmd.Stderr = io.Discard
+	if checkCmd.Run() == nil {
+		isManifest = true
+	}
+
 	for _, tag := range tags {
 		fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
 		pushTag := tag
 		if err := retryCmd(3, 5*time.Second, func() error {
-			pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
+			var pushCmd *exec.Cmd
+			if isManifest {
+				pushCmd = exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
+			} else {
+				pushCmd = exec.Command("podman", "push", tags[0], "docker://"+pushTag)
+			}
 			pushCmd.Dir = dir
 			pushCmd.Stdout = os.Stderr
 			pushCmd.Stderr = os.Stderr
 			return pushCmd.Run()
 		}); err != nil {
-			return fmt.Errorf("podman manifest push %s failed: %w", tag, err)
+			kind := "push"
+			if isManifest {
+				kind = "manifest push"
+			}
+			return fmt.Errorf("podman %s %s failed: %w", kind, tag, err)
 		}
 	}
 	return nil

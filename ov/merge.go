@@ -180,31 +180,18 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		return err
 	}
 
-	// Save merged image. For manifest sources, use a temp tag then rebuild the manifest.
-	saveRef := imageRef
-	if isManifest {
-		// Strip tag and add a temp tag to avoid conflicting with the manifest list
-		base := imageRef
-		if idx := strings.LastIndex(base, ":"); idx != -1 {
-			base = base[:idx]
-		}
-		saveRef = base + ":ov-merged-tmp"
-	}
-
-	if err := saveImageToDaemon(newImg, saveRef, engine); err != nil {
-		return err
-	}
-
+	// Save merged image. For manifest sources, remove the old manifest first
+	// so podman load can create a regular image with the same tag.
 	if isManifest {
 		binary := EngineBinary(engine)
-		if err := rebuildManifest(binary, imageRef, saveRef); err != nil {
-			return err
-		}
-		// Clean up temp tag
-		cmd := exec.Command(binary, "rmi", saveRef)
-		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
-		cmd.Run()
+		rmCmd := exec.Command(binary, "manifest", "rm", imageRef)
+		rmCmd.Stdout = io.Discard
+		rmCmd.Stderr = io.Discard
+		rmCmd.Run()
+	}
+
+	if err := saveImageToDaemon(newImg, imageRef, engine); err != nil {
+		return err
 	}
 
 	newLayers, _ := newImg.Layers()
@@ -544,26 +531,6 @@ func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 	}
 
 	return img, cleanup, nil
-}
-
-// rebuildManifest removes the old manifest list and creates a new one
-// pointing to the merged image.
-func rebuildManifest(binary, manifestRef, imageRef string) error {
-	// Remove old manifest
-	cmd := exec.Command(binary, "manifest", "rm", manifestRef)
-	cmd.Stdout = io.Discard
-	cmd.Stderr = io.Discard
-	cmd.Run() // ignore error if manifest doesn't exist
-
-	// Create new manifest from merged image
-	cmd = exec.Command(binary, "manifest", "create", manifestRef, imageRef)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("creating manifest %s from %s: %w", manifestRef, imageRef, err)
-	}
-
-	return nil
 }
 
 // saveImageToDaemon saves an image to the container engine via load.

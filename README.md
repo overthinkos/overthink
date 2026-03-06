@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-65 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+64 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -100,7 +100,7 @@ ov enable jupyter
 
 # Build a bootable VM disk image
 ov vm build openclaw-browser-bootc --type qcow2
-ov vm create openclaw-browser-bootc --ram 8G --cpus 4 --gpu
+ov vm create openclaw-browser-bootc --ram 8G --cpus 4
 ov vm start openclaw-browser-bootc
 ```
 
@@ -174,19 +174,20 @@ ov merge <image> [--dry-run]           # Merge small layers in built images
 ### Run & Manage
 
 ```
-ov shell <image> [-c CMD] [--gpu]      # Interactive shell
-ov start <image> [--gpu] [--build]     # Start service container
+ov shell <image> [-c CMD]               # Interactive shell
+ov start <image> [--build]             # Start service container
 ov stop <image>                        # Stop container
 ov enable <image>                      # Systemd quadlet service
 ov disable/status/logs/update <image>  # Service lifecycle
 ov remove <image> [--volumes]          # Remove service (optionally with volumes)
+ov service status/start/stop/restart   # Manage supervisord services in container
 ```
 
 ### Virtual Machines
 
 ```
 ov vm build <image> [--type qcow2|raw] # Build disk image
-ov vm create <image> [--ram] [--cpus] [--gpu]
+ov vm create <image> [--ram] [--cpus] [--ssh-key]
 ov vm start/stop/destroy <image>
 ov vm console/ssh <image>
 ov vm list [-a]

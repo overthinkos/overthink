@@ -71,10 +71,10 @@ ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov new layer <name>                    # Scaffold a layer directory
 ov seed <image> [--tag TAG]                # Seed empty bind mount dirs from image data
-ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
-ov start <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov start <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
 ov stop <image> [-i INSTANCE]          # Stop a running service container
-ov enable <image> [-w PATH] [--tag TAG] [--gpu|--no-gpu] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov enable <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
 ov disable <image> [-i INSTANCE]       # Disable service auto-start (quadlet only)
 ov status <image> [-i INSTANCE]        # Show service status
 ov logs <image> [-f] [-i INSTANCE]     # Show service logs
@@ -84,13 +84,17 @@ ov config get <key>                    # Print resolved value
 ov config set <key> <value>            # Set in user config
 ov config list                         # Show all settings with source
 ov config reset [key]                  # Remove from user config
+ov service status <image> [-i INSTANCE]    # Show supervisord service status
+ov service start <image> <service> [-i INSTANCE]   # Start a supervisord service
+ov service stop <image> <service> [-i INSTANCE]    # Stop a supervisord service
+ov service restart <image> <service> [-i INSTANCE] # Restart a supervisord service
 ov crypto init <image> [--volume NAME]
 ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
 ov crypto status <image>
 ov crypto passwd <image>               # Change encryption password
-ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--ssh-keygen] [--console] [--transport TRANSPORT]
-ov vm create <image> [--ram SIZE] [--cpus N] [--gpu|--no-gpu] [-i INSTANCE]
+ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--console] [--transport TRANSPORT]
+ov vm create <image> [--ram SIZE] [--cpus N] [--ssh-key SSH_KEY] [--no-autodetect] [-i INSTANCE]
 ov vm start <image> [-i INSTANCE]      # Start a VM
 ov vm stop <image> [-i INSTANCE] [--force]  # Stop a VM
 ov vm destroy <image> [-i INSTANCE] [--disk]  # Remove VM, optionally delete disk
@@ -101,7 +105,7 @@ ov config path                         # Print config file path
 ov version                             # Print computed CalVer tag
 ```
 
-**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`).
+**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`, `network`).
 
 **Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
 
@@ -191,7 +195,7 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Layer authoring | `/overthink:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts |
 | Image composition | `/overthink:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
 | Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache |
-| Runtime operations | `/overthink:run` | ov shell, start/stop, GPU passthrough, aliases, env vars, instances, remote refs, seed |
+| Runtime operations | `/overthink:run` | ov shell, start/stop, device auto-detection, aliases, env vars, instances, remote refs, seed, service management |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, bootc disk images, encryption |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |

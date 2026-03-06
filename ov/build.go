@@ -125,8 +125,14 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 
-	// Auto-merge if enabled (runs for both local and push builds)
-	mergeCmd := &MergeCmd{All: true, Tag: "latest"}
+	// Auto-merge if enabled (runs for both local and push builds).
+	// Use the CalVer tag for push builds (podman --manifest only tags with CalVer),
+	// and "latest" for local builds (which always have a :latest tag).
+	mergeTag := "latest"
+	if c.Push {
+		mergeTag = gen.Tag
+	}
+	mergeCmd := &MergeCmd{All: true, Tag: mergeTag}
 	if err := mergeCmd.Run(); err != nil {
 		// Non-fatal: log and continue
 		fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)

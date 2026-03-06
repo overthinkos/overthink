@@ -1,4 +1,9 @@
-description: Full ov toolchain (CLI + VM + crypto + console)
+description: Full ov toolchain (CLI + VM + crypto + console + podman machine)
+
+rpm:
+  packages:
+    - gvisor-tap-vsock
+    - podman-machine
 
 layers:
   - ov

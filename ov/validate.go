@@ -893,7 +893,7 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 			if !ok || !layer.HasSystemServices {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (system_services will be ignored)\n", imageName, bare)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (systemd units will be ignored)\n", imageName, bare)
 		}
 	}
 }

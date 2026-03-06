@@ -1082,15 +1082,25 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
 		writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
 
-		var systemServices []string
+		var systemdUnits []string
 		for _, layerName := range layerOrder {
 			layer := g.Layers[layerName]
 			if layer.HasSystemServices {
-				systemServices = append(systemServices, layer.SystemServiceUnits...)
+				systemdUnits = append(systemdUnits, layer.SystemServiceUnits...)
 			}
 		}
-		writeJSONLabel(b, LabelSystemServices, systemServices)
+		writeJSONLabel(b, LabelSystemd, systemdUnits)
 	}
+
+	// Supervisord services: collected from layers (all images)
+	var supervisordServices []string
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSupervisord {
+			supervisordServices = append(supervisordServices, layerName)
+		}
+	}
+	writeJSONLabel(b, LabelSupervisord, supervisordServices)
 
 	// Routes: collected from layers
 	var routes []LabelRoute

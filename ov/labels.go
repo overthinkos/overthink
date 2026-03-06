@@ -32,7 +32,8 @@ const (
 	LabelVm             = "org.overthinkos.vm"
 	LabelLibvirt        = "org.overthinkos.libvirt"
 	LabelRoutes         = "org.overthinkos.routes"
-	LabelSystemServices = "org.overthinkos.system_services"
+	LabelSystemd     = "org.overthinkos.systemd"
+	LabelSupervisord = "org.overthinkos.supervisord"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
 )
@@ -82,7 +83,8 @@ type ImageMetadata struct {
 	Vm             *VmConfig
 	Libvirt        []string
 	Routes         []LabelRoute
-	SystemServices []string
+	Systemd      []string
+	Supervisord  []string
 	EnvLayers      map[string]string
 	PathAppend     []string
 }
@@ -247,10 +249,17 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// System services
-	if v := labels[LabelSystemServices]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.SystemServices); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSystemServices, err)
+	// Systemd units (bootc only)
+	if v := labels[LabelSystemd]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Systemd); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSystemd, err)
+		}
+	}
+
+	// Supervisord services
+	if v := labels[LabelSupervisord]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Supervisord); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSupervisord, err)
 		}
 	}
 

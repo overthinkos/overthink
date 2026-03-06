@@ -35,7 +35,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelVm:        `{"disk_size":"20 GiB","ram":"8G","cpus":4,"ssh_port":2222}`,
 			LabelLibvirt:   `["<devices><channel/></devices>"]`,
 			LabelRoutes:    `[{"host":"openclaw.localhost","port":18789}]`,
-			LabelSystemServices: `["sshd"]`,
+			LabelSystemd:     `["sshd"]`,
+			LabelSupervisord: `["traefik","testapi"]`,
 			LabelEnvLayers: `{"CUDA_HOME":"/usr/local/cuda"}`,
 			LabelPathAppend: `["/opt/bin"]`,
 		}, nil
@@ -176,10 +177,16 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 		t.Errorf("Routes = %v, want %v", meta.Routes, wantRoutes)
 	}
 
-	// System services
+	// Systemd units
 	wantSysSvc := []string{"sshd"}
-	if !reflect.DeepEqual(meta.SystemServices, wantSysSvc) {
-		t.Errorf("SystemServices = %v, want %v", meta.SystemServices, wantSysSvc)
+	if !reflect.DeepEqual(meta.Systemd, wantSysSvc) {
+		t.Errorf("Systemd = %v, want %v", meta.Systemd, wantSysSvc)
+	}
+
+	// Supervisord services
+	wantSupervisord := []string{"traefik", "testapi"}
+	if !reflect.DeepEqual(meta.Supervisord, wantSupervisord) {
+		t.Errorf("Supervisord = %v, want %v", meta.Supervisord, wantSupervisord)
 	}
 
 	// Layer env vars
@@ -307,6 +314,8 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 			"svc": {
 				Name:       "svc",
 				HasUserYml: true,
+				HasSupervisord: true,
+				serviceConf:    "[program:svc]\ncommand=svc serve",
 				HasVolumes: true,
 				volumes: []VolumeYAML{
 					{Name: "data", Path: "/home/user/.myapp"},
@@ -384,6 +393,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelVm, `"ram":"4G"`},
 		{LabelEnvLayers, `"APP_ENV":"prod"`},
 		{LabelPathAppend, `["/opt/myapp/bin"]`},
+		{LabelSupervisord, `["svc"]`},
 	}
 
 	for _, c := range jsonChecks {
@@ -431,7 +441,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		LabelBootc, LabelBindMounts, LabelSecurity, LabelNetwork,
 		LabelTunnel, LabelFQDN, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
-		LabelSystemServices, LabelEnvLayers, LabelPathAppend,
+		LabelSystemd, LabelSupervisord, LabelEnvLayers, LabelPathAppend,
 	}
 	for _, label := range omitted {
 		if strings.Contains(output, label) {
@@ -478,6 +488,8 @@ func TestLabelRoundTrip(t *testing.T) {
 					Vars:       map[string]string{"LANG": "en_US.UTF-8"},
 					PathAppend: []string{"/opt/svc/bin"},
 				},
+				HasSupervisord:     true,
+				serviceConf:        "[program:svc]\ncommand=svc serve",
 				HasSystemServices:  true,
 				SystemServiceUnits: []string{"sshd", "docker"},
 			},
@@ -622,10 +634,16 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Errorf("Routes = %v, want %v", meta.Routes, wantRoutes)
 	}
 
-	// System services
+	// Systemd units
 	wantSysSvc := []string{"sshd", "docker"}
-	if !reflect.DeepEqual(meta.SystemServices, wantSysSvc) {
-		t.Errorf("SystemServices = %v, want %v", meta.SystemServices, wantSysSvc)
+	if !reflect.DeepEqual(meta.Systemd, wantSysSvc) {
+		t.Errorf("Systemd = %v, want %v", meta.Systemd, wantSysSvc)
+	}
+
+	// Supervisord services
+	wantSupervisord := []string{"svc"}
+	if !reflect.DeepEqual(meta.Supervisord, wantSupervisord) {
+		t.Errorf("Supervisord = %v, want %v", meta.Supervisord, wantSupervisord)
 	}
 
 	// Layer env

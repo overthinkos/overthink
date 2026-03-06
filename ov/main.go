@@ -30,6 +30,7 @@ type CLI struct {
 	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
+	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }

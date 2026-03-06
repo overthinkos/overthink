@@ -62,6 +62,25 @@ jobs:
             bin/ov build --push --jobs 1 "$image"
           done
 
+      - name: Delete package versions older than 24h
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: |
+          set -euo pipefail
+          cutoff=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+
+          gh api orgs/overthinkos/packages?package_type=container --paginate --jq '.[].name' | while read pkg; do
+            echo "--- Checking $pkg ---"
+            gh api "orgs/overthinkos/packages/container/$pkg/versions" --paginate \
+              --jq '.[] | "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"' | while read id updated tags; do
+              if [[ "$updated" < "$cutoff" ]]; then
+                echo "Deleting version $id (updated: $updated, tags: $tags)"
+                gh api --method DELETE "orgs/overthinkos/packages/container/$pkg/versions/$id" || true
+              fi
+            done
+          done
+
       - name: Prune images older than 24h
         if: always()
         run: podman image prune -af --filter "until=24h" || true

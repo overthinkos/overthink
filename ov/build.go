@@ -125,23 +125,40 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 
-	// Auto-merge if enabled
-	if !c.Push {
-		mergeCmd := &MergeCmd{All: true, Tag: "latest"}
-		if err := mergeCmd.Run(); err != nil {
-			// Non-fatal: log and continue
-			fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+	// Auto-merge if enabled (runs for both local and push builds)
+	mergeCmd := &MergeCmd{All: true, Tag: "latest"}
+	if err := mergeCmd.Run(); err != nil {
+		// Non-fatal: log and continue
+		fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+	}
+
+	// Push after merge (Podman only; Docker buildx pushes during build)
+	if c.Push && rt.BuildEngine == "podman" {
+		order, err := ResolveImageOrder(gen.Images, gen.Layers)
+		if err != nil {
+			return err
+		}
+		if len(c.Images) > 0 {
+			order, err = filterImages(order, c.Images, gen.Images)
+			if err != nil {
+				return err
+			}
+		}
+		fmt.Fprintf(os.Stderr, "\n=== Pushing images ===\n")
+		for _, name := range order {
+			img := gen.Images[name]
+			tags := imageTags(name, img, gen.Config)
+			if err := c.pushImage(dir, tags); err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-// buildImage builds a single image with the configured engine.
-// containerfileContent is piped via stdin (-f -) to avoid race conditions
-// with concurrent ov generate overwrites on disk.
-func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg *Config, platform, engineName, containerfileContent string) error {
-	// Compute tags
+// imageTags computes the tags for an image (CalVer tag + latest if auto-tagged).
+func imageTags(name string, img *ResolvedImage, cfg *Config) []string {
 	tags := []string{img.FullTag}
 	origCfg := cfg.Images[name]
 	if origCfg.Tag == "" || origCfg.Tag == "auto" {
@@ -151,6 +168,16 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 			tags = append(tags, fmt.Sprintf("%s:latest", name))
 		}
 	}
+	return tags
+}
+
+// buildImage builds a single image with the configured engine.
+// containerfileContent is piped via stdin (-f -) to avoid race conditions
+// with concurrent ov generate overwrites on disk.
+// For Podman --push, the image is built locally (--manifest) without pushing;
+// push happens separately after merge in Run().
+func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg *Config, platform, engineName, containerfileContent string) error {
+	tags := imageTags(name, img, cfg)
 
 	var args []string
 
@@ -171,23 +198,24 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 		return fmt.Errorf("%s build failed: %w", engine, err)
 	}
 
-	// Podman --manifest builds locally; push each tag separately with retry
-	if c.Push && engineName == "podman" {
-		for _, tag := range tags {
-			fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
-			pushTag := tag
-			if err := retryCmd(3, 5*time.Second, func() error {
-				pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
-				pushCmd.Dir = dir
-				pushCmd.Stdout = os.Stderr
-				pushCmd.Stderr = os.Stderr
-				return pushCmd.Run()
-			}); err != nil {
-				return fmt.Errorf("podman manifest push %s failed: %w", tag, err)
-			}
+	return nil
+}
+
+// pushImage pushes a Podman manifest to the registry for each tag with retry.
+func (c *BuildCmd) pushImage(dir string, tags []string) error {
+	for _, tag := range tags {
+		fmt.Fprintf(os.Stderr, "Pushing %s\n", tag)
+		pushTag := tag
+		if err := retryCmd(3, 5*time.Second, func() error {
+			pushCmd := exec.Command("podman", "manifest", "push", "--all", tags[0], "docker://"+pushTag)
+			pushCmd.Dir = dir
+			pushCmd.Stdout = os.Stderr
+			pushCmd.Stderr = os.Stderr
+			return pushCmd.Run()
+		}); err != nil {
+			return fmt.Errorf("podman manifest push %s failed: %w", tag, err)
 		}
 	}
-
 	return nil
 }
 

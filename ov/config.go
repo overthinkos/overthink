@@ -291,8 +291,10 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil)
 	}
 
-	// Resolve VM config: image -> defaults -> hardcoded defaults
-	resolved.Vm = resolveVmConfig(img.Vm, c.Defaults.Vm)
+	// Resolve VM config: only for bootc images, and only when configured
+	if img.Bootc && (img.Vm != nil || c.Defaults.Vm != nil) {
+		resolved.Vm = resolveVmConfig(img.Vm, c.Defaults.Vm)
+	}
 
 	// Resolve network: image -> defaults -> ""
 	resolved.Network = img.Network

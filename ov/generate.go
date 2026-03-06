@@ -1073,14 +1073,24 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelHooks, hooks)
 	}
 
-	// VM config (bootc images)
-	if img.Vm != nil {
-		writeJSONLabel(b, LabelVm, img.Vm)
-	}
+	// Bootc-only labels: VM config, libvirt snippets, system services
+	if img.Bootc {
+		if img.Vm != nil {
+			writeJSONLabel(b, LabelVm, img.Vm)
+		}
 
-	// Libvirt snippets: collected from layers + image config
-	libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
-	writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
+		libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
+		writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
+
+		var systemServices []string
+		for _, layerName := range layerOrder {
+			layer := g.Layers[layerName]
+			if layer.HasSystemServices {
+				systemServices = append(systemServices, layer.SystemServiceUnits...)
+			}
+		}
+		writeJSONLabel(b, LabelSystemServices, systemServices)
+	}
 
 	// Routes: collected from layers
 	var routes []LabelRoute
@@ -1095,16 +1105,6 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	writeJSONLabel(b, LabelRoutes, routes)
-
-	// System services: collected from layers
-	var systemServices []string
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasSystemServices {
-			systemServices = append(systemServices, layer.SystemServiceUnits...)
-		}
-	}
-	writeJSONLabel(b, LabelSystemServices, systemServices)
 
 	// Layer env vars: merged from all layers
 	var envConfigs []*EnvConfig

@@ -13,7 +13,7 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
-			LabelVersion:  "2",
+			LabelVersion:  "1",
 			LabelImage:    "openclaw",
 			LabelRegistry: "ghcr.io/overthinkos",
 			LabelBootc:    "true",
@@ -243,7 +243,7 @@ func TestExtractMetadataMinimalLabels(t *testing.T) {
 
 	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
 		return map[string]string{
-			LabelVersion: "2",
+			LabelVersion: "1",
 			LabelImage:   "fedora",
 			LabelUID:     "1000",
 			LabelGID:     "1000",
@@ -349,7 +349,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		label string
 		value string
 	}{
-		{LabelVersion, `"2"`},
+		{LabelVersion, `"1"`},
 		{LabelImage, `"myapp"`},
 		{LabelRegistry, `"ghcr.io/test"`},
 		{LabelBootc, `"true"`},

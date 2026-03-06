@@ -54,13 +54,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and push all images
-        run: |
-          set -euo pipefail
-          targets=$(bin/ov list targets)
-          for image in $targets; do
-            echo "--- Building $image ---"
-            bin/ov build --push --jobs 1 "$image"
-          done
+        run: bin/ov build --push
 
       - name: Delete package versions older than 24h
         if: success()

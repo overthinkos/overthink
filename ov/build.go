@@ -126,17 +126,16 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 
-	// Auto-merge if enabled (runs for both local and push builds).
-	// Use the CalVer tag for push builds (podman --manifest only tags with CalVer),
-	// and "latest" for local builds (which always have a :latest tag).
-	mergeTag := "latest"
-	if c.Push {
-		mergeTag = gen.Tag
-	}
-	mergeCmd := &MergeCmd{All: true, Tag: mergeTag}
-	if err := mergeCmd.Run(); err != nil {
-		// Non-fatal: log and continue
-		fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+	// Auto-merge if enabled (local builds only).
+	// Push builds skip merge: podman save/load creates large temp tarballs
+	// that can exhaust disk space on CI runners. Merge for push builds
+	// requires a disk-efficient approach (e.g., OCI layout or buildah).
+	if !c.Push {
+		mergeCmd := &MergeCmd{All: true, Tag: "latest"}
+		if err := mergeCmd.Run(); err != nil {
+			// Non-fatal: log and continue
+			fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+		}
 	}
 
 	// Push after merge (Podman only; Docker buildx pushes during build)

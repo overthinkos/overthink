@@ -181,8 +181,7 @@ images:
     base: fedora
     layers:
       - github-runner
-      - ov-cli
-      - virtualization
+      - ov-full
     platforms:
       - linux/amd64
     uid: 0
@@ -258,11 +257,8 @@ images:
       - linux/amd64
     layers:
       - sshd
-      - ov-cli
+      - ov-full
       - golang
-      - virtualization
-      - gocryptfs
-      - socat
     vm:
       disk_size: "80 GiB"
       ram: "12G"

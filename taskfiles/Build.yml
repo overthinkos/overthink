@@ -5,9 +5,9 @@ tasks:
     desc: Build ov from source
     dir: "{{.ROOT_DIR}}"
     cmds:
-      - mkdir -p bin layers/ov-cli/bin
+      - mkdir -p bin layers/ov/bin
       - cd ov && go build -o ../bin/ov .
-      - cp bin/ov layers/ov-cli/bin/ov
+      - cp bin/ov layers/ov/bin/ov
 
   install:
     desc: Build and install ov to ~/.local/bin

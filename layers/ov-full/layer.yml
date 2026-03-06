@@ -1,0 +1,7 @@
+description: Full ov toolchain (CLI + VM + crypto + console)
+
+layers:
+  - ov
+  - virtualization
+  - gocryptfs
+  - socat

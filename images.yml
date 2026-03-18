@@ -291,6 +291,14 @@ images:
     platforms:
       - linux/amd64
 
+  turnstone:
+    base: fedora
+    layers:
+      - turnstone
+    ports:
+      - "8080:8080"
+      - "8090:8090"
+
   immich-cuda:
     base: fedora
     layers:

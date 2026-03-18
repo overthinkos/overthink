@@ -12,9 +12,10 @@ tasks:
           aarch64) TRIPLE=aarch64-unknown-linux-musl;;
           *) echo "Unsupported arch: $ARCH"; exit 1;;
         esac
-        curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/{{.OPENSHELL_VERSION}}/openshell-${TRIPLE}.tar.gz" -o /tmp/openshell.tar.gz
+        TARBALL="openshell-${TRIPLE}.tar.gz"
+        curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/{{.OPENSHELL_VERSION}}/${TARBALL}" -o /tmp/${TARBALL}
         curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/{{.OPENSHELL_VERSION}}/openshell-checksums-sha256.txt" -o /tmp/checksums.txt
-        cd /tmp && grep "openshell-${TRIPLE}.tar.gz" checksums.txt | sha256sum -c -
-        tar -xzf /tmp/openshell.tar.gz -C /usr/local/bin/
+        cd /tmp && grep "${TARBALL}" checksums.txt | sha256sum -c -
+        tar -xzf /tmp/${TARBALL} -C /usr/local/bin/
         chmod +x /usr/local/bin/openshell
-        rm -f /tmp/openshell.tar.gz /tmp/checksums.txt
+        rm -f /tmp/${TARBALL} /tmp/checksums.txt

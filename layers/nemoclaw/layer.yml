@@ -2,6 +2,10 @@ depends:
   - openclaw
   - openshell
 
+rpm:
+  packages:
+    - git
+
 env:
   NEMOCLAW_HOME: "~/.nemoclaw"
 

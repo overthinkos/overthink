@@ -208,11 +208,17 @@ For detailed documentation on specific topics, use the corresponding skill:
 
 | Topic | Skill | Covers |
 |-------|-------|--------|
-| Layer authoring | `/overthink:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts |
+| Layer authoring | `/overthink:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts, port_relay, protocol annotations |
 | Image composition | `/overthink:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
-| Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache |
-| Runtime operations | `/overthink:run` | ov shell, start/stop, device auto-detection, aliases, env vars, instances, remote refs, seed, service management |
-| Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, bootc disk images, encryption |
-| Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules |
+| Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache, inline merge |
+| Shell & execution | `/overthink:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
+| Service management | `/overthink:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
+| Browser automation | `/overthink:browser` | ov browser commands, CDP, Chrome DevTools, OAuth flows |
+| Aliases | `/overthink:alias` | ov alias add/remove/list/install/uninstall |
+| Configuration | `/overthink:config` | ov config get/set/list/reset/path, bind_address, engine settings |
+| Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
+| Virtual machines | `/overthink:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
+| Encrypted storage | `/overthink:crypto` | ov crypto init/mount/unmount/status/passwd, gocryptfs |
+| Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
 | Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |

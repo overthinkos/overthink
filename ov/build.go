@@ -78,9 +78,7 @@ func (c *BuildCmd) Run() error {
 			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 				return fmt.Errorf("building %s: %w", name, err)
 			}
-			if !c.Push {
-				mergeAfterBuild(name, img)
-			}
+			mergeAfterBuild(name, img)
 		}
 	} else {
 		// Full build: use level-based parallelism
@@ -128,10 +126,8 @@ func (c *BuildCmd) Run() error {
 
 			// Merge this level before building the next so children
 			// start from a merged (fewer-layer) base image.
-			if !c.Push {
-				for _, name := range level {
-					mergeAfterBuild(name, gen.Images[name])
-				}
+			for _, name := range level {
+				mergeAfterBuild(name, gen.Images[name])
 			}
 		}
 	}

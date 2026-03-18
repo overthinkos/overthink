@@ -99,13 +99,34 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("Restart=always\n")
 	b.WriteString("TimeoutStartSec=900\n")
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" {
-		httpsPort := fmt.Sprintf("%d", cfg.Tunnel.HTTPS)
-		if cfg.Tunnel.Funnel {
-			b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
-			b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", httpsPort))
-		} else {
-			b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
-			b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --https=%s off\n", httpsPort))
+		if len(cfg.Tunnel.Ports) > 0 {
+			// Multi-port mode
+			for _, tp := range cfg.Tunnel.Ports {
+				port := fmt.Sprintf("%d", tp.Port)
+				if tp.Protocol == "tcp" {
+					b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --tcp=%s tcp://127.0.0.1:%s\n", port, port))
+				} else {
+					b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --https=%s http://127.0.0.1:%s\n", port, port))
+				}
+			}
+			for _, tp := range cfg.Tunnel.Ports {
+				port := fmt.Sprintf("%d", tp.Port)
+				if tp.Protocol == "tcp" {
+					b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --tcp=%s off\n", port))
+				} else {
+					b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --https=%s off\n", port))
+				}
+			}
+		} else if cfg.Tunnel.Port > 0 || cfg.Tunnel.HTTPS > 0 {
+			// Single-port mode
+			httpsPort := fmt.Sprintf("%d", cfg.Tunnel.HTTPS)
+			if cfg.Tunnel.Funnel {
+				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
+				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", httpsPort))
+			} else {
+				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --https=%s http://127.0.0.1:%d\n", httpsPort, cfg.Tunnel.Port))
+				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --https=%s off\n", httpsPort))
+			}
 		}
 	}
 

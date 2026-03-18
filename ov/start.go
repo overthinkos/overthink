@@ -200,6 +200,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 				tc := ResolveTunnelConfig(
 					c.findTunnelYAML(cfg),
 					c.Image, resolved.FQDN, layers, resolved.Layers,
+					collectPortProtos(layers, resolved.Layers), resolved.Ports,
 				)
 				if tc != nil {
 					if err := TunnelStart(*tc); err != nil {
@@ -520,7 +521,7 @@ func stopTunnelForImage(imageName string) {
 					if tunnelYAML == nil {
 						tunnelYAML = cfg.Defaults.Tunnel
 					}
-					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers)
+					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
 				}
 			}
 		}

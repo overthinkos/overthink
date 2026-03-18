@@ -655,7 +655,7 @@ var tunnelNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]*$`)
 
 // validateTunnel validates tunnel configuration in defaults and images
 func validateTunnel(cfg *Config, errs *ValidationError) {
-	check := func(name string, t *TunnelYAML, fqdn string) {
+	check := func(name string, t *TunnelYAML, fqdn string, ports []string) {
 		if t == nil {
 			return
 		}
@@ -663,10 +663,16 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 			errs.Add("%s: tunnel provider must be \"tailscale\" or \"cloudflare\", got %q", name, t.Provider)
 			return
 		}
+		if t.Ports != "" && t.Ports != "all" {
+			errs.Add("%s: tunnel ports must be \"all\" or omitted, got %q", name, t.Ports)
+		}
+		if t.Ports == "all" && len(ports) == 0 {
+			errs.Add("%s: tunnel ports \"all\" requires image to have ports defined", name)
+		}
 		if t.Port != 0 && (t.Port < 1 || t.Port > 65535) {
 			errs.Add("%s: tunnel port must be 1-65535, got %d", name, t.Port)
 		}
-		if t.Provider == "tailscale" {
+		if t.Provider == "tailscale" && t.Ports != "all" {
 			if t.Funnel {
 				// Funnel (public): restricted to 443, 8443, 10000
 				if t.HTTPS != 0 && !ValidFunnelPorts[t.HTTPS] {
@@ -689,7 +695,7 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 		}
 	}
 
-	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.FQDN)
+	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.FQDN, cfg.Defaults.Ports)
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
@@ -699,10 +705,10 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 		if fqdn == "" {
 			fqdn = cfg.Defaults.FQDN
 		}
-		check(fmt.Sprintf("image %q", imageName), img.Tunnel, fqdn)
+		check(fmt.Sprintf("image %q", imageName), img.Tunnel, fqdn, img.Ports)
 	}
 
-	// Cross-image tailscale HTTPS port conflict check
+	// Cross-image tailscale HTTPS port conflict check (single-port mode only)
 	portUsers := make(map[int][]string) // https port -> image names
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
@@ -714,6 +720,10 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 			tunnel = cfg.Defaults.Tunnel
 		}
 		if tunnel == nil || tunnel.Provider != "tailscale" {
+			continue
+		}
+		// Multi-port mode uses per-port external ports, not a single HTTPS port
+		if tunnel.Ports == "all" {
 			continue
 		}
 		httpsPort := tunnel.HTTPS

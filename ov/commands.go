@@ -148,7 +148,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 				if tunnelYAML == nil {
 					tunnelYAML = cfg.Defaults.Tunnel
 				}
-				tunnelCfg = ResolveTunnelConfig(tunnelYAML, c.Image, resolved.FQDN, layers, resolved.Layers)
+				tunnelCfg = ResolveTunnelConfig(tunnelYAML, c.Image, resolved.FQDN, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
 			}
 		}
 	} else {

@@ -290,9 +290,9 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 
 	// Resolve tunnel: image -> defaults -> nil
 	if img.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.FQDN, nil, nil)
+		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.FQDN, nil, nil, nil, resolved.Ports)
 	} else if c.Defaults.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil)
+		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil, nil, resolved.Ports)
 	}
 
 	// Resolve VM config: only for bootc images, and only when configured

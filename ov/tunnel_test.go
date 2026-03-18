@@ -1,6 +1,7 @@
 package main
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -148,7 +149,7 @@ func TestValidFunnelPorts(t *testing.T) {
 
 func TestResolveTunnelConfigTailscaleDefaults(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "tailscale"}
-	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil)
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, nil, nil)
 
 	if cfg.Provider != "tailscale" {
 		t.Errorf("Provider = %q, want tailscale", cfg.Provider)
@@ -163,7 +164,7 @@ func TestResolveTunnelConfigTailscaleDefaults(t *testing.T) {
 
 func TestResolveTunnelConfigCloudflareDefaults(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "cloudflare"}
-	cfg := ResolveTunnelConfig(tunnel, "immich", "im.example.com", nil, nil)
+	cfg := ResolveTunnelConfig(tunnel, "immich", "im.example.com", nil, nil, nil, nil)
 
 	if cfg.Provider != "cloudflare" {
 		t.Errorf("Provider = %q, want cloudflare", cfg.Provider)
@@ -178,7 +179,7 @@ func TestResolveTunnelConfigCloudflareDefaults(t *testing.T) {
 
 func TestResolveTunnelConfigCloudflareCustomTunnel(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "cloudflare", Tunnel: "my-tunnel", Port: 3001}
-	cfg := ResolveTunnelConfig(tunnel, "myapp", "app.example.com", nil, nil)
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "app.example.com", nil, nil, nil, nil)
 
 	if cfg.TunnelName != "my-tunnel" {
 		t.Errorf("TunnelName = %q, want my-tunnel", cfg.TunnelName)
@@ -189,7 +190,7 @@ func TestResolveTunnelConfigCloudflareCustomTunnel(t *testing.T) {
 }
 
 func TestResolveTunnelConfigNil(t *testing.T) {
-	cfg := ResolveTunnelConfig(nil, "myapp", "", nil, nil)
+	cfg := ResolveTunnelConfig(nil, "myapp", "", nil, nil, nil, nil)
 	if cfg != nil {
 		t.Error("expected nil for nil TunnelYAML")
 	}
@@ -210,7 +211,7 @@ func TestResolveTunnelConfigPortFromRoute(t *testing.T) {
 	layerNames := []string{"traefik", "immich"}
 
 	tunnel := &TunnelYAML{Provider: "cloudflare"}
-	cfg := ResolveTunnelConfig(tunnel, "myapp", "app.example.com", layers, layerNames)
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "app.example.com", layers, layerNames, nil, nil)
 
 	if cfg.Port != 3001 {
 		t.Errorf("Port = %d, want 3001 (from route)", cfg.Port)
@@ -471,7 +472,7 @@ port: 2283
 
 func TestResolveTunnelConfigFunnelFlag(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "tailscale", Funnel: true}
-	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil)
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, nil, nil)
 
 	if !cfg.Funnel {
 		t.Error("Funnel = false, want true")
@@ -479,7 +480,7 @@ func TestResolveTunnelConfigFunnelFlag(t *testing.T) {
 
 	// Serve mode (default)
 	tunnel2 := &TunnelYAML{Provider: "tailscale"}
-	cfg2 := ResolveTunnelConfig(tunnel2, "myapp", "", nil, nil)
+	cfg2 := ResolveTunnelConfig(tunnel2, "myapp", "", nil, nil, nil, nil)
 
 	if cfg2.Funnel {
 		t.Error("Funnel = true, want false (serve is default)")
@@ -642,5 +643,310 @@ func TestValidateTunnelHTTPSPortConflict(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPortSpecUnmarshalInt(t *testing.T) {
+	input := `
+- 8080
+- 9090
+`
+	var specs []PortSpec
+	if err := yaml.Unmarshal([]byte(input), &specs); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if len(specs) != 2 {
+		t.Fatalf("got %d specs, want 2", len(specs))
+	}
+	if specs[0].Port != 8080 || specs[0].Protocol != "http" {
+		t.Errorf("specs[0] = %+v, want {Port:8080 Protocol:http}", specs[0])
+	}
+	if specs[1].Port != 9090 || specs[1].Protocol != "http" {
+		t.Errorf("specs[1] = %+v, want {Port:9090 Protocol:http}", specs[1])
+	}
+}
+
+func TestPortSpecUnmarshalTCP(t *testing.T) {
+	input := `
+- tcp:5900
+`
+	var specs []PortSpec
+	if err := yaml.Unmarshal([]byte(input), &specs); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("got %d specs, want 1", len(specs))
+	}
+	if specs[0].Port != 5900 || specs[0].Protocol != "tcp" {
+		t.Errorf("specs[0] = %+v, want {Port:5900 Protocol:tcp}", specs[0])
+	}
+}
+
+func TestPortSpecUnmarshalStringNumber(t *testing.T) {
+	input := `
+- "5432"
+`
+	var specs []PortSpec
+	if err := yaml.Unmarshal([]byte(input), &specs); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if specs[0].Port != 5432 || specs[0].Protocol != "http" {
+		t.Errorf("specs[0] = %+v, want {Port:5432 Protocol:http}", specs[0])
+	}
+}
+
+func TestPortSpecMixed(t *testing.T) {
+	input := `
+- 18789
+- tcp:5900
+- 9222
+`
+	var specs []PortSpec
+	if err := yaml.Unmarshal([]byte(input), &specs); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	want := []PortSpec{
+		{Port: 18789, Protocol: "http"},
+		{Port: 5900, Protocol: "tcp"},
+		{Port: 9222, Protocol: "http"},
+	}
+	if !reflect.DeepEqual(specs, want) {
+		t.Errorf("got %+v, want %+v", specs, want)
+	}
+}
+
+func TestResolveTunnelConfigMultiPort(t *testing.T) {
+	tunnel := &TunnelYAML{Provider: "tailscale", Ports: "all"}
+	portProtos := map[int]string{5900: "tcp"}
+	imagePorts := []string{"18789:18789", "5900:5900", "9222:9222"}
+
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, portProtos, imagePorts)
+
+	if len(cfg.Ports) != 3 {
+		t.Fatalf("got %d ports, want 3", len(cfg.Ports))
+	}
+
+	want := []TunnelPort{
+		{Port: 18789, Protocol: "http"},
+		{Port: 5900, Protocol: "tcp"},
+		{Port: 9222, Protocol: "http"},
+	}
+	if !reflect.DeepEqual(cfg.Ports, want) {
+		t.Errorf("Ports = %+v, want %+v", cfg.Ports, want)
+	}
+
+	// HTTPS should not be set in multi-port mode
+	if cfg.HTTPS != 0 {
+		t.Errorf("HTTPS = %d, want 0 in multi-port mode", cfg.HTTPS)
+	}
+}
+
+func TestResolveTunnelConfigMultiPortNoProtos(t *testing.T) {
+	tunnel := &TunnelYAML{Provider: "tailscale", Ports: "all"}
+	imagePorts := []string{"8080:8080", "9090"}
+
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, nil, imagePorts)
+
+	if len(cfg.Ports) != 2 {
+		t.Fatalf("got %d ports, want 2", len(cfg.Ports))
+	}
+	// All ports should default to http
+	for _, p := range cfg.Ports {
+		if p.Protocol != "http" {
+			t.Errorf("port %d protocol = %q, want http", p.Port, p.Protocol)
+		}
+	}
+}
+
+func TestTunnelConfigFromMetadataMultiPort(t *testing.T) {
+	meta := &ImageMetadata{
+		Image: "test-app",
+		Tunnel: &TunnelYAML{
+			Provider: "tailscale",
+			Ports:    "all",
+		},
+		Ports:      []string{"18789:18789", "5900:5900"},
+		PortProtos: map[int]string{5900: "tcp"},
+	}
+
+	cfg := TunnelConfigFromMetadata(meta)
+	if cfg == nil {
+		t.Fatal("expected non-nil config")
+	}
+	if len(cfg.Ports) != 2 {
+		t.Fatalf("got %d ports, want 2", len(cfg.Ports))
+	}
+	if cfg.Ports[0].Protocol != "http" {
+		t.Errorf("port 18789 protocol = %q, want http", cfg.Ports[0].Protocol)
+	}
+	if cfg.Ports[1].Protocol != "tcp" {
+		t.Errorf("port 5900 protocol = %q, want tcp", cfg.Ports[1].Protocol)
+	}
+}
+
+func TestQuadletMultiPort(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "test-app",
+		ImageRef:  "ghcr.io/test/app:latest",
+		Workspace: "/home/user",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Ports: []TunnelPort{
+				{Port: 18789, Protocol: "http"},
+				{Port: 5900, Protocol: "tcp"},
+				{Port: 9222, Protocol: "http"},
+			},
+		},
+	}
+
+	output := generateQuadlet(cfg)
+
+	// Check start commands
+	if !strings.Contains(output, "ExecStartPost=tailscale serve --bg --https=18789 http://127.0.0.1:18789") {
+		t.Error("missing HTTPS start for port 18789")
+	}
+	if !strings.Contains(output, "ExecStartPost=tailscale serve --bg --tcp=5900 tcp://127.0.0.1:5900") {
+		t.Error("missing TCP start for port 5900")
+	}
+	if !strings.Contains(output, "ExecStartPost=tailscale serve --bg --https=9222 http://127.0.0.1:9222") {
+		t.Error("missing HTTPS start for port 9222")
+	}
+
+	// Check stop commands
+	if !strings.Contains(output, "ExecStopPost=-tailscale serve --https=18789 off") {
+		t.Error("missing HTTPS stop for port 18789")
+	}
+	if !strings.Contains(output, "ExecStopPost=-tailscale serve --tcp=5900 off") {
+		t.Error("missing TCP stop for port 5900")
+	}
+	if !strings.Contains(output, "ExecStopPost=-tailscale serve --https=9222 off") {
+		t.Error("missing HTTPS stop for port 9222")
+	}
+}
+
+func TestQuadletSinglePortStillWorks(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "test-app",
+		ImageRef:  "ghcr.io/test/app:latest",
+		Workspace: "/home/user",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Port:     8080,
+			HTTPS:    443,
+		},
+	}
+
+	output := generateQuadlet(cfg)
+	if !strings.Contains(output, "ExecStartPost=tailscale serve --bg --https=443 http://127.0.0.1:8080") {
+		t.Error("missing single-port serve start")
+	}
+	if !strings.Contains(output, "ExecStopPost=-tailscale serve --https=443 off") {
+		t.Error("missing single-port serve stop")
+	}
+}
+
+func TestValidateTunnelPortsAll(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Tunnel: &TunnelYAML{Provider: "tailscale", Ports: "all"},
+				Ports:  []string{"8080:8080", "5900:5900"},
+				Layers: []string{},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	err := Validate(cfg, layers)
+	// Should have no tunnel errors (may have other errors like missing layers)
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "tunnel") {
+			t.Errorf("unexpected tunnel error: %v", err)
+		}
+	}
+}
+
+func TestValidateTunnelPortsAllNoPorts(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Tunnel: &TunnelYAML{Provider: "tailscale", Ports: "all"},
+				Layers: []string{},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Fatal("expected error for ports:all without image ports")
+	}
+	if !strings.Contains(err.Error(), "tunnel ports \"all\" requires image to have ports defined") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateTunnelPortsInvalidValue(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"myapp": {
+				Tunnel: &TunnelYAML{Provider: "tailscale", Ports: "some"},
+				Ports:  []string{"8080:8080"},
+				Layers: []string{},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Fatal("expected error for invalid ports value")
+	}
+	if !strings.Contains(err.Error(), "tunnel ports must be \"all\" or omitted") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestCollectPortProtos(t *testing.T) {
+	layers := map[string]*Layer{
+		"wayvnc": {
+			Name:      "wayvnc",
+			HasPorts:  true,
+			ports:     []string{"5900"},
+			portSpecs: []PortSpec{{Port: 5900, Protocol: "tcp"}},
+		},
+		"openclaw": {
+			Name:      "openclaw",
+			HasPorts:  true,
+			ports:     []string{"18789"},
+			portSpecs: []PortSpec{{Port: 18789, Protocol: "http"}},
+		},
+	}
+	layerNames := []string{"openclaw", "wayvnc"}
+
+	protos := collectPortProtos(layers, layerNames)
+	if len(protos) != 1 {
+		t.Fatalf("got %d protos, want 1 (only non-http)", len(protos))
+	}
+	if protos[5900] != "tcp" {
+		t.Errorf("protos[5900] = %q, want tcp", protos[5900])
+	}
+}
+
+func TestTunnelYAMLUnmarshalWithPorts(t *testing.T) {
+	input := `
+provider: tailscale
+ports: all
+`
+	var tunnel TunnelYAML
+	if err := yaml.Unmarshal([]byte(input), &tunnel); err != nil {
+		t.Fatalf("Unmarshal error: %v", err)
+	}
+	if tunnel.Provider != "tailscale" {
+		t.Errorf("Provider = %q, want tailscale", tunnel.Provider)
+	}
+	if tunnel.Ports != "all" {
+		t.Errorf("Ports = %q, want all", tunnel.Ports)
 	}
 }

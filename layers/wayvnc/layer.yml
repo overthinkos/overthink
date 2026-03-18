@@ -2,7 +2,7 @@ depends:
   - supervisord
 
 ports:
-  - 5900
+  - tcp:5900
 
 rpm:
   packages:

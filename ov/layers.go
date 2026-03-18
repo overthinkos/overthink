@@ -10,6 +10,48 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// PortSpec represents a port declaration with an optional protocol annotation.
+// Supports both plain integer (defaults to "http") and "tcp:5900" string forms.
+type PortSpec struct {
+	Port     int
+	Protocol string // "http" (default) or "tcp"
+}
+
+// UnmarshalYAML handles both integer and string forms for port specs.
+func (p *PortSpec) UnmarshalYAML(value *yaml.Node) error {
+	// Try integer first
+	if value.Kind == yaml.ScalarNode {
+		// Try as int
+		if n, err := strconv.Atoi(value.Value); err == nil {
+			p.Port = n
+			p.Protocol = "http"
+			return nil
+		}
+		// Try as "proto:port" string
+		s := value.Value
+		if idx := strings.Index(s, ":"); idx != -1 {
+			proto := s[:idx]
+			portStr := s[idx+1:]
+			n, err := strconv.Atoi(portStr)
+			if err != nil {
+				return fmt.Errorf("invalid port spec %q: port must be a number", s)
+			}
+			p.Port = n
+			p.Protocol = proto
+			return nil
+		}
+		// Plain number as string
+		n, err := strconv.Atoi(s)
+		if err != nil {
+			return fmt.Errorf("invalid port spec %q: must be a number or proto:number", s)
+		}
+		p.Port = n
+		p.Protocol = "http"
+		return nil
+	}
+	return fmt.Errorf("invalid port spec: expected scalar, got %v", value.Kind)
+}
+
 // VolumeYAML represents a volume declaration in layer.yml
 type VolumeYAML struct {
 	Name string `yaml:"name"`
@@ -36,7 +78,7 @@ type LayerYAML struct {
 	Engine         string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env            map[string]string `yaml:"env,omitempty"`
 	PathAppend     []string          `yaml:"path_append,omitempty"`
-	Ports          []int             `yaml:"ports,omitempty"`
+	Ports          []PortSpec        `yaml:"ports,omitempty"`
 	Route          *RouteYAML        `yaml:"route,omitempty"`
 	Service        string            `yaml:"service,omitempty"`
 	Rpm            *RpmConfig        `yaml:"rpm,omitempty"`
@@ -117,6 +159,7 @@ type Layer struct {
 	rpmConfig   *RpmConfig
 	debConfig   *DebConfig
 	ports       []string
+	portSpecs   []PortSpec // full PortSpec data with protocol info
 	envConfig   *EnvConfig
 	route       *RouteConfig
 	serviceConf string
@@ -230,8 +273,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate ports cache
 		if layer.HasPorts {
 			layer.ports = make([]string, len(ly.Ports))
+			layer.portSpecs = make([]PortSpec, len(ly.Ports))
 			for i, p := range ly.Ports {
-				layer.ports[i] = strconv.Itoa(p)
+				layer.ports[i] = strconv.Itoa(p.Port)
+				layer.portSpecs[i] = p
 			}
 		}
 
@@ -347,6 +392,11 @@ func (l *Layer) Ports() ([]string, error) {
 		return l.ports, nil
 	}
 	return nil, nil
+}
+
+// PortSpecs returns the port specs with protocol info (pre-populated from layer.yml)
+func (l *Layer) PortSpecs() []PortSpec {
+	return l.portSpecs
 }
 
 // ServiceConf returns the supervisord service fragment from layer.yml

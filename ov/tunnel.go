@@ -26,6 +26,7 @@ type TunnelYAML struct {
 	HTTPS    int    `yaml:"https,omitempty" json:"https,omitempty"`    // tailscale only: external HTTPS port
 	Funnel   bool   `yaml:"funnel,omitempty" json:"funnel,omitempty"` // tailscale only: true=funnel (public), false=serve (tailnet-private)
 	Tunnel   string `yaml:"tunnel,omitempty" json:"tunnel,omitempty"` // cloudflare only: tunnel name
+	Ports    string `yaml:"ports,omitempty" json:"ports,omitempty"`   // "all" to expose all image ports
 }
 
 // UnmarshalYAML handles bare string ("tailscale"/"cloudflare") or expanded form.
@@ -44,15 +45,42 @@ func (t *TunnelYAML) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
+// TunnelPort represents a single port to tunnel with its protocol.
+type TunnelPort struct {
+	Port     int
+	Protocol string // "http" or "tcp"
+}
+
 // TunnelConfig is the resolved, ready-to-execute tunnel configuration.
 type TunnelConfig struct {
 	Provider   string // "tailscale" or "cloudflare"
-	Port       int    // container port to tunnel to
-	HTTPS      int    // tailscale: external HTTPS port
+	Port       int    // container port to tunnel to (single-port mode)
+	HTTPS      int    // tailscale: external HTTPS port (single-port mode)
 	Funnel     bool   // tailscale: true=funnel (public), false=serve (tailnet-private)
 	TunnelName string // cloudflare: tunnel name
 	Hostname   string // cloudflare: from fqdn
 	ImageName  string // for PID file naming
+	Ports      []TunnelPort // multiple ports (when tunnel.ports == "all")
+}
+
+// collectPortProtos builds a port->protocol map from layer PortSpec data.
+func collectPortProtos(layers map[string]*Layer, layerNames []string) map[int]string {
+	protos := make(map[int]string)
+	for _, name := range layerNames {
+		layer, ok := layers[name]
+		if !ok {
+			continue
+		}
+		for _, ps := range layer.PortSpecs() {
+			if ps.Protocol != "" && ps.Protocol != "http" {
+				protos[ps.Port] = ps.Protocol
+			}
+		}
+	}
+	if len(protos) == 0 {
+		return nil
+	}
+	return protos
 }
 
 // ValidFunnelPorts are the allowed external ports for Tailscale Funnel.
@@ -138,6 +166,16 @@ func isValidServePort(port int) bool {
 }
 
 func tailscaleServeStart(cfg TunnelConfig) error {
+	// Multi-port mode
+	if len(cfg.Ports) > 0 {
+		for _, tp := range cfg.Ports {
+			if err := tailscaleServeOneStart(tp); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// Single-port mode
 	httpsPort := strconv.Itoa(cfg.HTTPS)
 	target := fmt.Sprintf("http://127.0.0.1:%d", cfg.Port)
 	cmd := exec.Command("tailscale", "serve", "--bg", "--https="+httpsPort, target)
@@ -150,7 +188,40 @@ func tailscaleServeStart(cfg TunnelConfig) error {
 	return nil
 }
 
+func tailscaleServeOneStart(tp TunnelPort) error {
+	port := strconv.Itoa(tp.Port)
+	var cmd *exec.Cmd
+	if tp.Protocol == "tcp" {
+		target := fmt.Sprintf("tcp://127.0.0.1:%d", tp.Port)
+		cmd = exec.Command("tailscale", "serve", "--bg", "--tcp="+port, target)
+	} else {
+		target := fmt.Sprintf("http://127.0.0.1:%d", tp.Port)
+		cmd = exec.Command("tailscale", "serve", "--bg", "--https="+port, target)
+	}
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tailscale serve start on port %s failed: %w", port, err)
+	}
+	proto := "HTTPS"
+	if tp.Protocol == "tcp" {
+		proto = "TCP"
+	}
+	fmt.Fprintf(os.Stderr, "Tailscale Serve enabled %s :%s\n", proto, port)
+	return nil
+}
+
 func tailscaleServeStop(cfg TunnelConfig) error {
+	// Multi-port mode
+	if len(cfg.Ports) > 0 {
+		for _, tp := range cfg.Ports {
+			if err := tailscaleServeOneStop(tp); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	// Single-port mode
 	httpsPort := strconv.Itoa(cfg.HTTPS)
 	cmd := exec.Command("tailscale", "serve", "--https="+httpsPort, "off")
 	cmd.Stdout = os.Stderr
@@ -159,6 +230,27 @@ func tailscaleServeStop(cfg TunnelConfig) error {
 		return fmt.Errorf("tailscale serve stop failed: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Tailscale Serve disabled on :%s\n", httpsPort)
+	return nil
+}
+
+func tailscaleServeOneStop(tp TunnelPort) error {
+	port := strconv.Itoa(tp.Port)
+	var cmd *exec.Cmd
+	if tp.Protocol == "tcp" {
+		cmd = exec.Command("tailscale", "serve", "--tcp="+port, "off")
+	} else {
+		cmd = exec.Command("tailscale", "serve", "--https="+port, "off")
+	}
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("tailscale serve stop on port %s failed: %w", port, err)
+	}
+	proto := "HTTPS"
+	if tp.Protocol == "tcp" {
+		proto = "TCP"
+	}
+	fmt.Fprintf(os.Stderr, "Tailscale Serve disabled %s :%s\n", proto, port)
 	return nil
 }
 
@@ -356,7 +448,9 @@ func createCloudflaredTunnel(name string) (string, error) {
 }
 
 // ResolveTunnelConfig resolves a TunnelYAML into a TunnelConfig with defaults applied.
-func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers map[string]*Layer, layerNames []string) *TunnelConfig {
+// portProtos maps container port -> protocol ("http" or "tcp") from layer PortSpec data.
+// imagePorts is the list of image port mappings (e.g. "18789:18789", "5900").
+func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers map[string]*Layer, layerNames []string, portProtos map[int]string, imagePorts []string) *TunnelConfig {
 	if t == nil {
 		return nil
 	}
@@ -367,8 +461,30 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers ma
 		ImageName: imageName,
 	}
 
-	// Default port: first route port from layers
-	if cfg.Port == 0 && layers != nil {
+	// Multi-port mode: when ports == "all", populate from image ports
+	if t.Ports == "all" && len(imagePorts) > 0 {
+		for _, mapping := range imagePorts {
+			containerPort := mapping
+			// Parse host:container format
+			if idx := strings.LastIndex(mapping, ":"); idx != -1 {
+				containerPort = mapping[idx+1:]
+			}
+			p, err := strconv.Atoi(containerPort)
+			if err != nil {
+				continue
+			}
+			proto := "http"
+			if portProtos != nil {
+				if pp, ok := portProtos[p]; ok {
+					proto = pp
+				}
+			}
+			cfg.Ports = append(cfg.Ports, TunnelPort{Port: p, Protocol: proto})
+		}
+	}
+
+	// Default port: first route port from layers (single-port mode only)
+	if cfg.Port == 0 && len(cfg.Ports) == 0 && layers != nil {
 		for _, ln := range layerNames {
 			layer, ok := layers[ln]
 			if !ok {
@@ -390,7 +506,7 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, fqdn string, layers ma
 	case "tailscale":
 		cfg.Funnel = t.Funnel
 		cfg.HTTPS = t.HTTPS
-		if cfg.HTTPS == 0 {
+		if cfg.HTTPS == 0 && len(cfg.Ports) == 0 {
 			cfg.HTTPS = 443
 		}
 	case "cloudflare":
@@ -419,8 +535,29 @@ func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
 		ImageName: meta.Image,
 	}
 
-	// If port is still 0, try first route from label metadata
-	if cfg.Port == 0 && len(meta.Routes) > 0 {
+	// Multi-port mode
+	if t.Ports == "all" && len(meta.Ports) > 0 {
+		for _, mapping := range meta.Ports {
+			containerPort := mapping
+			if idx := strings.LastIndex(mapping, ":"); idx != -1 {
+				containerPort = mapping[idx+1:]
+			}
+			p, err := strconv.Atoi(containerPort)
+			if err != nil {
+				continue
+			}
+			proto := "http"
+			if meta.PortProtos != nil {
+				if pp, ok := meta.PortProtos[p]; ok {
+					proto = pp
+				}
+			}
+			cfg.Ports = append(cfg.Ports, TunnelPort{Port: p, Protocol: proto})
+		}
+	}
+
+	// If port is still 0 and not multi-port, try first route from label metadata
+	if cfg.Port == 0 && len(cfg.Ports) == 0 && len(meta.Routes) > 0 {
 		cfg.Port = meta.Routes[0].Port
 	}
 
@@ -428,7 +565,7 @@ func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
 	case "tailscale":
 		cfg.Funnel = t.Funnel
 		cfg.HTTPS = t.HTTPS
-		if cfg.HTTPS == 0 {
+		if cfg.HTTPS == 0 && len(cfg.Ports) == 0 {
 			cfg.HTTPS = 443
 		}
 	case "cloudflare":

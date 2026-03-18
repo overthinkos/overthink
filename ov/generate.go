@@ -1028,6 +1028,18 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// JSON array labels (omitted when empty)
 	writeJSONLabel(b, LabelPorts, img.Ports)
 
+	// Port protocols: collect from layer PortSpec declarations
+	portProtos := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		for _, ps := range layer.PortSpecs() {
+			if ps.Protocol != "" && ps.Protocol != "http" {
+				portProtos[strconv.Itoa(ps.Port)] = ps.Protocol
+			}
+		}
+	}
+	writeJSONLabel(b, LabelPortProtos, portProtos)
+
 	// Volumes: short form names (without ov-<image>- prefix)
 	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {

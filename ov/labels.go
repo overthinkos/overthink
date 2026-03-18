@@ -37,6 +37,7 @@ const (
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
 	LabelEngine         = "org.overthinkos.engine"
+	LabelPortProtos     = "org.overthinkos.port_protos"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -89,6 +90,7 @@ type ImageMetadata struct {
 	EnvLayers      map[string]string
 	PathAppend     []string
 	Engine         string
+	PortProtos     map[int]string // container port -> protocol ("http" or "tcp")
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -277,6 +279,20 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelPathAppend]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.PathAppend); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelPathAppend, err)
+		}
+	}
+
+	// Port protocols
+	if v := labels[LabelPortProtos]; v != "" {
+		var protos map[string]string
+		if err := json.Unmarshal([]byte(v), &protos); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPortProtos, err)
+		}
+		meta.PortProtos = make(map[int]string)
+		for k, v := range protos {
+			if p, err := strconv.Atoi(k); err == nil {
+				meta.PortProtos[p] = v
+			}
 		}
 	}
 

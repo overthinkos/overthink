@@ -19,10 +19,15 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		return merged
 	}
 
-	// Collect from layers
-	for _, layerName := range img.Layers {
-		bare := BareRef(layerName)
-		ly, ok := layers[bare]
+	// Resolve full layer tree (including composing layers' sub-layers)
+	allLayers, err := ResolveLayerOrder(img.Layers, layers, nil)
+	if err != nil {
+		allLayers = img.Layers // fall back to direct layers on error
+	}
+
+	// Collect from all layers
+	for _, layerName := range allLayers {
+		ly, ok := layers[layerName]
 		if !ok {
 			continue
 		}

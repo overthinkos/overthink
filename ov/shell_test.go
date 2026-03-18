@@ -11,6 +11,12 @@ func withTerminal(t *testing.T, tty bool) {
 	t.Cleanup(func() { isTerminal = orig })
 }
 
+func withForceTTY(t *testing.T, force bool) {
+	orig := forceTTY
+	forceTTY = force
+	t.Cleanup(func() { forceTTY = orig })
+}
+
 func TestBuildShellArgs(t *testing.T) {
 	withTerminal(t, true)
 	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", "/home/user/project", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{})
@@ -260,6 +266,40 @@ func TestBuildExecArgsWithCommandTTY(t *testing.T) {
 	}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("buildExecArgs(command+tty) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildShellArgsForceTTY(t *testing.T) {
+	withTerminal(t, false) // no real terminal
+	withForceTTY(t, true)  // but --tty flag set
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", "/home/user/project", 1000, 1000, nil, nil, nil, false, "openclaw models auth login", "127.0.0.1", nil, SecurityConfig{})
+	want := []string{
+		"docker", "run", "--rm", "-it",
+		"-v", "/home/user/project:/workspace",
+		"-w", "/workspace",
+		"--user", "1000:1000",
+		"--entrypoint", "bash", "ghcr.io/overthinkos/fedora:latest",
+		"-c", "openclaw models auth login",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildShellArgs(forceTTY) =\n  %v\nwant\n  %v", args, want)
+	}
+}
+
+func TestBuildExecArgsForceTTY(t *testing.T) {
+	withTerminal(t, false) // no real terminal
+	withForceTTY(t, true)  // but --tty flag set
+	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "openclaw models auth login", nil)
+	want := []string{
+		"docker", "exec", "-it",
+		"--user", "1000:1000",
+		"-w", "/workspace",
+		"ov-openclaw",
+		"bash",
+		"-c", "openclaw models auth login",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("buildExecArgs(forceTTY) =\n  %v\nwant\n  %v", args, want)
 	}
 }
 

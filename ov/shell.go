@@ -35,6 +35,10 @@ func defaultContainerRunning(engine, name string) bool {
 	return strings.TrimSpace(string(out)) == "true"
 }
 
+// forceTTY overrides isTerminal() when set to true (e.g., by --tty flag).
+// Allows automation tools like Claude Code to force TTY allocation.
+var forceTTY bool
+
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
 	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
@@ -42,6 +46,7 @@ type ShellCmd struct {
 	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Command   string   `short:"c" help:"Command to execute instead of interactive shell"`
 	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	TTY       bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
@@ -49,6 +54,9 @@ type ShellCmd struct {
 }
 
 func (c *ShellCmd) Run() error {
+	// Set global forceTTY so buildShellArgs/buildExecArgs pick it up
+	forceTTY = c.TTY
+
 	// Handle remote image refs
 	ref := StripURLScheme(c.Image)
 	if IsRemoteImageRef(ref) {
@@ -316,7 +324,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig, network ...string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
-	if isTerminal() {
+	if forceTTY || isTerminal() {
 		interactive = "-it"
 	}
 	args := []string{
@@ -358,7 +366,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 func buildExecArgs(engine, name string, uid, gid int, command string, envVars []string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
-	if isTerminal() {
+	if forceTTY || isTerminal() {
 		interactive = "-it"
 	}
 	args := []string{

@@ -184,7 +184,7 @@ func (c *ShellCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		return syscall.Exec(enginePath, args, os.Environ())
+		return execCommand(enginePath, args)
 	}
 
 	if cfgErr != nil {
@@ -221,7 +221,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Replace process with engine
-	return syscall.Exec(enginePath, args, os.Environ())
+	return execCommand(enginePath, args)
 }
 
 func (c *ShellCmd) runRemote(ref string) error {
@@ -268,7 +268,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 		if err != nil {
 			return err
 		}
-		return syscall.Exec(enginePath, args, os.Environ())
+		return execCommand(enginePath, args)
 	}
 
 	// Pull or build
@@ -309,7 +309,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 	if err != nil {
 		return err
 	}
-	return syscall.Exec(enginePath, args, os.Environ())
+	return execCommand(enginePath, args)
 }
 
 // resolveShellImageRef builds the full image reference from registry, name, and tag.
@@ -382,6 +382,42 @@ func buildExecArgs(engine, name string, uid, gid int, command string, envVars []
 		args = append(args, "-c", command)
 	}
 	return args
+}
+
+// execCommand runs the given args via syscall.Exec. When forceTTY is set
+// and there is no real terminal, it wraps the command with `script` to
+// provide a proper PTY so that programs requiring a TTY work correctly
+// from automation tools.
+func execCommand(path string, args []string) error {
+	if forceTTY && !isTerminal() {
+		// Wrap with script to provide a real PTY.
+		// script -qefc "<cmd>" /dev/null
+		//   -q: quiet (no "Script started" banner)
+		//   -e: return child exit code
+		//   -f: flush output after each write
+		//   -c: command to run
+		cmdStr := shellQuoteArgs(args)
+		scriptPath, err := findExecutable("script")
+		if err != nil {
+			return fmt.Errorf("--tty requires 'script' (util-linux): %w", err)
+		}
+		scriptArgs := []string{"script", "-qefc", cmdStr, "/dev/null"}
+		return syscall.Exec(scriptPath, scriptArgs, os.Environ())
+	}
+	return syscall.Exec(path, args, os.Environ())
+}
+
+// shellQuoteArgs joins args into a shell-safe command string.
+func shellQuoteArgs(args []string) string {
+	quoted := make([]string, len(args))
+	for i, arg := range args {
+		if strings.ContainsAny(arg, " \t\n\"'\\$`!#&|;(){}[]<>?*~") {
+			quoted[i] = "'" + strings.ReplaceAll(arg, "'", "'\"'\"'") + "'"
+		} else {
+			quoted[i] = arg
+		}
+	}
+	return strings.Join(quoted, " ")
 }
 
 // localizePort prefixes a port mapping with the given bind address.

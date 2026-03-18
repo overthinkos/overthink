@@ -71,7 +71,7 @@ ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
 ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
 ov new layer <name>                    # Scaffold a layer directory
 ov seed <image> [--tag TAG]                # Seed empty bind mount dirs from image data
-ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
+ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--tty] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
 ov start <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
 ov stop <image> [-i INSTANCE]          # Stop a running service container
 ov enable <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
@@ -88,6 +88,18 @@ ov service status <image> [-i INSTANCE]    # Show supervisord service status
 ov service start <image> <service> [-i INSTANCE]   # Start a supervisord service
 ov service stop <image> <service> [-i INSTANCE]    # Stop a supervisord service
 ov service restart <image> <service> [-i INSTANCE] # Restart a supervisord service
+ov browser open <image> <url> [-i INSTANCE]                  # Open URL in container's Chrome
+ov browser list <image> [-i INSTANCE]                         # List open Chrome tabs
+ov browser close <image> <tab-id> [-i INSTANCE]               # Close a Chrome tab
+ov browser text <image> <tab-id> [-i INSTANCE]                # Get page text content
+ov browser html <image> <tab-id> [-i INSTANCE]                # Get page HTML
+ov browser url <image> <tab-id> [-i INSTANCE]                 # Get page title and URL
+ov browser screenshot <image> <tab-id> [file] [-i INSTANCE]   # Capture screenshot (PNG)
+ov browser click <image> <tab-id> <selector> [-i INSTANCE]    # Click element by CSS selector
+ov browser type <image> <tab-id> <selector> <text> [-i INSTANCE]  # Type into input field
+ov browser eval <image> <tab-id> <expression> [-i INSTANCE]   # Evaluate JavaScript
+ov browser wait <image> <tab-id> <selector> [-i INSTANCE] [--timeout 30s]  # Wait for element
+ov browser cdp <image> <tab-id> <method> [params-json] [-i INSTANCE]  # Raw CDP command
 ov crypto init <image> [--volume NAME]
 ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
@@ -125,9 +137,9 @@ ov version                             # Print computed CalVer tag
 
 **Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway), `dank-material-shell` (DMS shell/launcher via COPR; depends: sway), `noctalia` (Quickshell-based shell via COPR; depends: sway)
 
-**Display/Audio:** `wayvnc` (VNC server on :5900), `pipewire` (audio/media server + wireplumber)
+**Display/Audio:** `wayvnc` (VNC server on tcp:5900; protocol annotation), `pipewire` (audio/media server + wireplumber)
 
-**Browser:** `chrome-deps` (Chrome runtime dependencies: fonts, graphics, audio libs), `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data; layers: chrome-deps), `google-chrome-sway` (Chrome on sway, same ports/volume; layers: chrome-deps)
+**Browser:** `chrome-deps` (Chrome runtime dependencies: fonts, graphics, audio libs; shm_size: 1g, procps-ng, iproute for debugging), `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data; layers: chrome-deps), `google-chrome-sway` (Chrome on sway, same ports/volume; layers: chrome-deps; port_relay on :9222, browser-open via CDP, BROWSER env)
 
 **GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
 
@@ -139,7 +151,7 @@ ov version                             # Print computed CalVer tag
 
 **Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
 
-**Utilities:** `gocryptfs` (encrypted filesystem for ov crypto operations), `socat` (socket relay for VM console access)
+**Utilities:** `gocryptfs` (encrypted filesystem for ov crypto operations), `socat` (socket relay for VM console access and port_relay for loopback-only services)
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov` (ov binary for container/VM use)
 
@@ -160,6 +172,10 @@ ov version                             # Print computed CalVer tag
 - Binary downloads: detect arch with `uname -m`, map via `case`, fail on unsupported
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
 - All logic belongs in `ov`. Tasks are only for bootstrap (building ov). Every public task has `desc:`
+- Port protocol annotations: `tcp:5900` in layer.yml ports for non-HTTP protocols (default: http)
+- `port_relay:` in layer.yml for services binding to loopback only -- auto-adds socat relay
+- `security.shm_size:` in layer.yml for shared memory requirements (e.g., `"1g"`)
+- `BROWSER` env in chrome layers points to `browser-open` for in-container URL opening via CDP
 
 ---
 

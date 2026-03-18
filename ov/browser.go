@@ -1,16 +1,14 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
-
-	"github.com/chromedp/chromedp"
 )
 
 // BrowserCmd manages Chrome browser tabs in running containers
@@ -38,20 +36,26 @@ func (c *BrowserOpenCmd) Run() error {
 		return err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Create a new tab navigated to the URL via Chrome DevTools HTTP API.
+	// URL-encode the target so its query params don't conflict with the endpoint.
+	encoded := url.QueryEscape(c.URL)
+	client := &http.Client{Timeout: 10 * time.Second}
+	req, err := http.NewRequest("PUT", devtoolsURL+"/json/new?"+encoded, nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("opening URL in Chrome: %w", err)
+	}
+	defer resp.Body.Close()
 
-	allocCtx, allocCancel := chromedp.NewRemoteAllocator(ctx, devtoolsURL)
-	defer allocCancel()
-
-	tabCtx, tabCancel := chromedp.NewContext(allocCtx)
-	defer tabCancel()
-
-	if err := chromedp.Run(tabCtx, chromedp.Navigate(c.URL)); err != nil {
-		return fmt.Errorf("failed to open URL: %w", err)
+	var tab devToolsTab
+	if err := json.NewDecoder(resp.Body).Decode(&tab); err != nil {
+		return fmt.Errorf("parsing response: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Opened %s in %s\n", c.URL, name)
+	fmt.Fprintf(os.Stderr, "Opened %s in %s (tab %s)\n", c.URL, name, tab.ID)
 	return nil
 }
 

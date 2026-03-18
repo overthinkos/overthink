@@ -211,3 +211,87 @@ func TestGenerateSupervisordFragments(t *testing.T) {
 		t.Error("python should not have a supervisor config")
 	}
 }
+
+func TestGenerateRelaySupervisordFragments(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	g := &Generator{
+		BuildDir: tmpDir,
+		Layers: map[string]*Layer{
+			"socat": {
+				Name:       "socat",
+				HasRootYml: true,
+			},
+			"chrome": {
+				Name:         "chrome",
+				HasUserYml:   true,
+				HasPortRelay: true,
+				portRelay:    []int{9222},
+				HasSupervisord: true,
+				serviceConf:   "[program:chrome]\ncommand=chrome\nautostart=true\n",
+			},
+		},
+	}
+
+	err := g.generateSupervisordFragments("test-image", []string{"socat", "chrome"})
+	if err != nil {
+		t.Fatalf("generateSupervisordFragments() error = %v", err)
+	}
+
+	// Regular service config should exist
+	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-chrome.conf")
+	if err != nil {
+		t.Fatalf("reading chrome supervisor config: %v", err)
+	}
+	if !strings.Contains(string(data), "[program:chrome]") {
+		t.Error("chrome fragment should contain [program:chrome]")
+	}
+
+	// Relay config should also exist
+	data, err = os.ReadFile(tmpDir + "/test-image/supervisor/02-relay-9222.conf")
+	if err != nil {
+		t.Fatalf("reading relay supervisor config: %v", err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "[program:relay-9222]") {
+		t.Error("relay fragment should contain [program:relay-9222]")
+	}
+	if !strings.Contains(content, "relay-wrapper 9222") {
+		t.Error("relay fragment should contain relay-wrapper 9222 command")
+	}
+	if !strings.Contains(content, "autostart=true") {
+		t.Error("relay fragment should have autostart=true")
+	}
+	if !strings.Contains(content, "priority=1") {
+		t.Error("relay fragment should have priority=1")
+	}
+
+	// socat has no supervisord or port_relay, should not have a config
+	_, err = os.ReadFile(tmpDir + "/test-image/supervisor/01-socat.conf")
+	if err == nil {
+		t.Error("socat should not have a supervisor config")
+	}
+}
+
+func TestGenerateRelayConf(t *testing.T) {
+	conf := generateRelayConf(9222)
+
+	if !strings.Contains(conf, "[program:relay-9222]") {
+		t.Error("should contain [program:relay-9222]")
+	}
+	if !strings.Contains(conf, "command=/usr/local/bin/relay-wrapper 9222") {
+		t.Error("should contain relay-wrapper command")
+	}
+	if !strings.Contains(conf, "autostart=true") {
+		t.Error("should contain autostart=true")
+	}
+	if !strings.Contains(conf, "autorestart=true") {
+		t.Error("should contain autorestart=true")
+	}
+	if !strings.Contains(conf, "priority=1") {
+		t.Error("should contain priority=1")
+	}
+	if !strings.HasSuffix(conf, "\n") {
+		t.Error("should end with newline")
+	}
+}

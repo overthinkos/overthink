@@ -1,5 +1,6 @@
-description: Socket relay tool for VM console access
+description: Socket relay tool for VM console access and port relays
 
 rpm:
   packages:
     - socat
+    - iproute

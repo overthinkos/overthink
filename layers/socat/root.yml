@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - cp /ctx/relay-wrapper /usr/local/bin/relay-wrapper
+      - chmod +x /usr/local/bin/relay-wrapper

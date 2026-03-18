@@ -932,3 +932,152 @@ func TestLevenshteinDistance(t *testing.T) {
 		})
 	}
 }
+
+func TestValidatePortRelayValid(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {Layers: []string{"socat", "chrome"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"socat": {Name: "socat", HasRootYml: true, rpmConfig: &RpmConfig{Packages: []string{"socat", "iproute"}}},
+		"chrome": {
+			Name:         "chrome",
+			HasUserYml:   true,
+			HasPorts:     true,
+			ports:        []string{"9222"},
+			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
+			HasPortRelay: true,
+			portRelay:    []int{9222},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+func TestValidatePortRelayInvalidPort(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:         "svc",
+			HasUserYml:   true,
+			HasPorts:     true,
+			ports:        []string{"99999"},
+			portSpecs:    []PortSpec{{Port: 99999, Protocol: "http"}},
+			HasPortRelay: true,
+			portRelay:    []int{99999},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for invalid port_relay port")
+	}
+	if !strings.Contains(err.Error(), "not a valid port") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidatePortRelayNotInPorts(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:         "svc",
+			HasUserYml:   true,
+			HasPorts:     true,
+			ports:        []string{"8080"},
+			portSpecs:    []PortSpec{{Port: 8080, Protocol: "http"}},
+			HasPortRelay: true,
+			portRelay:    []int{9222},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for port_relay port not in layer ports")
+	}
+	if !strings.Contains(err.Error(), "not declared in the layer's ports") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidatePortRelayNoPorts(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:         "svc",
+			HasUserYml:   true,
+			HasPortRelay: true,
+			portRelay:    []int{9222},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for port_relay without ports")
+	}
+	if !strings.Contains(err.Error(), "no ports declared") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidatePortRelayDuplicate(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"svc": {
+			Name:         "svc",
+			HasUserYml:   true,
+			HasPorts:     true,
+			ports:        []string{"9222"},
+			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
+			HasPortRelay: true,
+			portRelay:    []int{9222, 9222},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for duplicate port_relay port")
+	}
+	if !strings.Contains(err.Error(), "duplicate port") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidatePortRelayMissingSocat(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {Layers: []string{"chrome"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"chrome": {
+			Name:         "chrome",
+			HasUserYml:   true,
+			HasPorts:     true,
+			ports:        []string{"9222"},
+			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
+			HasPortRelay: true,
+			portRelay:    []int{9222},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for port_relay without socat layer")
+	}
+	if !strings.Contains(err.Error(), "missing \"socat\" layer") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

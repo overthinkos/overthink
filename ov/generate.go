@@ -343,11 +343,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	// Check if this is a service image (has supervisord layers)
+	// Check if this is a service image (has supervisord layers or port relays)
 	hasServices := false
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasSupervisord {
+		if layer.HasSupervisord || layer.HasPortRelay {
 			hasServices = true
 			break
 		}
@@ -410,6 +410,12 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			layer := g.Layers[layerName]
 			if layer.HasSupervisord {
 				b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%02d-%s.conf /supervisor/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
+			}
+			if layer.HasPortRelay {
+				for _, port := range layer.PortRelay() {
+					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
+					b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%s /supervisor/%s\n", imageName, confName, confName))
+				}
 			}
 		}
 		b.WriteString("\n")
@@ -815,19 +821,42 @@ func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []
 
 	for i, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if !layer.HasSupervisord {
-			continue
+		if layer.HasSupervisord {
+			content := layer.ServiceConf()
+			if !strings.HasSuffix(content, "\n") {
+				content += "\n"
+			}
+			fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
+			if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
+				return err
+			}
 		}
-		content := layer.ServiceConf()
-		if !strings.HasSuffix(content, "\n") {
-			content += "\n"
-		}
-		fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
-		if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
-			return err
+		if layer.HasPortRelay {
+			for _, port := range layer.PortRelay() {
+				content := generateRelayConf(port)
+				confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
+				fragFile := filepath.Join(fragDir, confName)
+				if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
+}
+
+// generateRelayConf returns a supervisord config fragment for a port relay.
+func generateRelayConf(port int) string {
+	return fmt.Sprintf(`[program:relay-%d]
+command=/usr/local/bin/relay-wrapper %d
+autostart=true
+autorestart=true
+priority=1
+startsecs=0
+stdout_logfile=/dev/fd/1
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+`, port, port)
 }
 
 // generateSystemdFragments copies systemd .service files from layers to .build/<image>/systemd/
@@ -1117,6 +1146,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	writeJSONLabel(b, LabelSupervisord, supervisordServices)
+
+	// Port relay: collected from layers
+	var portRelay []int
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		portRelay = append(portRelay, layer.PortRelay()...)
+	}
+	writeJSONLabel(b, LabelPortRelay, portRelay)
 
 	// Routes: collected from layers
 	var routes []LabelRoute

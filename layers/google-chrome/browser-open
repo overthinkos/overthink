@@ -1,0 +1,22 @@
+#!/usr/bin/env node
+// Opens a URL in the running Chrome instance via Chrome DevTools Protocol.
+// Uses WebSocket CDP Page.navigate — handles all URL characters correctly.
+const url = process.argv[2];
+if (!url) { process.stderr.write('Usage: browser-open <url>\n'); process.exit(1); }
+(async () => {
+  const res = await fetch('http://127.0.0.1:9222/json/new', { method: 'PUT' });
+  const tab = await res.json();
+  const ws = new WebSocket(tab.webSocketDebuggerUrl);
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ id: 1, method: 'Page.navigate', params: { url } }));
+  };
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.id === 1) {
+      ws.close();
+      process.exit(msg.result && msg.result.frameId ? 0 : 1);
+    }
+  };
+  ws.onerror = () => process.exit(1);
+  setTimeout(() => process.exit(1), 5000);
+})();

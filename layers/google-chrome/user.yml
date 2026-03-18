@@ -6,3 +6,5 @@ tasks:
       - mkdir -p ~/.local/bin
       - cp /ctx/chrome-wrapper ~/.local/bin/chrome-wrapper
       - chmod +x ~/.local/bin/chrome-wrapper
+      - cp /ctx/browser-open ~/.local/bin/browser-open
+      - chmod +x ~/.local/bin/browser-open

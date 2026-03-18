@@ -1,5 +1,6 @@
 depends:
   - niri
+  - socat
 
 layers:
   - chrome-deps
@@ -8,6 +9,9 @@ env:
   CHROME_FLAGS: "--ozone-platform=wayland --no-sandbox --enable-features=UseOzonePlatform"
 
 ports:
+  - 9222
+
+port_relay:
   - 9222
 
 volumes:

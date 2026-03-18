@@ -6,4 +6,6 @@ tasks:
       - mkdir -p ~/.local/bin
       - cp /ctx/chrome-wrapper ~/.local/bin/chrome-wrapper
       - chmod +x ~/.local/bin/chrome-wrapper
-      - xdg-settings set default-web-browser google-chrome.desktop
+      - cp /ctx/browser-open ~/.local/bin/browser-open
+      - chmod +x ~/.local/bin/browser-open
+      - BROWSER= xdg-settings set default-web-browser google-chrome.desktop

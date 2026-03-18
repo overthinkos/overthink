@@ -2,6 +2,9 @@ ports:
   - 8080
   - 9090
 
+port_relay:
+  - 8080
+
 route:
   host: webservice.localhost
   port: 8080

@@ -357,6 +357,82 @@ func TestVolumeLayers(t *testing.T) {
 	}
 }
 
+func TestLayerPortRelayFromYAML(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	ws := layers["webservice"]
+	if ws == nil {
+		t.Fatal("webservice layer not found")
+	}
+
+	if !ws.HasPortRelay {
+		t.Error("webservice should have port_relay")
+	}
+
+	relay := ws.PortRelay()
+	if len(relay) != 1 || relay[0] != 8080 {
+		t.Errorf("PortRelay() = %v, want [8080]", relay)
+	}
+}
+
+func TestLayerPortRelay(t *testing.T) {
+	// Test direct struct construction (no testdata file needed)
+	layer := &Layer{
+		Name:         "chrome",
+		HasUserYml:   true,
+		HasPortRelay: true,
+		portRelay:    []int{9222},
+		HasPorts:     true,
+		ports:        []string{"9222"},
+		portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
+	}
+
+	if !layer.HasPortRelay {
+		t.Error("layer should have port_relay")
+	}
+	relay := layer.PortRelay()
+	if len(relay) != 1 || relay[0] != 9222 {
+		t.Errorf("PortRelay() = %v, want [9222]", relay)
+	}
+}
+
+func TestLayerPortRelayNone(t *testing.T) {
+	layer := &Layer{
+		Name:       "basic",
+		HasRootYml: true,
+	}
+
+	if layer.HasPortRelay {
+		t.Error("basic layer should not have port_relay")
+	}
+	if len(layer.PortRelay()) != 0 {
+		t.Errorf("PortRelay() = %v, want nil/empty", layer.PortRelay())
+	}
+}
+
+func TestLayerPortRelayMultiple(t *testing.T) {
+	layer := &Layer{
+		Name:         "multi",
+		HasUserYml:   true,
+		HasPortRelay: true,
+		portRelay:    []int{9222, 5900},
+		HasPorts:     true,
+		ports:        []string{"9222", "5900"},
+		portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},
+	}
+
+	relay := layer.PortRelay()
+	if len(relay) != 2 {
+		t.Fatalf("PortRelay() returned %d ports, want 2", len(relay))
+	}
+	if relay[0] != 9222 || relay[1] != 5900 {
+		t.Errorf("PortRelay() = %v, want [9222 5900]", relay)
+	}
+}
+
 func TestRouteLayers(t *testing.T) {
 	layers, err := ScanLayers("testdata")
 	if err != nil {

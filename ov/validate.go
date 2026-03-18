@@ -105,6 +105,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate engine declarations
 	validateEngineConfig(cfg, layers, errs)
 
+	// Validate port_relay declarations
+	validatePortRelay(cfg, layers, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}
@@ -1063,6 +1066,69 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 			}
 			sort.Strings(conflicts)
 			errs.Add("image %q: conflicting engine requirements: %s", imageName, strings.Join(conflicts, ", "))
+		}
+	}
+}
+
+// validatePortRelay validates port_relay declarations in layers
+func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasPortRelay {
+			continue
+		}
+		// Validate each port
+		portSet := make(map[int]bool)
+		for _, port := range layer.PortRelay() {
+			if port < 1 || port > 65535 {
+				errs.Add("layer %q port_relay: %d is not a valid port number (1-65535)", name, port)
+			}
+			if portSet[port] {
+				errs.Add("layer %q port_relay: duplicate port %d", name, port)
+			}
+			portSet[port] = true
+		}
+
+		// Warn if relay port isn't declared in the layer's ports
+		if layer.HasPorts {
+			layerPorts := make(map[int]bool)
+			for _, ps := range layer.PortSpecs() {
+				layerPorts[ps.Port] = true
+			}
+			for _, port := range layer.PortRelay() {
+				if !layerPorts[port] {
+					errs.Add("layer %q port_relay: port %d is not declared in the layer's ports", name, port)
+				}
+			}
+		} else {
+			errs.Add("layer %q port_relay: layer has no ports declared", name)
+		}
+	}
+
+	// Validate that images with port_relay layers include the socat layer
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err != nil {
+			continue
+		}
+		hasRelay := false
+		hasSocat := false
+		for _, layerName := range resolved {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			if layer.HasPortRelay {
+				hasRelay = true
+			}
+			if layerName == "socat" {
+				hasSocat = true
+			}
+		}
+		if hasRelay && !hasSocat {
+			errs.Add("image %q: has port_relay layers but missing \"socat\" layer (add it to the image layers or as a dependency)", imageName)
 		}
 	}
 }

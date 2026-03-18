@@ -38,6 +38,7 @@ const (
 	LabelPathAppend     = "org.overthinkos.path_append"
 	LabelEngine         = "org.overthinkos.engine"
 	LabelPortProtos     = "org.overthinkos.port_protos"
+	LabelPortRelay      = "org.overthinkos.port_relay"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -91,6 +92,7 @@ type ImageMetadata struct {
 	PathAppend     []string
 	Engine         string
 	PortProtos     map[int]string // container port -> protocol ("http" or "tcp")
+	PortRelay      []int          // ports with socat relay (eth0 -> loopback)
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -293,6 +295,13 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 			if p, err := strconv.Atoi(k); err == nil {
 				meta.PortProtos[p] = v
 			}
+		}
+	}
+
+	// Port relay
+	if v := labels[LabelPortRelay]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.PortRelay); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPortRelay, err)
 		}
 	}
 

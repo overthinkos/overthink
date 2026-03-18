@@ -90,6 +90,7 @@ type LayerYAML struct {
 	SystemServices []string          `yaml:"system_services,omitempty"`
 	Libvirt        []string          `yaml:"libvirt,omitempty"`
 	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
+	PortRelay      []int             `yaml:"port_relay,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -144,6 +145,7 @@ type Layer struct {
 	HasSystemServices  bool
 	SystemServiceUnits []string // system-level systemd units to enable (e.g. "sshd")
 	HasLibvirt         bool
+	HasPortRelay       bool
 
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with :version for remote ref collection
@@ -169,6 +171,7 @@ type Layer struct {
 	security    *SecurityConfig
 	libvirt     []string
 	hooks       *HooksConfig
+	portRelay   []int
 	engine      string // required run engine from layer.yml ("docker", "podman", or "")
 }
 
@@ -330,6 +333,12 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate hooks
 		layer.hooks = ly.Hooks
 
+		// Pre-populate port relay
+		if len(ly.PortRelay) > 0 {
+			layer.HasPortRelay = true
+			layer.portRelay = ly.PortRelay
+		}
+
 		// Pre-populate engine requirement
 		layer.engine = ly.Engine
 	}
@@ -351,7 +360,8 @@ func (l *Layer) HasInstallFiles() bool {
 func (l *Layer) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
 		l.HasVolumes || l.HasAliases || l.HasSupervisord || l.HasExtract ||
-		l.HasSystemdServices || l.HasSystemServices || l.HasLibvirt
+		l.HasSystemdServices || l.HasSystemServices || l.HasLibvirt ||
+		l.HasPortRelay
 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists
@@ -462,6 +472,11 @@ func (l *Layer) Libvirt() []string {
 // Hooks returns the lifecycle hooks config (pre-populated from layer.yml, nil if not set)
 func (l *Layer) Hooks() *HooksConfig {
 	return l.hooks
+}
+
+// PortRelay returns the port relay declarations (pre-populated from layer.yml)
+func (l *Layer) PortRelay() []int {
+	return l.portRelay
 }
 
 // Engine returns the required run engine (pre-populated from layer.yml, "" if not set)

@@ -296,6 +296,76 @@ func TestExtractMetadataMinimalLabels(t *testing.T) {
 	}
 }
 
+func TestExtractMetadataPortRelay(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			LabelVersion:   "1",
+			LabelImage:     "chrome",
+			LabelUID:       "1000",
+			LabelGID:       "1000",
+			LabelUser:      "user",
+			LabelHome:      "/home/user",
+			LabelPortRelay: `[9222]`,
+		}, nil
+	}
+
+	meta, err := ExtractMetadata("docker", "chrome:latest")
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error = %v", err)
+	}
+	if meta == nil {
+		t.Fatal("ExtractMetadata() returned nil")
+	}
+
+	wantRelay := []int{9222}
+	if !reflect.DeepEqual(meta.PortRelay, wantRelay) {
+		t.Errorf("PortRelay = %v, want %v", meta.PortRelay, wantRelay)
+	}
+}
+
+func TestWriteLabelsPortRelay(t *testing.T) {
+	g := &Generator{
+		Config: &Config{
+			Images: map[string]ImageConfig{
+				"chrome-test": {
+					Layers: []string{"chrome"},
+				},
+			},
+		},
+		Layers: map[string]*Layer{
+			"chrome": {
+				Name:         "chrome",
+				HasUserYml:   true,
+				HasPortRelay: true,
+				portRelay:    []int{9222},
+			},
+		},
+	}
+
+	img := &ResolvedImage{
+		Name: "chrome-test",
+		UID:  1000,
+		GID:  1000,
+		User: "user",
+		Home: "/home/user",
+	}
+
+	var b strings.Builder
+	g.writeLabels(&b, "chrome-test", []string{"chrome"}, img)
+	output := b.String()
+
+	// Check port_relay label is emitted
+	if !strings.Contains(output, LabelPortRelay) {
+		t.Errorf("missing %s label in output:\n%s", LabelPortRelay, output)
+	}
+	if !strings.Contains(output, "[9222]") {
+		t.Errorf("missing port relay value [9222] in output:\n%s", output)
+	}
+}
+
 func TestWriteLabelsEmitsLabels(t *testing.T) {
 	tunnel := &TunnelYAML{Provider: "tailscale", Port: 8080, Funnel: true}
 	g := &Generator{
@@ -442,6 +512,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		LabelTunnel, LabelFQDN, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
 		LabelSystemd, LabelSupervisord, LabelEnvLayers, LabelPathAppend,
+		LabelPortRelay,
 	}
 	for _, label := range omitted {
 		if strings.Contains(output, label) {

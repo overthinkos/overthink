@@ -1,13 +1,21 @@
 depends:
   - sway
+  - socat
 
 layers:
   - chrome-deps
 
+path_append:
+  - "~/.local/bin"
+
 env:
   CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform"
+  BROWSER: "browser-open"
 
 ports:
+  - 9222
+
+port_relay:
   - 9222
 
 volumes:

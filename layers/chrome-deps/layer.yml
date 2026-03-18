@@ -1,5 +1,8 @@
 description: Google Chrome runtime dependencies
 
+security:
+  shm_size: "1g"
+
 rpm:
   packages:
     - liberation-fonts
@@ -12,3 +15,5 @@ rpm:
     - libdrm
     - libxkbcommon
     - nss
+    - procps-ng
+    - iproute

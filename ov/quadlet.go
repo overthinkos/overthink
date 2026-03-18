@@ -84,6 +84,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 			}
 		}
 	}
+	if cfg.Security.ShmSize != "" {
+		b.WriteString(fmt.Sprintf("ShmSize=%s\n", cfg.Security.ShmSize))
+	}
 	if len(cfg.BindMounts) > 0 {
 		b.WriteString(fmt.Sprintf("UserNS=keep-id:uid=%d,gid=%d\n", cfg.UID, cfg.GID))
 	}

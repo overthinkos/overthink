@@ -57,6 +57,59 @@ func TestAppendUnique(t *testing.T) {
 	}
 }
 
+func TestSecurityArgsShmSize(t *testing.T) {
+	args := SecurityArgs(SecurityConfig{ShmSize: "1g"})
+	want := []string{"--shm-size", "1g"}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("SecurityArgs(shm_size) = %v, want %v", args, want)
+	}
+}
+
+func TestSecurityArgsShmSizeWithPrivileged(t *testing.T) {
+	args := SecurityArgs(SecurityConfig{Privileged: true, ShmSize: "512m"})
+	want := []string{"--privileged", "--shm-size", "512m"}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("SecurityArgs(privileged+shm) = %v, want %v", args, want)
+	}
+}
+
+func TestMaxShmSize(t *testing.T) {
+	tests := []struct {
+		a, b, want string
+	}{
+		{"", "1g", "1g"},
+		{"1g", "", "1g"},
+		{"256m", "1g", "1g"},
+		{"2g", "1g", "2g"},
+		{"512m", "512m", "512m"},
+	}
+	for _, tt := range tests {
+		got := maxShmSize(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("maxShmSize(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestParseShmBytes(t *testing.T) {
+	tests := []struct {
+		s    string
+		want int64
+	}{
+		{"1g", 1024 * 1024 * 1024},
+		{"256m", 256 * 1024 * 1024},
+		{"64k", 64 * 1024},
+		{"1024", 1024},
+		{"", 0},
+	}
+	for _, tt := range tests {
+		got := parseShmBytes(tt.s)
+		if got != tt.want {
+			t.Errorf("parseShmBytes(%q) = %d, want %d", tt.s, got, tt.want)
+		}
+	}
+}
+
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
 	args := buildStartArgs("docker", "myimage:latest", "/workspace", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec)

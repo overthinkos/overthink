@@ -46,6 +46,7 @@ type SecurityConfig struct {
 	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
 	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
+	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"` // shared memory size (e.g. "1g", "256m")
 }
 
 // ImageConfig represents configuration for a single image or defaults

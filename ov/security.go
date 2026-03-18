@@ -1,9 +1,15 @@
 package main
 
+import (
+	"strconv"
+	"strings"
+)
+
 // CollectSecurity merges security configs from all layers in an image,
 // then applies image-level overrides. Returns a merged SecurityConfig.
 // If any layer sets privileged: true, the result is privileged.
 // cap_add, devices, and security_opt are unioned across all layers.
+// shm_size takes the largest value from any layer.
 // Image-level security (from images.yml) overrides layer-level settings.
 func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) SecurityConfig {
 	var merged SecurityConfig
@@ -30,6 +36,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		merged.CapAdd = appendUnique(merged.CapAdd, sec.CapAdd...)
 		merged.Devices = appendUnique(merged.Devices, sec.Devices...)
 		merged.SecurityOpt = appendUnique(merged.SecurityOpt, sec.SecurityOpt...)
+		if sec.ShmSize != "" {
+			merged.ShmSize = maxShmSize(merged.ShmSize, sec.ShmSize)
+		}
 	}
 
 	// Image-level overrides
@@ -43,6 +52,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		}
 		if len(img.Security.SecurityOpt) > 0 {
 			merged.SecurityOpt = appendUnique(merged.SecurityOpt, img.Security.SecurityOpt...)
+		}
+		if img.Security.ShmSize != "" {
+			merged.ShmSize = img.Security.ShmSize
 		}
 	}
 
@@ -67,7 +79,11 @@ func appendUnique(dst []string, items ...string) []string {
 // SecurityArgs returns the container run arguments for the given security config.
 func SecurityArgs(sec SecurityConfig) []string {
 	if sec.Privileged {
-		return []string{"--privileged"}
+		args := []string{"--privileged"}
+		if sec.ShmSize != "" {
+			args = append(args, "--shm-size", sec.ShmSize)
+		}
+		return args
 	}
 	var args []string
 	for _, cap := range sec.CapAdd {
@@ -79,5 +95,47 @@ func SecurityArgs(sec SecurityConfig) []string {
 	for _, opt := range sec.SecurityOpt {
 		args = append(args, "--security-opt", opt)
 	}
+	if sec.ShmSize != "" {
+		args = append(args, "--shm-size", sec.ShmSize)
+	}
 	return args
+}
+
+// parseShmBytes parses a size string like "256m", "1g", "1024" into bytes.
+func parseShmBytes(s string) int64 {
+	s = strings.TrimSpace(strings.ToLower(s))
+	if s == "" {
+		return 0
+	}
+	multiplier := int64(1)
+	switch {
+	case strings.HasSuffix(s, "g"):
+		multiplier = 1024 * 1024 * 1024
+		s = strings.TrimSuffix(s, "g")
+	case strings.HasSuffix(s, "m"):
+		multiplier = 1024 * 1024
+		s = strings.TrimSuffix(s, "m")
+	case strings.HasSuffix(s, "k"):
+		multiplier = 1024
+		s = strings.TrimSuffix(s, "k")
+	}
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return n * multiplier
+}
+
+// maxShmSize returns the larger of two shm size strings.
+func maxShmSize(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	if parseShmBytes(a) >= parseShmBytes(b) {
+		return a
+	}
+	return b
 }

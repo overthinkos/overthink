@@ -78,6 +78,9 @@ func (c *BuildCmd) Run() error {
 			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 				return fmt.Errorf("building %s: %w", name, err)
 			}
+			if !c.Push {
+				mergeAfterBuild(name, img)
+			}
 		}
 	} else {
 		// Full build: use level-based parallelism
@@ -102,55 +105,33 @@ func (c *BuildCmd) Run() error {
 				if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 					return fmt.Errorf("building %s: %w", name, err)
 				}
-				continue
-			}
+			} else {
+				g, _ := errgroup.WithContext(context.Background())
+				g.SetLimit(jobs)
 
-			g, _ := errgroup.WithContext(context.Background())
-			g.SetLimit(jobs)
-
-			for _, name := range level {
-				name := name
-				img := gen.Images[name]
-				content := gen.Containerfiles[name]
-				g.Go(func() error {
-					if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
-						return fmt.Errorf("building %s: %w", name, err)
-					}
-					return nil
-				})
-			}
-
-			if err := g.Wait(); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Auto-merge if enabled (local builds only).
-	// Push builds skip merge: podman save/load creates large temp tarballs
-	// that can exhaust disk space on CI runners. Merge for push builds
-	// requires a disk-efficient approach (e.g., OCI layout or buildah).
-	if !c.Push {
-		if len(c.Images) > 0 {
-			// Filtered build: only merge images that were actually built
-			order, err := ResolveImageOrder(gen.Images, gen.Layers)
-			if err == nil {
-				order, _ = filterImages(order, c.Images, gen.Images)
-				for _, name := range order {
+				for _, name := range level {
+					name := name
 					img := gen.Images[name]
-					if img.Merge != nil && img.Merge.Auto {
-						mergeCmd := &MergeCmd{Image: name, Tag: "latest"}
-						if err := mergeCmd.Run(); err != nil {
-							fmt.Fprintf(os.Stderr, "Warning: merge %s: %v\n", name, err)
+					content := gen.Containerfiles[name]
+					g.Go(func() error {
+						if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
+							return fmt.Errorf("building %s: %w", name, err)
 						}
-					}
+						return nil
+					})
+				}
+
+				if err := g.Wait(); err != nil {
+					return err
 				}
 			}
-		} else {
-			// Full build: merge all
-			mergeCmd := &MergeCmd{All: true, Tag: "latest"}
-			if err := mergeCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+
+			// Merge this level before building the next so children
+			// start from a merged (fewer-layer) base image.
+			if !c.Push {
+				for _, name := range level {
+					mergeAfterBuild(name, gen.Images[name])
+				}
 			}
 		}
 	}
@@ -192,6 +173,18 @@ func imageTags(name string, img *ResolvedImage, cfg *Config) []string {
 		}
 	}
 	return tags
+}
+
+// mergeAfterBuild merges a single image if merge.auto is enabled.
+// Called immediately after building so child images inherit a merged base.
+func mergeAfterBuild(name string, img *ResolvedImage) {
+	if img.Merge == nil || !img.Merge.Auto {
+		return
+	}
+	mergeCmd := &MergeCmd{Image: name, Tag: "latest"}
+	if err := mergeCmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: merge %s: %v\n", name, err)
+	}
 }
 
 // buildImage builds a single image with the configured engine.

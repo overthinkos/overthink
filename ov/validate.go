@@ -102,6 +102,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate libvirt snippets
 	validateLibvirt(cfg, layers, errs)
 
+	// Validate engine declarations
+	validateEngineConfig(cfg, layers, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}
@@ -996,6 +999,60 @@ func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 			if hasLibvirt {
 				fmt.Fprintf(os.Stderr, "Warning: image %q has libvirt snippets but is not a bootc image (snippets will be ignored)\n", imageName)
 			}
+		}
+	}
+}
+
+// validateEngineConfig validates engine declarations in layers and images
+func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	validEngines := map[string]bool{"docker": true, "podman": true}
+
+	// Validate layer engine declarations
+	for name, layer := range layers {
+		if e := layer.Engine(); e != "" && !validEngines[e] {
+			errs.Add("layer %q: engine must be \"docker\" or \"podman\", got %q", name, e)
+		}
+	}
+
+	// Validate defaults engine
+	if e := cfg.Defaults.Engine; e != "" && !validEngines[e] {
+		errs.Add("defaults: engine must be \"docker\" or \"podman\", got %q", e)
+	}
+
+	// Validate image engine declarations and check for conflicting layer requirements
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if e := img.Engine; e != "" && !validEngines[e] {
+			errs.Add("image %q: engine must be \"docker\" or \"podman\", got %q", imageName, e)
+		}
+
+		// Check for conflicting layer engine requirements within the image
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err != nil {
+			continue
+		}
+
+		engineSources := make(map[string]string) // engine value -> first layer declaring it
+		for _, layerName := range resolved {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			if e := layer.Engine(); e != "" {
+				if _, exists := engineSources[e]; !exists {
+					engineSources[e] = layerName
+				}
+			}
+		}
+		if len(engineSources) > 1 {
+			var conflicts []string
+			for e, l := range engineSources {
+				conflicts = append(conflicts, fmt.Sprintf("%s (from layer %s)", e, l))
+			}
+			sort.Strings(conflicts)
+			errs.Add("image %q: conflicting engine requirements: %s", imageName, strings.Join(conflicts, ", "))
 		}
 	}
 }

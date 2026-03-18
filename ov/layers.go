@@ -33,6 +33,7 @@ type ExtractYAML struct {
 type LayerYAML struct {
 	Layers         []string          `yaml:"layers,omitempty"`
 	Depends        []string          `yaml:"depends,omitempty"`
+	Engine         string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env            map[string]string `yaml:"env,omitempty"`
 	PathAppend     []string          `yaml:"path_append,omitempty"`
 	Ports          []int             `yaml:"ports,omitempty"`
@@ -125,6 +126,7 @@ type Layer struct {
 	security    *SecurityConfig
 	libvirt     []string
 	hooks       *HooksConfig
+	engine      string // required run engine from layer.yml ("docker", "podman", or "")
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -282,6 +284,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate hooks
 		layer.hooks = ly.Hooks
+
+		// Pre-populate engine requirement
+		layer.engine = ly.Engine
 	}
 
 	return layer, nil
@@ -407,6 +412,11 @@ func (l *Layer) Libvirt() []string {
 // Hooks returns the lifecycle hooks config (pre-populated from layer.yml, nil if not set)
 func (l *Layer) Hooks() *HooksConfig {
 	return l.hooks
+}
+
+// Engine returns the required run engine (pre-populated from layer.yml, "" if not set)
+func (l *Layer) Engine() string {
+	return l.engine
 }
 
 // ServiceLayers returns layers that have supervisord.conf

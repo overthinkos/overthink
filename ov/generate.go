@@ -1013,6 +1013,11 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if img.Network != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
 	}
+	// Emit resolved engine label (includes layer-level requirements)
+	resolvedEngine := ResolveImageEngine(g.Config, g.Layers, imageName, "")
+	if resolvedEngine != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelEngine, resolvedEngine))
+	}
 	if img.FQDN != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelFQDN, img.FQDN))
 	}

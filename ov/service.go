@@ -26,7 +26,10 @@ func (c *ServiceStatusCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	engine := EngineBinary(rt.RunEngine)
+	// Resolve per-image engine
+	dir, _ := os.Getwd()
+	runEngine := ResolveImageEngineFromDir(dir, resolveImageName(c.Image), rt.RunEngine)
+	engine := EngineBinary(runEngine)
 	name := containerNameInstance(resolveImageName(c.Image), c.Instance)
 
 	if !containerRunning(engine, name) {
@@ -95,8 +98,12 @@ func resolveServiceContainer(image, instance string) (engine, name string, err e
 	if err != nil {
 		return "", "", err
 	}
-	engine = EngineBinary(rt.RunEngine)
-	name = containerNameInstance(resolveImageName(image), instance)
+	// Resolve per-image engine
+	dir, _ := os.Getwd()
+	imageName := resolveImageName(image)
+	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	engine = EngineBinary(runEngine)
+	name = containerNameInstance(imageName, instance)
 	if !containerRunning(engine, name) {
 		return "", "", fmt.Errorf("container %s is not running", name)
 	}

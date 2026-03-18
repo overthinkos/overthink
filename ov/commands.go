@@ -477,7 +477,10 @@ func (c *StatusCmd) Run() error {
 		return nil
 	}
 
-	engine := EngineBinary(rt.RunEngine)
+	// Resolve per-image engine
+	dir, _ := os.Getwd()
+	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 	cmd := exec.Command(engine, "inspect", name)
 	cmd.Stdout = os.Stdout
@@ -518,7 +521,10 @@ func (c *LogsCmd) Run() error {
 		return nil
 	}
 
-	engine := EngineBinary(rt.RunEngine)
+	// Resolve per-image engine
+	dir, _ := os.Getwd()
+	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 	args := []string{"logs"}
 	if c.Follow {
@@ -557,6 +563,8 @@ func (c *UpdateCmd) Run() error {
 	var imageRef string
 	dir, _ := os.Getwd()
 	cfg, cfgErr := LoadConfig(dir)
+	// Resolve per-image engine
+	runEngine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
 	if cfgErr == nil {
 		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
 		if resolveErr != nil {
@@ -565,7 +573,7 @@ func (c *UpdateCmd) Run() error {
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 	} else {
 		// Label path
-		engine := rt.RunEngine
+		engine := runEngine
 		ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
 		meta, metaErr := ExtractMetadata(engine, ref)
 		if metaErr == nil && meta != nil && meta.Registry != "" {
@@ -599,7 +607,8 @@ func (c *UpdateCmd) Run() error {
 	}
 
 	// Direct mode
-	if err := EnsureImage(imageRef, rt); err != nil {
+	imageRT := ImageRuntime(rt, runEngine)
+	if err := EnsureImage(imageRef, imageRT); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "Image updated. Restart with: ov stop %s && ov start %s\n", c.Image, c.Image)
@@ -667,7 +676,10 @@ func (c *RemoveCmd) Run() error {
 		return err
 	}
 
-	engine := EngineBinary(rt.RunEngine)
+	// Resolve per-image engine
+	dir, _ := os.Getwd()
+	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	engine := EngineBinary(runEngine)
 	containerName := containerNameInstance(imageName, c.Instance)
 
 	// Run pre_remove hooks (best-effort, before stopping)

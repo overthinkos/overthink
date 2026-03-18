@@ -154,7 +154,7 @@ func (c *VmCreateCmd) Run() error {
 		}
 	} else {
 		// Label path
-		engine := rt.RunEngine
+		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
 		ref := fmt.Sprintf("%s:latest", c.Image)
 		meta, metaErr := ExtractMetadata(engine, ref)
 		if metaErr == nil && meta != nil {

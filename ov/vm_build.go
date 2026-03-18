@@ -66,7 +66,7 @@ func (c *VmBuildCmd) Run() error {
 	} else {
 		// Label path
 		ref := fmt.Sprintf("%s:%s", imageName, calverTag)
-		meta, metaErr := ExtractMetadata(rt.RunEngine, ref)
+		meta, metaErr := ExtractMetadata(ResolveImageEngineFromDir(dir, imageName, rt.RunEngine), ref)
 		if metaErr != nil {
 			return metaErr
 		}
@@ -88,7 +88,7 @@ func (c *VmBuildCmd) Run() error {
 		vmCfg = &VmConfig{}
 	}
 
-	engine := rt.RunEngine
+	engine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
 
 	// CLI --size overrides config
 	diskSize := normalizeSize(vmCfg.DiskSize)

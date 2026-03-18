@@ -1,0 +1,20 @@
+version: '3'
+
+tasks:
+  install:
+    vars:
+      OPENSHELL_VERSION: "v0.0.10"
+    cmds:
+      - |
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) TRIPLE=x86_64-unknown-linux-musl;;
+          aarch64) TRIPLE=aarch64-unknown-linux-musl;;
+          *) echo "Unsupported arch: $ARCH"; exit 1;;
+        esac
+        curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/{{.OPENSHELL_VERSION}}/openshell-${TRIPLE}.tar.gz" -o /tmp/openshell.tar.gz
+        curl -fsSL "https://github.com/NVIDIA/OpenShell/releases/download/{{.OPENSHELL_VERSION}}/openshell-checksums-sha256.txt" -o /tmp/checksums.txt
+        cd /tmp && grep "openshell-${TRIPLE}.tar.gz" checksums.txt | sha256sum -c -
+        tar -xzf /tmp/openshell.tar.gz -C /usr/local/bin/
+        chmod +x /usr/local/bin/openshell
+        rm -f /tmp/openshell.tar.gz /tmp/checksums.txt

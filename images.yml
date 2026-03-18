@@ -273,6 +273,24 @@ images:
     platforms:
       - linux/amd64
 
+  nemoclaw:
+    base: fedora
+    layers:
+      - nemoclaw
+    ports:
+      - "18789:18789"
+
+  nemoclaw-ollama:
+    base: nvidia
+    layers:
+      - nemoclaw
+      - ollama
+    ports:
+      - "18789:18789"
+      - "11434:11434"
+    platforms:
+      - linux/amd64
+
   immich-cuda:
     base: fedora
     layers:

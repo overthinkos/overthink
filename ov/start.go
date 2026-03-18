@@ -80,6 +80,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
+		// Resolve per-image engine
+		engine = ResolveImageEngine(cfg, layers, c.Image, rt.RunEngine)
 		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 		if err != nil {
 			return err
@@ -107,6 +109,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if meta == nil {
 			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
+		// Resolve per-image engine from labels
+		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 		// Apply deploy.yml overrides
 		dc, _ := LoadDeployConfig()
 		MergeDeployOntoMetadata(meta, dc)
@@ -133,7 +137,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	if cfgErr == nil {
-		if err := EnsureImage(imageRef, rt); err != nil {
+		imageRT := ImageRuntime(rt, engine)
+		if err := EnsureImage(imageRef, imageRT); err != nil {
 			return err
 		}
 	}
@@ -244,7 +249,6 @@ func (c *StartCmd) runRemote(ref string) error {
 	if err != nil {
 		return err
 	}
-	engine := rt.RunEngine
 
 	ctx, err := ResolveRemoteImage(ref, c.Tag)
 	if err != nil {
@@ -258,6 +262,12 @@ func (c *StartCmd) runRemote(ref string) error {
 	// Pull or build
 	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
 		return err
+	}
+
+	// Resolve per-image engine from remote config
+	engine := rt.RunEngine
+	if ctx.Resolved != nil {
+		engine = ResolveImageEngineFromMeta(&ImageMetadata{Engine: ctx.Resolved.Engine}, rt.RunEngine)
 	}
 
 	volumes, err := ctx.CollectVolumes()
@@ -464,12 +474,28 @@ func (c *StopCmd) Run() error {
 		return nil
 	}
 
-	engine := EngineBinary(rt.RunEngine)
+	// Resolve per-image engine
+	runEngine := rt.RunEngine
+	dir, _ := os.Getwd()
+	runEngine = ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+
+	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 
 	cmd := exec.Command(engine, "stop", name)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		// Fallback: try the other engine if the container wasn't found
+		otherEngine := "docker"
+		if runEngine == "docker" {
+			otherEngine = "podman"
+		}
+		otherBinary := EngineBinary(otherEngine)
+		fallbackCmd := exec.Command(otherBinary, "stop", name)
+		if _, fallbackErr := fallbackCmd.CombinedOutput(); fallbackErr == nil {
+			fmt.Fprintf(os.Stderr, "Stopped %s (via %s)\n", name, otherEngine)
+			return nil
+		}
 		return fmt.Errorf("%s stop failed: %w\n%s", engine, err, strings.TrimSpace(string(output)))
 	}
 

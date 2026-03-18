@@ -73,6 +73,7 @@ type ImageConfig struct {
 	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
 	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
 	Network    string            `yaml:"network,omitempty"`      // container network mode (e.g. "host", "none", "slirp4netns")
+	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
 	Vm         *VmConfig         `yaml:"vm,omitempty"`           // virtual machine settings (bootc images)
 	Libvirt    []string          `yaml:"libvirt,omitempty"`      // raw libvirt XML snippets for VM configuration
 }
@@ -129,6 +130,9 @@ type ResolvedImage struct {
 
 	// Container network mode (e.g. "host", "none")
 	Network string
+
+	// Per-image run engine override (resolved from image config and layer requirements)
+	Engine string `json:"engine,omitempty"`
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -300,6 +304,12 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	resolved.Network = img.Network
 	if resolved.Network == "" {
 		resolved.Network = c.Defaults.Network
+	}
+
+	// Resolve engine: image -> defaults -> "" (layer requirements resolved separately)
+	resolved.Engine = img.Engine
+	if resolved.Engine == "" {
+		resolved.Engine = c.Defaults.Engine
 	}
 
 	// Home directory will be resolved later (after inspecting base image)

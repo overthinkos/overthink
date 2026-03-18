@@ -164,6 +164,16 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			}
 		case "network":
 			fmt.Println(resolved.Network)
+		case "engine":
+			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			if err != nil {
+				return err
+			}
+			engine := ResolveImageEngine(cfg, layers, c.Image, "")
+			if engine == "" {
+				engine = "(global default)"
+			}
+			fmt.Println(engine)
 		case "bind_mounts":
 			img := cfg.Images[c.Image]
 			for _, bm := range img.BindMounts {
@@ -235,6 +245,12 @@ func (c *InspectCmd) runFromLabels() error {
 			}
 		case "network":
 			fmt.Println(meta.Network)
+		case "engine":
+			engine := meta.Engine
+			if engine == "" {
+				engine = "(global default)"
+			}
+			fmt.Println(engine)
 		case "bind_mounts":
 			for _, bm := range meta.BindMounts {
 				encrypted := "no"

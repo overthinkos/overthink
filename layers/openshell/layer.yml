@@ -1,0 +1,17 @@
+depends:
+  - docker-ce
+engine: docker
+
+env:
+  OPENSHELL_HOME: "~/.openshell"
+
+volumes:
+  - name: openshell
+    path: "~/.openshell"
+
+security:
+  privileged: true
+
+aliases:
+  - name: openshell
+    command: openshell

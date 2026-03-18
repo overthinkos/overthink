@@ -1,0 +1,14 @@
+depends:
+  - openclaw
+  - openshell
+
+env:
+  NEMOCLAW_HOME: "~/.nemoclaw"
+
+volumes:
+  - name: nemoclaw
+    path: "~/.nemoclaw"
+
+aliases:
+  - name: nemoclaw
+    command: nemoclaw

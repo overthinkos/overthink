@@ -102,6 +102,8 @@ func (c *ShellCmd) Run() error {
 		if err != nil {
 			return err
 		}
+		// Resolve per-image engine
+		engine = ResolveImageEngine(cfg, layers, c.Image, rt.RunEngine)
 		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
 		if err != nil {
 			return err
@@ -131,6 +133,8 @@ func (c *ShellCmd) Run() error {
 		if meta == nil {
 			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 		}
+		// Resolve per-image engine from labels
+		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 		// Apply deploy.yml overrides
 		dc, _ := LoadDeployConfig()
 		MergeDeployOntoMetadata(meta, dc)
@@ -178,7 +182,8 @@ func (c *ShellCmd) Run() error {
 	if cfgErr != nil {
 		// Already ensured above in the label path
 	} else {
-		if err := EnsureImage(imageRef, rt); err != nil {
+		imageRT := ImageRuntime(rt, engine)
+		if err := EnsureImage(imageRef, imageRT); err != nil {
 			return err
 		}
 	}
@@ -261,6 +266,11 @@ func (c *ShellCmd) runRemote(ref string) error {
 	// Pull or build
 	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
 		return err
+	}
+
+	// Resolve per-image engine from remote config
+	if ctx.Resolved != nil && ctx.Resolved.Engine != "" {
+		engine = ctx.Resolved.Engine
 	}
 
 	volumes, err := ctx.CollectVolumes()

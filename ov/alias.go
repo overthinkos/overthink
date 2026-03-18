@@ -325,7 +325,8 @@ func (c *AliasInstallCmd) Run() error {
 			return err
 		}
 		imageRef := resolveShellImageRef("", c.Image, "latest")
-		meta, err := ExtractMetadata(rt.RunEngine, imageRef)
+		runEngine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
+		meta, err := ExtractMetadata(runEngine, imageRef)
 		if err != nil {
 			return err
 		}

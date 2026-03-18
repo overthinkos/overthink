@@ -47,7 +47,7 @@ func (c *SeedCmd) Run() error {
 		bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
 	} else {
 		// Label path
-		engine := rt.RunEngine
+		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
 		ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
 		meta, metaErr := ExtractMetadata(engine, ref)
 		if metaErr != nil {
@@ -100,7 +100,7 @@ func (c *SeedCmd) Run() error {
 
 		fmt.Fprintf(os.Stderr, "%s: seeding from %s ...\n", bm.Name, contPath)
 
-		engine := rt.RunEngine
+		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
 		args := []string{
 			EngineBinary(engine), "run", "--rm",
 			"-v", fmt.Sprintf("%s:/seed", bm.HostPath),

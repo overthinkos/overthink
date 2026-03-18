@@ -36,6 +36,7 @@ const (
 	LabelSupervisord = "org.overthinkos.supervisord"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
+	LabelEngine         = "org.overthinkos.engine"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -87,6 +88,7 @@ type ImageMetadata struct {
 	Supervisord  []string
 	EnvLayers      map[string]string
 	PathAppend     []string
+	Engine         string
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -134,6 +136,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		FQDN:      labels[LabelFQDN],
 		AcmeEmail: labels[LabelAcmeEmail],
 		Network:   labels[LabelNetwork],
+		Engine:    labels[LabelEngine],
 	}
 
 	// Bootc

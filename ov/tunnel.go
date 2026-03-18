@@ -64,9 +64,17 @@ type TunnelConfig struct {
 }
 
 // collectPortProtos builds a port->protocol map from layer PortSpec data.
+// It resolves the full layer tree (including composing layers) to find all port specs.
 func collectPortProtos(layers map[string]*Layer, layerNames []string) map[int]string {
+	// Resolve full layer order including sub-layers of composing layers
+	allLayers, err := ResolveLayerOrder(layerNames, layers, nil)
+	if err != nil {
+		// Fall back to direct layer names on error
+		allLayers = layerNames
+	}
+
 	protos := make(map[int]string)
-	for _, name := range layerNames {
+	for _, name := range allLayers {
 		layer, ok := layers[name]
 		if !ok {
 			continue

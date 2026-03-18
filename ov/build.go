@@ -131,10 +131,27 @@ func (c *BuildCmd) Run() error {
 	// that can exhaust disk space on CI runners. Merge for push builds
 	// requires a disk-efficient approach (e.g., OCI layout or buildah).
 	if !c.Push {
-		mergeCmd := &MergeCmd{All: true, Tag: "latest"}
-		if err := mergeCmd.Run(); err != nil {
-			// Non-fatal: log and continue
-			fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+		if len(c.Images) > 0 {
+			// Filtered build: only merge images that were actually built
+			order, err := ResolveImageOrder(gen.Images, gen.Layers)
+			if err == nil {
+				order, _ = filterImages(order, c.Images, gen.Images)
+				for _, name := range order {
+					img := gen.Images[name]
+					if img.Merge != nil && img.Merge.Auto {
+						mergeCmd := &MergeCmd{Image: name, Tag: "latest"}
+						if err := mergeCmd.Run(); err != nil {
+							fmt.Fprintf(os.Stderr, "Warning: merge %s: %v\n", name, err)
+						}
+					}
+				}
+			}
+		} else {
+			// Full build: merge all
+			mergeCmd := &MergeCmd{All: true, Tag: "latest"}
+			if err := mergeCmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: merge --all: %v\n", err)
+			}
 		}
 	}
 

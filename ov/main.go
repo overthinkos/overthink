@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/alecthomas/kong"
 )
@@ -31,6 +32,7 @@ type CLI struct {
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
 	Browser  BrowserCmd  `cmd:"" help:"Manage Chrome browser tabs in running containers"`
+	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
@@ -545,7 +547,15 @@ func (c *ConfigGetCmd) Run() error {
 	case "vm.backend":
 		fmt.Println(rt.VmBackend)
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.ram, vm.cpus)", c.Key)
+		if strings.HasPrefix(c.Key, "vnc.password.") {
+			val, err := GetConfigValue(c.Key)
+			if err != nil {
+				return err
+			}
+			fmt.Println(val)
+			return nil
+		}
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vnc.password.<image>)", c.Key)
 	}
 	return nil
 }

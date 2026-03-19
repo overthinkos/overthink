@@ -13,12 +13,13 @@ import (
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine               EngineConfig    `yaml:"engine"`
-	RunMode              string          `yaml:"run_mode,omitempty"`
-	AutoEnable           *bool           `yaml:"auto_enable,omitempty"`
-	BindAddress          string          `yaml:"bind_address,omitempty"`
-	EncryptedStoragePath string          `yaml:"encrypted_storage_path,omitempty"`
-	Vm                   RuntimeVmConfig `yaml:"vm,omitempty"`
+	Engine               EngineConfig      `yaml:"engine"`
+	RunMode              string            `yaml:"run_mode,omitempty"`
+	AutoEnable           *bool             `yaml:"auto_enable,omitempty"`
+	BindAddress          string            `yaml:"bind_address,omitempty"`
+	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
+	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
+	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"` // VNC passwords keyed by image[-instance]
 }
 
 // RuntimeVmConfig holds user-level VM defaults
@@ -286,7 +287,14 @@ func GetConfigValue(key string) (string, error) {
 	case "vm.transport":
 		return cfg.Vm.Transport, nil
 	default:
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		if strings.HasPrefix(key, "vnc.password.") {
+			name := strings.TrimPrefix(key, "vnc.password.")
+			if pw, ok := cfg.VncPasswords[name]; ok {
+				return pw, nil
+			}
+			return "", nil
+		}
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -342,7 +350,11 @@ func SetConfigValue(key, value string) error {
 			return fmt.Errorf("vm.transport must be \"registry\", \"containers-storage\", \"oci\", or \"oci-archive\", got %q", value)
 		}
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		if strings.HasPrefix(key, "vnc.password.") {
+			// VNC passwords are free-form strings, no validation needed.
+			break
+		}
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -381,6 +393,14 @@ func SetConfigValue(key, value string) error {
 		cfg.Vm.Rootfs = value
 	case "vm.transport":
 		cfg.Vm.Transport = value
+	default:
+		if strings.HasPrefix(key, "vnc.password.") {
+			name := strings.TrimPrefix(key, "vnc.password.")
+			if cfg.VncPasswords == nil {
+				cfg.VncPasswords = make(map[string]string)
+			}
+			cfg.VncPasswords[name] = value
+		}
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -429,7 +449,12 @@ func ResetConfigValue(key string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = ""
 	default:
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport)", key)
+		if strings.HasPrefix(key, "vnc.password.") {
+			name := strings.TrimPrefix(key, "vnc.password.")
+			delete(cfg.VncPasswords, name)
+		} else {
+			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		}
 	}
 
 	return SaveRuntimeConfig(cfg)

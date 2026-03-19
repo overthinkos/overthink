@@ -100,6 +100,14 @@ ov browser type <image> <tab-id> <selector> <text> [-i INSTANCE]  # Type into in
 ov browser eval <image> <tab-id> <expression> [-i INSTANCE]   # Evaluate JavaScript
 ov browser wait <image> <tab-id> <selector> [-i INSTANCE] [--timeout 30s]  # Wait for element
 ov browser cdp <image> <tab-id> <method> [params-json] [-i INSTANCE]  # Raw CDP command
+ov vnc screenshot <image> [file] [-i INSTANCE]              # Capture VNC framebuffer as PNG
+ov vnc click <image> <x> <y> [-i INSTANCE] [--button left]  # Click at coordinates
+ov vnc type <image> <text> [-i INSTANCE]                     # Type text as key events
+ov vnc key <image> <key-name> [-i INSTANCE]                  # Send key (Return, Escape, F1, etc.)
+ov vnc mouse <image> <x> <y> [-i INSTANCE]                   # Move mouse without clicking
+ov vnc status <image> [-i INSTANCE]                           # Show desktop name, resolution
+ov vnc passwd <image> [-i INSTANCE] [--generate]             # Set VNC password for a deployment
+ov vnc rfb <image> <method> [params-json] [-i INSTANCE]      # Raw RFB command
 ov crypto init <image> [--volume NAME]
 ov crypto mount <image> [--volume NAME]
 ov crypto unmount <image> [--volume NAME]
@@ -214,6 +222,7 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Shell & execution | `/overthink:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
 | Service management | `/overthink:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
 | Browser automation | `/overthink:browser` | ov browser commands, CDP, Chrome DevTools, OAuth flows |
+| VNC automation | `/overthink:vnc` | ov vnc commands, RFB protocol, screenshots, keyboard/mouse input, VNC password |
 | Aliases | `/overthink:alias` | ov alias add/remove/list/install/uninstall |
 | Configuration | `/overthink:config` | ov config get/set/list/reset/path, bind_address, engine settings |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |

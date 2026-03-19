@@ -88,18 +88,33 @@ ov service status <image> [-i INSTANCE]    # Show supervisord service status
 ov service start <image> <service> [-i INSTANCE]   # Start a supervisord service
 ov service stop <image> <service> [-i INSTANCE]    # Stop a supervisord service
 ov service restart <image> <service> [-i INSTANCE] # Restart a supervisord service
-ov browser open <image> <url> [-i INSTANCE]                  # Open URL in container's Chrome
-ov browser list <image> [-i INSTANCE]                         # List open Chrome tabs
-ov browser close <image> <tab-id> [-i INSTANCE]               # Close a Chrome tab
-ov browser text <image> <tab-id> [-i INSTANCE]                # Get page text content
-ov browser html <image> <tab-id> [-i INSTANCE]                # Get page HTML
-ov browser url <image> <tab-id> [-i INSTANCE]                 # Get page title and URL
-ov browser screenshot <image> <tab-id> [file] [-i INSTANCE]   # Capture screenshot (PNG)
-ov browser click <image> <tab-id> <selector> [-i INSTANCE]    # Click element by CSS selector
-ov browser type <image> <tab-id> <selector> <text> [-i INSTANCE]  # Type into input field
-ov browser eval <image> <tab-id> <expression> [-i INSTANCE]   # Evaluate JavaScript
-ov browser wait <image> <tab-id> <selector> [-i INSTANCE] [--timeout 30s]  # Wait for element
-ov browser cdp <image> <tab-id> <method> [params-json] [-i INSTANCE]  # Raw CDP command
+ov cdp open <image> <url> [-i INSTANCE]                  # Open URL in container's Chrome
+ov cdp list <image> [-i INSTANCE]                         # List open Chrome tabs
+ov cdp close <image> <tab-id> [-i INSTANCE]               # Close a Chrome tab
+ov cdp text <image> <tab-id> [-i INSTANCE]                # Get page text content
+ov cdp html <image> <tab-id> [-i INSTANCE]                # Get page HTML
+ov cdp url <image> <tab-id> [-i INSTANCE]                 # Get page title and URL
+ov cdp screenshot <image> <tab-id> [file] [-i INSTANCE]   # Capture screenshot (PNG)
+ov cdp click <image> <tab-id> <selector> [-i INSTANCE]    # Click element by CSS selector
+ov cdp type <image> <tab-id> <selector> <text> [-i INSTANCE]  # Type into input field
+ov cdp eval <image> <tab-id> <expression> [-i INSTANCE]   # Evaluate JavaScript
+ov cdp wait <image> <tab-id> <selector> [-i INSTANCE] [--timeout 30s]  # Wait for element
+ov cdp raw <image> <tab-id> <method> [params-json] [-i INSTANCE]  # Raw CDP command
+ov sway msg <image> <command> [-i INSTANCE]               # Run a sway command
+ov sway tree <image> [-i INSTANCE]                        # Get window/container tree (JSON)
+ov sway workspaces <image> [-i INSTANCE]                  # List workspaces (JSON)
+ov sway outputs <image> [-i INSTANCE]                     # List outputs (JSON)
+ov sway exec <image> <command> [-i INSTANCE]              # Launch an application
+ov sway focus <image> <target> [-i INSTANCE]              # Focus window by direction or criteria
+ov sway move <image> <target...> [-i INSTANCE]            # Move window (direction/scratchpad/workspace N)
+ov sway resize <image> <dimension> <amount> [-i INSTANCE] # Resize window (width/height, 10px/-10px)
+ov sway kill <image> [-i INSTANCE]                        # Close focused window
+ov sway fullscreen <image> [-i INSTANCE]                  # Toggle fullscreen
+ov sway floating <image> [-i INSTANCE]                    # Toggle floating
+ov sway layout <image> <mode> [-i INSTANCE]               # Set layout (tabbed/stacking/splitv/splith)
+ov sway workspace <image> <number> [-i INSTANCE]          # Switch workspace
+ov sway reload <image> [-i INSTANCE]                      # Reload sway config
+ov sway resolution <image> <WxH> [-i INSTANCE] [-o OUTPUT]  # Set output resolution
 ov vnc screenshot <image> [file] [-i INSTANCE]              # Capture VNC framebuffer as PNG
 ov vnc click <image> <x> <y> [-i INSTANCE] [--button left]  # Click at coordinates
 ov vnc type <image> <text> [-i INSTANCE]                     # Type text as key events
@@ -108,11 +123,11 @@ ov vnc mouse <image> <x> <y> [-i INSTANCE]                   # Move mouse withou
 ov vnc status <image> [-i INSTANCE]                           # Show desktop name, resolution
 ov vnc passwd <image> [-i INSTANCE] [--generate]             # Set VNC password for a deployment
 ov vnc rfb <image> <method> [params-json] [-i INSTANCE]      # Raw RFB command
-ov crypto init <image> [--volume NAME]
-ov crypto mount <image> [--volume NAME]
-ov crypto unmount <image> [--volume NAME]
-ov crypto status <image>
-ov crypto passwd <image>               # Change encryption password
+ov enc init <image> [--volume NAME]
+ov enc mount <image> [--volume NAME]
+ov enc unmount <image> [--volume NAME]
+ov enc status <image>
+ov enc passwd <image>               # Change encryption password
 ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--console] [--transport TRANSPORT]
 ov vm create <image> [--ram SIZE] [--cpus N] [--ssh-key SSH_KEY] [--no-autodetect] [-i INSTANCE]
 ov vm start <image> [-i INSTANCE]      # Start a VM
@@ -126,6 +141,8 @@ ov version                             # Print computed CalVer tag
 ```
 
 **Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`, `network`).
+
+**Local mode:** `ov cdp`, `ov vnc`, and `ov sway` commands accept `.` as the image name for local/in-container use — connects directly to `127.0.0.1` (CDP/VNC) or runs `swaymsg` locally (sway) instead of going through the container engine.
 
 **Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
 
@@ -159,7 +176,7 @@ ov version                             # Print computed CalVer tag
 
 **Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
 
-**Utilities:** `gocryptfs` (encrypted filesystem for ov crypto operations), `socat` (socket relay for VM console access and port_relay for loopback-only services)
+**Utilities:** `gocryptfs` (encrypted filesystem for ov enc operations), `socat` (socket relay for VM console access and port_relay for loopback-only services)
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov` (ov binary for container/VM use)
 
@@ -222,13 +239,14 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache, inline merge |
 | Shell & execution | `/overthink:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
 | Service management | `/overthink:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
-| Browser automation | `/overthink:browser` | ov browser commands, CDP, Chrome DevTools, OAuth flows |
+| CDP (Chrome DevTools) | `/overthink:cdp` | ov cdp commands, CDP, Chrome DevTools, OAuth flows |
+| Sway compositor | `/overthink:sway` | ov sway commands, window management, workspaces, outputs |
 | VNC automation | `/overthink:vnc` | ov vnc commands, RFB protocol, screenshots, keyboard/mouse input, VNC password |
 | Aliases | `/overthink:alias` | ov alias add/remove/list/install/uninstall |
 | Configuration | `/overthink:config` | ov config get/set/list/reset/path, bind_address, engine settings |
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
 | Virtual machines | `/overthink:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
-| Encrypted storage | `/overthink:crypto` | ov crypto init/mount/unmount/status/passwd, gocryptfs |
+| Encrypted storage | `/overthink:enc` | ov enc init/mount/unmount/status/passwd, gocryptfs |
 | OpenClaw gateway | `/overthink:openclaw` | Gateway config, model auth, browser integration, channels, agent setup |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |

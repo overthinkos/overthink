@@ -152,9 +152,9 @@ func TestGenerateCryptoUnit(t *testing.T) {
 		{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
 
-	got := generateCryptoUnit("myapp", mounts, "/data/enc")
+	got := generateEncUnit("myapp", mounts, "/data/enc")
 
-	if !strings.Contains(got, "ov-myapp-crypto.service") {
+	if !strings.Contains(got, "ov-myapp-enc.service") {
 		t.Errorf("expected filename in comment, got:\n%s", got)
 	}
 	if !strings.Contains(got, "Description=gocryptfs mounts for ov-myapp") {
@@ -191,7 +191,7 @@ func TestGenerateCryptoUnitNoEncrypted(t *testing.T) {
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp", Encrypted: false},
 	}
 
-	got := generateCryptoUnit("myapp", mounts, "/data/enc")
+	got := generateEncUnit("myapp", mounts, "/data/enc")
 	if got != "" {
 		t.Errorf("expected empty string for no encrypted mounts, got: %s", got)
 	}
@@ -203,7 +203,7 @@ func TestGenerateCryptoUnitMultiple(t *testing.T) {
 		{Name: "models", HostPath: "/data/enc/ov-myapp-models/plain", ContPath: "/home/user/.models", Encrypted: true},
 	}
 
-	got := generateCryptoUnit("myapp", mounts, "/data/enc")
+	got := generateEncUnit("myapp", mounts, "/data/enc")
 
 	// Should have two ExecStart and two ExecStop lines
 	if strings.Count(got, "ExecStart=") != 2 {
@@ -219,14 +219,14 @@ func TestCryptoServiceFilename(t *testing.T) {
 		image string
 		want  string
 	}{
-		{"myapp", "ov-myapp-crypto.service"},
-		{"openclaw", "ov-openclaw-crypto.service"},
+		{"myapp", "ov-myapp-enc.service"},
+		{"openclaw", "ov-openclaw-enc.service"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.image, func(t *testing.T) {
-			got := cryptoServiceFilename(tt.image)
+			got := encServiceFilename(tt.image)
 			if got != tt.want {
-				t.Errorf("cryptoServiceFilename(%q) = %q, want %q", tt.image, got, tt.want)
+				t.Errorf("encServiceFilename(%q) = %q, want %q", tt.image, got, tt.want)
 			}
 		})
 	}
@@ -272,8 +272,8 @@ func TestVerifyBindMountsEncryptedNotMounted(t *testing.T) {
 	if !strings.Contains(err.Error(), "not mounted") {
 		t.Errorf("error should mention 'not mounted', got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ov crypto mount") {
-		t.Errorf("error should suggest 'ov crypto mount', got: %v", err)
+	if !strings.Contains(err.Error(), "ov enc mount") {
+		t.Errorf("error should suggest 'ov enc mount', got: %v", err)
 	}
 }
 
@@ -550,10 +550,10 @@ func TestQuadletWithEncryptedBindMounts(t *testing.T) {
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "Requires=ov-myapp-crypto.service") {
+	if !strings.Contains(got, "Requires=ov-myapp-enc.service") {
 		t.Errorf("expected Requires for crypto service, got:\n%s", got)
 	}
-	if !strings.Contains(got, "After=ov-myapp-crypto.service") {
+	if !strings.Contains(got, "After=ov-myapp-enc.service") {
 		t.Errorf("expected After for crypto service, got:\n%s", got)
 	}
 	if !strings.Contains(got, "Volume=/data/enc/ov-myapp-secrets/plain:/home/user/.secrets") {
@@ -653,7 +653,7 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	isEncryptedMounted = func(plainDir string) bool { return true }
 	defer func() { isEncryptedMounted = origMounted }()
 
-	cmd := &CryptoPasswdCmd{Image: "myapp"}
+	cmd := &EncPasswdCmd{Image: "myapp"}
 	// We can't call Run() directly because loadEncryptedMounts needs images.yml,
 	// so test the logic by simulating what Run() does.
 	mounts := []BindMountConfig{
@@ -664,12 +664,12 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	for _, m := range mounts {
 		plainDir := encryptedPlainDir(storagePath, cmd.Image, m.Name)
 		if isEncryptedMounted(plainDir) {
-			err := fmt.Errorf("encrypted volume %q is still mounted; run 'ov crypto unmount %s' first", m.Name, cmd.Image)
+			err := fmt.Errorf("encrypted volume %q is still mounted; run 'ov enc unmount %s' first", m.Name, cmd.Image)
 			if !strings.Contains(err.Error(), "still mounted") {
 				t.Errorf("expected 'still mounted' in error, got: %v", err)
 			}
-			if !strings.Contains(err.Error(), "ov crypto unmount") {
-				t.Errorf("expected 'ov crypto unmount' hint in error, got: %v", err)
+			if !strings.Contains(err.Error(), "ov enc unmount") {
+				t.Errorf("expected 'ov enc unmount' hint in error, got: %v", err)
 			}
 			return
 		}

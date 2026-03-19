@@ -21,6 +21,17 @@ func defaultIsTerminal() bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
+// isInsideContainer returns true if ov is running inside a container.
+func isInsideContainer() bool {
+	if _, err := os.Stat("/.containerenv"); err == nil {
+		return true
+	}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	return false
+}
+
 // containerRunning checks if a container with the given name is currently running.
 var containerRunning = defaultContainerRunning
 

@@ -28,11 +28,12 @@ type CLI struct {
 	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
-	Crypto   CryptoCmd   `cmd:"" help:"Manage encrypted bind mounts"`
+	Enc      EncCmd   `cmd:"" help:"Manage encrypted bind mounts"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
-	Browser  BrowserCmd  `cmd:"" help:"Manage Chrome browser tabs in running containers"`
+	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
+	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`

@@ -155,7 +155,7 @@ Overthink covers the full journey from development to production:
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov crypto init/mount` handles encrypted bind-mount volumes. `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images and restarts services. `ov enc init/mount` handles encrypted bind-mount volumes. `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
@@ -207,8 +207,8 @@ ov version
 ov new layer <name>                            # Scaffold a new layer
 ov seed <image>                                # Seed bind mount dirs
 ov alias install/uninstall <image>             # Host command aliases
-ov crypto init/mount/unmount/status <image>    # Encrypted volumes
-ov crypto passwd <image>                       # Change encryption password
+ov enc init/mount/unmount/status <image>    # Encrypted volumes
+ov enc passwd <image>                       # Change encryption password
 ov config get/set/list/reset/path              # Runtime configuration
 ```
 

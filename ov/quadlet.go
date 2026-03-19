@@ -41,9 +41,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString(fmt.Sprintf("Description=Overthink %s\n", desc))
 	b.WriteString("After=network-online.target\n")
 	if hasEncryptedBindMounts(cfg.BindMounts) {
-		cryptoSvc := cryptoServiceFilename(cfg.ImageName)
-		b.WriteString(fmt.Sprintf("Requires=%s\n", cryptoSvc))
-		b.WriteString(fmt.Sprintf("After=%s\n", cryptoSvc))
+		encSvc := encServiceFilename(cfg.ImageName)
+		b.WriteString(fmt.Sprintf("Requires=%s\n", encSvc))
+		b.WriteString(fmt.Sprintf("After=%s\n", encSvc))
 	}
 
 	b.WriteString("\n[Container]\n")

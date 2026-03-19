@@ -1,4 +1,4 @@
-description: Encrypted filesystem (gocryptfs) for ov crypto operations
+description: Encrypted filesystem (gocryptfs) for ov enc operations
 
 rpm:
   packages:

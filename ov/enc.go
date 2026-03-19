@@ -99,22 +99,22 @@ func defaultIsEncryptedMounted(plainDir string) bool {
 	return false
 }
 
-// CryptoCmd groups crypto subcommands
-type CryptoCmd struct {
-	Init    CryptoInitCmd    `cmd:"" help:"Initialize gocryptfs cipher directories"`
-	Mount   CryptoMountCmd   `cmd:"" help:"Mount encrypted volumes (interactive password)"`
-	Unmount CryptoUnmountCmd `cmd:"" help:"Unmount encrypted volumes"`
-	Passwd  CryptoPasswdCmd  `cmd:"" help:"Change encryption password"`
-	Status  CryptoStatusCmd  `cmd:"" help:"Show status of all encrypted bind mounts"`
+// EncCmd groups crypto subcommands
+type EncCmd struct {
+	Init    EncInitCmd    `cmd:"" help:"Initialize gocryptfs cipher directories"`
+	Mount   EncMountCmd   `cmd:"" help:"Mount encrypted volumes (interactive password)"`
+	Unmount EncUnmountCmd `cmd:"" help:"Unmount encrypted volumes"`
+	Passwd  EncPasswdCmd  `cmd:"" help:"Change encryption password"`
+	Status  EncStatusCmd  `cmd:"" help:"Show status of all encrypted bind mounts"`
 }
 
-// cryptoExtpassArgs returns gocryptfs -extpass arguments for CLI commands.
+// encExtpassArgs returns gocryptfs -extpass arguments for CLI commands.
 // Uses a temp script file because gocryptfs's flag parser normalizes multi-flag
 // values (turns -c into --c). The script checks GOCRYPTFS_PASSWORD env var first
 // (for testing/CI), then falls back to systemd-ask-password with /dev/tty redirect
 // so it works regardless of whether gocryptfs connects stdin to the child process.
 // Caller must defer the returned cleanup function.
-func cryptoExtpassArgs(imageID string) ([]string, func()) {
+func encExtpassArgs(imageID string) ([]string, func()) {
 	script := "#!/bin/bash\n" +
 		"if [ -n \"$GOCRYPTFS_PASSWORD\" ]; then\n" +
 		"  printf '%s' \"$GOCRYPTFS_PASSWORD\"\n" +
@@ -135,20 +135,20 @@ func cryptoExtpassArgs(imageID string) ([]string, func()) {
 	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()) }
 }
 
-// CryptoInitCmd initializes gocryptfs cipher directories
-type CryptoInitCmd struct {
+// EncInitCmd initializes gocryptfs cipher directories
+type EncInitCmd struct {
 	Image  string `arg:"" help:"Image name from images.yml"`
 	Volume string `long:"volume" help:"Only initialize this volume (by name)"`
 }
 
-func (c *CryptoInitCmd) Run() error {
+func (c *EncInitCmd) Run() error {
 	mounts, storagePath, err := loadEncryptedMounts(c.Image)
 	if err != nil {
 		return err
 	}
 
 	volID := "ov-" + c.Image
-	extpassArgs, cleanup := cryptoExtpassArgs(volID)
+	extpassArgs, cleanup := encExtpassArgs(volID)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -186,13 +186,13 @@ func (c *CryptoInitCmd) Run() error {
 	return nil
 }
 
-// CryptoMountCmd mounts encrypted volumes
-type CryptoMountCmd struct {
+// EncMountCmd mounts encrypted volumes
+type EncMountCmd struct {
 	Image  string `arg:"" help:"Image name from images.yml"`
 	Volume string `long:"volume" help:"Only mount this volume (by name)"`
 }
 
-func (c *CryptoMountCmd) Run() error {
+func (c *EncMountCmd) Run() error {
 	mounts, storagePath, err := loadEncryptedMounts(c.Image)
 	if err != nil {
 		return err
@@ -200,7 +200,7 @@ func (c *CryptoMountCmd) Run() error {
 
 	// Use per-image password ID so all volumes share a single prompt
 	volID := "ov-" + c.Image
-	extpassArgs, cleanup := cryptoExtpassArgs(volID)
+	extpassArgs, cleanup := encExtpassArgs(volID)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -212,7 +212,7 @@ func (c *CryptoMountCmd) Run() error {
 		plainDir := encryptedPlainDir(storagePath, c.Image, m.Name)
 
 		if !isEncryptedInitialized(cipherDir) {
-			return fmt.Errorf("encrypted volume %q not initialized; run 'ov crypto init %s' first", m.Name, c.Image)
+			return fmt.Errorf("encrypted volume %q not initialized; run 'ov enc init %s' first", m.Name, c.Image)
 		}
 
 		if isEncryptedMounted(plainDir) {
@@ -237,13 +237,13 @@ func (c *CryptoMountCmd) Run() error {
 	return nil
 }
 
-// CryptoUnmountCmd unmounts encrypted volumes
-type CryptoUnmountCmd struct {
+// EncUnmountCmd unmounts encrypted volumes
+type EncUnmountCmd struct {
 	Image  string `arg:"" help:"Image name from images.yml"`
 	Volume string `long:"volume" help:"Only unmount this volume (by name)"`
 }
 
-func (c *CryptoUnmountCmd) Run() error {
+func (c *EncUnmountCmd) Run() error {
 	mounts, storagePath, err := loadEncryptedMounts(c.Image)
 	if err != nil {
 		return err
@@ -272,12 +272,12 @@ func (c *CryptoUnmountCmd) Run() error {
 	return nil
 }
 
-// CryptoStatusCmd shows the status of encrypted bind mounts
-type CryptoStatusCmd struct {
+// EncStatusCmd shows the status of encrypted bind mounts
+type EncStatusCmd struct {
 	Image string `arg:"" help:"Image name from images.yml"`
 }
 
-func (c *CryptoStatusCmd) Run() error {
+func (c *EncStatusCmd) Run() error {
 	mounts, storagePath, err := loadEncryptedMounts(c.Image)
 	if err != nil {
 		return err
@@ -323,12 +323,12 @@ func defaultAskPassword(id, prompt string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
-// CryptoPasswdCmd changes the encryption password for all encrypted volumes of an image.
-type CryptoPasswdCmd struct {
+// EncPasswdCmd changes the encryption password for all encrypted volumes of an image.
+type EncPasswdCmd struct {
 	Image string `arg:"" help:"Image name from images.yml"`
 }
 
-func (c *CryptoPasswdCmd) Run() error {
+func (c *EncPasswdCmd) Run() error {
 	mounts, storagePath, err := loadEncryptedMounts(c.Image)
 	if err != nil {
 		return err
@@ -342,7 +342,7 @@ func (c *CryptoPasswdCmd) Run() error {
 	for _, m := range mounts {
 		plainDir := encryptedPlainDir(storagePath, c.Image, m.Name)
 		if isEncryptedMounted(plainDir) {
-			return fmt.Errorf("encrypted volume %q is still mounted; run 'ov crypto unmount %s' first", m.Name, c.Image)
+			return fmt.Errorf("encrypted volume %q is still mounted; run 'ov enc unmount %s' first", m.Name, c.Image)
 		}
 	}
 
@@ -449,8 +449,8 @@ func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
 	return encrypted, rt.EncryptedStoragePath, nil
 }
 
-// generateCryptoUnit produces a companion systemd service unit for gocryptfs mounts.
-func generateCryptoUnit(imageName string, mounts []ResolvedBindMount, storagePath string) string {
+// generateEncUnit produces a companion systemd service unit for gocryptfs mounts.
+func generateEncUnit(imageName string, mounts []ResolvedBindMount, storagePath string) string {
 	// Filter to encrypted mounts only
 	var encrypted []ResolvedBindMount
 	for _, m := range mounts {
@@ -465,7 +465,7 @@ func generateCryptoUnit(imageName string, mounts []ResolvedBindMount, storagePat
 	name := containerName(imageName)
 	var b strings.Builder
 
-	b.WriteString(fmt.Sprintf("# %s-crypto.service (generated by ov enable)\n", name))
+	b.WriteString(fmt.Sprintf("# %s-enc.service (generated by ov enable)\n", name))
 	b.WriteString("[Unit]\n")
 	b.WriteString(fmt.Sprintf("Description=gocryptfs mounts for %s\n", name))
 	b.WriteString("\n[Service]\n")
@@ -473,7 +473,7 @@ func generateCryptoUnit(imageName string, mounts []ResolvedBindMount, storagePat
 	b.WriteString("RemainAfterExit=yes\n")
 
 	// Use per-image password ID so all volumes share a single prompt.
-	// Each ExecStart checks if already FUSE-mounted (e.g. via ov crypto mount) and skips if so.
+	// Each ExecStart checks if already FUSE-mounted (e.g. via ov enc mount) and skips if so.
 	// Quoting: outer double-quotes (systemd), inner single-quotes (bash → gocryptfs extpass).
 	volID := "ov-" + imageName
 	extpass := fmt.Sprintf("systemd-ask-password --id=%s --timeout=0 --echo=masked Passphrase:", volID)
@@ -495,9 +495,9 @@ func generateCryptoUnit(imageName string, mounts []ResolvedBindMount, storagePat
 	return b.String()
 }
 
-// cryptoServiceFilename returns the systemd service filename for a crypto companion unit.
-func cryptoServiceFilename(imageName string) string {
-	return containerName(imageName) + "-crypto.service"
+// encServiceFilename returns the systemd service filename for a crypto companion unit.
+func encServiceFilename(imageName string) string {
+	return containerName(imageName) + "-enc.service"
 }
 
 // hasEncryptedBindMounts returns true if any bind mount is encrypted.
@@ -517,7 +517,7 @@ func verifyBindMounts(mounts []ResolvedBindMount, imageName string) error {
 	for _, m := range mounts {
 		if m.Encrypted {
 			if !isEncryptedMounted(m.HostPath) {
-				return fmt.Errorf("encrypted bind mount %q for image %q is not mounted; run 'ov crypto mount %s' first", m.Name, imageName, imageName)
+				return fmt.Errorf("encrypted bind mount %q for image %q is not mounted; run 'ov enc mount %s' first", m.Name, imageName, imageName)
 			}
 		} else {
 			info, err := os.Stat(m.HostPath)

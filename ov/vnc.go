@@ -26,7 +26,7 @@ type VncCmd struct {
 
 // VncScreenshotCmd captures the VNC framebuffer as a PNG image.
 type VncScreenshotCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	File     string `arg:"" optional:"" default:"screenshot.png" help:"Output file path"`
 	Instance string `short:"i" long:"instance" help:"Instance name for multi-instance containers"`
 }
@@ -53,7 +53,7 @@ func (c *VncScreenshotCmd) Run() error {
 
 // VncClickCmd sends a pointer click at the given coordinates.
 type VncClickCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	X        uint16 `arg:"" help:"X coordinate"`
 	Y        uint16 `arg:"" help:"Y coordinate"`
 	Button   string `long:"button" default:"left" help:"Mouse button (left, right, middle)"`
@@ -78,7 +78,7 @@ func (c *VncClickCmd) Run() error {
 
 // VncTypeCmd sends keyboard input as a sequence of key events.
 type VncTypeCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	Text     string `arg:"" help:"Text to type"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
@@ -102,7 +102,7 @@ func (c *VncTypeCmd) Run() error {
 
 // VncKeyCmd sends an individual key press/release event.
 type VncKeyCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	KeyName  string `arg:"" help:"Key name (e.g., Return, Escape, Tab, F1-F12, Up, Down, Left, Right, Control_L, Shift_L, Alt_L, Super_L)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
@@ -131,7 +131,7 @@ func (c *VncKeyCmd) Run() error {
 
 // VncMouseCmd moves the mouse pointer without clicking.
 type VncMouseCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	X        uint16 `arg:"" help:"X coordinate"`
 	Y        uint16 `arg:"" help:"Y coordinate"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -155,7 +155,7 @@ func (c *VncMouseCmd) Run() error {
 
 // VncStatusCmd checks VNC server reachability and reports display info.
 type VncStatusCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -174,7 +174,7 @@ func (c *VncStatusCmd) Run() error {
 
 // VncPasswdCmd sets up VNC authentication for a deployment.
 type VncPasswdCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	Generate bool   `long:"generate" help:"Generate random password and print to stdout"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
@@ -293,7 +293,7 @@ rsa_private_key_file=%s/rsa.key
 
 // VncRfbCmd sends a raw RFB command.
 type VncRfbCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	Method   string `arg:"" help:"RFB method (key, pointer, cut-text, fbupdate-request)"`
 	Params   string `arg:"" optional:"" help:"JSON params"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`

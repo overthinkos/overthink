@@ -274,8 +274,8 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	// Write companion crypto service if encrypted bind mounts are configured
 	if hasEncryptedBindMounts(bindMounts) {
-		cryptoContent := generateCryptoUnit(c.Image, bindMounts, rt.EncryptedStoragePath)
-		if cryptoContent != "" {
+		encContent := generateEncUnit(c.Image, bindMounts, rt.EncryptedStoragePath)
+		if encContent != "" {
 			svcDir, err := systemdUserDir()
 			if err != nil {
 				return err
@@ -283,11 +283,11 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 			if err := os.MkdirAll(svcDir, 0755); err != nil {
 				return fmt.Errorf("creating systemd user directory: %w", err)
 			}
-			cryptoPath := filepath.Join(svcDir, cryptoServiceFilename(c.Image))
-			if err := os.WriteFile(cryptoPath, []byte(cryptoContent), 0644); err != nil {
+			encPath := filepath.Join(svcDir, encServiceFilename(c.Image))
+			if err := os.WriteFile(encPath, []byte(encContent), 0644); err != nil {
 				return fmt.Errorf("writing crypto service file: %w", err)
 			}
-			fmt.Fprintf(os.Stderr, "Wrote %s\n", cryptoPath)
+			fmt.Fprintf(os.Stderr, "Wrote %s\n", encPath)
 		}
 	}
 
@@ -707,9 +707,9 @@ func (c *RemoveCmd) Run() error {
 			if err := os.Remove(tunnelPath); err == nil {
 				fmt.Fprintf(os.Stderr, "Removed %s\n", tunnelPath)
 			}
-			cryptoPath := filepath.Join(svcDir, cryptoServiceFilename(imageName))
-			if err := os.Remove(cryptoPath); err == nil {
-				fmt.Fprintf(os.Stderr, "Removed %s\n", cryptoPath)
+			encPath := filepath.Join(svcDir, encServiceFilename(imageName))
+			if err := os.Remove(encPath); err == nil {
+				fmt.Fprintf(os.Stderr, "Removed %s\n", encPath)
 			}
 		}
 

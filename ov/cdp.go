@@ -12,31 +12,31 @@ import (
 	"time"
 )
 
-// BrowserCmd manages Chrome browser tabs in running containers
-type BrowserCmd struct {
-	Open       BrowserOpenCmd       `cmd:"" help:"Open a URL in the container's Chrome browser"`
-	List       BrowserListCmd       `cmd:"" help:"List open Chrome browser tabs"`
-	Close      BrowserCloseCmd      `cmd:"" help:"Close a Chrome browser tab"`
-	Text       BrowserTextCmd       `cmd:"" help:"Get page text content"`
-	Html       BrowserHtmlCmd       `cmd:"" help:"Get page HTML"`
-	Url        BrowserUrlCmd        `cmd:"" help:"Get current page URL and title"`
-	Screenshot BrowserScreenshotCmd `cmd:"" help:"Capture a screenshot"`
-	Click      BrowserClickCmd      `cmd:"" help:"Click an element by CSS selector"`
-	Type       BrowserTypeCmd       `cmd:"" help:"Type text into an input field"`
-	Eval       BrowserEvalCmd       `cmd:"" help:"Evaluate JavaScript expression"`
-	Wait       BrowserWaitCmd       `cmd:"" help:"Wait for an element to appear"`
-	Cdp        BrowserCdpCmd        `cmd:"" help:"Send a raw CDP command"`
+// CdpCmd manages Chrome browser tabs in running containers
+type CdpCmd struct {
+	Open       CdpOpenCmd       `cmd:"" help:"Open a URL in the container's Chrome browser"`
+	List       CdpListCmd       `cmd:"" help:"List open Chrome browser tabs"`
+	Close      CdpCloseCmd      `cmd:"" help:"Close a Chrome browser tab"`
+	Text       CdpTextCmd       `cmd:"" help:"Get page text content"`
+	Html       CdpHtmlCmd       `cmd:"" help:"Get page HTML"`
+	Url        CdpUrlCmd        `cmd:"" help:"Get current page URL and title"`
+	Screenshot CdpScreenshotCmd `cmd:"" help:"Capture a screenshot"`
+	Click      CdpClickCmd      `cmd:"" help:"Click an element by CSS selector"`
+	Type       CdpTypeCmd       `cmd:"" help:"Type text into an input field"`
+	Eval       CdpEvalCmd       `cmd:"" help:"Evaluate JavaScript expression"`
+	Wait       CdpWaitCmd       `cmd:"" help:"Wait for an element to appear"`
+	Raw        CdpRawCmd        `cmd:"" help:"Send a raw CDP command"`
 }
 
-// BrowserOpenCmd opens a URL in the container's Chrome browser
-type BrowserOpenCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpOpenCmd opens a URL in the container's Chrome browser
+type CdpOpenCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	URL      string `arg:"" help:"URL to open"`
 	Instance string `short:"i" long:"instance" help:"Instance name for multi-instance containers"`
 }
 
-func (c *BrowserOpenCmd) Run() error {
-	engine, name, err := resolveBrowserContainer(c.Image, c.Instance)
+func (c *CdpOpenCmd) Run() error {
+	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -69,9 +69,9 @@ func (c *BrowserOpenCmd) Run() error {
 	return nil
 }
 
-// BrowserListCmd lists open Chrome browser tabs
-type BrowserListCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpListCmd lists open Chrome browser tabs
+type CdpListCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -84,8 +84,8 @@ type devToolsTab struct {
 	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
 }
 
-func (c *BrowserListCmd) Run() error {
-	engine, name, err := resolveBrowserContainer(c.Image, c.Instance)
+func (c *CdpListCmd) Run() error {
+	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -124,15 +124,15 @@ func (c *BrowserListCmd) Run() error {
 	return nil
 }
 
-// BrowserCloseCmd closes a Chrome browser tab
-type BrowserCloseCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpCloseCmd closes a Chrome browser tab
+type CdpCloseCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID to close (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserCloseCmd) Run() error {
-	engine, name, err := resolveBrowserContainer(c.Image, c.Instance)
+func (c *CdpCloseCmd) Run() error {
+	engine, name, err := resolveCdpContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
@@ -157,8 +157,12 @@ func (c *BrowserCloseCmd) Run() error {
 	return nil
 }
 
-// resolveBrowserContainer resolves the engine and container name, verifying the container is running.
-func resolveBrowserContainer(image, instance string) (engine, name string, err error) {
+// resolveCdpContainer resolves the engine and container name, verifying the container is running.
+// Use "." as image name for local mode (direct connection to localhost).
+func resolveCdpContainer(image, instance string) (engine, name string, err error) {
+	if image == "." {
+		return "", "", nil
+	}
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return "", "", err
@@ -176,7 +180,11 @@ func resolveBrowserContainer(image, instance string) (engine, name string, err e
 
 // resolveDevToolsURL inspects the container's port mapping for port 9222
 // and returns the DevTools WebSocket URL.
+// When engine is empty (local mode), connects to localhost directly.
 func resolveDevToolsURL(engine, containerName string) (string, error) {
+	if engine == "" {
+		return "http://127.0.0.1:9222", nil
+	}
 	cmd := exec.Command(engine, "port", containerName, "9222")
 	output, err := cmd.Output()
 	if err != nil {
@@ -231,7 +239,7 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 
 // connectTab resolves container -> devtools URL -> tab WS URL -> CDPClient.
 func connectTab(image, tabID, instance string) (*CDPClient, error) {
-	engine, name, err := resolveBrowserContainer(image, instance)
+	engine, name, err := resolveCdpContainer(image, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -295,14 +303,14 @@ func cdpEvaluate(client *CDPClient, expression string) (string, error) {
 	return string(evalResult.Result.Value), nil
 }
 
-// BrowserTextCmd gets the page text content of a tab.
-type BrowserTextCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpTextCmd gets the page text content of a tab.
+type CdpTextCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserTextCmd) Run() error {
+func (c *CdpTextCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -317,14 +325,14 @@ func (c *BrowserTextCmd) Run() error {
 	return nil
 }
 
-// BrowserHtmlCmd gets the page HTML of a tab.
-type BrowserHtmlCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpHtmlCmd gets the page HTML of a tab.
+type CdpHtmlCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserHtmlCmd) Run() error {
+func (c *CdpHtmlCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -339,14 +347,14 @@ func (c *BrowserHtmlCmd) Run() error {
 	return nil
 }
 
-// BrowserUrlCmd gets the current page URL and title of a tab.
-type BrowserUrlCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpUrlCmd gets the current page URL and title of a tab.
+type CdpUrlCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserUrlCmd) Run() error {
+func (c *CdpUrlCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -371,15 +379,15 @@ func (c *BrowserUrlCmd) Run() error {
 	return nil
 }
 
-// BrowserScreenshotCmd captures a screenshot from a tab.
-type BrowserScreenshotCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpScreenshotCmd captures a screenshot from a tab.
+type CdpScreenshotCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	File     string `arg:"" optional:"" default:"screenshot.png" help:"Output file path"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserScreenshotCmd) Run() error {
+func (c *CdpScreenshotCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -413,15 +421,15 @@ func (c *BrowserScreenshotCmd) Run() error {
 	return nil
 }
 
-// BrowserClickCmd clicks an element by CSS selector.
-type BrowserClickCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpClickCmd clicks an element by CSS selector.
+type CdpClickCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of element to click"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserClickCmd) Run() error {
+func (c *CdpClickCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -492,16 +500,16 @@ func (c *BrowserClickCmd) Run() error {
 	return nil
 }
 
-// BrowserTypeCmd types text into an input field.
-type BrowserTypeCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpTypeCmd types text into an input field.
+type CdpTypeCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of input field"`
 	Text     string `arg:"" help:"Text to type"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserTypeCmd) Run() error {
+func (c *CdpTypeCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -530,15 +538,15 @@ func (c *BrowserTypeCmd) Run() error {
 	return nil
 }
 
-// BrowserEvalCmd evaluates a JavaScript expression in a tab.
-type BrowserEvalCmd struct {
+// CdpEvalCmd evaluates a JavaScript expression in a tab.
+type CdpEvalCmd struct {
 	Image      string `arg:"" help:"Image name from images.yml"`
 	TabID      string `arg:"" help:"Tab ID (from browser list)"`
 	Expression string `arg:"" help:"JavaScript expression to evaluate"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserEvalCmd) Run() error {
+func (c *CdpEvalCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -553,8 +561,8 @@ func (c *BrowserEvalCmd) Run() error {
 	return nil
 }
 
-// BrowserWaitCmd waits for an element to appear in the page.
-type BrowserWaitCmd struct {
+// CdpWaitCmd waits for an element to appear in the page.
+type CdpWaitCmd struct {
 	Image    string        `arg:"" help:"Image name from images.yml"`
 	TabID    string        `arg:"" help:"Tab ID (from browser list)"`
 	Selector string        `arg:"" help:"CSS selector to wait for"`
@@ -562,7 +570,7 @@ type BrowserWaitCmd struct {
 	Timeout  time.Duration `long:"timeout" default:"30s" help:"Maximum wait time"`
 }
 
-func (c *BrowserWaitCmd) Run() error {
+func (c *CdpWaitCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err
@@ -588,16 +596,16 @@ func (c *BrowserWaitCmd) Run() error {
 	}
 }
 
-// BrowserCdpCmd sends a raw CDP command to a tab.
-type BrowserCdpCmd struct {
-	Image    string `arg:"" help:"Image name from images.yml"`
+// CdpRawCmd sends a raw CDP command to a tab.
+type CdpRawCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Method   string `arg:"" help:"CDP method (e.g. Page.navigate)"`
 	Params   string `arg:"" optional:"" help:"JSON params"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
-func (c *BrowserCdpCmd) Run() error {
+func (c *CdpRawCmd) Run() error {
 	client, err := connectTab(c.Image, c.TabID, c.Instance)
 	if err != nil {
 		return err

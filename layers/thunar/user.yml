@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.config/sway/config.d
+      - cp /ctx/thunar.conf ~/.config/sway/config.d/thunar.conf

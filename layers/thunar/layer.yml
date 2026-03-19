@@ -1,0 +1,6 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - thunar

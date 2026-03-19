@@ -1,0 +1,6 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - xfce4-terminal

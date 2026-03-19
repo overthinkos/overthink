@@ -1,0 +1,29 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - waybar
+
+service: |
+  [program:waybar]
+  command=%(ENV_HOME)s/.local/bin/waybar-wrapper
+  autostart=true
+  autorestart=true
+  priority=15
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:sway-autotile]
+  command=%(ENV_HOME)s/.local/bin/sway-autotile
+  autostart=true
+  autorestart=true
+  priority=16
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

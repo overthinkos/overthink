@@ -13,7 +13,6 @@ env:
 rpm:
   packages:
     - sway
-    - foot
     - fuzzel
     - mako
     - mesa-dri-drivers

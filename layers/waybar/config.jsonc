@@ -1,0 +1,75 @@
+{
+    "layer": "top",
+    "position": "bottom",
+    "height": 40,
+    "modules-left": ["custom/files", "custom/chrome", "custom/terminal",
+                      "custom/float", "custom/move-left", "custom/move-right",
+                      "custom/minimize", "custom/restore", "custom/close"],
+    "modules-center": ["wlr/taskbar"],
+    "modules-right": ["sway/workspaces", "clock"],
+
+    "custom/files": {
+        "format": "Files",
+        "on-click": "swaymsg exec thunar",
+        "tooltip": false
+    },
+    "custom/chrome": {
+        "format": "Chrome",
+        "on-click": "swaymsg exec 'google-chrome-stable $CHROME_FLAGS --user-data-dir=$HOME/.chrome-debug'",
+        "tooltip": false
+    },
+    "custom/terminal": {
+        "format": "Terminal",
+        "on-click": "swaymsg exec xfce4-terminal",
+        "tooltip": false
+    },
+
+    "custom/float": {
+        "format": "\u2980",
+        "on-click": "swaymsg '[workspace=__focused__] floating toggle'",
+        "tooltip-format": "Toggle all windows float/tile"
+    },
+    "custom/move-left": {
+        "format": "\u25c0",
+        "on-click": "swaymsg move left",
+        "tooltip-format": "Move window left"
+    },
+    "custom/move-right": {
+        "format": "\u25b6",
+        "on-click": "swaymsg move right",
+        "tooltip-format": "Move window right"
+    },
+    "custom/minimize": {
+        "format": "\u25bc",
+        "on-click": "swaymsg move scratchpad",
+        "tooltip-format": "Minimize window"
+    },
+    "custom/restore": {
+        "format": "\u25b2",
+        "on-click": "swaymsg scratchpad show",
+        "tooltip-format": "Restore window"
+    },
+    "custom/close": {
+        "format": "\u2715",
+        "on-click": "swaymsg kill",
+        "tooltip-format": "Close window"
+    },
+
+    "wlr/taskbar": {
+        "format": "{name}",
+        "icon-size": 0,
+        "on-click": "activate",
+        "on-click-right": "close",
+        "tooltip": false
+    },
+
+    "sway/workspaces": {
+        "disable-scroll": true,
+        "format": "{index}"
+    },
+
+    "clock": {
+        "format": "{:%H:%M:%S}",
+        "interval": 1
+    }
+}

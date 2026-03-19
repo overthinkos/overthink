@@ -2,5 +2,6 @@ layers:
   - pipewire
   - wayvnc
   - google-chrome-sway
-  - pcmanfm-qt
-  - quickshell
+  - xfce4-terminal
+  - thunar
+  - waybar

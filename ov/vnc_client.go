@@ -519,11 +519,18 @@ func (c *VNCClient) TypeText(text string) error {
 	return nil
 }
 
-// PointerClick sends press + release at (x, y).
+// PointerClick moves to (x,y) first to trigger virtual pointer creation and
+// wl_seat.capabilities broadcast, waits for Wayland clients to bind wl_pointer,
+// then sends press + release with realistic timing.
 func (c *VNCClient) PointerClick(x, y uint16, buttonMask uint8) error {
+	if err := c.PointerEvent(0, x, y); err != nil {
+		return fmt.Errorf("pointer move: %w", err)
+	}
+	time.Sleep(100 * time.Millisecond)
 	if err := c.PointerEvent(buttonMask, x, y); err != nil {
 		return fmt.Errorf("pointer press: %w", err)
 	}
+	time.Sleep(50 * time.Millisecond)
 	if err := c.PointerEvent(0, x, y); err != nil {
 		return fmt.Errorf("pointer release: %w", err)
 	}
@@ -532,7 +539,11 @@ func (c *VNCClient) PointerClick(x, y uint16, buttonMask uint8) error {
 
 // PointerMove moves without clicking.
 func (c *VNCClient) PointerMove(x, y uint16) error {
-	return c.PointerEvent(0, x, y)
+	if err := c.PointerEvent(0, x, y); err != nil {
+		return err
+	}
+	time.Sleep(50 * time.Millisecond)
+	return nil
 }
 
 // Screenshot captures the framebuffer as an image.

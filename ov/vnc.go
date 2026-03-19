@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // VncCmd manages VNC desktop interaction in running containers.
@@ -69,6 +70,7 @@ func (c *VncClickCmd) Run() error {
 	if err := client.PointerClick(c.X, c.Y, vncButton(c.Button)); err != nil {
 		return fmt.Errorf("clicking at (%d, %d): %w", c.X, c.Y, err)
 	}
+	time.Sleep(50 * time.Millisecond)
 
 	fmt.Fprintf(os.Stderr, "Clicked %s at (%d, %d)\n", c.Button, c.X, c.Y)
 	return nil
@@ -88,9 +90,11 @@ func (c *VncTypeCmd) Run() error {
 	}
 	defer client.Close()
 
+	time.Sleep(100 * time.Millisecond)
 	if err := client.TypeText(c.Text); err != nil {
 		return fmt.Errorf("typing text: %w", err)
 	}
+	time.Sleep(50 * time.Millisecond)
 
 	fmt.Fprintf(os.Stderr, "Typed %d characters\n", len(c.Text))
 	return nil
@@ -115,9 +119,11 @@ func (c *VncKeyCmd) Run() error {
 	}
 	defer client.Close()
 
+	time.Sleep(100 * time.Millisecond)
 	if err := client.KeyPress(keysym); err != nil {
 		return fmt.Errorf("sending key %s: %w", c.KeyName, err)
 	}
+	time.Sleep(50 * time.Millisecond)
 
 	fmt.Fprintf(os.Stderr, "Pressed key %s\n", c.KeyName)
 	return nil
@@ -141,6 +147,7 @@ func (c *VncMouseCmd) Run() error {
 	if err := client.PointerMove(c.X, c.Y); err != nil {
 		return fmt.Errorf("moving mouse to (%d, %d): %w", c.X, c.Y, err)
 	}
+	time.Sleep(50 * time.Millisecond)
 
 	fmt.Fprintf(os.Stderr, "Moved mouse to (%d, %d)\n", c.X, c.Y)
 	return nil

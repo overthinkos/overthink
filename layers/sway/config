@@ -1,7 +1,7 @@
 # Headless sway config for container use
 xwayland disable
 set $mod Mod1
-set $term foot
+set $term xterm
 set $menu fuzzel
 
 # Key bindings

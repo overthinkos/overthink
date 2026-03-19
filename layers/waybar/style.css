@@ -1,0 +1,139 @@
+/* Catppuccin Mocha theme for waybar bottom bar */
+
+* {
+    font-family: monospace;
+    font-size: 13px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+}
+
+/* App launcher buttons */
+#custom-chrome,
+#custom-files,
+#custom-terminal {
+    background-color: #313244;
+    color: #cdd6f4;
+    border-radius: 6px;
+    padding: 4px 12px;
+    margin: 4px 3px;
+    font-weight: bold;
+}
+
+#custom-chrome:hover,
+#custom-files:hover,
+#custom-terminal:hover {
+    background-color: #45475a;
+}
+
+/* Window control buttons — move, float */
+#custom-move-left,
+#custom-move-right,
+#custom-float {
+    background-color: #313244;
+    color: #cdd6f4;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 4px 2px;
+    font-weight: bold;
+}
+
+#custom-move-left:hover,
+#custom-move-right:hover {
+    background-color: #45475a;
+}
+
+#custom-float:hover {
+    background-color: #89b4fa;
+    color: #1e1e2e;
+}
+
+/* Minimize */
+#custom-minimize {
+    background-color: #313244;
+    color: #f9e2af;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 4px 2px;
+    font-weight: bold;
+}
+
+#custom-minimize:hover {
+    background-color: #f9e2af;
+    color: #1e1e2e;
+}
+
+/* Restore/maximize */
+#custom-restore {
+    background-color: #313244;
+    color: #a6e3a1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 4px 2px;
+    font-weight: bold;
+}
+
+#custom-restore:hover {
+    background-color: #a6e3a1;
+    color: #1e1e2e;
+}
+
+/* Close */
+#custom-close {
+    background-color: #313244;
+    color: #f38ba8;
+    border-radius: 6px;
+    padding: 4px 10px;
+    margin: 4px 2px;
+    font-weight: bold;
+}
+
+#custom-close:hover {
+    background-color: #f38ba8;
+    color: #1e1e2e;
+}
+
+/* Taskbar */
+#taskbar button {
+    background-color: #313244;
+    color: #a6adc8;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 4px 2px;
+}
+
+#taskbar button.active {
+    background-color: #585b70;
+    color: #cdd6f4;
+}
+
+#taskbar button:hover {
+    background-color: #45475a;
+}
+
+/* Workspace indicators */
+#workspaces button {
+    background-color: transparent;
+    color: #cdd6f4;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 4px 2px;
+    min-width: 24px;
+}
+
+#workspaces button.focused {
+    background-color: #585b70;
+}
+
+#workspaces button:hover {
+    background-color: #45475a;
+}
+
+/* Clock */
+#clock {
+    padding: 4px 8px;
+    margin: 4px 4px;
+}

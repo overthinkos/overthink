@@ -1,0 +1,14 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/waybar
+      - cp /ctx/waybar-wrapper ~/.local/bin/waybar-wrapper
+      - chmod +x ~/.local/bin/waybar-wrapper
+      - cp /ctx/config.jsonc ~/.config/waybar/config
+      - cp /ctx/style.css ~/.config/waybar/style.css
+      - cp /ctx/sway-autotile ~/.local/bin/sway-autotile
+      - chmod +x ~/.local/bin/sway-autotile
+      - cp /ctx/window-list.sh ~/.local/bin/window-list.sh
+      - chmod +x ~/.local/bin/window-list.sh

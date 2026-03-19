@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-61 layers. 28 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+90 layers. 29 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -142,6 +142,8 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 Some layers are pure composition — they pull in a curated set of other layers:
 **sway-desktop** = pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar.
 **bootc-base** = sshd + guest agent + bootc config.
+**openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
+**openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
 
 ## The Lifecycle
 

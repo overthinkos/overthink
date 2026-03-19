@@ -152,7 +152,7 @@ ov version                             # Print computed CalVer tag
 
 ---
 
-## Shipped Layers (61 total)
+## Shipped Layers (90 total)
 
 **Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `nodejs24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
@@ -174,7 +174,7 @@ ov version                             # Print computed CalVer tag
 
 **Dev Tools:** `dev-tools` (bat, ripgrep, neovim, gh, direnv, fd-find, htop, podman-compose), `vscode` (VS Code via Microsoft repo), `pre-commit` (git hooks), `typst` (document processor), `ujust` (task runner)
 
-**Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack)
+**Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack), `thunar` (XFCE file manager), `waybar` (Wayland status bar), `xfce4-terminal` (terminal emulator)
 
 **Utilities:** `gocryptfs` (encrypted filesystem for ov enc operations), `socat` (socket relay for VM console access and port_relay for loopback-only services)
 

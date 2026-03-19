@@ -180,7 +180,9 @@ ov version                             # Print computed CalVer tag
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov` (ov binary for container/VM use)
 
-**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar), `bootc-base` (sshd + qemu-guest-agent + bootc-config), `ov-full` (ov + virtualization + gocryptfs + socat)
+**OpenClaw Tools:** `codex` (OpenAI Codex CLI; depends: nodejs), `gemini` (Google Gemini CLI; depends: nodejs), `clawhub` (ClawHub skill registry; depends: nodejs), `mcporter` (MCP server CLI; depends: nodejs), `oracle` (prompt bundling CLI; depends: nodejs), `xurl` (X/Twitter API CLI; depends: nodejs), `summarize` (URL/transcript extractor; depends: nodejs), `playwright` (browser automation; depends: nodejs), `blogwatcher` (RSS monitor; depends: golang), `gifgrep` (GIF search; depends: golang), `wacli` (WhatsApp CLI; depends: golang), `goplaces` (Google Places CLI; depends: golang), `songsee` (audio spectrogram; depends: golang), `sag` (ElevenLabs TTS; depends: golang), `camsnap` (camera CLI; depends: golang), `gogcli` (Google Workspace CLI; depends: golang), `ordercli` (food delivery CLI; depends: golang), `himalaya` (email CLI; depends: rust), `uv` (Python pkg mgr; depends: python), `nano-pdf` (PDF editor; depends: python), `gh` (GitHub CLI + git), `tmux`, `ffmpeg`, `ripgrep`, `sqlite`, `whisper` (local STT; depends: python, cuda), `sherpa-onnx` (offline TTS)
+
+**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar), `bootc-base` (sshd + qemu-guest-agent + bootc-config), `ov-full` (ov + virtualization + gocryptfs + socat), `openclaw-full` (openclaw + chrome + all OpenClaw tool layers), `openclaw-full-ml` (openclaw-full + whisper + sherpa-onnx)
 
 ---
 
@@ -202,6 +204,27 @@ ov version                             # Print computed CalVer tag
 - `security.shm_size:` in layer.yml for shared memory requirements (e.g., `"1g"`)
 - `BROWSER` env in chrome layers points to `browser-open` for in-container URL opening via CDP
 - VNC password management: `ov vnc passwd` for deployments, password stored in `ov config` as `vnc.password.<image>`, wayvnc reads `~/.config/wayvnc/config` by default (no layer/wrapper changes needed for auth)
+
+---
+
+## Layer Patterns
+
+**Package manager auto-detection:** `ov` automatically creates build stages for `package.json` (npm), `pixi.toml` (pixi), and `Cargo.toml` (cargo). Do not duplicate these with manual install commands in `root.yml` or `user.yml`.
+
+**`depends` vs `layers`:**
+- `depends:` declares prerequisites -- layers that must be installed first because this layer needs their outputs (compilers, runtimes, libraries). Use for: `golang`, `python`, `rust`, `nodejs`, `supervisord`, `cuda`.
+- `layers:` composes layers into a group. The composed layers are spliced directly into the image. Use for metalayers that bundle tools together. A layer with only `layers:` and no install files is a pure composition (metalayer).
+- Both can coexist: `depends: [sway]` + `layers: [chrome]` means "needs sway installed first, and also includes chrome".
+
+**Python packages:** Always use `pixi.toml`, never `pip install` or `pixi global install` in user.yml. Depend on `python` (runtime), not `pixi` (build tool -- pixi runs in the builder stage, not the final image). PyPI-only packages use `[pypi-dependencies]` in pixi.toml.
+
+**npm packages:** Use `package.json` with dependencies. The build system runs `npm install -g` automatically. Do not create `root.yml` with manual `npm install -g` commands. Depend on `nodejs`.
+
+**Go packages:** Use `user.yml` with `go install`. Depend on `golang`. Set `GOPATH: "~/go"` and `path_append: ["~/go/bin"]` in layer.yml. If the Go code uses cgo, add required `-devel` RPM packages (e.g., `alsa-lib-devel` for audio). Always run `go clean -cache` at the end to reduce image size.
+
+**Cargo packages:** Use `user.yml` with `cargo install`. Depend on `rust`. The `rust` layer provides `~/.cargo/bin` on PATH.
+
+**Metalayers:** Pure composition layers contain only a `layers:` list in `layer.yml` -- no packages, no install files. They group existing layers for convenience (e.g., `sway-desktop`, `openclaw-full`).
 
 ---
 

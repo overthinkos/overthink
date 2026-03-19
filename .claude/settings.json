@@ -1,7 +1,9 @@
 {
   "enabledPlugins": {
     "overthink@overthink-plugins": true,
-    "overthink-dev@overthink-plugins": true
+    "overthink-dev@overthink-plugins": true,
+    "overthink-layers@overthink-plugins": true,
+    "overthink-images@overthink-plugins": true
   },
   "extraKnownMarketplaces": {
     "overthink-plugins": {

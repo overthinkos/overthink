@@ -251,3 +251,5 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
 | Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |
+| Layer reference | `/overthink-layers:<name>` | Per-layer docs: deps, ports, volumes, env, packages, usage |
+| Image reference | `/overthink-images:<name>` | Per-image docs: base, layers, ports, platforms, lifecycle |

@@ -145,7 +145,7 @@ ov version                             # Print computed CalVer tag
 
 **Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway), `dank-material-shell` (DMS shell/launcher via COPR; depends: sway), `noctalia` (Quickshell-based shell via COPR; depends: sway)
 
-**Display/Audio:** `wayvnc` (VNC server on tcp:5900; protocol annotation), `pipewire` (audio/media server + wireplumber)
+**Display/Audio:** `wayvnc` (VNC server on tcp:5900; protocol annotation; VeNCrypt/TLS auth via `ov vnc passwd`; reads `~/.config/wayvnc/config` automatically), `pipewire` (audio/media server + wireplumber)
 
 **Browser:** `chrome-deps` (Chrome runtime dependencies: fonts, graphics, audio libs; shm_size: 1g, procps-ng, iproute for debugging), `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data; layers: chrome-deps), `google-chrome-sway` (Chrome on sway, same ports/volume; layers: chrome-deps; port_relay on :9222, browser-open via CDP, BROWSER env)
 
@@ -184,6 +184,7 @@ ov version                             # Print computed CalVer tag
 - `port_relay:` in layer.yml for services binding to loopback only -- auto-adds socat relay
 - `security.shm_size:` in layer.yml for shared memory requirements (e.g., `"1g"`)
 - `BROWSER` env in chrome layers points to `browser-open` for in-container URL opening via CDP
+- VNC password management: `ov vnc passwd` for deployments, password stored in `ov config` as `vnc.password.<image>`, wayvnc reads `~/.config/wayvnc/config` by default (no layer/wrapper changes needed for auth)
 
 ---
 

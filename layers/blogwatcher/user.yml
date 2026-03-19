@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
+      - go clean -cache

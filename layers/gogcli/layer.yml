@@ -1,0 +1,10 @@
+description: Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs)
+
+depends:
+  - golang
+
+env:
+  GOPATH: "~/go"
+
+path_append:
+  - "~/go/bin"

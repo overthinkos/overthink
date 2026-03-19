@@ -1,0 +1,4 @@
+description: uv Python package manager
+
+depends:
+  - python

@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - go install github.com/steipete/wacli/cmd/wacli@latest
+      - go clean -cache

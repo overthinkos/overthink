@@ -1,0 +1,5 @@
+description: Fast recursive text search (rg)
+
+rpm:
+  packages:
+    - ripgrep

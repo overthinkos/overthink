@@ -1,0 +1,4 @@
+description: nano-pdf CLI for PDF editing with natural language
+
+depends:
+  - python

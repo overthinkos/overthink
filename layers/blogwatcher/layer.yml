@@ -1,0 +1,10 @@
+description: Blog/RSS feed monitor CLI
+
+depends:
+  - golang
+
+env:
+  GOPATH: "~/go"
+
+path_append:
+  - "~/go/bin"

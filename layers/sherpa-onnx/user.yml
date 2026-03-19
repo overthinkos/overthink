@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/share/sherpa-onnx/runtime ~/.local/share/sherpa-onnx/models
+      - |
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) SUFFIX="linux-x64" ;;
+          aarch64) SUFFIX="linux-aarch64" ;;
+          *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+        esac
+        curl -fsSL "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.12.23/sherpa-onnx-v1.12.23-${SUFFIX}-shared.tar.bz2" \
+          | tar -xjf - --strip-components=1 -C ~/.local/share/sherpa-onnx/runtime
+      - |
+        curl -fsSL "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-high.tar.bz2" \
+          | tar -xjf - -C ~/.local/share/sherpa-onnx/models

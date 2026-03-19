@@ -1,0 +1,4 @@
+description: Google Gemini CLI for AI coding assistance and search
+
+depends:
+  - nodejs

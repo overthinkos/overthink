@@ -1,0 +1,9 @@
+description: OpenAI Whisper local speech-to-text
+
+depends:
+  - python
+  - cuda
+
+rpm:
+  packages:
+    - ffmpeg-free

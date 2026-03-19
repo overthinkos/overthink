@@ -1,0 +1,6 @@
+description: OpenClaw full + ML tools (whisper, sherpa-onnx-tts, CUDA)
+
+layers:
+  - openclaw-full
+  - whisper
+  - sherpa-onnx

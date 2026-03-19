@@ -234,6 +234,43 @@ images:
     platforms:
       - linux/amd64
 
+  openclaw-full:
+    base: fedora
+    layers:
+      - openclaw-full
+    ports:
+      - "18789:18789"
+      - "9222:9222"
+
+  openclaw-full-sway:
+    base: fedora
+    layers:
+      - openclaw-full
+      - sway-desktop
+    ports:
+      - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
+    tunnel:
+      provider: tailscale
+      ports: all
+    platforms:
+      - linux/amd64
+
+  openclaw-full-ml:
+    base: nvidia
+    layers:
+      - openclaw-full-ml
+      - sway-desktop
+      - ollama
+    ports:
+      - "18789:18789"
+      - "5900:5900"
+      - "9222:9222"
+      - "11434:11434"
+    platforms:
+      - linux/amd64
+
   immich-cuda:
     base: fedora
     layers:

@@ -1,0 +1,5 @@
+description: sherpa-onnx offline text-to-speech
+
+env:
+  SHERPA_ONNX_RUNTIME_DIR: "~/.local/share/sherpa-onnx/runtime"
+  SHERPA_ONNX_MODEL_DIR: "~/.local/share/sherpa-onnx/models"

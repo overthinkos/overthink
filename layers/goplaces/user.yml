@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - go install github.com/steipete/goplaces/cmd/goplaces@latest
+      - go clean -cache

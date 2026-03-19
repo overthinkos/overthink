@@ -1,0 +1,6 @@
+description: GitHub CLI and git
+
+rpm:
+  packages:
+    - gh
+    - git

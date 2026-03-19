@@ -1,0 +1,4 @@
+description: Oracle CLI for prompt bundling and multi-engine AI queries
+
+depends:
+  - nodejs

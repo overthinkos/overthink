@@ -1,0 +1,10 @@
+description: GIF search and download CLI
+
+depends:
+  - golang
+
+env:
+  GOPATH: "~/go"
+
+path_append:
+  - "~/go/bin"

@@ -1,0 +1,4 @@
+description: Playwright browser automation (OpenClaw AI snapshots)
+
+depends:
+  - nodejs

@@ -1,0 +1,4 @@
+description: X (Twitter) API CLI for posts, search, DMs, and media
+
+depends:
+  - nodejs

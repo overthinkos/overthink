@@ -1,0 +1,4 @@
+description: OpenAI Codex CLI coding agent
+
+depends:
+  - nodejs

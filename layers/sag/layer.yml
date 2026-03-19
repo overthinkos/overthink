@@ -1,0 +1,14 @@
+description: ElevenLabs text-to-speech CLI
+
+depends:
+  - golang
+
+rpm:
+  packages:
+    - alsa-lib-devel
+
+env:
+  GOPATH: "~/go"
+
+path_append:
+  - "~/go/bin"

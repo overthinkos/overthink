@@ -1,0 +1,5 @@
+description: FFmpeg multimedia framework
+
+rpm:
+  packages:
+    - ffmpeg-free

@@ -1,0 +1,10 @@
+description: WhatsApp CLI for message sending and history sync
+
+depends:
+  - golang
+
+env:
+  GOPATH: "~/go"
+
+path_append:
+  - "~/go/bin"

@@ -1,0 +1,4 @@
+description: Himalaya email CLI (IMAP/SMTP)
+
+depends:
+  - rust

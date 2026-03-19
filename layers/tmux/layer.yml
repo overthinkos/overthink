@@ -1,0 +1,5 @@
+description: Terminal multiplexer
+
+rpm:
+  packages:
+    - tmux

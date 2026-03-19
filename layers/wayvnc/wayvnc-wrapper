@@ -10,4 +10,16 @@ if [ ! -e "$SOCKET" ]; then
     echo "wayvnc-wrapper: Wayland socket $SOCKET not found after ${TIMEOUT}s" >&2
     exit 1
 fi
-exec wayvnc --render-cursor --disable-resizing -o HEADLESS-1 0.0.0.0 5900
+WAYVNC_ARGS="--render-cursor --disable-resizing -o HEADLESS-1"
+
+# GPU-accelerated encoding when DRI render node is available
+if ls /dev/dri/renderD* >/dev/null 2>&1; then
+    WAYVNC_ARGS="$WAYVNC_ARGS --gpu"
+fi
+
+# Configurable max frame rate (default: wayvnc's built-in 30fps)
+if [ -n "$WAYVNC_MAX_FPS" ]; then
+    WAYVNC_ARGS="$WAYVNC_ARGS --max-fps=$WAYVNC_MAX_FPS"
+fi
+
+exec wayvnc $WAYVNC_ARGS 0.0.0.0 5900

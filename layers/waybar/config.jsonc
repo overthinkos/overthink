@@ -26,7 +26,7 @@
 
     "custom/float": {
         "format": "\u25eb",
-        "on-click": "swaymsg '[workspace=__focused__] floating toggle'",
+        "on-click": "~/.local/bin/sway-float-toggle",
         "tooltip-format": "Toggle all windows float/tile"
     },
     "custom/move-left": {

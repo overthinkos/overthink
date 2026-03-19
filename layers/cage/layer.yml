@@ -5,7 +5,6 @@ env:
   WLR_BACKENDS: "headless"
   WLR_HEADLESS_OUTPUTS: "1"
   WLR_LIBINPUT_NO_DEVICES: "1"
-  WLR_RENDERER: "pixman"
   XDG_RUNTIME_DIR: "/tmp"
   WAYLAND_DISPLAY: "wayland-0"
 
@@ -21,7 +20,7 @@ service: |
   autorestart=true
   priority=10
   startsecs=3
-  environment=WLR_BACKENDS="headless",WLR_HEADLESS_OUTPUTS="1",WLR_LIBINPUT_NO_DEVICES="1",WLR_RENDERER="pixman",XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
+  environment=WLR_BACKENDS="headless",WLR_HEADLESS_OUTPUTS="1",WLR_LIBINPUT_NO_DEVICES="1",XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true

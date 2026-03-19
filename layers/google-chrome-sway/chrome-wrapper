@@ -27,7 +27,7 @@ fi
 
 exec google-chrome-stable $CHROME_FLAGS \
     --disable-background-networking \
-    --disable-features=VaapiVideoDecoder,VaapiVideoEncoder \
+    --enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks \
     --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins='*' \
     --user-data-dir="$HOME/.chrome-debug"

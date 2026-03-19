@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/zlib"
 	"crypto/des"
 	"crypto/tls"
 	"encoding/binary"
@@ -22,6 +24,8 @@ type VNCClient struct {
 	height      uint16
 	name        string
 	pixelFormat vncPixelFormat
+	zBuf        *bytes.Buffer // persistent zlib input buffer for ZRLE
+	zReader     io.ReadCloser // persistent zlib decompressor for ZRLE
 }
 
 // vncPixelFormat represents the RFB pixel format (16 bytes on wire).
@@ -194,8 +198,8 @@ func (c *VNCClient) handshake(password string) error {
 	}
 	c.pixelFormat = pf
 
-	// Send SetEncodings: Raw only.
-	if err := c.sendSetEncodings([]int32{0}); err != nil { // 0 = Raw
+	// Send SetEncodings: prefer ZRLE (compressed), fall back to Raw.
+	if err := c.sendSetEncodings([]int32{16, 0}); err != nil { // 16 = ZRLE, 0 = Raw
 		return err
 	}
 
@@ -603,46 +607,46 @@ func (c *VNCClient) readFramebufferUpdate() (image.Image, error) {
 			return nil, fmt.Errorf("reading rectangle header: %w", err)
 		}
 
-		if rect.Encoding != 0 { // Only Raw encoding supported
-			return nil, fmt.Errorf("unsupported encoding: %d", rect.Encoding)
-		}
-
-		pixelData := make([]byte, int(rect.Width)*int(rect.Height)*bpp)
-		if _, err := io.ReadFull(c.conn, pixelData); err != nil {
-			return nil, fmt.Errorf("reading pixel data: %w", err)
-		}
-
-		// Convert pixels to image using the negotiated pixel format.
-		for py := 0; py < int(rect.Height); py++ {
-			for px := 0; px < int(rect.Width); px++ {
-				offset := (py*int(rect.Width) + px) * bpp
-				pixel := pixelData[offset : offset+bpp]
-
-				var r, g, b uint8
-				var val uint32
-				switch bpp {
-				case 4:
-					if c.pixelFormat.BigEndian != 0 {
-						val = binary.BigEndian.Uint32(pixel)
-					} else {
-						val = binary.LittleEndian.Uint32(pixel)
-					}
-				case 2:
-					if c.pixelFormat.BigEndian != 0 {
-						val = uint32(binary.BigEndian.Uint16(pixel))
-					} else {
-						val = uint32(binary.LittleEndian.Uint16(pixel))
-					}
-				case 1:
-					val = uint32(pixel[0])
-				}
-
-				r = uint8((val >> c.pixelFormat.RedShift) & uint32(c.pixelFormat.RedMax))
-				g = uint8((val >> c.pixelFormat.GreenShift) & uint32(c.pixelFormat.GreenMax))
-				b = uint8((val >> c.pixelFormat.BlueShift) & uint32(c.pixelFormat.BlueMax))
-
-				img.SetRGBA(int(rect.X)+px, int(rect.Y)+py, color.RGBA{R: r, G: g, B: b, A: 255})
+		switch rect.Encoding {
+		case 0: // Raw
+			pixelData := make([]byte, int(rect.Width)*int(rect.Height)*bpp)
+			if _, err := io.ReadFull(c.conn, pixelData); err != nil {
+				return nil, fmt.Errorf("reading pixel data: %w", err)
 			}
+			for py := 0; py < int(rect.Height); py++ {
+				for px := 0; px < int(rect.Width); px++ {
+					offset := (py*int(rect.Width) + px) * bpp
+					pixel := pixelData[offset : offset+bpp]
+					var r, g, b uint8
+					var val uint32
+					switch bpp {
+					case 4:
+						if c.pixelFormat.BigEndian != 0 {
+							val = binary.BigEndian.Uint32(pixel)
+						} else {
+							val = binary.LittleEndian.Uint32(pixel)
+						}
+					case 2:
+						if c.pixelFormat.BigEndian != 0 {
+							val = uint32(binary.BigEndian.Uint16(pixel))
+						} else {
+							val = uint32(binary.LittleEndian.Uint16(pixel))
+						}
+					case 1:
+						val = uint32(pixel[0])
+					}
+					r = uint8((val >> c.pixelFormat.RedShift) & uint32(c.pixelFormat.RedMax))
+					g = uint8((val >> c.pixelFormat.GreenShift) & uint32(c.pixelFormat.GreenMax))
+					b = uint8((val >> c.pixelFormat.BlueShift) & uint32(c.pixelFormat.BlueMax))
+					img.SetRGBA(int(rect.X)+px, int(rect.Y)+py, color.RGBA{R: r, G: g, B: b, A: 255})
+				}
+			}
+		case 16: // ZRLE
+			if err := c.decodeZRLE(img, rect.X, rect.Y, rect.Width, rect.Height); err != nil {
+				return nil, fmt.Errorf("decoding ZRLE rectangle: %w", err)
+			}
+		default:
+			return nil, fmt.Errorf("unsupported encoding: %d", rect.Encoding)
 		}
 	}
 
@@ -687,7 +691,250 @@ func (c *VNCClient) Height() uint16 { return c.height }
 func (c *VNCClient) DesktopName() string { return c.name }
 
 // Close disconnects from the VNC server.
-func (c *VNCClient) Close() error { return c.conn.Close() }
+func (c *VNCClient) Close() error {
+	if c.zReader != nil {
+		c.zReader.Close()
+	}
+	return c.conn.Close()
+}
+
+// --- ZRLE encoding support (RFC 6143 §7.7.6) ---
+
+// cpixelSize returns the CPIXEL size in bytes for ZRLE encoding.
+// When BPP=32, Depth=24, TrueColor=1, CPIXEL is 3 bytes.
+func (c *VNCClient) cpixelSize() int {
+	if c.pixelFormat.BPP == 32 && c.pixelFormat.Depth == 24 && c.pixelFormat.TrueColor == 1 {
+		return 3
+	}
+	return int(c.pixelFormat.BPP) / 8
+}
+
+// readCPixel reads a CPIXEL from r and returns it as color.RGBA.
+func (c *VNCClient) readCPixel(r io.Reader, cpLen int) (color.RGBA, error) {
+	buf := make([]byte, cpLen)
+	if _, err := io.ReadFull(r, buf); err != nil {
+		return color.RGBA{}, err
+	}
+	if cpLen == 3 {
+		// CPIXEL: least significant 3 bytes (little-endian).
+		// With RedShift=16, GreenShift=8, BlueShift=0: bytes are B, G, R.
+		return color.RGBA{R: buf[2], G: buf[1], B: buf[0], A: 255}, nil
+	}
+	var val uint32
+	switch cpLen {
+	case 4:
+		if c.pixelFormat.BigEndian != 0 {
+			val = binary.BigEndian.Uint32(buf)
+		} else {
+			val = binary.LittleEndian.Uint32(buf)
+		}
+	case 2:
+		if c.pixelFormat.BigEndian != 0 {
+			val = uint32(binary.BigEndian.Uint16(buf))
+		} else {
+			val = uint32(binary.LittleEndian.Uint16(buf))
+		}
+	case 1:
+		val = uint32(buf[0])
+	}
+	return color.RGBA{
+		R: uint8((val >> c.pixelFormat.RedShift) & uint32(c.pixelFormat.RedMax)),
+		G: uint8((val >> c.pixelFormat.GreenShift) & uint32(c.pixelFormat.GreenMax)),
+		B: uint8((val >> c.pixelFormat.BlueShift) & uint32(c.pixelFormat.BlueMax)),
+		A: 255,
+	}, nil
+}
+
+// decodeZRLE decodes a ZRLE-encoded rectangle.
+func (c *VNCClient) decodeZRLE(img *image.RGBA, rx, ry, rw, rh uint16) error {
+	var length uint32
+	if err := binary.Read(c.conn, binary.BigEndian, &length); err != nil {
+		return fmt.Errorf("reading ZRLE length: %w", err)
+	}
+	compressed := make([]byte, length)
+	if _, err := io.ReadFull(c.conn, compressed); err != nil {
+		return fmt.Errorf("reading ZRLE data: %w", err)
+	}
+
+	// The zlib stream is persistent across all ZRLE rectangles in a connection.
+	if c.zBuf == nil {
+		c.zBuf = new(bytes.Buffer)
+	}
+	c.zBuf.Write(compressed)
+
+	if c.zReader == nil {
+		r, err := zlib.NewReader(c.zBuf)
+		if err != nil {
+			return fmt.Errorf("zlib init: %w", err)
+		}
+		c.zReader = r
+	}
+
+	cpLen := c.cpixelSize()
+
+	for ty := int(ry); ty < int(ry)+int(rh); ty += 64 {
+		th := int(ry) + int(rh) - ty
+		if th > 64 {
+			th = 64
+		}
+		for tx := int(rx); tx < int(rx)+int(rw); tx += 64 {
+			tw := int(rx) + int(rw) - tx
+			if tw > 64 {
+				tw = 64
+			}
+			if err := c.decodeZRLETile(img, tx, ty, tw, th, cpLen); err != nil {
+				return fmt.Errorf("tile at (%d,%d): %w", tx, ty, err)
+			}
+		}
+	}
+	return nil
+}
+
+// decodeZRLETile decodes a single ZRLE tile from the decompressed stream.
+func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) error {
+	var subenc uint8
+	if err := binary.Read(c.zReader, binary.BigEndian, &subenc); err != nil {
+		return fmt.Errorf("reading subencoding: %w", err)
+	}
+
+	numPixels := tw * th
+
+	switch {
+	case subenc == 0: // Raw CPIXEL
+		for py := 0; py < th; py++ {
+			for px := 0; px < tw; px++ {
+				clr, err := c.readCPixel(c.zReader, cpLen)
+				if err != nil {
+					return err
+				}
+				img.SetRGBA(tx+px, ty+py, clr)
+			}
+		}
+
+	case subenc == 1: // Solid color
+		clr, err := c.readCPixel(c.zReader, cpLen)
+		if err != nil {
+			return err
+		}
+		for py := 0; py < th; py++ {
+			for px := 0; px < tw; px++ {
+				img.SetRGBA(tx+px, ty+py, clr)
+			}
+		}
+
+	case subenc >= 2 && subenc <= 16: // Packed palette
+		paletteSize := int(subenc)
+		palette := make([]color.RGBA, paletteSize)
+		for i := range palette {
+			clr, err := c.readCPixel(c.zReader, cpLen)
+			if err != nil {
+				return err
+			}
+			palette[i] = clr
+		}
+		var bitsPerIndex int
+		switch {
+		case paletteSize == 2:
+			bitsPerIndex = 1
+		case paletteSize <= 4:
+			bitsPerIndex = 2
+		default:
+			bitsPerIndex = 4
+		}
+		for py := 0; py < th; py++ {
+			bytesPerRow := (tw*bitsPerIndex + 7) / 8
+			rowBuf := make([]byte, bytesPerRow)
+			if _, err := io.ReadFull(c.zReader, rowBuf); err != nil {
+				return err
+			}
+			for px := 0; px < tw; px++ {
+				bitPos := px * bitsPerIndex
+				byteIdx := bitPos / 8
+				bitOff := uint(8 - bitsPerIndex - (bitPos % 8))
+				mask := byte((1 << bitsPerIndex) - 1)
+				idx := int((rowBuf[byteIdx] >> bitOff) & mask)
+				if idx >= paletteSize {
+					idx = 0
+				}
+				img.SetRGBA(tx+px, ty+py, palette[idx])
+			}
+		}
+
+	case subenc == 128: // Plain RLE
+		pos := 0
+		for pos < numPixels {
+			clr, err := c.readCPixel(c.zReader, cpLen)
+			if err != nil {
+				return err
+			}
+			runLen := 1
+			for {
+				var b uint8
+				if err := binary.Read(c.zReader, binary.BigEndian, &b); err != nil {
+					return err
+				}
+				runLen += int(b)
+				if b != 255 {
+					break
+				}
+			}
+			for i := 0; i < runLen && pos < numPixels; i++ {
+				img.SetRGBA(tx+pos%tw, ty+pos/tw, clr)
+				pos++
+			}
+		}
+
+	case subenc >= 129: // Palette RLE
+		paletteSize := int(subenc - 128)
+		palette := make([]color.RGBA, paletteSize)
+		for i := range palette {
+			clr, err := c.readCPixel(c.zReader, cpLen)
+			if err != nil {
+				return err
+			}
+			palette[i] = clr
+		}
+		pos := 0
+		for pos < numPixels {
+			var idx uint8
+			if err := binary.Read(c.zReader, binary.BigEndian, &idx); err != nil {
+				return err
+			}
+			if idx >= 128 {
+				palIdx := int(idx - 128)
+				if palIdx >= paletteSize {
+					palIdx = 0
+				}
+				runLen := 1
+				for {
+					var b uint8
+					if err := binary.Read(c.zReader, binary.BigEndian, &b); err != nil {
+						return err
+					}
+					runLen += int(b)
+					if b != 255 {
+						break
+					}
+				}
+				for i := 0; i < runLen && pos < numPixels; i++ {
+					img.SetRGBA(tx+pos%tw, ty+pos/tw, palette[palIdx])
+					pos++
+				}
+			} else {
+				palIdx := int(idx)
+				if palIdx >= paletteSize {
+					palIdx = 0
+				}
+				img.SetRGBA(tx+pos%tw, ty+pos/tw, palette[palIdx])
+				pos++
+			}
+		}
+
+	default: // 17-127 are unused per RFC 6143
+		return fmt.Errorf("unsupported ZRLE subencoding: %d", subenc)
+	}
+	return nil
+}
 
 // --- Container resolution helpers (mirror browser.go pattern) ---
 

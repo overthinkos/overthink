@@ -9,7 +9,7 @@ path_append:
   - "~/.local/bin"
 
 env:
-  CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform"
+  CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
   BROWSER: "browser-open"
 
 ports:

@@ -1,6 +1,18 @@
 #!/bin/sh
 SOCKET="${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}"
 
+# GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel), then software fallback
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    export GBM_BACKEND=nvidia-drm
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+elif ls /dev/dri/renderD* >/dev/null 2>&1; then
+    export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+else
+    export WLR_RENDERER="${WLR_RENDERER:-pixman}"
+fi
+
 cage -- niri &
 CAGE_PID=$!
 

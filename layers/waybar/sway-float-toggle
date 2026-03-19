@@ -1,0 +1,16 @@
+#!/bin/bash
+# Toggle ALL windows on the focused workspace between float and tile.
+# Uses a state file to track mode — floating enable/disable (not toggle)
+# ensures ALL windows switch together.
+export SWAYSOCK=$(ls /tmp/sway-ipc.*.sock 2>/dev/null | head -1)
+STATE_FILE=/tmp/sway-float-state
+
+if [ -f "$STATE_FILE" ]; then
+    # Currently floating → tile ALL
+    swaymsg '[workspace=__focused__] floating disable'
+    rm -f "$STATE_FILE"
+else
+    # Currently tiled → float ALL
+    swaymsg '[workspace=__focused__] floating enable'
+    touch "$STATE_FILE"
+fi

@@ -10,5 +10,5 @@ tasks:
       - cp /ctx/style.css ~/.config/waybar/style.css
       - cp /ctx/sway-autotile ~/.local/bin/sway-autotile
       - chmod +x ~/.local/bin/sway-autotile
-      - cp /ctx/window-list.sh ~/.local/bin/window-list.sh
-      - chmod +x ~/.local/bin/window-list.sh
+      - cp /ctx/sway-float-toggle ~/.local/bin/sway-float-toggle
+      - chmod +x ~/.local/bin/sway-float-toggle

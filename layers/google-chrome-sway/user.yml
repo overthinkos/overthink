@@ -8,4 +8,8 @@ tasks:
       - chmod +x ~/.local/bin/chrome-wrapper
       - cp /ctx/browser-open ~/.local/bin/browser-open
       - chmod +x ~/.local/bin/browser-open
+      - mkdir -p ~/.local/share/chrome-windows
+      - cp /ctx/chrome-windows/manifest.json ~/.local/share/chrome-windows/
+      - cp /ctx/chrome-windows/rules.json ~/.local/share/chrome-windows/
+      - cp /ctx/chrome-windows/content.js ~/.local/share/chrome-windows/
       - BROWSER= xdg-settings set default-web-browser google-chrome.desktop

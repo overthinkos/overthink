@@ -1,49 +1,47 @@
-/* Catppuccin Mocha theme for waybar bottom bar */
+/* Waybar bottom bar — Catppuccin Mocha with high contrast for VNC */
 
 * {
-    font-family: monospace;
-    font-size: 13px;
+    font-family: "DejaVu Sans Mono", "Noto Sans Mono", monospace;
+    font-size: 14px;
     min-height: 0;
 }
 
 window#waybar {
-    background-color: #1e1e2e;
+    background-color: #11111b;
     color: #cdd6f4;
 }
 
-/* App launcher buttons */
-#custom-chrome,
+/* App launcher buttons — high contrast, fixed width */
 #custom-files,
+#custom-chrome,
 #custom-terminal {
-    background-color: #313244;
+    background-color: #45475a;
     color: #cdd6f4;
+    border: 1px solid #585b70;
     border-radius: 6px;
     padding: 4px 12px;
     margin: 4px 3px;
+    min-width: 64px;
     font-weight: bold;
 }
 
-#custom-chrome:hover,
 #custom-files:hover,
+#custom-chrome:hover,
 #custom-terminal:hover {
-    background-color: #45475a;
+    background-color: #585b70;
+    border-color: #89b4fa;
 }
 
-/* Window control buttons — move, float */
-#custom-move-left,
-#custom-move-right,
+/* Window control buttons — fixed width, distinct colors */
 #custom-float {
-    background-color: #313244;
-    color: #cdd6f4;
-    border-radius: 6px;
-    padding: 4px 10px;
-    margin: 4px 2px;
-    font-weight: bold;
-}
-
-#custom-move-left:hover,
-#custom-move-right:hover {
     background-color: #45475a;
+    color: #89b4fa;
+    border: 1px solid #585b70;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 4px 2px;
+    min-width: 28px;
+    font-weight: bold;
 }
 
 #custom-float:hover {
@@ -51,13 +49,32 @@ window#waybar {
     color: #1e1e2e;
 }
 
-/* Minimize */
-#custom-minimize {
-    background-color: #313244;
-    color: #f9e2af;
+#custom-move-left,
+#custom-move-right {
+    background-color: #45475a;
+    color: #cdd6f4;
+    border: 1px solid #585b70;
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 4px 8px;
     margin: 4px 2px;
+    min-width: 28px;
+    font-weight: bold;
+}
+
+#custom-move-left:hover,
+#custom-move-right:hover {
+    background-color: #585b70;
+    border-color: #cdd6f4;
+}
+
+#custom-minimize {
+    background-color: #45475a;
+    color: #f9e2af;
+    border: 1px solid #585b70;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 4px 2px;
+    min-width: 28px;
     font-weight: bold;
 }
 
@@ -66,13 +83,14 @@ window#waybar {
     color: #1e1e2e;
 }
 
-/* Restore/maximize */
 #custom-restore {
-    background-color: #313244;
+    background-color: #45475a;
     color: #a6e3a1;
+    border: 1px solid #585b70;
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 4px 8px;
     margin: 4px 2px;
+    min-width: 28px;
     font-weight: bold;
 }
 
@@ -81,13 +99,14 @@ window#waybar {
     color: #1e1e2e;
 }
 
-/* Close */
 #custom-close {
-    background-color: #313244;
+    background-color: #45475a;
     color: #f38ba8;
+    border: 1px solid #585b70;
     border-radius: 6px;
-    padding: 4px 10px;
+    padding: 4px 8px;
     margin: 4px 2px;
+    min-width: 28px;
     font-weight: bold;
 }
 
@@ -96,10 +115,11 @@ window#waybar {
     color: #1e1e2e;
 }
 
-/* Taskbar */
+/* Taskbar — per-window tabs */
 #taskbar button {
     background-color: #313244;
     color: #a6adc8;
+    border: 1px solid #45475a;
     border-radius: 6px;
     padding: 4px 8px;
     margin: 4px 2px;
@@ -108,6 +128,7 @@ window#waybar {
 #taskbar button.active {
     background-color: #585b70;
     color: #cdd6f4;
+    border-color: #89b4fa;
 }
 
 #taskbar button:hover {
@@ -121,11 +142,12 @@ window#waybar {
     border-radius: 6px;
     padding: 4px 8px;
     margin: 4px 2px;
-    min-width: 24px;
+    min-width: 28px;
 }
 
 #workspaces button.focused {
     background-color: #585b70;
+    border: 1px solid #89b4fa;
 }
 
 #workspaces button:hover {

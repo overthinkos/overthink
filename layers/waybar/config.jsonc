@@ -25,7 +25,7 @@
     },
 
     "custom/float": {
-        "format": "\u2980",
+        "format": "\u25eb",
         "on-click": "swaymsg '[workspace=__focused__] floating toggle'",
         "tooltip-format": "Toggle all windows float/tile"
     },

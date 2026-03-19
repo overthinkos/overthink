@@ -131,7 +131,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**gocryptfs** — Encrypted filesystem for `ov crypto` operations. **socat** — Socket relay for VM console access.
+**gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access.
 
 ### OS / Bootc
 

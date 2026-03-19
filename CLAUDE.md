@@ -229,6 +229,7 @@ For detailed documentation on specific topics, use the corresponding skill:
 | Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
 | Virtual machines | `/overthink:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
 | Encrypted storage | `/overthink:crypto` | ov crypto init/mount/unmount/status/passwd, gocryptfs |
+| OpenClaw gateway | `/overthink:openclaw` | Gateway config, model auth, browser integration, channels, agent setup |
 | Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
 | Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
 | Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |

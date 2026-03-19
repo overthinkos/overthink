@@ -1,7 +1,7 @@
 layers:
   - pipewire
   - wayvnc
-  - google-chrome-sway
+  - chrome-sway
   - xfce4-terminal
   - thunar
   - waybar

@@ -283,8 +283,8 @@ func TestExpandLayers(t *testing.T) {
 		"pipewire":         {Name: "pipewire", HasRootYml: true},
 		"wayvnc":           {Name: "wayvnc", HasRootYml: true},
 		"chrome":           {Name: "chrome", HasRootYml: true},
-		"quickshell":       {Name: "quickshell", HasRootYml: true},
-		"sway-desktop":     {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "quickshell"}},
+		"waybar":           {Name: "waybar", HasRootYml: true},
+		"sway-desktop":     {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
 		"openclaw":         {Name: "openclaw", HasUserYml: true},
 	}
 
@@ -293,7 +293,7 @@ func TestExpandLayers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ExpandLayers() error: %v", err)
 	}
-	want := []string{"openclaw", "pipewire", "wayvnc", "chrome", "quickshell"}
+	want := []string{"openclaw", "pipewire", "wayvnc", "chrome", "waybar"}
 	if !reflect.DeepEqual(result, want) {
 		t.Errorf("ExpandLayers() = %v, want %v", result, want)
 	}

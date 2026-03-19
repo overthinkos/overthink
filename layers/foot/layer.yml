@@ -1,6 +1,0 @@
-depends:
-  - sway
-
-rpm:
-  packages:
-    - foot

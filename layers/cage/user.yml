@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  install:
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp /ctx/cage-wrapper ~/.local/bin/cage-wrapper
-      - chmod +x ~/.local/bin/cage-wrapper

@@ -12,4 +12,5 @@ tasks:
       - cp /ctx/chrome-windows/manifest.json ~/.local/share/chrome-windows/
       - cp /ctx/chrome-windows/rules.json ~/.local/share/chrome-windows/
       - cp /ctx/chrome-windows/content.js ~/.local/share/chrome-windows/
+      - mkdir -p ~/.config
       - BROWSER= xdg-settings set default-web-browser google-chrome.desktop

@@ -1,0 +1,21 @@
+depends:
+  - supervisord
+
+env:
+  DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+
+rpm:
+  packages:
+    - dbus-daemon
+
+service: |
+  [program:dbus]
+  command=dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session
+  autostart=true
+  autorestart=true
+  priority=2
+  startsecs=1
+  environment=XDG_RUNTIME_DIR="/tmp"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

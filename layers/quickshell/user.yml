@@ -1,9 +1,0 @@
-version: '3'
-
-tasks:
-  install:
-    cmds:
-      - mkdir -p ~/.local/bin ~/.config/quickshell
-      - cp /ctx/quickshell-wrapper ~/.local/bin/quickshell-wrapper
-      - chmod +x ~/.local/bin/quickshell-wrapper
-      - cp /ctx/shell.qml ~/.config/quickshell/shell.qml

@@ -135,23 +135,23 @@ ov version                             # Print computed CalVer tag
 
 ---
 
-## Shipped Layers (64 total)
+## Shipped Layers (61 total)
 
-**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `node24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
+**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `nodejs24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
 
 **Build:** `build-toolchain` (gcc, cmake, autoconf, ninja, git, pkg-config), `pre-commit` (git hooks framework)
 
 **Services:** `supervisord` (process manager via pixi; depends: python), `traefik` (reverse proxy on :8000/:8080; depends: supervisord), `testapi` (FastAPI test service on :9090, routed via `testapi.localhost`), `postgresql` (PostgreSQL server on :5432; volume: pgdata), `redis` (Redis on :6379; service)
 
-**Desktop/Wayland:** `sway` (Sway compositor + dbus), `cage` (kiosk-mode headless Wayland), `niri` (Niri compositor; depends: cage), `quickshell` (bar/launcher via COPR; depends: sway), `pcmanfm-qt` (file manager; depends: sway), `dank-material-shell` (DMS shell/launcher via COPR; depends: sway), `noctalia` (Quickshell-based shell via COPR; depends: sway)
+**Desktop/Wayland:** `dbus` (D-Bus session bus; depends: supervisord), `sway` (Sway compositor; depends: dbus)
 
 **Display/Audio:** `wayvnc` (VNC server on tcp:5900; protocol annotation; VeNCrypt/TLS auth via `ov vnc passwd`; reads `~/.config/wayvnc/config` automatically), `pipewire` (audio/media server + wireplumber)
 
-**Browser:** `chrome-deps` (Chrome runtime dependencies: fonts, graphics, audio libs; shm_size: 1g, procps-ng, iproute for debugging), `google-chrome` (Chrome on niri, DevTools :9222, volume: chrome-data; layers: chrome-deps), `google-chrome-sway` (Chrome on sway, same ports/volume; layers: chrome-deps; port_relay on :9222, browser-open via CDP, BROWSER env)
+**Browser:** `chrome` (Google Chrome + runtime deps; DevTools :9222, volume: chrome-data; port_relay on :9222, browser-open via CDP, BROWSER env; shm_size: 1g), `chrome-sway` (Chrome on sway via exec autostart; depends: sway; layers: chrome)
 
 **GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
 
-**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs), `immich` (photo management on :2283; depends: node24, postgresql, redis, supervisord), `immich-ml` (ML backend on :3003; depends: immich; volume: models)
+**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs), `immich` (photo management on :2283; depends: nodejs24, postgresql, redis, supervisord), `immich-ml` (ML backend on :3003; depends: immich; volume: models)
 
 **DevOps/CI:** `docker-ce` (Docker CE + buildx + compose), `kubernetes` (kubectl + Helm), `devops-tools` (bind-utils, jq, rsync; depends: nodejs), `github-runner` (Actions runner as service; uid: 0), `github-actions` (Act CLI via COPR + guestfs), `google-cloud` (Google Cloud SDK), `google-cloud-npm` (GCP npm packages; depends: google-cloud, nodejs), `grafana-tools` (Grafana tooling)
 
@@ -163,7 +163,7 @@ ov version                             # Print computed CalVer tag
 
 **OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov` (ov binary for container/VM use)
 
-**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + pcmanfm-qt + quickshell), `sway-desktop-dank` (same with dank-material-shell), `sway-desktop-noctalia` (same with noctalia), `bootc-base` (sshd + qemu-guest-agent + bootc-config), `ov-full` (ov + virtualization + gocryptfs + socat)
+**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar), `bootc-base` (sshd + qemu-guest-agent + bootc-config), `ov-full` (ov + virtualization + gocryptfs + socat)
 
 ---
 

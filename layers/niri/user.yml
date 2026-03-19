@@ -1,7 +1,0 @@
-version: '3'
-
-tasks:
-  install:
-    cmds:
-      - mkdir -p ~/.config/niri
-      - cp /ctx/config.kdl ~/.config/niri/config.kdl

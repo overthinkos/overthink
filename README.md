@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-64 layers. 31 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+61 layers. 28 pre-built image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -123,7 +123,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Desktop Environments
 
-**sway** / **niri** / **cage** — Wayland compositors (full desktop, tiling, kiosk mode). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **google-chrome** / **google-chrome-sway** — Chrome with DevTools on `:9222`. **quickshell** / **dank-material-shell** / **noctalia** — Desktop shells and launchers.
+**sway** — Wayland compositor (full desktop). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** — Chrome with DevTools on `:9222`.
 
 ### Applications
 
@@ -140,7 +140,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + wayvnc + chrome + file manager + shell.
+**sway-desktop** = pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar.
 **bootc-base** = sshd + guest agent + bootc config.
 
 ## The Lifecycle

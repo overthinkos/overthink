@@ -55,20 +55,6 @@ images:
     ports:
       - "18789:18789"
 
-  openclaw-browser:
-    enabled: false
-    base: fedora
-    layers:
-      - openclaw
-      - wayvnc
-      - google-chrome
-    ports:
-      - "18789:18789"
-      - "5900:5900"
-      - "9222:9222"
-    platforms:
-      - linux/amd64
-
   openclaw-sway-browser:
     base: fedora
     layers:
@@ -89,36 +75,6 @@ images:
     layers:
       - openclaw
       - sway-desktop
-      - ollama
-    ports:
-      - "18789:18789"
-      - "5900:5900"
-      - "9222:9222"
-      - "11434:11434"
-    platforms:
-      - linux/amd64
-
-  openclaw-ollama-sway-browser-dank:
-    enabled: false
-    base: nvidia
-    layers:
-      - openclaw
-      - sway-desktop-dank
-      - ollama
-    ports:
-      - "18789:18789"
-      - "5900:5900"
-      - "9222:9222"
-      - "11434:11434"
-    platforms:
-      - linux/amd64
-
-  openclaw-ollama-sway-browser-noctalia:
-    enabled: false
-    base: nvidia
-    layers:
-      - openclaw
-      - sway-desktop-noctalia
       - ollama
     ports:
       - "18789:18789"
@@ -193,6 +149,7 @@ images:
     network: host
 
   openclaw-browser-bootc:
+    enabled: false
     base: "quay.io/fedora/fedora-bootc:43"
     bootc: true
     layers:
@@ -200,7 +157,7 @@ images:
       - openclaw
       - pipewire
       - wayvnc
-      - google-chrome-sway
+      - chrome-sway
     platforms:
       - linux/amd64
     ports:
@@ -243,7 +200,7 @@ images:
   immich:
     base: fedora-nonfree
     layers:
-      - node24
+      - nodejs24
       - supervisord
       - postgresql
       - redis
@@ -254,6 +211,7 @@ images:
       - linux/amd64
 
   aurora:
+    enabled: false
     base: "ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305"
     bootc: true
     platforms:
@@ -276,36 +234,10 @@ images:
     platforms:
       - linux/amd64
 
-  nemoclaw:
-    base: fedora
-    layers:
-      - nemoclaw
-    ports:
-      - "18789:18789"
-
-  nemoclaw-ollama:
-    base: nvidia
-    layers:
-      - nemoclaw
-      - ollama
-    ports:
-      - "18789:18789"
-      - "11434:11434"
-    platforms:
-      - linux/amd64
-
-  turnstone:
-    base: fedora
-    layers:
-      - turnstone
-    ports:
-      - "8080:8080"
-      - "8090:8090"
-
   immich-cuda:
     base: fedora
     layers:
-      - node24
+      - nodejs24
       - cuda
       - python-ml
       - supervisord

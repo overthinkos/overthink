@@ -4,4 +4,4 @@ tasks:
   install:
     cmds:
       - mkdir -p ~/.config/sway/config.d
-      - cp /ctx/pcmanfm-qt.conf ~/.config/sway/config.d/pcmanfm-qt.conf
+      - cp /ctx/chrome-sway.conf ~/.config/sway/config.d/chrome-sway.conf

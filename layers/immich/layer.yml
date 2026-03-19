@@ -1,6 +1,6 @@
 depends:
   - supervisord
-  - node24
+  - nodejs24
   - postgresql
   - redis
 

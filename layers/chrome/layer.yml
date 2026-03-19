@@ -1,0 +1,38 @@
+depends:
+  - socat
+
+path_append:
+  - "~/.local/bin"
+
+env:
+  CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
+  BROWSER: "browser-open"
+
+security:
+  shm_size: "1g"
+
+rpm:
+  packages:
+    - liberation-fonts
+    - vulkan-loader
+    - mesa-dri-drivers
+    - alsa-lib
+    - at-spi2-core
+    - cups-libs
+    - gtk3
+    - libdrm
+    - libxkbcommon
+    - nss
+    - procps-ng
+    - iproute
+    - libva-utils
+
+ports:
+  - 9222
+
+port_relay:
+  - 9222
+
+volumes:
+  - name: chrome-data
+    path: "~/.chrome-debug"

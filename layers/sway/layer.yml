@@ -1,5 +1,5 @@
 depends:
-  - supervisord
+  - dbus
 
 env:
   WLR_BACKENDS: "headless"
@@ -7,7 +7,6 @@ env:
   WLR_LIBINPUT_NO_DEVICES: "1"
   XDG_RUNTIME_DIR: "/tmp"
   WAYLAND_DISPLAY: "wayland-0"
-  DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
   EGL_LOG_LEVEL: "fatal"
 
 rpm:
@@ -21,20 +20,8 @@ rpm:
     - libglvnd-gles
     - egl-wayland
     - wlr-randr
-    - dbus-daemon
 
 service: |
-  [program:dbus]
-  command=dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session
-  autostart=true
-  autorestart=true
-  priority=2
-  startsecs=1
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
-
   [program:sway]
   command=%(ENV_HOME)s/.local/bin/sway-wrapper
   autostart=true

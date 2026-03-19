@@ -111,7 +111,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Foundations
 
 **pixi** — The Pixi package manager, foundation for Python and conda environments.
-**python** — Python 3.13 via Pixi. **nodejs** / **node24** — Node.js + npm. **rust** — Rust + Cargo. **golang** — Go compiler. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config.
+**python** — Python 3.13 via Pixi. **nodejs** / **nodejs24** — Node.js + npm. **rust** — Rust + Cargo. **golang** — Go compiler. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config.
 
 ### Services & Infrastructure
 

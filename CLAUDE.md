@@ -234,22 +234,22 @@ For detailed documentation on specific topics, use the corresponding skill:
 
 | Topic | Skill | Covers |
 |-------|-------|--------|
-| Layer authoring | `/overthink:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts, port_relay, protocol annotations |
-| Image composition | `/overthink:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
-| Building images | `/overthink:build` | ov build, push mode, layer merging algorithm, build cache, inline merge |
-| Shell & execution | `/overthink:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
-| Service management | `/overthink:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
-| CDP (Chrome DevTools) | `/overthink:cdp` | ov cdp commands, CDP, Chrome DevTools, OAuth flows |
-| Sway compositor | `/overthink:sway` | ov sway commands, window management, workspaces, outputs |
-| VNC automation | `/overthink:vnc` | ov vnc commands, RFB protocol, screenshots, keyboard/mouse input, VNC password |
-| Aliases | `/overthink:alias` | ov alias add/remove/list/install/uninstall |
-| Configuration | `/overthink:config` | ov config get/set/list/reset/path, bind_address, engine settings |
-| Deployment | `/overthink:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
-| Virtual machines | `/overthink:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
-| Encrypted storage | `/overthink:enc` | ov enc init/mount/unmount/status/passwd, gocryptfs |
-| OpenClaw gateway | `/overthink:openclaw` | Gateway config, model auth, browser integration, channels, agent setup |
-| Validation | `/overthink:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
-| Go CLI development | `/overthink-dev:go` | Source code map, testing, adding commands |
-| Containerfile generation | `/overthink-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |
-| Layer reference | `/overthink-layers:<name>` | Per-layer docs: deps, ports, volumes, env, packages, usage |
-| Image reference | `/overthink-images:<name>` | Per-image docs: base, layers, ports, platforms, lifecycle |
+| Layer authoring | `/ov:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts, port_relay, protocol annotations |
+| Image composition | `/ov:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
+| Building images | `/ov:build` | ov build, push mode, layer merging algorithm, build cache, inline merge |
+| Shell & execution | `/ov:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
+| Service management | `/ov:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
+| CDP (Chrome DevTools) | `/ov:cdp` | ov cdp commands, CDP, Chrome DevTools, OAuth flows |
+| Sway compositor | `/ov:sway` | ov sway commands, window management, workspaces, outputs |
+| VNC automation | `/ov:vnc` | ov vnc commands, RFB protocol, screenshots, keyboard/mouse input, VNC password |
+| Aliases | `/ov:alias` | ov alias add/remove/list/install/uninstall |
+| Configuration | `/ov:config` | ov config get/set/list/reset/path, bind_address, engine settings |
+| Deployment | `/ov:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
+| Virtual machines | `/ov:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
+| Encrypted storage | `/ov:enc` | ov enc init/mount/unmount/status/passwd, gocryptfs |
+| OpenClaw gateway | `/ov:openclaw` | Gateway config, model auth, browser integration, channels, agent setup |
+| Validation | `/ov:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
+| Go CLI development | `/ov-dev:go` | Source code map, testing, adding commands |
+| Containerfile generation | `/ov-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |
+| Layer reference | `/ov-layers:<name>` | Per-layer docs: deps, ports, volumes, env, packages, usage |
+| Image reference | `/ov-images:<name>` | Per-image docs: base, layers, ports, platforms, lifecycle |

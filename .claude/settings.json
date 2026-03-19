@@ -1,12 +1,12 @@
 {
   "enabledPlugins": {
-    "overthink@overthink-plugins": true,
-    "overthink-dev@overthink-plugins": true,
-    "overthink-layers@overthink-plugins": true,
-    "overthink-images@overthink-plugins": true
+    "ov@ov-plugins": true,
+    "ov-dev@ov-plugins": true,
+    "ov-layers@ov-plugins": true,
+    "ov-images@ov-plugins": true
   },
   "extraKnownMarketplaces": {
-    "overthink-plugins": {
+    "ov-plugins": {
       "source": {
         "source": "directory",
         "path": "./plugins"

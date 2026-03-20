@@ -34,205 +34,53 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories
++-- layers/<name>/            # Layer directories (90 layers)
 +-- templates/                # supervisord.header.conf
 ```
 
 ---
 
-## ov CLI Reference
-
-```
-ov generate [--tag TAG]                # Write .build/ (Containerfiles)
-ov validate                            # Check images.yml + layers, exit 0 or 1
-ov inspect <image> [--format FIELD]    # Print resolved config (JSON) or single field
-ov list images                         # Images from images.yml
-ov list layers                         # Layers from filesystem
-ov list targets                        # Build targets in dependency order
-ov list services                       # Layers with service in layer.yml
-ov list routes                         # Layers with route in layer.yml (host + port)
-ov list volumes                        # Layers with volumes in layer.yml
-ov list aliases                        # Layers with aliases in layer.yml
-ov alias add <name> <image> [command]  # Create a host command alias
-ov alias remove <name>                 # Remove an alias
-ov alias list                          # List all installed aliases
-ov alias install <image>               # Install default aliases from layer.yml / images.yml
-ov alias uninstall <image>             # Remove all aliases for an image
-ov build [image...]                    # Build with auto cache (image cache from registry)
-ov build --push [image...]             # Build+push with registry cache (read+write)
-ov build --no-cache [image...]         # Build without any cache
-ov build --platform linux/amd64 [image...]  # Specific platform
-ov build --cache registry [image...]       # Explicit registry cache (read+write)
-ov build --cache image [image...]          # Explicit image cache (read-only)
-ov build --cache gha [image...]            # GitHub Actions cache
-ov build --cache none [image...]           # Same as --no-cache
-ov build --jobs N [image...]               # Max concurrent builds per level (default: 4)
-ov merge <image> [--max-mb N] [--tag TAG] [--dry-run]
-ov merge --all [--dry-run]             # Merge all images with merge.auto enabled
-ov new layer <name>                    # Scaffold a layer directory
-ov seed <image> [--tag TAG]                # Seed empty bind mount dirs from image data
-ov shell <image> [-w PATH] [-c CMD] [--tag TAG] [--tty] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
-ov start <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
-ov stop <image> [-i INSTANCE]          # Stop a running service container
-ov enable <image> [-w PATH] [--tag TAG] [--no-autodetect] [-e KEY=VALUE] [--env-file PATH] [-i INSTANCE] [--build]
-ov disable <image> [-i INSTANCE]       # Disable service auto-start (quadlet only)
-ov status <image> [-i INSTANCE]        # Show service status
-ov logs <image> [-f] [-i INSTANCE]     # Show service logs
-ov update <image> [--tag TAG] [-i INSTANCE] [--build]  # Update image, restart if active
-ov remove <image> [-i INSTANCE] [--volumes] [-e KEY=VALUE]  # Remove service (--volumes removes named volumes)
-ov config get <key>                    # Print resolved value
-ov config set <key> <value>            # Set in user config
-ov config list                         # Show all settings with source
-ov config reset [key]                  # Remove from user config
-ov service status <image> [-i INSTANCE]    # Show supervisord service status
-ov service start <image> <service> [-i INSTANCE]   # Start a supervisord service
-ov service stop <image> <service> [-i INSTANCE]    # Stop a supervisord service
-ov service restart <image> <service> [-i INSTANCE] # Restart a supervisord service
-ov cdp open <image> <url> [-i INSTANCE]                  # Open URL in container's Chrome
-ov cdp list <image> [-i INSTANCE]                         # List open Chrome tabs
-ov cdp close <image> <tab-id> [-i INSTANCE]               # Close a Chrome tab
-ov cdp text <image> <tab-id> [-i INSTANCE]                # Get page text content
-ov cdp html <image> <tab-id> [-i INSTANCE]                # Get page HTML
-ov cdp url <image> <tab-id> [-i INSTANCE]                 # Get page title and URL
-ov cdp screenshot <image> <tab-id> [file] [-i INSTANCE]   # Capture screenshot (PNG)
-ov cdp click <image> <tab-id> <selector> [-i INSTANCE]    # Click element by CSS selector
-ov cdp type <image> <tab-id> <selector> <text> [-i INSTANCE]  # Type into input field
-ov cdp eval <image> <tab-id> <expression> [-i INSTANCE]   # Evaluate JavaScript
-ov cdp wait <image> <tab-id> <selector> [-i INSTANCE] [--timeout 30s]  # Wait for element
-ov cdp raw <image> <tab-id> <method> [params-json] [-i INSTANCE]  # Raw CDP command
-ov sway msg <image> <command> [-i INSTANCE]               # Run a sway command
-ov sway tree <image> [-i INSTANCE]                        # Get window/container tree (JSON)
-ov sway workspaces <image> [-i INSTANCE]                  # List workspaces (JSON)
-ov sway outputs <image> [-i INSTANCE]                     # List outputs (JSON)
-ov sway exec <image> <command> [-i INSTANCE]              # Launch an application
-ov sway focus <image> <target> [-i INSTANCE]              # Focus window by direction or criteria
-ov sway move <image> <target...> [-i INSTANCE]            # Move window (direction/scratchpad/workspace N)
-ov sway resize <image> <dimension> <amount> [-i INSTANCE] # Resize window (width/height, 10px/-10px)
-ov sway kill <image> [-i INSTANCE]                        # Close focused window
-ov sway fullscreen <image> [-i INSTANCE]                  # Toggle fullscreen
-ov sway floating <image> [-i INSTANCE]                    # Toggle floating
-ov sway layout <image> <mode> [-i INSTANCE]               # Set layout (tabbed/stacking/splitv/splith)
-ov sway workspace <image> <number> [-i INSTANCE]          # Switch workspace
-ov sway reload <image> [-i INSTANCE]                      # Reload sway config
-ov sway resolution <image> <WxH> [-i INSTANCE] [-o OUTPUT]  # Set output resolution
-ov vnc screenshot <image> [file] [-i INSTANCE]              # Capture VNC framebuffer as PNG
-ov vnc click <image> <x> <y> [-i INSTANCE] [--button left]  # Click at coordinates
-ov vnc type <image> <text> [-i INSTANCE]                     # Type text as key events
-ov vnc key <image> <key-name> [-i INSTANCE]                  # Send key (Return, Escape, F1, etc.)
-ov vnc mouse <image> <x> <y> [-i INSTANCE]                   # Move mouse without clicking
-ov vnc status <image> [-i INSTANCE]                           # Show desktop name, resolution
-ov vnc passwd <image> [-i INSTANCE] [--generate]             # Set VNC password for a deployment
-ov vnc rfb <image> <method> [params-json] [-i INSTANCE]      # Raw RFB command
-ov enc init <image> [--volume NAME]
-ov enc mount <image> [--volume NAME]
-ov enc unmount <image> [--volume NAME]
-ov enc status <image>
-ov enc passwd <image>               # Change encryption password
-ov vm build <image> [--type qcow2|raw] [--size SIZE] [--root-size SIZE] [--console] [--transport TRANSPORT]
-ov vm create <image> [--ram SIZE] [--cpus N] [--ssh-key SSH_KEY] [--no-autodetect] [-i INSTANCE]
-ov vm start <image> [-i INSTANCE]      # Start a VM
-ov vm stop <image> [-i INSTANCE] [--force]  # Stop a VM
-ov vm destroy <image> [-i INSTANCE] [--disk]  # Remove VM, optionally delete disk
-ov vm list [-a]                        # List VMs (--all includes stopped)
-ov vm console <image> [-i INSTANCE]    # Attach to VM serial console
-ov vm ssh <image> [-i INSTANCE] [-p PORT] [-l USER] [args...]
-ov config path                         # Print config file path
-ov version                             # Print computed CalVer tag
-```
-
-**Output conventions:** `generate`/`validate`/`new`/`merge` write to stderr. `inspect`/`list`/`version` write to stdout (pipeable). `inspect --format <field>` outputs bare value for shell substitution (`tag`, `base`, `builder`, `pkg`, `registry`, `platforms`, `layers`, `ports`, `volumes`, `aliases`, `bind_mounts`, `tunnel`, `network`).
-
-**Local mode:** `ov cdp`, `ov vnc`, and `ov sway` commands accept `.` as the image name for local/in-container use — connects directly to `127.0.0.1` (CDP/VNC) or runs `swaymsg` locally (sway) instead of going through the container engine.
-
-**Remote image refs:** All runtime commands (`shell`, `start`, `enable`, `update`) accept remote image references as `github.com/org/repo/image[@version]`. Registry-first approach: attempts pull, falls back to local build. Use `--build` to force local builds.
-
-**Remote layer refs:** Layer references starting with `@` are remote: `@github.com/org/repo/layers/name:version`. The path after the repo maps directly to the directory in the repo (e.g., `layers/name`). Auto-downloaded to `~/.cache/ov/repos/` on first use. Version is optional -- when omitted, the repo's default branch is used. Different layers from the same repo can use different versions. Used in `images.yml` layers and `layer.yml` depends/layers fields.
-
-**Error handling:** validation collects all errors at once. Exit codes: 0 = success, 1 = validation/user error, 2 = internal error.
-
----
-
-## Shipped Layers (90 total)
-
-**Foundation:** `pixi` (pixi binary + env/PATH), `nodejs` (Node.js + npm via rpm/deb), `nodejs24` (Node.js 24 via rpm/deb), `rust` (Rust + Cargo via rpm/deb), `golang` (Go compiler via rpm), `python` (Python 3.13 via pixi), `language-runtimes` (Go, PHP, .NET, nodejs-devel, python3-devel)
-
-**Build:** `build-toolchain` (gcc, cmake, autoconf, ninja, git, pkg-config), `pre-commit` (git hooks framework)
-
-**Services:** `supervisord` (process manager via pixi; depends: python), `traefik` (reverse proxy on :8000/:8080; depends: supervisord), `testapi` (FastAPI test service on :9090, routed via `testapi.localhost`), `postgresql` (PostgreSQL server on :5432; volume: pgdata), `redis` (Redis on :6379; service)
-
-**Desktop/Wayland:** `dbus` (D-Bus session bus; depends: supervisord), `sway` (Sway compositor; depends: dbus)
-
-**Display/Audio:** `wayvnc` (VNC server on tcp:5900; protocol annotation; VeNCrypt/TLS auth via `ov vnc passwd`; reads `~/.config/wayvnc/config` automatically), `pipewire` (audio/media server + wireplumber)
-
-**Browser:** `chrome` (Google Chrome + runtime deps; DevTools :9222, volume: chrome-data; port_relay on :9222, browser-open via CDP, BROWSER env; shm_size: 1g), `chrome-sway` (Chrome on sway via exec autostart; depends: sway; layers: chrome)
-
-**GPU/ML:** `cuda` (CUDA toolkit + cuDNN + onnxruntime), `python-ml` (ML Python env; depends: cuda), `jupyter` (Jupyter + ML libs on :8888; depends: cuda, supervisord), `ollama` (LLM server on :11434; depends: cuda, supervisord; volume: models; alias: ollama), `comfyui` (image generation on :8188; depends: cuda, supervisord; volume: comfyui)
-
-**Applications:** `openclaw` (AI gateway on :18789 via npm; depends: nodejs, supervisord; volume: data; alias: openclaw), `claude-code` (Claude Code CLI; depends: nodejs), `immich` (photo management on :2283; depends: nodejs24, postgresql, redis, supervisord), `immich-ml` (ML backend on :3003; depends: immich; volume: models)
-
-**DevOps/CI:** `docker-ce` (Docker CE + buildx + compose), `kubernetes` (kubectl + Helm), `devops-tools` (bind-utils, jq, rsync; depends: nodejs), `github-runner` (Actions runner as service; uid: 0), `github-actions` (Act CLI via COPR + guestfs), `google-cloud` (Google Cloud SDK), `google-cloud-npm` (GCP npm packages; depends: google-cloud, nodejs), `grafana-tools` (Grafana tooling)
-
-**Dev Tools:** `dev-tools` (bat, ripgrep, neovim, gh, direnv, fd-find, htop, podman-compose), `vscode` (VS Code via Microsoft repo), `pre-commit` (git hooks), `typst` (document processor), `ujust` (task runner)
-
-**Desktop Apps:** `desktop-apps` (Chromium, VLC, KeePassXC, btop, cockpit, zsh), `copr-desktop` (COPR desktop packages), `vr-streaming` (OpenXR, OpenVR, GStreamer), `virtualization` (QEMU/KVM/libvirt stack), `thunar` (XFCE file manager), `waybar` (Wayland status bar), `xfce4-terminal` (terminal emulator)
-
-**Utilities:** `gocryptfs` (encrypted filesystem for ov enc operations), `socat` (socket relay for VM console access and port_relay for loopback-only services)
-
-**OS (bootc):** `os-config` (OS configuration), `os-system-files` (system files/configs), `rpmfusion` (RPM Fusion repository configuration), `bootc-config` (bootc system config: autologin, graphical target, pipewire/wireplumber), `cloud-init` (cloud instance init; depends: sshd), `qemu-guest-agent` (QEMU guest agent; libvirt channel config), `sshd` (SSH server on :22), `ov` (ov binary for container/VM use)
-
-**OpenClaw Tools:** `codex` (OpenAI Codex CLI; depends: nodejs), `gemini` (Google Gemini CLI; depends: nodejs), `clawhub` (ClawHub skill registry; depends: nodejs), `mcporter` (MCP server CLI; depends: nodejs), `oracle` (prompt bundling CLI; depends: nodejs), `xurl` (X/Twitter API CLI; depends: nodejs), `summarize` (URL/transcript extractor; depends: nodejs), `playwright` (browser automation; depends: nodejs), `blogwatcher` (RSS monitor; depends: golang), `gifgrep` (GIF search; depends: golang), `wacli` (WhatsApp CLI; depends: golang), `goplaces` (Google Places CLI; depends: golang), `songsee` (audio spectrogram; depends: golang), `sag` (ElevenLabs TTS; depends: golang), `camsnap` (camera CLI; depends: golang), `gogcli` (Google Workspace CLI; depends: golang), `ordercli` (food delivery CLI; depends: golang), `himalaya` (email CLI; depends: rust), `uv` (Python pkg mgr; depends: python), `nano-pdf` (PDF editor; depends: python), `gh` (GitHub CLI + git), `tmux`, `ffmpeg`, `ripgrep`, `sqlite`, `whisper` (local STT; depends: python, cuda), `sherpa-onnx` (offline TTS)
-
-**Composing (layer groups):** `sway-desktop` (pipewire + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar), `bootc-base` (sshd + qemu-guest-agent + bootc-config), `ov-full` (ov + virtualization + gocryptfs + socat), `openclaw-full` (openclaw + chrome + all OpenClaw tool layers), `openclaw-full-ml` (openclaw-full + whisper + sherpa-onnx)
-
----
-
-## Style Guide
+## Key Rules
 
 - Lowercase-hyphenated names for layers and images
 - Taskfiles for bootstrap only (building ov), Go for all other logic
-- No Docker layer cleanup -- cache mounts handle it
-- `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
-- Layer Taskfiles (`root.yml`/`user.yml`): single `install` task, no parameters, idempotent
-- System packages in `layer.yml` `rpm:`/`deb:` sections. Python in `pixi.toml`. npm in `package.json`. Rust in `Cargo.toml`
-- Composing layers: use `layers:` in `layer.yml` to include other layers. Layers with `layers:` and no install files are valid (pure composition). Build cache defaults to `image` (read-only from registry); use `--no-cache` to disable
 - Never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is the only Python package manager
-- Binary downloads: detect arch with `uname -m`, map via `case`, fail on unsupported
+- `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
-- All logic belongs in `ov`. Tasks are only for bootstrap (building ov). Every public task has `desc:`
-- Port protocol annotations: `tcp:5900` in layer.yml ports for non-HTTP protocols (default: http)
-- `port_relay:` in layer.yml for services binding to loopback only -- auto-adds socat relay
-- `security.shm_size:` in layer.yml for shared memory requirements (e.g., `"1g"`)
-- `BROWSER` env in chrome layers points to `browser-open` for in-container URL opening via CDP
-- VNC password management: `ov vnc passwd` for deployments, password stored in `ov config` as `vnc.password.<image>`, wayvnc reads `~/.config/wayvnc/config` by default (no layer/wrapper changes needed for auth)
+- All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
+
+For layer-specific rules (install files, packages, port_relay, cache mounts): `/ov:layer`
 
 ---
 
-## Layer Patterns
+## Command Map
 
-**Package manager auto-detection:** `ov` automatically creates build stages for `package.json` (npm), `pixi.toml` (pixi), and `Cargo.toml` (cargo). Do not duplicate these with manual install commands in `root.yml` or `user.yml`.
+Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usage, load the skill.
 
-**`depends` vs `layers`:**
-- `depends:` declares prerequisites -- layers that must be installed first because this layer needs their outputs (compilers, runtimes, libraries). Use for: `golang`, `python`, `rust`, `nodejs`, `supervisord`, `cuda`.
-- `layers:` composes layers into a group. The composed layers are spliced directly into the image. Use for metalayers that bundle tools together. A layer with only `layers:` and no install files is a pure composition (metalayer).
-- Both can coexist: `depends: [sway]` + `layers: [chrome]` means "needs sway installed first, and also includes chrome".
-
-**Python packages:** Always use `pixi.toml`, never `pip install` or `pixi global install` in user.yml. Depend on `python` (runtime), not `pixi` (build tool -- pixi runs in the builder stage, not the final image). PyPI-only packages use `[pypi-dependencies]` in pixi.toml.
-
-**npm packages:** Use `package.json` with dependencies. The build system runs `npm install -g` automatically. Do not create `root.yml` with manual `npm install -g` commands. Depend on `nodejs`.
-
-**Go packages:** Use `user.yml` with `go install`. Depend on `golang`. Set `GOPATH: "~/go"` and `path_append: ["~/go/bin"]` in layer.yml. If the Go code uses cgo, add required `-devel` RPM packages (e.g., `alsa-lib-devel` for audio). Always run `go clean -cache` at the end to reduce image size.
-
-**Cargo packages:** Use `user.yml` with `cargo install`. Depend on `rust`. The `rust` layer provides `~/.cargo/bin` on PATH.
-
-**Metalayers:** Pure composition layers contain only a `layers:` list in `layer.yml` -- no packages, no install files. They group existing layers for convenience (e.g., `sway-desktop`, `openclaw-full`).
+| Commands | Skill |
+|----------|-------|
+| `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
+| `build`, `merge` | `/ov:build` |
+| `shell` | `/ov:shell` |
+| `start`, `stop`, `enable`, `disable`, `status`, `logs`, `update`, `remove`, `seed` | `/ov:service` |
+| `service start/stop/restart/status` (supervisord) | `/ov:service` |
+| `cdp` | `/ov:cdp` |
+| `sway` | `/ov:sway` |
+| `vnc` | `/ov:vnc` |
+| `alias` | `/ov:alias` |
+| `config` | `/ov:config` |
+| `enc` | `/ov:enc` |
+| `vm` | `/ov:vm` |
 
 ---
 
 ## Workflows
 
-**Add a layer:** `ov new layer <name>` -> edit `layer.yml` -> add install files -> add to an image in `images.yml` -> `ov build <image>`
+**Add a layer:** `ov new layer <name>` -> edit `layer.yml` -> add install files -> add to image in `images.yml` -> `ov build <image>`
+Skills: `/ov:layer` -> `/ov-layers:<similar>` (pattern reference) -> `/ov:image` -> `/ov:build`
 
 **Add an image:** add entry to `images.yml` -> `ov build <image>`
+Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
@@ -242,37 +90,82 @@ ov version                             # Print computed CalVer tag
 
 ## Task Commands (bootstrap only)
 
-Task is used only for bootstrapping. All other operations use `ov` directly.
-
-- `task build:ov` — Build ov from source into `bin/ov`
-- `task build:install` — Build and install ov to `~/.local/bin`
-- `task setup:builder` — Create multi-platform buildx builder
-- `task setup:all` — Full setup (build ov + create builder)
+- `task build:ov` -- Build ov from source into `bin/ov`
+- `task build:install` -- Build and install ov to `~/.local/bin`
+- `task setup:builder` -- Create multi-platform buildx builder
+- `task setup:all` -- Full setup (build ov + create builder)
 
 ---
 
-## Skill Reference
+## Skills: Decision Architecture
 
-For detailed documentation on specific topics, use the corresponding skill:
+### First Branch: Using vs Developing
 
-| Topic | Skill | Covers |
-|-------|-------|--------|
-| Layer authoring | `/ov:layer` | layer.yml fields, install files, packages, deps, env, volumes, cache mounts, port_relay, protocol annotations |
-| Image composition | `/ov:image` | images.yml, inheritance chain, builder image, intermediates, versioning |
-| Building images | `/ov:build` | ov build, push mode, layer merging algorithm, build cache, inline merge |
-| Shell & execution | `/ov:shell` | ov shell, --tty, -c commands, exec into running containers, port_relay |
-| Service management | `/ov:service` | ov start/stop/enable/disable/status/logs/update/remove, supervisord services |
-| CDP (Chrome DevTools) | `/ov:cdp` | ov cdp commands, CDP, Chrome DevTools, OAuth flows |
-| Sway compositor | `/ov:sway` | ov sway commands, window management, workspaces, outputs |
-| VNC automation | `/ov:vnc` | ov vnc commands, RFB protocol, screenshots, keyboard/mouse input, VNC password |
-| Aliases | `/ov:alias` | ov alias add/remove/list/install/uninstall |
-| Configuration | `/ov:config` | ov config get/set/list/reset/path, bind_address, engine settings |
-| Deployment | `/ov:deploy` | Quadlet services, bind mounts, tunnels, deploy.yml, tailscale serve |
-| Virtual machines | `/ov:vm` | ov vm build/create/start/stop/destroy/list/console/ssh, bootc images |
-| Encrypted storage | `/ov:enc` | ov enc init/mount/unmount/status/passwd, gocryptfs |
-| OpenClaw gateway | `/ov:openclaw` | Gateway config, model auth, browser integration, channels, agent setup |
-| Validation | `/ov:validate` | Layer rules, image rules, bind mount rules, tunnel rules, port_relay rules |
-| Go CLI development | `/ov-dev:go` | Source code map, testing, adding commands |
-| Containerfile generation | `/ov-dev:generate` | Generated structure, multi-stage builds, labels, user resolution, cache mounts |
-| Layer reference | `/ov-layers:<name>` | Per-layer docs: deps, ports, volumes, env, packages, usage |
-| Image reference | `/ov-images:<name>` | Per-image docs: base, layers, ports, platforms, lifecycle |
+- **Using ov** (building/running images): `ov` + `ov-layers` + `ov-images` plugins
+- **Developing ov** (Go CLI code): `ov-dev` plugin
+- Bug fixes in ov often need both: `ov-dev` (how code works) + `ov:*` (expected behavior)
+
+### Plugin Namespaces
+
+| Plugin | Skills | Role | Question it answers |
+|--------|--------|------|---------------------|
+| `ov` | 15 | Operations | "How do I do X?" |
+| `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
+| `ov-layers` | 90 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 16 | Image reference | "What does image X look like?" |
+
+### Common Skill Chains
+
+Real tasks chain through skills in predictable patterns:
+
+**Author a new layer:**
+`/ov:layer` (format, rules) -> `/ov-layers:<similar>` (existing pattern) -> `/ov:image` (add to image) -> `/ov:build`
+
+**Debug a runtime issue:**
+`/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:config` or `/ov:service` (state)
+
+**Desktop automation:**
+`/ov:cdp` (DOM: click, type, eval) -> `/ov:vnc` (pixel: coordinates, screenshots) -> `/ov:sway` (window: focus, layout)
+Use CDP first. Fall back to VNC for visual-only elements. Use Sway for window management.
+
+**Deploy a service:**
+`/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
+
+**Fix a bug in ov:**
+`/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
+
+**Modify a metalayer:**
+`/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
+
+### Disambiguating Overlapping Skills
+
+Rule of thumb:
+- `/ov:X` = "how do I USE X?" (operations, commands, flags)
+- `/ov-layers:X` = "what does layer X CONTAIN?" (deps, ports, volumes, env, packages)
+- `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
+
+Examples where multiple skills cover one topic:
+- **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
+- **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
+- **Sway:** `/ov:sway` (compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
+- **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
+
+### Desktop Automation Hierarchy
+
+Three abstraction levels for interacting with container desktops:
+
+| Level | Skill | Interface | When to use |
+|-------|-------|-----------|-------------|
+| DOM | `/ov:cdp` | CSS selectors, JS eval | First choice -- structured, reliable |
+| Pixel | `/ov:vnc` | Coordinates, screenshots | Fallback -- when DOM not accessible |
+| Window | `/ov:sway` | Focus, layout, workspace | Window management, app launching |
+
+### ov-dev Agents
+
+The `ov-dev` plugin includes 3 blocking enforcement agents (automatic, not invoked manually):
+
+| Agent | Trigger | Purpose |
+|-------|---------|---------|
+| layer-validator | Before editing `layer.yml` | Validates structure and field types |
+| root-cause-analyzer | Any error in output | Deep 8-step root cause analysis |
+| testing-validator | Claiming something "works" | Verifies actual local test results |

@@ -62,6 +62,7 @@ Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
 - All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
 - Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
+- MUST invoke skills before exploring the codebase. Skills are the primary knowledge source, not the code itself
 
 For layer-specific rules (install files, packages, port_relay, cache mounts): `/ov:layer`
 
@@ -113,15 +114,26 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 ## Skills: Decision Architecture
 
-### Information Retrieval Priority
+### MANDATORY: Skills Before Exploration
 
-Always follow this order when gathering information:
-1. **Invoke skills** -- structured, curated knowledge for the task at hand
-2. **Read CLAUDE.md** -- project rules and architecture overview
-3. **Read memory** -- prior learnings and user context
-4. **Explore codebase** -- only when skills don't cover the topic
+**CRITICAL: You MUST invoke matching skills BEFORE reading source files, launching Explore agents, or using Grep/Glob to search the codebase.** This is a BLOCKING REQUIREMENT -- not a suggestion.
 
-Never launch Explore agents or read raw source files when a matching skill exists.
+The skills system contains curated, structured knowledge for every component. Raw codebase exploration is slower, noisier, and misses context that skills provide.
+
+**Required order:**
+1. **Invoke skills** -- ALWAYS first. Match the task to skills using the tables below.
+2. **Read CLAUDE.md** -- project rules already in context
+3. **Read memory** -- prior learnings and user preferences
+4. **Explore codebase** -- ONLY after confirming no skill covers the topic
+
+**Hard rules:**
+- If a skill exists for the topic, you MUST invoke it. No exceptions.
+- For development tasks: invoke BOTH `/ov-dev:go` (code structure) AND the relevant `/ov:*` skill (expected behavior) before touching any `.go` file.
+- For multi-step workflows: invoke ALL skills in the chain (e.g., build -> deploy -> service -> image).
+- Explore agents are a LAST RESORT, not a first step. Justify why no skill covers the topic before launching one.
+
+**Self-check before any codebase exploration:**
+> "Is there a skill that covers this topic? If yes, invoke it first."
 
 ### First Branch: Using vs Developing
 

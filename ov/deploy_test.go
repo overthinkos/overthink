@@ -30,11 +30,11 @@ func TestLoadDeployConfigValid(t *testing.T) {
 	content := `
 images:
   myapp:
-    fqdn: "app.example.com"
+    dns: "app.example.com"
     acme_email: "test@example.com"
     tunnel:
       provider: cloudflare
-      port: 8080
+      public: [8080]
     bind_mounts:
       - name: data
         path: "~/.myapp"
@@ -62,8 +62,8 @@ images:
 	if !ok {
 		t.Fatal("expected myapp in deploy config")
 	}
-	if img.FQDN != "app.example.com" {
-		t.Errorf("FQDN = %q, want app.example.com", img.FQDN)
+	if img.DNS != "app.example.com" {
+		t.Errorf("DNS = %q, want app.example.com", img.DNS)
 	}
 	if img.AcmeEmail != "test@example.com" {
 		t.Errorf("AcmeEmail = %q, want test@example.com", img.AcmeEmail)
@@ -84,7 +84,7 @@ func TestMergeDeployOverlay(t *testing.T) {
 		Images: map[string]ImageConfig{
 			"myapp": {
 				Layers: []string{"svc"},
-				FQDN:   "old.example.com",
+				DNS:   "old.example.com",
 				Ports:  []string{"80:80"},
 			},
 		},
@@ -92,7 +92,7 @@ func TestMergeDeployOverlay(t *testing.T) {
 	dc := &DeployConfig{
 		Images: map[string]DeployImageConfig{
 			"myapp": {
-				FQDN:      "new.example.com",
+				DNS:      "new.example.com",
 				AcmeEmail: "admin@example.com",
 				Ports:     []string{"8080:8080"},
 			},
@@ -102,8 +102,8 @@ func TestMergeDeployOverlay(t *testing.T) {
 	MergeDeployOverlay(cfg, dc)
 
 	img := cfg.Images["myapp"]
-	if img.FQDN != "new.example.com" {
-		t.Errorf("FQDN = %q, want new.example.com", img.FQDN)
+	if img.DNS != "new.example.com" {
+		t.Errorf("DNS = %q, want new.example.com", img.DNS)
 	}
 	if img.AcmeEmail != "admin@example.com" {
 		t.Errorf("AcmeEmail = %q, want admin@example.com", img.AcmeEmail)
@@ -125,7 +125,7 @@ func TestMergeDeployOverlayUnknownImage(t *testing.T) {
 	}
 	dc := &DeployConfig{
 		Images: map[string]DeployImageConfig{
-			"unknown": {FQDN: "test.example.com"},
+			"unknown": {DNS: "test.example.com"},
 		},
 	}
 
@@ -141,13 +141,13 @@ func TestMergeDeployOverlayUnknownImage(t *testing.T) {
 func TestMergeDeployOverlayNil(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{
-			"myapp": {Layers: []string{"svc"}, FQDN: "original.com"},
+			"myapp": {Layers: []string{"svc"}, DNS: "original.com"},
 		},
 	}
 
 	MergeDeployOverlay(cfg, nil)
 
-	if cfg.Images["myapp"].FQDN != "original.com" {
+	if cfg.Images["myapp"].DNS != "original.com" {
 		t.Error("nil deploy config should not modify config")
 	}
 }
@@ -164,7 +164,7 @@ func TestMergeDeployOverlayTunnel(t *testing.T) {
 	dc := &DeployConfig{
 		Images: map[string]DeployImageConfig{
 			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "cloudflare", Port: 8080},
+				Tunnel: &TunnelYAML{Provider: "cloudflare", Public: PortScope{Ports: []int{8080}}},
 			},
 		},
 	}
@@ -172,8 +172,11 @@ func TestMergeDeployOverlayTunnel(t *testing.T) {
 	MergeDeployOverlay(cfg, dc)
 
 	img := cfg.Images["myapp"]
-	if img.Tunnel == nil || img.Tunnel.Provider != "cloudflare" || img.Tunnel.Port != 8080 {
-		t.Errorf("Tunnel = %+v, want cloudflare:8080", img.Tunnel)
+	if img.Tunnel == nil || img.Tunnel.Provider != "cloudflare" {
+		t.Errorf("Tunnel = %+v, want cloudflare provider", img.Tunnel)
+	}
+	if img.Tunnel != nil && (len(img.Tunnel.Public.Ports) != 1 || img.Tunnel.Public.Ports[0] != 8080) {
+		t.Errorf("Tunnel.Public.Ports = %v, want [8080]", img.Tunnel.Public.Ports)
 	}
 }
 

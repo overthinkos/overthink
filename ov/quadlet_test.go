@@ -255,32 +255,32 @@ func TestQuadletExists(t *testing.T) {
 	}
 }
 
-func TestGenerateQuadletWithTailscaleFunnel(t *testing.T) {
+func TestGenerateQuadletWithTailscalePublic(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
 		Workspace:   "/home/user/project",
-		Ports:       []string{"8080:8080"},
+		Ports:       []string{"443:8080"},
 		BindAddress: "127.0.0.1",
 		Tunnel: &TunnelConfig{
 			Provider: "tailscale",
-			Port:     8080,
-			HTTPS:    443,
-			Funnel:   true,
+			Ports: []TunnelPort{
+				{Port: 443, Protocol: "http", Public: true},
+			},
 		},
 	}
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 http://127.0.0.1:8080") {
-		t.Errorf("expected ExecStartPost for tailscale funnel, got:\n%s", got)
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 http://127.0.0.1:443") {
+		t.Errorf("expected ExecStartPost for public port, got:\n%s", got)
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 443 off") {
-		t.Errorf("expected ExecStopPost for tailscale funnel, got:\n%s", got)
+		t.Errorf("expected ExecStopPost for public port, got:\n%s", got)
 	}
 }
 
-func TestGenerateQuadletWithTailscaleFunnelCustomPort(t *testing.T) {
+func TestGenerateQuadletWithTailscalePublicCustomPort(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
@@ -288,15 +288,15 @@ func TestGenerateQuadletWithTailscaleFunnelCustomPort(t *testing.T) {
 		BindAddress: "127.0.0.1",
 		Tunnel: &TunnelConfig{
 			Provider: "tailscale",
-			Port:     3001,
-			HTTPS:    8443,
-			Funnel:   true,
+			Ports: []TunnelPort{
+				{Port: 8443, Protocol: "http", Public: true},
+			},
 		},
 	}
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 http://127.0.0.1:3001") {
+	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 http://127.0.0.1:8443") {
 		t.Errorf("expected ExecStartPost with port 8443, got:\n%s", got)
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 8443 off") {
@@ -304,7 +304,7 @@ func TestGenerateQuadletWithTailscaleFunnelCustomPort(t *testing.T) {
 	}
 }
 
-func TestGenerateQuadletWithTailscaleServe(t *testing.T) {
+func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "immich-cuda",
 		ImageRef:    "ghcr.io/overthinkos/immich-cuda:latest",
@@ -313,23 +313,23 @@ func TestGenerateQuadletWithTailscaleServe(t *testing.T) {
 		BindAddress: "127.0.0.1",
 		Tunnel: &TunnelConfig{
 			Provider: "tailscale",
-			Port:     2283,
-			HTTPS:    443,
-			Funnel:   false, // serve mode
+			Ports: []TunnelPort{
+				{Port: 2283, Protocol: "http", Public: false},
+			},
 		},
 	}
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=443 http://127.0.0.1:2283") {
-		t.Errorf("expected ExecStartPost for tailscale serve, got:\n%s", got)
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=2283 http://127.0.0.1:2283") {
+		t.Errorf("expected ExecStartPost for private port, got:\n%s", got)
 	}
-	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=443 off") {
-		t.Errorf("expected ExecStopPost for tailscale serve, got:\n%s", got)
+	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=2283 off") {
+		t.Errorf("expected ExecStopPost for private port, got:\n%s", got)
 	}
-	// Ensure it does NOT contain funnel
+	// Private ports should not use tailscale funnel
 	if strings.Contains(got, "tailscale funnel") {
-		t.Errorf("serve mode should not contain 'tailscale funnel', got:\n%s", got)
+		t.Errorf("private mode should not contain 'tailscale funnel', got:\n%s", got)
 	}
 }
 
@@ -341,9 +341,11 @@ func TestGenerateQuadletWithCloudflareTunnelNoExecPost(t *testing.T) {
 		BindAddress: "127.0.0.1",
 		Tunnel: &TunnelConfig{
 			Provider:   "cloudflare",
-			Port:       3001,
 			TunnelName: "ov-myapp",
 			Hostname:   "app.example.com",
+			Ports: []TunnelPort{
+				{Port: 3001, Protocol: "http", Public: true},
+			},
 		},
 	}
 
@@ -362,9 +364,11 @@ func TestGenerateTunnelUnit(t *testing.T) {
 		Workspace: "/home/user/project",
 		Tunnel: &TunnelConfig{
 			Provider:   "cloudflare",
-			Port:       3001,
 			TunnelName: "ov-immich",
 			Hostname:   "im.example.com",
+			Ports: []TunnelPort{
+				{Port: 3001, Protocol: "http", Public: true},
+			},
 		},
 	}
 

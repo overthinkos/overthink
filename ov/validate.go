@@ -75,11 +75,11 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate builder
 	validateBuilder(cfg, layers, errs)
 
-	// Validate FQDN and ACME email
-	validateFQDN(cfg, errs)
+	// Validate DNS and ACME email
+	validateDNS(cfg, errs)
 
 	// Validate tunnel configuration
-	validateTunnel(cfg, errs)
+	validateTunnel(cfg, layers, errs)
 
 	// Validate bind mounts
 	validateBindMounts(cfg, layers, errs)
@@ -634,15 +634,15 @@ func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 }
 
-// validateFQDN validates FQDN and ACME email fields
-func validateFQDN(cfg *Config, errs *ValidationError) {
-	// Validate defaults.fqdn if set
-	if cfg.Defaults.FQDN != "" {
-		if !strings.Contains(cfg.Defaults.FQDN, ".") {
-			errs.Add("defaults.fqdn: must be a valid domain name (got %q)", cfg.Defaults.FQDN)
+// validateDNS validates DNS and ACME email fields
+func validateDNS(cfg *Config, errs *ValidationError) {
+	// Validate defaults.dns if set
+	if cfg.Defaults.DNS != "" {
+		if !strings.Contains(cfg.Defaults.DNS, ".") {
+			errs.Add("defaults.dns: must be a valid domain name (got %q)", cfg.Defaults.DNS)
 		}
-		if strings.HasPrefix(cfg.Defaults.FQDN, ".") || strings.HasSuffix(cfg.Defaults.FQDN, ".") {
-			errs.Add("defaults.fqdn: cannot start or end with a dot (got %q)", cfg.Defaults.FQDN)
+		if strings.HasPrefix(cfg.Defaults.DNS, ".") || strings.HasSuffix(cfg.Defaults.DNS, ".") {
+			errs.Add("defaults.dns: cannot start or end with a dot (got %q)", cfg.Defaults.DNS)
 		}
 	}
 
@@ -651,18 +651,18 @@ func validateFQDN(cfg *Config, errs *ValidationError) {
 		errs.Add("defaults.acme_email: must be a valid email address (got %q)", cfg.Defaults.AcmeEmail)
 	}
 
-	// Validate each enabled image's FQDN and ACME email
+	// Validate each enabled image's DNS and ACME email
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
 
-		if img.FQDN != "" {
-			if !strings.Contains(img.FQDN, ".") {
-				errs.Add("image %q: fqdn must be a valid domain name (got %q)", imageName, img.FQDN)
+		if img.DNS != "" {
+			if !strings.Contains(img.DNS, ".") {
+				errs.Add("image %q: dns must be a valid domain name (got %q)", imageName, img.DNS)
 			}
-			if strings.HasPrefix(img.FQDN, ".") || strings.HasSuffix(img.FQDN, ".") {
-				errs.Add("image %q: fqdn cannot start or end with a dot (got %q)", imageName, img.FQDN)
+			if strings.HasPrefix(img.DNS, ".") || strings.HasSuffix(img.DNS, ".") {
+				errs.Add("image %q: dns cannot start or end with a dot (got %q)", imageName, img.DNS)
 			}
 		}
 
@@ -676,8 +676,8 @@ func validateFQDN(cfg *Config, errs *ValidationError) {
 var tunnelNameRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9-]*$`)
 
 // validateTunnel validates tunnel configuration in defaults and images
-func validateTunnel(cfg *Config, errs *ValidationError) {
-	check := func(name string, t *TunnelYAML, fqdn string, ports []string) {
+func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	check := func(name string, t *TunnelYAML, dns string, imagePorts []string, portProtos map[int]string) {
 		if t == nil {
 			return
 		}
@@ -685,53 +685,166 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 			errs.Add("%s: tunnel provider must be \"tailscale\" or \"cloudflare\", got %q", name, t.Provider)
 			return
 		}
-		if t.Ports != "" && t.Ports != "all" {
-			errs.Add("%s: tunnel ports must be \"all\" or omitted, got %q", name, t.Ports)
+
+		// Must specify at least public or private
+		if t.Public.IsZero() && t.Private.IsZero() {
+			errs.Add("%s: tunnel must specify public, private, or both", name)
+			return
 		}
-		if t.Ports == "all" && len(ports) == 0 {
-			errs.Add("%s: tunnel ports \"all\" requires image to have ports defined", name)
+
+		// public: all + private: all = conflict
+		if t.Public.All && t.Private.All {
+			errs.Add("%s: tunnel cannot have both public: all and private: all", name)
 		}
-		if t.Port != 0 && (t.Port < 1 || t.Port > 65535) {
-			errs.Add("%s: tunnel port must be 1-65535, got %d", name, t.Port)
+
+		// Same port in both public and private = error
+		pubPorts := make(map[int]bool)
+		for _, p := range t.Public.Ports {
+			pubPorts[p] = true
 		}
-		if t.Provider == "tailscale" && t.Ports != "all" {
-			if t.Funnel {
-				// Funnel (public): restricted to 443, 8443, 10000
-				if t.HTTPS != 0 && !ValidFunnelPorts[t.HTTPS] {
-					errs.Add("%s: tunnel https must be 443, 8443, or 10000 for funnel, got %d", name, t.HTTPS)
+		for p := range t.Public.PortMap {
+			pubPorts[p] = true
+		}
+		for _, p := range t.Private.Ports {
+			if pubPorts[p] {
+				errs.Add("%s: port %d appears in both public and private", name, p)
+			}
+		}
+		for p := range t.Private.PortMap {
+			if pubPorts[p] {
+				errs.Add("%s: port %d appears in both public and private", name, p)
+			}
+		}
+
+		// Cloudflare + private: in any form = error
+		if t.Provider == "cloudflare" && !t.Private.IsZero() {
+			errs.Add("%s: cloudflare tunnels are always public; use tailscale for private ports", name)
+		}
+
+		// Tailscale + public: map form = error
+		if t.Provider == "tailscale" && len(t.Public.PortMap) > 0 {
+			errs.Add("%s: tailscale doesn't use hostnames; use public: [port_list]", name)
+		}
+
+		// private: map form in any provider = error
+		if len(t.Private.PortMap) > 0 {
+			errs.Add("%s: private ports don't use hostnames", name)
+		}
+
+		// Build set of image host ports for existence checks
+		hostPortSet := make(map[int]bool)
+		for _, hp := range parseHostPorts(imagePorts) {
+			hostPortSet[hp] = true
+		}
+
+		// Tailscale public port list validation
+		if t.Provider == "tailscale" {
+			hostToContainer := buildPortMapping(imagePorts)
+
+			for _, p := range t.Public.Ports {
+				if !ValidPublicPorts[p] {
+					errs.Add("%s: tailscale public port %d must be 443, 8443, or 10000", name, p)
 				}
-			} else {
-				// Serve (tailnet-private): wider port range
-				if t.HTTPS != 0 && !isValidServePort(t.HTTPS) {
-					errs.Add("%s: tunnel https must be 80, 443, 3000-10000, 4443, 5432, 6443, or 8443 for serve, got %d", name, t.HTTPS)
+				// TCP ports can't be public
+				if portProtos != nil {
+					cp := p
+					if c, ok := hostToContainer[p]; ok {
+						cp = c
+					}
+					if portProtos[cp] == "tcp" {
+						errs.Add("%s: TCP port %d cannot be public (only HTTP ports can be internet-accessible)", name, p)
+					}
+				}
+			}
+
+			// Tailscale public: all — validate each non-TCP image port is a valid public port
+			if t.Public.All {
+				for _, hp := range parseHostPorts(imagePorts) {
+					cp := hp
+					if c, ok := hostToContainer[hp]; ok {
+						cp = c
+					}
+					proto := "http"
+					if portProtos != nil {
+						if pp, ok := portProtos[cp]; ok {
+							proto = pp
+						}
+					}
+					if proto == "tcp" {
+						continue // TCP ports are skipped in public: all
+					}
+					if !ValidPublicPorts[hp] {
+						errs.Add("%s: tailscale public: all includes port %d which is not a valid public port (443, 8443, 10000)", name, hp)
+					}
+				}
+			}
+
+			// Tailscale private port list: each must satisfy isValidServePort
+			for _, p := range t.Private.Ports {
+				if !isValidServePort(p) {
+					errs.Add("%s: tailscale private port %d must be 80, 443, 3000-10000, 4443, 5432, 6443, or 8443", name, p)
 				}
 			}
 		}
+
+		// All public/private ports must exist in image ports
+		if len(hostPortSet) > 0 {
+			for _, p := range t.Public.Ports {
+				if !hostPortSet[p] {
+					errs.Add("%s: public port %d not found in image ports", name, p)
+				}
+			}
+			for p := range t.Public.PortMap {
+				if !hostPortSet[p] {
+					errs.Add("%s: public port %d not found in image ports", name, p)
+				}
+			}
+			for _, p := range t.Private.Ports {
+				if !hostPortSet[p] {
+					errs.Add("%s: private port %d not found in image ports", name, p)
+				}
+			}
+		}
+
+		// Cloudflare-specific validation
 		if t.Provider == "cloudflare" {
-			if fqdn == "" {
-				errs.Add("%s: tunnel provider \"cloudflare\" requires fqdn to be set", name)
+			publicCount := len(t.Public.Ports) + len(t.Public.PortMap)
+			if t.Public.All {
+				publicCount = len(imagePorts)
 			}
+			if publicCount > 1 && len(t.Public.PortMap) == 0 {
+				errs.Add("%s: multiple cloudflare ports need per-port hostnames; use map form", name)
+			}
+			// Cloudflare without map form and without dns = error
+			if len(t.Public.PortMap) == 0 && dns == "" {
+				errs.Add("%s: cloudflare requires dns or per-port hostnames", name)
+			}
+			// Cloudflare tunnel name validation
 			if t.Tunnel != "" && !tunnelNameRe.MatchString(t.Tunnel) {
 				errs.Add("%s: tunnel name must match [a-zA-Z0-9][a-zA-Z0-9-]*, got %q", name, t.Tunnel)
 			}
 		}
 	}
 
-	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.FQDN, cfg.Defaults.Ports)
+	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.DNS, cfg.Defaults.Ports, nil)
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		// Resolve FQDN for the image (image -> defaults)
-		fqdn := img.FQDN
-		if fqdn == "" {
-			fqdn = cfg.Defaults.FQDN
+		// Resolve DNS for the image (image -> defaults)
+		dns := img.DNS
+		if dns == "" {
+			dns = cfg.Defaults.DNS
 		}
-		check(fmt.Sprintf("image %q", imageName), img.Tunnel, fqdn, img.Ports)
+		var portProtos map[int]string
+		if layers != nil {
+			portProtos = collectPortProtos(layers, img.Layers)
+		}
+		check(fmt.Sprintf("image %q", imageName), img.Tunnel, dns, img.Ports, portProtos)
 	}
 
-	// Cross-image tailscale HTTPS port conflict check (single-port mode only)
-	portUsers := make(map[int][]string) // https port -> image names
+	// Cross-image tailscale public port conflict check
+	portUsers := make(map[int][]string) // public port -> image names
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
@@ -744,22 +857,25 @@ func validateTunnel(cfg *Config, errs *ValidationError) {
 		if tunnel == nil || tunnel.Provider != "tailscale" {
 			continue
 		}
-		// Multi-port mode uses per-port external ports, not a single HTTPS port
-		if tunnel.Ports == "all" {
-			continue
+		// Collect all tailscale public ports (from Ports list and PortMap keys)
+		if tunnel.Public.All {
+			for _, hp := range parseHostPorts(img.Ports) {
+				portUsers[hp] = append(portUsers[hp], imageName)
+			}
 		}
-		httpsPort := tunnel.HTTPS
-		if httpsPort == 0 {
-			httpsPort = 443
+		for _, p := range tunnel.Public.Ports {
+			portUsers[p] = append(portUsers[p], imageName)
 		}
-		portUsers[httpsPort] = append(portUsers[httpsPort], imageName)
+		for p := range tunnel.Public.PortMap {
+			portUsers[p] = append(portUsers[p], imageName)
+		}
 	}
 	for port, names := range portUsers {
 		if len(names) < 2 {
 			continue
 		}
 		sort.Strings(names)
-		errs.Add("images %q and %q: both use tailscale tunnel https port %d (set different https ports to avoid conflict)", names[0], names[1], port)
+		errs.Add("images %s: tailscale public port %d used by multiple images (each needs a unique port)", formatImageList(names), port)
 	}
 }
 

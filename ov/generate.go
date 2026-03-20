@@ -781,10 +781,10 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	}
 
 	for _, r := range routes {
-		// Use image FQDN if configured, otherwise layer's host
+		// Use image DNS if configured, otherwise layer's host
 		host := r.cfg.Host
-		if img.FQDN != "" {
-			host = img.FQDN
+		if img.DNS != "" {
+			host = img.DNS
 		}
 
 		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
@@ -1065,8 +1065,8 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if resolvedEngine != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelEngine, resolvedEngine))
 	}
-	if img.FQDN != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelFQDN, img.FQDN))
+	if img.DNS != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDNS, img.DNS))
 	}
 	if img.AcmeEmail != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))

@@ -66,7 +66,7 @@ type ImageConfig struct {
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
 	Builder    string            `yaml:"builder,omitempty"`      // builder image name (per-image, falls back to defaults)
-	FQDN       string            `yaml:"fqdn,omitempty"`         // fully qualified domain name for traefik routing
+	DNS        string            `yaml:"dns,omitempty"`          // DNS hostname for traefik routing and tunnels
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
 	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`  // bind mount declarations (image-level only)
@@ -119,8 +119,8 @@ type ResolvedImage struct {
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
 
-	// FQDN and ACME configuration
-	FQDN      string // fully qualified domain name for traefik routing
+	// DNS and ACME configuration
+	DNS       string // DNS hostname for traefik routing and tunnels
 	AcmeEmail string // email for Let's Encrypt notifications
 
 	// Tunnel configuration
@@ -287,10 +287,10 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Builder = c.Defaults.Builder
 	}
 
-	// Resolve FQDN: image -> defaults -> ""
-	resolved.FQDN = img.FQDN
-	if resolved.FQDN == "" {
-		resolved.FQDN = c.Defaults.FQDN
+	// Resolve DNS: image -> defaults -> ""
+	resolved.DNS = img.DNS
+	if resolved.DNS == "" {
+		resolved.DNS = c.Defaults.DNS
 	}
 
 	// Resolve AcmeEmail: image -> defaults -> ""
@@ -301,9 +301,9 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 
 	// Resolve tunnel: image -> defaults -> nil
 	if img.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.FQDN, nil, nil, nil, resolved.Ports)
+		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.DNS, nil, nil, nil, resolved.Ports)
 	} else if c.Defaults.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.FQDN, nil, nil, nil, resolved.Ports)
+		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.DNS, nil, nil, nil, resolved.Ports)
 	}
 
 	// Resolve VM config: only for bootc images, and only when configured

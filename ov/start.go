@@ -213,7 +213,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 			if scanErr == nil {
 				tc := ResolveTunnelConfig(
 					c.findTunnelYAML(cfg),
-					c.Image, resolved.FQDN, layers, resolved.Layers,
+					c.Image, resolved.DNS, layers, resolved.Layers,
 					collectPortProtos(layers, resolved.Layers), resolved.Ports,
 				)
 				if tc != nil {
@@ -535,7 +535,7 @@ func stopTunnelForImage(imageName string) {
 					if tunnelYAML == nil {
 						tunnelYAML = cfg.Defaults.Tunnel
 					}
-					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.FQDN, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
+					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.DNS, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
 				}
 			}
 		}

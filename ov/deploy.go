@@ -17,7 +17,7 @@ type DeployConfig struct {
 // DeployImageConfig holds deployment-specific overrides for a single image.
 type DeployImageConfig struct {
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`
-	FQDN       string            `yaml:"fqdn,omitempty"`
+	DNS        string            `yaml:"dns,omitempty"`
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`
 	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`
 	Ports      []string          `yaml:"ports,omitempty"`
@@ -80,8 +80,8 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Tunnel != nil {
 			img.Tunnel = overlay.Tunnel
 		}
-		if overlay.FQDN != "" {
-			img.FQDN = overlay.FQDN
+		if overlay.DNS != "" {
+			img.DNS = overlay.DNS
 		}
 		if overlay.AcmeEmail != "" {
 			img.AcmeEmail = overlay.AcmeEmail
@@ -127,8 +127,8 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 	if overlay.Tunnel != nil {
 		meta.Tunnel = overlay.Tunnel
 	}
-	if overlay.FQDN != "" {
-		meta.FQDN = overlay.FQDN
+	if overlay.DNS != "" {
+		meta.DNS = overlay.DNS
 	}
 	if overlay.AcmeEmail != "" {
 		meta.AcmeEmail = overlay.AcmeEmail
@@ -247,8 +247,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Tunnel != nil {
 				existing.Tunnel = overlay.Tunnel
 			}
-			if overlay.FQDN != "" {
-				existing.FQDN = overlay.FQDN
+			if overlay.DNS != "" {
+				existing.DNS = overlay.DNS
 			}
 			if overlay.AcmeEmail != "" {
 				existing.AcmeEmail = overlay.AcmeEmail
@@ -297,7 +297,7 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 		entry := DeployImageConfig{
 			Ports:      img.Ports,
 			Tunnel:     img.Tunnel,
-			FQDN:       img.FQDN,
+			DNS:        img.DNS,
 			AcmeEmail:  img.AcmeEmail,
 			BindMounts: img.BindMounts,
 			Env:        img.Env,
@@ -307,7 +307,7 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 			Engine:     img.Engine,
 		}
 		// Only include if at least one field is set
-		if entry.Ports != nil || entry.Tunnel != nil || entry.FQDN != "" ||
+		if entry.Ports != nil || entry.Tunnel != nil || entry.DNS != "" ||
 			entry.AcmeEmail != "" || entry.BindMounts != nil || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" ||
 			entry.Engine != "" {

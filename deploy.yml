@@ -7,7 +7,7 @@
 # Supported fields per image:
 #   ports        — Host:container port mappings (replaces image ports)
 #   tunnel       — Tailscale/Cloudflare tunnel config
-#   fqdn         — Fully qualified domain name (for Cloudflare tunnels)
+#   dns          — DNS hostname (for Cloudflare tunnels)
 #   acme_email   — ACME/Let's Encrypt email
 #   bind_mounts  — Host-path bind mounts (plain or encrypted)
 #   env          — Environment variables (KEY=VALUE list)
@@ -27,17 +27,32 @@ images:
   # Uncomment sections below to customize:
   #
   # openclaw-ollama-sway-browser:
-  #   # Expose all ports via Tailscale
+  #   # Remap gateway to port 443 and expose publicly, rest on tailnet
+  #   ports:
+  #     - "443:18789"
+  #     - "5900:5900"
+  #     - "9222:9222"
+  #     - "11434:11434"
   #   tunnel:
   #     provider: tailscale
-  #     ports: all
+  #     public: [443]          # port 443 = internet-accessible
+  #     private: all           # remaining ports = tailnet-only
   #
-  #   # Or expose a single port via Cloudflare
+  #   # Or all ports private on tailnet (shorthand)
+  #   # tunnel: tailscale
+  #
+  #   # Or expose via Cloudflare (single port)
   #   # tunnel:
   #   #   provider: cloudflare
-  #   #   port: 18789
-  #   # fqdn: "openclaw.example.com"
-  #   # acme_email: "admin@example.com"
+  #   #   public: [18789]
+  #   # dns: "openclaw.example.com"
+  #
+  #   # Or Cloudflare multi-port with per-port hostnames
+  #   # tunnel:
+  #   #   provider: cloudflare
+  #   #   public:
+  #   #     18789: openclaw.example.com
+  #   #     9222: devtools.example.com
   #
   #   # Inject environment variables
   #   env:

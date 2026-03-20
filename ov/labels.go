@@ -25,7 +25,7 @@ const (
 	LabelSecurity       = "org.overthinkos.security"
 	LabelNetwork        = "org.overthinkos.network"
 	LabelTunnel         = "org.overthinkos.tunnel"
-	LabelFQDN           = "org.overthinkos.fqdn"
+	LabelDNS            = "org.overthinkos.dns"
 	LabelAcmeEmail      = "org.overthinkos.acme_email"
 	LabelEnv            = "org.overthinkos.env"
 	LabelHooks          = "org.overthinkos.hooks"
@@ -79,7 +79,7 @@ type ImageMetadata struct {
 	Security       SecurityConfig
 	Network        string
 	Tunnel         *TunnelYAML
-	FQDN           string
+	DNS            string
 	AcmeEmail      string
 	Env            []string
 	Hooks          *HooksConfig
@@ -137,7 +137,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		Registry:  labels[LabelRegistry],
 		User:      labels[LabelUser],
 		Home:      labels[LabelHome],
-		FQDN:      labels[LabelFQDN],
+		DNS:       labels[LabelDNS],
 		AcmeEmail: labels[LabelAcmeEmail],
 		Network:   labels[LabelNetwork],
 		Engine:    labels[LabelEngine],

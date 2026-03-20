@@ -158,14 +158,19 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
 		case "tunnel":
-			if resolved.Tunnel != nil {
-				mode := "serve"
-				if resolved.Tunnel.Provider == "tailscale" && resolved.Tunnel.Funnel {
-					mode = "funnel"
-				} else if resolved.Tunnel.Provider == "cloudflare" {
-					mode = "tunnel"
+			if resolved.Tunnel != nil && len(resolved.Tunnel.Ports) > 0 {
+				fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+				for _, tp := range resolved.Tunnel.Ports {
+					access := "private"
+					if tp.Public {
+						access = "public"
+					}
+					hostname := tp.Hostname
+					if hostname == "" {
+						hostname = "-"
+					}
+					fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
 				}
-				fmt.Printf("%s:%s:%d\n", resolved.Tunnel.Provider, mode, resolved.Tunnel.Port)
 			}
 		case "network":
 			fmt.Println(resolved.Network)
@@ -239,14 +244,20 @@ func (c *InspectCmd) runFromLabels() error {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
 		case "tunnel":
-			if meta.Tunnel != nil {
-				mode := "serve"
-				if meta.Tunnel.Provider == "tailscale" && meta.Tunnel.Funnel {
-					mode = "funnel"
-				} else if meta.Tunnel.Provider == "cloudflare" {
-					mode = "tunnel"
+			tc := TunnelConfigFromMetadata(meta)
+			if tc != nil && len(tc.Ports) > 0 {
+				fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+				for _, tp := range tc.Ports {
+					access := "private"
+					if tp.Public {
+						access = "public"
+					}
+					hostname := tp.Hostname
+					if hostname == "" {
+						hostname = "-"
+					}
+					fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
 				}
-				fmt.Printf("%s:%s:%d\n", meta.Tunnel.Provider, mode, meta.Tunnel.Port)
 			}
 		case "network":
 			fmt.Println(meta.Network)

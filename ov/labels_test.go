@@ -27,8 +27,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelBindMounts: `[{"name":"config","path":"/home/user/.config","encrypted":true}]`,
 			LabelSecurity: `{"privileged":true,"cap_add":["NET_ADMIN"]}`,
 			LabelNetwork:  "host",
-			LabelTunnel:   `{"provider":"tailscale","port":18789,"funnel":true}`,
-			LabelFQDN:     "openclaw.example.com",
+			LabelTunnel:   `{"provider":"tailscale","public":[18789]}`,
+			LabelDNS:     "openclaw.example.com",
 			LabelAcmeEmail: "admin@example.com",
 			LabelEnv:       `["API_KEY=secret"]`,
 			LabelHooks:     `{"post_enable":"echo started","pre_remove":"echo stopping"}`,
@@ -74,8 +74,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 	if meta.Network != "host" {
 		t.Errorf("Network = %q, want %q", meta.Network, "host")
 	}
-	if meta.FQDN != "openclaw.example.com" {
-		t.Errorf("FQDN = %q, want %q", meta.FQDN, "openclaw.example.com")
+	if meta.DNS != "openclaw.example.com" {
+		t.Errorf("DNS = %q, want %q", meta.DNS, "openclaw.example.com")
 	}
 	if meta.AcmeEmail != "admin@example.com" {
 		t.Errorf("AcmeEmail = %q, want %q", meta.AcmeEmail, "admin@example.com")
@@ -124,11 +124,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 	if meta.Tunnel.Provider != "tailscale" {
 		t.Errorf("Tunnel.Provider = %q, want %q", meta.Tunnel.Provider, "tailscale")
 	}
-	if meta.Tunnel.Port != 18789 {
-		t.Errorf("Tunnel.Port = %d, want 18789", meta.Tunnel.Port)
-	}
-	if !meta.Tunnel.Funnel {
-		t.Error("Tunnel.Funnel = false, want true")
+	if len(meta.Tunnel.Public.Ports) != 1 || meta.Tunnel.Public.Ports[0] != 18789 {
+		t.Errorf("Tunnel.Public.Ports = %v, want [18789]", meta.Tunnel.Public.Ports)
 	}
 
 	// Env
@@ -367,7 +364,7 @@ func TestWriteLabelsPortRelay(t *testing.T) {
 }
 
 func TestWriteLabelsEmitsLabels(t *testing.T) {
-	tunnel := &TunnelYAML{Provider: "tailscale", Port: 8080, Funnel: true}
+	tunnel := &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{8080}}}
 	g := &Generator{
 		Config: &Config{
 			Images: map[string]ImageConfig{
@@ -414,7 +411,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		Home:     "/home/user",
 		Ports:    []string{"8080:8080"},
 		Network:  "host",
-		FQDN:     "myapp.example.com",
+		DNS:     "myapp.example.com",
 		AcmeEmail: "admin@example.com",
 		Vm:       &VmConfig{Ram: "4G", Cpus: 2},
 	}
@@ -437,7 +434,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelUser, `"user"`},
 		{LabelHome, `"/home/user"`},
 		{LabelNetwork, `"host"`},
-		{LabelFQDN, `"myapp.example.com"`},
+		{LabelDNS, `"myapp.example.com"`},
 		{LabelAcmeEmail, `"admin@example.com"`},
 	}
 
@@ -509,7 +506,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 	omitted := []string{
 		LabelPorts, LabelVolumes, LabelAliases, LabelRegistry,
 		LabelBootc, LabelBindMounts, LabelSecurity, LabelNetwork,
-		LabelTunnel, LabelFQDN, LabelAcmeEmail, LabelEnv,
+		LabelTunnel, LabelDNS, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
 		LabelSystemd, LabelSupervisord, LabelEnvLayers, LabelPathAppend,
 		LabelPortRelay,
@@ -522,7 +519,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 }
 
 func TestLabelRoundTrip(t *testing.T) {
-	tunnel := &TunnelYAML{Provider: "cloudflare", Port: 9090, Tunnel: "my-tunnel"}
+	tunnel := &TunnelYAML{Provider: "cloudflare", Tunnel: "my-tunnel", Public: PortScope{Ports: []int{9090}}}
 	g := &Generator{
 		Config: &Config{
 			Images: map[string]ImageConfig{
@@ -577,7 +574,7 @@ func TestLabelRoundTrip(t *testing.T) {
 		Home:      "/home/testuser",
 		Ports:     []string{"9090:9090", "8080"},
 		Network:   "host",
-		FQDN:      "roundtrip.example.com",
+		DNS:      "roundtrip.example.com",
 		AcmeEmail: "test@example.com",
 		Vm:        &VmConfig{Ram: "8G", Cpus: 4, SshPort: 2222, DiskSize: "30 GiB"},
 	}
@@ -623,8 +620,8 @@ func TestLabelRoundTrip(t *testing.T) {
 	if meta.Network != "host" {
 		t.Errorf("Network = %q, want %q", meta.Network, "host")
 	}
-	if meta.FQDN != "roundtrip.example.com" {
-		t.Errorf("FQDN = %q, want %q", meta.FQDN, "roundtrip.example.com")
+	if meta.DNS != "roundtrip.example.com" {
+		t.Errorf("DNS = %q, want %q", meta.DNS, "roundtrip.example.com")
 	}
 	if meta.AcmeEmail != "test@example.com" {
 		t.Errorf("AcmeEmail = %q, want %q", meta.AcmeEmail, "test@example.com")
@@ -670,8 +667,8 @@ func TestLabelRoundTrip(t *testing.T) {
 	if meta.Tunnel.Provider != "cloudflare" {
 		t.Errorf("Tunnel.Provider = %q, want %q", meta.Tunnel.Provider, "cloudflare")
 	}
-	if meta.Tunnel.Port != 9090 {
-		t.Errorf("Tunnel.Port = %d, want 9090", meta.Tunnel.Port)
+	if len(meta.Tunnel.Public.Ports) != 1 || meta.Tunnel.Public.Ports[0] != 9090 {
+		t.Errorf("Tunnel.Public.Ports = %v, want [9090]", meta.Tunnel.Public.Ports)
 	}
 
 	// Env

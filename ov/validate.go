@@ -313,9 +313,25 @@ func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 			if len(rpm.Copr) > 0 && len(rpm.Packages) == 0 {
 				errs.Add("layer %q layer.yml: rpm.copr requires rpm.packages", name)
 			}
-			// repos without packages is an error
-			if len(rpm.Repos) > 0 && len(rpm.Packages) == 0 {
-				errs.Add("layer %q layer.yml: rpm.repos requires rpm.packages", name)
+			// url-type repos without packages is an error
+			for _, repo := range rpm.Repos {
+				if repo.URL != "" && len(rpm.Packages) == 0 {
+					errs.Add("layer %q layer.yml: rpm.repos requires rpm.packages", name)
+					break
+				}
+			}
+			// modules without packages is an error
+			if len(rpm.Modules) > 0 && len(rpm.Packages) == 0 {
+				errs.Add("layer %q layer.yml: rpm.modules requires rpm.packages", name)
+			}
+			// repos: exactly one of url or rpm must be set
+			for _, repo := range rpm.Repos {
+				if repo.URL == "" && repo.RPM == "" {
+					errs.Add("layer %q layer.yml: rpm.repos entry %q requires url or rpm", name, repo.Name)
+				}
+				if repo.URL != "" && repo.RPM != "" {
+					errs.Add("layer %q layer.yml: rpm.repos entry %q has both url and rpm (pick one)", name, repo.Name)
+				}
 			}
 		}
 	}

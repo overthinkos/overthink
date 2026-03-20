@@ -165,6 +165,75 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 	}
 }
 
+func TestValidateModulesWithoutPackages(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"layer": {
+			Name:       "layer",
+			HasRootYml: true,
+			rpmConfig:  &RpmConfig{Modules: []string{"valkey:remi-9.0"}},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for rpm.modules without rpm.packages")
+	}
+	if !strings.Contains(err.Error(), "rpm.modules requires rpm.packages") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRepoUrlAndRpmBothSet(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"layer": {
+			Name:       "layer",
+			HasRootYml: true,
+			rpmConfig: &RpmConfig{
+				Repos:    []RpmRepo{{Name: "test", URL: "http://example.com", RPM: "http://example.com/release.rpm"}},
+				Packages: []string{"pkg"},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for rpm.repos with both url and rpm")
+	}
+	if !strings.Contains(err.Error(), "has both url and rpm") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestValidateRepoNeitherUrlNorRpm(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{},
+	}
+	layers := map[string]*Layer{
+		"layer": {
+			Name:       "layer",
+			HasRootYml: true,
+			rpmConfig: &RpmConfig{
+				Repos:    []RpmRepo{{Name: "test"}},
+				Packages: []string{"pkg"},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers)
+	if err == nil {
+		t.Error("expected error for rpm.repos with neither url nor rpm")
+	}
+	if !strings.Contains(err.Error(), "requires url or rpm") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestValidateUnknownDependency(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{},

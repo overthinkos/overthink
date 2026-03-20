@@ -104,14 +104,19 @@ type RpmConfig struct {
 	Packages []string  `yaml:"packages,omitempty"`
 	Copr     []string  `yaml:"copr,omitempty"`
 	Repos    []RpmRepo `yaml:"repos,omitempty"`
+	Modules  []string  `yaml:"modules,omitempty"` // "module:stream" format (e.g. "valkey:remi-9.0")
 	Exclude  []string  `yaml:"exclude,omitempty"`
 	Options  []string  `yaml:"options,omitempty"`
 }
 
-// RpmRepo represents an external RPM repository
+// RpmRepo represents an external RPM repository.
+// Exactly one of URL or RPM must be set.
+// URL: .repo file URL (added via dnf5 config-manager, enabled only during install)
+// RPM: release RPM URL (installed via dnf install, repos enabled by default)
 type RpmRepo struct {
 	Name   string `yaml:"name"`
-	URL    string `yaml:"url"`
+	URL    string `yaml:"url,omitempty"`
+	RPM    string `yaml:"rpm,omitempty"`
 	GPGKey string `yaml:"gpgkey,omitempty"`
 }
 

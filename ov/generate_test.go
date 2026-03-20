@@ -295,3 +295,74 @@ func TestGenerateRelayConf(t *testing.T) {
 		t.Error("should end with newline")
 	}
 }
+
+func TestWriteDnfInstallWithModules(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeDnfInstall(&b, &RpmConfig{
+		Modules:  []string{"valkey:remi-9.0"},
+		Packages: []string{"valkey"},
+	})
+	out := b.String()
+
+	if !strings.Contains(out, "dnf module reset -y valkey") {
+		t.Error("should contain dnf module reset")
+	}
+	if !strings.Contains(out, "dnf module enable -y valkey:remi-9.0") {
+		t.Error("should contain dnf module enable")
+	}
+	if !strings.Contains(out, "dnf install -y") {
+		t.Error("should contain dnf install")
+	}
+	if !strings.Contains(out, "valkey") {
+		t.Error("should contain package name")
+	}
+}
+
+func TestWriteDnfInstallWithReleaseRpm(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeDnfInstall(&b, &RpmConfig{
+		Repos:    []RpmRepo{{Name: "remi", RPM: "https://example.com/remi-release.rpm"}},
+		Packages: []string{"valkey"},
+	})
+	out := b.String()
+
+	if !strings.Contains(out, `dnf install -y "https://example.com/remi-release.rpm"`) {
+		t.Errorf("should contain release RPM install, got:\n%s", out)
+	}
+	// rpm-type repos should NOT emit --enable-repo
+	if strings.Contains(out, "--enable-repo") {
+		t.Error("rpm-type repos should not emit --enable-repo")
+	}
+}
+
+func TestWriteDnfInstallWithReleaseRpmAndModules(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeDnfInstall(&b, &RpmConfig{
+		Repos:    []RpmRepo{{Name: "remi", RPM: "https://example.com/remi-release.rpm"}},
+		Modules:  []string{"valkey:remi-9.0"},
+		Packages: []string{"valkey"},
+	})
+	out := b.String()
+
+	// Verify order: release RPM → module enable → package install
+	rpmIdx := strings.Index(out, "remi-release.rpm")
+	resetIdx := strings.Index(out, "dnf module reset")
+	enableIdx := strings.Index(out, "dnf module enable")
+	installIdx := strings.LastIndex(out, "dnf install -y")
+
+	if rpmIdx < 0 || resetIdx < 0 || enableIdx < 0 || installIdx < 0 {
+		t.Fatalf("missing expected commands in output:\n%s", out)
+	}
+	if rpmIdx > resetIdx {
+		t.Error("release RPM install should come before module reset")
+	}
+	if resetIdx > enableIdx {
+		t.Error("module reset should come before module enable")
+	}
+	if enableIdx > installIdx {
+		t.Error("module enable should come before package install")
+	}
+}

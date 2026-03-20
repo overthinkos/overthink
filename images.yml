@@ -48,6 +48,15 @@ images:
       - "8000:8000"
       - "8080:8080"
 
+  valkey-test:
+    enabled: false
+    base: fedora
+    layers:
+      - supervisord
+      - valkey
+    ports:
+      - "6379:6379"
+
   openclaw:
     base: fedora
     layers:

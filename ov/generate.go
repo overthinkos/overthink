@@ -942,18 +942,34 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 func (g *Generator) writeDnfInstall(b *strings.Builder, rpm *RpmConfig) {
 	b.WriteString("RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
 
-	// External repos: add disabled, import GPG keys
+	// Release RPMs: install first to add repo definitions
 	for _, repo := range rpm.Repos {
-		b.WriteString(fmt.Sprintf("    dnf5 config-manager addrepo --from-repofile=%q 2>/dev/null || true && \\\n", repo.URL))
-		b.WriteString(fmt.Sprintf("    dnf5 config-manager setopt %q && \\\n", repo.Name+".enabled=0"))
-		if repo.GPGKey != "" {
-			b.WriteString(fmt.Sprintf("    rpm --import %s || true && \\\n", repo.GPGKey))
+		if repo.RPM != "" {
+			b.WriteString(fmt.Sprintf("    dnf install -y %q && \\\n", repo.RPM))
+		}
+	}
+
+	// Repo files: add disabled, import GPG keys
+	for _, repo := range rpm.Repos {
+		if repo.URL != "" {
+			b.WriteString(fmt.Sprintf("    dnf5 config-manager addrepo --from-repofile=%q 2>/dev/null || true && \\\n", repo.URL))
+			b.WriteString(fmt.Sprintf("    dnf5 config-manager setopt %q && \\\n", repo.Name+".enabled=0"))
+			if repo.GPGKey != "" {
+				b.WriteString(fmt.Sprintf("    rpm --import %s || true && \\\n", repo.GPGKey))
+			}
 		}
 	}
 
 	// COPR repos: enable first
 	for _, repo := range rpm.Copr {
 		b.WriteString(fmt.Sprintf("    dnf5 copr enable -y %s && \\\n", repo))
+	}
+
+	// Module streams: reset and enable
+	for _, mod := range rpm.Modules {
+		moduleName := strings.SplitN(mod, ":", 2)[0]
+		b.WriteString(fmt.Sprintf("    dnf module reset -y %s && \\\n", moduleName))
+		b.WriteString(fmt.Sprintf("    dnf module enable -y %s && \\\n", mod))
 	}
 
 	b.WriteString("    dnf install -y")
@@ -963,9 +979,11 @@ func (g *Generator) writeDnfInstall(b *strings.Builder, rpm *RpmConfig) {
 		b.WriteString(fmt.Sprintf(" %s", opt))
 	}
 
-	// Enable repos for this install
+	// Enable repos for this install (url-type repos only; rpm-type repos enable themselves)
 	for _, repo := range rpm.Repos {
-		b.WriteString(fmt.Sprintf(" --enable-repo=%q", repo.Name))
+		if repo.URL != "" {
+			b.WriteString(fmt.Sprintf(" --enable-repo=%q", repo.Name))
+		}
 	}
 
 	// Exclude patterns

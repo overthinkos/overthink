@@ -1203,6 +1203,13 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelPathAppend, merged.PathAppend)
 	}
 
+	// Skills documentation URL
+	skillPath := filepath.Join(g.Dir, "plugins", "ov-images", "skills", imageName, "SKILL.md")
+	if _, err := os.Stat(skillPath); err == nil {
+		skillURL := fmt.Sprintf("https://github.com/overthinkos/overthink-plugins/blob/main/ov-images/skills/%s/SKILL.md", imageName)
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkills, skillURL))
+	}
+
 	b.WriteString("\n")
 }
 

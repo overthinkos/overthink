@@ -35,6 +35,7 @@ project/
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
 +-- layers/<name>/            # Layer directories (90 layers)
++-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
 
@@ -50,6 +51,46 @@ Git handles public/shared artifacts. Syncthing handles private/machine-specific 
 | `.claude/settings.json` | Git | Public (committed) |
 
 Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local.json`. Both settings.local.json and memory/ sync via Syncthing automatically.
+
+### Plugins Submodule
+
+Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
+
+**Repository:** `git@github.com:overthinkos/overthink-plugins.git`
+
+```
+plugins/
++-- .claude-plugin/marketplace.json   # Central plugin registry
++-- ov/                               # Operations (15 skills)
++-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
++-- ov-layers/                        # Layer reference (90 skills)
++-- ov-images/                        # Image reference (16 skills)
+```
+
+Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
+
+**Enabled via** `.claude/settings.json` (committed):
+
+```json
+{
+  "enabledPlugins": {
+    "ov@ov-plugins": true,
+    "ov-dev@ov-plugins": true,
+    "ov-layers@ov-plugins": true,
+    "ov-images@ov-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "ov-plugins": {
+      "source": { "source": "directory", "path": "./plugins" }
+    }
+  }
+}
+```
+
+**Submodule operations:**
+- Clone with plugins: `git clone --recurse-submodules`
+- Update plugins: `git submodule update --remote plugins`
+- After pulling main repo: `git submodule update --init`
 
 ---
 

@@ -39,6 +39,7 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelSupervisord: `["traefik","testapi"]`,
 			LabelEnvLayers: `{"CUDA_HOME":"/usr/local/cuda"}`,
 			LabelPathAppend: `["/opt/bin"]`,
+			LabelSkills:     "https://github.com/overthinkos/overthink-plugins/blob/main/ov-images/skills/openclaw/SKILL.md",
 		}, nil
 	}
 
@@ -196,6 +197,12 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 	wantPathAppend := []string{"/opt/bin"}
 	if !reflect.DeepEqual(meta.PathAppend, wantPathAppend) {
 		t.Errorf("PathAppend = %v, want %v", meta.PathAppend, wantPathAppend)
+	}
+
+	// Skills
+	wantSkills := "https://github.com/overthinkos/overthink-plugins/blob/main/ov-images/skills/openclaw/SKILL.md"
+	if meta.Skills != wantSkills {
+		t.Errorf("Skills = %q, want %q", meta.Skills, wantSkills)
 	}
 }
 
@@ -509,7 +516,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		LabelTunnel, LabelDNS, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
 		LabelSystemd, LabelSupervisord, LabelEnvLayers, LabelPathAppend,
-		LabelPortRelay,
+		LabelPortRelay, LabelSkills,
 	}
 	for _, label := range omitted {
 		if strings.Contains(output, label) {

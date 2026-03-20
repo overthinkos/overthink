@@ -25,6 +25,7 @@ type DeployImageConfig struct {
 	EnvFile    string            `yaml:"env_file,omitempty"`
 	Security   *SecurityConfig   `yaml:"security,omitempty"`
 	Network    string            `yaml:"network,omitempty"`
+	Engine     string            `yaml:"engine,omitempty"`
 }
 
 // DeployConfigPath returns the path to the deploy overlay file.
@@ -103,6 +104,9 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Network != "" {
 			img.Network = overlay.Network
 		}
+		if overlay.Engine != "" {
+			img.Engine = overlay.Engine
+		}
 
 		cfg.Images[name] = img
 	}
@@ -151,6 +155,9 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 	}
 	if overlay.Network != "" {
 		meta.Network = overlay.Network
+	}
+	if overlay.Engine != "" {
+		meta.Engine = overlay.Engine
 	}
 }
 

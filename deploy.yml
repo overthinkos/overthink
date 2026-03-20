@@ -1,0 +1,68 @@
+# deploy.yml — Per-machine deployment overrides
+#
+# Copy to ~/.config/ov/deploy.yml and customize for your machine.
+# Only runtime/deployment fields are supported (not build-time fields like base, layers, platforms).
+# Field-level replace: deploy.yml values fully replace images.yml values.
+#
+# Supported fields per image:
+#   ports        — Host:container port mappings (replaces image ports)
+#   tunnel       — Tailscale/Cloudflare tunnel config
+#   fqdn         — Fully qualified domain name (for Cloudflare tunnels)
+#   acme_email   — ACME/Let's Encrypt email
+#   bind_mounts  — Host-path bind mounts (plain or encrypted)
+#   env          — Environment variables (KEY=VALUE list)
+#   env_file     — Path to .env file
+#   security     — Container security overrides
+#   network      — Container network name
+
+images:
+  # Remap openclaw-sway-browser ports to avoid conflicts with openclaw-ollama-sway-browser
+  openclaw-sway-browser:
+    ports:
+      - "18790:18789"    # OpenClaw gateway (default 18789 -> 18790)
+      - "5901:5900"      # VNC (default 5900 -> 5901)
+      - "9223:9222"      # Chrome DevTools (default 9222 -> 9223)
+
+  # openclaw-ollama-sway-browser keeps default ports (18789, 5900, 9222, 11434)
+  # Uncomment sections below to customize:
+  #
+  # openclaw-ollama-sway-browser:
+  #   # Expose all ports via Tailscale
+  #   tunnel:
+  #     provider: tailscale
+  #     ports: all
+  #
+  #   # Or expose a single port via Cloudflare
+  #   # tunnel:
+  #   #   provider: cloudflare
+  #   #   port: 18789
+  #   # fqdn: "openclaw.example.com"
+  #   # acme_email: "admin@example.com"
+  #
+  #   # Inject environment variables
+  #   env:
+  #     - "OLLAMA_NUM_PARALLEL=4"
+  #     - "OLLAMA_MAX_LOADED_MODELS=2"
+  #   # env_file: "/path/to/.env"
+  #
+  #   # Bind mount host directories into container
+  #   bind_mounts:
+  #     - name: data
+  #       host: "~/openclaw-data"
+  #       path: "~/.openclaw"
+  #   # Encrypted bind mount (managed by ov enc)
+  #   #   - name: secrets
+  #   #     path: "~/.openclaw/secrets"
+  #   #     encrypted: true
+  #
+  #   # Security overrides
+  #   # security:
+  #   #   privileged: false
+  #   #   cap_add:
+  #   #     - SYS_PTRACE
+  #   #   devices:
+  #   #     - /dev/dri
+  #   #   shm_size: "2g"
+  #
+  #   # Custom network
+  #   # network: host

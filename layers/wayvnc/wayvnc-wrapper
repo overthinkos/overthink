@@ -12,8 +12,9 @@ if [ ! -e "$SOCKET" ]; then
 fi
 WAYVNC_ARGS="--render-cursor --disable-resizing -o HEADLESS-1"
 
-# GPU-accelerated encoding when DRI render node is available
-if ls /dev/dri/renderD* >/dev/null 2>&1; then
+# GPU-accelerated encoding — only for real displays, not headless.
+# Headless + NVIDIA: pixman renderer produces compatible buffers without --gpu.
+if [ "$WLR_BACKENDS" != "headless" ] && ls /dev/dri/renderD* >/dev/null 2>&1; then
     WAYVNC_ARGS="$WAYVNC_ARGS --gpu"
 fi
 

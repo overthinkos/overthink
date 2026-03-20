@@ -58,7 +58,7 @@ images:
   openclaw-sway-browser:
     base: fedora
     layers:
-      - openclaw
+      - openclaw-full
       - sway-desktop
     ports:
       - "18789:18789"
@@ -73,7 +73,7 @@ images:
   openclaw-ollama-sway-browser:
     base: nvidia
     layers:
-      - openclaw
+      - openclaw-full-ml
       - sway-desktop
       - ollama
     ports:
@@ -235,6 +235,7 @@ images:
       - linux/amd64
 
   openclaw-full:
+    enabled: false
     base: fedora
     layers:
       - openclaw-full
@@ -243,6 +244,7 @@ images:
       - "9222:9222"
 
   openclaw-full-sway:
+    enabled: false
     base: fedora
     layers:
       - openclaw-full
@@ -258,6 +260,7 @@ images:
       - linux/amd64
 
   openclaw-full-ml:
+    enabled: false
     base: nvidia
     layers:
       - openclaw-full-ml

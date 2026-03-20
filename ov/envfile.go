@@ -8,6 +8,52 @@ import (
 	"strings"
 )
 
+// dotenvLoaded tracks which env var names were loaded from .env (for source attribution in ov config list).
+var dotenvLoaded = make(map[string]bool)
+
+// DotenvLoaded reports whether a given env var name was loaded from the project .env file.
+func DotenvLoaded(name string) bool {
+	return dotenvLoaded[name]
+}
+
+// resetDotenvLoaded clears the tracking map (for testing).
+func resetDotenvLoaded() {
+	dotenvLoaded = make(map[string]bool)
+}
+
+// LoadProcessDotenv loads .env from dir into the process environment.
+// Variables already set in the environment are NOT overwritten (real env wins).
+// Silently returns nil if .env does not exist.
+func LoadProcessDotenv(dir string) error {
+	envPath := filepath.Join(dir, ".env")
+	if _, err := os.Stat(envPath); os.IsNotExist(err) {
+		return nil
+	}
+
+	entries, err := ParseEnvFile(envPath)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		idx := strings.IndexByte(entry, '=')
+		if idx < 0 {
+			// Bare KEY (no value) — skip, inheriting from host is meaningless here
+			continue
+		}
+		key := entry[:idx]
+		value := entry[idx+1:]
+
+		// Only set if NOT already in environment (real env takes precedence)
+		if _, exists := os.LookupEnv(key); !exists {
+			os.Setenv(key, value)
+			dotenvLoaded[key] = true
+		}
+	}
+
+	return nil
+}
+
 // ParseEnvFile reads a .env file and returns KEY=VALUE strings.
 // Skips comments (#), blank lines, and supports KEY=VALUE and KEY="VALUE" (strips quotes).
 // Compatible with docker --env-file format.

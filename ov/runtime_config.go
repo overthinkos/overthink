@@ -477,7 +477,11 @@ func ListConfigValues() ([]configKeySource, error) {
 	resolve := func(key, envName, cfgVal, defaultVal string) configKeySource {
 		envVal := os.Getenv(envName)
 		if envVal != "" {
-			return configKeySource{Key: key, Value: envVal, Source: "env (" + envName + ")"}
+			source := "env (" + envName + ")"
+			if DotenvLoaded(envName) {
+				source = "env (.env)"
+			}
+			return configKeySource{Key: key, Value: envVal, Source: source}
 		}
 		if cfgVal != "" {
 			return configKeySource{Key: key, Value: cfgVal, Source: "config"}
@@ -493,7 +497,11 @@ func ListConfigValues() ([]configKeySource, error) {
 			if envVal == "true" || envVal == "1" {
 				resolved = "true"
 			}
-			return configKeySource{Key: "auto_enable", Value: resolved, Source: "env (OV_AUTO_ENABLE)"}
+			source := "env (OV_AUTO_ENABLE)"
+			if DotenvLoaded("OV_AUTO_ENABLE") {
+				source = "env (.env)"
+			}
+			return configKeySource{Key: "auto_enable", Value: resolved, Source: source}
 		}
 		if cfg.AutoEnable != nil {
 			val := "false"
@@ -512,7 +520,11 @@ func ListConfigValues() ([]configKeySource, error) {
 	vmCpusEntry := func() configKeySource {
 		envVal := os.Getenv("OV_VM_CPUS")
 		if envVal != "" {
-			return configKeySource{Key: "vm.cpus", Value: envVal, Source: "env (OV_VM_CPUS)"}
+			source := "env (OV_VM_CPUS)"
+			if DotenvLoaded("OV_VM_CPUS") {
+				source = "env (.env)"
+			}
+			return configKeySource{Key: "vm.cpus", Value: envVal, Source: source}
 		}
 		if cfg.Vm.Cpus > 0 {
 			return configKeySource{Key: "vm.cpus", Value: fmt.Sprintf("%d", cfg.Vm.Cpus), Source: "config"}

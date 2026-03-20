@@ -641,6 +641,14 @@ func (c *VersionCmd) Run() error {
 }
 
 func main() {
+	// Load project .env into process environment before any config resolution.
+	// Real env vars take precedence over .env values.
+	if dir, err := os.Getwd(); err == nil {
+		if err := LoadProcessDotenv(dir); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: loading .env: %v\n", err)
+		}
+	}
+
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("ov"),

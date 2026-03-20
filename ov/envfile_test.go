@@ -83,6 +83,69 @@ func TestDeduplicateEnv(t *testing.T) {
 	}
 }
 
+func TestLoadProcessDotenv(t *testing.T) {
+	resetDotenvLoaded()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_DOTENV_VAR=from_dotenv\nTEST_DOTENV_EMPTY=\n"), 0644)
+
+	t.Cleanup(func() {
+		os.Unsetenv("TEST_DOTENV_VAR")
+		os.Unsetenv("TEST_DOTENV_EMPTY")
+		resetDotenvLoaded()
+	})
+
+	err := LoadProcessDotenv(dir)
+	if err != nil {
+		t.Fatalf("LoadProcessDotenv() error: %v", err)
+	}
+
+	if got := os.Getenv("TEST_DOTENV_VAR"); got != "from_dotenv" {
+		t.Errorf("TEST_DOTENV_VAR = %q, want %q", got, "from_dotenv")
+	}
+	if !DotenvLoaded("TEST_DOTENV_VAR") {
+		t.Error("TEST_DOTENV_VAR should be marked as dotenv-loaded")
+	}
+	if got := os.Getenv("TEST_DOTENV_EMPTY"); got != "" {
+		t.Errorf("TEST_DOTENV_EMPTY = %q, want empty", got)
+	}
+	if !DotenvLoaded("TEST_DOTENV_EMPTY") {
+		t.Error("TEST_DOTENV_EMPTY should be marked as dotenv-loaded")
+	}
+}
+
+func TestLoadProcessDotenvRealEnvWins(t *testing.T) {
+	resetDotenvLoaded()
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, ".env"), []byte("TEST_EXISTING=from_dotenv\n"), 0644)
+
+	os.Setenv("TEST_EXISTING", "from_real_env")
+	t.Cleanup(func() {
+		os.Unsetenv("TEST_EXISTING")
+		resetDotenvLoaded()
+	})
+
+	err := LoadProcessDotenv(dir)
+	if err != nil {
+		t.Fatalf("LoadProcessDotenv() error: %v", err)
+	}
+
+	if got := os.Getenv("TEST_EXISTING"); got != "from_real_env" {
+		t.Errorf("TEST_EXISTING = %q, want %q (real env should win)", got, "from_real_env")
+	}
+	if DotenvLoaded("TEST_EXISTING") {
+		t.Error("TEST_EXISTING should NOT be marked as dotenv-loaded (was already set)")
+	}
+}
+
+func TestLoadProcessDotenvNoFile(t *testing.T) {
+	resetDotenvLoaded()
+	dir := t.TempDir()
+	err := LoadProcessDotenv(dir)
+	if err != nil {
+		t.Fatalf("LoadProcessDotenv() should not error when .env missing, got: %v", err)
+	}
+}
+
 func TestResolveEnvVars(t *testing.T) {
 	dir := t.TempDir()
 

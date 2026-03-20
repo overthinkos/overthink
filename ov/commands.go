@@ -17,6 +17,7 @@ type EnableCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	PortMap   []string `short:"p" long:"port" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -209,6 +210,23 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	resolvedNetwork, netErr := ResolveNetwork(network, rt.RunEngine)
 	if netErr != nil {
 		return netErr
+	}
+
+	// Apply port overrides from --port flags
+	if len(c.PortMap) > 0 {
+		ports, err = ApplyPortOverrides(ports, c.PortMap)
+		if err != nil {
+			return err
+		}
+		// Persist overrides to deploy.yml for quadlet restarts
+		if saveErr := SavePortOverride(c.Image, ports); saveErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not save port override to deploy.yml: %v\n", saveErr)
+		}
+	}
+
+	// Pre-flight port conflict check (warning for enable, not hard error)
+	if conflicts := CheckPortAvailability(ports, rt.BindAddress, rt.RunEngine); len(conflicts) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
 	}
 
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.

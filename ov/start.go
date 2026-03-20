@@ -17,6 +17,7 @@ type StartCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	PortMap   []string `short:"p" long:"port" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -173,6 +174,19 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	resolvedNetwork, netErr := ResolveNetwork(network, engine)
 	if netErr != nil {
 		return netErr
+	}
+
+	// Apply port overrides from --port flags
+	if len(c.PortMap) > 0 {
+		ports, err = ApplyPortOverrides(ports, c.PortMap)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Pre-flight port conflict check
+	if conflicts := CheckPortAvailability(ports, rt.BindAddress, engine); len(conflicts) > 0 {
+		return fmt.Errorf("port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
 	}
 
 	name := containerNameInstance(c.Image, c.Instance)

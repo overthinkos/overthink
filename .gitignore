@@ -31,8 +31,9 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Claude Code local settings
+# Claude Code local settings and memory (synced via Syncthing, not git)
 .claude/settings.local.json
+.claude/memory/
 
 # Overthink build artifacts
 .build/

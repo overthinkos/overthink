@@ -1,11 +1,15 @@
 depends:
   - nodejs
+  - socat
   - supervisord
 
 env:
   NODE_ENV: "production"
 
 ports:
+  - 18789
+
+port_relay:
   - 18789
 
 volumes:
@@ -18,7 +22,7 @@ aliases:
 
 service: |
   [program:openclaw]
-  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789 --bind lan
+  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789
   autostart=true
   autorestart=true
   stdout_logfile=/dev/stdout

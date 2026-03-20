@@ -38,6 +38,19 @@ project/
 +-- templates/                # supervisord.header.conf
 ```
 
+### Two-Layer Sync Architecture
+
+Git handles public/shared artifacts. Syncthing handles private/machine-specific state. `.gitignore` is the boundary.
+
+| What | Synced by | Visibility |
+|------|-----------|------------|
+| Code, CLAUDE.md, skills, layers | Git | Public (committed) |
+| `.claude/memory/` | Syncthing | Private (gitignored) |
+| `.claude/settings.local.json` | Syncthing | Private (gitignored) |
+| `.claude/settings.json` | Git | Public (committed) |
+
+Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local.json`. Both settings.local.json and memory/ sync via Syncthing automatically.
+
 ---
 
 ## Key Rules
@@ -48,6 +61,7 @@ project/
 - `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
 - All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
+- Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
 
 For layer-specific rules (install files, packages, port_relay, cache mounts): `/ov:layer`
 
@@ -99,6 +113,16 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 ## Skills: Decision Architecture
 
+### Information Retrieval Priority
+
+Always follow this order when gathering information:
+1. **Invoke skills** -- structured, curated knowledge for the task at hand
+2. **Read CLAUDE.md** -- project rules and architecture overview
+3. **Read memory** -- prior learnings and user context
+4. **Explore codebase** -- only when skills don't cover the topic
+
+Never launch Explore agents or read raw source files when a matching skill exists.
+
 ### First Branch: Using vs Developing
 
 - **Using ov** (building/running images): `ov` + `ov-layers` + `ov-images` plugins
@@ -136,6 +160,26 @@ Use CDP first. Fall back to VNC for visual-only elements. Use Sway for window ma
 
 **Modify a metalayer:**
 `/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
+
+**Full image lifecycle (build -> deploy -> test):**
+`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, bind mounts) -> `/ov:service` (enable, start, status, logs) -> `/ov-images:<name>` (ports, verification)
+
+### Continuous Improvement: Feeding Insights Back Into Skills
+
+Skills are living documents. When real-world usage reveals gaps, update them:
+
+**What triggers a skill update:**
+- A deployment step fails or requires undocumented workarounds
+- A verification check is missing from an image skill
+- A skill's recommended order or defaults are wrong (e.g., direct vs quadlet)
+- A gotcha or prerequisite is discovered during actual usage
+
+**How to feed back:**
+1. During the session, update the relevant skill file at `plugins/<plugin>/skills/<skill-name>/SKILL.md`
+2. If the insight affects cross-skill behavior, update CLAUDE.md too
+3. After any non-trivial deployment session, ask: "Did we learn anything that future sessions should know?"
+
+**When NOT to update skills:** ephemeral issues, user-specific config (use memory), bug fixes in ov code (use git)
 
 ### Disambiguating Overlapping Skills
 

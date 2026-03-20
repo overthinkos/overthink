@@ -128,7 +128,7 @@ func checkGvproxy() error {
 			return nil
 		}
 	}
-	return fmt.Errorf("gvproxy not found — required for podman machine.\nInstall it: sudo dnf install gvisor-tap-vsock")
+	return fmt.Errorf("gvproxy not found — required for podman machine.\nInstall it: %s", InstallHint("gvproxy"))
 }
 
 func runPodmanMachine(args ...string) error {

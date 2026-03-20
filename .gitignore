@@ -35,6 +35,9 @@ go.work.sum
 .claude/settings.local.json
 .claude/memory/
 
+# Machine-specific deploy overrides
+deploy.local.yml
+
 # Overthink build artifacts
 .build/
 bin/

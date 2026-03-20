@@ -202,6 +202,121 @@ func resolveBindMountsFromLabels(imageName string, mounts []LabelBindMount, home
 	return resolved
 }
 
+// LoadDeployFile reads a deploy.yml from an arbitrary path.
+func LoadDeployFile(path string) (*DeployConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", path, err)
+	}
+	var dc DeployConfig
+	if err := yaml.Unmarshal(data, &dc); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return &dc, nil
+}
+
+// SaveDeployConfig writes a DeployConfig to the standard deploy.yml path.
+func SaveDeployConfig(dc *DeployConfig) error {
+	path, err := DeployConfigPath()
+	if err != nil {
+		return fmt.Errorf("determining deploy config path: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating config directory: %w", err)
+	}
+	data, err := yaml.Marshal(dc)
+	if err != nil {
+		return fmt.Errorf("marshaling deploy config: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("writing %s: %w", path, err)
+	}
+	return nil
+}
+
+// MergeDeployConfigs merges multiple DeployConfigs left-to-right.
+// Later configs take precedence (field-level replace per image).
+func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
+	result := &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	for _, dc := range configs {
+		if dc == nil || dc.Images == nil {
+			continue
+		}
+		for name, overlay := range dc.Images {
+			existing := result.Images[name]
+			if overlay.Tunnel != nil {
+				existing.Tunnel = overlay.Tunnel
+			}
+			if overlay.FQDN != "" {
+				existing.FQDN = overlay.FQDN
+			}
+			if overlay.AcmeEmail != "" {
+				existing.AcmeEmail = overlay.AcmeEmail
+			}
+			if overlay.BindMounts != nil {
+				existing.BindMounts = overlay.BindMounts
+			}
+			if overlay.Ports != nil {
+				existing.Ports = overlay.Ports
+			}
+			if overlay.Env != nil {
+				existing.Env = overlay.Env
+			}
+			if overlay.EnvFile != "" {
+				existing.EnvFile = overlay.EnvFile
+			}
+			if overlay.Security != nil {
+				existing.Security = overlay.Security
+			}
+			if overlay.Network != "" {
+				existing.Network = overlay.Network
+			}
+			if overlay.Engine != "" {
+				existing.Engine = overlay.Engine
+			}
+			result.Images[name] = existing
+		}
+	}
+	return result
+}
+
+// RemoveImageDeploy removes an image's entry from a deploy config.
+func RemoveImageDeploy(dc *DeployConfig, imageName string) {
+	if dc != nil && dc.Images != nil {
+		delete(dc.Images, imageName)
+	}
+}
+
+// ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.
+func ExportAllImages(cfg *Config) *DeployConfig {
+	dc := &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	for name, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		entry := DeployImageConfig{
+			Ports:      img.Ports,
+			Tunnel:     img.Tunnel,
+			FQDN:       img.FQDN,
+			AcmeEmail:  img.AcmeEmail,
+			BindMounts: img.BindMounts,
+			Env:        img.Env,
+			EnvFile:    img.EnvFile,
+			Security:   img.Security,
+			Network:    img.Network,
+			Engine:     img.Engine,
+		}
+		// Only include if at least one field is set
+		if entry.Ports != nil || entry.Tunnel != nil || entry.FQDN != "" ||
+			entry.AcmeEmail != "" || entry.BindMounts != nil || entry.Env != nil ||
+			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" ||
+			entry.Engine != "" {
+			dc.Images[name] = entry
+		}
+	}
+	return dc
+}
+
 // BindMountNames returns a set of bind mount names for use as an exclusion filter.
 func BindMountNames(mounts []BindMountConfig) map[string]bool {
 	if len(mounts) == 0 {

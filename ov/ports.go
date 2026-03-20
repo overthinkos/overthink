@@ -3,13 +3,9 @@ package main
 import (
 	"fmt"
 	"net"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // PortConflict describes a host port that is already in use.
@@ -156,11 +152,6 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 
 // SavePortOverride writes port overrides to deploy.yml for persistence.
 func SavePortOverride(image string, ports []string) error {
-	path, err := DeployConfigPath()
-	if err != nil {
-		return fmt.Errorf("determining deploy config path: %w", err)
-	}
-
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
@@ -173,19 +164,5 @@ func SavePortOverride(image string, ports []string) error {
 	overlay.Ports = ports
 	dc.Images[image] = overlay
 
-	data, err := yaml.Marshal(dc)
-	if err != nil {
-		return fmt.Errorf("marshaling deploy config: %w", err)
-	}
-
-	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-
-	return nil
+	return SaveDeployConfig(dc)
 }

@@ -36,6 +36,7 @@ type CLI struct {
 	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
+	Deploy   DeployCmd   `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }
 

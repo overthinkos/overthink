@@ -140,8 +140,25 @@ type ResolvedImage struct {
 	FullTag        string // registry/name:tag
 }
 
-// LoadConfig reads and parses images.yml from the given directory
+// LoadConfig reads and parses images.yml, then merges deploy.yml overrides.
 func LoadConfig(dir string) (*Config, error) {
+	cfg, err := LoadConfigRaw(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	// Merge per-deployment overrides from deploy.yml
+	dc, dcErr := LoadDeployConfig()
+	if dcErr != nil {
+		return nil, dcErr
+	}
+	MergeDeployOverlay(cfg, dc)
+
+	return cfg, nil
+}
+
+// LoadConfigRaw reads and parses images.yml without merging deploy.yml overrides.
+func LoadConfigRaw(dir string) (*Config, error) {
 	path := filepath.Join(dir, "images.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -152,13 +169,6 @@ func LoadConfig(dir string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing images.yml: %w", err)
 	}
-
-	// Merge per-deployment overrides from deploy.yml
-	dc, err := LoadDeployConfig()
-	if err != nil {
-		return nil, err
-	}
-	MergeDeployOverlay(&cfg, dc)
 
 	return &cfg, nil
 }

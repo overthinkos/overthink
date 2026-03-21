@@ -40,6 +40,8 @@ if [ "$COMPOSITOR_RENDERER" = "pixman" ]; then
     # Software compositor — strip NVIDIA EGL vars and VAAPI flags.
     # Do NOT use --disable-gpu: it breaks CDP tab creation (PUT /json/new crashes Chrome).
     # Without NVIDIA vars, Chrome falls back to software rendering gracefully.
+    # NOTE: shm_size: "1g" in layer.yml is critical — Chrome crashes with
+    # ContextResult::kTransientFailure on complex pages if /dev/shm is too small.
     CHROME_FLAGS=$(echo "$CHROME_FLAGS" | sed 's/,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks//g')
     VAAPI_FLAGS=""
 elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then

@@ -176,7 +176,7 @@ ov merge <image> [--dry-run]           # Merge small layers in built images
 ### Run & Manage
 
 ```
-ov shell <image> [-c CMD]               # Interactive shell
+ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
 ov start <image> [--build]             # Start service container
 ov stop <image>                        # Stop container
 ov enable <image> [-w PATH]            # Systemd quadlet + save to deploy.yml
@@ -184,6 +184,18 @@ ov disable/status/logs/update <image>  # Service lifecycle
 ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage supervisord services in container
+```
+
+### Desktop Automation
+
+```
+ov cdp open/list/close <image>         # Chrome tab management via DevTools
+ov cdp click <image> <tab> <selector>  # Click element (--vnc for VNC-visible click)
+ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, capture
+ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
+ov vnc screenshot/click/type/key       # VNC framebuffer interaction
+ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
+ov sway msg <image> <command>          # Sway compositor control
 ```
 
 ### Deploy Configuration

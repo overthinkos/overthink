@@ -23,7 +23,7 @@ type CLI struct {
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
 	Enable   EnableCmd   `cmd:"" help:"Enable a service (quadlet: generate .container + reload)"`
 	Disable  DisableCmd  `cmd:"" help:"Disable service auto-start (quadlet only)"`
-	Status   StatusCmd   `cmd:"" help:"Show service container status"`
+	Status   StatusCmd   `cmd:"" help:"Show service container status (all if no image given)"`
 	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
 	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`

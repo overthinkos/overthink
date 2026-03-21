@@ -474,7 +474,7 @@ func (c *DisableCmd) Run() error {
 
 // StatusCmd shows the status of a service container
 type StatusCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref"`
+	Image    string `arg:"" optional:"" help:"Image name or remote ref (omit to list all)"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 }
 
@@ -482,6 +482,10 @@ func (c *StatusCmd) Run() error {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
+	}
+
+	if c.Image == "" {
+		return c.statusAll(rt)
 	}
 
 	imageName := resolveImageName(c.Image)
@@ -507,6 +511,24 @@ func (c *StatusCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Container %s is not running\n", name)
 	}
 	return nil
+}
+
+// statusAll lists all running ov containers/services.
+func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
+	if rt.RunMode == "quadlet" {
+		cmd := exec.Command("systemctl", "--user", "list-units",
+			"ov-*.service", "--no-pager")
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+
+	engine := EngineBinary(rt.RunEngine)
+	cmd := exec.Command(engine, "ps", "--filter", "name=ov-",
+		"--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 // LogsCmd shows service container logs
@@ -719,6 +741,12 @@ func (c *RemoveCmd) Run() error {
 		}
 		fmt.Fprintf(os.Stderr, "Removed %s\n", qpath)
 
+		// Stop companion services before removing (best-effort)
+		stopTunnel := exec.Command("systemctl", "--user", "stop", tunnelServiceFilename(imageName))
+		_ = stopTunnel.Run()
+		stopEnc := exec.Command("systemctl", "--user", "stop", encServiceFilename(imageName))
+		_ = stopEnc.Run()
+
 		svcDir, svcDirErr := systemdUserDir()
 		if svcDirErr == nil {
 			tunnelPath := filepath.Join(svcDir, tunnelServiceFilename(imageName))
@@ -737,6 +765,16 @@ func (c *RemoveCmd) Run() error {
 		}
 
 		fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
+
+		// Clear any lingering failed state for main + companion services (best-effort)
+		for _, unit := range []string{
+			svc,
+			tunnelServiceFilename(imageName),
+			encServiceFilename(imageName),
+		} {
+			rf := exec.Command("systemctl", "--user", "reset-failed", unit)
+			_ = rf.Run()
+		}
 
 		if c.WithVolumes {
 			removeVolumes(engine, imageName, c.Instance)

@@ -633,7 +633,7 @@ func (c *UpdateCmd) runRemoteUpdate(ref string) error {
 type RemoveCmd struct {
 	Image       string   `arg:"" help:"Image name or remote ref"`
 	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	WithVolumes bool     `name:"volumes" help:"Also remove named volumes"`
+	Purge       bool     `long:"purge" help:"Also remove named volumes"`
 	KeepDeploy  bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
 	Env         []string `short:"e" long:"env" help:"Set env var for hooks (KEY=VALUE)"`
 }
@@ -708,7 +708,7 @@ func (c *RemoveCmd) Run() error {
 			_ = rf.Run()
 		}
 
-		if c.WithVolumes {
+		if c.Purge {
 			removeVolumes(engine, imageName, c.Instance)
 		}
 		if !c.KeepDeploy && c.Instance == "" {
@@ -728,7 +728,7 @@ func (c *RemoveCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Removed container %s\n", name)
 
-	if c.WithVolumes {
+	if c.Purge {
 		removeVolumes(engine, imageName, c.Instance)
 	}
 	if !c.KeepDeploy && c.Instance == "" {

@@ -181,7 +181,7 @@ ov start <image> [--build]             # Start service container
 ov stop <image>                        # Stop container
 ov enable <image> [-w PATH]            # Systemd quadlet + save to deploy.yml
 ov disable/status/logs/update <image>  # Service lifecycle
-ov remove <image> [--volumes]          # Remove service + deploy.yml entry
+ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage supervisord services in container
 ```

@@ -415,6 +415,7 @@ func (c *DisableCmd) Run() error {
 type StatusCmd struct {
 	Image    string `arg:"" optional:"" help:"Image name or remote ref (omit to list all)"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	All      bool   `short:"a" long:"all" help:"Show all services including inactive"`
 }
 
 func (c *StatusCmd) Run() error {
@@ -454,16 +455,23 @@ func (c *StatusCmd) Run() error {
 // statusAll lists all running ov containers/services.
 func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 	if rt.RunMode == "quadlet" {
-		cmd := exec.Command("systemctl", "--user", "list-units",
-			"ov-*.service", "--no-pager")
+		args := []string{"--user", "list-units", "ov-*.service", "--no-pager"}
+		if c.All {
+			args = append(args, "--all")
+		}
+		cmd := exec.Command("systemctl", args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}
 
 	engine := EngineBinary(rt.RunEngine)
-	cmd := exec.Command(engine, "ps", "--filter", "name=ov-",
-		"--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}")
+	args := []string{"ps", "--filter", "name=ov-",
+		"--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}
+	if c.All {
+		args = append(args, "-a")
+	}
+	cmd := exec.Command(engine, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

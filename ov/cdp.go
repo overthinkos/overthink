@@ -12,6 +12,26 @@ import (
 	"time"
 )
 
+// deepQueryJS is a JavaScript helper that recursively searches through
+// shadow DOM boundaries to find an element matching a CSS selector.
+// Standard document.querySelector() only searches the light DOM.
+const deepQueryJS = `function deepQuery(sel, root) {
+  root = root || document;
+  var matches = root.querySelectorAll(sel);
+  for (var m = 0; m < matches.length; m++) {
+    var r = matches[m].getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) return matches[m];
+  }
+  var all = root.querySelectorAll('*');
+  for (var i = 0; i < all.length; i++) {
+    if (all[i].shadowRoot) {
+      var el = deepQuery(sel, all[i].shadowRoot);
+      if (el) return el;
+    }
+  }
+  return null;
+}`
+
 // CdpCmd manages Chrome browser tabs in running containers
 type CdpCmd struct {
 	Open       CdpOpenCmd       `cmd:"" help:"Open a URL in the container's Chrome browser"`
@@ -26,6 +46,7 @@ type CdpCmd struct {
 	Eval       CdpEvalCmd       `cmd:"" help:"Evaluate JavaScript expression"`
 	Wait       CdpWaitCmd       `cmd:"" help:"Wait for an element to appear"`
 	Raw        CdpRawCmd        `cmd:"" help:"Send a raw CDP command"`
+	Coords     CdpCoordsCmd     `cmd:"" help:"Show element coordinates in viewport and desktop systems"`
 }
 
 // CdpOpenCmd opens a URL in the container's Chrome browser
@@ -160,22 +181,7 @@ func (c *CdpCloseCmd) Run() error {
 // resolveCdpContainer resolves the engine and container name, verifying the container is running.
 // Use "." as image name for local mode (direct connection to localhost).
 func resolveCdpContainer(image, instance string) (engine, name string, err error) {
-	if image == "." {
-		return "", "", nil
-	}
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return "", "", err
-	}
-	dir, _ := os.Getwd()
-	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
-	engine = EngineBinary(runEngine)
-	name = containerNameInstance(imageName, instance)
-	if !containerRunning(engine, name) {
-		return "", "", fmt.Errorf("container %s is not running", name)
-	}
-	return engine, name, nil
+	return resolveContainer(image, instance)
 }
 
 // resolveDevToolsURL inspects the container's port mapping for port 9222
@@ -427,6 +433,7 @@ type CdpClickCmd struct {
 	TabID    string `arg:"" help:"Tab ID (from browser list)"`
 	Selector string `arg:"" help:"CSS selector of element to click"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
+	VNC      bool   `long:"vnc" help:"Deliver click via VNC instead of CDP (translates viewport coords to desktop coords)"`
 }
 
 func (c *CdpClickCmd) Run() error {
@@ -436,13 +443,15 @@ func (c *CdpClickCmd) Run() error {
 	}
 	defer client.Close()
 
-	// Find element and get its center coordinates.
+	// Find element (piercing shadow DOM), scroll into view, and get its center coordinates.
 	js := fmt.Sprintf(`(function() {
-		const el = document.querySelector(%s);
+		%s
+		const el = deepQuery(%s);
 		if (!el) return JSON.stringify({error: 'Element not found'});
+		el.scrollIntoViewIfNeeded();
 		const rect = el.getBoundingClientRect();
 		return JSON.stringify({x: rect.x + rect.width/2, y: rect.y + rect.height/2});
-	})()`, jsQuote(c.Selector))
+	})()`, deepQueryJS, jsQuote(c.Selector))
 
 	result, err := cdpEvaluate(client, js)
 	if err != nil {
@@ -459,6 +468,27 @@ func (c *CdpClickCmd) Run() error {
 	}
 	if coords.Error != "" {
 		return fmt.Errorf("%s", coords.Error)
+	}
+
+	// If --vnc is set, translate viewport coords to desktop coords and click via VNC.
+	if c.VNC {
+		offset, err := cdpGetWindowOffset(client)
+		if err != nil {
+			return fmt.Errorf("getting window offset for VNC translation: %w", err)
+		}
+		desktopX := uint16(coords.X + offset.ScreenX)
+		desktopY := uint16(coords.Y + offset.ScreenY + offset.ChromeHeight)
+		vncClient, err := connectVNC(c.Image, c.Instance)
+		if err != nil {
+			return fmt.Errorf("connecting to VNC: %w", err)
+		}
+		defer vncClient.Close()
+		if err := vncClient.PointerClick(desktopX, desktopY, 1); err != nil {
+			return fmt.Errorf("VNC click at (%d, %d): %w", desktopX, desktopY, err)
+		}
+		fmt.Fprintf(os.Stderr, "Clicked element at viewport (%.0f, %.0f) → desktop (%d, %d) via VNC\n",
+			coords.X, coords.Y, desktopX, desktopY)
+		return nil
 	}
 
 	// Dispatch mouse events: press then release.
@@ -479,9 +509,7 @@ func (c *CdpClickCmd) Run() error {
 		return fmt.Errorf("dispatching mouseReleased: %w", err)
 	}
 
-	// Wait briefly for navigation/effects, then report new page state.
-	time.Sleep(1 * time.Second)
-
+	// Report new page state (best-effort).
 	info, err := cdpEvaluate(client, `JSON.stringify({title: document.title, url: location.href})`)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Clicked element at (%.0f, %.0f)\n", coords.X, coords.Y)
@@ -516,26 +544,55 @@ func (c *CdpTypeCmd) Run() error {
 	}
 	defer client.Close()
 
+	// Focus the element (piercing shadow DOM) and clear its value.
 	js := fmt.Sprintf(`(function() {
-		const el = document.querySelector(%s);
+		%s
+		const el = deepQuery(%s);
 		if (!el) return 'Element not found';
+		el.scrollIntoViewIfNeeded();
 		el.focus();
-		el.value = %s;
-		el.dispatchEvent(new Event('input', {bubbles: true}));
-		el.dispatchEvent(new Event('change', {bubbles: true}));
+		el.value = '';
 		return 'ok';
-	})()`, jsQuote(c.Selector), jsQuote(c.Text))
+	})()`, deepQueryJS, jsQuote(c.Selector))
 
 	result, err := cdpEvaluate(client, js)
 	if err != nil {
-		return fmt.Errorf("typing text: %w", err)
+		return fmt.Errorf("focusing element: %w", err)
 	}
 	if result != "ok" {
 		return fmt.Errorf("%s", result)
 	}
 
+	// Type each character via Input.dispatchKeyEvent (matches Puppeteer behavior).
+	for _, ch := range c.Text {
+		key := string(ch)
+		if err := cdpDispatchKeyEvent(client, "keyDown", key); err != nil {
+			return fmt.Errorf("dispatching keyDown: %w", err)
+		}
+		if err := cdpDispatchKeyEvent(client, "char", key); err != nil {
+			return fmt.Errorf("dispatching char: %w", err)
+		}
+		if err := cdpDispatchKeyEvent(client, "keyUp", key); err != nil {
+			return fmt.Errorf("dispatching keyUp: %w", err)
+		}
+	}
+
 	fmt.Fprintf(os.Stderr, "Typed text into %s\n", c.Selector)
 	return nil
+}
+
+// cdpDispatchKeyEvent sends a single CDP Input.dispatchKeyEvent.
+func cdpDispatchKeyEvent(client *CDPClient, eventType, key string) error {
+	params := map[string]any{
+		"type": eventType,
+		"key":  key,
+	}
+	// Only "char" events carry the text field.
+	if eventType == "char" {
+		params["text"] = key
+	}
+	_, err := client.Call("Input.dispatchKeyEvent", params)
+	return err
 }
 
 // CdpEvalCmd evaluates a JavaScript expression in a tab.
@@ -577,7 +634,7 @@ func (c *CdpWaitCmd) Run() error {
 	}
 	defer client.Close()
 
-	js := fmt.Sprintf(`document.querySelector(%s) !== null`, jsQuote(c.Selector))
+	js := fmt.Sprintf(`(function() { %s; return deepQuery(%s) !== null; })()`, deepQueryJS, jsQuote(c.Selector))
 
 	deadline := time.Now().Add(c.Timeout)
 	for {
@@ -645,4 +702,100 @@ func (c *CdpRawCmd) Run() error {
 func jsQuote(s string) string {
 	b, _ := json.Marshal(s)
 	return string(b)
+}
+
+// windowOffset holds Chrome's position on the desktop.
+type windowOffset struct {
+	ScreenX      float64 `json:"screenX"`
+	ScreenY      float64 `json:"screenY"`
+	ChromeHeight float64 `json:"chromeHeight"`
+}
+
+// cdpGetWindowOffset queries the Chrome window's desktop position and chrome UI height via CDP JS.
+func cdpGetWindowOffset(client *CDPClient) (windowOffset, error) {
+	result, err := cdpEvaluate(client, `JSON.stringify({screenX: window.screenX, screenY: window.screenY, chromeHeight: window.outerHeight - window.innerHeight})`)
+	if err != nil {
+		return windowOffset{}, fmt.Errorf("querying window offset: %w", err)
+	}
+	var offset windowOffset
+	if err := json.Unmarshal([]byte(result), &offset); err != nil {
+		return windowOffset{}, fmt.Errorf("parsing window offset: %w", err)
+	}
+	return offset, nil
+}
+
+// CdpCoordsCmd shows element coordinates in both viewport and desktop coordinate systems.
+type CdpCoordsCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	TabID    string `arg:"" help:"Tab ID (from browser list)"`
+	Selector string `arg:"" help:"CSS selector of element"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+	AppID    string `long:"app-id" default:"google-chrome" help:"Sway app_id for window geometry lookup"`
+}
+
+func (c *CdpCoordsCmd) Run() error {
+	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	// Find element and get its bounding rect.
+	js := fmt.Sprintf(`(function() {
+		%s
+		const el = deepQuery(%s);
+		if (!el) return JSON.stringify({error: 'Element not found'});
+		el.scrollIntoViewIfNeeded();
+		const rect = el.getBoundingClientRect();
+		return JSON.stringify({x: rect.x, y: rect.y, cx: rect.x + rect.width/2, cy: rect.y + rect.height/2, w: rect.width, h: rect.height});
+	})()`, deepQueryJS, jsQuote(c.Selector))
+
+	result, err := cdpEvaluate(client, js)
+	if err != nil {
+		return fmt.Errorf("finding element: %w", err)
+	}
+
+	var rect struct {
+		X     float64 `json:"x"`
+		Y     float64 `json:"y"`
+		CX    float64 `json:"cx"`
+		CY    float64 `json:"cy"`
+		W     float64 `json:"w"`
+		H     float64 `json:"h"`
+		Error string  `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(result), &rect); err != nil {
+		return fmt.Errorf("parsing element position: %w", err)
+	}
+	if rect.Error != "" {
+		return fmt.Errorf("%s", rect.Error)
+	}
+
+	fmt.Printf("Element:  %s (%.0fx%.0f)\n", c.Selector, rect.W, rect.H)
+	fmt.Printf("Viewport: x=%.0f y=%.0f  center=(%.0f, %.0f)\n", rect.X, rect.Y, rect.CX, rect.CY)
+
+	// Get CDP-based desktop offset.
+	offset, err := cdpGetWindowOffset(client)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not get CDP window offset: %v\n", err)
+	} else {
+		desktopX := rect.CX + offset.ScreenX
+		desktopY := rect.CY + offset.ScreenY + offset.ChromeHeight
+		fmt.Printf("Desktop:  x=%.0f y=%.0f  center=(%.0f, %.0f)  (via window.screenX/screenY, chromeHeight=%.0f)\n",
+			rect.X+offset.ScreenX, rect.Y+offset.ScreenY+offset.ChromeHeight, desktopX, desktopY, offset.ChromeHeight)
+	}
+
+	// Get sway-based desktop offset.
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err == nil && engine != "" {
+		swayRect, err := FindWindowRect(engine, name, c.AppID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not get sway window rect for %s: %v\n", c.AppID, err)
+		} else {
+			fmt.Printf("Sway:     window at (%d, %d) size %dx%d  (app_id=%s)\n",
+				swayRect.X, swayRect.Y, swayRect.Width, swayRect.Height, c.AppID)
+		}
+	}
+
+	return nil
 }

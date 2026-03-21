@@ -25,14 +25,17 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     export __GLX_VENDOR_LIBRARY_NAME=nvidia
 fi
 
+# Resolve the real Chrome binary — avoids recursion when google-chrome-stable
+# in ~/.local/bin is a symlink back to this wrapper.
+CHROME_BIN=/opt/google/chrome/chrome
+
 # Windows platform identity — overrides User-Agent header and navigator.userAgent
-CHROME_VER=$(google-chrome-stable --version | awk '{print $NF}')
+CHROME_VER=$($CHROME_BIN --version | awk '{print $NF}')
 CHROME_MAJOR=${CHROME_VER%%.*}
 WIN_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36"
 WIN_EXT="$HOME/.local/share/chrome-windows"
 
-exec google-chrome-stable $CHROME_FLAGS \
-    --disable-background-networking \
+exec $CHROME_BIN $CHROME_FLAGS \
     --enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks \
     --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins='*' \

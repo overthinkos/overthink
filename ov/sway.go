@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -260,22 +261,7 @@ func (c *SwayResolutionCmd) Run() error {
 // resolveSwayContainer resolves the engine and container name.
 // Use "." as image name for local mode (direct swaymsg execution).
 func resolveSwayContainer(image, instance string) (engine, name string, err error) {
-	if image == "." {
-		return "", "", nil
-	}
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return "", "", err
-	}
-	dir, _ := os.Getwd()
-	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
-	engine = EngineBinary(runEngine)
-	name = containerNameInstance(imageName, instance)
-	if !containerRunning(engine, name) {
-		return "", "", fmt.Errorf("container %s is not running", name)
-	}
-	return engine, name, nil
+	return resolveContainer(image, instance)
 }
 
 // swaymsgShellCmd builds a shell command string that discovers SWAYSOCK and runs swaymsg.
@@ -302,6 +288,68 @@ func execSwaymsg(engine, containerName string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// captureSwaymsg runs swaymsg and captures stdout as bytes (instead of piping to os.Stdout).
+func captureSwaymsg(engine, containerName string, args ...string) ([]byte, error) {
+	shellCmd := swaymsgShellCmd(args...)
+	var cmd *exec.Cmd
+	if engine == "" {
+		cmd = exec.Command("sh", "-c", shellCmd)
+	} else {
+		cmd = exec.Command(engine, "exec", containerName, "sh", "-c", shellCmd)
+	}
+	return cmd.Output()
+}
+
+// SwayRect represents a window's position and size on the desktop.
+type SwayRect struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type swayNode struct {
+	Name          string     `json:"name"`
+	AppID         string     `json:"app_id"`
+	Rect          SwayRect   `json:"rect"`
+	Nodes         []swayNode `json:"nodes"`
+	FloatingNodes []swayNode `json:"floating_nodes"`
+}
+
+// FindWindowRect searches the sway tree for a window matching appID and returns its rect.
+func FindWindowRect(engine, containerName, appID string) (SwayRect, error) {
+	data, err := captureSwaymsg(engine, containerName, "-t", "get_tree")
+	if err != nil {
+		return SwayRect{}, fmt.Errorf("querying sway tree: %w", err)
+	}
+	var root swayNode
+	if err := json.Unmarshal(data, &root); err != nil {
+		return SwayRect{}, fmt.Errorf("parsing sway tree: %w", err)
+	}
+	rect, found := searchSwayNode(&root, appID)
+	if !found {
+		return SwayRect{}, fmt.Errorf("window with app_id %q not found in sway tree", appID)
+	}
+	return rect, nil
+}
+
+func searchSwayNode(node *swayNode, appID string) (SwayRect, bool) {
+	if node.AppID == appID && node.Rect.Width > 0 {
+		return node.Rect, true
+	}
+	for i := range node.Nodes {
+		if r, ok := searchSwayNode(&node.Nodes[i], appID); ok {
+			return r, true
+		}
+	}
+	for i := range node.FloatingNodes {
+		if r, ok := searchSwayNode(&node.FloatingNodes[i], appID); ok {
+			return r, true
+		}
+	}
+	return SwayRect{}, false
 }
 
 // shellQuote wraps a string in single quotes for shell safety.

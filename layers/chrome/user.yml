@@ -6,6 +6,10 @@ tasks:
       - mkdir -p ~/.local/bin
       - cp /ctx/chrome-wrapper ~/.local/bin/chrome-wrapper
       - chmod +x ~/.local/bin/chrome-wrapper
+      # Ensure Chrome always launches through chrome-wrapper (CDP flags, user-agent,
+      # etc.) regardless of how it's started (sway exec, desktop file, app menu,
+      # or Chrome's own self-restart after close/crash).
+      - ln -sf chrome-wrapper ~/.local/bin/google-chrome-stable
       - cp /ctx/browser-open ~/.local/bin/browser-open
       - chmod +x ~/.local/bin/browser-open
       - mkdir -p ~/.local/share/chrome-windows

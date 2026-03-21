@@ -939,22 +939,7 @@ func (c *VNCClient) decodeZRLETile(img *image.RGBA, tx, ty, tw, th, cpLen int) e
 // --- Container resolution helpers (mirror browser.go pattern) ---
 
 func resolveVNCContainer(imageName, instance string) (engine, name string, err error) {
-	if imageName == "." {
-		return "", "", nil
-	}
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return "", "", err
-	}
-	dir, _ := os.Getwd()
-	img := resolveImageName(imageName)
-	runEngine := ResolveImageEngineFromDir(dir, img, rt.RunEngine)
-	engine = EngineBinary(runEngine)
-	name = containerNameInstance(img, instance)
-	if !containerRunning(engine, name) {
-		return "", "", fmt.Errorf("container %s is not running", name)
-	}
-	return engine, name, nil
+	return resolveContainer(imageName, instance)
 }
 
 func resolveVNCAddress(engine, containerName string) (string, error) {

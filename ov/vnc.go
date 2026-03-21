@@ -58,21 +58,58 @@ type VncClickCmd struct {
 	Y        uint16 `arg:"" help:"Y coordinate"`
 	Button   string `long:"button" default:"left" help:"Mouse button (left, right, middle)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
+	FromCDP  string `long:"from-cdp" help:"Translate from CDP viewport coords using this tab ID (queries window.screenX/screenY)"`
+	FromSway string `long:"from-sway" help:"Translate from window-relative coords using sway window rect for this app_id"`
 }
 
 func (c *VncClickCmd) Run() error {
-	client, err := connectVNC(c.Image, c.Instance)
+	clickX, clickY := c.X, c.Y
+
+	// Translate from CDP viewport coordinates to desktop coordinates.
+	if c.FromCDP != "" {
+		client, err := connectTab(c.Image, c.FromCDP, c.Instance)
+		if err != nil {
+			return fmt.Errorf("connecting to CDP tab %s for coordinate translation: %w", c.FromCDP, err)
+		}
+		offset, err := cdpGetWindowOffset(client)
+		client.Close()
+		if err != nil {
+			return fmt.Errorf("getting CDP window offset: %w", err)
+		}
+		clickX = uint16(float64(c.X) + offset.ScreenX)
+		clickY = uint16(float64(c.Y) + offset.ScreenY + offset.ChromeHeight)
+		fmt.Fprintf(os.Stderr, "Translated viewport (%d, %d) → desktop (%d, %d) via CDP tab %s\n",
+			c.X, c.Y, clickX, clickY, c.FromCDP)
+	}
+
+	// Translate from window-relative coordinates to desktop coordinates via sway.
+	if c.FromSway != "" {
+		engine, name, err := resolveContainer(c.Image, c.Instance)
+		if err != nil {
+			return fmt.Errorf("resolving container for sway: %w", err)
+		}
+		rect, err := FindWindowRect(engine, name, c.FromSway)
+		if err != nil {
+			return err
+		}
+		clickX = uint16(int(c.X) + rect.X)
+		clickY = uint16(int(c.Y) + rect.Y)
+		fmt.Fprintf(os.Stderr, "Translated window-relative (%d, %d) → desktop (%d, %d) via sway app_id=%s\n",
+			c.X, c.Y, clickX, clickY, c.FromSway)
+	}
+
+	vncClient, err := connectVNC(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer vncClient.Close()
 
-	if err := client.PointerClick(c.X, c.Y, vncButton(c.Button)); err != nil {
-		return fmt.Errorf("clicking at (%d, %d): %w", c.X, c.Y, err)
+	if err := vncClient.PointerClick(clickX, clickY, vncButton(c.Button)); err != nil {
+		return fmt.Errorf("clicking at (%d, %d): %w", clickX, clickY, err)
 	}
 	time.Sleep(50 * time.Millisecond)
 
-	fmt.Fprintf(os.Stderr, "Clicked %s at (%d, %d)\n", c.Button, c.X, c.Y)
+	fmt.Fprintf(os.Stderr, "Clicked %s at (%d, %d)\n", c.Button, clickX, clickY)
 	return nil
 }
 

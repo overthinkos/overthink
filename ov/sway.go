@@ -271,7 +271,7 @@ func swaymsgShellCmd(args ...string) string {
 		quoted[i] = shellQuote(a)
 	}
 	return fmt.Sprintf(
-		`export SWAYSOCK=$(ls /tmp/sway-ipc.*.sock 2>/dev/null | head -1) && [ -n "$SWAYSOCK" ] && swaymsg %s`,
+		`export SWAYSOCK=$(ls -t /tmp/sway-ipc.*.sock 2>/dev/null | head -1) && [ -n "$SWAYSOCK" ] && swaymsg %s`,
 		strings.Join(quoted, " "),
 	)
 }

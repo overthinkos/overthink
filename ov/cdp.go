@@ -77,7 +77,7 @@ func (c *CdpOpenCmd) Run() error {
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("opening URL in Chrome: %w", err)
+		return diagnoseCDP(engine, name, c.Image, fmt.Errorf("opening URL in Chrome: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -119,7 +119,7 @@ func (c *CdpListCmd) Run() error {
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(devtoolsURL + "/json")
 	if err != nil {
-		return fmt.Errorf("failed to connect to Chrome DevTools: %w", err)
+		return diagnoseCDP(engine, name, c.Image, fmt.Errorf("failed to connect to Chrome DevTools: %w", err))
 	}
 	defer resp.Body.Close()
 
@@ -244,6 +244,7 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 }
 
 // connectTab resolves container -> devtools URL -> tab WS URL -> CDPClient.
+// On connection failure, runs CDP diagnostics to help identify the cause.
 func connectTab(image, tabID, instance string) (*CDPClient, error) {
 	engine, name, err := resolveCdpContainer(image, instance)
 	if err != nil {
@@ -257,10 +258,14 @@ func connectTab(image, tabID, instance string) (*CDPClient, error) {
 
 	wsURL, err := resolveTabWS(devtoolsURL, tabID)
 	if err != nil {
-		return nil, err
+		return nil, diagnoseCDP(engine, name, image, err)
 	}
 
-	return NewCDPClient(wsURL)
+	client, err := NewCDPClient(wsURL)
+	if err != nil {
+		return nil, diagnoseCDP(engine, name, image, err)
+	}
+	return client, nil
 }
 
 // cdpEvaluate calls Runtime.evaluate and returns the result value as a string.
@@ -798,4 +803,84 @@ func (c *CdpCoordsCmd) Run() error {
 	}
 
 	return nil
+}
+
+// diagnoseCDP runs diagnostic checks when a CDP connection fails and returns
+// an enriched error with actionable information printed to stderr.
+func diagnoseCDP(engine, containerName, image string, origErr error) error {
+	if engine == "" {
+		// Local mode — minimal diagnostics
+		fmt.Fprintf(os.Stderr, "\nCDP connection failed: %v\n\n", origErr)
+		fmt.Fprintf(os.Stderr, "Diagnostics:\n")
+
+		// Check if anything is listening on 9222
+		out, err := exec.Command("ss", "-tlnp", "sport", "=", ":9222").Output()
+		if err == nil && strings.Contains(string(out), ":9222") {
+			fmt.Fprintf(os.Stderr, "  Port 9222:  bound\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "  Port 9222:  not bound ← Chrome is likely not running\n")
+		}
+		fmt.Fprintf(os.Stderr, "\nHint: start Chrome with: chrome-wrapper &\n")
+		return origErr
+	}
+
+	fmt.Fprintf(os.Stderr, "\nCDP connection failed: %v\n\n", origErr)
+	fmt.Fprintf(os.Stderr, "Diagnostics:\n")
+	fmt.Fprintf(os.Stderr, "  Container:  running (%s)\n", containerName)
+
+	// Check Chrome process
+	chromeAlive := false
+	cmd := exec.Command(engine, "exec", containerName, "pgrep", "-f", "chrome.*remote-debugging-port")
+	if pidOut, err := cmd.Output(); err == nil {
+		pid := strings.TrimSpace(string(pidOut))
+		if pid != "" {
+			chromeAlive = true
+			firstPid := strings.Split(pid, "\n")[0]
+			fmt.Fprintf(os.Stderr, "  Chrome:     running (pid %s)\n", firstPid)
+		}
+	}
+	if !chromeAlive {
+		fmt.Fprintf(os.Stderr, "  Chrome:     NOT RUNNING ← likely cause\n")
+	}
+
+	// Check relay
+	cmd = exec.Command(engine, "exec", containerName, "supervisorctl", "status", "relay-9222")
+	if relayOut, err := cmd.Output(); err == nil {
+		line := strings.TrimSpace(string(relayOut))
+		if strings.Contains(line, "RUNNING") {
+			fmt.Fprintf(os.Stderr, "  Relay 9222: running\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "  Relay 9222: %s\n", line)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "  Relay 9222: unknown (no supervisord?)\n")
+	}
+
+	// Check port binding inside container
+	cmd = exec.Command(engine, "exec", containerName, "ss", "-tlnp", "sport", "=", ":9222")
+	if portOut, err := cmd.Output(); err == nil {
+		if strings.Contains(string(portOut), ":9222") {
+			fmt.Fprintf(os.Stderr, "  Port 9222:  bound\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "  Port 9222:  not bound\n")
+		}
+	}
+
+	// Actionable hints
+	imgArg := image
+	if imgArg == "" {
+		imgArg = "<image>"
+	}
+	fmt.Fprintln(os.Stderr)
+	if !chromeAlive {
+		fmt.Fprintf(os.Stderr, "Hint: Chrome is not running. To start it:\n")
+		fmt.Fprintf(os.Stderr, "  ov sway exec %s chrome-wrapper\n", imgArg)
+	} else {
+		fmt.Fprintf(os.Stderr, "Hint: Chrome is running but CDP is not responding.\n")
+		fmt.Fprintf(os.Stderr, "  Kill and restart:\n")
+		fmt.Fprintf(os.Stderr, "  ov shell %s -c \"pkill -9 -f 'chrome.*remote-debugging'\"\n", imgArg)
+		fmt.Fprintf(os.Stderr, "  ov sway exec %s chrome-wrapper\n", imgArg)
+	}
+
+	return origErr
 }

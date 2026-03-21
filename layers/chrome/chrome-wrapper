@@ -18,8 +18,32 @@ rm -f "$HOME/.chrome-debug/SingletonLock" \
       "$HOME/.chrome-debug/SingletonSocket" \
       "$HOME/.chrome-debug/SingletonCookie"
 
-# NVIDIA GPU detection — set EGL/GBM vars so Chrome uses the GPU
-if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+# Clean GPU shader caches — corrupted caches from hard kills (pkill -9)
+# cause SIGILL on next start. Caches rebuild automatically.
+rm -rf "$HOME/.chrome-debug/ShaderCache" \
+       "$HOME/.chrome-debug/GpuCache" \
+       "$HOME/.chrome-debug/GPUCache"
+
+# GPU setup: detect compositor renderer and NVIDIA hardware.
+# On NVIDIA headless, sway uses pixman (software) because wayvnc cannot
+# capture GPU-rendered buffers. Chrome must not have NVIDIA EGL vars or VAAPI
+# flags — otherwise the renderer crashes with SIGILL. Do NOT use --disable-gpu
+# as it breaks CDP tab creation (PUT /json/new crashes Chrome).
+VAAPI_FLAGS="--enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
+SWAY_PID=$(pgrep -x sway | head -1)
+COMPOSITOR_RENDERER=""
+if [ -n "$SWAY_PID" ]; then
+    COMPOSITOR_RENDERER=$(cat /proc/$SWAY_PID/environ 2>/dev/null | tr '\0' '\n' | grep ^WLR_RENDERER= | cut -d= -f2)
+fi
+
+if [ "$COMPOSITOR_RENDERER" = "pixman" ]; then
+    # Software compositor — strip NVIDIA EGL vars and VAAPI flags.
+    # Do NOT use --disable-gpu: it breaks CDP tab creation (PUT /json/new crashes Chrome).
+    # Without NVIDIA vars, Chrome falls back to software rendering gracefully.
+    CHROME_FLAGS=$(echo "$CHROME_FLAGS" | sed 's/,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks//g')
+    VAAPI_FLAGS=""
+elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    # GPU compositor with NVIDIA — set EGL/GBM vars for hardware acceleration.
     export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
     export GBM_BACKEND=nvidia-drm
     export __GLX_VENDOR_LIBRARY_NAME=nvidia
@@ -36,9 +60,10 @@ WIN_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, lik
 WIN_EXT="$HOME/.local/share/chrome-windows"
 
 exec $CHROME_BIN $CHROME_FLAGS \
-    --enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks \
+    $VAAPI_FLAGS \
     --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins='*' \
     --user-data-dir="$HOME/.chrome-debug" \
     --user-agent="$WIN_UA" \
-    --load-extension="$WIN_EXT"
+    --load-extension="$WIN_EXT" \
+    --disable-session-crashed-bubble

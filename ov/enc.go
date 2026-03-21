@@ -426,7 +426,7 @@ func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
 	}
 
 	// Label fallback
-	engine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	engine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
 	imageRef := fmt.Sprintf("%s:latest", imageName)
 	meta, metaErr := ExtractMetadata(engine, imageRef)
 	if metaErr != nil {

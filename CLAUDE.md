@@ -9,7 +9,11 @@ Built on `supervisord` and `ov` (Go CLI). Supports both Docker and Podman as bui
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation and building. Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`. Source: `ov/`. Registry inspection via go-containerregistry. `ov shell`/`ov start`/`ov stop`/`ov merge`/`ov enable` use the configured engine (Docker or Podman).
+**`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
+- **Build mode:** Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`.
+- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov enable`/`start`/`stop`/`status`/`logs`/`update`/`remove`/`seed` all work standalone with just the container image.
+
+Source: `ov/`. Registry inspection via go-containerregistry.
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
@@ -119,6 +123,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `build`, `merge` | `/ov:build` |
 | `shell` | `/ov:shell` |
 | `start`, `stop`, `enable`, `disable`, `status`, `logs`, `update`, `remove`, `seed` | `/ov:service` |
+| `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` (supervisord) | `/ov:service` |
 | `cdp` | `/ov:cdp` |
 | `sway` | `/ov:sway` |
@@ -139,6 +144,9 @@ Skills: `/ov:layer` -> `/ov-layers:<similar>` (pattern reference) -> `/ov:image`
 Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
+
+**Deploy a service:** `ov enable <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet from image labels + deploy.yml. No `images.yml` needed for deployment.
+Skills: `/ov:deploy` -> `/ov:service` (lifecycle)
 
 **Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov config set engine.build podman`.
 

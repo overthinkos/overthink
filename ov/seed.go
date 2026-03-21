@@ -19,72 +19,46 @@ func (c *SeedCmd) Run() error {
 		return err
 	}
 
-	dir, _ := os.Getwd()
+	// Resolve from image labels (no images.yml dependency)
+	engine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
+	ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
+	meta, metaErr := ExtractMetadata(engine, ref)
+	if metaErr != nil {
+		return metaErr
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", ref)
+	}
+	dc, _ := LoadDeployConfig()
+	MergeDeployOntoMetadata(meta, dc)
+
+	if len(meta.BindMounts) == 0 {
+		fmt.Fprintln(os.Stderr, "No bind mounts configured")
+		return nil
+	}
 
 	var imageRef string
-	var uid, gid int
-	var bindMounts []ResolvedBindMount
-	var volPaths map[string]string
-
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused")
-		if err != nil {
-			return err
-		}
-		layers, err := ScanAllLayersWithConfig(dir, cfg)
-		if err != nil {
-			return err
-		}
-		img := cfg.Images[c.Image]
-		if len(img.BindMounts) == 0 {
-			fmt.Fprintln(os.Stderr, "No bind mounts configured")
-			return nil
-		}
-		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-		uid, gid = resolved.UID, resolved.GID
-		volPaths = collectLayerVolumePaths(cfg, layers, c.Image, resolved.Home)
-		bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
+	if meta.Registry != "" {
+		imageRef = fmt.Sprintf("%s/%s:%s", meta.Registry, c.Image, c.Tag)
 	} else {
-		// Label path
-		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
-		ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
-		meta, metaErr := ExtractMetadata(engine, ref)
-		if metaErr != nil {
-			return metaErr
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", ref)
-		}
-		dc, _ := LoadDeployConfig()
-		MergeDeployOntoMetadata(meta, dc)
-
-		if len(meta.BindMounts) == 0 {
-			fmt.Fprintln(os.Stderr, "No bind mounts configured")
-			return nil
-		}
-		if meta.Registry != "" {
-			imageRef = fmt.Sprintf("%s/%s:%s", meta.Registry, c.Image, c.Tag)
-		} else {
-			imageRef = ref
-		}
-		uid, gid = meta.UID, meta.GID
-
-		// Build volume path map from label volumes
-		volPaths = make(map[string]string)
-		for _, vol := range meta.Volumes {
-			shortName := strings.TrimPrefix(vol.VolumeName, "ov-"+c.Image+"-")
-			volPaths[shortName] = vol.ContainerPath
-		}
-
-		var deployMounts []BindMountConfig
-		if dc != nil {
-			if overlay, ok := dc.Images[c.Image]; ok {
-				deployMounts = overlay.BindMounts
-			}
-		}
-		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+		imageRef = ref
 	}
+	uid, gid := meta.UID, meta.GID
+
+	// Build volume path map from label volumes
+	volPaths := make(map[string]string)
+	for _, vol := range meta.Volumes {
+		shortName := strings.TrimPrefix(vol.VolumeName, "ov-"+c.Image+"-")
+		volPaths[shortName] = vol.ContainerPath
+	}
+
+	var deployMounts []BindMountConfig
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deployMounts = overlay.BindMounts
+		}
+	}
+	bindMounts := resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
 
 	seeded := 0
 	for _, bm := range bindMounts {
@@ -100,7 +74,7 @@ func (c *SeedCmd) Run() error {
 
 		fmt.Fprintf(os.Stderr, "%s: seeding from %s ...\n", bm.Name, contPath)
 
-		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
+		engine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
 		args := []string{
 			EngineBinary(engine), "run", "--rm",
 			"-v", fmt.Sprintf("%s:/seed", bm.HostPath),

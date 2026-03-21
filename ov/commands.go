@@ -45,6 +45,19 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	if err != nil {
 		return fmt.Errorf("resolving workspace path: %w", err)
 	}
+
+	// Check deploy.yml for previously saved workspace when using default
+	if c.Workspace == "." {
+		if dc, _ := LoadDeployConfig(); dc != nil {
+			if entry, ok := dc.Images[c.Image]; ok && entry.Workspace != "" {
+				if wInfo, wErr := os.Stat(entry.Workspace); wErr == nil && wInfo.IsDir() {
+					absWorkspace = entry.Workspace
+					fmt.Fprintf(os.Stderr, "Using workspace from deploy.yml: %s\n", absWorkspace)
+				}
+			}
+		}
+	}
+
 	info, err := os.Stat(absWorkspace)
 	if err != nil {
 		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
@@ -59,129 +72,54 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		LogDetectedDevices(detected)
 	}
 
-	var imageRef string
-	var ports []string
-	var volumes []VolumeMount
-	var bindMounts []ResolvedBindMount
-	var security SecurityConfig
-	var network string
-	uid, gid := 1000, 1000 // defaults
-
-	// Try images.yml first, fall back to image labels
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused")
-		if err != nil {
-			return err
-		}
-		uid, gid = resolved.UID, resolved.GID
-		layers, err := ScanAllLayersWithConfig(dir, cfg)
-		if err != nil {
-			return err
-		}
-		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
-		if err != nil {
-			return err
-		}
-		security = CollectSecurity(cfg, layers, c.Image)
-		// Resolve bind mounts
-		img := cfg.Images[c.Image]
-		if len(img.BindMounts) > 0 {
-			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
-		}
-		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-		ports = resolved.Ports
-		network = resolved.Network
-	} else {
-		imageRef = resolveShellImageRef("", c.Image, c.Tag)
-		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-		if err := EnsureImage(imageRef, podmanRT); err != nil {
-			return err
-		}
-		meta, err := ExtractMetadata("podman", imageRef)
-		if err != nil {
-			return err
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
-		}
-		// Apply deploy.yml overrides
-		dc, _ := LoadDeployConfig()
-		MergeDeployOntoMetadata(meta, dc)
-
-		uid = meta.UID
-		gid = meta.GID
-		ports = meta.Ports
-		volumes = meta.Volumes
-		security = meta.Security
-		network = meta.Network
-
-		// Resolve bind mounts from labels
-		var deployMounts []BindMountConfig
-		if dc != nil {
-			if overlay, ok := dc.Images[c.Image]; ok {
-				deployMounts = overlay.BindMounts
-			}
-		}
-		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
-
-		if meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
-		}
+	// Always resolve from image labels (no images.yml dependency for deployment)
+	imageRef := resolveShellImageRef("", c.Image, c.Tag)
+	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
+	if err := EnsureImage(imageRef, podmanRT); err != nil {
+		return err
+	}
+	meta, err := ExtractMetadata("podman", imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
 	}
 
-	if cfgErr == nil {
-		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-		if err := EnsureImage(imageRef, podmanRT); err != nil {
-			return err
+	// Apply deploy.yml overrides onto label metadata
+	dc, _ := LoadDeployConfig()
+	MergeDeployOntoMetadata(meta, dc)
+
+	uid, gid := meta.UID, meta.GID
+	ports := meta.Ports
+	volumes := meta.Volumes
+	security := meta.Security
+	network := meta.Network
+
+	// Resolve bind mounts from labels + deploy.yml host paths
+	var deployMounts []BindMountConfig
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deployMounts = overlay.BindMounts
 		}
 	}
+	bindMounts := resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
 
-	// Resolve tunnel config
+	if meta.Registry != "" {
+		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+	}
+
+	// Resolve tunnel config from labels
 	var tunnelCfg *TunnelConfig
-	if cfgErr == nil {
-		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
-		if resolveErr == nil && resolved.Tunnel != nil {
-			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
-			if scanErr == nil {
-				tunnelYAML := cfg.Images[c.Image].Tunnel
-				if tunnelYAML == nil {
-					tunnelYAML = cfg.Defaults.Tunnel
-				}
-				tunnelCfg = ResolveTunnelConfig(tunnelYAML, c.Image, resolved.DNS, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
-			}
-		}
-	} else {
-		// Label path: tunnel from metadata
-		meta, metaErr := ExtractMetadata("podman", imageRef)
-		if metaErr == nil && meta != nil && meta.Tunnel != nil {
-			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc)
-			tunnelCfg = TunnelConfigFromMetadata(meta)
-		}
+	if meta.Tunnel != nil {
+		tunnelCfg = TunnelConfigFromMetadata(meta)
 	}
 
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
-	// Resolve env vars
-	var deployEnv []string
-	var deployEnvFile string
-	if cfgErr == nil {
-		img := cfg.Images[c.Image]
-		deployEnv = img.Env
-		deployEnvFile = img.EnvFile
-	} else {
-		// Use env from labels (deploy.yml already merged above)
-		meta, metaErr := ExtractMetadata("podman", imageRef)
-		if metaErr == nil && meta != nil {
-			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc)
-			deployEnv = meta.Env
-		}
-	}
-	envVars, envErr := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	// Resolve env vars from labels + deploy.yml + CLI
+	envVars, envErr := ResolveEnvVars(meta.Env, "", absWorkspace, c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -190,8 +128,12 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	var quadletEnvFile string
 	if c.EnvFile != "" {
 		quadletEnvFile, _ = filepath.Abs(c.EnvFile)
-	} else if deployEnvFile != "" {
-		quadletEnvFile = expandHostHome(deployEnvFile)
+	}
+	// Check deploy.yml env_file
+	if quadletEnvFile == "" && dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok && overlay.EnvFile != "" {
+			quadletEnvFile = expandHostHome(overlay.EnvFile)
+		}
 	}
 	// Also check workspace .env for quadlet EnvironmentFile
 	if quadletEnvFile == "" {
@@ -217,10 +159,6 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		ports, err = ApplyPortOverrides(ports, c.PortMap)
 		if err != nil {
 			return err
-		}
-		// Persist overrides to deploy.yml for quadlet restarts
-		if saveErr := SavePortOverride(c.Image, ports); saveErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not save port override to deploy.yml: %v\n", saveErr)
 		}
 	}
 
@@ -255,6 +193,16 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	if quadletEnvFile != "" {
 		qcfg.Env = c.Env
 	}
+
+	// Persist deployment state to deploy.yml (source of truth)
+	saveDeployState(c.Image, SaveDeployStateInput{
+		Workspace: absWorkspace,
+		Ports:     ports,
+		Env:       c.Env,
+		EnvFile:   quadletEnvFile,
+		Network:   resolvedNetwork,
+		Security:  &security,
+	})
 
 	content := generateQuadlet(qcfg)
 
@@ -316,19 +264,10 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
 
-	// Run post_enable hooks
+	// Run post_enable hooks from image labels
 	var hooks *HooksConfig
-	if cfgErr == nil {
-		layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
-		if scanErr == nil {
-			hooks = CollectHooks(cfg, layers, c.Image)
-		}
-	} else {
-		// Label path: hooks from metadata
-		meta, metaErr := ExtractMetadata("podman", imageRef)
-		if metaErr == nil && meta != nil {
-			hooks = meta.Hooks
-		}
+	if meta != nil {
+		hooks = meta.Hooks
 	}
 	if hooks != nil && hooks.PostEnable != "" {
 		containerName := containerNameInstance(c.Image, c.Instance)
@@ -499,9 +438,8 @@ func (c *StatusCmd) Run() error {
 		return nil
 	}
 
-	// Resolve per-image engine
-	dir, _ := os.Getwd()
-	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	// Resolve per-image engine from deploy.yml
+	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 	cmd := exec.Command(engine, "inspect", name)
@@ -561,9 +499,8 @@ func (c *LogsCmd) Run() error {
 		return nil
 	}
 
-	// Resolve per-image engine
-	dir, _ := os.Getwd()
-	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	// Resolve per-image engine from deploy.yml
+	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 	args := []string{"logs"}
@@ -600,27 +537,14 @@ func (c *UpdateCmd) Run() error {
 		return err
 	}
 
-	var imageRef string
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	// Resolve per-image engine
-	runEngine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
-	if cfgErr == nil {
-		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
-		if resolveErr != nil {
-			return resolveErr
-		}
-		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	} else {
-		// Label path
-		engine := runEngine
-		ref := fmt.Sprintf("%s:%s", c.Image, c.Tag)
-		meta, metaErr := ExtractMetadata(engine, ref)
-		if metaErr == nil && meta != nil && meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
-		} else {
-			imageRef = ref
-		}
+	// Resolve per-image engine from deploy.yml
+	runEngine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
+
+	// Resolve image ref from labels (no images.yml dependency)
+	imageRef := fmt.Sprintf("%s:%s", c.Image, c.Tag)
+	meta, metaErr := ExtractMetadata(runEngine, imageRef)
+	if metaErr == nil && meta != nil && meta.Registry != "" {
+		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 	}
 
 	if rt.RunMode == "quadlet" {
@@ -702,6 +626,7 @@ type RemoveCmd struct {
 	Image       string   `arg:"" help:"Image name or remote ref"`
 	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	WithVolumes bool     `name:"volumes" help:"Also remove named volumes"`
+	KeepDeploy  bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
 	Env         []string `short:"e" long:"env" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
@@ -716,9 +641,8 @@ func (c *RemoveCmd) Run() error {
 		return err
 	}
 
-	// Resolve per-image engine
-	dir, _ := os.Getwd()
-	runEngine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	// Resolve per-image engine from deploy.yml
+	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	containerName := containerNameInstance(imageName, c.Instance)
 
@@ -779,6 +703,9 @@ func (c *RemoveCmd) Run() error {
 		if c.WithVolumes {
 			removeVolumes(engine, imageName, c.Instance)
 		}
+		if !c.KeepDeploy && c.Instance == "" {
+			cleanDeployEntry(imageName)
+		}
 		return nil
 	}
 
@@ -795,6 +722,9 @@ func (c *RemoveCmd) Run() error {
 
 	if c.WithVolumes {
 		removeVolumes(engine, imageName, c.Instance)
+	}
+	if !c.KeepDeploy && c.Instance == "" {
+		cleanDeployEntry(imageName)
 	}
 	return nil
 }

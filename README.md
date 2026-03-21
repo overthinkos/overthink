@@ -153,7 +153,7 @@ Overthink covers the full journey from development to production:
 
 **Run** — `ov start <image>` launches a detached service container with supervisord managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov enable <image>` generates a quadlet and registers it with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`.
+**Deploy** — `ov enable <image>` reads the image's embedded labels, generates a quadlet, saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image.
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
@@ -179,10 +179,22 @@ ov merge <image> [--dry-run]           # Merge small layers in built images
 ov shell <image> [-c CMD]               # Interactive shell
 ov start <image> [--build]             # Start service container
 ov stop <image>                        # Stop container
-ov enable <image>                      # Systemd quadlet service
+ov enable <image> [-w PATH]            # Systemd quadlet + save to deploy.yml
 ov disable/status/logs/update <image>  # Service lifecycle
-ov remove <image> [--volumes]          # Remove service (optionally with volumes)
+ov remove <image> [--volumes]          # Remove service + deploy.yml entry
+ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage supervisord services in container
+```
+
+### Deploy Configuration
+
+```
+ov deploy status                       # Audit deploy.yml vs quadlet sync
+ov deploy show [image]                 # Display deploy.yml contents
+ov deploy export [image] [-o FILE]     # Export effective config
+ov deploy import <files> [--replace]   # Import deploy.yml file(s)
+ov deploy reset [image]                # Remove deploy.yml overrides
+ov deploy path                         # Print deploy.yml file path
 ```
 
 ### Virtual Machines

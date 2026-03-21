@@ -238,7 +238,7 @@ func resolveAutoEnable(envVal string, cfgVal *bool) bool {
 	if cfgVal != nil {
 		return *cfgVal
 	}
-	return false
+	return true
 }
 
 // GetConfigValue returns the value for a dot-notation key from the config file.
@@ -510,7 +510,7 @@ func ListConfigValues() ([]configKeySource, error) {
 			}
 			return configKeySource{Key: "auto_enable", Value: val, Source: "config"}
 		}
-		return configKeySource{Key: "auto_enable", Value: "false", Source: "default"}
+		return configKeySource{Key: "auto_enable", Value: "true", Source: "default"}
 	}
 
 	// Resolve encrypted_storage_path default

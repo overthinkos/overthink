@@ -74,6 +74,18 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 	return ResolveImageEngine(cfg, layers, imageName, globalEngine)
 }
 
+// ResolveImageEngineForDeploy resolves the run engine from deploy.yml,
+// falling back to globalEngine. No images.yml dependency.
+func ResolveImageEngineForDeploy(imageName, globalEngine string) string {
+	dc, _ := LoadDeployConfig()
+	if dc != nil {
+		if entry, ok := dc.Images[imageName]; ok && entry.Engine != "" {
+			return entry.Engine
+		}
+	}
+	return globalEngine
+}
+
 // ResolveImageEngineFromMeta returns the engine from image metadata labels,
 // falling back to globalEngine if not set.
 func ResolveImageEngineFromMeta(meta *ImageMetadata, globalEngine string) string {

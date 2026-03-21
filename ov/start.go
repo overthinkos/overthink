@@ -489,10 +489,8 @@ func (c *StopCmd) Run() error {
 		return nil
 	}
 
-	// Resolve per-image engine
-	runEngine := rt.RunEngine
-	dir, _ := os.Getwd()
-	runEngine = ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
+	// Resolve per-image engine from deploy.yml
+	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
 
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)

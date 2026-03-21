@@ -16,6 +16,7 @@ type DeployConfig struct {
 
 // DeployImageConfig holds deployment-specific overrides for a single image.
 type DeployImageConfig struct {
+	Workspace  string            `yaml:"workspace,omitempty"`
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`
 	DNS        string            `yaml:"dns,omitempty"`
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`
@@ -77,6 +78,7 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 			continue // silently ignore unknown images
 		}
 
+		// Note: Workspace is deploy-only, not merged into ImageConfig (build-time).
 		if overlay.Tunnel != nil {
 			img.Tunnel = overlay.Tunnel
 		}
@@ -181,8 +183,8 @@ func resolveBindMountsFromLabels(imageName string, mounts []LabelBindMount, home
 		var hostPath string
 
 		if m.Encrypted {
-			// Encrypted mounts use gocryptfs storage
-			hostPath = filepath.Join(encStoragePath, imageName, m.Name)
+			// Encrypted mounts use gocryptfs storage (same path as resolveBindMounts in enc.go)
+			hostPath = encryptedPlainDir(encStoragePath, imageName, m.Name)
 		} else if dm, ok := deployByName[m.Name]; ok && dm.Host != "" {
 			// Plain mount with deploy.yml host override
 			hostPath = expandHostHome(dm.Host)
@@ -244,6 +246,9 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 		}
 		for name, overlay := range dc.Images {
 			existing := result.Images[name]
+			if overlay.Workspace != "" {
+				existing.Workspace = overlay.Workspace
+			}
 			if overlay.Tunnel != nil {
 				existing.Tunnel = overlay.Tunnel
 			}
@@ -284,6 +289,68 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 func RemoveImageDeploy(dc *DeployConfig, imageName string) {
 	if dc != nil && dc.Images != nil {
 		delete(dc.Images, imageName)
+	}
+}
+
+// cleanDeployEntry removes an image's entry from deploy.yml (best-effort).
+// If deploy.yml becomes empty after removal, the file is deleted.
+func cleanDeployEntry(imageName string) {
+	dc, err := LoadDeployConfig()
+	if err != nil || dc == nil {
+		return
+	}
+	if _, ok := dc.Images[imageName]; !ok {
+		return
+	}
+	RemoveImageDeploy(dc, imageName)
+	if len(dc.Images) == 0 {
+		if path, pathErr := DeployConfigPath(); pathErr == nil {
+			os.Remove(path)
+		}
+	} else if err := SaveDeployConfig(dc); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not clean deploy.yml: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Cleaned deploy.yml entry for %s\n", imageName)
+}
+
+// SaveDeployStateInput holds the deployment parameters to persist.
+type SaveDeployStateInput struct {
+	Workspace string
+	Ports     []string
+	Env       []string
+	EnvFile   string
+	Network   string
+	Security  *SecurityConfig
+}
+
+// saveDeployState persists deployment parameters to deploy.yml (best-effort).
+// Merges onto any existing entry to preserve fields from ov deploy import.
+func saveDeployState(imageName string, input SaveDeployStateInput) {
+	dc, _ := LoadDeployConfig()
+	if dc == nil {
+		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	}
+	entry := dc.Images[imageName] // preserve existing fields (tunnel, bind_mounts, etc.)
+	entry.Workspace = input.Workspace
+	if input.Ports != nil {
+		entry.Ports = input.Ports
+	}
+	if len(input.Env) > 0 {
+		entry.Env = input.Env
+	}
+	if input.EnvFile != "" {
+		entry.EnvFile = input.EnvFile
+	}
+	if input.Network != "" {
+		entry.Network = input.Network
+	}
+	if input.Security != nil {
+		entry.Security = input.Security
+	}
+	dc.Images[imageName] = entry
+	if err := SaveDeployConfig(dc); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}
 }
 

@@ -82,8 +82,8 @@ func TestResolveRuntime_Defaults(t *testing.T) {
 	if rt.RunMode != "direct" {
 		t.Errorf("RunMode = %q, want %q", rt.RunMode, "direct")
 	}
-	if rt.AutoEnable {
-		t.Error("AutoEnable should default to false")
+	if !rt.AutoEnable {
+		t.Error("AutoEnable should default to true")
 	}
 	if rt.BindAddress != "127.0.0.1" {
 		t.Errorf("BindAddress = %q, want %q", rt.BindAddress, "127.0.0.1")
@@ -264,8 +264,8 @@ func TestListConfigValues(t *testing.T) {
 	if vals[2].Key != "engine.rootful" || vals[2].Value != "auto" || vals[2].Source != "default" {
 		t.Errorf("engine.rootful entry: %+v", vals[2])
 	}
-	// auto_enable should be default false
-	if vals[4].Key != "auto_enable" || vals[4].Value != "false" || vals[4].Source != "default" {
+	// auto_enable should be default true
+	if vals[4].Key != "auto_enable" || vals[4].Value != "true" || vals[4].Source != "default" {
 		t.Errorf("auto_enable entry: %+v", vals[4])
 	}
 	// bind_address should be default 127.0.0.1

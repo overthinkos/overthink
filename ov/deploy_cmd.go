@@ -13,6 +13,7 @@ type DeployCmd struct {
 	Export DeployExportCmd `cmd:"" help:"Export effective config as deploy.yml"`
 	Import DeployImportCmd `cmd:"" help:"Import deploy.yml file(s) into config"`
 	Reset  DeployResetCmd  `cmd:"" help:"Remove deploy.yml overrides"`
+	Status DeployStatusCmd `cmd:"" help:"Show sync status between deploy.yml and quadlet files"`
 	Path   DeployPathCmd   `cmd:"" help:"Print deploy.yml file path"`
 }
 
@@ -228,6 +229,61 @@ func (c *DeployPathCmd) Run() error {
 		return err
 	}
 	fmt.Println(path)
+	return nil
+}
+
+// DeployStatusCmd shows sync status between deploy.yml and quadlet files.
+type DeployStatusCmd struct{}
+
+func (c *DeployStatusCmd) Run() error {
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		return err
+	}
+
+	// Enumerate quadlet files
+	qdir, qdirErr := quadletDir()
+	quadletImages := make(map[string]bool)
+	if qdirErr == nil {
+		entries, readErr := os.ReadDir(qdir)
+		if readErr == nil {
+			for _, e := range entries {
+				name := e.Name()
+				if len(name) > 3 && name[:3] == "ov-" && len(name) > 10 && name[len(name)-10:] == ".container" {
+					imageName := name[3 : len(name)-10]
+					quadletImages[imageName] = true
+				}
+			}
+		}
+	}
+
+	deployImages := make(map[string]bool)
+	if dc != nil {
+		for name := range dc.Images {
+			deployImages[name] = true
+		}
+	}
+
+	if len(deployImages) == 0 && len(quadletImages) == 0 {
+		fmt.Println("No deploy.yml entries and no quadlet files found")
+		return nil
+	}
+
+	// Stale deploy.yml entries (no quadlet)
+	for name := range deployImages {
+		if !quadletImages[name] {
+			fmt.Printf("%-40s deploy.yml: yes  quadlet: no   (stale config)\n", name)
+		}
+	}
+	// Both exist
+	for name := range quadletImages {
+		if deployImages[name] {
+			fmt.Printf("%-40s deploy.yml: yes  quadlet: yes  (ok)\n", name)
+		} else {
+			fmt.Printf("%-40s deploy.yml: no   quadlet: yes  (no overrides)\n", name)
+		}
+	}
+
 	return nil
 }
 

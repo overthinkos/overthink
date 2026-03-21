@@ -34,6 +34,7 @@ type CLI struct {
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
 	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
+	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Deploy   DeployCmd   `cmd:"" help:"Manage deploy.yml deployment overrides"`

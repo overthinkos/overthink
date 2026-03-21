@@ -198,6 +198,18 @@ ov vnc mouse <image> <x> <y>           # Move cursor (verify position before cli
 ov sway msg <image> <command>          # Sway compositor control
 ```
 
+### Persistent Sessions
+
+```
+ov tmux shell <image>                  # Persistent shell (survives disconnects)
+ov tmux run <image> -s <name> "cmd"    # Start command in detached tmux session
+ov tmux attach <image> -s <name>       # Attach to session interactively
+ov tmux list <image>                   # List active sessions
+ov tmux capture <image> -s <name>      # Read output (for automation)
+ov tmux send <image> -s <name> "text"  # Send keystrokes
+ov tmux kill <image> -s <name>         # Kill session
+```
+
 ### Deploy Configuration
 
 ```

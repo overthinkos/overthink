@@ -127,6 +127,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `service start/stop/restart/status` (supervisord) | `/ov:service` |
 | `cdp` | `/ov:cdp` |
 | `sway` | `/ov:sway` |
+| `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
 | `alias` | `/ov:alias` |
 | `config` | `/ov:config` |

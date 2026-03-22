@@ -216,7 +216,7 @@ Real tasks chain through skills in predictable patterns:
 
 **Desktop automation:**
 `/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (Wayland + X11: grim, wtype, wlrctl, xdotool, import) -> `/ov:sway` (window: focus, layout)
-Use CDP first. Use WL for screenshots (`ov wl screenshot`), input, and X11 window interaction (`ov wl capture`, `ov wl windows`, `ov wl focus`). Use Sway for window management.
+Use CDP first. Use WL for screenshots (`ov wl screenshot`), input, and X11 window interaction (`ov wl windows`, `ov wl focus`). Use Sway for window management.
 On NVIDIA headless: `ov wl` is the primary tool — VNC screenshots are gray (upstream wayvnc bug), but `ov wl screenshot` works perfectly with gles2.
 For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diagnostics, and Moonlight pairing.
 

@@ -65,7 +65,7 @@ Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
 ```
 plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
-+-- ov/                               # Operations (17 skills)
++-- ov/                               # Operations (18 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-layers/                        # Layer reference (95 skills)
 +-- ov-images/                        # Image reference (18 skills)
@@ -129,6 +129,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `sway` | `/ov:sway` |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
+| `sun` | `/ov:sun` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
 | `config` | `/ov:config` |
@@ -196,7 +197,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 17 | Operations | "How do I use X?" |
+| `ov` | 18 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-layers` | 95 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 18 | Image reference | "What does image X look like?" |
@@ -214,9 +215,13 @@ Real tasks chain through skills in predictable patterns:
 **Desktop automation:**
 `/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (Wayland: grim, wtype, wlrctl) -> `/ov:vnc` (pixel: VNC framebuffer) -> `/ov:sway` (window: focus, layout)
 Use CDP first. Use WL for Wayland-native screenshots and input (works on NVIDIA headless). Fall back to VNC for remote access. Use Sway for window management.
+For Sunshine images: use `/ov:sun` for credential setup and Moonlight pairing.
 
 **Deploy a service:**
 `/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
+
+**Set up Sunshine streaming:**
+`/ov:sun` (passwd, pair, config) -> `/ov-layers:sunshine` (layer properties) -> `/ov:service` (lifecycle) -> `/ov-images:sway-browser-sunshine` (verify setup)
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -256,6 +261,7 @@ Examples where multiple skills cover one topic:
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:sway` (compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
 - **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
+- **Sunshine:** `/ov:sun` (credentials, pairing, config) vs `/ov-layers:sunshine` (layer properties) vs `/ov-images:sway-browser-sunshine` (image definition)
 
 ### Desktop Automation Hierarchy
 

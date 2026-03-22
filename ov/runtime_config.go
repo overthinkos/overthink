@@ -19,7 +19,9 @@ type RuntimeConfig struct {
 	BindAddress          string            `yaml:"bind_address,omitempty"`
 	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
-	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"` // VNC passwords keyed by image[-instance]
+	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
+	SunshineUsers        map[string]string `yaml:"sunshine_users,omitempty"`     // Sunshine Web UI usernames keyed by image[-instance]
+	SunshinePasswords    map[string]string `yaml:"sunshine_passwords,omitempty"` // Sunshine Web UI passwords keyed by image[-instance]
 }
 
 // RuntimeVmConfig holds user-level VM defaults
@@ -294,7 +296,21 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return "", nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		if strings.HasPrefix(key, "sunshine.user.") {
+			name := strings.TrimPrefix(key, "sunshine.user.")
+			if u, ok := cfg.SunshineUsers[name]; ok {
+				return u, nil
+			}
+			return "", nil
+		}
+		if strings.HasPrefix(key, "sunshine.password.") {
+			name := strings.TrimPrefix(key, "sunshine.password.")
+			if p, ok := cfg.SunshinePasswords[name]; ok {
+				return p, nil
+			}
+			return "", nil
+		}
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 	}
 }
 
@@ -354,7 +370,11 @@ func SetConfigValue(key, value string) error {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		if strings.HasPrefix(key, "sunshine.user.") || strings.HasPrefix(key, "sunshine.password.") {
+			// Sunshine credentials are free-form strings, no validation needed.
+			break
+		}
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -400,6 +420,20 @@ func SetConfigValue(key, value string) error {
 				cfg.VncPasswords = make(map[string]string)
 			}
 			cfg.VncPasswords[name] = value
+		}
+		if strings.HasPrefix(key, "sunshine.user.") {
+			name := strings.TrimPrefix(key, "sunshine.user.")
+			if cfg.SunshineUsers == nil {
+				cfg.SunshineUsers = make(map[string]string)
+			}
+			cfg.SunshineUsers[name] = value
+		}
+		if strings.HasPrefix(key, "sunshine.password.") {
+			name := strings.TrimPrefix(key, "sunshine.password.")
+			if cfg.SunshinePasswords == nil {
+				cfg.SunshinePasswords = make(map[string]string)
+			}
+			cfg.SunshinePasswords[name] = value
 		}
 	}
 
@@ -452,8 +486,14 @@ func ResetConfigValue(key string) error {
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			delete(cfg.VncPasswords, name)
+		} else if strings.HasPrefix(key, "sunshine.user.") {
+			name := strings.TrimPrefix(key, "sunshine.user.")
+			delete(cfg.SunshineUsers, name)
+		} else if strings.HasPrefix(key, "sunshine.password.") {
+			name := strings.TrimPrefix(key, "sunshine.password.")
+			delete(cfg.SunshinePasswords, name)
 		} else {
-			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 		}
 	}
 

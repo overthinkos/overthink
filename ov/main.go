@@ -33,6 +33,7 @@ type CLI struct {
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
+	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
 	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
 	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
 	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
@@ -563,7 +564,7 @@ func (c *ConfigGetCmd) Run() error {
 	case "vm.backend":
 		fmt.Println(rt.VmBackend)
 	default:
-		if strings.HasPrefix(c.Key, "vnc.password.") {
+		if strings.HasPrefix(c.Key, "vnc.password.") || strings.HasPrefix(c.Key, "sunshine.user.") || strings.HasPrefix(c.Key, "sunshine.password.") {
 			val, err := GetConfigValue(c.Key)
 			if err != nil {
 				return err
@@ -571,7 +572,7 @@ func (c *ConfigGetCmd) Run() error {
 			fmt.Println(val)
 			return nil
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vnc.password.<image>)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", c.Key)
 	}
 	return nil
 }

@@ -199,8 +199,10 @@ ov vnc mouse <image> <x> <y>           # Move cursor (verify position before cli
 ov wl screenshot/click/type/key        # Wayland-native interaction (grim + wtype + wlrctl)
 ov wl mouse <image> <x> <y>            # Move pointer (Wayland-native)
 ov sway msg <image> <command>          # Sway compositor control
-ov sun status/passwd/pair/clients      # Sunshine game streaming management
+ov sun status/passwd/pair/clients      # Sunshine server management
 ov sun config/set/restart/url          # Sunshine config and service control
+ov moon pair <image> --auto            # Moonlight pairing (fully automated)
+ov moon status/apps/launch/quit        # GameStream client protocol
 ```
 
 ### Persistent Sessions

@@ -34,6 +34,7 @@ type CLI struct {
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
 	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
+	Moon     MoonCmd     `cmd:"" help:"GameStream client protocol (pair, launch, quit)"`
 	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
 	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
 	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`

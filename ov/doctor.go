@@ -45,6 +45,8 @@ type CheckGroup struct {
 // HardwareInfo holds device detection results for JSON output.
 type HardwareInfo struct {
 	GPU            bool           `json:"gpu"`
+	AMDGPU         bool           `json:"amd_gpu"`
+	AMDGFXVersion  string         `json:"amd_gfx_version,omitempty"`
 	GPUFlags       []string       `json:"gpu_flags"`
 	Devices        []DeviceInfo   `json:"devices"`
 	ContainerFlags []string       `json:"container_flags"`
@@ -367,6 +369,7 @@ func getBinaryVersion(name string) string {
 // deviceDescriptions maps device patterns to human-readable descriptions.
 var deviceDescriptions = map[string]string{
 	"/dev/dri/renderD*": "GPU render node",
+	"/dev/kfd":          "AMD Kernel Fusion Driver (ROCm compute)",
 	"/dev/kvm":          "KVM virtualization",
 	"/dev/vhost-net":    "vhost network acceleration",
 	"/dev/vhost-vsock":  "VM socket communication",
@@ -389,6 +392,13 @@ func runHardwareChecks(distro Distro) HardwareInfo {
 			hw.GPUFlags = GPURunArgs("docker")
 		}
 		hw.ContainerFlags = append(hw.ContainerFlags, hw.GPUFlags...)
+	}
+
+	// AMD GPU detection
+	hw.AMDGPU = DetectAMDGPU()
+	if hw.AMDGPU {
+		hw.AMDGFXVersion = detectAMDGFXVersion()
+		hw.ContainerFlags = append(hw.ContainerFlags, "--group-add", "keep-groups")
 	}
 
 	// Device pattern probing (same patterns as devicePatterns in devices.go)
@@ -473,6 +483,15 @@ func (c *DoctorCmd) printHuman(distro Distro, groups []CheckGroup, hw HardwareIn
 	} else {
 		fmt.Println("  [ ] NVIDIA GPU -- not detected")
 	}
+	if hw.AMDGPU {
+		label := "detected (--group-add keep-groups)"
+		if hw.AMDGFXVersion != "" {
+			label = fmt.Sprintf("detected gfx %s (--group-add keep-groups)", hw.AMDGFXVersion)
+		}
+		fmt.Printf("  [+] AMD GPU -- %s\n", label)
+	} else {
+		fmt.Println("  [ ] AMD GPU -- not detected")
+	}
 
 	for _, d := range hw.Devices {
 		if d.Present {
@@ -484,6 +503,9 @@ func (c *DoctorCmd) printHuman(distro Distro, groups []CheckGroup, hw HardwareIn
 	}
 
 	if hw.GPU {
+		deviceCount++
+	}
+	if hw.AMDGPU {
 		deviceCount++
 	}
 
@@ -514,6 +536,9 @@ func (c *DoctorCmd) printJSON(distro Distro, groups []CheckGroup, hw HardwareInf
 
 	deviceCount := 0
 	if hw.GPU {
+		deviceCount++
+	}
+	if hw.AMDGPU {
 		deviceCount++
 	}
 	for _, d := range hw.Devices {

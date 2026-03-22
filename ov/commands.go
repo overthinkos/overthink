@@ -17,7 +17,7 @@ type EnableCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	PortMap   []string `short:"p" long:"port" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
+	Port []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -146,6 +146,12 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	// Merge auto-detected devices into security config
 	if !security.Privileged {
 		security.Devices = appendUnique(security.Devices, detected.Devices...)
+		if detected.AMDGPU {
+			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+		}
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 	}
 
 	// Resolve network (default to shared "ov" network)
@@ -155,8 +161,8 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	}
 
 	// Apply port overrides from --port flags
-	if len(c.PortMap) > 0 {
-		ports, err = ApplyPortOverrides(ports, c.PortMap)
+	if len(c.Port) > 0 {
+		ports, err = ApplyPortOverrides(ports, c.Port)
 		if err != nil {
 			return err
 		}
@@ -188,10 +194,13 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Network:     resolvedNetwork,
 	}
 
-	// Suppress Env if we're using EnvFile (avoid duplication)
-	// Only keep CLI -e flags as inline env vars
+	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
+	// Keep CLI -e flags + auto-detected env vars as inline env.
 	if quadletEnvFile != "" {
 		qcfg.Env = c.Env
+		if detected.AMDGPU && detected.AMDGFXVersion != "" {
+			qcfg.Env = appendEnvUnique(qcfg.Env, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+		}
 	}
 
 	// Persist deployment state to deploy.yml (source of truth)
@@ -334,6 +343,12 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 	// Merge auto-detected devices
 	security := SecurityConfig{}
 	security.Devices = appendUnique(security.Devices, detected.Devices...)
+	if detected.AMDGPU {
+		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+	}
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)

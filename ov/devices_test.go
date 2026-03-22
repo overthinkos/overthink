@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
@@ -108,5 +109,168 @@ func TestPrivilegedSkipsDevices(t *testing.T) {
 	want := []string{"--privileged"}
 	if !reflect.DeepEqual(args, want) {
 		t.Errorf("SecurityArgs(privileged) = %v, want %v", args, want)
+	}
+}
+
+func TestDetectHostDevicesWithAMDGPU(t *testing.T) {
+	orig := DetectHostDevices
+	defer func() { DetectHostDevices = orig }()
+
+	DetectHostDevices = func() DetectedDevices {
+		return DetectedDevices{
+			AMDGPU:        true,
+			AMDGFXVersion: "10.3.0",
+			Devices:       []string{"/dev/kfd", "/dev/dri/renderD128"},
+		}
+	}
+
+	detected := DetectHostDevices()
+	if !detected.AMDGPU {
+		t.Error("expected AMDGPU=true")
+	}
+	if detected.AMDGFXVersion != "10.3.0" {
+		t.Errorf("AMDGFXVersion = %q, want %q", detected.AMDGFXVersion, "10.3.0")
+	}
+	if detected.GPU {
+		t.Error("expected GPU=false (NVIDIA not set)")
+	}
+}
+
+func TestDetectHostDevicesWithBothGPUs(t *testing.T) {
+	orig := DetectHostDevices
+	defer func() { DetectHostDevices = orig }()
+
+	DetectHostDevices = func() DetectedDevices {
+		return DetectedDevices{
+			GPU:           true,
+			AMDGPU:        true,
+			AMDGFXVersion: "11.0.0",
+			Devices:       []string{"/dev/kfd", "/dev/dri/renderD128", "/dev/dri/renderD129"},
+		}
+	}
+
+	detected := DetectHostDevices()
+	if !detected.GPU {
+		t.Error("expected GPU=true")
+	}
+	if !detected.AMDGPU {
+		t.Error("expected AMDGPU=true")
+	}
+}
+
+func TestAMDGPUGroupInjection(t *testing.T) {
+	detected := DetectedDevices{
+		AMDGPU:  true,
+		Devices: []string{"/dev/kfd", "/dev/dri/renderD128"},
+	}
+
+	sec := SecurityConfig{}
+	sec.Devices = appendUnique(sec.Devices, detected.Devices...)
+	if detected.AMDGPU {
+		sec.GroupAdd = appendGroupsForAMDGPU(sec.GroupAdd)
+	}
+
+	// Check keep-groups was added
+	wantGroups := []string{"keep-groups"}
+	if !reflect.DeepEqual(sec.GroupAdd, wantGroups) {
+		t.Errorf("GroupAdd = %v, want %v", sec.GroupAdd, wantGroups)
+	}
+
+	// Check it appears in SecurityArgs
+	args := SecurityArgs(sec)
+	hasKeepGroups := false
+	for i, a := range args {
+		if a == "--group-add" && i+1 < len(args) && args[i+1] == "keep-groups" {
+			hasKeepGroups = true
+		}
+	}
+	if !hasKeepGroups {
+		t.Error("expected --group-add keep-groups in SecurityArgs")
+	}
+}
+
+func TestAMDGPUGroupsIdempotent(t *testing.T) {
+	// Already has keep-groups — should not duplicate
+	groups := appendGroupsForAMDGPU([]string{"keep-groups"})
+	if len(groups) != 1 || groups[0] != "keep-groups" {
+		t.Errorf("expected [keep-groups] unchanged, got %v", groups)
+	}
+
+	// Empty — should add keep-groups
+	groups = appendGroupsForAMDGPU(nil)
+	want := []string{"keep-groups"}
+	if !reflect.DeepEqual(groups, want) {
+		t.Errorf("expected %v, got %v", want, groups)
+	}
+}
+
+func TestAMDGPUGroupsInQuadlet(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "test-amd",
+		ImageRef:    "test-amd:latest",
+		Workspace:   "/workspace",
+		GPU:         false,
+		BindAddress: "127.0.0.1",
+		Security: SecurityConfig{
+			Devices:  []string{"/dev/kfd", "/dev/dri/renderD128"},
+			GroupAdd: []string{"keep-groups"},
+		},
+	}
+	content := generateQuadlet(cfg)
+	if !containsLine(content, "GroupAdd=keep-groups") {
+		t.Error("expected GroupAdd=keep-groups in quadlet")
+	}
+	if !containsLine(content, "AddDevice=/dev/kfd") {
+		t.Error("expected AddDevice=/dev/kfd in quadlet")
+	}
+}
+
+func TestAMDGFXVersionParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{"RDNA2", "gfx_target_version 100306\n", "10.3.0"},
+		{"RDNA3", "gfx_target_version 110000\n", "11.0.0"},
+		{"CPU node", "gfx_target_version 0\n", ""},
+		{"missing", "some_other_field 123\n", ""},
+		{"RDNA1", "gfx_target_version 90012\n", "9.0.0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Write temp file
+			f, err := os.CreateTemp("", "kfd-props-*")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer os.Remove(f.Name())
+			f.WriteString(tt.content)
+			f.Close()
+
+			got := parseKFDGFXVersion(f.Name())
+			if got != tt.expected {
+				t.Errorf("parseKFDGFXVersion(%q) = %q, want %q", tt.content, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestAppendEnvUnique(t *testing.T) {
+	// New key is appended
+	env := []string{"FOO=bar"}
+	env = appendEnvUnique(env, "HSA_OVERRIDE_GFX_VERSION=10.3.0")
+	if len(env) != 2 {
+		t.Fatalf("expected 2 env vars, got %d", len(env))
+	}
+
+	// Existing key is not overridden
+	env = appendEnvUnique(env, "HSA_OVERRIDE_GFX_VERSION=11.0.0")
+	if len(env) != 2 {
+		t.Fatalf("expected 2 env vars after dedup, got %d", len(env))
+	}
+	if env[1] != "HSA_OVERRIDE_GFX_VERSION=10.3.0" {
+		t.Errorf("expected original value preserved, got %q", env[1])
 	}
 }

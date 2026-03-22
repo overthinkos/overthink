@@ -177,15 +177,23 @@ func TestDoctorOutputJSON(t *testing.T) {
 
 func TestRunHardwareChecks(t *testing.T) {
 	origGPU := DetectGPU
-	defer func() { DetectGPU = origGPU }()
+	origAMDGPU := DetectAMDGPU
+	defer func() {
+		DetectGPU = origGPU
+		DetectAMDGPU = origAMDGPU
+	}()
 
 	DetectGPU = func() bool { return false }
+	DetectAMDGPU = func() bool { return false }
 
 	distro := Distro{ID: "arch", Name: "Arch Linux", Manager: "pacman -S"}
 	hw := runHardwareChecks(distro)
 
 	if hw.GPU {
 		t.Error("expected GPU=false with mocked DetectGPU")
+	}
+	if hw.AMDGPU {
+		t.Error("expected AMDGPU=false with mocked DetectAMDGPU")
 	}
 
 	// Should have entries for all device patterns

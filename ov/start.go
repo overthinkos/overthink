@@ -17,7 +17,7 @@ type StartCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	PortMap   []string `short:"p" long:"port" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
+	Port []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -168,6 +168,12 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// Merge auto-detected devices into security config
 	if !security.Privileged {
 		security.Devices = appendUnique(security.Devices, detected.Devices...)
+		if detected.AMDGPU {
+			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+		}
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 	}
 
 	// Resolve network (default to shared "ov" network)
@@ -177,8 +183,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	// Apply port overrides from --port flags and persist to deploy.yml
-	if len(c.PortMap) > 0 {
-		ports, err = ApplyPortOverrides(ports, c.PortMap)
+	if len(c.Port) > 0 {
+		ports, err = ApplyPortOverrides(ports, c.Port)
 		if err != nil {
 			return err
 		}
@@ -305,6 +311,12 @@ func (c *StartCmd) runRemote(ref string) error {
 	// Merge auto-detected devices
 	security := SecurityConfig{}
 	security.Devices = appendUnique(security.Devices, detected.Devices...)
+	if detected.AMDGPU {
+		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+	}
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", engine)
@@ -355,6 +367,12 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	// Merge auto-detected devices
 	security := SecurityConfig{}
 	security.Devices = appendUnique(security.Devices, detected.Devices...)
+	if detected.AMDGPU {
+		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+	}
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
@@ -363,9 +381,9 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	}
 
 	ports := ctx.Resolved.Ports
-	if len(c.PortMap) > 0 {
+	if len(c.Port) > 0 {
 		var portErr error
-		ports, portErr = ApplyPortOverrides(ports, c.PortMap)
+		ports, portErr = ApplyPortOverrides(ports, c.Port)
 		if portErr != nil {
 			return portErr
 		}
@@ -447,7 +465,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 			Env:             c.Env,
 			EnvFile:         c.EnvFile,
 			Instance:        c.Instance,
-			PortMap:         c.PortMap,
+			Port:         c.Port,
 			AutoDetectFlags: c.AutoDetectFlags,
 		}
 		if err := enable.runEnable(rt); err != nil {
@@ -462,7 +480,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 			Env:             c.Env,
 			EnvFile:         c.EnvFile,
 			Instance:        c.Instance,
-			PortMap:         c.PortMap,
+			Port:         c.Port,
 			AutoDetectFlags: c.AutoDetectFlags,
 		}
 		if err := enable.runEnable(rt); err != nil {
@@ -484,7 +502,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 // hasConfigOverrides returns true if the user passed any config flags that
 // should trigger quadlet regeneration (port maps, env vars, env file).
 func (c *StartCmd) hasConfigOverrides() bool {
-	return len(c.PortMap) > 0 || len(c.Env) > 0 || c.EnvFile != ""
+	return len(c.Port) > 0 || len(c.Env) > 0 || c.EnvFile != ""
 }
 
 // StopCmd stops a running container started by StartCmd

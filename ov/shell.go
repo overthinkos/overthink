@@ -215,6 +215,12 @@ func (c *ShellCmd) Run() error {
 	// Merge auto-detected devices into security config
 	if !security.Privileged {
 		security.Devices = appendUnique(security.Devices, detected.Devices...)
+		if detected.AMDGPU {
+			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+		}
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 	}
 
 	// Resolve network (default to shared "ov" network)
@@ -305,6 +311,12 @@ func (c *ShellCmd) runRemote(ref string) error {
 	// Merge auto-detected devices
 	security := SecurityConfig{}
 	security.Devices = appendUnique(security.Devices, detected.Devices...)
+	if detected.AMDGPU {
+		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+	}
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+	}
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", engine)

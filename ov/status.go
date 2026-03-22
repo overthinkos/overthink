@@ -286,6 +286,8 @@ func summarizeDevices(devices []string) string {
 			token = "gpu"
 		case strings.Contains(d, "/dev/nvidia") || strings.Contains(d, "nvidia"):
 			token = "gpu"
+		case strings.Contains(d, "/dev/kfd"):
+			token = "kfd"
 		case strings.Contains(d, "/dev/dri"):
 			token = "dri"
 		case strings.Contains(d, "/dev/kvm"):

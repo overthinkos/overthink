@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-99 layers. 34 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+100 layers. 34 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -119,7 +119,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### GPU & Machine Learning
 
-**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **python-ml** — ML Python environment on top of CUDA. **jupyter** — Jupyter + ML libraries on `:8888`. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
+**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **python-ml** — ML Python environment on top of CUDA. **jupyter** — Jupyter + ML libraries on `:8888`. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
 
 ### Desktop Environments
 

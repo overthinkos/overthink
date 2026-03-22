@@ -182,7 +182,8 @@ ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
 ov start <image> [--build]             # Start service container
 ov stop <image>                        # Stop container
 ov enable <image> [-w PATH]            # Systemd quadlet + save to deploy.yml
-ov disable/status/logs/update <image>  # Service lifecycle
+ov status [<image>] [--all] [--json]   # Service status (table/detail/JSON)
+ov disable/logs/update <image>        # Service lifecycle
 ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage supervisord services in container
@@ -195,13 +196,17 @@ ov cdp open/list/close <image>         # Chrome tab management via DevTools
 ov cdp click <image> <tab> <selector>  # Click element (--vnc for VNC-visible click)
 ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, capture
 ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
+ov cdp status <image>                  # Check CDP availability and port
 ov vnc screenshot/click/type/key       # VNC framebuffer interaction
 ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
+ov vnc status <image>                  # Check VNC server, show resolution
 ov wl screenshot/click/type/key        # Desktop interaction (grim + wtype + wlrctl)
 ov wl mouse <image> <x> <y>            # Move pointer
 ov wl windows <image>                  # List X11 windows (xdotool)
 ov wl focus <image> <title>            # Focus X11 window by title/class
+ov wl status <image>                   # Check Wayland tool availability
 ov sway msg <image> <command>          # Sway compositor control
+ov sway status <image>                 # Check Sway compositor availability
 ov sun status/passwd/pair/clients      # Sunshine server management
 ov sun config/set/restart/url          # Sunshine config and service control
 ov moon pair <image> --auto            # Moonlight pairing (fully automated)

@@ -44,35 +44,79 @@ func (c *SunStatusCmd) Run() error {
 		execSupervisorctl(engine, name, "status", "sunshine")
 	}
 
-	// Phase 2: Try API for version and config info.
-	client, err := connectSunshine(c.Image, c.Instance)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "API:       not reachable (%v)\n", err)
-		return nil
+	// Phase 2: Check via shared probe function.
+	ts := checkSunStatus(c.Image, c.Instance)
+	if ts.Port > 0 {
+		fmt.Printf("Sunshine:  %s (port %d)\n", ts.Status, ts.Port)
+	} else {
+		fmt.Printf("Sunshine:  %s\n", ts.Status)
 	}
 
-	config, err := client.GetConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "API:       not reachable (%v)\n", err)
-		return nil
+	// Phase 3: If reachable, show detailed config.
+	if ts.Status == "ok" {
+		client, err := connectSunshine(c.Image, c.Instance)
+		if err == nil {
+			config, err := client.GetConfig()
+			if err == nil {
+				if v, ok := config["version"]; ok {
+					fmt.Printf("Version:   %v\n", v)
+				}
+				if v, ok := config["encoder"]; ok {
+					fmt.Printf("Encoder:   %v\n", v)
+				}
+				if v, ok := config["capture"]; ok {
+					fmt.Printf("Capture:   %v\n", v)
+				}
+				if v, ok := config["platform"]; ok {
+					fmt.Printf("Platform:  %v\n", v)
+				}
+			}
+		}
+		fmt.Fprintf(os.Stderr, "Sunshine API is reachable\n")
 	}
-
-	if v, ok := config["version"]; ok {
-		fmt.Printf("Version:   %v\n", v)
-	}
-	if v, ok := config["encoder"]; ok {
-		fmt.Printf("Encoder:   %v\n", v)
-	}
-	if v, ok := config["capture"]; ok {
-		fmt.Printf("Capture:   %v\n", v)
-	}
-	if v, ok := config["platform"]; ok {
-		fmt.Printf("Platform:  %v\n", v)
-	}
-
-	fmt.Fprintf(os.Stderr, "Sunshine API is reachable\n")
 	return nil
 }
+
+// checkSunStatus probes Sunshine availability on port 47990.
+// Returns ToolStatus{Status: "-"} if port 47990 is not mapped.
+func checkSunStatus(image, instance string) ToolStatus {
+	ts := ToolStatus{Name: "sun", Status: "-"}
+
+	engine, name, err := resolveSunContainer(image, instance)
+	if err != nil {
+		return ts
+	}
+
+	address, err := resolveSunAddress(engine, name)
+	if err != nil {
+		return ts
+	}
+
+	// Extract port from URL (https://host:port)
+	ts.Port = extractPortFromURL(address)
+	ts.Status = "unreachable"
+
+	imageName := resolveImageName(image)
+	username, password, err := resolveSunCredentials(imageName, instance)
+	if err != nil {
+		// No credentials — can't fully test, but port exists
+		return ts
+	}
+
+	client := NewSunshineClient(address, username, password)
+	config, err := client.GetConfig()
+	if err != nil {
+		return ts
+	}
+
+	ts.Status = "ok"
+	if v, ok := config["version"]; ok {
+		ts.Detail = fmt.Sprintf("v%v", v)
+	}
+	return ts
+}
+
+// extractPortFromURL is defined in status.go
 
 // SunPasswdCmd sets Sunshine Web UI credentials via the REST API.
 type SunPasswdCmd struct {

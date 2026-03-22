@@ -11,39 +11,39 @@ import (
 
 // CLI defines the command-line interface structure
 type CLI struct {
-	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
-	Validate ValidateCmd `cmd:"" help:"Check images.yml + layers, exit 0 or 1"`
-	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd     `cmd:"" help:"List components"`
-	New      NewCmd      `cmd:"" help:"Scaffold new components"`
-	Build    BuildCmd    `cmd:"" help:"Build container images"`
-	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
-	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
-	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
-	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
-	Enable   EnableCmd   `cmd:"" help:"Enable a service (quadlet: generate .container + reload)"`
-	Disable  DisableCmd  `cmd:"" help:"Disable service auto-start (quadlet only)"`
-	Status   StatusCmd   `cmd:"" help:"Show service container status (all if no image given)"`
-	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
-	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
-	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
-	Enc      EncCmd   `cmd:"" help:"Manage encrypted bind mounts"`
-	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
-	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
+	Build    BuildCmd    `cmd:"" help:"Build container images"`
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
-	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
-	Moon     MoonCmd     `cmd:"" help:"GameStream client protocol (pair, launch, quit)"`
-	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
-	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
-	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Deploy   DeployCmd   `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Disable  DisableCmd  `cmd:"" help:"Disable service auto-start (quadlet only)"`
 	Doctor   DoctorCmd   `cmd:"" help:"Check host dependencies and report status"`
+	Enable   EnableCmd   `cmd:"" help:"Enable a service (quadlet: generate .container + reload)"`
+	Enc      EncCmd      `cmd:"" help:"Manage encrypted bind mounts"`
+	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
+	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
+	List     ListCmd     `cmd:"" help:"List components"`
+	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
+	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
+	Moon     MoonCmd     `cmd:"" help:"GameStream client protocol (pair, launch, quit)"`
+	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
+	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
+	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
+	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
+	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
+	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
+	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
+	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
+	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
+	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
+	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
+	Validate ValidateCmd `cmd:"" help:"Check images.yml + layers, exit 0 or 1"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
+	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
+	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
 }
 
 // GenerateCmd generates Containerfiles

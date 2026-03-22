@@ -122,7 +122,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
 | `build`, `merge` | `/ov:build` |
 | `shell` | `/ov:shell` |
-| `start`, `stop`, `enable`, `disable`, `status`, `logs`, `update`, `remove`, `seed` | `/ov:service` |
+| `start`, `stop`, `enable`, `disable`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` (supervisord) | `/ov:service` |
 | `cdp` | `/ov:cdp` |

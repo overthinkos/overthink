@@ -197,16 +197,54 @@ type VncStatusCmd struct {
 }
 
 func (c *VncStatusCmd) Run() error {
-	client, err := connectVNC(c.Image, c.Instance)
+	ts := checkVncStatus(c.Image, c.Instance)
+	if ts.Status == "-" {
+		return fmt.Errorf("VNC server not configured (port 5900 not mapped)")
+	}
+	if ts.Status == "unreachable" {
+		return fmt.Errorf("VNC server not reachable")
+	}
+	if ts.Port > 0 {
+		fmt.Printf("VNC:        %s (port %d)\n", ts.Status, ts.Port)
+	} else {
+		fmt.Printf("VNC:        %s\n", ts.Status)
+	}
+	if ts.Detail != "" {
+		fmt.Printf("Detail:     %s\n", ts.Detail)
+	}
+	fmt.Fprintf(os.Stderr, "VNC server is reachable\n")
+	return nil
+}
+
+// checkVncStatus probes VNC availability on port 5900.
+// Returns ToolStatus{Status: "-"} if port 5900 is not mapped.
+func checkVncStatus(image, instance string) ToolStatus {
+	ts := ToolStatus{Name: "vnc", Status: "-"}
+
+	engine, name, err := resolveVNCContainer(image, instance)
 	if err != nil {
-		return fmt.Errorf("VNC server not reachable: %w", err)
+		return ts
+	}
+
+	address, err := resolveVNCAddress(engine, name)
+	if err != nil {
+		return ts
+	}
+
+	// Extract port from address (host:port format)
+	ts.Port = extractPortFromAddress(address)
+	ts.Status = "unreachable"
+
+	password := resolveVNCPassword(resolveImageName(image), instance)
+	client, err := NewVNCClient(address, password)
+	if err != nil {
+		return ts
 	}
 	defer client.Close()
 
-	fmt.Printf("Desktop:    %s\n", client.DesktopName())
-	fmt.Printf("Resolution: %dx%d\n", client.Width(), client.Height())
-	fmt.Fprintf(os.Stderr, "VNC server is reachable\n")
-	return nil
+	ts.Status = "ok"
+	ts.Detail = fmt.Sprintf("%dx%d %s", client.Width(), client.Height(), client.DesktopName())
+	return ts
 }
 
 // VncPasswdCmd sets up VNC authentication for a deployment.

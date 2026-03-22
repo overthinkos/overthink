@@ -25,6 +25,51 @@ type SwayCmd struct {
 	Workspace  SwayWorkspaceCmd  `cmd:"" help:"Switch to a workspace"`
 	Reload     SwayReloadCmd     `cmd:"" help:"Reload sway configuration"`
 	Resolution SwayResolutionCmd `cmd:"" help:"Set output resolution"`
+	Status     SwayStatusCmd     `cmd:"" help:"Check Sway compositor availability"`
+}
+
+// SwayStatusCmd checks if Sway compositor is reachable via IPC.
+type SwayStatusCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+func (c *SwayStatusCmd) Run() error {
+	engine, name, err := resolveSwayContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	ts := checkSwayStatus(engine, name)
+	fmt.Printf("Sway:      %s\n", ts.Status)
+	if ts.Detail != "" {
+		fmt.Printf("Detail:    %s\n", ts.Detail)
+	}
+	return nil
+}
+
+// checkSwayStatus probes the Sway compositor via IPC socket.
+// Returns ToolStatus{Status: "-"} if sway socket doesn't exist.
+func checkSwayStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "sway", Status: "-"}
+
+	data, err := captureSwaymsg(engine, containerName, "-t", "get_outputs")
+	if err != nil {
+		return ts
+	}
+
+	ts.Status = "ok"
+	var outputs []struct {
+		Name        string `json:"name"`
+		CurrentMode struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"current_mode"`
+	}
+	if err := json.Unmarshal(data, &outputs); err == nil && len(outputs) > 0 {
+		o := outputs[0]
+		ts.Detail = fmt.Sprintf("%s %dx%d", o.Name, o.CurrentMode.Width, o.CurrentMode.Height)
+	}
+	return ts
 }
 
 // --- Subcommand structs ---

@@ -207,7 +207,14 @@ func (c *WlStatusCmd) Run() error {
 		return err
 	}
 
-	// Check Wayland tool availability.
+	// Quick check via shared probe function.
+	ts := checkWlStatus(engine, name)
+	fmt.Printf("WL:        %s\n", ts.Status)
+	if ts.Detail != "" {
+		fmt.Printf("Detail:    %s\n", ts.Detail)
+	}
+
+	// Verbose per-tool availability.
 	tools := []string{"grim", "wtype", "wlrctl"}
 	for _, tool := range tools {
 		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
@@ -237,8 +244,11 @@ func (c *WlStatusCmd) Run() error {
 	}
 
 	var outputs []struct {
-		Name              string `json:"name"`
-		CurrentMode       struct{ Width, Height int } `json:"current_mode"`
+		Name        string `json:"name"`
+		CurrentMode struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"current_mode"`
 	}
 	if err := json.Unmarshal(data, &outputs); err == nil && len(outputs) > 0 {
 		o := outputs[0]
@@ -256,6 +266,36 @@ func (c *WlStatusCmd) Run() error {
 	}
 
 	return nil
+}
+
+// checkWlStatus probes Wayland tool availability inside a container.
+// Returns ToolStatus{Status: "-"} if the Wayland tools aren't present.
+func checkWlStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "wl", Status: "-"}
+
+	// Check for core tools: grim, wtype, wlrctl
+	coreTools := []string{"grim", "wtype", "wlrctl"}
+	var available []string
+	for _, tool := range coreTools {
+		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
+		if err := execWlCmdSilent(engine, containerName, shellCmd); err == nil {
+			available = append(available, tool)
+		}
+	}
+
+	if len(available) == 0 {
+		return ts
+	}
+
+	ts.Status = "ok"
+	ts.Detail = strings.Join(available, ",")
+
+	// If not all tools are present, mark as partial
+	if len(available) < len(coreTools) {
+		ts.Status = "ok"
+		ts.Detail = fmt.Sprintf("%s (%d/%d)", strings.Join(available, ","), len(available), len(coreTools))
+	}
+	return ts
 }
 
 // WlWindowsCmd lists X11 windows via xdotool.

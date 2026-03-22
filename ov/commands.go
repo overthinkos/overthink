@@ -411,71 +411,7 @@ func (c *DisableCmd) Run() error {
 	return nil
 }
 
-// StatusCmd shows the status of a service container
-type StatusCmd struct {
-	Image    string `arg:"" optional:"" help:"Image name or remote ref (omit to list all)"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	All      bool   `short:"a" long:"all" help:"Show all services including inactive"`
-}
-
-func (c *StatusCmd) Run() error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	if c.Image == "" {
-		return c.statusAll(rt)
-	}
-
-	imageName := resolveImageName(c.Image)
-
-	if rt.RunMode == "quadlet" {
-		svc := serviceNameInstance(imageName, c.Instance)
-		cmd := exec.Command("systemctl", "--user", "status", svc)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		_ = cmd.Run()
-		return nil
-	}
-
-	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
-	engine := EngineBinary(runEngine)
-	name := containerNameInstance(imageName, c.Instance)
-	cmd := exec.Command(engine, "inspect", name)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Container %s is not running\n", name)
-	}
-	return nil
-}
-
-// statusAll lists all running ov containers/services.
-func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
-	if rt.RunMode == "quadlet" {
-		args := []string{"--user", "list-units", "ov-*.service", "--no-pager"}
-		if c.All {
-			args = append(args, "--all")
-		}
-		cmd := exec.Command("systemctl", args...)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
-	}
-
-	engine := EngineBinary(rt.RunEngine)
-	args := []string{"ps", "--filter", "name=ov-",
-		"--format", "table {{.Names}}\t{{.Status}}\t{{.Ports}}"}
-	if c.All {
-		args = append(args, "-a")
-	}
-	cmd := exec.Command(engine, args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
+// StatusCmd is defined in status.go
 
 // LogsCmd shows service container logs
 type LogsCmd struct {

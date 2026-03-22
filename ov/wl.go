@@ -40,7 +40,7 @@ func (c *WlScreenshotCmd) Run() error {
 
 	var captureCmd string
 	if c.X11 {
-		captureCmd = "DISPLAY=:0 import -window root png:-"
+		captureCmd = "export DISPLAY=:0 && xwd -silent -root | convert xwd:- png:-"
 	} else if c.Region != "" {
 		captureCmd = fmt.Sprintf("grim -g %s -", shellQuote(c.Region))
 	} else {
@@ -274,7 +274,7 @@ func (c *WlWindowsCmd) Run() error {
 		return err
 	}
 
-	shellCmd := `DISPLAY=:0 xdotool search --name "" 2>/dev/null | while read wid; do
+	shellCmd := `export DISPLAY=:0 && xdotool search --name "." 2>/dev/null | while read wid; do
 		name=$(xdotool getwindowname "$wid" 2>/dev/null)
 		[ -n "$name" ] && printf "%s\t%s\n" "$wid" "$name"
 	done`
@@ -296,7 +296,7 @@ func (c *WlFocusCmd) Run() error {
 	}
 
 	shellCmd := fmt.Sprintf(
-		`DISPLAY=:0 xdotool search --name %s windowactivate 2>/dev/null || DISPLAY=:0 xdotool search --class %s windowactivate`,
+		`export DISPLAY=:0 && xdotool search --name %s windowactivate 2>/dev/null || export DISPLAY=:0 && xdotool search --class %s windowactivate`,
 		shellQuote(c.Target), shellQuote(c.Target),
 	)
 	if err := execWlCmd(engine, name, shellCmd); err != nil {
@@ -323,14 +323,14 @@ func (c *WlCaptureCmd) Run() error {
 
 	var captureCmd string
 	if c.Window != "" {
-		// Capture a specific window by title
+		// Capture a specific window by title via xwd + convert
 		captureCmd = fmt.Sprintf(
-			`DISPLAY=:0 import -window "$(xdotool search --name %s 2>/dev/null | head -1)" png:-`,
+			`export DISPLAY=:0 && xwd -silent -id "$(xdotool search --name %s 2>/dev/null | head -1)" | convert xwd:- png:-`,
 			shellQuote(c.Window),
 		)
 	} else {
-		// Capture the entire X11 root window
-		captureCmd = "DISPLAY=:0 import -window root png:-"
+		// Capture the entire X11 root window via xwd + convert
+		captureCmd = "export DISPLAY=:0 && xwd -silent -root | convert xwd:- png:-"
 	}
 
 	data, err := captureWlCmd(engine, name, captureCmd)

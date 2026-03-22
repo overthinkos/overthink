@@ -3,28 +3,19 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 EXPECTED="${WAYLAND_DISPLAY:-wayland-0}"
 EXPECTED_SOCKET="$XDG_RUNTIME_DIR/$EXPECTED"
 
-# Renderer selection: layer override file > WLR_RENDERER env > hardware auto-detect.
-# Display server layers write ~/.config/sway/renderer to declare their preference
-# (e.g. wayvnc writes "pixman"). Default is hardware auto-detect (gles2 on GPU).
-RENDERER_OVERRIDE="$HOME/.config/sway/renderer"
-if [ -f "$RENDERER_OVERRIDE" ]; then
-    LAYER_RENDERER=$(cat "$RENDERER_OVERRIDE" | tr -d '[:space:]')
-fi
-
-# GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel), then software fallback
+# GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel), then software fallback.
+# Always use gles2 on GPU hardware. WLR_RENDERER env var overrides if set explicitly.
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-gles2}}"
-    if [ "$WLR_RENDERER" != "pixman" ]; then
-        export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-        export GBM_BACKEND=nvidia-drm
-        export __GLX_VENDOR_LIBRARY_NAME=nvidia
-    fi
+    export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    export GBM_BACKEND=nvidia-drm
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
     SWAY_EXTRA="--unsupported-gpu"
 elif ls /dev/dri/renderD* >/dev/null 2>&1; then
-    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-gles2}}"
+    export WLR_RENDERER="${WLR_RENDERER:-gles2}"
     SWAY_EXTRA=""
 else
-    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-pixman}}"
+    export WLR_RENDERER="${WLR_RENDERER:-pixman}"
     SWAY_EXTRA=""
 fi
 

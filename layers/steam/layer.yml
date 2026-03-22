@@ -8,7 +8,6 @@ rpm:
   packages:
     - steam
     - gamescope
-    - xorg-x11-server-Xwayland
   options:
     - --allowerasing
 

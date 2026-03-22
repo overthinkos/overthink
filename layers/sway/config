@@ -1,5 +1,5 @@
 # Headless sway config for container use
-xwayland disable
+xwayland enable
 set $mod Mod1
 set $term xterm
 set $menu fuzzel

@@ -12,6 +12,7 @@ env:
 rpm:
   packages:
     - sway
+    - xorg-x11-server-Xwayland
     - fuzzel
     - mako
     - mesa-dri-drivers

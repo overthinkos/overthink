@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"regexp"
 	"sort"
+	"strings"
 )
 
 // SunCmd manages Sunshine game streaming in running containers.
@@ -22,6 +24,7 @@ type SunCmd struct {
 	Set     SunSetCmd     `cmd:"" help:"Modify a Sunshine config value"`
 	Restart SunRestartCmd `cmd:"" help:"Restart Sunshine service"`
 	Url     SunUrlCmd     `cmd:"" help:"Print Sunshine Web UI URL"`
+	Diag    SunDiagCmd    `cmd:"" help:"Run comprehensive streaming diagnostics"`
 }
 
 // SunStatusCmd checks Sunshine health: supervisord service + API config.
@@ -360,5 +363,126 @@ func (c *SunUrlCmd) Run() error {
 		return err
 	}
 	fmt.Println(baseURL)
+	return nil
+}
+
+// SunDiagCmd runs comprehensive streaming diagnostics.
+type SunDiagCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+func (c *SunDiagCmd) Run() error {
+	engine, name, err := resolveSunContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("Sunshine Diagnostics:")
+
+	// 1. Service status
+	if engine != "" {
+		fmt.Print("  Service:     ")
+		out, _ := exec.Command(engine, "exec", name, "supervisorctl", "status", "sunshine").Output()
+		fmt.Println(strings.TrimSpace(string(out)))
+	}
+
+	// 2. API config (encoder, capture, version)
+	client, apiErr := connectSunshine(c.Image, c.Instance)
+	if apiErr != nil {
+		fmt.Printf("  API:         not reachable (%v)\n", apiErr)
+	} else {
+		config, err := client.GetConfig()
+		if err != nil {
+			fmt.Printf("  API:         error (%v)\n", err)
+		} else {
+			fmt.Println("  API:         reachable")
+			for _, key := range []string{"version", "encoder", "capture", "platform"} {
+				if v, ok := config[key]; ok {
+					fmt.Printf("  %-12s %v\n", strings.Title(key)+":", v)
+				}
+			}
+		}
+	}
+
+	// 3. GPU access inside container
+	fmt.Println("\nGPU Access (inside container):")
+	if engine != "" {
+		// DRI devices
+		driOut, _ := exec.Command(engine, "exec", name, "sh", "-c",
+			`for d in /dev/dri/card* /dev/dri/renderD*; do [ -e "$d" ] || continue; driver=""; link=$(readlink /sys/class/drm/$(basename $d)/device/driver 2>/dev/null) && driver=$(basename "$link"); access="accessible"; dd if="$d" of=/dev/null bs=1 count=0 2>/dev/null || access="NO ACCESS"; printf "  %-22s %-10s %s\n" "$d" "$driver" "$access"; done`).Output()
+		if len(driOut) > 0 {
+			fmt.Print(string(driOut))
+		}
+
+		// NVIDIA devices
+		nvidiaOut, _ := exec.Command(engine, "exec", name, "sh", "-c",
+			`for d in /dev/nvidia0 /dev/nvidiactl /dev/nvidia-modeset; do [ -e "$d" ] || continue; access="accessible"; dd if="$d" of=/dev/null bs=1 count=0 2>/dev/null || access="NO ACCESS"; printf "  %-22s %s\n" "$d" "$access"; done`).Output()
+		if len(nvidiaOut) > 0 {
+			fmt.Print(string(nvidiaOut))
+		}
+
+		// nvidia-smi
+		smiOut, _ := exec.Command(engine, "exec", name, "sh", "-c",
+			`nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || echo "not available"`).Output()
+		fmt.Printf("  nvidia-smi:  %s", strings.TrimSpace(string(smiOut)))
+		fmt.Println()
+	}
+
+	// 4. Encoder detection from container logs
+	fmt.Println("\nEncoder Detection (from startup logs):")
+	if engine != "" {
+		logsOut, _ := exec.Command(engine, "logs", name).CombinedOutput()
+		logStr := string(logsOut)
+		encoders := []string{"h264_nvenc", "hevc_nvenc", "av1_nvenc", "h264_vaapi", "hevc_vaapi", "av1_vaapi"}
+		for _, enc := range encoders {
+			if strings.Contains(logStr, "Found "+enc[0:4]+" encoder: "+enc) ||
+				strings.Contains(logStr, "Found H.264 encoder: "+enc) ||
+				strings.Contains(logStr, "Found HEVC encoder: "+enc) ||
+				strings.Contains(logStr, "Found AV1 encoder: "+enc) {
+				fmt.Printf("  %-14s found\n", enc+":")
+			}
+		}
+		// Check for permission errors
+		if strings.Contains(logStr, "Permission denied") {
+			fmt.Println("\n  WARNING: Permission denied errors detected in logs")
+			for _, line := range strings.Split(logStr, "\n") {
+				if strings.Contains(line, "Permission denied") {
+					// Extract just the relevant part
+					if idx := strings.Index(line, "Error:"); idx >= 0 {
+						fmt.Printf("  > %s\n", strings.TrimSpace(line[idx:]))
+					}
+				}
+			}
+		}
+	}
+
+	// 5. Paired clients
+	if client != nil {
+		clients, err := client.GetClients()
+		if err == nil {
+			fmt.Printf("\nPaired Clients: %d\n", len(clients))
+		}
+	}
+
+	// 6. Container network
+	if engine != "" {
+		fmt.Println("\nContainer Network:")
+		ipOut, _ := exec.Command(engine, "inspect", name, "--format",
+			`{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}`).Output()
+		ip := strings.TrimSpace(string(ipOut))
+		if ip != "" {
+			fmt.Printf("  IP: %s\n", ip)
+		}
+		portsOut, _ := exec.Command(engine, "port", name).Output()
+		if len(portsOut) > 0 {
+			for _, line := range strings.Split(strings.TrimSpace(string(portsOut)), "\n") {
+				if line != "" {
+					fmt.Printf("  %s\n", line)
+				}
+			}
+		}
+	}
+
 	return nil
 }

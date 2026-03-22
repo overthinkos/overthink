@@ -509,7 +509,10 @@ func (c *StopCmd) Run() error {
 		return err
 	}
 
-	if rt.RunMode == "quadlet" {
+	// Always use systemctl for quadlet-managed containers, regardless of run_mode.
+	// Without this, podman stop + systemd Restart=always creates a restart loop.
+	quadletActive, _ := quadletExistsInstance(imageName, c.Instance)
+	if quadletActive {
 		svc := serviceNameInstance(imageName, c.Instance)
 		cmd := exec.Command("systemctl", "--user", "stop", svc)
 		cmd.Stdout = os.Stdout

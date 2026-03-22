@@ -2,12 +2,6 @@ version: '3'
 tasks:
   install:
     cmds:
-      # Enable XWayland in sway (required for Steam, which is X11-only)
-      - mkdir -p ~/.config/sway/config.d
-      - |
-        cat > ~/.config/sway/config.d/xwayland.conf << 'EOF'
-        xwayland enable
-        EOF
       # Pre-configure Sunshine apps for Steam Big Picture
       - mkdir -p ~/.config/sunshine
       - |

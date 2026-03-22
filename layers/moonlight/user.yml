@@ -5,6 +5,10 @@ tasks:
       - mkdir -p ~/.config/sway/config.d
       - |
         cat > ~/.config/sway/config.d/moonlight.conf << 'EOF'
+        # Moonlight window rules
+        for_window [class="Moonlight"] border none
+        for_window [class="Moonlight" title="- Moonlight$"] fullscreen enable
+
         # Launch Moonlight with Alt+M
-        bindsym Mod1+m exec /usr/local/bin/moonlight --appimage-extract-and-run
+        bindsym Mod1+m exec env QT_QPA_PLATFORM=xcb DISPLAY=:0 /usr/local/bin/moonlight --appimage-extract-and-run
         EOF

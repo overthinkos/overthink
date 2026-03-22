@@ -6,3 +6,7 @@ rpm:
     - grim
     - wtype
     - wlrctl
+    - xdotool
+    - xprop
+    - xwininfo
+    - ImageMagick

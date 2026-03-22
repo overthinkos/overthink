@@ -1,0 +1,56 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      # Enable XWayland in sway (required for Steam, which is X11-only)
+      - mkdir -p ~/.config/sway/config.d
+      - |
+        cat > ~/.config/sway/config.d/xwayland.conf << 'EOF'
+        xwayland enable
+        EOF
+      # Pre-configure Sunshine apps for Steam Big Picture
+      - mkdir -p ~/.config/sunshine
+      - |
+        cat > ~/.config/sunshine/apps.json << 'APPS'
+        {
+          "env": {},
+          "apps": [
+            {
+              "name": "Desktop",
+              "output": "",
+              "cmd": "",
+              "index": -1,
+              "exclude-global-prep-cmd": false,
+              "elevated": false,
+              "auto-detach": true,
+              "wait-all": true,
+              "exit-timeout": 5,
+              "prep-cmd": [],
+              "detached": [],
+              "image-path": ""
+            },
+            {
+              "name": "Steam Big Picture",
+              "output": "",
+              "cmd": "",
+              "index": -1,
+              "exclude-global-prep-cmd": false,
+              "elevated": false,
+              "auto-detach": true,
+              "wait-all": true,
+              "exit-timeout": 5,
+              "prep-cmd": [
+                {
+                  "do": "",
+                  "undo": "setsid steam steam://close/bigpicture",
+                  "elevated": false
+                }
+              ],
+              "detached": [
+                "setsid steam steam://open/bigpicture"
+              ],
+              "image-path": ""
+            }
+          ]
+        }
+        APPS

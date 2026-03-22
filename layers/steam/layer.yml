@@ -1,0 +1,20 @@
+depends:
+  - sway
+
+env:
+  STEAM_RUNTIME_PREFER_HOST_LIBRARIES: "0"
+
+rpm:
+  packages:
+    - steam
+    - gamescope
+    - xorg-x11-server-Xwayland
+  options:
+    - --allowerasing
+
+security:
+  shm_size: "1g"
+
+volumes:
+  - name: steam-data
+    path: "~/.local/share/Steam"

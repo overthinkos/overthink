@@ -1,0 +1,8 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - grim
+    - wtype
+    - wlrctl

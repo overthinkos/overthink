@@ -176,12 +176,13 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return netErr
 	}
 
-	// Apply port overrides from --port flags
+	// Apply port overrides from --port flags and persist to deploy.yml
 	if len(c.PortMap) > 0 {
 		ports, err = ApplyPortOverrides(ports, c.PortMap)
 		if err != nil {
 			return err
 		}
+		saveDeployState(c.Image, SaveDeployStateInput{Ports: ports})
 	}
 
 	// Pre-flight port conflict check
@@ -361,11 +362,20 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return netErr
 	}
 
+	ports := ctx.Resolved.Ports
+	if len(c.PortMap) > 0 {
+		var portErr error
+		ports, portErr = ApplyPortOverrides(ports, c.PortMap)
+		if portErr != nil {
+			return portErr
+		}
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:   ctx.ImageName,
 		ImageRef:    ctx.ImageRef,
 		Workspace:   absWorkspace,
-		Ports:       ctx.Resolved.Ports,
+		Ports:       ports,
 		Volumes:     volumes,
 		BindMounts:  bindMounts,
 		GPU:         detected.GPU,
@@ -437,6 +447,22 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 			Env:             c.Env,
 			EnvFile:         c.EnvFile,
 			Instance:        c.Instance,
+			PortMap:         c.PortMap,
+			AutoDetectFlags: c.AutoDetectFlags,
+		}
+		if err := enable.runEnable(rt); err != nil {
+			return err
+		}
+	} else if c.hasConfigOverrides() {
+		// Quadlet exists but config flags changed — regenerate
+		enable := &EnableCmd{
+			Image:           c.Image,
+			Workspace:       c.Workspace,
+			Tag:             c.Tag,
+			Env:             c.Env,
+			EnvFile:         c.EnvFile,
+			Instance:        c.Instance,
+			PortMap:         c.PortMap,
 			AutoDetectFlags: c.AutoDetectFlags,
 		}
 		if err := enable.runEnable(rt); err != nil {
@@ -453,6 +479,12 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	}
 	fmt.Fprintf(os.Stderr, "Started %s\n", svc)
 	return nil
+}
+
+// hasConfigOverrides returns true if the user passed any config flags that
+// should trigger quadlet regeneration (port maps, env vars, env file).
+func (c *StartCmd) hasConfigOverrides() bool {
+	return len(c.PortMap) > 0 || len(c.Env) > 0 || c.EnvFile != ""
 }
 
 // StopCmd stops a running container started by StartCmd

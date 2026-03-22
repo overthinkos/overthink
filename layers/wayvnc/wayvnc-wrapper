@@ -2,6 +2,8 @@
 SOCKET="${XDG_RUNTIME_DIR:-/tmp}/${WAYLAND_DISPLAY:-wayland-0}"
 TIMEOUT=30
 ELAPSED=0
+
+# Phase 1: Wait for Wayland display socket
 while [ ! -e "$SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 1
     ELAPSED=$((ELAPSED + 1))
@@ -10,7 +12,20 @@ if [ ! -e "$SOCKET" ]; then
     echo "wayvnc-wrapper: Wayland socket $SOCKET not found after ${TIMEOUT}s" >&2
     exit 1
 fi
-WAYVNC_ARGS="--render-cursor --disable-resizing -o HEADLESS-1"
+
+# Phase 2: Wait for sway IPC socket (means sway is fully initialized and
+# resolution has been set by sway-wrapper)
+ELAPSED=0
+while [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    SWAYSOCK=$(ls -t /tmp/sway-ipc.*.sock 2>/dev/null | head -1)
+    [ -n "$SWAYSOCK" ] && break
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+# Extra pause to let sway-wrapper finish setting resolution
+sleep 2
+
+WAYVNC_ARGS="--render-cursor -o HEADLESS-1"
 
 # GPU-accelerated encoding — only for real displays, not headless.
 # Headless + NVIDIA: pixman renderer produces compatible buffers without --gpu.

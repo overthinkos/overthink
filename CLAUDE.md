@@ -38,7 +38,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (90 layers)
++-- layers/<name>/            # Layer directories (93 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -129,6 +129,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `sway` | `/ov:sway` |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
+| `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
 | `config` | `/ov:config` |
 | `enc` | `/ov:enc` |
@@ -195,9 +196,9 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 15 | Operations | "How do I do X?" |
+| `ov` | 17 | Operations | "How do I do X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 90 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 92 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 16 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
@@ -211,8 +212,8 @@ Real tasks chain through skills in predictable patterns:
 `/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:config` or `/ov:service` (state)
 
 **Desktop automation:**
-`/ov:cdp` (DOM: click, type, eval) -> `/ov:vnc` (pixel: coordinates, screenshots) -> `/ov:sway` (window: focus, layout)
-Use CDP first. Fall back to VNC for visual-only elements. Use Sway for window management.
+`/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (Wayland: grim, wtype, wlrctl) -> `/ov:vnc` (pixel: VNC framebuffer) -> `/ov:sway` (window: focus, layout)
+Use CDP first. Use WL for Wayland-native screenshots and input (works on NVIDIA headless). Fall back to VNC for remote access. Use Sway for window management.
 
 **Deploy a service:**
 `/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
@@ -258,12 +259,13 @@ Examples where multiple skills cover one topic:
 
 ### Desktop Automation Hierarchy
 
-Three abstraction levels for interacting with container desktops:
+Four abstraction levels for interacting with container desktops:
 
 | Level | Skill | Interface | When to use |
 |-------|-------|-----------|-------------|
 | DOM | `/ov:cdp` | CSS selectors, JS eval | First choice -- structured, reliable |
-| Pixel | `/ov:vnc` | Coordinates, screenshots | Fallback -- when DOM not accessible |
+| Wayland | `/ov:wl` | grim, wtype, wlrctl | Screenshots + input via Wayland protocols (works on NVIDIA headless) |
+| Pixel | `/ov:vnc` | VNC coordinates, framebuffer | Remote access -- when TCP connectivity needed |
 | Window | `/ov:sway` | Focus, layout, workspace | Window management, app launching |
 
 ### ov-dev Agents

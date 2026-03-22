@@ -8,6 +8,7 @@ rpm:
   packages:
     - pipewire
     - pipewire-pulseaudio
+    - pipewire-utils
     - wireplumber
 
 service: |

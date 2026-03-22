@@ -1,0 +1,14 @@
+depends:
+  - dbus
+  - sway
+  - pipewire
+
+env:
+  XDG_CURRENT_DESKTOP: "sway"
+
+rpm:
+  packages:
+    - xdg-desktop-portal
+    - xdg-desktop-portal-wlr
+    - xdg-desktop-portal-gtk
+    - slurp

@@ -33,6 +33,7 @@ type CLI struct {
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
 	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
 	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`

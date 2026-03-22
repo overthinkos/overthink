@@ -111,6 +111,11 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 
 For layer-specific rules (install files, packages, port_relay, cache mounts): `/ov:layer`
 
+**GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime:
+- **NVIDIA:** CUDA images get `--gpus all` / CDI device injection automatically
+- **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
+- Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
+
 ---
 
 ## Command Map
@@ -137,6 +142,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `enc` | `/ov:enc` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |
+| `doctor` | Host dependency check (no skill -- standalone diagnostic) |
 
 ---
 
@@ -202,7 +208,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-layers` | 100 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 22 | Image reference | "What does image X look like?" |
+| `ov-images` | 32 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 

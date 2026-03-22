@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-96 layers. 29 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+99 layers. 34 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -127,7 +127,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Applications
 
-**openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope and XWayland for game streaming via Sunshine/Moonlight. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
+**openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope and XWayland for game streaming via Sunshine/Moonlight. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
 
 ### Utilities
 
@@ -140,8 +140,9 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar.
-**sway-desktop-sunshine** = pipewire + xdg-portal + wl-tools + sunshine + chrome-sway + xfce4-terminal + thunar + waybar. GPU-accelerated variant — Sunshine game streaming replaces VNC, full NVENC pipeline on NVIDIA.
+**sway-desktop** = pipewire + xdg-portal + wl-tools + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
+**sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
+**sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
@@ -255,6 +256,11 @@ ov alias install/uninstall <image>             # Host command aliases
 ov enc init/mount/unmount/status <image>    # Encrypted volumes
 ov enc passwd <image>                       # Change encryption password
 ov config get/set/list/reset/path              # Runtime configuration
+ov udev status                                 # Show GPU device access status
+ov udev generate                               # Print udev rules to stdout
+ov udev install                                # Install udev rules (requires sudo)
+ov udev remove                                 # Remove installed udev rules
+ov doctor                                      # Check host dependencies
 ```
 
 ## Adding a Layer

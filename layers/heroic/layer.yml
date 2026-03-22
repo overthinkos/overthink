@@ -1,0 +1,13 @@
+depends:
+  - sway
+
+rpm:
+  packages:
+    - mangohud
+    - gamemode
+
+volumes:
+  - name: heroic-config
+    path: "~/.config/heroic"
+  - name: heroic-games
+    path: "~/Games/Heroic"

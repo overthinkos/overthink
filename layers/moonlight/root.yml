@@ -1,0 +1,7 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      - |
+        curl -fsSL "https://github.com/moonlight-stream/moonlight-qt/releases/download/v6.1.0/Moonlight-6.1.0-x86_64.AppImage" -o /usr/local/bin/moonlight
+        chmod +x /usr/local/bin/moonlight

@@ -41,6 +41,7 @@ type CLI struct {
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
 	Deploy   DeployCmd   `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Doctor   DoctorCmd   `cmd:"" help:"Check host dependencies and report status"`
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 }

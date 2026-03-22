@@ -3,9 +3,6 @@ depends:
   - sway
   - pipewire
 
-env:
-  SWAY_CAPTURE: "sunshine"
-
 ports:
   - tcp:47984
   - 47989
@@ -18,6 +15,8 @@ ports:
 security:
   devices:
     - /dev/uinput
+  group_add:
+    - keep-groups
 
 rpm:
   copr:

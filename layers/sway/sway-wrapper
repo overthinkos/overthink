@@ -3,35 +3,28 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 EXPECTED="${WAYLAND_DISPLAY:-wayland-0}"
 EXPECTED_SOCKET="$XDG_RUNTIME_DIR/$EXPECTED"
 
+# Renderer selection: layer override file > WLR_RENDERER env > hardware auto-detect.
+# Display server layers write ~/.config/sway/renderer to declare their preference
+# (e.g. wayvnc writes "pixman"). Default is hardware auto-detect (gles2 on GPU).
+RENDERER_OVERRIDE="$HOME/.config/sway/renderer"
+if [ -f "$RENDERER_OVERRIDE" ]; then
+    LAYER_RENDERER=$(cat "$RENDERER_OVERRIDE" | tr -d '[:space:]')
+fi
+
 # GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel), then software fallback
 if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
-    if [ "$WLR_BACKENDS" = "headless" ]; then
-        if [ "$SWAY_CAPTURE" = "sunshine" ]; then
-            # Sunshine captures via wlr-screencopy — works with gles2 on NVIDIA.
-            # Full GPU pipeline: gles2 compositing + NVENC encoding.
-            export WLR_RENDERER="${WLR_RENDERER:-gles2}"
-            export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
-            export GBM_BACKEND=nvidia-drm
-            export __GLX_VENDOR_LIBRARY_NAME=nvidia
-        else
-            # wayvnc/neatvnc cannot capture GPU-rendered buffers
-            # (ext-image-copy-capture fails with gles2, vulkan, and gles2+DRM_NO_MODIFIERS).
-            # Use pixman so VNC works. chrome-wrapper strips NVIDIA EGL vars on pixman
-            # so Chrome falls back to software rendering (--disable-gpu breaks CDP).
-            export WLR_RENDERER="${WLR_RENDERER:-pixman}"
-        fi
-    else
-        export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-gles2}}"
+    if [ "$WLR_RENDERER" != "pixman" ]; then
         export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
         export GBM_BACKEND=nvidia-drm
         export __GLX_VENDOR_LIBRARY_NAME=nvidia
     fi
     SWAY_EXTRA="--unsupported-gpu"
 elif ls /dev/dri/renderD* >/dev/null 2>&1; then
-    export WLR_RENDERER="${WLR_RENDERER:-gles2}"
+    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-gles2}}"
     SWAY_EXTRA=""
 else
-    export WLR_RENDERER="${WLR_RENDERER:-pixman}"
+    export WLR_RENDERER="${WLR_RENDERER:-${LAYER_RENDERER:-pixman}}"
     SWAY_EXTRA=""
 fi
 

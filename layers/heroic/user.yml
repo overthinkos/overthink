@@ -1,0 +1,72 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      # Configure Sunshine apps with Desktop + Steam Big Picture + Heroic
+      - mkdir -p ~/.config/sunshine
+      - |
+        cat > ~/.config/sunshine/apps.json << 'APPS'
+        {
+          "env": {},
+          "apps": [
+            {
+              "name": "Desktop",
+              "output": "",
+              "cmd": "",
+              "index": -1,
+              "exclude-global-prep-cmd": false,
+              "elevated": false,
+              "auto-detach": true,
+              "wait-all": true,
+              "exit-timeout": 5,
+              "prep-cmd": [],
+              "detached": [],
+              "image-path": ""
+            },
+            {
+              "name": "Steam Big Picture",
+              "output": "",
+              "cmd": "",
+              "index": -1,
+              "exclude-global-prep-cmd": false,
+              "elevated": false,
+              "auto-detach": true,
+              "wait-all": true,
+              "exit-timeout": 5,
+              "prep-cmd": [
+                {
+                  "do": "",
+                  "undo": "setsid steam steam://close/bigpicture",
+                  "elevated": false
+                }
+              ],
+              "detached": [
+                "setsid steam steam://open/bigpicture"
+              ],
+              "image-path": ""
+            },
+            {
+              "name": "Heroic Games Launcher",
+              "output": "",
+              "cmd": "",
+              "index": -1,
+              "exclude-global-prep-cmd": false,
+              "elevated": false,
+              "auto-detach": true,
+              "wait-all": true,
+              "exit-timeout": 5,
+              "prep-cmd": [
+                {
+                  "do": "",
+                  "undo": "pkill -f heroic || true",
+                  "elevated": false
+                }
+              ],
+              "detached": [
+                "setsid heroic --fullscreen"
+              ],
+              "image-path": ""
+            }
+          ]
+        }
+        APPS

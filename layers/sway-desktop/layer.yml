@@ -2,7 +2,6 @@ layers:
   - pipewire
   - xdg-portal
   - wl-tools
-  - wayvnc
   - chrome-sway
   - xfce4-terminal
   - thunar

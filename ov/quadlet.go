@@ -84,6 +84,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 			}
 		}
 	}
+	for _, group := range cfg.Security.GroupAdd {
+		b.WriteString(fmt.Sprintf("GroupAdd=%s\n", group))
+	}
 	if cfg.Security.ShmSize != "" {
 		b.WriteString(fmt.Sprintf("ShmSize=%s\n", cfg.Security.ShmSize))
 	}

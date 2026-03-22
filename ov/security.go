@@ -41,6 +41,7 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		merged.CapAdd = appendUnique(merged.CapAdd, sec.CapAdd...)
 		merged.Devices = appendUnique(merged.Devices, sec.Devices...)
 		merged.SecurityOpt = appendUnique(merged.SecurityOpt, sec.SecurityOpt...)
+		merged.GroupAdd = appendUnique(merged.GroupAdd, sec.GroupAdd...)
 		if sec.ShmSize != "" {
 			merged.ShmSize = maxShmSize(merged.ShmSize, sec.ShmSize)
 		}
@@ -60,6 +61,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		}
 		if img.Security.ShmSize != "" {
 			merged.ShmSize = img.Security.ShmSize
+		}
+		if len(img.Security.GroupAdd) > 0 {
+			merged.GroupAdd = appendUnique(merged.GroupAdd, img.Security.GroupAdd...)
 		}
 	}
 
@@ -99,6 +103,9 @@ func SecurityArgs(sec SecurityConfig) []string {
 	}
 	for _, opt := range sec.SecurityOpt {
 		args = append(args, "--security-opt", opt)
+	}
+	for _, group := range sec.GroupAdd {
+		args = append(args, "--group-add", group)
 	}
 	if sec.ShmSize != "" {
 		args = append(args, "--shm-size", sec.ShmSize)

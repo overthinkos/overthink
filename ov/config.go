@@ -46,7 +46,8 @@ type SecurityConfig struct {
 	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
 	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
-	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"` // shared memory size (e.g. "1g", "256m")
+	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
+	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
 }
 
 // ImageConfig represents configuration for a single image or defaults

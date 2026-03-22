@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"slices"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -75,6 +77,21 @@ func (c *BuildCmd) Run() error {
 		for _, name := range order {
 			img := gen.Images[name]
 			content := gen.Containerfiles[name]
+
+			// Skip dependency images that are already built locally.
+			// Re-tag with current CalVer so downstream FROM references resolve.
+			if !c.NoCache && !slices.Contains(c.Images, name) {
+				latestRef := fmt.Sprintf("%s/%s:latest", img.Registry, name)
+				if defaultLocalImageExists(rt.BuildEngine, latestRef) {
+					tags := imageTags(name, img, gen.Config)
+					for _, tag := range tags {
+						exec.Command(EngineBinary(rt.BuildEngine), "tag", latestRef, tag).Run()
+					}
+					fmt.Fprintf(os.Stderr, "\n--- Skipping %s (using cached %s) ---\n", name, latestRef)
+					continue
+				}
+			}
+
 			if err := c.buildImage(engine, dir, name, img, gen.Config, platform, rt.BuildEngine, content); err != nil {
 				return fmt.Errorf("building %s: %w", name, err)
 			}

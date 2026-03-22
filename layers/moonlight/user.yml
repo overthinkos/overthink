@@ -1,0 +1,10 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.config/sway/config.d
+      - |
+        cat > ~/.config/sway/config.d/moonlight.conf << 'EOF'
+        # Launch Moonlight with Alt+M
+        bindsym Mod1+m exec /usr/local/bin/moonlight --appimage-extract-and-run
+        EOF

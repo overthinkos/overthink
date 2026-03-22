@@ -68,7 +68,7 @@ images:
     base: fedora
     layers:
       - openclaw-full
-      - sway-desktop
+      - sway-desktop-vnc
     ports:
       - "18789:18789"
       - "5900:5900"
@@ -80,13 +80,34 @@ images:
     base: nvidia
     layers:
       - openclaw-full-ml
-      - sway-desktop
+      - sway-desktop-vnc
       - ollama
     ports:
       - "18789:18789"
       - "5900:5900"
       - "9222:9222"
       - "11434:11434"
+    platforms:
+      - linux/amd64
+
+  sway-browser-vnc:
+    base: fedora
+    layers:
+      - sway-desktop-vnc
+    ports:
+      - "5900:5900"
+      - "9222:9222"
+    platforms:
+      - linux/amd64
+
+  sway-browser-vnc-moonlight:
+    base: fedora
+    layers:
+      - sway-desktop-vnc
+      - moonlight
+    ports:
+      - "5900:5900"
+      - "9222:9222"
     platforms:
       - linux/amd64
 
@@ -111,6 +132,24 @@ images:
     layers:
       - sway-desktop-sunshine
       - steam
+    ports:
+      - "9222:9222"
+      - "47984:47984"
+      - "47989:47989"
+      - "47990:47990"
+      - "48010:48010"
+      - "47998:47998/udp"
+      - "47999:47999/udp"
+      - "48000:48000/udp"
+    platforms:
+      - linux/amd64
+
+  sway-browser-sunshine-steam-heroic:
+    base: nvidia
+    layers:
+      - sway-desktop-sunshine
+      - steam
+      - heroic
     ports:
       - "9222:9222"
       - "47984:47984"
@@ -307,7 +346,7 @@ images:
     base: fedora
     layers:
       - openclaw-full
-      - sway-desktop
+      - sway-desktop-vnc
     ports:
       - "18789:18789"
       - "5900:5900"
@@ -320,7 +359,7 @@ images:
     base: nvidia
     layers:
       - openclaw-full-ml
-      - sway-desktop
+      - sway-desktop-vnc
       - ollama
     ports:
       - "18789:18789"

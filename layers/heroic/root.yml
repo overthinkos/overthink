@@ -1,0 +1,10 @@
+version: '3'
+tasks:
+  install:
+    cmds:
+      - |
+        ARCH=$(uname -m)
+        VER=2.20.1
+        curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${VER}/Heroic-${VER}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
+        dnf install -y /tmp/heroic.rpm
+        rm -f /tmp/heroic.rpm

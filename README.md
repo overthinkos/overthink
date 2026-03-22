@@ -197,12 +197,10 @@ ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, ca
 ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
 ov vnc screenshot/click/type/key       # VNC framebuffer interaction
 ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
-ov wl screenshot/click/type/key        # Wayland-native interaction (grim + wtype + wlrctl)
-ov wl screenshot <image> --x11         # X11 screenshot via import (GPU-rendered content)
-ov wl mouse <image> <x> <y>            # Move pointer (Wayland-native)
+ov wl screenshot/click/type/key        # Desktop interaction (grim + wtype + wlrctl)
+ov wl mouse <image> <x> <y>            # Move pointer
 ov wl windows <image>                  # List X11 windows (xdotool)
 ov wl focus <image> <title>            # Focus X11 window by title/class
-ov wl capture <image> [file]           # Capture X11 screen/window (import)
 ov sway msg <image> <command>          # Sway compositor control
 ov sun status/passwd/pair/clients      # Sunshine server management
 ov sun config/set/restart/url          # Sunshine config and service control

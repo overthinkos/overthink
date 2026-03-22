@@ -9,5 +9,3 @@ rpm:
     - xdotool
     - xprop
     - xwininfo
-    - xwd
-    - ImageMagick

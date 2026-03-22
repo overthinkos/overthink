@@ -19,16 +19,14 @@ type WlCmd struct {
 	Status     WlStatusCmd     `cmd:"" help:"Check Wayland desktop and tool availability"`
 	Windows    WlWindowsCmd    `cmd:"" help:"List X11 windows (via xdotool)"`
 	Focus      WlFocusCmd      `cmd:"" help:"Focus an X11 window by name or class (via xdotool)"`
-	Capture    WlCaptureCmd    `cmd:"" help:"Capture X11 screen or window as PNG (via import)"`
 }
 
-// WlScreenshotCmd captures the desktop as a PNG image via grim (or import --x11).
+// WlScreenshotCmd captures the desktop as a PNG image via grim.
 type WlScreenshotCmd struct {
 	Image    string `arg:"" help:"Image name (use . for local)"`
 	File     string `arg:"" optional:"" default:"screenshot.png" help:"Output file path"`
 	Output   string `long:"output" default:"HEADLESS-1" help:"Wayland output name"`
 	Region   string `long:"region" help:"Capture region as 'X,Y WxH'"`
-	X11      bool   `long:"x11" help:"Capture via X11 (import) instead of Wayland (grim)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
@@ -39,9 +37,7 @@ func (c *WlScreenshotCmd) Run() error {
 	}
 
 	var captureCmd string
-	if c.X11 {
-		captureCmd = "export DISPLAY=:0 && xwd -silent -root | convert xwd:- png:-"
-	} else if c.Region != "" {
+	if c.Region != "" {
 		captureCmd = fmt.Sprintf("grim -g %s -", shellQuote(c.Region))
 	} else {
 		captureCmd = fmt.Sprintf("grim -o %s -", shellQuote(c.Output))
@@ -307,44 +303,6 @@ func (c *WlFocusCmd) Run() error {
 	return nil
 }
 
-// WlCaptureCmd captures an X11 screen or window via ImageMagick import.
-type WlCaptureCmd struct {
-	Image    string `arg:"" help:"Image name (use . for local)"`
-	File     string `arg:"" optional:"" default:"capture.png" help:"Output file path"`
-	Window   string `long:"window" help:"Capture specific window by title (default: full screen)"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
-}
-
-func (c *WlCaptureCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
-	if err != nil {
-		return err
-	}
-
-	var captureCmd string
-	if c.Window != "" {
-		// Capture a specific window by title via xwd + convert
-		captureCmd = fmt.Sprintf(
-			`export DISPLAY=:0 && xwd -silent -id "$(xdotool search --name %s 2>/dev/null | head -1)" | convert xwd:- png:-`,
-			shellQuote(c.Window),
-		)
-	} else {
-		// Capture the entire X11 root window via xwd + convert
-		captureCmd = "export DISPLAY=:0 && xwd -silent -root | convert xwd:- png:-"
-	}
-
-	data, err := captureWlCmd(engine, name, captureCmd)
-	if err != nil {
-		return fmt.Errorf("capturing X11 screen: %w", err)
-	}
-
-	if err := os.WriteFile(c.File, data, 0644); err != nil {
-		return fmt.Errorf("writing capture: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "X11 capture saved to %s (%d bytes)\n", c.File, len(data))
-	return nil
-}
 
 // --- Helper functions ---
 

@@ -283,7 +283,11 @@ func scanLayer(path string, name string) (*Layer, error) {
 			layer.ports = make([]string, len(ly.Ports))
 			layer.portSpecs = make([]PortSpec, len(ly.Ports))
 			for i, p := range ly.Ports {
-				layer.ports[i] = strconv.Itoa(p.Port)
+				if p.Protocol == "udp" {
+					layer.ports[i] = strconv.Itoa(p.Port) + "/udp"
+				} else {
+					layer.ports[i] = strconv.Itoa(p.Port)
+				}
 				layer.portSpecs[i] = p
 			}
 		}

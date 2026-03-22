@@ -949,7 +949,11 @@ func resolveVNCAddress(engine, containerName string) (string, error) {
 	cmd := exec.Command(engine, "port", containerName, "5900")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("container %s does not expose port 5900 (VNC)", containerName)
+		// Host-networked containers have no port mappings — fall back to localhost.
+		if isHostNetworked(engine, containerName) {
+			return "127.0.0.1:5900", nil
+		}
+		return "", fmt.Errorf("no port mapping found for 5900")
 	}
 	return parseVNCPort(string(output))
 }

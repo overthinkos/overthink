@@ -1,0 +1,9 @@
+layers:
+  - pipewire
+  - xdg-portal
+  - wl-tools
+  - sunshine
+  - chrome-sway
+  - xfce4-terminal
+  - thunar
+  - waybar

@@ -1,0 +1,42 @@
+depends:
+  - supervisord
+  - sway
+  - pipewire
+
+env:
+  SWAY_CAPTURE: "sunshine"
+
+ports:
+  - tcp:47984
+  - 47989
+  - 47990
+  - tcp:48010
+  - udp:47998
+  - udp:47999
+  - udp:48000
+
+security:
+  devices:
+    - /dev/uinput
+
+rpm:
+  copr:
+    - lizardbyte/beta
+  packages:
+    - sunshine
+
+volumes:
+  - name: sunshine-config
+    path: "~/.config/sunshine"
+
+service: |
+  [program:sunshine]
+  command=%(ENV_HOME)s/.local/bin/sunshine-wrapper
+  autostart=true
+  autorestart=true
+  priority=20
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",PULSE_SERVER="unix:/tmp/pulse-socket"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

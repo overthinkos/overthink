@@ -433,11 +433,22 @@ func shellQuoteArgs(args []string) string {
 
 // localizePort prefixes a port mapping with the given bind address.
 // "80:8000" -> "<bindAddr>:80:8000", "8080" -> "<bindAddr>:8080:8080"
+// Preserves protocol suffixes: "47998:47998/udp" -> "<bindAddr>:47998:47998/udp"
 func localizePort(mapping string, bindAddr string) string {
-	if strings.Contains(mapping, ":") {
-		return bindAddr + ":" + mapping
+	// Extract and preserve protocol suffix (/udp, /tcp)
+	suffix := ""
+	clean := mapping
+	for _, proto := range []string{"/udp", "/tcp"} {
+		if strings.HasSuffix(mapping, proto) {
+			suffix = proto
+			clean = strings.TrimSuffix(mapping, proto)
+			break
+		}
 	}
-	return fmt.Sprintf("%s:%s:%s", bindAddr, mapping, mapping)
+	if strings.Contains(clean, ":") {
+		return bindAddr + ":" + clean + suffix
+	}
+	return fmt.Sprintf("%s:%s:%s%s", bindAddr, clean, clean, suffix)
 }
 
 // findExecutable locates an executable in PATH.

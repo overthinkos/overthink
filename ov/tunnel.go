@@ -229,6 +229,10 @@ func defaultTunnelStop(cfg TunnelConfig) error {
 // --- Tailscale Public (internet-accessible) ---
 
 func tailscalePublicOneStart(tp TunnelPort) error {
+	if tp.Protocol == "udp" {
+		fmt.Fprintf(os.Stderr, "Warning: port %d (UDP) cannot be tunneled — tailscale funnel only supports TCP/HTTPS. UDP traffic works directly between tailnet nodes.\n", tp.Port)
+		return nil
+	}
 	port := strconv.Itoa(tp.Port)
 	target := fmt.Sprintf("http://127.0.0.1:%d", tp.Port)
 	cmd := exec.Command("tailscale", "funnel", "--bg", "--https="+port, target)
@@ -242,6 +246,9 @@ func tailscalePublicOneStart(tp TunnelPort) error {
 }
 
 func tailscalePublicOneStop(tp TunnelPort) error {
+	if tp.Protocol == "udp" {
+		return nil // UDP ports are not tunneled
+	}
 	port := strconv.Itoa(tp.Port)
 	cmd := exec.Command("tailscale", "funnel", port, "off")
 	cmd.Stdout = os.Stderr
@@ -271,6 +278,10 @@ func isValidServePort(port int) bool {
 }
 
 func tailscalePrivateOneStart(tp TunnelPort) error {
+	if tp.Protocol == "udp" {
+		fmt.Fprintf(os.Stderr, "Warning: port %d (UDP) cannot be tunneled — tailscale serve only supports TCP/HTTPS. UDP traffic works directly between tailnet nodes.\n", tp.Port)
+		return nil
+	}
 	port := strconv.Itoa(tp.Port)
 	var cmd *exec.Cmd
 	if tp.Protocol == "tcp" {
@@ -294,6 +305,9 @@ func tailscalePrivateOneStart(tp TunnelPort) error {
 }
 
 func tailscalePrivateOneStop(tp TunnelPort) error {
+	if tp.Protocol == "udp" {
+		return nil // UDP ports are not tunneled
+	}
 	port := strconv.Itoa(tp.Port)
 	var cmd *exec.Cmd
 	if tp.Protocol == "tcp" {
@@ -392,6 +406,10 @@ func cloudflareTunnelStart(cfg TunnelConfig) error {
 	// Build ingress rules from public ports
 	var ingress strings.Builder
 	for _, tp := range cfg.Ports {
+		if tp.Protocol == "udp" {
+			fmt.Fprintf(os.Stderr, "Warning: port %d (UDP) skipped in Cloudflare tunnel — cloudflared only supports HTTP/WebSocket\n", tp.Port)
+			continue
+		}
 		hostname := tp.Hostname
 		if hostname == "" {
 			hostname = cfg.Hostname // fallback to image dns
@@ -532,6 +550,7 @@ func createCloudflaredTunnel(name string) (string, error) {
 
 // parseHostPorts extracts host-side ports from image port mappings.
 // For "443:18789" returns 443. For "5900" returns 5900.
+// Handles /udp and /tcp suffixes: "47998:47998/udp" returns 47998.
 func parseHostPorts(imagePorts []string) []int {
 	var result []int
 	for _, mapping := range imagePorts {
@@ -539,7 +558,8 @@ func parseHostPorts(imagePorts []string) []int {
 		if idx := strings.Index(mapping, ":"); idx != -1 {
 			hostPort = mapping[:idx]
 		}
-		p, err := strconv.Atoi(hostPort)
+		clean, _ := stripPortSuffix(hostPort)
+		p, err := strconv.Atoi(clean)
 		if err != nil {
 			continue
 		}
@@ -550,17 +570,23 @@ func parseHostPorts(imagePorts []string) []int {
 
 // buildPortMapping builds a host→container port map from image port mappings.
 // For "443:18789" maps 443→18789. For "5900" maps 5900→5900.
+// Handles /udp and /tcp suffixes: "47998:47998/udp" maps 47998→47998.
 func buildPortMapping(imagePorts []string) map[int]int {
 	m := make(map[int]int, len(imagePorts))
 	for _, mapping := range imagePorts {
 		if idx := strings.Index(mapping, ":"); idx != -1 {
-			host, err1 := strconv.Atoi(mapping[:idx])
-			container, err2 := strconv.Atoi(mapping[idx+1:])
+			hostStr := mapping[:idx]
+			contStr := mapping[idx+1:]
+			cleanHost, _ := stripPortSuffix(hostStr)
+			cleanCont, _ := stripPortSuffix(contStr)
+			host, err1 := strconv.Atoi(cleanHost)
+			container, err2 := strconv.Atoi(cleanCont)
 			if err1 == nil && err2 == nil {
 				m[host] = container
 			}
 		} else {
-			p, err := strconv.Atoi(mapping)
+			clean, _ := stripPortSuffix(mapping)
+			p, err := strconv.Atoi(clean)
 			if err == nil {
 				m[p] = p
 			}

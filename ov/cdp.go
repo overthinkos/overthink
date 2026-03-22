@@ -194,7 +194,11 @@ func resolveDevToolsURL(engine, containerName string) (string, error) {
 	cmd := exec.Command(engine, "port", containerName, "9222")
 	output, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("container %s does not expose port 9222 (Chrome DevTools)", containerName)
+		// Host-networked containers have no port mappings — fall back to localhost.
+		if isHostNetworked(engine, containerName) {
+			return "http://127.0.0.1:9222", nil
+		}
+		return "", fmt.Errorf("no port mapping found for 9222")
 	}
 	return parseDevToolsPort(string(output))
 }

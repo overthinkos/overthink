@@ -104,7 +104,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" && len(cfg.Tunnel.Ports) > 0 {
 		for _, tp := range cfg.Tunnel.Ports {
 			port := fmt.Sprintf("%d", tp.Port)
-			if tp.Public {
+			if tp.Protocol == "udp" {
+				b.WriteString(fmt.Sprintf("# Port %s: UDP — not tunneled (tailscale serve does not support UDP; accessible directly between tailnet nodes)\n", port))
+			} else if tp.Public {
 				b.WriteString(fmt.Sprintf("# Port %s: public (internet-accessible)\n", port))
 				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s http://127.0.0.1:%s\n", port, port))
 			} else if tp.Protocol == "tcp" {
@@ -116,6 +118,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 			}
 		}
 		for _, tp := range cfg.Tunnel.Ports {
+			if tp.Protocol == "udp" {
+				continue // UDP ports have no tunnel commands to stop
+			}
 			port := fmt.Sprintf("%d", tp.Port)
 			if tp.Public {
 				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", port))

@@ -1049,9 +1049,11 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 	}
 }
 
-// isValidPort checks if a string is a valid port number (1-65535)
+// isValidPort checks if a string is a valid port number (1-65535).
+// Handles /udp and /tcp suffixes: "47998/udp" is valid.
 func isValidPort(s string) bool {
-	n, err := strconv.Atoi(s)
+	clean, _ := stripPortSuffix(s)
+	n, err := strconv.Atoi(clean)
 	if err != nil {
 		return false
 	}

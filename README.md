@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-93 layers. 27 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+95 layers. 28 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -115,7 +115,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Services & Infrastructure
 
-**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
+**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding.
 
 ### GPU & Machine Learning
 
@@ -141,6 +141,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 Some layers are pure composition — they pull in a curated set of other layers:
 **sway-desktop** = pipewire + xdg-portal + wl-tools + wayvnc + chrome-sway + xfce4-terminal + thunar + waybar.
+**sway-desktop-sunshine** = pipewire + xdg-portal + wl-tools + sunshine + chrome-sway + xfce4-terminal + thunar + waybar. GPU-accelerated variant — Sunshine game streaming replaces VNC, full NVENC pipeline on NVIDIA.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

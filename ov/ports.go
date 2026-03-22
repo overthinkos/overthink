@@ -16,23 +16,36 @@ type PortConflict struct {
 	OwnerType string // "ov-container", "container", "host-process"
 }
 
-// ParseHostPort extracts the host port from a mapping like "8000:8000" or "8000".
-func ParseHostPort(mapping string) (int, error) {
-	parts := strings.SplitN(mapping, ":", 2)
-	return strconv.Atoi(parts[0])
+// stripPortSuffix removes /tcp or /udp protocol suffix from a port string.
+// "47998/udp" -> "47998", "udp"; "8000" -> "8000", ""
+func stripPortSuffix(s string) (string, string) {
+	if idx := strings.LastIndex(s, "/"); idx != -1 {
+		return s[:idx], s[idx+1:]
+	}
+	return s, ""
 }
 
-// ParseContainerPort extracts the container port from a mapping like "8000:9000" or "8000".
+// ParseHostPort extracts the host port from a mapping like "8000:8000", "8000", or "47998:47998/udp".
+func ParseHostPort(mapping string) (int, error) {
+	parts := strings.SplitN(mapping, ":", 2)
+	clean, _ := stripPortSuffix(parts[0])
+	return strconv.Atoi(clean)
+}
+
+// ParseContainerPort extracts the container port from a mapping like "8000:9000", "8000", or "47998:47998/udp".
 func ParseContainerPort(mapping string) (int, error) {
 	parts := strings.SplitN(mapping, ":", 2)
+	s := parts[0]
 	if len(parts) == 2 {
-		return strconv.Atoi(parts[1])
+		s = parts[1]
 	}
-	return strconv.Atoi(parts[0])
+	clean, _ := stripPortSuffix(s)
+	return strconv.Atoi(clean)
 }
 
 // CheckPortAvailability tests whether each host port can be bound.
 // Returns a list of conflicts for ports that are already in use.
+// Detects /udp suffix and uses UDP bind check accordingly.
 func CheckPortAvailability(ports []string, bindAddr string, engine string) []PortConflict {
 	var conflicts []PortConflict
 	for _, mapping := range ports {
@@ -43,17 +56,33 @@ func CheckPortAvailability(ports []string, bindAddr string, engine string) []Por
 		contPort, _ := ParseContainerPort(mapping)
 
 		addr := fmt.Sprintf("%s:%d", bindAddr, hostPort)
-		ln, err := net.Listen("tcp", addr)
-		if err != nil {
-			owner, ownerType := FindPortOwner(hostPort, engine)
-			conflicts = append(conflicts, PortConflict{
-				HostPort:  hostPort,
-				ContPort:  contPort,
-				Owner:     owner,
-				OwnerType: ownerType,
-			})
+
+		if strings.HasSuffix(mapping, "/udp") {
+			conn, err := net.ListenPacket("udp", addr)
+			if err != nil {
+				owner, ownerType := FindPortOwner(hostPort, engine)
+				conflicts = append(conflicts, PortConflict{
+					HostPort:  hostPort,
+					ContPort:  contPort,
+					Owner:     owner,
+					OwnerType: ownerType,
+				})
+			} else {
+				conn.Close()
+			}
 		} else {
-			ln.Close()
+			ln, err := net.Listen("tcp", addr)
+			if err != nil {
+				owner, ownerType := FindPortOwner(hostPort, engine)
+				conflicts = append(conflicts, PortConflict{
+					HostPort:  hostPort,
+					ContPort:  contPort,
+					Owner:     owner,
+					OwnerType: ownerType,
+				})
+			} else {
+				ln.Close()
+			}
 		}
 	}
 	return conflicts
@@ -114,6 +143,7 @@ func FormatPortConflicts(conflicts []PortConflict, image string) string {
 // ApplyPortOverrides modifies port mappings based on --port flags.
 // Each override is "newHost:containerPort". It replaces the host port
 // for the matching container port in the ports list.
+// Preserves protocol suffixes like /udp.
 func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 	// Parse overrides into container→host map
 	overrideMap := make(map[int]int)
@@ -126,7 +156,8 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid host port in override %q: %w", o, err)
 		}
-		contPort, err := strconv.Atoi(parts[1])
+		clean, _ := stripPortSuffix(parts[1])
+		contPort, err := strconv.Atoi(clean)
 		if err != nil {
 			return nil, fmt.Errorf("invalid container port in override %q: %w", o, err)
 		}
@@ -142,7 +173,14 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 			continue
 		}
 		if newHost, ok := overrideMap[contPort]; ok {
-			result[i] = fmt.Sprintf("%d:%d", newHost, contPort)
+			// Preserve protocol suffix (/udp, /tcp)
+			suffix := ""
+			if strings.HasSuffix(mapping, "/udp") {
+				suffix = "/udp"
+			} else if strings.HasSuffix(mapping, "/tcp") {
+				suffix = "/tcp"
+			}
+			result[i] = fmt.Sprintf("%d:%d%s", newHost, contPort, suffix)
 		} else {
 			result[i] = mapping
 		}

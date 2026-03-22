@@ -1,6 +1,10 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os/exec"
+	"strings"
+)
 
 // resolveContainer resolves engine + container name, verifying the container is running.
 // Use "." as image name for local mode (returns empty engine and name).
@@ -20,4 +24,15 @@ func resolveContainer(image, instance string) (engine, name string, err error) {
 		return "", "", fmt.Errorf("container %s is not running", name)
 	}
 	return engine, name, nil
+}
+
+// isHostNetworked checks if a running container uses --network host.
+func isHostNetworked(engine, containerName string) bool {
+	cmd := exec.Command(engine, "inspect", "--format",
+		"{{.HostConfig.NetworkMode}}", containerName)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(output)) == "host"
 }

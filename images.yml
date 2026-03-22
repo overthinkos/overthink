@@ -90,6 +90,42 @@ images:
     platforms:
       - linux/amd64
 
+  sway-browser-sunshine:
+    base: nvidia
+    layers:
+      - sway-desktop-sunshine
+    ports:
+      - "9222:9222"
+      - "47984:47984"
+      - "47989:47989"
+      - "47990:47990"
+      - "48010:48010"
+      - "47998:47998/udp"
+      - "47999:47999/udp"
+      - "48000:48000/udp"
+    platforms:
+      - linux/amd64
+
+  openclaw-ollama-sway-sunshine:
+    base: nvidia
+    layers:
+      - openclaw-full-ml
+      - sway-desktop-sunshine
+      - ollama
+    ports:
+      - "18789:18789"
+      - "9222:9222"
+      - "11434:11434"
+      - "47984:47984"
+      - "47989:47989"
+      - "47990:47990"
+      - "48010:48010"
+      - "47998:47998/udp"
+      - "47999:47999/udp"
+      - "48000:48000/udp"
+    platforms:
+      - linux/amd64
+
   nvidia:
     base: fedora
     layers:

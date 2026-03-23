@@ -182,6 +182,24 @@ images:
     platforms:
       - linux/amd64
 
+  wolf:
+    base: fedora-nonfree
+    layers:
+      - wolf
+    ports:
+      - "47984:47984"
+      - "47989:47989"
+      - "47999:47999/udp"
+      - "48010:48010"
+      - "48100:48100/udp"
+      - "48200:48200/udp"
+    security:
+      cap_add:
+        - SYS_ADMIN
+    network: host
+    platforms:
+      - linux/amd64
+
   nvidia:
     base: fedora-nonfree
     layers:

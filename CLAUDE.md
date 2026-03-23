@@ -38,7 +38,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (100 layers)
++-- layers/<name>/            # Layer directories (101 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -67,8 +67,8 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (19 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (100 skills)
-+-- ov-images/                        # Image reference (22 skills)
++-- ov-layers/                        # Layer reference (101 skills)
++-- ov-images/                        # Image reference (33 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -213,8 +213,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 100 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 32 | Image reference | "What does image X look like?" |
+| `ov-layers` | 101 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 33 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -237,6 +237,10 @@ For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diag
 
 **Set up Sunshine streaming:**
 `/ov:sun` (passwd, config) -> `/ov:moon` (pair, launch, quit) -> `/ov-layers:sunshine` (layer properties) -> `/ov:service` (lifecycle)
+
+**Set up Wolf streaming (container-native):**
+`/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
+Wolf is self-contained (own compositor, audio, input). No sway/pipewire needed. Uses host networking + Podman socket for per-app containers.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -277,6 +281,7 @@ Examples where multiple skills cover one topic:
 - **Sway:** `/ov:sway` (compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
 - **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
 - **Sunshine:** `/ov:sun` (server: credentials, config) vs `/ov:moon` (client: pairing, launch, quit) vs `/ov-layers:sunshine` (layer properties) vs `/ov-images:sway-browser-sunshine` (image definition)
+- **Wolf:** `/ov-layers:wolf` (layer properties, build-from-source) vs `/ov-images:wolf` (image definition) vs `/ov:moon` (client pairing — same GameStream protocol as Sunshine)
 
 ### Desktop Automation Hierarchy
 

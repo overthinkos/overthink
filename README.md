@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-100 layers. 32 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+101 layers. 33 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -115,7 +115,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Services & Infrastructure
 
-**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding and fake-udev for virtual input devices in containers.
+**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding and fake-udev for virtual input devices in containers. **wolf** — Container-native game streaming server (Games on Whales) with built-in Smithay compositor, GStreamer encoding, and per-app container orchestration via Podman socket. Built from source on Fedora.
 
 ### GPU & Machine Learning
 

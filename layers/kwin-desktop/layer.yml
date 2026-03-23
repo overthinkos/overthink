@@ -1,0 +1,5 @@
+layers:
+  - pipewire
+  - xdg-portal-kde
+  - chrome-kwin
+  - kwin-apps

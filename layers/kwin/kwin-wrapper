@@ -1,0 +1,72 @@
+#!/bin/sh
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+EXPECTED="${WAYLAND_DISPLAY:-wayland-0}"
+EXPECTED_SOCKET="$XDG_RUNTIME_DIR/$EXPECTED"
+
+# GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel).
+# KWin manages rendering internally — no WLR_RENDERER or --unsupported-gpu needed.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    export GBM_BACKEND=nvidia-drm
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+fi
+
+# Wait for PipeWire socket — KWin's screencast plugin needs PipeWire to
+# register the zkde_screencast_unstable_v1 Wayland protocol. Without it,
+# the plugin loads but the protocol is never created, causing portal
+# capture (ScreenCast/RemoteDesktop CreateSession) to fail with code 2.
+PW_SOCKET="$XDG_RUNTIME_DIR/pipewire-0"
+PW_TIMEOUT=15
+PW_ELAPSED=0
+while [ ! -e "$PW_SOCKET" ] && [ "$PW_ELAPSED" -lt "$PW_TIMEOUT" ]; do
+    sleep 1
+    PW_ELAPSED=$((PW_ELAPSED + 1))
+done
+if [ ! -e "$PW_SOCKET" ]; then
+    echo "kwin-wrapper: PipeWire socket $PW_SOCKET not found after ${PW_TIMEOUT}s" >&2
+fi
+
+# Clean up stale wayland sockets from previous kwin processes.
+# Supervisord restarts leave old sockets that confuse client connections.
+rm -f "$XDG_RUNTIME_DIR"/wayland-*
+
+# Unset WAYLAND_DISPLAY before starting kwin — it interprets an existing
+# WAYLAND_DISPLAY as a request to run as a nested compositor.
+unset WAYLAND_DISPLAY
+kwin_wayland --virtual \
+    --width "${RESOLUTION_W:-1920}" \
+    --height "${RESOLUTION_H:-1080}" &
+KWIN_PID=$!
+
+cleanup() {
+    kill $KWIN_PID 2>/dev/null
+    rm -f "$EXPECTED_SOCKET"
+}
+trap cleanup TERM INT QUIT
+
+# Wait for any wayland socket to appear
+TIMEOUT=30
+ELAPSED=0
+ACTUAL_SOCKET=""
+while [ -z "$ACTUAL_SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    for f in "$XDG_RUNTIME_DIR"/wayland-*; do
+        [ -e "$f" ] && case "$f" in *.lock) ;; *) ACTUAL_SOCKET="$f"; break ;; esac
+    done
+    [ -z "$ACTUAL_SOCKET" ] && sleep 1 && ELAPSED=$((ELAPSED + 1))
+done
+
+if [ -n "$ACTUAL_SOCKET" ]; then
+    # If kwin created a different socket than expected (e.g. wayland-1),
+    # symlink the expected name so other services can connect via wayland-0.
+    if [ "$ACTUAL_SOCKET" != "$EXPECTED_SOCKET" ]; then
+        ln -sf "$(basename "$ACTUAL_SOCKET")" "$EXPECTED_SOCKET"
+    fi
+
+    # Export Wayland environment to D-Bus activation environment so portal
+    # backends (xdg-desktop-portal-kde) can connect to KWin as Wayland clients.
+    export WAYLAND_DISPLAY="$EXPECTED"
+    dbus-update-activation-environment \
+        WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP DISPLAY 2>/dev/null || true
+fi
+
+wait $KWIN_PID

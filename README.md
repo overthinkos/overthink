@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-115 layers. 35 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+122 layers. 42 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 

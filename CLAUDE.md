@@ -38,7 +38,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (115 layers)
++-- layers/<name>/            # Layer directories (122 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -67,8 +67,8 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (19 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (115 skills)
-+-- ov-images/                        # Image reference (35 skills)
++-- ov-layers/                        # Layer reference (122 skills)
++-- ov-images/                        # Image reference (36 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -292,6 +292,7 @@ Examples where multiple skills cover one topic:
 - **Sunshine:** `/ov:sun` (server: credentials, config) vs `/ov:moon` (client: pairing, launch, quit) vs `/ov-layers:sunshine-x11` (recommended, X11 capture) vs `/ov-layers:sunshine` (Sway, input broken) vs `/ov-images:sunshine-desktop-x11` (recommended image)
 - **Wolf:** `/ov-layers:wolf` (layer properties, build-from-source) vs `/ov-images:wolf` (image definition) vs `/ov:moon` (client pairing — same GameStream protocol as Sunshine)
 - **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer) vs `/ov-layers:sunshine-niri` (streaming layer) vs `/ov-images:sunshine-desktop-niri` (experimental, capture broken)
+- **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer) vs `/ov-layers:sunshine-kwin` (portal capture) vs `/ov-images:sunshine-desktop-kwin` (disabled, KWin screencast protocol missing in virtual mode)
 - **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer) vs `/ov-layers:sunshine-x11` (streaming) vs `/ov-images:sunshine-desktop-x11` (image)
 
 ### Desktop Automation Hierarchy

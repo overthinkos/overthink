@@ -159,6 +159,23 @@ images:
     platforms:
       - linux/amd64
 
+  sunshine-desktop-kwin:
+    enabled: false
+    base: nvidia
+    layers:
+      - kwin-desktop-sunshine
+    ports:
+      - "9222:9222"
+      - "47984:47984"
+      - "47989:47989"
+      - "47990:47990"
+      - "48010:48010"
+      - "47998:47998/udp"
+      - "47999:47999/udp"
+      - "48000:48000/udp"
+    platforms:
+      - linux/amd64
+
   sway-browser-sunshine-steam:
     base: nvidia
     layers:

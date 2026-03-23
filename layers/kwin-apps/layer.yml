@@ -1,0 +1,7 @@
+depends:
+  - kwin
+
+rpm:
+  packages:
+    - dolphin
+    - konsole

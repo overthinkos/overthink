@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      # kwin_wayland ships with cap_sys_nice file capability which prevents
+      # execution in rootless containers (kernel blocks exec of binaries with
+      # file caps in user namespaces). Strip it — not needed for headless compositor.
+      - setcap -r /usr/bin/kwin_wayland 2>/dev/null || true

@@ -1,0 +1,12 @@
+depends:
+  - dbus
+  - kwin
+  - pipewire
+
+env:
+  XDG_CURRENT_DESKTOP: "KDE"
+
+rpm:
+  packages:
+    - xdg-desktop-portal
+    - xdg-desktop-portal-kde

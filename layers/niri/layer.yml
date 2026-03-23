@@ -1,0 +1,59 @@
+depends:
+  - dbus
+  - rust
+  - build-toolchain
+
+env:
+  XDG_RUNTIME_DIR: "/tmp"
+  WAYLAND_DISPLAY: "wayland-1"
+  XDG_CURRENT_DESKTOP: "niri"
+  EGL_LOG_LEVEL: "fatal"
+
+rpm:
+  options:
+    - --allowerasing
+  packages:
+    # Runtime dependencies (mesa-libEGL, mesa-libgbm already in nvidia base)
+    - xorg-x11-server-Xwayland
+    - mesa-dri-drivers
+    - mesa-vulkan-drivers
+    - libglvnd-egl
+    - libglvnd-gles
+    - egl-wayland
+    - wl-clipboard
+    - fuzzel
+    - mako
+    - libwayland-server
+    - libinput
+    - libxkbcommon
+    - pango
+    - cairo-gobject
+    - libdisplay-info
+    - libseat
+    - pipewire-libs
+    # Build dependencies (cleaned up at end of root.yml)
+    - clang-devel
+    - libudev-devel
+    - mesa-libgbm-devel.x86_64
+    - libxkbcommon-devel
+    - wayland-devel
+    - libinput-devel
+    - dbus-devel
+    - systemd-devel
+    - libseat-devel
+    - pipewire-devel
+    - pango-devel
+    - cairo-gobject-devel
+    - libdisplay-info-devel
+
+service: |
+  [program:niri]
+  command=%(ENV_HOME)s/.local/bin/niri-wrapper
+  autostart=true
+  autorestart=true
+  priority=10
+  startsecs=3
+  environment=XDG_RUNTIME_DIR="/tmp"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

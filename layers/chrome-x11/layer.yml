@@ -1,0 +1,8 @@
+depends:
+  - openbox
+
+layers:
+  - chrome
+
+env:
+  CHROME_FLAGS: "--enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"

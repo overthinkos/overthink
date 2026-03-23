@@ -1,0 +1,33 @@
+#!/bin/sh
+# chrome-x11-wrapper: Launch Chrome on X11 display.
+# No Wayland socket wait, no compositor renderer detection, no NVIDIA EGL hacks.
+
+# Wait for X11 display
+TIMEOUT=30
+ELAPSED=0
+while ! xdpyinfo -display :0 >/dev/null 2>&1 && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+
+# Clean stale locks and GPU caches
+rm -f "$HOME/.chrome-debug/SingletonLock" \
+      "$HOME/.chrome-debug/SingletonSocket" \
+      "$HOME/.chrome-debug/SingletonCookie"
+rm -rf "$HOME/.chrome-debug/ShaderCache" \
+       "$HOME/.chrome-debug/GpuCache" \
+       "$HOME/.chrome-debug/GPUCache"
+
+CHROME_BIN=/opt/google/chrome/chrome
+CHROME_VER=$($CHROME_BIN --version | awk '{print $NF}')
+CHROME_MAJOR=${CHROME_VER%%.*}
+WIN_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36"
+WIN_EXT="$HOME/.local/share/chrome-windows"
+
+exec $CHROME_BIN $CHROME_FLAGS \
+    --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
+    --remote-allow-origins='*' \
+    --user-data-dir="$HOME/.chrome-debug" \
+    --user-agent="$WIN_UA" \
+    --load-extension="$WIN_EXT" \
+    --disable-session-crashed-bubble

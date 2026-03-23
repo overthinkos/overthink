@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/sunshine
+      - cp /ctx/sunshine-niri-wrapper ~/.local/bin/sunshine-niri-wrapper
+      - chmod +x ~/.local/bin/sunshine-niri-wrapper
+      - cp /ctx/fake-udev ~/.local/bin/fake-udev
+      - chmod +x ~/.local/bin/fake-udev

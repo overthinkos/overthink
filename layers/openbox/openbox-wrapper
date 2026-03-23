@@ -1,0 +1,15 @@
+#!/bin/sh
+# openbox-wrapper: Wait for X11 display, then start openbox.
+
+TIMEOUT=30
+ELAPSED=0
+while ! xdpyinfo -display :0 >/dev/null 2>&1 && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+if ! xdpyinfo -display :0 >/dev/null 2>&1; then
+    echo "openbox-wrapper: X display :0 not ready after ${TIMEOUT}s" >&2
+    exit 1
+fi
+
+exec openbox --config-file "$HOME/.config/openbox/rc.xml"

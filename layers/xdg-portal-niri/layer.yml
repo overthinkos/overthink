@@ -1,0 +1,13 @@
+depends:
+  - dbus
+  - niri
+  - pipewire
+
+env:
+  XDG_CURRENT_DESKTOP: "niri"
+
+rpm:
+  packages:
+    - xdg-desktop-portal
+    - xdg-desktop-portal-gtk
+    - xdg-desktop-portal-gnome

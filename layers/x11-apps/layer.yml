@@ -1,0 +1,7 @@
+depends:
+  - xorg-headless
+
+rpm:
+  packages:
+    - xfce4-terminal
+    - thunar

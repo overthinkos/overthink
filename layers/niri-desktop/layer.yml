@@ -1,0 +1,6 @@
+layers:
+  - pipewire
+  - xdg-portal-niri
+  - niri
+  - chrome-niri
+  - niri-apps

@@ -1,0 +1,13 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/openbox
+      - cp /ctx/chrome-x11-wrapper ~/.local/bin/chrome-wrapper
+      - chmod +x ~/.local/bin/chrome-wrapper
+      # Add Chrome to openbox autostart
+      - |
+        cat >> ~/.config/openbox/autostart << 'EOF'
+        chrome-wrapper &
+        EOF

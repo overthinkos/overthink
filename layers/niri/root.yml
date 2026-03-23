@@ -1,0 +1,23 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      # Build niri from QaidVoid/niri feat/virtual branch (virtual output support).
+      # Based on niri main (b07bde3e, 2026-03-10) + virtual output commit (df8a2f04).
+      # Provides NIRI_BACKEND=headless mode and niri msg create-virtual-output.
+      - |
+        git clone --depth 1 --branch feat/virtual https://github.com/QaidVoid/niri.git /tmp/niri-src
+        cd /tmp/niri-src
+        cargo build --release
+        install -m 755 target/release/niri /usr/local/bin/niri
+        rm -rf /tmp/niri-src
+
+      # Clean up build dependencies to reduce image size
+      - |
+        dnf remove -y \
+          clang-devel libudev-devel mesa-libgbm-devel libxkbcommon-devel \
+          wayland-devel libinput-devel dbus-devel systemd-devel \
+          libseat-devel pipewire-devel pango-devel cairo-gobject-devel \
+          libdisplay-info-devel || true
+        rm -rf /root/.cargo/registry /root/.cargo/git

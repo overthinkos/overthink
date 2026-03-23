@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-101 layers. 33 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+115 layers. 35 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -123,7 +123,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Desktop Environments
 
-**sway** — Wayland compositor (full desktop). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** — Chrome with DevTools on `:9222`.
+**sway** — Wayland compositor (wlroots, full desktop). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** — Chrome with DevTools on `:9222`.
 
 ### Applications
 
@@ -143,6 +143,10 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **sway-desktop** = pipewire + xdg-portal + wl-tools + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
 **sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA. Includes fake-udev for virtual input device injection in containers.
+**niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
+**niri-desktop-sunshine** = niri-desktop + sunshine-niri. Niri desktop with Sunshine streaming (experimental — capture pending upstream protocol support).
+**x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
+**x11-desktop-sunshine** = x11-desktop + sunshine-x11. X11 desktop with Sunshine streaming via native X11 capture and XTest input injection. All features work — recommended for Sunshine.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

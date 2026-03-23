@@ -38,7 +38,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (101 layers)
++-- layers/<name>/            # Layer directories (115 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -67,8 +67,8 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (19 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (101 skills)
-+-- ov-images/                        # Image reference (33 skills)
++-- ov-layers/                        # Layer reference (115 skills)
++-- ov-images/                        # Image reference (35 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -116,8 +116,8 @@ For layer-specific rules (install files, packages, port_relay, cache mounts): `/
 - **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
 - Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
 
-**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine layer includes a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into sway's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `WLR_BACKENDS=headless,libinput` + `LIBSEAT_BACKEND=noop` in sway.
-- Source: `layers/sunshine/fake-udev`, `layers/sway/sway-wrapper`
+**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine and sunshine-niri layers include a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into the compositor's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `LIBSEAT_BACKEND=noop`. Sway variant also needs `WLR_BACKENDS=headless,libinput`.
+- Source: `layers/sunshine/fake-udev`, `layers/sunshine-niri/fake-udev`, `layers/sway/sway-wrapper`, `layers/niri/niri-wrapper`
 
 **Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov enable`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
 - Source: `ov/config.go` (`SecurityConfig.Mounts`), `ov/quadlet.go`, `ov/start.go`
@@ -213,8 +213,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 101 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 33 | Image reference | "What does image X look like?" |
+| `ov-layers` | 115 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 35 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -235,8 +235,17 @@ For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diag
 **Deploy a service:**
 `/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
 
-**Set up Sunshine streaming:**
+**Set up Sunshine streaming (recommended — X11):**
+`/ov-layers:sunshine-x11` (X11 capture, no fake-udev) -> `/ov:sun` (credentials) -> connect with Moonlight client
+Uses Xorg headless (dummy driver + libinput) + Openbox + X11 native capture. All features work. Image: `sunshine-desktop-x11`.
+**Note:** `/ov:moon` is a host-side control plane only (pairing, app list, launch/quit). It does NOT stream video/audio/input. For end-to-end testing, use `sway-browser-vnc-moonlight` (Moonlight GUI inside a container) or a desktop Moonlight client.
+
+**Set up Sunshine streaming (Sway — input broken):**
 `/ov:sun` (passwd, config) -> `/ov:moon` (pair, launch, quit) -> `/ov-layers:sunshine` (layer properties) -> `/ov:service` (lifecycle)
+
+**Set up Niri Sunshine streaming (experimental — capture broken):**
+`/ov-layers:niri` (compositor) -> `/ov-layers:sunshine-niri` (streaming) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
+Niri is Smithay-based (not wlroots). Built from QaidVoid/niri fork with virtual output support. Capture path pending (niri doesn't expose wlr-screencopy).
 
 **Set up Wolf streaming (container-native):**
 `/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
@@ -280,8 +289,10 @@ Examples where multiple skills cover one topic:
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:sway` (compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
 - **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
-- **Sunshine:** `/ov:sun` (server: credentials, config) vs `/ov:moon` (client: pairing, launch, quit) vs `/ov-layers:sunshine` (layer properties) vs `/ov-images:sway-browser-sunshine` (image definition)
+- **Sunshine:** `/ov:sun` (server: credentials, config) vs `/ov:moon` (client: pairing, launch, quit) vs `/ov-layers:sunshine-x11` (recommended, X11 capture) vs `/ov-layers:sunshine` (Sway, input broken) vs `/ov-images:sunshine-desktop-x11` (recommended image)
 - **Wolf:** `/ov-layers:wolf` (layer properties, build-from-source) vs `/ov-images:wolf` (image definition) vs `/ov:moon` (client pairing — same GameStream protocol as Sunshine)
+- **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer) vs `/ov-layers:sunshine-niri` (streaming layer) vs `/ov-images:sunshine-desktop-niri` (experimental, capture broken)
+- **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer) vs `/ov-layers:sunshine-x11` (streaming) vs `/ov-images:sunshine-desktop-x11` (image)
 
 ### Desktop Automation Hierarchy
 

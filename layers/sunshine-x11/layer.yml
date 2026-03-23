@@ -1,0 +1,41 @@
+depends:
+  - supervisord
+  - xorg-headless
+  - pipewire
+
+ports:
+  - tcp:47984
+  - 47989
+  - 47990
+  - tcp:48010
+  - udp:47998
+  - udp:47999
+  - udp:48000
+
+security:
+  devices:
+    - /dev/uinput
+  mounts:
+    - /dev/input:/dev/input:rw
+
+volumes:
+  - name: sunshine-config
+    path: "~/.config/sunshine"
+
+rpm:
+  copr:
+    - lizardbyte/beta
+  packages:
+    - sunshine
+
+service: |
+  [program:sunshine]
+  command=%(ENV_HOME)s/.local/bin/sunshine-x11-wrapper
+  autostart=true
+  autorestart=true
+  priority=20
+  startsecs=5
+  environment=DISPLAY=":0",PULSE_SERVER="unix:/tmp/pulse/native"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

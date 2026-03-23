@@ -1,0 +1,96 @@
+// Niri config for headless container use (virtual output via NIRI_BACKEND=headless)
+// Built from QaidVoid/niri feat/virtual — Smithay-based compositor with virtual outputs
+
+input {
+    keyboard {
+        xkb {
+        }
+    }
+
+    mouse {
+        accel-profile "flat"
+    }
+
+    touchpad {
+        accel-profile "flat"
+    }
+}
+
+// Virtual headless output — NIRI_BACKEND=headless creates HEADLESS-1 automatically.
+// Configure resolution here or dynamically via: niri msg create-virtual-output --width 1920 --height 1080
+output "HEADLESS-1" {
+    mode "1920x1080@60.000"
+}
+
+layout {
+    gaps 4
+
+    border {
+        width 2
+        active-color "#89b4fa"
+        inactive-color "#45475a"
+    }
+
+    focus-ring {
+        off
+    }
+
+    default-column-width {
+        proportion 0.5
+    }
+}
+
+// Disable client-side decorations (prefer server-side borders)
+prefer-no-csd
+
+// Disable screenshot path (use ov wl screenshot instead)
+screenshot-path null
+
+// XWayland: niri 25.x requires xwayland-satellite (separate package).
+// Uncomment if xwayland-satellite is installed:
+// xwayland-satellite {
+// }
+
+// Key bindings (Mod = Alt, matching sway config)
+binds {
+    Mod+Return { spawn "xfce4-terminal"; }
+    Mod+D { spawn "fuzzel"; }
+    Mod+Q { close-window; }
+    Mod+Shift+E { quit; }
+
+    // Navigation
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up { focus-window-up; }
+    Mod+Down { focus-window-down; }
+
+    // Move windows
+    Mod+Shift+Left { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    Mod+Shift+Up { move-window-up; }
+    Mod+Shift+Down { move-window-down; }
+
+    // Workspaces
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+
+    // Layout
+    Mod+F { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    Mod+R { switch-preset-column-width; }
+    Mod+Minus { set-column-width "-10%"; }
+    Mod+Equal { set-column-width "+10%"; }
+    Mod+Space { switch-layout "next"; }
+
+    // Scratchpad (minimize/restore)
+    Mod+Shift+Minus { move-window-to-workspace "scratchpad"; }
+    Mod+Plus { toggle-window-floating; }
+}

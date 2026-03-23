@@ -1,0 +1,25 @@
+#!/bin/sh
+# niri-wrapper: Headless Smithay compositor startup with virtual output.
+# Built from QaidVoid/niri feat/virtual — supports NIRI_BACKEND=headless mode.
+# Dramatically simpler than sway-wrapper — no WLR_ hacks, no --unsupported-gpu,
+# no cap_sys_nice, no socket symlink.
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+
+# Sunshine input: enable noop libseat if uinput is available.
+# fake-udev (separate service) handles device discovery via synthetic netlink events.
+if [ -e /dev/uinput ]; then
+    export LIBSEAT_BACKEND=noop
+    mkdir -p /run/udev/data
+    touch /run/udev/control
+fi
+
+# Clean up stale sockets from previous runs (supervisord restarts).
+rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/niri.*.sock
+
+# Start niri in headless mode — creates HEADLESS-1 output automatically (1920x1080).
+# Niri/Smithay creates wayland-1 (not wayland-0 like wlroots) — WAYLAND_DISPLAY=wayland-1
+# is set in layer.yml so downstream services connect correctly.
+# No GPU-specific env vars needed. No WLR_BACKENDS hack. No --unsupported-gpu flag.
+export NIRI_BACKEND=headless
+exec niri

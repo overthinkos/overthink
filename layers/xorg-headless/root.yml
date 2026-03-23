@@ -1,0 +1,45 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p /etc/X11
+      # Allow non-console users to run Xorg (Fedora's Xorg.wrap restriction)
+      - echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
+      - |
+        cat > /etc/X11/xorg.conf << 'EOF'
+        Section "ServerFlags"
+          Option "DontVTSwitch" "true"
+          Option "AutoAddDevices" "true"
+          Option "AutoEnableDevices" "true"
+        EndSection
+
+        Section "Monitor"
+          Identifier "Monitor0"
+          HorizSync 28.0-80.0
+          VertRefresh 48.0-75.0
+          Modeline "1920x1080_60.00" 172.80 1920 2040 2248 2576 1080 1081 1084 1118 -HSync +Vsync
+        EndSection
+
+        Section "Device"
+          Identifier "Card0"
+          Driver "dummy"
+          VideoRam 256000
+        EndSection
+
+        Section "Screen"
+          Identifier "Screen0"
+          Device "Card0"
+          Monitor "Monitor0"
+          DefaultDepth 24
+          SubSection "Display"
+            Depth 24
+            Modes "1920x1080_60.00"
+          EndSubSection
+        EndSection
+
+        Section "ServerLayout"
+          Identifier "Layout0"
+          Screen "Screen0"
+        EndSection
+        EOF

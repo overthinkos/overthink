@@ -1,0 +1,25 @@
+depends:
+  - dbus
+
+env:
+  DISPLAY: ":0"
+
+rpm:
+  packages:
+    - xorg-x11-server-Xorg
+    - xorg-x11-drv-dummy
+    - xorg-x11-drv-libinput
+    - xrandr
+    - xdotool
+    - xdpyinfo
+
+service: |
+  [program:xorg]
+  command=Xorg :0 -noreset +extension GLX +extension RANDR +extension RENDER
+  autostart=true
+  autorestart=true
+  priority=10
+  startsecs=2
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

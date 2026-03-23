@@ -1,0 +1,7 @@
+depends:
+  - niri
+
+rpm:
+  packages:
+    - xfce4-terminal
+    - thunar

@@ -48,6 +48,7 @@ type SecurityConfig struct {
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
 	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
+	Mounts      []string `yaml:"mounts,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 }
 
 // ImageConfig represents configuration for a single image or defaults

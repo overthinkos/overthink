@@ -63,6 +63,14 @@ func generateQuadlet(cfg QuadletConfig) string {
 	for _, bm := range cfg.BindMounts {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", bm.HostPath, bm.ContPath))
 	}
+	for _, m := range cfg.Security.Mounts {
+		if strings.HasPrefix(m, "tmpfs:") {
+			// tmpfs:/path:options → Tmpfs=/path:options
+			b.WriteString(fmt.Sprintf("Tmpfs=%s\n", strings.TrimPrefix(m, "tmpfs:")))
+		} else {
+			b.WriteString(fmt.Sprintf("Volume=%s\n", m))
+		}
+	}
 	if cfg.GPU {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
 	}

@@ -355,15 +355,22 @@ type SwayRect struct {
 	Height int `json:"height"`
 }
 
-type swayNode struct {
-	Name          string     `json:"name"`
-	AppID         string     `json:"app_id"`
-	Rect          SwayRect   `json:"rect"`
-	Nodes         []swayNode `json:"nodes"`
-	FloatingNodes []swayNode `json:"floating_nodes"`
+type swayWindowProperties struct {
+	Class string `json:"class"`
 }
 
-// FindWindowRect searches the sway tree for a window matching appID and returns its rect.
+type swayNode struct {
+	Name             string                  `json:"name"`
+	AppID            string                  `json:"app_id"`
+	Rect             SwayRect                `json:"rect"`
+	Focused          bool                    `json:"focused"`
+	FullscreenMode   int                     `json:"fullscreen_mode"`
+	WindowProperties *swayWindowProperties   `json:"window_properties,omitempty"`
+	Nodes            []swayNode              `json:"nodes"`
+	FloatingNodes    []swayNode              `json:"floating_nodes"`
+}
+
+// FindWindowRect searches the sway tree for a window matching appID or X11 class and returns its rect.
 func FindWindowRect(engine, containerName, appID string) (SwayRect, error) {
 	data, err := captureSwaymsg(engine, containerName, "-t", "get_tree")
 	if err != nil {
@@ -375,26 +382,46 @@ func FindWindowRect(engine, containerName, appID string) (SwayRect, error) {
 	}
 	rect, found := searchSwayNode(&root, appID)
 	if !found {
-		return SwayRect{}, fmt.Errorf("window with app_id %q not found in sway tree", appID)
+		return SwayRect{}, fmt.Errorf("window with app_id or class %q not found in sway tree", appID)
 	}
 	return rect, nil
 }
 
 func searchSwayNode(node *swayNode, appID string) (SwayRect, bool) {
-	if node.AppID == appID && node.Rect.Width > 0 {
-		return node.Rect, true
+	var matches []swayNode
+	collectSwayMatches(node, appID, &matches)
+	if len(matches) == 0 {
+		return SwayRect{}, false
+	}
+	// Prefer focused, then fullscreen, then largest area
+	best := matches[0]
+	for _, m := range matches[1:] {
+		if m.Focused {
+			best = m
+			break
+		}
+		if m.FullscreenMode > best.FullscreenMode {
+			best = m
+		} else if m.FullscreenMode == best.FullscreenMode &&
+			m.Rect.Width*m.Rect.Height > best.Rect.Width*best.Rect.Height {
+			best = m
+		}
+	}
+	return best.Rect, true
+}
+
+func collectSwayMatches(node *swayNode, appID string, matches *[]swayNode) {
+	matched := (node.AppID == appID) ||
+		(node.WindowProperties != nil && node.WindowProperties.Class == appID)
+	if matched && node.Rect.Width > 0 {
+		*matches = append(*matches, *node)
 	}
 	for i := range node.Nodes {
-		if r, ok := searchSwayNode(&node.Nodes[i], appID); ok {
-			return r, true
-		}
+		collectSwayMatches(&node.Nodes[i], appID, matches)
 	}
 	for i := range node.FloatingNodes {
-		if r, ok := searchSwayNode(&node.FloatingNodes[i], appID); ok {
-			return r, true
-		}
+		collectSwayMatches(&node.FloatingNodes[i], appID, matches)
 	}
-	return SwayRect{}, false
 }
 
 // shellQuote wraps a string in single quotes for shell safety.

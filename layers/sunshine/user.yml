@@ -3,6 +3,23 @@ version: '3'
 tasks:
   install:
     cmds:
-      - mkdir -p ~/.local/bin ~/.config/sunshine
+      - mkdir -p ~/.local/bin ~/.config/sunshine ~/.config/sway/config.d
       - cp /ctx/sunshine-wrapper ~/.local/bin/sunshine-wrapper
       - chmod +x ~/.local/bin/sunshine-wrapper
+      - cp /ctx/fake-udev ~/.local/bin/fake-udev
+      - chmod +x ~/.local/bin/fake-udev
+      # Sway input isolation: disable all host devices, enable only Sunshine
+      # passthrough devices (vendor 0xBEEF=48879, product 0xDEAD=57005).
+      # Flat acceleration avoids double-acceleration (Moonlight already handles it).
+      - |
+        cat > ~/.config/sway/config.d/sunshine-input.conf << 'EOF'
+        # Sunshine input isolation — only process Sunshine virtual devices
+        input * events disabled
+        input "48879:57005:Keyboard_passthrough" events enabled
+        input "48879:57005:Mouse_passthrough" events enabled
+        input "48879:57005:Mouse_passthrough_(absolute)" events enabled
+        input "48879:57005:Touch_passthrough" events enabled
+        input "48879:57005:Pen_passthrough" events enabled
+        input "48879:57005:Mouse_passthrough" accel_profile flat
+        input "48879:57005:Mouse_passthrough_(absolute)" accel_profile flat
+        EOF

@@ -60,6 +60,7 @@ type VncClickCmd struct {
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	FromCDP  string `long:"from-cdp" help:"Translate from CDP viewport coords using this tab ID (queries window.screenX/screenY)"`
 	FromSway string `long:"from-sway" help:"Translate from window-relative coords using sway window rect for this app_id"`
+	FromX11  string `name:"from-x11" help:"Translate from X11 window-internal coords (scales for XWayland fullscreen)"`
 }
 
 func (c *VncClickCmd) Run() error {
@@ -96,6 +97,26 @@ func (c *VncClickCmd) Run() error {
 		clickY = uint16(int(c.Y) + rect.Y)
 		fmt.Fprintf(os.Stderr, "Translated window-relative (%d, %d) → desktop (%d, %d) via sway app_id=%s\n",
 			c.X, c.Y, clickX, clickY, c.FromSway)
+	}
+
+	// Translate from X11 window-internal coordinates to desktop coordinates.
+	if c.FromX11 != "" {
+		engine, name, err := resolveContainer(c.Image, c.Instance)
+		if err != nil {
+			return fmt.Errorf("resolving container for X11: %w", err)
+		}
+		rect, err := FindWindowRect(engine, name, c.FromX11)
+		if err != nil {
+			return err
+		}
+		x11W, x11H, err := FindX11WindowGeometry(engine, name, c.FromX11)
+		if err != nil {
+			return err
+		}
+		clickX = uint16(rect.X + (int(c.X)*rect.Width)/x11W)
+		clickY = uint16(rect.Y + (int(c.Y)*rect.Height)/x11H)
+		fmt.Fprintf(os.Stderr, "Translated X11 (%d, %d) → desktop (%d, %d) (x11=%dx%d sway=%dx%d)\n",
+			c.X, c.Y, clickX, clickY, x11W, x11H, rect.Width, rect.Height)
 	}
 
 	vncClient, err := connectVNC(c.Image, c.Instance)

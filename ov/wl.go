@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -65,6 +66,7 @@ type WlClickCmd struct {
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	FromCDP  string `long:"from-cdp" help:"Translate from CDP viewport coords using this tab ID"`
 	FromSway string `long:"from-sway" help:"Translate from window-relative coords using sway app_id"`
+	FromX11  string `name:"from-x11" help:"Translate from X11 window-internal coords (scales for XWayland fullscreen)"`
 }
 
 func (c *WlClickCmd) Run() error {
@@ -102,6 +104,24 @@ func (c *WlClickCmd) Run() error {
 		clickY = c.Y + rect.Y
 		fmt.Fprintf(os.Stderr, "Translated window-relative (%d, %d) → desktop (%d, %d) via sway app_id=%s\n",
 			c.X, c.Y, clickX, clickY, c.FromSway)
+	}
+
+	// Translate from X11 window-internal coordinates to desktop coordinates.
+	// XWayland windows may render at a different internal resolution than their
+	// sway-managed desktop size (e.g. fullscreened 1280x600 app on 1920x1080).
+	if c.FromX11 != "" {
+		rect, err := FindWindowRect(engine, name, c.FromX11)
+		if err != nil {
+			return err
+		}
+		x11W, x11H, err := FindX11WindowGeometry(engine, name, c.FromX11)
+		if err != nil {
+			return err
+		}
+		clickX = rect.X + (c.X * rect.Width / x11W)
+		clickY = rect.Y + (c.Y * rect.Height / x11H)
+		fmt.Fprintf(os.Stderr, "Translated X11 (%d, %d) → desktop (%d, %d) (x11=%dx%d sway=%dx%d)\n",
+			c.X, c.Y, clickX, clickY, x11W, x11H, rect.Width, rect.Height)
 	}
 
 	btn := wlButton(c.Button)
@@ -343,6 +363,42 @@ func (c *WlFocusCmd) Run() error {
 	return nil
 }
 
+
+// FindX11WindowGeometry queries the X11 window geometry via xdotool for an XWayland window.
+// Returns the window's internal (X11-reported) width and height.
+func FindX11WindowGeometry(engine, containerName, target string) (int, int, error) {
+	shellCmd := fmt.Sprintf(
+		`export DISPLAY=:0 && xdotool search --class %s getwindowgeometry 2>/dev/null || export DISPLAY=:0 && xdotool search --name %s getwindowgeometry`,
+		shellQuote(target), shellQuote(target),
+	)
+	var cmd *exec.Cmd
+	if engine == "" {
+		cmd = exec.Command("sh", "-c", shellCmd)
+	} else {
+		cmd = exec.Command(engine, "exec", containerName, "sh", "-c", shellCmd)
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("querying X11 geometry for %q: %w", target, err)
+	}
+
+	// Parse "Geometry: WIDTHxHEIGHT" from xdotool output
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Geometry:") {
+			geom := strings.TrimSpace(strings.TrimPrefix(line, "Geometry:"))
+			parts := strings.SplitN(geom, "x", 2)
+			if len(parts) == 2 {
+				w, errW := strconv.Atoi(parts[0])
+				h, errH := strconv.Atoi(parts[1])
+				if errW == nil && errH == nil && w > 0 && h > 0 {
+					return w, h, nil
+				}
+			}
+		}
+	}
+	return 0, 0, fmt.Errorf("could not parse X11 geometry for %q from: %s", target, string(out))
+}
 
 // --- Helper functions ---
 

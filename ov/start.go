@@ -638,6 +638,14 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	for _, bm := range bindMounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
 	}
+	for _, m := range security.Mounts {
+		if strings.HasPrefix(m, "tmpfs:") {
+			// tmpfs:/path:options → --tmpfs /path:options
+			args = append(args, "--tmpfs", strings.TrimPrefix(m, "tmpfs:"))
+		} else {
+			args = append(args, "-v", m)
+		}
+	}
 	if engine == "podman" && len(bindMounts) > 0 {
 		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))
 	}

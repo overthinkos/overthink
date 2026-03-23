@@ -1118,7 +1118,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Security: collected from layers + image config
 	security := CollectSecurity(g.Config, g.Layers, imageName)
-	if security.Privileged || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 {
+	if security.Privileged || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
 		writeJSONLabel(b, LabelSecurity, security)
 	}
 

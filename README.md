@@ -115,7 +115,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Services & Infrastructure
 
-**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding.
+**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding and fake-udev for virtual input devices in containers.
 
 ### GPU & Machine Learning
 
@@ -142,7 +142,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 Some layers are pure composition — they pull in a curated set of other layers:
 **sway-desktop** = pipewire + xdg-portal + wl-tools + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
-**sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA.
+**sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA. Includes fake-udev for virtual input device injection in containers.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

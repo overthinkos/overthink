@@ -116,6 +116,12 @@ For layer-specific rules (install files, packages, port_relay, cache mounts): `/
 - **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
 - Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
 
+**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine layer includes a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into sway's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `WLR_BACKENDS=headless,libinput` + `LIBSEAT_BACKEND=noop` in sway.
+- Source: `layers/sunshine/fake-udev`, `layers/sway/sway-wrapper`
+
+**Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov enable`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
+- Source: `ov/config.go` (`SecurityConfig.Mounts`), `ov/quadlet.go`, `ov/start.go`
+
 ---
 
 ## Command Map

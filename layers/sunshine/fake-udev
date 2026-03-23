@@ -1,0 +1,287 @@
+#!/usr/bin/env python3
+"""fake-udev: Synthetic udev events for Sunshine virtual input devices in containers.
+
+Container sysfs doesn't reflect host-created virtual input devices, so libinput's
+udev backend can't discover them. This script monitors /dev/input/ for Sunshine's
+passthrough devices (vendor 0xBEEF, product 0xDEAD) and sends synthetic
+NETLINK_KOBJECT_UEVENT messages to notify libinput of new devices.
+
+Based on the approach from Games on Whales / Wolf:
+https://games-on-whales.github.io/wolf/stable/dev/fake-udev.html
+"""
+
+import ctypes
+import ctypes.util
+import glob
+import os
+import signal
+import socket
+import struct
+import sys
+import time
+
+# Netlink constants
+NETLINK_KOBJECT_UEVENT = 15
+GROUP_UDEV = 2  # libudev listens on this group (not GROUP_KERNEL=1)
+
+# udev netlink header magic
+UDEV_MAGIC = 0xFEEDCAFE
+
+# Sunshine device identifiers
+SUNSHINE_VENDOR = "beef"
+SUNSHINE_PRODUCT = "dead"
+
+# Input device type detection from sysfs
+INPUT_TYPES = {
+    "ID_INPUT_MOUSE": lambda ev, _abs: (ev & (1 << 0x02)) != 0,      # EV_REL
+    "ID_INPUT_KEYBOARD": lambda ev, _abs: (ev & (1 << 0x01)) != 0,    # EV_KEY
+    "ID_INPUT_TOUCHSCREEN": lambda ev, abs_: (ev & (1 << 0x03)) != 0, # EV_ABS
+}
+
+
+def log(msg):
+    print(f"fake-udev: {msg}", file=sys.stderr, flush=True)
+
+
+def murmurhash2(key, seed=0):
+    """MurmurHash2 (same algorithm as systemd/libudev uses for filter hashes)."""
+    data = key.encode() if isinstance(key, str) else key
+    length = len(data)
+    m = 0x5BD1E995
+    h = (seed ^ length) & 0xFFFFFFFF
+    i = 0
+    while length >= 4:
+        k = struct.unpack_from("<I", data, i)[0]
+        k = (k * m) & 0xFFFFFFFF
+        k ^= (k >> 24)
+        k = (k * m) & 0xFFFFFFFF
+        h = (h * m) & 0xFFFFFFFF
+        h ^= k
+        i += 4
+        length -= 4
+    if length >= 3:
+        h ^= data[i + 2] << 16
+    if length >= 2:
+        h ^= data[i + 1] << 8
+    if length >= 1:
+        h ^= data[i]
+        h = (h * m) & 0xFFFFFFFF
+    h ^= (h >> 13)
+    h = (h * m) & 0xFFFFFFFF
+    h ^= (h >> 15)
+    return h
+
+
+def build_udev_header(payload_len, subsystem="input"):
+    """Build the monitor_netlink_header struct for a libudev event."""
+    header_size = 40  # Fixed size of the header struct
+    subsys_hash = socket.htonl(murmurhash2(subsystem))
+    magic = socket.htonl(UDEV_MAGIC)
+
+    return struct.pack(
+        "8sIIIIIIII",
+        b"libudev\x00",   # prefix
+        magic,             # magic (network byte order)
+        header_size,       # header_size
+        header_size,       # properties_off (payload starts right after header)
+        payload_len,       # properties_len
+        subsys_hash,       # filter_subsystem_hash
+        0,                 # filter_devtype_hash
+        0,                 # filter_tag_bloom_hi
+        0,                 # filter_tag_bloom_lo
+    )
+
+
+def build_payload(properties):
+    """Build null-separated key=value payload for a udev event."""
+    parts = []
+    for key, value in properties.items():
+        parts.append(f"{key}={value}\x00")
+    return "".join(parts).encode()
+
+
+def send_udev_event(sock, action, devname, devpath, major, minor, input_props):
+    """Send a synthetic udev event via netlink."""
+    properties = {
+        "ACTION": action,
+        "DEVNAME": devname,
+        "DEVPATH": devpath,
+        "SUBSYSTEM": "input",
+        "MAJOR": str(major),
+        "MINOR": str(minor),
+        "SEQNUM": str(int(time.time())),
+    }
+    properties.update(input_props)
+
+    payload = build_payload(properties)
+    header = build_udev_header(len(payload))
+
+    # Send to GROUP_UDEV via netlink
+    dest = struct.pack("IHI", 0, socket.AF_NETLINK, GROUP_UDEV)
+    try:
+        sock.sendto(header + payload, (0, GROUP_UDEV))
+    except OSError as e:
+        log(f"sendto failed: {e}")
+
+
+def create_netlink_socket():
+    """Create a NETLINK_KOBJECT_UEVENT socket bound to GROUP_UDEV."""
+    sock = socket.socket(socket.AF_NETLINK, socket.SOCK_RAW, NETLINK_KOBJECT_UEVENT)
+    sock.bind((0, GROUP_UDEV))
+    return sock
+
+
+def read_sysfs(path):
+    """Read a sysfs file, return stripped content or empty string."""
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except (OSError, IOError):
+        return ""
+
+
+def get_device_info(event_name):
+    """Get device info from sysfs for an input event device."""
+    base = f"/sys/class/input/{event_name}"
+    if not os.path.exists(base):
+        return None
+
+    dev = read_sysfs(f"{base}/dev")
+    if not dev or ":" not in dev:
+        return None
+
+    major, minor = dev.split(":")
+
+    # Check vendor
+    vendor = read_sysfs(f"{base}/device/id/vendor")
+    product = read_sysfs(f"{base}/device/id/product")
+    if vendor != SUNSHINE_VENDOR:
+        return None
+
+    name = read_sysfs(f"{base}/device/name")
+    devpath = os.path.realpath(base)
+    # Convert /sys/... to /devices/...
+    if devpath.startswith("/sys"):
+        devpath = devpath[4:]
+
+    # Detect input type from capabilities
+    ev_hex = read_sysfs(f"{base}/device/capabilities/ev")
+    abs_hex = read_sysfs(f"{base}/device/capabilities/abs")
+    ev_bits = int(ev_hex, 16) if ev_hex else 0
+    abs_bits = int(abs_hex, 16) if abs_hex else 0
+
+    input_props = {"ID_INPUT": "1"}
+    for prop, check in INPUT_TYPES.items():
+        if check(ev_bits, abs_bits):
+            input_props[prop] = "1"
+
+    return {
+        "event_name": event_name,
+        "name": name,
+        "major": int(major),
+        "minor": int(minor),
+        "devpath": devpath,
+        "devname": f"/dev/input/{event_name}",
+        "vendor": vendor,
+        "product": product,
+        "input_props": input_props,
+    }
+
+
+def write_udev_data(major, minor, input_props):
+    """Write a udev data file to /run/udev/data/."""
+    data_dir = "/run/udev/data"
+    os.makedirs(data_dir, exist_ok=True)
+
+    data_file = os.path.join(data_dir, f"c{major}:{minor}")
+    lines = [f"E:{k}={v}\n" for k, v in input_props.items()]
+    try:
+        with open(data_file, "w") as f:
+            f.writelines(lines)
+    except OSError as e:
+        log(f"cannot write {data_file}: {e}")
+
+
+def ensure_udev_control():
+    """Create /run/udev/control so libudev thinks udev is running."""
+    control = "/run/udev/control"
+    if not os.path.exists(control):
+        try:
+            os.makedirs(os.path.dirname(control), exist_ok=True)
+            open(control, "w").close()
+        except OSError:
+            pass
+
+
+def main():
+    log("starting")
+    running = True
+
+    def handle_signal(signum, _):
+        nonlocal running
+        log(f"received signal {signum}, shutting down")
+        running = False
+
+    signal.signal(signal.SIGTERM, handle_signal)
+    signal.signal(signal.SIGINT, handle_signal)
+
+    # Wait for sway to be ready (libinput must be listening)
+    wayland_socket = os.path.join(
+        os.environ.get("XDG_RUNTIME_DIR", "/tmp"),
+        os.environ.get("WAYLAND_DISPLAY", "wayland-0"),
+    )
+    for _ in range(30):
+        if os.path.exists(wayland_socket):
+            break
+        time.sleep(1)
+
+    log("Wayland ready, monitoring /dev/input/ for Sunshine devices")
+    ensure_udev_control()
+
+    try:
+        sock = create_netlink_socket()
+    except OSError as e:
+        log(f"cannot create netlink socket: {e}")
+        log("falling back to polling mode (no hotplug events)")
+        sock = None
+
+    known_devices = set()
+
+    while running:
+        for path in sorted(glob.glob("/dev/input/event*")):
+            event_name = os.path.basename(path)
+            if event_name in known_devices:
+                continue
+
+            info = get_device_info(event_name)
+            if info is None:
+                continue
+
+            known_devices.add(event_name)
+            log(f"detected Sunshine device: {info['devname']} ({info['name']})")
+
+            # Write udev data file
+            write_udev_data(info["major"], info["minor"], info["input_props"])
+
+            # Send synthetic udev event
+            if sock is not None:
+                send_udev_event(
+                    sock,
+                    "add",
+                    info["devname"],
+                    info["devpath"],
+                    info["major"],
+                    info["minor"],
+                    info["input_props"],
+                )
+                log(f"sent udev add event for {info['devname']}")
+
+        time.sleep(2)
+
+    if sock is not None:
+        sock.close()
+    log("stopped")
+
+
+if __name__ == "__main__":
+    main()

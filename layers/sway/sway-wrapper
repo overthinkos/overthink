@@ -19,6 +19,17 @@ else
     SWAY_EXTRA=""
 fi
 
+# Sunshine input support: when /dev/uinput is available, enable LIBSEAT_BACKEND=noop
+# so the libinput backend can open devices without a real seat session.
+# fake-udev (separate service) handles device discovery via synthetic netlink events.
+if [ -e /dev/uinput ]; then
+    export LIBSEAT_BACKEND=noop
+    # Create /run/udev/control so libinput monitors for udev events.
+    # Must exist BEFORE sway starts, otherwise libinput won't listen.
+    mkdir -p /run/udev/data
+    touch /run/udev/control
+fi
+
 # Clean up stale sway IPC sockets from previous sway processes.
 # Supervisord restarts leave old sockets that confuse swaymsg, ov sway, and
 # the resolution-setting logic below (ls picks oldest PID alphabetically).

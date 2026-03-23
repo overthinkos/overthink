@@ -15,8 +15,13 @@ ports:
 security:
   devices:
     - /dev/uinput
+  cap_add:
+    - NET_ADMIN
   group_add:
     - keep-groups
+  mounts:
+    - /dev/input:/dev/input:rw
+    - tmpfs:/run/udev:rw,size=1m
 
 rpm:
   copr:
@@ -28,7 +33,22 @@ volumes:
   - name: sunshine-config
     path: "~/.config/sunshine"
 
+env:
+  SWAY_CAPTURE: "sunshine"
+  LIBSEAT_BACKEND: "noop"
+
 service: |
+  [program:fake-udev]
+  command=python3 %(ENV_HOME)s/.local/bin/fake-udev
+  autostart=true
+  autorestart=true
+  priority=19
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
   [program:sunshine]
   command=%(ENV_HOME)s/.local/bin/sunshine-wrapper
   autostart=true

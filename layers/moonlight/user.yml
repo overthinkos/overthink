@@ -12,3 +12,53 @@ tasks:
         # Launch Moonlight with Alt+M
         bindsym Mod1+m exec env QT_QPA_PLATFORM=xcb DISPLAY=:0 /usr/local/bin/moonlight --appimage-extract-and-run
         EOF
+      # Add Moonlight button to waybar (runs after waybar layer installs config)
+      - |
+        python3 -c "
+        import json, re, sys
+
+        cfg_path = '$HOME/.config/waybar/config'
+
+        # Read and strip // comments for JSON parsing
+        with open(cfg_path) as f:
+            text = f.read()
+        clean = re.sub(r'//.*', '', text)
+        cfg = json.loads(clean)
+
+        # Add to modules-left after terminal
+        mods = cfg.get('modules-left', [])
+        if 'custom/moonlight' not in mods:
+            idx = mods.index('custom/terminal') + 1 if 'custom/terminal' in mods else len(mods)
+            mods.insert(idx, 'custom/moonlight')
+            cfg['modules-left'] = mods
+
+        # Add module definition
+        cfg['custom/moonlight'] = {
+            'format': 'Moonlight',
+            'on-click': \"swaymsg exec 'env QT_QPA_PLATFORM=xcb DISPLAY=:0 /usr/local/bin/moonlight --appimage-extract-and-run'\",
+            'tooltip': False
+        }
+
+        with open(cfg_path, 'w') as f:
+            json.dump(cfg, f, indent=4)
+            f.write('\n')
+        "
+      - |
+        cat >> ~/.config/waybar/style.css << 'EOF'
+
+        /* Moonlight launcher button */
+        #custom-moonlight {
+            background-color: #45475a;
+            color: #cba6f7;
+            border: 1px solid #585b70;
+            border-radius: 6px;
+            padding: 4px 12px;
+            margin: 4px 3px;
+            min-width: 64px;
+            font-weight: bold;
+        }
+        #custom-moonlight:hover {
+            background-color: #cba6f7;
+            color: #1e1e2e;
+        }
+        EOF

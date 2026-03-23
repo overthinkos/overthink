@@ -193,10 +193,6 @@ images:
       - "48010:48010"
       - "48100:48100/udp"
       - "48200:48200/udp"
-    security:
-      cap_add:
-        - SYS_ADMIN
-    network: host
     platforms:
       - linux/amd64
 

@@ -240,7 +240,7 @@ For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diag
 
 **Set up Wolf streaming (container-native):**
 `/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
-Wolf is self-contained (own compositor, audio, input). No sway/pipewire needed. Uses host networking + Podman socket for per-app containers.
+Wolf is self-contained (own compositor, audio, input). No sway/pipewire needed. Uses Podman socket for per-app containers.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)

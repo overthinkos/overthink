@@ -23,13 +23,14 @@ security:
     - /run/user/1000/podman/podman.sock:/var/run/docker.sock:rw
     - /dev/input:/dev/input:rw
     - tmpfs:/run/udev:rw,size=1m
+    - tmpfs:/run/user/1000/wolf:rw,size=10m
 
 env:
   WOLF_LOG_LEVEL: "INFO"
   WOLF_CFG_FILE: "~/.config/wolf/config.toml"
   WOLF_PRIVATE_KEY_FILE: "~/.config/wolf/key.pem"
   WOLF_PRIVATE_CERT_FILE: "~/.config/wolf/cert.pem"
-  XDG_RUNTIME_DIR: "/tmp"
+  XDG_RUNTIME_DIR: "/run/user/1000/wolf"
   GST_GL_API: "gles2"
   GST_GL_WINDOW: "surfaceless"
   GST_PLUGIN_PATH: "/usr/local/lib64/gstreamer-1.0"
@@ -93,7 +94,7 @@ service: |
   autorestart=true
   priority=20
   startsecs=5
-  environment=XDG_RUNTIME_DIR="/tmp"
+  environment=XDG_RUNTIME_DIR="/run/user/1000/wolf"
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true

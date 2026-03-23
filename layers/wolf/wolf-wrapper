@@ -27,12 +27,14 @@ while [ ! -S "$DOCKER_SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     ELAPSED=$((ELAPSED + 1))
 done
 if [ ! -S "$DOCKER_SOCKET" ]; then
-    echo "wolf-wrapper: Docker socket $DOCKER_SOCKET not found after ${TIMEOUT}s" >&2
-    exit 1
+    echo "wolf-wrapper: WARNING: Docker socket $DOCKER_SOCKET not found after ${TIMEOUT}s" >&2
+    echo "wolf-wrapper: Wolf will start but per-app container spawning may not work" >&2
+else
+    echo "wolf-wrapper: Docker socket ready at $DOCKER_SOCKET"
 fi
-echo "wolf-wrapper: Docker socket ready at $DOCKER_SOCKET"
 
-# --- Set up udev environment for input handling ---
+# --- Set up runtime and udev directories ---
+mkdir -p "${XDG_RUNTIME_DIR:-/run/wolf}"
 mkdir -p /run/udev/data
 touch /run/udev/control
 

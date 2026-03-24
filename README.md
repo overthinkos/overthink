@@ -1,18 +1,24 @@
 # Overthink
 
-**Composable container images from a library of snap-together layers.**
+**The container management experience for you and your AI.**
 
-Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
+Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
 129 layers. 39 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
+*The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but a fitting description of what the tool does: carefully working through dependency graphs, security declarations, and build ordering so you don't have to.*
+
 ## Why Overthink?
 
-Every container project starts the same way: copy a Dockerfile, paste in package installs, fight with layer ordering, repeat for the next variant. Need GPU support? Another Dockerfile. Want a desktop environment inside the container? Good luck.
+Containers are a great idea with rough edges. The basics work well enough, but real-world needs pile up fast: GPU passthrough with the right driver stack, containers that need `/dev/kvm` or virtualization access without blanket `--privileged`, multiple services managed together, encrypted volumes, VNC or game-streaming desktops, device permissions that don't compromise your host. Each of these is solvable — but solving them all at once, reliably, across images, is where things get hard. And if you're working with an AI agent that needs to build and manage these containers too, the complexity compounds.
 
-Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, and dependencies declared in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order.
+Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, security declarations, and dependencies described in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order — handling the hard parts so you (and your AI) don't have to.
 
-Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition, done. Need to add Ollama for local LLMs? Drop in the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? That's still just a list of layers in `images.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, and GPU passthrough.
+Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers in `images.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
+
+### Sandboxed AI Desktops
+
+One of Overthink's design goals is running sandboxed [OpenClaw](https://github.com/overthinkos/openclaw) systems. The approach flips the usual AI sandboxing model: instead of restricting what the AI agent can do, Overthink gives it full access to a complete desktop environment — Chrome, a Wayland compositor, development tools, network services — and sandboxes the entire desktop inside a container managed by `ov`. The AI agent operates freely within its environment while the host stays fully isolated. This is how images like `openclaw-sway-browser` and `openclaw-ollama-sway-browser` work: a full AI workstation with no host compromise.
 
 ## Key Concepts
 
@@ -155,7 +161,7 @@ Some layers are pure composition — they pull in a curated set of other layers:
 
 ## The Lifecycle
 
-Overthink covers the full journey from development to production:
+Overthink covers the full lifecycle — from development to production — whether you're driving or your AI agent is:
 
 **Develop** — `ov shell <image>` drops you into an interactive container with all your layers, volumes mounted, GPU passed through. Change code, rebuild, iterate.
 
@@ -291,9 +297,37 @@ ov build my-image                      # Build it
 
 See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files.
 
-## Documentation
+## Works with Claude Code
 
-See [CLAUDE.md](CLAUDE.md) for the complete system specification.
+Overthink is designed to work hand-in-hand with [Claude Code](https://claude.com/claude-code). The [overthink-plugins](https://github.com/overthinkos/overthink-plugins) repository provides skills that teach Claude how to compose, build, deploy, and manage your container images.
+
+**Quick setup** — add this to your project's `.claude/settings.json`:
+
+```json
+{
+  "enabledPlugins": {
+    "ov@ov-plugins": true,
+    "ov-dev@ov-plugins": true,
+    "ov-layers@ov-plugins": true,
+    "ov-images@ov-plugins": true
+  },
+  "extraKnownMarketplaces": {
+    "ov-plugins": {
+      "source": { "source": "directory", "path": "./plugins" }
+    }
+  }
+}
+```
+
+Then clone with the plugins submodule:
+
+```bash
+git clone --recurse-submodules https://github.com/overthinkos/overthink.git
+```
+
+This gives Claude Code access to 188 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+
+See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 
 ## License
 

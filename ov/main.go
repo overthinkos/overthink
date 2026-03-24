@@ -684,7 +684,7 @@ func main() {
 	var cli CLI
 	ctx := kong.Parse(&cli,
 		kong.Name("ov"),
-		kong.Description("Overthink build system - composable container images"),
+		kong.Description("Overthink - the container management experience for you and your AI"),
 		kong.UsageOnError(),
 	)
 	err := ctx.Run()

@@ -1,7 +1,7 @@
-# Overthink Build System
+# Overthink — The Container Management Experience for You and Your AI
 
-Compose container images from a library of fully configurable layers.
-Built on `supervisord` and `ov` (Go CLI). Supports both Docker and Podman as build/run engines.
+Compose, build, deploy, and manage container images from a library of fully configurable layers.
+Built on `supervisord` and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
 
 ---
 

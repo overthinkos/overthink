@@ -43,3 +43,11 @@ deploy.local.yml
 bin/
 ov/ov
 output/
+
+# Screenshots and temporary images
+*.png
+*.jpg
+*.jpeg
+
+# RPM packages
+*.rpm

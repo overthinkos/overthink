@@ -28,6 +28,7 @@ type CLI struct {
 	Moon     MoonCmd     `cmd:"" help:"GameStream client protocol (pair, launch, quit)"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
+	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`

@@ -17,9 +17,10 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 **Credential & Secret Management** -- Abstracted via `CredentialStore` interface:
 - **Host-side credentials** (VNC passwords, Sunshine creds) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
+- **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. `ov secrets` commands manage entries directly.
 - **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At runtime, `ov enable`/`ov start` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. Docker falls back to env var injection.
 - **Resolution chain:** env var > keyring > config file > default. Migration: `ov config migrate-secrets`.
-- Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/secrets.go`
+- Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
@@ -153,6 +154,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
 | `config` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
+| `secrets` (init, list, get, set, delete, import, export, path) | `/ov:config` |
 | `enc` | `/ov:enc` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |

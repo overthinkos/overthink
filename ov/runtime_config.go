@@ -21,7 +21,9 @@ type RuntimeConfig struct {
 	AutoEnable           *bool             `yaml:"auto_enable,omitempty"`
 	BindAddress          string            `yaml:"bind_address,omitempty"`
 	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
-	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "config"
+	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "kdbx", "config"
+	SecretsKdbxPath      string            `yaml:"secrets_kdbx_path,omitempty"`  // Path to .kdbx database file
+	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
 	SunshineUsers        map[string]string `yaml:"sunshine_users,omitempty"`     // Sunshine Web UI usernames keyed by image[-instance]
@@ -290,6 +292,10 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.EncryptedStoragePath, nil
 	case "secret_backend":
 		return cfg.SecretBackend, nil
+	case "secrets.kdbx_path":
+		return cfg.SecretsKdbxPath, nil
+	case "secrets.kdbx_key_file":
+		return cfg.SecretsKdbxKeyFile, nil
 	case "vm.backend":
 		return cfg.Vm.Backend, nil
 	case "vm.disk_size":
@@ -323,7 +329,7 @@ func GetConfigValue(key string) (string, error) {
 			val, _ := ResolveCredential("", CredServiceSunshinePassword, name, "")
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 	}
 }
 
@@ -356,9 +362,13 @@ func SetConfigValue(key, value string) error {
 	case "encrypted_storage_path":
 		// Any non-empty path is valid
 	case "secret_backend":
-		if value != "auto" && value != "keyring" && value != "config" {
-			return fmt.Errorf("secret_backend must be \"auto\", \"keyring\", or \"config\", got %q", value)
+		if value != "auto" && value != "keyring" && value != "kdbx" && value != "config" {
+			return fmt.Errorf("secret_backend must be \"auto\", \"keyring\", \"kdbx\", or \"config\", got %q", value)
 		}
+	case "secrets.kdbx_path":
+		// Any non-empty path is valid
+	case "secrets.kdbx_key_file":
+		// Any non-empty path is valid
 	case "vm.backend":
 		if value != "auto" && value != "libvirt" && value != "qemu" {
 			return fmt.Errorf("vm.backend must be \"auto\", \"libvirt\", or \"qemu\", got %q", value)
@@ -419,6 +429,10 @@ func SetConfigValue(key, value string) error {
 		cfg.SecretBackend = value
 		// Reset cached default store so the new backend takes effect
 		resetDefaultStore()
+	case "secrets.kdbx_path":
+		cfg.SecretsKdbxPath = value
+	case "secrets.kdbx_key_file":
+		cfg.SecretsKdbxKeyFile = value
 	case "vm.backend":
 		cfg.Vm.Backend = value
 	case "vm.disk_size":
@@ -484,6 +498,10 @@ func ResetConfigValue(key string) error {
 	case "secret_backend":
 		cfg.SecretBackend = ""
 		resetDefaultStore()
+	case "secrets.kdbx_path":
+		cfg.SecretsKdbxPath = ""
+	case "secrets.kdbx_key_file":
+		cfg.SecretsKdbxKeyFile = ""
 	case "vm.backend":
 		cfg.Vm.Backend = ""
 	case "vm.disk_size":
@@ -598,6 +616,8 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
 		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
+		resolve("secrets.kdbx_path", "OV_KDBX_PATH", cfg.SecretsKdbxPath, ""),
+		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),
 		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),
 		resolve("vm.disk_size", "OV_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
 		resolve("vm.root_size", "OV_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),

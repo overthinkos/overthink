@@ -49,15 +49,34 @@ func DefaultCredentialStore() CredentialStore {
 				return
 			}
 			defaultStoreVal = store
+		case "kdbx":
+			path, keyFile := resolveKdbxPaths()
+			if path == "" {
+				fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'kdbx' but secrets.kdbx_path is not configured.\n")
+				fmt.Fprintf(os.Stderr, "Run: ov secrets init  (or: ov config set secrets.kdbx_path /path/to/database.kdbx)\n")
+				defaultStoreVal = &ConfigFileStore{}
+				return
+			}
+			defaultStoreVal = &KdbxStore{path: path, keyFile: keyFile}
 		case "config":
 			defaultStoreVal = &ConfigFileStore{}
 		default: // "auto" or ""
+			// 1. Try system keyring (silent D-Bus probe)
 			store := &KeyringStore{}
 			if err := store.Probe(); err == nil {
 				defaultStoreVal = store
-			} else {
-				defaultStoreVal = &ConfigFileStore{}
+				return
 			}
+			// 2. Try kdbx if configured and file exists (no password prompt)
+			if path, keyFile := resolveKdbxPaths(); path != "" {
+				kdbx := &KdbxStore{path: path, keyFile: keyFile}
+				if err := kdbx.Probe(); err == nil {
+					defaultStoreVal = kdbx
+					return
+				}
+			}
+			// 3. Fall back to config file
+			defaultStoreVal = &ConfigFileStore{}
 		}
 	})
 	return defaultStoreVal
@@ -72,6 +91,9 @@ func PrintStoreInfo() {
 		case "keyring":
 			fmt.Fprintf(os.Stderr, "Using system keyring for credential storage.\n")
 			fmt.Fprintf(os.Stderr, "To force a specific backend: ov config set secret_backend keyring|config\n")
+		case "kdbx":
+			fmt.Fprintf(os.Stderr, "Using KeePass database for credential storage.\n")
+			fmt.Fprintf(os.Stderr, "To force a specific backend: ov config set secret_backend keyring|kdbx|config\n")
 		case "config":
 			backend := resolveSecretBackend()
 			if backend == "config" {
@@ -81,6 +103,7 @@ func PrintStoreInfo() {
 			fmt.Fprintf(os.Stderr, "System keyring not available (no D-Bus session bus).\n")
 			fmt.Fprintf(os.Stderr, "Credentials will be stored in ~/.config/ov/config.yml (permissions: 0600).\n")
 			fmt.Fprintf(os.Stderr, "To suppress this message: ov config set secret_backend config\n")
+			fmt.Fprintf(os.Stderr, "For encrypted storage without a keyring: ov secrets init\n")
 		}
 	})
 }
@@ -99,9 +122,9 @@ func ResolveCredential(envVar, service, key, defaultVal string) (value, source s
 		return v, store.Name()
 	}
 
-	// If the primary store is keyring, also check config file as fallback
+	// If the primary store is keyring or kdbx, also check config file as fallback
 	// (for credentials not yet migrated)
-	if store.Name() == "keyring" {
+	if store.Name() == "keyring" || store.Name() == "kdbx" {
 		fallback := &ConfigFileStore{}
 		if v, err := fallback.Get(service, key); err == nil && v != "" {
 			return v, "config"
@@ -124,6 +147,27 @@ func resolveSecretBackend() string {
 		return cfg.SecretBackend
 	}
 	return "auto"
+}
+
+// resolveKdbxPaths reads the kdbx path and key file from env or config.
+func resolveKdbxPaths() (path, keyFile string) {
+	if v := os.Getenv("OV_KDBX_PATH"); v != "" {
+		path = v
+	} else {
+		cfg, err := LoadRuntimeConfig()
+		if err == nil {
+			path = cfg.SecretsKdbxPath
+		}
+	}
+	if v := os.Getenv("OV_KDBX_KEY_FILE"); v != "" {
+		keyFile = v
+	} else {
+		cfg, err := LoadRuntimeConfig()
+		if err == nil {
+			keyFile = cfg.SecretsKdbxKeyFile
+		}
+	}
+	return
 }
 
 // resetDefaultStore resets the cached default store (for testing).

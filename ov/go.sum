@@ -49,6 +49,10 @@ github.com/stretchr/objx v0.5.2/go.mod h1:FRsXN1f5AsAjCGJKqEizvkpNtU+EGNCLh3NxZ/
 github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/tobischo/argon2 v0.1.0 h1:mwAx/9DK/4rP0xzNifb/XMAf43dU3eG1B3aeF88qu4Y=
+github.com/tobischo/argon2 v0.1.0/go.mod h1:4NLmLFwhWPbT66nRZNgcktV/mibJ6fESoeEp43h9GRw=
+github.com/tobischo/gokeepasslib/v3 v3.6.2 h1:SJzzllmNe7iZLudLJ3Lzdm3pDb++AJqZlmqG+SR8bVc=
+github.com/tobischo/gokeepasslib/v3 v3.6.2/go.mod h1:ga7HFqG0TZSLNao/QOnV2+yngkrf5186saPxSQ1Xp7o=
 github.com/vbatts/tar-split v0.12.2 h1:w/Y6tjxpeiFMR47yzZPlPj/FcPLpXbTUi/9H7d3CPa4=
 github.com/vbatts/tar-split v0.12.2/go.mod h1:eF6B6i6ftWQcDqEn3/iGFRFRo8cBIMSJVOpnNdfTMFA=
 github.com/zalando/go-keyring v0.2.8 h1:6sD/Ucpl7jNq10rM2pgqTs0sZ9V3qMrqfIIy5YPccHs=

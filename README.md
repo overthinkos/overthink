@@ -276,6 +276,9 @@ ov enc init/mount/unmount/status <image>    # Encrypted volumes
 ov enc passwd <image>                       # Change encryption password
 ov config get/set/list/reset/path              # Runtime configuration
 ov config migrate-secrets [--dry-run]          # Move plaintext creds to system keyring
+ov secrets init [path]                         # Create KeePass .kdbx database
+ov secrets list/get/set/delete                 # Manage kdbx entries directly
+ov secrets import [--dry-run]                  # Import creds into kdbx from config/keyring
 ov udev status                                 # Show GPU device access status
 ov udev generate                               # Print udev rules to stdout
 ov udev install                                # Install udev rules (requires sudo)

@@ -404,6 +404,8 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		Instance:    c.Instance,
 		Security:    security,
 		Network:     resolvedNetwork,
+		Status:      ctx.Resolved.Status,
+		Info:        ctx.Resolved.Info,
 	}
 
 	content := generateQuadlet(qcfg)

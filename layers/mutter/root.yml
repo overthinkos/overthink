@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      # mutter may ship with cap_sys_nice file capability which prevents
+      # execution in rootless containers (kernel blocks exec of binaries with
+      # file caps in user namespaces). Strip it — not needed for headless compositor.
+      - setcap -r /usr/bin/mutter 2>/dev/null || true

@@ -1,0 +1,31 @@
+depends:
+  - mutter
+  - supervisord
+
+rpm:
+  packages:
+    - gnome-terminal
+    - nautilus
+
+service: |
+  [program:gnome-terminal]
+  command=%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait
+  autostart=true
+  autorestart=false
+  priority=16
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:nautilus]
+  command=%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus
+  autostart=true
+  autorestart=false
+  priority=16
+  startsecs=0
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

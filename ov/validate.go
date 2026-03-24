@@ -111,6 +111,12 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Warn about cross-image port overlaps
 	validatePortOverlap(cfg, errs)
 
+	// Validate status fields
+	validateStatus(cfg, layers, errs)
+
+	// Validate version fields
+	validateVersionFields(cfg, layers, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}
@@ -1314,4 +1320,49 @@ func formatImageList(names []string) string {
 		quoted[i] = fmt.Sprintf("%q", n)
 	}
 	return strings.Join(quoted, ", ")
+}
+
+// validStatuses lists the allowed status values (empty string also accepted as "testing").
+var validStatuses = map[string]bool{
+	"":        true,
+	"working": true,
+	"testing": true,
+	"broken":  true,
+}
+
+// calverRe matches CalVer format: YYYY.DDD.HHMM (3 dot-separated non-negative integers)
+var calverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// validateStatus validates status fields in layers and images.
+func validateStatus(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !validStatuses[layer.Status] {
+			errs.Add("layer %q: status must be \"working\", \"testing\", or \"broken\", got %q", name, layer.Status)
+		}
+	}
+	for name, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if !validStatuses[img.Status] {
+			errs.Add("image %q: status must be \"working\", \"testing\", or \"broken\", got %q", name, img.Status)
+		}
+	}
+}
+
+// validateVersionFields validates version fields in layers and images.
+func validateVersionFields(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if layer.Version != "" && !calverRe.MatchString(layer.Version) {
+			errs.Add("layer %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, layer.Version)
+		}
+	}
+	for name, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		if img.Version != "" && !calverRe.MatchString(img.Version) {
+			errs.Add("image %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, img.Version)
+		}
+	}
 }

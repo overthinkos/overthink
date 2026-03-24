@@ -199,6 +199,12 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				}
 				fmt.Printf("%s\t%s\t%s\t%s\n", bm.Name, bm.Host, bm.Path, encrypted)
 			}
+		case "version":
+			fmt.Println(resolved.Version)
+		case "status":
+			fmt.Println(resolveStatus(resolved.Status))
+		case "info":
+			fmt.Println(resolved.Info)
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
 		}
@@ -281,6 +287,13 @@ func (c *InspectCmd) runFromLabels() error {
 				}
 				fmt.Printf("%s\t\t%s\t%s\n", bm.Name, bm.Path, encrypted)
 			}
+		case "version":
+			// Not available from labels (image version is a build-time concept)
+			return fmt.Errorf("format field %q is only available from project directory (build-time field)", c.Format)
+		case "status":
+			fmt.Println(resolveStatus(meta.Status))
+		case "info":
+			fmt.Println(meta.Info)
 		case "tag", "base", "builder", "pkg", "platforms", "layers":
 			return fmt.Errorf("format field %q is only available from project directory (build-time field)", c.Format)
 		default:
@@ -323,7 +336,13 @@ func (c *ListImagesCmd) Run() error {
 	}
 
 	for _, name := range cfg.ImageNames() {
-		fmt.Println(name)
+		img := cfg.Images[name]
+		status := resolveStatus(img.Status)
+		if status != "working" {
+			fmt.Printf("%s [%s]\n", name, status)
+		} else {
+			fmt.Println(name)
+		}
 	}
 	return nil
 }
@@ -349,8 +368,16 @@ func (c *ListLayersCmd) Run() error {
 
 	for _, name := range LayerNames(layers) {
 		layer := layers[name]
+		status := resolveStatus(layer.Status)
+		var tags []string
 		if layer.Remote {
-			fmt.Printf("%s [%s]\n", name, layer.RepoPath)
+			tags = append(tags, layer.RepoPath)
+		}
+		if status != "working" {
+			tags = append(tags, status)
+		}
+		if len(tags) > 0 {
+			fmt.Printf("%s [%s]\n", name, strings.Join(tags, ", "))
 		} else {
 			fmt.Println(name)
 		}

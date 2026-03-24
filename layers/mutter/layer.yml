@@ -1,0 +1,31 @@
+depends:
+  - dbus
+
+env:
+  XDG_RUNTIME_DIR: "/tmp"
+  WAYLAND_DISPLAY: "wayland-0"
+  XDG_CURRENT_DESKTOP: "GNOME"
+  XDG_SESSION_TYPE: "wayland"
+  EGL_LOG_LEVEL: "fatal"
+
+rpm:
+  packages:
+    - mutter
+    - xorg-x11-server-Xwayland
+    - mesa-dri-drivers
+    - mesa-vulkan-drivers
+    - libglvnd-egl
+    - libglvnd-gles
+    - egl-wayland
+
+service: |
+  [program:mutter]
+  command=%(ENV_HOME)s/.local/bin/mutter-wrapper
+  autostart=true
+  autorestart=true
+  priority=10
+  startsecs=3
+  environment=XDG_RUNTIME_DIR="/tmp"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

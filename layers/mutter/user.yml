@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/mutter-wrapper ~/.local/bin/mutter-wrapper
+      - chmod +x ~/.local/bin/mutter-wrapper

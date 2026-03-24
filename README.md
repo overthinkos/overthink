@@ -4,7 +4,7 @@
 
 Stop writing Dockerfiles. Define what you need — Python, CUDA, Jupyter, a reverse proxy, a Wayland desktop — and Overthink composes it into optimized multi-stage container images. Same definition takes you from an interactive dev shell to a running service to a systemd unit to a bootable VM disk image.
 
-122 layers. 42 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
+129 layers. 39 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
 ## Why Overthink?
 
@@ -24,7 +24,7 @@ A layer is a reusable building block — packages, config, services. An image is
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
-- **`layer.yml`** — The layer's manifest: system packages (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu), dependencies on other layers, environment variables, ports, services, volumes, and routes
+- **`layer.yml`** — The layer's manifest: system packages (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu), dependencies on other layers, environment variables, ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
 - **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user)
 - **`package.json`** — npm packages for Node.js (multi-stage build, runs as user)
 - **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user)
@@ -123,7 +123,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Desktop Environments
 
-**sway** — Wayland compositor (wlroots, full desktop). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** — Chrome with DevTools on `:9222`.
+**sway** — Wayland compositor (wlroots, full desktop). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222`.
 
 ### Applications
 
@@ -147,6 +147,8 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **niri-desktop-sunshine** = niri-desktop + sunshine-niri. Niri desktop with Sunshine streaming (experimental — capture pending upstream protocol support).
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
 **x11-desktop-sunshine** = x11-desktop + sunshine-x11. X11 desktop with Sunshine streaming via native X11 capture and XTest input injection. All features work — recommended for Sunshine.
+**mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
+**mutter-desktop-sunshine** = mutter-desktop + sunshine-mutter. Portal-native Sunshine streaming — zero fake-udev, zero NET_ADMIN. Uses D-Bus ScreenCast + AT-SPI2 auto-accept for the permission dialog.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

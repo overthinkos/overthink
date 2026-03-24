@@ -54,6 +54,9 @@ type SecurityConfig struct {
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
 	Enabled   *bool         `yaml:"enabled,omitempty"`
+	Version   string        `yaml:"version,omitempty"`  // CalVer version (YYYY.DDD.HHMM) of this image definition
+	Status    string        `yaml:"status,omitempty"`   // working, testing, broken (default: testing)
+	Info      string        `yaml:"info,omitempty"`     // free-form description of what works/doesn't
 	Base      string        `yaml:"base,omitempty"`
 	Bootc     bool          `yaml:"bootc,omitempty"`
 	Platforms []string      `yaml:"platforms,omitempty"`
@@ -97,6 +100,9 @@ func boolPtr(v bool) *bool {
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedImage struct {
 	Name      string
+	Version   string `json:"version,omitempty"`  // CalVer version from images.yml
+	Status    string `json:"status,omitempty"`   // effective status (worst of image + layers)
+	Info      string `json:"info,omitempty"`     // aggregated info from image + layers
 	Base      string   // Resolved base (external OCI ref or internal image name)
 	Bootc     bool
 	Platforms []string
@@ -186,7 +192,10 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	}
 
 	resolved := &ResolvedImage{
-		Name: name,
+		Name:    name,
+		Version: img.Version,
+		Status:  img.Status,
+		Info:    img.Info,
 	}
 
 	// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"

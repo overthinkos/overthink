@@ -38,7 +38,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (122 layers)
++-- layers/<name>/            # Layer directories (129 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -67,8 +67,8 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (19 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (122 skills)
-+-- ov-images/                        # Image reference (36 skills)
++-- ov-layers/                        # Layer reference (129 skills)
++-- ov-images/                        # Image reference (37 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -213,8 +213,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 115 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 35 | Image reference | "What does image X look like?" |
+| `ov-layers` | 129 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 37 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -246,6 +246,10 @@ Uses Xorg headless (dummy driver + libinput) + Openbox + X11 native capture. All
 **Set up Niri Sunshine streaming (experimental — capture broken):**
 `/ov-layers:niri` (compositor) -> `/ov-layers:sunshine-niri` (streaming) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
 Niri is Smithay-based (not wlroots). Built from QaidVoid/niri fork with virtual output support. Capture path pending (niri doesn't expose wlr-screencopy).
+
+**Set up Mutter Sunshine streaming (portal-native — working):**
+`/ov-layers:mutter` (compositor) -> `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
+Mutter uses D-Bus `org.gnome.Mutter.ScreenCast` (not Wayland protocol). `XDG_SESSION_TYPE=wayland` required. Portal dialog auto-accepted via AT-SPI2. Zero security declarations. Image: `sunshine-desktop-mutter`.
 
 **Set up Wolf streaming (container-native):**
 `/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
@@ -293,6 +297,7 @@ Examples where multiple skills cover one topic:
 - **Wolf:** `/ov-layers:wolf` (layer properties, build-from-source) vs `/ov-images:wolf` (image definition) vs `/ov:moon` (client pairing — same GameStream protocol as Sunshine)
 - **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer) vs `/ov-layers:sunshine-niri` (streaming layer) vs `/ov-images:sunshine-desktop-niri` (experimental, capture broken)
 - **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer) vs `/ov-layers:sunshine-kwin` (portal capture) vs `/ov-images:sunshine-desktop-kwin` (disabled, KWin screencast protocol missing in virtual mode)
+- **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer) vs `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) vs `/ov-images:sunshine-desktop-mutter` (working, first portal-native streaming)
 - **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer) vs `/ov-layers:sunshine-x11` (streaming) vs `/ov-images:sunshine-desktop-x11` (image)
 
 ### Desktop Automation Hierarchy

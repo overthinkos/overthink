@@ -1210,6 +1210,37 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkills, skillURL))
 	}
 
+	// Status and info: aggregate worst status from image + layers
+	effectiveStatus := img.Status
+	var infoParts []string
+	if img.Info != "" {
+		infoParts = append(infoParts, img.Info)
+	}
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		layerStatus := layer.Status
+		effectiveStatus = worstStatus(effectiveStatus, layerStatus)
+		if layer.Info != "" && resolveStatus(layerStatus) != "working" {
+			infoParts = append(infoParts, layerName+": "+layer.Info)
+		}
+	}
+	resolvedStatus := resolveStatus(effectiveStatus)
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelStatus, resolvedStatus))
+	if len(infoParts) > 0 {
+		combinedInfo := strings.Join(infoParts, "; ")
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInfo, combinedInfo))
+	}
+
+	// Layer versions: map of layer name -> CalVer for layers with version set
+	layerVersions := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.Version != "" {
+			layerVersions[layerName] = layer.Version
+		}
+	}
+	writeJSONLabel(b, LabelLayerVersions, layerVersions)
+
 	b.WriteString("\n")
 }
 
@@ -1225,6 +1256,36 @@ func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
 		return
 	}
 	b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", key, s))
+}
+
+// resolveStatus returns the effective status string. Empty defaults to "testing".
+func resolveStatus(s string) string {
+	if s == "" {
+		return "testing"
+	}
+	return s
+}
+
+// statusSeverity returns a numeric severity for status comparison.
+func statusSeverity(s string) int {
+	switch resolveStatus(s) {
+	case "working":
+		return 0
+	case "testing":
+		return 1
+	case "broken":
+		return 2
+	default:
+		return 1 // unknown treated as testing
+	}
+}
+
+// worstStatus returns the more severe of two status values.
+func worstStatus(a, b string) string {
+	if statusSeverity(b) > statusSeverity(a) {
+		return resolveStatus(b)
+	}
+	return resolveStatus(a)
 }
 
 // createRemoteLayerCopies copies remote layer directories into .build/_layers/

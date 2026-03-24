@@ -1,0 +1,14 @@
+depends:
+  - dbus
+  - mutter
+  - pipewire
+
+env:
+  XDG_CURRENT_DESKTOP: "GNOME"
+
+rpm:
+  packages:
+    - xdg-desktop-portal
+    - xdg-desktop-portal-gnome
+    - xdg-desktop-portal-gtk
+    - python3-gobject

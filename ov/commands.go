@@ -192,6 +192,8 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Instance:    c.Instance,
 		Security:    security,
 		Network:     resolvedNetwork,
+		Status:      meta.Status,
+		Info:        meta.Info,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -371,6 +373,8 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		Instance:    c.Instance,
 		Security:    security,
 		Network:     resolvedNetwork,
+		Status:      ctx.Resolved.Status,
+		Info:        ctx.Resolved.Info,
 	}
 
 	content := generateQuadlet(qcfg)

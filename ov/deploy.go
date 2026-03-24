@@ -17,6 +17,9 @@ type DeployConfig struct {
 // DeployImageConfig holds deployment-specific overrides for a single image.
 type DeployImageConfig struct {
 	Workspace  string            `yaml:"workspace,omitempty"`
+	Version    string            `yaml:"version,omitempty"`
+	Status     string            `yaml:"status,omitempty"`
+	Info       string            `yaml:"info,omitempty"`
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`
 	DNS        string            `yaml:"dns,omitempty"`
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`
@@ -79,6 +82,15 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		}
 
 		// Note: Workspace is deploy-only, not merged into ImageConfig (build-time).
+		if overlay.Version != "" {
+			img.Version = overlay.Version
+		}
+		if overlay.Status != "" {
+			img.Status = overlay.Status
+		}
+		if overlay.Info != "" {
+			img.Info = overlay.Info
+		}
 		if overlay.Tunnel != nil {
 			img.Tunnel = overlay.Tunnel
 		}
@@ -126,6 +138,12 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 		return
 	}
 
+	if overlay.Status != "" {
+		meta.Status = overlay.Status
+	}
+	if overlay.Info != "" {
+		meta.Info = overlay.Info
+	}
 	if overlay.Tunnel != nil {
 		meta.Tunnel = overlay.Tunnel
 	}
@@ -362,6 +380,9 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 			continue
 		}
 		entry := DeployImageConfig{
+			Version:    img.Version,
+			Status:     img.Status,
+			Info:       img.Info,
 			Ports:      img.Ports,
 			Tunnel:     img.Tunnel,
 			DNS:        img.DNS,
@@ -374,7 +395,8 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 			Engine:     img.Engine,
 		}
 		// Only include if at least one field is set
-		if entry.Ports != nil || entry.Tunnel != nil || entry.DNS != "" ||
+		if entry.Version != "" || entry.Status != "" || entry.Info != "" ||
+			entry.Ports != nil || entry.Tunnel != nil || entry.DNS != "" ||
 			entry.AcmeEmail != "" || entry.BindMounts != nil || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" ||
 			entry.Engine != "" {

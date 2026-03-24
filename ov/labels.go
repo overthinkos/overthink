@@ -40,6 +40,9 @@ const (
 	LabelPortProtos     = "org.overthinkos.port_protos"
 	LabelPortRelay      = "org.overthinkos.port_relay"
 	LabelSkills         = "org.overthinkos.skills"
+	LabelStatus         = "org.overthinkos.status"
+	LabelInfo           = "org.overthinkos.info"
+	LabelLayerVersions  = "org.overthinkos.layer_versions"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -92,9 +95,12 @@ type ImageMetadata struct {
 	EnvLayers      map[string]string
 	PathAppend     []string
 	Engine         string
-	PortProtos     map[int]string // container port -> protocol ("http" or "tcp")
-	PortRelay      []int          // ports with socat relay (eth0 -> loopback)
-	Skills         string         // skill documentation URL
+	PortProtos     map[int]string    // container port -> protocol ("http" or "tcp")
+	PortRelay      []int             // ports with socat relay (eth0 -> loopback)
+	Skills         string            // skill documentation URL
+	Status         string            // effective status (working, testing, broken)
+	Info           string            // aggregated status info
+	LayerVersions  map[string]string // layer name -> CalVer version
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -309,6 +315,17 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 
 	// Skills
 	meta.Skills = labels[LabelSkills]
+
+	// Status and info
+	meta.Status = labels[LabelStatus]
+	meta.Info = labels[LabelInfo]
+
+	// Layer versions
+	if v := labels[LabelLayerVersions]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.LayerVersions); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelLayerVersions, err)
+		}
+	}
 
 	return meta, nil
 }

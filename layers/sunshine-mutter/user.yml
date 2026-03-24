@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/sunshine
+      - cp /ctx/sunshine-mutter-wrapper ~/.local/bin/sunshine-mutter-wrapper
+      - chmod +x ~/.local/bin/sunshine-mutter-wrapper
+      - cp /ctx/portal-auto-accept ~/.local/bin/portal-auto-accept
+      - chmod +x ~/.local/bin/portal-auto-accept
+      - cp /ctx/mutter-input-bridge ~/.local/bin/mutter-input-bridge
+      - chmod +x ~/.local/bin/mutter-input-bridge

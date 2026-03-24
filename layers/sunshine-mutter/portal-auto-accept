@@ -1,0 +1,103 @@
+#!/usr/bin/python3
+"""Auto-accept XDG portal screen-sharing dialogs via AT-SPI2.
+
+Monitors for the GNOME portal Remote Desktop / Screen Cast permission
+dialog and automatically clicks "Share" + enables "Allow Remote
+Interaction". Designed for headless Mutter containers where no user is
+present to interact with the dialog.
+
+Runs as a supervisord service at priority 21 (after Sunshine at 20).
+"""
+import sys
+import time
+
+try:
+    import gi
+    gi.require_version("Atspi", "2.0")
+    from gi.repository import Atspi
+except (ImportError, ValueError) as e:
+    print(f"portal-auto-accept: AT-SPI2 not available: {e}", file=sys.stderr)
+    sys.exit(1)
+
+
+def find_and_click(node, target_name, target_role, action_name):
+    """Recursively find a widget by name+role and perform an action."""
+    if not node:
+        return False
+    name = node.get_name() or ""
+    role = node.get_role_name() or ""
+    if name == target_name and role == target_role:
+        acts = node.get_action_iface()
+        if acts:
+            for i in range(acts.get_n_actions()):
+                if acts.get_action_name(i) == action_name:
+                    acts.do_action(i)
+                    print(f"portal-auto-accept: {action_name} '{target_name}' [{target_role}]")
+                    return True
+    for i in range(node.get_child_count()):
+        if find_and_click(node.get_child_at_index(i), target_name, target_role, action_name):
+            return True
+    return False
+
+
+def find_portal_dialog():
+    """Find the xdg-desktop-portal-gnome dialog window."""
+    desktop = Atspi.get_desktop(0)
+    for i in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(i)
+        if app and app.get_name() == "xdg-desktop-portal-gnome":
+            for j in range(app.get_child_count()):
+                window = app.get_child_at_index(j)
+                if window:
+                    wname = window.get_name() or ""
+                    if wname in ("Remote Desktop", "Screen Cast", "Screencast"):
+                        return window
+    return None
+
+
+def accept_dialog(dialog):
+    """Enable remote interaction and click Share."""
+    # Enable "Allow Remote Interaction" checkbox (if present)
+    find_and_click(dialog, "Allow Remote Interaction", "check box", "toggle")
+    time.sleep(0.3)
+    # Click "Share" button
+    return find_and_click(dialog, "Share", "button", "click")
+
+
+def main():
+    Atspi.init()
+
+    # Poll for the dialog — Sunshine triggers it a few seconds after start
+    timeout = 120
+    poll_interval = 1
+    elapsed = 0
+
+    print("portal-auto-accept: waiting for portal permission dialog...")
+    while elapsed < timeout:
+        dialog = find_portal_dialog()
+        if dialog:
+            print(f"portal-auto-accept: found dialog after {elapsed}s")
+            time.sleep(0.5)  # Let the dialog fully render
+            if accept_dialog(dialog):
+                print("portal-auto-accept: dialog accepted successfully")
+                # Keep monitoring for additional dialogs (Sunshine may retry)
+                time.sleep(5)
+                dialog = find_portal_dialog()
+                if dialog:
+                    print("portal-auto-accept: found second dialog, accepting...")
+                    time.sleep(0.5)
+                    accept_dialog(dialog)
+                print("portal-auto-accept: done")
+                return 0
+            else:
+                print("portal-auto-accept: could not find Share button", file=sys.stderr)
+                return 1
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+    print(f"portal-auto-accept: no dialog found after {timeout}s", file=sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

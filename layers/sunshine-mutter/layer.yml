@@ -1,0 +1,63 @@
+depends:
+  - supervisord
+  - mutter
+  - pipewire
+
+ports:
+  - tcp:47984
+  - 47989
+  - 47990
+  - tcp:48010
+  - udp:47998
+  - udp:47999
+  - udp:48000
+
+rpm:
+  copr:
+    - lizardbyte/beta
+  packages:
+    - sunshine
+
+security:
+  devices:
+    - /dev/uinput
+  mounts:
+    - /dev/input:/dev/input:rw
+
+volumes:
+  - name: sunshine-config
+    path: "~/.config/sunshine"
+
+service: |
+  [program:sunshine]
+  command=%(ENV_HOME)s/.local/bin/sunshine-mutter-wrapper
+  autostart=true
+  autorestart=true
+  priority=20
+  startsecs=5
+  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",PULSE_SERVER="unix:/tmp/pulse-socket",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session",XDG_CURRENT_DESKTOP="GNOME"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:portal-accept]
+  command=/usr/bin/python3 %(ENV_HOME)s/.local/bin/portal-auto-accept
+  autostart=true
+  autorestart=false
+  priority=21
+  startsecs=0
+  environment=DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:input-bridge]
+  command=/usr/bin/python3 %(ENV_HOME)s/.local/bin/mutter-input-bridge
+  autostart=true
+  autorestart=true
+  priority=22
+  startsecs=0
+  environment=DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

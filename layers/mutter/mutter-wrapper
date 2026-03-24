@@ -1,0 +1,79 @@
+#!/bin/sh
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+EXPECTED="${WAYLAND_DISPLAY:-wayland-0}"
+EXPECTED_SOCKET="$XDG_RUNTIME_DIR/$EXPECTED"
+
+# GPU detection: NVIDIA (CDI), then DRI render nodes (AMD/Intel).
+# Mutter manages rendering via Clutter/Cogl — no WLR_RENDERER needed.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    export __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json
+    export GBM_BACKEND=nvidia-drm
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+fi
+
+# Wait for PipeWire socket — Mutter 49.5 has a hard dependency on PipeWire
+# for its org.gnome.Mutter.ScreenCast D-Bus interface.
+PW_SOCKET="$XDG_RUNTIME_DIR/pipewire-0"
+PW_TIMEOUT=15
+PW_ELAPSED=0
+while [ ! -e "$PW_SOCKET" ] && [ "$PW_ELAPSED" -lt "$PW_TIMEOUT" ]; do
+    sleep 1
+    PW_ELAPSED=$((PW_ELAPSED + 1))
+done
+if [ ! -e "$PW_SOCKET" ]; then
+    echo "mutter-wrapper: PipeWire socket $PW_SOCKET not found after ${PW_TIMEOUT}s" >&2
+fi
+
+# Wait for D-Bus session bus — Mutter's ScreenCast and RemoteDesktop
+# interfaces are D-Bus services, not Wayland protocols.
+DBUS_SOCKET="/tmp/dbus-session"
+DBUS_TIMEOUT=10
+DBUS_ELAPSED=0
+while [ ! -e "$DBUS_SOCKET" ] && [ "$DBUS_ELAPSED" -lt "$DBUS_TIMEOUT" ]; do
+    sleep 1
+    DBUS_ELAPSED=$((DBUS_ELAPSED + 1))
+done
+
+# Clean up stale wayland sockets from previous mutter processes.
+rm -f "$XDG_RUNTIME_DIR"/wayland-*
+
+# Unset WAYLAND_DISPLAY before starting mutter — it interprets an existing
+# WAYLAND_DISPLAY as a request to run as a nested compositor.
+unset WAYLAND_DISPLAY
+mutter --headless \
+    --virtual-monitor "${RESOLUTION_W:-1920}x${RESOLUTION_H:-1080}" &
+MUTTER_PID=$!
+
+cleanup() {
+    kill $MUTTER_PID 2>/dev/null
+    rm -f "$EXPECTED_SOCKET"
+}
+trap cleanup TERM INT QUIT
+
+# Wait for any wayland socket to appear
+TIMEOUT=30
+ELAPSED=0
+ACTUAL_SOCKET=""
+while [ -z "$ACTUAL_SOCKET" ] && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    for f in "$XDG_RUNTIME_DIR"/wayland-*; do
+        [ -e "$f" ] && case "$f" in *.lock) ;; *) ACTUAL_SOCKET="$f"; break ;; esac
+    done
+    [ -z "$ACTUAL_SOCKET" ] && sleep 1 && ELAPSED=$((ELAPSED + 1))
+done
+
+if [ -n "$ACTUAL_SOCKET" ]; then
+    # If mutter created a different socket than expected (e.g. wayland-1),
+    # symlink the expected name so other services can connect via wayland-0.
+    if [ "$ACTUAL_SOCKET" != "$EXPECTED_SOCKET" ]; then
+        ln -sf "$(basename "$ACTUAL_SOCKET")" "$EXPECTED_SOCKET"
+    fi
+
+    # Export Wayland environment to D-Bus activation environment so portal
+    # backends (xdg-desktop-portal-gnome) can connect to Mutter as Wayland clients.
+    export WAYLAND_DISPLAY="$EXPECTED"
+    export XDG_SESSION_TYPE=wayland
+    dbus-update-activation-environment \
+        WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_CURRENT_DESKTOP XDG_SESSION_TYPE DISPLAY 2>/dev/null || true
+fi
+
+wait $MUTTER_PID

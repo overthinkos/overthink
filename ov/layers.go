@@ -73,6 +73,9 @@ type ExtractYAML struct {
 
 // LayerYAML represents the parsed layer.yml file
 type LayerYAML struct {
+	Version        string            `yaml:"version,omitempty"`  // CalVer version (YYYY.DDD.HHMM) of this layer definition
+	Status         string            `yaml:"status,omitempty"`   // working, testing, broken (default: testing)
+	Info           string            `yaml:"info,omitempty"`     // free-form description of what works/doesn't
 	Layers         []string          `yaml:"layers,omitempty"`
 	Depends        []string          `yaml:"depends,omitempty"`
 	Engine         string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
@@ -129,6 +132,9 @@ type DebConfig struct {
 type Layer struct {
 	Name              string
 	Path              string
+	Version           string // CalVer version from layer.yml
+	Status            string // working, testing, broken (empty = testing)
+	Info              string // free-form status description
 	HasRootYml        bool
 	HasPixiToml       bool
 	HasPyprojectToml  bool
@@ -253,6 +259,11 @@ func scanLayer(path string, name string) (*Layer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("parsing layer.yml: %w", err)
 		}
+
+		// Pre-populate version, status, info
+		layer.Version = ly.Version
+		layer.Status = ly.Status
+		layer.Info = ly.Info
 
 		// Keep raw depends for remote ref collection
 		layer.RawDepends = ly.Depends

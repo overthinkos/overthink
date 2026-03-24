@@ -1,0 +1,5 @@
+layers:
+  - pipewire
+  - xdg-portal-gnome
+  - chrome-mutter
+  - mutter-apps

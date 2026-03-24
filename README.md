@@ -6,7 +6,7 @@ Building containers sounds simple — until you need CUDA drivers, a Wayland des
 
 129 layers. 39 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. One CLI: `ov`.
 
-*The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but a fitting description of what the tool does: carefully working through dependency graphs, security declarations, and build ordering so you don't have to.*
+*The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
 ## Why Overthink?
 

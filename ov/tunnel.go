@@ -420,7 +420,7 @@ func cloudflareTunnelStart(cfg TunnelConfig) error {
 
 	configContent := fmt.Sprintf("tunnel: %s\ncredentials-file: %s\ningress:\n%s", uuid, credsFile, ingress.String())
 
-	if err := os.WriteFile(cfgPath, []byte(configContent), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte(configContent), 0600); err != nil {
 		return fmt.Errorf("writing tunnel config: %w", err)
 	}
 

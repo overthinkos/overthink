@@ -237,6 +237,7 @@ func TestListConfigValues(t *testing.T) {
 	os.Unsetenv("OV_AUTO_ENABLE")
 	os.Unsetenv("OV_BIND_ADDRESS")
 	os.Unsetenv("OV_ENCRYPTED_STORAGE_PATH")
+	os.Unsetenv("OV_SECRET_BACKEND")
 	os.Unsetenv("OV_VM_BACKEND")
 	os.Unsetenv("OV_VM_DISK_SIZE")
 	os.Unsetenv("OV_VM_RAM")
@@ -248,8 +249,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 14 {
-		t.Fatalf("expected 14 values, got %d", len(vals))
+	if len(vals) != 15 {
+		t.Fatalf("expected 15 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config

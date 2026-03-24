@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -317,39 +316,21 @@ func parseSunPort(output string) (string, error) {
 }
 
 func resolveSunCredentials(imageName, instance string) (username, password string, err error) {
-	if u := os.Getenv("SUNSHINE_USER"); u != "" {
-		username = u
-	}
-	if p := os.Getenv("SUNSHINE_PASSWORD"); p != "" {
-		password = p
-	}
-	if username != "" && password != "" {
-		return username, password, nil
-	}
-
-	cfg, err := LoadRuntimeConfig()
-	if err != nil {
-		return "", "", err
-	}
-
 	key := imageName
 	if instance != "" {
 		key = imageName + "-" + instance
 	}
 
-	if username == "" {
-		if u, ok := cfg.SunshineUsers[key]; ok {
-			username = u
-		} else if u, ok := cfg.SunshineUsers[imageName]; ok && instance != "" {
-			username = u
-		}
+	// Resolve username: instance-specific key first, then image-level
+	username, _ = ResolveCredential("SUNSHINE_USER", CredServiceSunshineUser, key, "")
+	if username == "" && instance != "" {
+		username, _ = ResolveCredential("SUNSHINE_USER", CredServiceSunshineUser, imageName, "")
 	}
-	if password == "" {
-		if p, ok := cfg.SunshinePasswords[key]; ok {
-			password = p
-		} else if p, ok := cfg.SunshinePasswords[imageName]; ok && instance != "" {
-			password = p
-		}
+
+	// Resolve password: instance-specific key first, then image-level
+	password, _ = ResolveCredential("SUNSHINE_PASSWORD", CredServiceSunshinePassword, key, "")
+	if password == "" && instance != "" {
+		password, _ = ResolveCredential("SUNSHINE_PASSWORD", CredServiceSunshinePassword, imageName, "")
 	}
 
 	if username == "" || password == "" {

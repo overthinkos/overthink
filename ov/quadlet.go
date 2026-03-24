@@ -28,6 +28,7 @@ type QuadletConfig struct {
 	Version     string              // image definition version (CalVer)
 	Status      string              // effective status (working, testing, broken)
 	Info        string              // status description
+	Secrets     []CollectedSecret   // container secrets (podman Secret= directives)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -83,6 +84,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 		} else {
 			b.WriteString(fmt.Sprintf("Volume=%s\n", m))
 		}
+	}
+	for _, s := range cfg.Secrets {
+		b.WriteString(fmt.Sprintf("Secret=%s,target=%s\n", s.Name, s.Target))
 	}
 	if cfg.GPU {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")

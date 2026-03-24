@@ -43,6 +43,7 @@ const (
 	LabelStatus         = "org.overthinkos.status"
 	LabelInfo           = "org.overthinkos.info"
 	LabelLayerVersions  = "org.overthinkos.layer_versions"
+	LabelSecrets        = "org.overthinkos.secrets"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -101,6 +102,7 @@ type ImageMetadata struct {
 	Status         string            // effective status (working, testing, broken)
 	Info           string            // aggregated status info
 	LayerVersions  map[string]string // layer name -> CalVer version
+	Secrets        []LabelSecret     // secret requirements (metadata only, no values)
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -324,6 +326,13 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelLayerVersions]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.LayerVersions); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelLayerVersions, err)
+		}
+	}
+
+	// Secrets
+	if v := labels[LabelSecrets]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Secrets); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecrets, err)
 		}
 	}
 

@@ -7,9 +7,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
+
+var configPermWarningOnce sync.Once
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
@@ -18,10 +21,12 @@ type RuntimeConfig struct {
 	AutoEnable           *bool             `yaml:"auto_enable,omitempty"`
 	BindAddress          string            `yaml:"bind_address,omitempty"`
 	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
+	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "config"
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
 	SunshineUsers        map[string]string `yaml:"sunshine_users,omitempty"`     // Sunshine Web UI usernames keyed by image[-instance]
 	SunshinePasswords    map[string]string `yaml:"sunshine_passwords,omitempty"` // Sunshine Web UI passwords keyed by image[-instance]
+	KeyringKeys          []string          `yaml:"keyring_keys,omitempty"`       // Shadow index: names of keys stored in keyring (no values)
 }
 
 // RuntimeVmConfig holds user-level VM defaults
@@ -80,6 +85,18 @@ func LoadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
+	// Warn once per session if config file has overly permissive permissions
+	if info, statErr := os.Stat(path); statErr == nil {
+		perm := info.Mode().Perm()
+		if perm&0077 != 0 {
+			configPermWarningOnce.Do(func() {
+				fmt.Fprintf(os.Stderr, "WARNING: %s has permissions %04o (accessible by other users).\n", path, perm)
+				fmt.Fprintf(os.Stderr, "This file may contain plaintext credentials.\n")
+				fmt.Fprintf(os.Stderr, "Run: chmod 600 %s\n", path)
+			})
+		}
+	}
+
 	var cfg RuntimeConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
@@ -104,7 +121,7 @@ func SaveRuntimeConfig(cfg *RuntimeConfig) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // ResolveRuntime resolves the runtime configuration: env vars > config file > defaults.
@@ -271,6 +288,8 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.BindAddress, nil
 	case "encrypted_storage_path":
 		return cfg.EncryptedStoragePath, nil
+	case "secret_backend":
+		return cfg.SecretBackend, nil
 	case "vm.backend":
 		return cfg.Vm.Backend, nil
 	case "vm.disk_size":
@@ -291,26 +310,20 @@ func GetConfigValue(key string) (string, error) {
 	default:
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
-			if pw, ok := cfg.VncPasswords[name]; ok {
-				return pw, nil
-			}
-			return "", nil
+			val, _ := ResolveCredential("", CredServiceVNC, name, "")
+			return val, nil
 		}
 		if strings.HasPrefix(key, "sunshine.user.") {
 			name := strings.TrimPrefix(key, "sunshine.user.")
-			if u, ok := cfg.SunshineUsers[name]; ok {
-				return u, nil
-			}
-			return "", nil
+			val, _ := ResolveCredential("", CredServiceSunshineUser, name, "")
+			return val, nil
 		}
 		if strings.HasPrefix(key, "sunshine.password.") {
 			name := strings.TrimPrefix(key, "sunshine.password.")
-			if p, ok := cfg.SunshinePasswords[name]; ok {
-				return p, nil
-			}
-			return "", nil
+			val, _ := ResolveCredential("", CredServiceSunshinePassword, name, "")
+			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 	}
 }
 
@@ -342,6 +355,10 @@ func SetConfigValue(key, value string) error {
 		}
 	case "encrypted_storage_path":
 		// Any non-empty path is valid
+	case "secret_backend":
+		if value != "auto" && value != "keyring" && value != "config" {
+			return fmt.Errorf("secret_backend must be \"auto\", \"keyring\", or \"config\", got %q", value)
+		}
 	case "vm.backend":
 		if value != "auto" && value != "libvirt" && value != "qemu" {
 			return fmt.Errorf("vm.backend must be \"auto\", \"libvirt\", or \"qemu\", got %q", value)
@@ -398,6 +415,10 @@ func SetConfigValue(key, value string) error {
 		cfg.BindAddress = value
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = value
+	case "secret_backend":
+		cfg.SecretBackend = value
+		// Reset cached default store so the new backend takes effect
+		resetDefaultStore()
 	case "vm.backend":
 		cfg.Vm.Backend = value
 	case "vm.disk_size":
@@ -414,26 +435,18 @@ func SetConfigValue(key, value string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = value
 	default:
+		// Credential keys go through the credential store
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
-			if cfg.VncPasswords == nil {
-				cfg.VncPasswords = make(map[string]string)
-			}
-			cfg.VncPasswords[name] = value
+			return DefaultCredentialStore().Set(CredServiceVNC, name, value)
 		}
 		if strings.HasPrefix(key, "sunshine.user.") {
 			name := strings.TrimPrefix(key, "sunshine.user.")
-			if cfg.SunshineUsers == nil {
-				cfg.SunshineUsers = make(map[string]string)
-			}
-			cfg.SunshineUsers[name] = value
+			return DefaultCredentialStore().Set(CredServiceSunshineUser, name, value)
 		}
 		if strings.HasPrefix(key, "sunshine.password.") {
 			name := strings.TrimPrefix(key, "sunshine.password.")
-			if cfg.SunshinePasswords == nil {
-				cfg.SunshinePasswords = make(map[string]string)
-			}
-			cfg.SunshinePasswords[name] = value
+			return DefaultCredentialStore().Set(CredServiceSunshinePassword, name, value)
 		}
 	}
 
@@ -468,6 +481,9 @@ func ResetConfigValue(key string) error {
 		cfg.BindAddress = ""
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = ""
+	case "secret_backend":
+		cfg.SecretBackend = ""
+		resetDefaultStore()
 	case "vm.backend":
 		cfg.Vm.Backend = ""
 	case "vm.disk_size":
@@ -483,17 +499,18 @@ func ResetConfigValue(key string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = ""
 	default:
+		// Credential keys: delete from credential store
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
-			delete(cfg.VncPasswords, name)
+			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		} else if strings.HasPrefix(key, "sunshine.user.") {
 			name := strings.TrimPrefix(key, "sunshine.user.")
-			delete(cfg.SunshineUsers, name)
+			return DefaultCredentialStore().Delete(CredServiceSunshineUser, name)
 		} else if strings.HasPrefix(key, "sunshine.password.") {
 			name := strings.TrimPrefix(key, "sunshine.password.")
-			delete(cfg.SunshinePasswords, name)
+			return DefaultCredentialStore().Delete(CredServiceSunshinePassword, name)
 		} else {
-			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
+			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 		}
 	}
 
@@ -580,6 +597,7 @@ func ListConfigValues() ([]configKeySource, error) {
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
+		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
 		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),
 		resolve("vm.disk_size", "OV_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
 		resolve("vm.root_size", "OV_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),

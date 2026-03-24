@@ -124,6 +124,11 @@ func runDoctorChecks(distro Distro) []CheckGroup {
 			},
 		},
 		{
+			Name:     "Secret Storage",
+			Required: false,
+			Checks:   secretStorageChecks(),
+		},
+		{
 			Name:     "Tunnels",
 			Required: false,
 			Checks: []CheckResult{
@@ -634,4 +639,79 @@ func managerShort(manager string) string {
 		return "unknown package manager"
 	}
 	return manager
+}
+
+// secretStorageChecks returns checks for the credential/secret storage subsystem.
+func secretStorageChecks() []CheckResult {
+	var checks []CheckResult
+
+	// Check 1: Secret backend availability
+	keyring := &KeyringStore{}
+	if err := keyring.Probe(); err == nil {
+		checks = append(checks, CheckResult{
+			Name:    "Secret backend",
+			Status:  CheckOK,
+			Version: "system keyring",
+		})
+	} else {
+		backend := resolveSecretBackend()
+		if backend == "config" {
+			checks = append(checks, CheckResult{
+				Name:    "Secret backend",
+				Status:  CheckOK,
+				Version: "config file (explicit)",
+			})
+		} else {
+			checks = append(checks, CheckResult{
+				Name:        "Secret backend",
+				Status:      CheckWarning,
+				Detail:      "config file (no keyring available)",
+				InstallHint: "Install gnome-keyring or keepassxc for secure credential storage, or run: ov config set secret_backend config",
+			})
+		}
+	}
+
+	// Check 2: Config file permissions
+	configPath, err := RuntimeConfigPath()
+	if err == nil {
+		if info, statErr := os.Stat(configPath); statErr == nil {
+			perm := info.Mode().Perm()
+			if perm&0077 == 0 {
+				checks = append(checks, CheckResult{
+					Name:    "Config permissions",
+					Status:  CheckOK,
+					Version: fmt.Sprintf("%04o", perm),
+				})
+			} else {
+				checks = append(checks, CheckResult{
+					Name:        "Config permissions",
+					Status:      CheckWarning,
+					Detail:      fmt.Sprintf("%04o (world-readable)", perm),
+					InstallHint: fmt.Sprintf("Run: chmod 600 %s", configPath),
+				})
+			}
+		}
+	}
+
+	// Check 3: Plaintext credentials count
+	cfg, err := LoadRuntimeConfig()
+	if err == nil {
+		count := HasPlaintextCredentials(cfg)
+		if count == 0 {
+			checks = append(checks, CheckResult{
+				Name:    "Plaintext credentials",
+				Status:  CheckOK,
+				Version: "0",
+			})
+		} else {
+			checks = append(checks, CheckResult{
+				Name:        "Plaintext credentials",
+				Status:      CheckWarning,
+				Detail:      fmt.Sprintf("%d in config.yml", count),
+				InstallHint: "Run: ov config migrate-secrets --dry-run",
+			})
+		}
+	}
+
+	return checks
 }

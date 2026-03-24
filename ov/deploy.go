@@ -16,20 +16,27 @@ type DeployConfig struct {
 
 // DeployImageConfig holds deployment-specific overrides for a single image.
 type DeployImageConfig struct {
-	Workspace  string            `yaml:"workspace,omitempty"`
-	Version    string            `yaml:"version,omitempty"`
-	Status     string            `yaml:"status,omitempty"`
-	Info       string            `yaml:"info,omitempty"`
-	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`
-	DNS        string            `yaml:"dns,omitempty"`
-	AcmeEmail  string            `yaml:"acme_email,omitempty"`
-	BindMounts []BindMountConfig `yaml:"bind_mounts,omitempty"`
-	Ports      []string          `yaml:"ports,omitempty"`
-	Env        []string          `yaml:"env,omitempty"`
-	EnvFile    string            `yaml:"env_file,omitempty"`
-	Security   *SecurityConfig   `yaml:"security,omitempty"`
-	Network    string            `yaml:"network,omitempty"`
-	Engine     string            `yaml:"engine,omitempty"`
+	Workspace  string               `yaml:"workspace,omitempty"`
+	Version    string               `yaml:"version,omitempty"`
+	Status     string               `yaml:"status,omitempty"`
+	Info       string               `yaml:"info,omitempty"`
+	Tunnel     *TunnelYAML          `yaml:"tunnel,omitempty"`
+	DNS        string               `yaml:"dns,omitempty"`
+	AcmeEmail  string               `yaml:"acme_email,omitempty"`
+	BindMounts []BindMountConfig    `yaml:"bind_mounts,omitempty"`
+	Ports      []string             `yaml:"ports,omitempty"`
+	Env        []string             `yaml:"env,omitempty"`
+	EnvFile    string               `yaml:"env_file,omitempty"`
+	Security   *SecurityConfig      `yaml:"security,omitempty"`
+	Network    string               `yaml:"network,omitempty"`
+	Engine     string               `yaml:"engine,omitempty"`
+	Secrets    []DeploySecretConfig `yaml:"secrets,omitempty"`
+}
+
+// DeploySecretConfig overrides or provides a secret for deployment.
+type DeploySecretConfig struct {
+	Name   string `yaml:"name"`              // matches layer secret name
+	Source string `yaml:"source,omitempty"`   // "keyring" (default), "env:VAR", "file:/path"
 }
 
 // DeployConfigPath returns the path to the deploy overlay file.
@@ -179,6 +186,37 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 	if overlay.Engine != "" {
 		meta.Engine = overlay.Engine
 	}
+	// Merge deploy.yml secrets onto image label secrets
+	if overlay.Secrets != nil {
+		deployByName := make(map[string]DeploySecretConfig, len(overlay.Secrets))
+		for _, ds := range overlay.Secrets {
+			deployByName[ds.Name] = ds
+		}
+		// Override matching secrets from image labels with deploy.yml source config
+		for i, ls := range meta.Secrets {
+			if _, ok := deployByName[ls.Name]; ok {
+				// Deploy.yml provides this secret — keep the label entry
+				// (the source override is used at provisioning time, not in the label)
+				_ = i
+			}
+		}
+		// Add deploy-only secrets that aren't in the image labels
+		for _, ds := range overlay.Secrets {
+			found := false
+			for _, ls := range meta.Secrets {
+				if ls.Name == ds.Name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				meta.Secrets = append(meta.Secrets, LabelSecret{
+					Name:   ds.Name,
+					Target: "/run/secrets/" + ds.Name,
+				})
+			}
+		}
+	}
 }
 
 // resolveBindMountsFromLabels resolves host paths for label-derived bind mounts.
@@ -248,7 +286,7 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	if err != nil {
 		return fmt.Errorf("marshaling deploy config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
 	return nil

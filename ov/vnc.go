@@ -302,21 +302,16 @@ func (c *VncPasswdCmd) Run() error {
 	}
 
 	imageName := resolveImageName(c.Image)
-	cfg, err := LoadRuntimeConfig()
-	if err != nil {
-		return err
-	}
-	if cfg.VncPasswords == nil {
-		cfg.VncPasswords = make(map[string]string)
-	}
 	configKey := imageName
 	if c.Instance != "" {
 		configKey = imageName + "-" + c.Instance
 	}
-	cfg.VncPasswords[configKey] = password
-	if err := SaveRuntimeConfig(cfg); err != nil {
-		return fmt.Errorf("saving VNC password to config: %w", err)
+	store := DefaultCredentialStore()
+	if err := store.Set(CredServiceVNC, configKey, password); err != nil {
+		return fmt.Errorf("saving VNC password: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "Stored VNC password for '%s' in %s.\n", configKey, store.Name())
+	fmt.Fprintf(os.Stderr, "To verify: ov config get vnc.password.%s\n", configKey)
 
 	// Resolve $HOME inside the container to get absolute paths (wayvnc doesn't expand shell vars).
 	homeCmd := exec.Command(engine, "exec", name, "sh", "-c", "echo $HOME")

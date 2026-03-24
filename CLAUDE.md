@@ -15,6 +15,12 @@ Two components with a clean split:
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
+**Credential & Secret Management** -- Abstracted via `CredentialStore` interface:
+- **Host-side credentials** (VNC passwords, Sunshine creds) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
+- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At runtime, `ov enable`/`ov start` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. Docker falls back to env var injection.
+- **Resolution chain:** env var > keyring > config file > default. Migration: `ov config migrate-secrets`.
+- Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/secrets.go`
+
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
 **What gets generated** (`ov generate`):
@@ -109,7 +115,9 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
 - MUST invoke skills before exploring the codebase. Skills are the primary knowledge source, not the code itself
 
-For layer-specific rules (install files, packages, port_relay, cache mounts): `/ov:layer`
+For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
+
+**Credential security:** Config files (`config.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov config migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
 
 **GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime:
 - **NVIDIA:** CUDA images get `--gpus all` / CDI device injection automatically
@@ -144,11 +152,11 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `moon` | `/ov:moon` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
-| `config` | `/ov:config` |
+| `config` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
 | `enc` | `/ov:enc` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |
-| `doctor` | Host dependency check (no skill -- standalone diagnostic) |
+| `doctor` | Host dependency + secret storage checks (no skill -- standalone diagnostic) |
 
 ---
 

@@ -165,28 +165,21 @@ func (c *SunPasswdCmd) Run() error {
 		return fmt.Errorf("setting Sunshine credentials: %w", err)
 	}
 
-	// Store credentials in ov config.
-	cfg, err := LoadRuntimeConfig()
-	if err != nil {
-		return err
-	}
-	if cfg.SunshineUsers == nil {
-		cfg.SunshineUsers = make(map[string]string)
-	}
-	if cfg.SunshinePasswords == nil {
-		cfg.SunshinePasswords = make(map[string]string)
-	}
+	// Store credentials via credential store.
 	configKey := imageName
 	if c.Instance != "" {
 		configKey = imageName + "-" + c.Instance
 	}
-	cfg.SunshineUsers[configKey] = c.User
-	cfg.SunshinePasswords[configKey] = password
-	if err := SaveRuntimeConfig(cfg); err != nil {
-		return fmt.Errorf("saving Sunshine credentials to config: %w", err)
+	store := DefaultCredentialStore()
+	if err := store.Set(CredServiceSunshineUser, configKey, c.User); err != nil {
+		return fmt.Errorf("saving Sunshine username: %w", err)
+	}
+	if err := store.Set(CredServiceSunshinePassword, configKey, password); err != nil {
+		return fmt.Errorf("saving Sunshine password: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Sunshine credentials set for %s (user: %s)\n", configKey, c.User)
+	fmt.Fprintf(os.Stderr, "Stored Sunshine credentials for '%s' in %s (user: %s).\n", configKey, store.Name(), c.User)
+	fmt.Fprintf(os.Stderr, "To verify: ov config get sunshine.password.%s\n", configKey)
 	return nil
 }
 

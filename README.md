@@ -171,7 +171,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov enc init/mount` handles encrypted bind-mount volumes. `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images and restarts services. `ov enc init/mount` handles encrypted bind-mount volumes. `ov config migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
@@ -275,6 +275,7 @@ ov alias install/uninstall <image>             # Host command aliases
 ov enc init/mount/unmount/status <image>    # Encrypted volumes
 ov enc passwd <image>                       # Change encryption password
 ov config get/set/list/reset/path              # Runtime configuration
+ov config migrate-secrets [--dry-run]          # Move plaintext creds to system keyring
 ov udev status                                 # Show GPU device access status
 ov udev generate                               # Print udev rules to stdout
 ov udev install                                # Install udev rules (requires sudo)

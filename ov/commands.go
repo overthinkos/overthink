@@ -226,7 +226,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	}
 
 	qpath := filepath.Join(qdir, quadletFilenameInstance(c.Image, c.Instance))
-	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
 
@@ -388,7 +388,7 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 	}
 
 	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
-	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
 

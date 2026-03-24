@@ -94,6 +94,7 @@ type LayerYAML struct {
 	Libvirt        []string          `yaml:"libvirt,omitempty"`
 	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
+	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -183,6 +184,7 @@ type Layer struct {
 	libvirt     []string
 	hooks       *HooksConfig
 	portRelay   []int
+	secrets     []SecretYAML
 	engine      string // required run engine from layer.yml ("docker", "podman", or "")
 }
 
@@ -359,6 +361,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 			layer.portRelay = ly.PortRelay
 		}
 
+		// Pre-populate secrets
+		layer.secrets = ly.SecretsYAML
+
 		// Pre-populate engine requirement
 		layer.engine = ly.Engine
 	}
@@ -497,6 +502,11 @@ func (l *Layer) Hooks() *HooksConfig {
 // PortRelay returns the port relay declarations (pre-populated from layer.yml)
 func (l *Layer) PortRelay() []int {
 	return l.portRelay
+}
+
+// Secrets returns the secret declarations (pre-populated from layer.yml)
+func (l *Layer) Secrets() []SecretYAML {
+	return l.secrets
 }
 
 // Engine returns the required run engine (pre-populated from layer.yml, "" if not set)

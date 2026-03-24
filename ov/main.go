@@ -552,11 +552,12 @@ func (c *NewLayerCmd) Run() error {
 
 // ConfigCmd groups config subcommands
 type ConfigCmd struct {
-	Get   ConfigGetCmd   `cmd:"" help:"Print resolved value for a config key"`
-	Set   ConfigSetCmd   `cmd:"" help:"Set a config value"`
-	List  ConfigListCmd  `cmd:"" help:"Show all settings with source"`
-	Reset ConfigResetCmd `cmd:"" help:"Remove a key from config (revert to default)"`
-	Path  ConfigPathCmd  `cmd:"" help:"Print config file path"`
+	Get            ConfigGetCmd            `cmd:"" help:"Print resolved value for a config key"`
+	Set            ConfigSetCmd            `cmd:"" help:"Set a config value"`
+	List           ConfigListCmd           `cmd:"" help:"Show all settings with source"`
+	Reset          ConfigResetCmd          `cmd:"" help:"Remove a key from config (revert to default)"`
+	Path           ConfigPathCmd           `cmd:"" help:"Print config file path"`
+	MigrateSecrets ConfigMigrateSecretsCmd `cmd:"migrate-secrets" help:"Migrate plaintext credentials from config.yml to system keyring"`
 }
 
 // ConfigGetCmd prints the resolved value for a key
@@ -590,6 +591,10 @@ func (c *ConfigGetCmd) Run() error {
 		fmt.Println(rt.BindAddress)
 	case "encrypted_storage_path":
 		fmt.Println(rt.EncryptedStoragePath)
+	case "secret_backend":
+		// Show the resolved backend, not just the config value
+		store := DefaultCredentialStore()
+		fmt.Println(store.Name())
 	case "vm.backend":
 		fmt.Println(rt.VmBackend)
 	default:
@@ -601,7 +606,7 @@ func (c *ConfigGetCmd) Run() error {
 			fmt.Println(val)
 			return nil
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", c.Key)
 	}
 	return nil
 }

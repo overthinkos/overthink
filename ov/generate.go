@@ -1173,6 +1173,31 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 	writeJSONLabel(b, LabelPortRelay, portRelay)
 
+	// Secrets: collected from layers (metadata only, no values)
+	var labelSecrets []LabelSecret
+	secretSeen := make(map[string]bool)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		for _, s := range layer.Secrets() {
+			if secretSeen[s.Name] {
+				continue
+			}
+			secretSeen[s.Name] = true
+			target := s.Target
+			if target == "" {
+				target = "/run/secrets/" + s.Name
+			}
+			labelSecrets = append(labelSecrets, LabelSecret{
+				Name:   s.Name,
+				Target: target,
+				Env:    s.Env,
+			})
+		}
+	}
+	if len(labelSecrets) > 0 {
+		writeJSONLabel(b, LabelSecrets, labelSecrets)
+	}
+
 	// Routes: collected from layers
 	var routes []LabelRoute
 	for _, layerName := range layerOrder {

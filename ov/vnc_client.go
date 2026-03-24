@@ -11,7 +11,6 @@ import (
 	"image/color"
 	"io"
 	"net"
-	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -972,22 +971,16 @@ func parseVNCPort(output string) (string, error) {
 }
 
 func resolveVNCPassword(imageName, instance string) string {
-	if pw := os.Getenv("VNC_PASSWORD"); pw != "" {
-		return pw
-	}
-	cfg, err := LoadRuntimeConfig()
-	if err != nil {
-		return ""
-	}
+	// Try instance-specific key first, then image-level key
 	if instance != "" {
-		if pw, ok := cfg.VncPasswords[imageName+"-"+instance]; ok {
-			return pw
+		key := imageName + "-" + instance
+		val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, key, "")
+		if val != "" {
+			return val
 		}
 	}
-	if pw, ok := cfg.VncPasswords[imageName]; ok {
-		return pw
-	}
-	return ""
+	val, _ := ResolveCredential("VNC_PASSWORD", CredServiceVNC, imageName, "")
+	return val
 }
 
 func connectVNC(image, instance string) (*VNCClient, error) {

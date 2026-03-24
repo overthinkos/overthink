@@ -419,7 +419,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	}
 
 	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
-	if err := os.WriteFile(qpath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
 		return fmt.Errorf("writing quadlet file: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)

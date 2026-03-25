@@ -124,6 +124,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				FullTag:        "ghcr.io/test/test-image:latest",
 				Layers:         []string{"svc"},
 				Pkg:            "rpm",
+				PkgFormats:     []string{"rpm"},
 				User:           "user",
 				UID:            1000,
 				GID:            1000,
@@ -364,5 +365,159 @@ func TestWriteDnfInstallWithReleaseRpmAndModules(t *testing.T) {
 	}
 	if enableIdx > installIdx {
 		t.Error("module enable should come before package install")
+	}
+}
+
+func TestWritePacmanInstallBasic(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writePacmanInstall(&b, &PacConfig{
+		Packages: []string{"neovim", "ripgrep"},
+	})
+	out := b.String()
+
+	if !strings.Contains(out, "pacman -Syu --noconfirm") {
+		t.Error("should contain pacman -Syu --noconfirm")
+	}
+	if !strings.Contains(out, "neovim") {
+		t.Error("should contain neovim")
+	}
+	if !strings.Contains(out, "ripgrep") {
+		t.Error("should contain ripgrep")
+	}
+	if !strings.Contains(out, "/var/cache/pacman/pkg") {
+		t.Error("should use pacman cache mount")
+	}
+}
+
+func TestWritePacmanInstallWithRepos(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writePacmanInstall(&b, &PacConfig{
+		Repos: []PacRepo{{
+			Name:     "custom",
+			Server:   "https://example.com/repo/$arch",
+			SigLevel: "Optional TrustAll",
+		}},
+		Packages: []string{"custom-pkg"},
+	})
+	out := b.String()
+
+	if !strings.Contains(out, "[custom]") {
+		t.Error("should contain repo name in brackets")
+	}
+	if !strings.Contains(out, "https://example.com/repo/$arch") {
+		t.Error("should contain repo server URL")
+	}
+	if !strings.Contains(out, "Optional TrustAll") {
+		t.Error("should contain SigLevel")
+	}
+	if !strings.Contains(out, "/etc/pacman.conf") {
+		t.Error("should append to pacman.conf")
+	}
+}
+
+func TestWritePacmanInstallWithOptions(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writePacmanInstall(&b, &PacConfig{
+		Options:  []string{"--needed"},
+		Packages: []string{"base-devel"},
+	})
+	out := b.String()
+
+	if !strings.Contains(out, "--needed") {
+		t.Error("should contain --needed option")
+	}
+}
+
+func TestWriteAurBuildStage(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeAurBuildStage(&b, "my-tool", &AurConfig{
+		Packages: []string{"yay-bin", "neovim-nightly-bin"},
+	}, &ResolvedImage{UID: 1000, Home: "/home/user"}, "ghcr.io/overthinkos/archlinux-builder:latest")
+	out := b.String()
+
+	if !strings.Contains(out, "FROM ghcr.io/overthinkos/archlinux-builder:latest AS my-tool-aur-build") {
+		t.Error("should have correct FROM line")
+	}
+	if !strings.Contains(out, "USER 1000") {
+		t.Error("should switch to non-root user")
+	}
+	if !strings.Contains(out, "yay -S --noconfirm --needed") {
+		t.Error("should use yay to install")
+	}
+	if !strings.Contains(out, "yay-bin") {
+		t.Error("should contain yay-bin package")
+	}
+	if !strings.Contains(out, "neovim-nightly-bin") {
+		t.Error("should contain neovim-nightly-bin package")
+	}
+	if !strings.Contains(out, "--builddir /tmp/aur-build") {
+		t.Error("should use --builddir")
+	}
+	if !strings.Contains(out, "/tmp/aur-pkgs") {
+		t.Error("should copy built packages to /tmp/aur-pkgs")
+	}
+}
+
+func TestWriteAurInstallStep(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeAurInstallStep(&b, "my-tool")
+	out := b.String()
+
+	if !strings.Contains(out, "COPY --from=my-tool-aur-build /tmp/aur-pkgs/ /tmp/aur-pkgs/") {
+		t.Error("should COPY from AUR build stage")
+	}
+	if !strings.Contains(out, "pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst") {
+		t.Error("should install with pacman -U")
+	}
+	if !strings.Contains(out, "rm -rf /tmp/aur-pkgs") {
+		t.Error("should clean up aur-pkgs")
+	}
+}
+
+func TestWriteRootYmlPac(t *testing.T) {
+	g := &Generator{}
+	var b strings.Builder
+	g.writeRootYml(&b, "test-layer", "pac")
+	out := b.String()
+
+	if !strings.Contains(out, "/var/cache/pacman/pkg") {
+		t.Error("should use pacman cache mount for pac")
+	}
+	if strings.Contains(out, "libdnf5") {
+		t.Error("should not use dnf cache for pac")
+	}
+	if strings.Contains(out, "/var/cache/apt") {
+		t.Error("should not use apt cache for pac")
+	}
+}
+
+func TestAurBuilderRefForImage(t *testing.T) {
+	g := &Generator{
+		Images: map[string]*ResolvedImage{
+			"arch-img": {
+				AurBuilder: "archlinux-builder",
+			},
+			"archlinux-builder": {
+				FullTag: "ghcr.io/overthinkos/archlinux-builder:2026.84.1200",
+			},
+			"no-aur-img": {
+				AurBuilder: "",
+			},
+		},
+	}
+
+	ref := g.aurBuilderRefForImage("arch-img")
+	if ref != "ghcr.io/overthinkos/archlinux-builder:2026.84.1200" {
+		t.Errorf("aurBuilderRefForImage() = %q, want full tag", ref)
+	}
+
+	ref = g.aurBuilderRefForImage("no-aur-img")
+	if ref != "" {
+		t.Errorf("aurBuilderRefForImage() = %q, want empty", ref)
 	}
 }

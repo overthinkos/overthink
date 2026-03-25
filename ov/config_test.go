@@ -16,8 +16,8 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Defaults.Registry != "ghcr.io/test" {
 		t.Errorf("Defaults.Registry = %q, want %q", cfg.Defaults.Registry, "ghcr.io/test")
 	}
-	if cfg.Defaults.Pkg != "rpm" {
-		t.Errorf("Defaults.Pkg = %q, want %q", cfg.Defaults.Pkg, "rpm")
+	if len(cfg.Defaults.Pkg) != 1 || cfg.Defaults.Pkg[0] != "rpm" {
+		t.Errorf("Defaults.Pkg = %v, want [rpm]", cfg.Defaults.Pkg)
 	}
 
 	// Check images exist
@@ -187,7 +187,7 @@ func TestResolveImageBuilder(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       "rpm",
+			Pkg:       PkgFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Builder:   "default-builder",
 		},
@@ -229,7 +229,7 @@ func TestResolveImageBuilder(t *testing.T) {
 
 	// No defaults.builder → empty
 	cfg2 := &Config{
-		Defaults: ImageConfig{Pkg: "rpm", Platforms: []string{"linux/amd64"}},
+		Defaults: ImageConfig{Pkg: PkgFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
 			"app": {Layers: []string{}},
 		},
@@ -247,7 +247,7 @@ func TestResolveImagePorts(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       "rpm",
+			Pkg:       PkgFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Ports:     []string{"80:80"},
 		},

@@ -1,0 +1,15 @@
+pac:
+  packages:
+    - neovim
+    - ripgrep
+  repos:
+    - name: custom-repo
+      server: https://example.com/repo/$arch
+      siglevel: Optional TrustAll
+  options:
+    - --needed
+
+aur:
+  packages:
+    - yay-bin
+    - neovim-nightly-bin

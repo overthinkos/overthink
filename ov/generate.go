@@ -335,6 +335,19 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
+	// Emit per-layer AUR build stages (pac images only)
+	aurBuilderRef := g.aurBuilderRefForImage(imageName)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		aur := layer.AurConfig()
+		if img.SupportsPkg("aur") && aur != nil && len(aur.Packages) > 0 {
+			if aurBuilderRef == "" {
+				return fmt.Errorf("image %q: layer %q has aur packages but no aur_builder configured", imageName, layerName)
+			}
+			g.writeAurBuildStage(&b, layer.Name, aur, img, aurBuilderRef)
+		}
+	}
+
 	// Emit extraction stages for layers with extract field
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
@@ -652,6 +665,9 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 		b.WriteString("--mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
 		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
 		b.WriteString("    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \\\n    ")
+	} else if img.Pkg == "pac" {
+		b.WriteString("--mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
+		b.WriteString("    pacman -Syu --noconfirm curl ca-certificates && \\\n    ")
 	} else {
 		b.WriteString("--mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n    ")
 	}
@@ -902,13 +918,24 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Track if we've switched to user mode
 	asUser := false
 
-	// 1. rpm or deb packages from layer.yml (root)
+	// 1. System packages from layer.yml (root)
 	rpm := layer.RpmConfig()
 	deb := layer.DebConfig()
-	if img.Pkg == "rpm" && rpm != nil && len(rpm.Packages) > 0 {
+	pac := layer.PacConfig()
+	aur := layer.AurConfig()
+	if img.SupportsPkg("rpm") && rpm != nil && len(rpm.Packages) > 0 {
 		g.writeDnfInstall(b, rpm)
-	} else if img.Pkg == "deb" && deb != nil && len(deb.Packages) > 0 {
+	}
+	if img.SupportsPkg("deb") && deb != nil && len(deb.Packages) > 0 {
 		g.writeAptInstall(b, deb)
+	}
+	if img.SupportsPkg("pac") && pac != nil && len(pac.Packages) > 0 {
+		g.writePacmanInstall(b, pac)
+	}
+
+	// 1b. AUR packages: install pre-built packages from multi-stage build (root)
+	if img.SupportsPkg("aur") && aur != nil && len(aur.Packages) > 0 {
+		g.writeAurInstallStep(b, layer.Name)
 	}
 
 	// 2. root.yml (root)
@@ -1018,11 +1045,107 @@ func (g *Generator) writeAptInstall(b *strings.Builder, deb *DebConfig) {
 	b.WriteString("\n")
 }
 
+func (g *Generator) writePacmanInstall(b *strings.Builder, pac *PacConfig) {
+	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
+
+	// Add custom repos to pacman.conf
+	for _, repo := range pac.Repos {
+		sigLevel := repo.SigLevel
+		if sigLevel == "" {
+			sigLevel = "Optional TrustAll"
+		}
+		b.WriteString(fmt.Sprintf("    printf '[%s]\\nServer = %s\\nSigLevel = %s\\n' >> /etc/pacman.conf && \\\n", repo.Name, repo.Server, sigLevel))
+	}
+
+	b.WriteString("    pacman -Syu --noconfirm")
+
+	// Extra options
+	for _, opt := range pac.Options {
+		b.WriteString(fmt.Sprintf(" %s", opt))
+	}
+
+	// Packages
+	for _, pkg := range pac.Packages {
+		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
+	}
+
+	b.WriteString("\n")
+}
+
+func (g *Generator) writeAurBuildStage(b *strings.Builder, layerName string, aur *AurConfig, img *ResolvedImage, aurBuilderRef string) {
+	b.WriteString(fmt.Sprintf("FROM %s AS %s-aur-build\n", aurBuilderRef, layerName))
+	// Configure passwordless sudo for the build user (required by yay/makepkg)
+	b.WriteString("USER root\n")
+	b.WriteString(fmt.Sprintf("RUN echo '%s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder\n", img.User))
+	b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+	b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
+	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
+	b.WriteString("    mkdir -p /tmp/aur-build && \\\n")
+	b.WriteString("    cp /etc/makepkg.conf /tmp/makepkg.conf && \\\n")
+	b.WriteString("    sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \\\n")
+	b.WriteString("    yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
+
+	// Extra options
+	for _, opt := range aur.Options {
+		b.WriteString(fmt.Sprintf(" %s", opt))
+	}
+
+	// Packages
+	for _, pkg := range aur.Packages {
+		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
+	}
+
+	b.WriteString(" && \\\n")
+	b.WriteString("    mkdir -p /tmp/aur-pkgs && \\\n")
+	b.WriteString("    find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \\;\n\n")
+}
+
+func (g *Generator) writeAurInstallStep(b *strings.Builder, layerName string) {
+	b.WriteString(fmt.Sprintf("COPY --from=%s-aur-build /tmp/aur-pkgs/ /tmp/aur-pkgs/\n", layerName))
+	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
+	b.WriteString("    pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst && \\\n")
+	b.WriteString("    rm -rf /tmp/aur-pkgs\n")
+}
+
+// deduplicatePackages removes duplicate package names across format lists
+// based on priority order. Higher-priority formats (earlier in pkgOrder) win.
+func deduplicatePackages(pkgLists map[string][]string, pkgOrder []string) map[string][]string {
+	seen := make(map[string]bool)
+	result := make(map[string][]string)
+	for _, format := range pkgOrder {
+		pkgs := pkgLists[format]
+		var filtered []string
+		for _, pkg := range pkgs {
+			if !seen[pkg] {
+				seen[pkg] = true
+				filtered = append(filtered, pkg)
+			}
+		}
+		result[format] = filtered
+	}
+	return result
+}
+
+// aurBuilderRefForImage returns the full tag of the AUR builder image,
+// or "" if the image has no aur_builder.
+func (g *Generator) aurBuilderRefForImage(imageName string) string {
+	img := g.Images[imageName]
+	if img.AurBuilder == "" || img.AurBuilder == imageName {
+		return ""
+	}
+	if builderImg, ok := g.Images[img.AurBuilder]; ok {
+		return builderImg.FullTag
+	}
+	return ""
+}
+
 func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg string) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
 	if pkg == "deb" {
 		b.WriteString("    --mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
 		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
+	} else if pkg == "pac" {
+		b.WriteString("    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
 	} else {
 		b.WriteString("    --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
 	}

@@ -430,6 +430,11 @@ func filterImages(order []string, requested []string, images map[string]*Resolve
 				addDeps(img.Builder)
 			}
 		}
+		if img.AurBuilder != "" && img.AurBuilder != name {
+			if _, ok := images[img.AurBuilder]; ok {
+				addDeps(img.AurBuilder)
+			}
+		}
 	}
 	for _, name := range requested {
 		addDeps(name)

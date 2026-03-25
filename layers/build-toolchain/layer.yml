@@ -25,3 +25,21 @@ rpm:
     - redhat-rpm-config
     - rpm-build
     - rpm-sign
+
+pac:
+  packages:
+    - autoconf
+    - automake
+    - binutils
+    - bison
+    - ccache
+    - cmake
+    - flex
+    - gcc
+    - gdb
+    - git
+    - glibc
+    - libtool
+    - make
+    - ninja
+    - pkgconf

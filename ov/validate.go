@@ -48,8 +48,11 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate env files
 	validateEnvFiles(layers, errs)
 
-	// Validate package config (rpm/deb sections in layer.yml)
+	// Validate package config (rpm/deb/pac/aur sections in layer.yml)
 	validatePkgConfig(layers, errs)
+
+	// Validate pkg_order
+	validatePkgOrder(cfg, errs)
 
 	// Validate image base references
 	validateBaseReferences(cfg, errs)
@@ -74,6 +77,9 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 
 	// Validate builder
 	validateBuilder(cfg, layers, errs)
+
+	// Validate AUR builder
+	validateAurBuilder(cfg, layers, errs)
 
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
@@ -123,18 +129,67 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	return nil
 }
 
-// validatePkgValues ensures pkg is "rpm" or "deb"
+// validatePkgValues ensures pkg entries are valid formats
 func validatePkgValues(cfg *Config, errs *ValidationError) {
-	if cfg.Defaults.Pkg != "" && cfg.Defaults.Pkg != "rpm" && cfg.Defaults.Pkg != "deb" {
-		errs.Add("defaults: pkg must be \"rpm\" or \"deb\", got %q", cfg.Defaults.Pkg)
+	validPkg := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
+
+	// Validate defaults.pkg
+	seen := make(map[string]bool)
+	for _, p := range cfg.Defaults.Pkg {
+		if !validPkg[p] {
+			errs.Add("defaults: pkg entry %q is not valid (must be rpm, deb, pac, or aur)", p)
+		}
+		if seen[p] {
+			errs.Add("defaults: duplicate pkg entry %q", p)
+		}
+		seen[p] = true
 	}
 
+	// Validate per-image pkg
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		if img.Pkg != "" && img.Pkg != "rpm" && img.Pkg != "deb" {
-			errs.Add("image %q: pkg must be \"rpm\" or \"deb\", got %q", name, img.Pkg)
+		seen := make(map[string]bool)
+		for _, p := range img.Pkg {
+			if !validPkg[p] {
+				errs.Add("image %q: pkg entry %q is not valid (must be rpm, deb, pac, or aur)", name, p)
+			}
+			if seen[p] {
+				errs.Add("image %q: duplicate pkg entry %q", name, p)
+			}
+			seen[p] = true
+		}
+	}
+}
+
+// validatePkgOrder validates pkg_order entries are valid and a subset of pkg formats
+func validatePkgOrder(cfg *Config, errs *ValidationError) {
+	validPkg := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
+
+	for name, img := range cfg.Images {
+		if !img.IsEnabled() || len(img.PkgOrder) == 0 {
+			continue
+		}
+
+		// Build set of supported formats for this image
+		pkgSet := make(map[string]bool)
+		for _, p := range img.Pkg {
+			pkgSet[p] = true
+		}
+
+		seen := make(map[string]bool)
+		for _, p := range img.PkgOrder {
+			if !validPkg[p] {
+				errs.Add("image %q: pkg_order entry %q is not valid (must be rpm, deb, pac, or aur)", name, p)
+			}
+			if seen[p] {
+				errs.Add("image %q: duplicate pkg_order entry %q", name, p)
+			}
+			seen[p] = true
+			if len(pkgSet) > 0 && !pkgSet[p] {
+				errs.Add("image %q: pkg_order entry %q is not in pkg formats %v", name, p, []string(img.Pkg))
+			}
 		}
 	}
 }
@@ -313,7 +368,7 @@ func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validatePkgConfig validates rpm/deb config in layer.yml
+// validatePkgConfig validates rpm/deb/pac/aur config in layer.yml
 func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		rpm := layer.RpmConfig()
@@ -340,6 +395,19 @@ func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 				}
 				if repo.URL != "" && repo.RPM != "" {
 					errs.Add("layer %q layer.yml: rpm.repos entry %q has both url and rpm (pick one)", name, repo.Name)
+				}
+			}
+		}
+
+		// Validate pac config
+		pac := layer.PacConfig()
+		if pac != nil {
+			for _, repo := range pac.Repos {
+				if repo.Name == "" {
+					errs.Add("layer %q layer.yml: pac.repos entry requires name", name)
+				}
+				if repo.Server == "" {
+					errs.Add("layer %q layer.yml: pac.repos entry %q requires server", name, repo.Name)
 				}
 			}
 		}
@@ -636,6 +704,71 @@ func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 
 		if needsBuilder && resolvedBuilder == "" {
 			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder or image builder in images.yml)", imageName)
+		}
+	}
+}
+
+// validateAurBuilder validates aur_builder configuration
+func validateAurBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// Validate defaults.aur_builder if set
+	if cfg.Defaults.AurBuilder != "" {
+		builderImg, exists := cfg.Images[cfg.Defaults.AurBuilder]
+		if !exists {
+			errs.Add("defaults.aur_builder: image %q not found in images.yml", cfg.Defaults.AurBuilder)
+		} else if !builderImg.IsEnabled() {
+			errs.Add("defaults.aur_builder: image %q is disabled", cfg.Defaults.AurBuilder)
+		}
+	}
+
+	// Check each enabled image: if it has layers with aur: packages, it needs an aur_builder
+	for imageName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+
+		// Validate per-image aur_builder reference
+		if img.AurBuilder != "" {
+			if img.AurBuilder == imageName {
+				errs.Add("image %q: cannot be its own aur_builder", imageName)
+				continue
+			}
+			builderImg, exists := cfg.Images[img.AurBuilder]
+			if !exists {
+				errs.Add("image %q: aur_builder %q not found in images.yml", imageName, img.AurBuilder)
+				continue
+			}
+			if !builderImg.IsEnabled() {
+				errs.Add("image %q: aur_builder %q is disabled", imageName, img.AurBuilder)
+				continue
+			}
+		}
+
+		// Check if this image needs an AUR builder
+		resolvedAurBuilder := img.AurBuilder
+		if resolvedAurBuilder == "" {
+			resolvedAurBuilder = cfg.Defaults.AurBuilder
+		}
+		if resolvedAurBuilder == imageName {
+			continue
+		}
+
+		needsAurBuilder := false
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err == nil {
+			for _, layerName := range resolved {
+				layer, ok := layers[layerName]
+				if !ok {
+					continue
+				}
+				if layer.HasAur {
+					needsAurBuilder = true
+					break
+				}
+			}
+		}
+
+		if needsAurBuilder && resolvedAurBuilder == "" {
+			errs.Add("image %q: has layers with aur packages but no aur_builder configured (set defaults.aur_builder or image aur_builder in images.yml)", imageName)
 		}
 	}
 }
@@ -1029,10 +1162,19 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 				errs.Add("layer %q: system_services entry %q must be a unit name (no paths or spaces)", name, unit)
 			}
 		}
-		// Warn if layer has system_services but no RPM packages
-		rpm := layer.RpmConfig()
-		if rpm == nil || len(rpm.Packages) == 0 {
-			errs.Add("layer %q: system_services requires rpm packages that provide those units", name)
+		// Warn if layer has system_services but no system packages
+		hasSystemPkgs := false
+		if rpm := layer.RpmConfig(); rpm != nil && len(rpm.Packages) > 0 {
+			hasSystemPkgs = true
+		}
+		if deb := layer.DebConfig(); deb != nil && len(deb.Packages) > 0 {
+			hasSystemPkgs = true
+		}
+		if pac := layer.PacConfig(); pac != nil && len(pac.Packages) > 0 {
+			hasSystemPkgs = true
+		}
+		if !hasSystemPkgs {
+			errs.Add("layer %q: system_services requires system packages that provide those units", name)
 		}
 	}
 

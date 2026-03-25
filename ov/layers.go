@@ -86,6 +86,8 @@ type LayerYAML struct {
 	Service        string            `yaml:"service,omitempty"`
 	Rpm            *RpmConfig        `yaml:"rpm,omitempty"`
 	Deb            *DebConfig        `yaml:"deb,omitempty"`
+	Pac            *PacConfig        `yaml:"pac,omitempty"`
+	Aur            *AurConfig        `yaml:"aur,omitempty"`
 	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
 	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
@@ -129,6 +131,26 @@ type DebConfig struct {
 	Packages []string `yaml:"packages,omitempty"`
 }
 
+// PacConfig represents Pacman package configuration in layer.yml
+type PacConfig struct {
+	Packages []string  `yaml:"packages,omitempty"` // official repo packages (pacman -S)
+	Repos    []PacRepo `yaml:"repos,omitempty"`    // custom pacman repos
+	Options  []string  `yaml:"options,omitempty"`  // extra pacman flags
+}
+
+// PacRepo represents a custom Pacman repository
+type PacRepo struct {
+	Name     string `yaml:"name"`
+	Server   string `yaml:"server"`
+	SigLevel string `yaml:"siglevel,omitempty"` // e.g. "Optional TrustAll"
+}
+
+// AurConfig represents AUR package configuration in layer.yml
+type AurConfig struct {
+	Packages []string `yaml:"packages,omitempty"` // AUR packages (yay -S, multi-stage build)
+	Options  []string `yaml:"options,omitempty"`  // extra yay flags
+}
+
 // Layer represents a layer directory and its contents
 type Layer struct {
 	Name              string
@@ -158,6 +180,7 @@ type Layer struct {
 	SystemServiceUnits []string // system-level systemd units to enable (e.g. "sshd")
 	HasLibvirt         bool
 	HasPortRelay       bool
+	HasAur             bool
 
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with :version for remote ref collection
@@ -172,6 +195,8 @@ type Layer struct {
 	// Pre-populated from layer.yml
 	rpmConfig   *RpmConfig
 	debConfig   *DebConfig
+	pacConfig   *PacConfig
+	aurConfig   *AurConfig
 	ports       []string
 	portSpecs   []PortSpec // full PortSpec data with protocol info
 	envConfig   *EnvConfig
@@ -290,6 +315,11 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate package config
 		layer.rpmConfig = ly.Rpm
 		layer.debConfig = ly.Deb
+		layer.pacConfig = ly.Pac
+		layer.aurConfig = ly.Aur
+		if ly.Aur != nil && len(ly.Aur.Packages) > 0 {
+			layer.HasAur = true
+		}
 
 		// Pre-populate ports cache
 		if layer.HasPorts {
@@ -375,7 +405,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 func (l *Layer) HasInstallFiles() bool {
 	hasRpm := l.rpmConfig != nil && len(l.rpmConfig.Packages) > 0
 	hasDeb := l.debConfig != nil && len(l.debConfig.Packages) > 0
-	return hasRpm || hasDeb || l.HasRootYml ||
+	hasPac := l.pacConfig != nil && len(l.pacConfig.Packages) > 0
+	hasAur := l.aurConfig != nil && len(l.aurConfig.Packages) > 0
+	return hasRpm || hasDeb || hasPac || hasAur || l.HasRootYml ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml || l.HasUserYml
 }
@@ -411,6 +443,16 @@ func (l *Layer) RpmConfig() *RpmConfig {
 // DebConfig returns the Debian package config (pre-populated from layer.yml)
 func (l *Layer) DebConfig() *DebConfig {
 	return l.debConfig
+}
+
+// PacConfig returns the Pacman package config (pre-populated from layer.yml)
+func (l *Layer) PacConfig() *PacConfig {
+	return l.pacConfig
+}
+
+// AurConfig returns the AUR package config (pre-populated from layer.yml)
+func (l *Layer) AurConfig() *AurConfig {
+	return l.aurConfig
 }
 
 // EnvConfig returns the environment config (pre-populated from layer.yml)

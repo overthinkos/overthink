@@ -399,7 +399,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Layers:         ownLayers,
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
-		Pkg:            cfg.Defaults.Pkg,
+		PkgFormats:     []string(cfg.Defaults.Pkg),
 		Platforms:      platforms,
 		User:           cfg.Defaults.User,
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
@@ -408,9 +408,10 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Builder:        cfg.Defaults.Builder,
 		Auto:           true,
 	}
-	if img.Pkg == "" {
-		img.Pkg = "rpm"
+	if len(img.PkgFormats) == 0 {
+		img.PkgFormats = []string{"rpm"}
 	}
+	img.Pkg = img.PkgFormats[0]
 	if img.User == "" {
 		img.User = "user"
 	}

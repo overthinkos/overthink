@@ -105,7 +105,7 @@ func TestComputeIntermediates_NoBranching(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images:   map[string]ImageConfig{"app": {Layers: []string{"python"}}},
 	}
 
@@ -153,7 +153,7 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"fedora": {Layers: []string{}},
 			"app1":   {Base: "fedora", Layers: []string{"python", "testapi"}},
@@ -214,7 +214,7 @@ func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"fedora":      {Layers: []string{}},
 			"fedora-test": {Base: "fedora", Layers: []string{"testapi"}},
@@ -281,7 +281,7 @@ func TestComputeIntermediates_ExistingImageReuse(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"fedora": {Layers: []string{}},
 			"app1":   {Base: "fedora", Layers: []string{"pixi"}},
@@ -394,7 +394,7 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm", Builder: "builder"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}, Builder: "builder"},
 		Images: map[string]ImageConfig{
 			"builder":     {Layers: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":      {Layers: []string{}},
@@ -528,7 +528,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm", Builder: "builder"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}, Builder: "builder"},
 		Images: map[string]ImageConfig{
 			"builder":         {Layers: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":          {Layers: []string{}},
@@ -677,7 +677,7 @@ func TestComputeIntermediates_UserImageAtBranchPoint(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"fedora": {Layers: []string{}},
 			"svbase": {Base: "fedora", Layers: []string{"supervisord"}},
@@ -774,7 +774,7 @@ func TestComputeIntermediates_UserImageAsBranchIntermediate(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Pkg: "rpm"},
+		Defaults: ImageConfig{Registry: "r", Pkg: PkgFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"base": {Layers: []string{}},
 			"mid":  {Base: "base", Layers: []string{"B"}},
@@ -879,7 +879,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "r",
-			Pkg:       "rpm",
+			Pkg:       PkgFormats{"rpm"},
 			Builder:   "builder",
 			Platforms: []string{"linux/amd64", "linux/arm64"},
 		},

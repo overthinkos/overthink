@@ -7,3 +7,8 @@ deb:
   packages:
     - nodejs
     - npm
+
+pac:
+  packages:
+    - nodejs
+    - npm

@@ -93,6 +93,66 @@ func TestLayerNodejs(t *testing.T) {
 	if !reflect.DeepEqual(deb.Packages, []string{"nodejs", "npm"}) {
 		t.Errorf("DebConfig().Packages = %v, want [nodejs npm]", deb.Packages)
 	}
+
+	pac := nodejs.PacConfig()
+	if pac == nil {
+		t.Fatal("nodejs should have pac config")
+	}
+	if !reflect.DeepEqual(pac.Packages, []string{"nodejs", "npm"}) {
+		t.Errorf("PacConfig().Packages = %v, want [nodejs npm]", pac.Packages)
+	}
+}
+
+func TestLayerPacTool(t *testing.T) {
+	layers, err := ScanLayers("testdata")
+	if err != nil {
+		t.Fatalf("ScanLayers() error = %v", err)
+	}
+
+	pacTool := layers["pac-tool"]
+	if pacTool == nil {
+		t.Fatal("pac-tool layer not found")
+	}
+
+	// Test pac config
+	pac := pacTool.PacConfig()
+	if pac == nil {
+		t.Fatal("pac-tool should have pac config")
+	}
+	if !reflect.DeepEqual(pac.Packages, []string{"neovim", "ripgrep"}) {
+		t.Errorf("PacConfig().Packages = %v, want [neovim ripgrep]", pac.Packages)
+	}
+	if len(pac.Repos) != 1 || pac.Repos[0].Name != "custom-repo" {
+		t.Errorf("PacConfig().Repos = %v, want [{custom-repo ...}]", pac.Repos)
+	}
+	if pac.Repos[0].Server != "https://example.com/repo/$arch" {
+		t.Errorf("PacConfig().Repos[0].Server = %v, want https://example.com/repo/$arch", pac.Repos[0].Server)
+	}
+	if pac.Repos[0].SigLevel != "Optional TrustAll" {
+		t.Errorf("PacConfig().Repos[0].SigLevel = %v, want 'Optional TrustAll'", pac.Repos[0].SigLevel)
+	}
+	if !reflect.DeepEqual(pac.Options, []string{"--needed"}) {
+		t.Errorf("PacConfig().Options = %v, want [--needed]", pac.Options)
+	}
+
+	// Test aur config
+	aur := pacTool.AurConfig()
+	if aur == nil {
+		t.Fatal("pac-tool should have aur config")
+	}
+	if !reflect.DeepEqual(aur.Packages, []string{"yay-bin", "neovim-nightly-bin"}) {
+		t.Errorf("AurConfig().Packages = %v, want [yay-bin neovim-nightly-bin]", aur.Packages)
+	}
+
+	// Test HasAur flag
+	if !pacTool.HasAur {
+		t.Error("pac-tool should have HasAur=true")
+	}
+
+	// Test HasInstallFiles
+	if !pacTool.HasInstallFiles() {
+		t.Error("pac-tool should have install files")
+	}
 }
 
 func TestLayerCargoTool(t *testing.T) {
@@ -134,8 +194,8 @@ func TestLayerNames(t *testing.T) {
 	}
 
 	names := LayerNames(layers)
-	if len(names) != 6 {
-		t.Errorf("LayerNames() returned %d names, want 6", len(names))
+	if len(names) != 7 {
+		t.Errorf("LayerNames() returned %d names, want 7", len(names))
 	}
 
 	// Should be sorted

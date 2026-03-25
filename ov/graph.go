@@ -210,7 +210,7 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 		if !ok {
 			continue
 		}
-		if layer.PixiManifest() != "" || layer.HasPackageJson || layer.HasCargoToml {
+		if layer.PixiManifest() != "" || layer.HasPackageJson || layer.HasCargoToml || layer.HasAur {
 			return true
 		}
 	}
@@ -231,11 +231,19 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 			// base is another image in images.yml
 			deps = append(deps, img.Base)
 		}
-		// Only images that need multi-stage builds depend on their builder
+		// Collect all builder images this image may depend on
+		builders := make(map[string]bool)
 		if img.Builder != "" && img.Builder != name {
-			if _, ok := images[img.Builder]; ok {
-				if ImageNeedsBuilder(img, images, layers) {
-					deps = append(deps, img.Builder)
+			builders[img.Builder] = true
+		}
+		if img.AurBuilder != "" && img.AurBuilder != name {
+			builders[img.AurBuilder] = true
+		}
+		// Only add builder dependencies if image actually needs multi-stage builds
+		if len(builders) > 0 && ImageNeedsBuilder(img, images, layers) {
+			for builder := range builders {
+				if _, ok := images[builder]; ok {
+					deps = append(deps, builder)
 				}
 			}
 		}

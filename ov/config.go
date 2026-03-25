@@ -14,6 +14,31 @@ type Config struct {
 	Images   map[string]ImageConfig `yaml:"images"`
 }
 
+// PkgFormats handles YAML unmarshal of pkg as either a string or a list.
+// Single string "rpm" becomes ["rpm"]. List ["pac", "aur"] stays as-is.
+type PkgFormats []string
+
+func (p *PkgFormats) UnmarshalYAML(value *yaml.Node) error {
+	// Try string first
+	if value.Kind == yaml.ScalarNode {
+		var s string
+		if err := value.Decode(&s); err != nil {
+			return err
+		}
+		if s != "" {
+			*p = PkgFormats{s}
+		}
+		return nil
+	}
+	// Try list
+	var list []string
+	if err := value.Decode(&list); err != nil {
+		return err
+	}
+	*p = PkgFormats(list)
+	return nil
+}
+
 // MergeConfig configures post-build layer merging
 type MergeConfig struct {
 	Auto  bool `yaml:"auto,omitempty"`   // enable automatic merging after builds
@@ -62,7 +87,8 @@ type ImageConfig struct {
 	Platforms []string      `yaml:"platforms,omitempty"`
 	Tag       string        `yaml:"tag,omitempty"`
 	Registry  string        `yaml:"registry,omitempty"`
-	Pkg       string        `yaml:"pkg,omitempty"`
+	Pkg       PkgFormats    `yaml:"pkg,omitempty"`
+	PkgOrder  []string      `yaml:"pkg_order,omitempty"`  // priority order for per-package deduplication
 	Layers    []string      `yaml:"layers,omitempty"`
 	Ports     []string      `yaml:"ports,omitempty"`    // runtime port mappings ["host:container"]
 	User      string        `yaml:"user,omitempty"`     // username (default: "user")
@@ -71,6 +97,7 @@ type ImageConfig struct {
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
 	Builder    string            `yaml:"builder,omitempty"`      // builder image name (per-image, falls back to defaults)
+	AurBuilder string            `yaml:"aur_builder,omitempty"`  // AUR builder image name for yay multi-stage builds
 	DNS        string            `yaml:"dns,omitempty"`          // DNS hostname for traefik routing and tunnels
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
@@ -108,7 +135,9 @@ type ResolvedImage struct {
 	Platforms []string
 	Tag       string
 	Registry  string
-	Pkg       string
+	Pkg        string   // primary format (first entry in PkgFormats) — for bootstrap/cache mount decisions
+	PkgFormats []string // all supported formats — for layer section activation
+	PkgOrder   []string // priority order for per-package deduplication
 	Layers    []string
 	Ports     []string // runtime port mappings
 
@@ -123,6 +152,8 @@ type ResolvedImage struct {
 
 	// Builder image name (resolved: image -> defaults -> "")
 	Builder string
+	// AUR builder image name (resolved: image -> defaults -> "")
+	AurBuilder string
 
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
@@ -146,6 +177,16 @@ type ResolvedImage struct {
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
 	FullTag        string // registry/name:tag
+}
+
+// SupportsPkg returns true if this image supports the given package format.
+func (img *ResolvedImage) SupportsPkg(format string) bool {
+	for _, f := range img.PkgFormats {
+		if f == format {
+			return true
+		}
+	}
+	return false
 }
 
 // LoadConfig reads and parses images.yml, then merges deploy.yml overrides.
@@ -248,13 +289,26 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Registry = c.Defaults.Registry
 	}
 
-	// Resolve pkg: image -> defaults -> "rpm"
-	resolved.Pkg = img.Pkg
-	if resolved.Pkg == "" {
-		resolved.Pkg = c.Defaults.Pkg
+	// Resolve pkg formats: image -> base image (if internal) -> defaults -> ["rpm"]
+	resolved.PkgFormats = []string(img.Pkg)
+	if len(resolved.PkgFormats) == 0 && !resolved.IsExternalBase {
+		// Inherit from base image
+		if baseImg, ok := c.Images[resolved.Base]; ok {
+			resolved.PkgFormats = []string(baseImg.Pkg)
+		}
 	}
-	if resolved.Pkg == "" {
-		resolved.Pkg = "rpm"
+	if len(resolved.PkgFormats) == 0 {
+		resolved.PkgFormats = []string(c.Defaults.Pkg)
+	}
+	if len(resolved.PkgFormats) == 0 {
+		resolved.PkgFormats = []string{"rpm"}
+	}
+	resolved.Pkg = resolved.PkgFormats[0] // primary format
+
+	// Resolve pkg_order: image -> defaults -> nil
+	resolved.PkgOrder = img.PkgOrder
+	if len(resolved.PkgOrder) == 0 {
+		resolved.PkgOrder = c.Defaults.PkgOrder
 	}
 
 	// Layers are not inherited, they're image-specific
@@ -296,6 +350,12 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	resolved.Builder = img.Builder
 	if resolved.Builder == "" {
 		resolved.Builder = c.Defaults.Builder
+	}
+
+	// Resolve AUR builder: image -> defaults -> ""
+	resolved.AurBuilder = img.AurBuilder
+	if resolved.AurBuilder == "" {
+		resolved.AurBuilder = c.Defaults.AurBuilder
 	}
 
 	// Resolve DNS: image -> defaults -> ""

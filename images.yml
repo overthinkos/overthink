@@ -38,6 +38,31 @@ images:
     base: "debian:13"
     pkg: deb
 
+  archlinux:
+    base: "docker.io/library/archlinux:latest"
+    pkg: [pac]
+    builder: ""
+
+  archlinux-builder:
+    base: archlinux
+    pkg: [pac]
+    builder: ""
+    layers:
+      - pixi
+      - nodejs
+      - build-toolchain
+      - yay
+
+  arch-test:
+    base: archlinux
+    pkg: [pac, aur]
+    builder: archlinux-builder
+    aur_builder: archlinux-builder
+    pkg_order: [pac, aur]
+    layers:
+      - arch-pac-test
+      - arch-aur-test
+
   fedora-test:
     enabled: false
     base: fedora

@@ -32,6 +32,8 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
+**Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `ov/generate.go` near line 297.
+
 ---
 
 ## Directory Structure
@@ -45,7 +47,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (129 layers)
++-- layers/<name>/            # Layer directories (133 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -125,7 +127,7 @@ For layer-specific rules (install files, packages, port_relay, secrets, cache mo
 - **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
 - Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
 
-**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine and sunshine-niri layers include a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into the compositor's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `LIBSEAT_BACKEND=noop`. Sway variant also needs `WLR_BACKENDS=headless,libinput`.
+**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine and sunshine-niri layers include a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into the compositor's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `LIBSEAT_BACKEND=noop`. Sway variant's sway-wrapper dynamically adds the `libinput` backend when `/dev/uinput` is present (sets `LIBSEAT_BACKEND=noop`). The base sway layer uses `WLR_BACKENDS=headless` only.
 - Source: `layers/sunshine/fake-udev`, `layers/sunshine-niri/fake-udev`, `layers/sway/sway-wrapper`, `layers/niri/niri-wrapper`
 
 **Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov enable`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
@@ -261,6 +263,10 @@ Niri is Smithay-based (not wlroots). Built from QaidVoid/niri fork with virtual 
 `/ov-layers:mutter` (compositor) -> `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
 Mutter uses D-Bus `org.gnome.Mutter.ScreenCast` (not Wayland protocol). `XDG_SESSION_TYPE=wayland` required. Portal dialog auto-accepted via AT-SPI2. Zero security declarations. Image: `sunshine-desktop-mutter`.
 
+**Set up Selkies streaming (browser-accessible — working):**
+`/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
+Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://localhost:3000` — no client app needed. NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
+
 **Set up Wolf streaming (container-native):**
 `/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
 Wolf is self-contained (own compositor, audio, input). No sway/pipewire needed. Uses Podman socket for per-app containers.
@@ -309,6 +315,7 @@ Examples where multiple skills cover one topic:
 - **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer) vs `/ov-layers:sunshine-kwin` (portal capture) vs `/ov-images:sunshine-desktop-kwin` (disabled, KWin screencast protocol missing in virtual mode)
 - **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer) vs `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) vs `/ov-images:sunshine-desktop-mutter` (working, first portal-native streaming)
 - **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer) vs `/ov-layers:sunshine-x11` (streaming) vs `/ov-images:sunshine-desktop-x11` (image)
+- **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 
 ### Desktop Automation Hierarchy
 

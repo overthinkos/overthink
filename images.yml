@@ -464,6 +464,26 @@ images:
     platforms:
       - linux/amd64
 
+  selkies-desktop:
+    base: fedora-nonfree
+    layers:
+      - selkies-desktop
+    ports:
+      - "3000:3000"
+      - "9222:9222"
+    platforms:
+      - linux/amd64
+
+  selkies-desktop-nvidia:
+    base: nvidia
+    layers:
+      - selkies-desktop
+    ports:
+      - "3000:3000"
+      - "9222:9222"
+    platforms:
+      - linux/amd64
+
   immich-cuda:
     base: fedora
     layers:

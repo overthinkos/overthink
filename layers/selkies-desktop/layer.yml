@@ -1,0 +1,6 @@
+layers:
+  - pipewire
+  - chrome
+  - labwc
+  - waybar-labwc
+  - selkies

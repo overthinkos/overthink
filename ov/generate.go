@@ -294,6 +294,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/pixi.lock pixi.lock\n", img.UID, img.GID, copySrc))
 			}
 			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/%s %s\n", img.UID, img.GID, copySrc, manifest, manifest))
+			// Ensure pixi resolves manylinux wheels for the builder's actual glibc.
+			// Pixi 0.66.0's resolver detects the platform as manylinux_2_28 even on glibc 2.42,
+			// rejecting wheels tagged manylinux_2_34+. This injects [system-requirements] to fix it.
+			b.WriteString(fmt.Sprintf("RUN grep -q 'system-requirements' %s || printf '\\n[system-requirements]\\nlibc = { family = \"glibc\", version = \"2.34\" }\\n' >> %s\n", manifest, manifest))
 			b.WriteString("ENV PIXI_CACHE_DIR=/tmp/pixi-cache\n")
 			b.WriteString("ENV RATTLER_CACHE_DIR=/tmp/rattler-cache\n")
 			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=/tmp/pixi-cache,uid=%d,gid=%d "+

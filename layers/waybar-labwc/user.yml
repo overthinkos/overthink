@@ -1,0 +1,10 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/waybar
+      - cp /ctx/waybar-labwc-wrapper ~/.local/bin/waybar-labwc-wrapper
+      - chmod +x ~/.local/bin/waybar-labwc-wrapper
+      - cp /ctx/config.jsonc ~/.config/waybar/config.jsonc
+      - cp /ctx/style.css ~/.config/waybar/style.css

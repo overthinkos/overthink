@@ -1,0 +1,38 @@
+{
+    "layer": "top",
+    "position": "bottom",
+    "height": 40,
+    "exclusive": true,
+    "modules-left": ["custom/chrome", "custom/terminal", "custom/files"],
+    "modules-center": ["wlr/taskbar"],
+    "modules-right": ["clock"],
+
+    "custom/chrome": {
+        "format": "Chrome",
+        "on-click": "google-chrome-stable --ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks --user-data-dir=$HOME/.chrome-debug --remote-debugging-port=9222 --no-first-run --no-sandbox &",
+        "tooltip": false
+    },
+    "custom/terminal": {
+        "format": "Terminal",
+        "on-click": "foot &",
+        "tooltip": false
+    },
+    "custom/files": {
+        "format": "Files",
+        "on-click": "thunar &",
+        "tooltip": false
+    },
+
+    "wlr/taskbar": {
+        "format": "{name}",
+        "icon-size": 0,
+        "on-click": "activate",
+        "on-click-right": "close",
+        "tooltip": false
+    },
+
+    "clock": {
+        "format": "{:%H:%M:%S}",
+        "interval": 1
+    }
+}

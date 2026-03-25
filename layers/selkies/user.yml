@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin ~/.config/selkies
+      - cp /ctx/selkies-wrapper ~/.local/bin/selkies-wrapper
+      - chmod +x ~/.local/bin/selkies-wrapper
+      - cp /ctx/nginx.conf ~/.config/selkies/nginx.conf

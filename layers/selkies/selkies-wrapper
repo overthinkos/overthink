@@ -1,0 +1,43 @@
+#!/bin/sh
+# selkies-wrapper: Start Selkies streaming server.
+# Pixelflux creates its own Wayland compositor (wayland-1).
+# labwc connects to it as a nested compositor.
+
+# Add NVIDIA NVRTC library path (installed by pip nvidia-cuda-nvrtc)
+NVRTC_PATH="$HOME/.pixi/envs/default/lib/python3.13/site-packages/nvidia/cu13/lib"
+if [ -d "$NVRTC_PATH" ]; then
+    export LD_LIBRARY_PATH="${NVRTC_PATH}${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+
+# GPU detection for NVENC hardware encoding
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
+    echo "selkies-wrapper: NVIDIA GPU detected, DRINODE=${DRINODE:-not set}"
+fi
+
+# Default framerate 60fps. Don't set SELKIES_ENCODER — let pixelflux
+# auto-detect GPU (NVENC/VAAPI) and fall back to CPU if unavailable.
+export SELKIES_FRAMERATE="${SELKIES_FRAMERATE:-60}"
+
+# Wait for PipeWire/PulseAudio to be ready, then setup null sinks for audio capture
+TIMEOUT=15
+ELAPSED=0
+while ! pactl info >/dev/null 2>&1 && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+    sleep 1
+    ELAPSED=$((ELAPSED + 1))
+done
+
+if pactl info >/dev/null 2>&1; then
+    if [ ! -f /dev/shm/selkies-audio.lock ]; then
+        pactl load-module module-null-sink sink_name=output sink_properties=device.description="output" 2>/dev/null || true
+        pactl load-module module-null-sink sink_name=input sink_properties=device.description="input" 2>/dev/null || true
+        pactl set-default-sink output 2>/dev/null || true
+        touch /dev/shm/selkies-audio.lock
+        echo "selkies-wrapper: PulseAudio null sinks configured"
+    fi
+else
+    echo "selkies-wrapper: WARNING: PulseAudio not available after ${TIMEOUT}s"
+fi
+
+exec "$HOME/.pixi/envs/default/bin/selkies" \
+    --addr="0.0.0.0" \
+    --mode="websockets"

@@ -1,0 +1,76 @@
+depends:
+  - supervisord
+  - python
+  - pipewire
+
+env:
+  PIXELFLUX_WAYLAND: "true"
+  DRINODE: "/dev/dri/renderD129"
+  DRI_NODE: "/dev/dri/renderD129"
+  PULSE_SERVER: "unix:/tmp/pulse/native"
+
+ports:
+  - 3000
+  - 8081
+
+route:
+  host: selkies.localhost
+  port: 3000
+
+security:
+  shm_size: "1g"
+
+volumes:
+  - name: selkies-config
+    path: "~/.config/selkies"
+
+rpm:
+  packages:
+    - nginx
+    - nodejs
+    - npm
+    - wl-clipboard
+    - libICE
+    - libSM
+    - pulseaudio-libs
+    - pulseaudio-utils
+    # GPU acceleration (VAAPI for AMD/Intel)
+    - mesa-va-drivers
+    - libva
+    - libva-utils
+    # Debug/diagnostic tools
+    - procps-ng
+    - iproute
+    - iputils
+    - strace
+    - htop
+    - file
+    - lsof
+    # Build deps for evdev/xkbcommon Python wheels (cleaned up in root.yml)
+    - gcc
+    - python3-devel
+    - libxkbcommon-devel
+    - libevdev-devel
+    - kernel-headers
+
+service: |
+  [program:nginx]
+  command=nginx -g "daemon off;" -c %(ENV_HOME)s/.config/selkies/nginx.conf
+  autostart=true
+  autorestart=true
+  priority=18
+  startsecs=1
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:selkies]
+  command=%(ENV_HOME)s/.local/bin/selkies-wrapper
+  autostart=true
+  autorestart=true
+  priority=8
+  startsecs=3
+  environment=XDG_RUNTIME_DIR="/tmp",PIXELFLUX_WAYLAND="true"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

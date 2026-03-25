@@ -1,0 +1,59 @@
+/* Waybar bottom bar — Catppuccin Mocha */
+
+* {
+    font-family: "DejaVu Sans Mono", "Noto Sans Mono", monospace;
+    font-size: 14px;
+    min-height: 0;
+}
+
+window#waybar {
+    background-color: #11111b;
+    color: #cdd6f4;
+}
+
+/* App launcher buttons */
+#custom-files,
+#custom-chrome,
+#custom-terminal {
+    background-color: #45475a;
+    color: #cdd6f4;
+    border: 1px solid #585b70;
+    border-radius: 6px;
+    padding: 4px 12px;
+    margin: 4px 3px;
+    min-width: 64px;
+    font-weight: bold;
+}
+
+#custom-files:hover,
+#custom-chrome:hover,
+#custom-terminal:hover {
+    background-color: #585b70;
+    border-color: #89b4fa;
+}
+
+/* Taskbar — per-window tabs */
+#taskbar button {
+    background-color: #313244;
+    color: #a6adc8;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    padding: 4px 8px;
+    margin: 4px 2px;
+}
+
+#taskbar button.active {
+    background-color: #585b70;
+    color: #cdd6f4;
+    border-color: #89b4fa;
+}
+
+#taskbar button:hover {
+    background-color: #45475a;
+}
+
+/* Clock */
+#clock {
+    padding: 4px 8px;
+    margin: 4px 4px;
+}

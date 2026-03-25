@@ -1,0 +1,25 @@
+depends:
+  - dbus
+
+env:
+  WAYLAND_DISPLAY: "wayland-0"
+  XDG_RUNTIME_DIR: "/tmp"
+
+rpm:
+  packages:
+    - labwc
+    - foot
+    - xorg-x11-server-Xwayland
+    - thunar
+
+service: |
+  [program:labwc]
+  command=%(ENV_HOME)s/.local/bin/labwc-wrapper
+  autostart=true
+  autorestart=true
+  priority=12
+  startsecs=2
+  environment=XDG_RUNTIME_DIR="/tmp"
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true

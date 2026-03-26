@@ -76,8 +76,8 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (19 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (129 skills)
-+-- ov-images/                        # Image reference (37 skills)
++-- ov-layers/                        # Layer reference (133 skills)
++-- ov-images/                        # Image reference (39 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -225,8 +225,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 129 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 37 | Image reference | "What does image X look like?" |
+| `ov-layers` | 133 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 39 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 

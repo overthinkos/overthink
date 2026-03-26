@@ -44,6 +44,9 @@ const (
 	LabelInfo           = "org.overthinkos.info"
 	LabelLayerVersions  = "org.overthinkos.layer_versions"
 	LabelSecrets        = "org.overthinkos.secrets"
+	LabelPkg            = "org.overthinkos.pkg"
+	LabelBuilders       = "org.overthinkos.builders"
+	LabelBuilds         = "org.overthinkos.builds"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -103,6 +106,9 @@ type ImageMetadata struct {
 	Info           string            // aggregated status info
 	LayerVersions  map[string]string // layer name -> CalVer version
 	Secrets        []LabelSecret     // secret requirements (metadata only, no values)
+	PkgFormats     []string          // system package formats
+	Builders       map[string]string // build type → builder image
+	Builds         []string          // what this builder can build
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -333,6 +339,27 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelSecrets]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Secrets); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelSecrets, err)
+		}
+	}
+
+	// Package formats
+	if v := labels[LabelPkg]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.PkgFormats); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelPkg, err)
+		}
+	}
+
+	// Builders
+	if v := labels[LabelBuilders]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Builders); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilders, err)
+		}
+	}
+
+	// Builds
+	if v := labels[LabelBuilds]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Builds); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilds, err)
 		}
 	}
 

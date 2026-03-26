@@ -231,6 +231,11 @@ func TestSunCredentialResolution(t *testing.T) {
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
 
+	// Use config backend to avoid D-Bus keyring probe hanging in CI/headless
+	t.Setenv("OV_SECRET_BACKEND", "config")
+	resetDefaultStore()
+	defer resetDefaultStore()
+
 	// No credentials set — should error.
 	_, _, err := resolveSunCredentials("test-image", "")
 	if err == nil {
@@ -285,6 +290,11 @@ func TestSunCredentialConfigRoundtrip(t *testing.T) {
 	orig := RuntimeConfigPath
 	defer func() { RuntimeConfigPath = orig }()
 	RuntimeConfigPath = func() (string, error) { return configPath, nil }
+
+	// Use config backend to avoid D-Bus keyring probe hanging in CI/headless
+	t.Setenv("OV_SECRET_BACKEND", "config")
+	resetDefaultStore()
+	defer resetDefaultStore()
 
 	// Set via SetConfigValue.
 	if err := SetConfigValue("sunshine.user.my-image", "admin"); err != nil {

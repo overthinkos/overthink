@@ -51,9 +51,6 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate package config (rpm/deb/pac/aur sections in layer.yml)
 	validatePkgConfig(layers, errs)
 
-	// Validate pkg_order
-	validatePkgOrder(cfg, errs)
-
 	// Validate image base references
 	validateBaseReferences(cfg, errs)
 
@@ -75,11 +72,8 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	// Validate aliases
 	validateAliases(cfg, layers, errs)
 
-	// Validate builder
-	validateBuilder(cfg, layers, errs)
-
-	// Validate AUR builder
-	validateAurBuilder(cfg, layers, errs)
+	// Validate builders and builds
+	validateBuilders(cfg, layers, errs)
 
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
@@ -163,36 +157,6 @@ func validatePkgValues(cfg *Config, errs *ValidationError) {
 	}
 }
 
-// validatePkgOrder validates pkg_order entries are valid and a subset of pkg formats
-func validatePkgOrder(cfg *Config, errs *ValidationError) {
-	validPkg := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
-
-	for name, img := range cfg.Images {
-		if !img.IsEnabled() || len(img.PkgOrder) == 0 {
-			continue
-		}
-
-		// Build set of supported formats for this image
-		pkgSet := make(map[string]bool)
-		for _, p := range img.Pkg {
-			pkgSet[p] = true
-		}
-
-		seen := make(map[string]bool)
-		for _, p := range img.PkgOrder {
-			if !validPkg[p] {
-				errs.Add("image %q: pkg_order entry %q is not valid (must be rpm, deb, pac, or aur)", name, p)
-			}
-			if seen[p] {
-				errs.Add("image %q: duplicate pkg_order entry %q", name, p)
-			}
-			seen[p] = true
-			if len(pkgSet) > 0 && !pkgSet[p] {
-				errs.Add("image %q: pkg_order entry %q is not in pkg formats %v", name, p, []string(img.Pkg))
-			}
-		}
-	}
-}
 
 // validateLayerReferences ensures all layers referenced in images exist
 func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
@@ -633,142 +597,110 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 }
 
-// validateBuilder validates the builder configuration
-func validateBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate defaults.builder if set
-	if cfg.Defaults.Builder != "" {
-		builderImg, exists := cfg.Images[cfg.Defaults.Builder]
-		if !exists {
-			errs.Add("defaults.builder: image %q not found in images.yml", cfg.Defaults.Builder)
-		} else if !builderImg.IsEnabled() {
-			errs.Add("defaults.builder: image %q is disabled", cfg.Defaults.Builder)
+// validateBuilders validates builders and builds configuration
+func validateBuilders(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	validBuildTypes := map[string]bool{"pixi": true, "npm": true, "cargo": true, "aur": true}
+
+	// Validate defaults.builders entries
+	for typ, builder := range cfg.Defaults.Builders {
+		if !validBuildTypes[typ] {
+			errs.Add("defaults.builders: build type %q is not valid (must be pixi, npm, cargo, or aur)", typ)
+		}
+		if builder != "" {
+			builderImg, exists := cfg.Images[builder]
+			if !exists {
+				errs.Add("defaults.builders.%s: image %q not found in images.yml", typ, builder)
+			} else if !builderImg.IsEnabled() {
+				errs.Add("defaults.builders.%s: image %q is disabled", typ, builder)
+			}
 		}
 	}
 
-	// Check each enabled image's builder
+	// Validate each enabled image
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
 
-		// Resolve builder: image -> defaults -> ""
-		resolvedBuilder := img.Builder
-		if resolvedBuilder == "" {
-			resolvedBuilder = cfg.Defaults.Builder
-		}
-
-		// Self-reference check (only for explicitly set builder, not inherited from defaults)
-		if img.Builder == imageName {
-			errs.Add("image %q: cannot be its own builder", imageName)
-			continue
-		}
-
-		// Skip images where resolved builder is self (inherited from defaults — not an error)
-		if resolvedBuilder == imageName {
-			continue
-		}
-
-		// Validate per-image builder reference (if set on the image itself)
-		if img.Builder != "" {
-			builderImg, exists := cfg.Images[img.Builder]
-			if !exists {
-				errs.Add("image %q: builder %q not found in images.yml", imageName, img.Builder)
-				continue
-			}
-			if !builderImg.IsEnabled() {
-				errs.Add("image %q: builder %q is disabled", imageName, img.Builder)
-				continue
+		// Validate builds: entries (capability declarations on builder images)
+		for _, b := range img.Builds {
+			if !validBuildTypes[b] {
+				errs.Add("image %q: builds entry %q is not valid (must be pixi, npm, cargo, or aur)", imageName, b)
 			}
 		}
 
-		// Skip builder image itself
-		if imageName == resolvedBuilder {
-			continue
-		}
-
-		// Check if this image needs a builder
-		needsBuilder := false
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
-		if err == nil {
-			for _, layerName := range resolved {
-				layer, ok := layers[layerName]
-				if !ok {
+		// Validate builders: entries (per-type builder assignments)
+		for typ, builder := range img.Builders {
+			if !validBuildTypes[typ] {
+				errs.Add("image %q: builders.%s is not a valid build type (must be pixi, npm, cargo, or aur)", imageName, typ)
+			}
+			if builder == imageName {
+				errs.Add("image %q: builders.%s cannot reference self", imageName, typ)
+				continue
+			}
+			if builder != "" {
+				builderImg, exists := cfg.Images[builder]
+				if !exists {
+					errs.Add("image %q: builders.%s references %q which is not found in images.yml", imageName, typ, builder)
 					continue
 				}
-				if layer.PixiManifest() != "" || layer.HasPackageJson {
-					needsBuilder = true
-					break
-				}
-			}
-		}
-
-		if needsBuilder && resolvedBuilder == "" {
-			errs.Add("image %q: has pixi/npm layers but no builder configured (set defaults.builder or image builder in images.yml)", imageName)
-		}
-	}
-}
-
-// validateAurBuilder validates aur_builder configuration
-func validateAurBuilder(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// Validate defaults.aur_builder if set
-	if cfg.Defaults.AurBuilder != "" {
-		builderImg, exists := cfg.Images[cfg.Defaults.AurBuilder]
-		if !exists {
-			errs.Add("defaults.aur_builder: image %q not found in images.yml", cfg.Defaults.AurBuilder)
-		} else if !builderImg.IsEnabled() {
-			errs.Add("defaults.aur_builder: image %q is disabled", cfg.Defaults.AurBuilder)
-		}
-	}
-
-	// Check each enabled image: if it has layers with aur: packages, it needs an aur_builder
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-
-		// Validate per-image aur_builder reference
-		if img.AurBuilder != "" {
-			if img.AurBuilder == imageName {
-				errs.Add("image %q: cannot be its own aur_builder", imageName)
-				continue
-			}
-			builderImg, exists := cfg.Images[img.AurBuilder]
-			if !exists {
-				errs.Add("image %q: aur_builder %q not found in images.yml", imageName, img.AurBuilder)
-				continue
-			}
-			if !builderImg.IsEnabled() {
-				errs.Add("image %q: aur_builder %q is disabled", imageName, img.AurBuilder)
-				continue
-			}
-		}
-
-		// Check if this image needs an AUR builder
-		resolvedAurBuilder := img.AurBuilder
-		if resolvedAurBuilder == "" {
-			resolvedAurBuilder = cfg.Defaults.AurBuilder
-		}
-		if resolvedAurBuilder == imageName {
-			continue
-		}
-
-		needsAurBuilder := false
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
-		if err == nil {
-			for _, layerName := range resolved {
-				layer, ok := layers[layerName]
-				if !ok {
+				if !builderImg.IsEnabled() {
+					errs.Add("image %q: builders.%s references %q which is disabled", imageName, typ, builder)
 					continue
 				}
-				if layer.HasAur {
-					needsAurBuilder = true
-					break
+				// Check builder declares this capability
+				hasCapability := false
+				for _, b := range builderImg.Builds {
+					if b == typ {
+						hasCapability = true
+						break
+					}
+				}
+				if len(builderImg.Builds) > 0 && !hasCapability {
+					errs.Add("image %q: builders.%s references %q which does not declare builds: [%s]", imageName, typ, builder, typ)
 				}
 			}
 		}
 
-		if needsAurBuilder && resolvedAurBuilder == "" {
-			errs.Add("image %q: has layers with aur packages but no aur_builder configured (set defaults.aur_builder or image aur_builder in images.yml)", imageName)
+		// Resolve effective builders (image -> base -> defaults) to check needs
+		resolved := make(BuildersMap)
+		for typ, builder := range cfg.Defaults.Builders {
+			resolved[typ] = builder
+		}
+		if baseImg, ok := cfg.Images[img.Base]; ok && baseImg.IsEnabled() {
+			for typ, builder := range baseImg.Builders {
+				resolved[typ] = builder
+			}
+		}
+		for typ, builder := range img.Builders {
+			resolved[typ] = builder
+		}
+		// Filter self-references
+		for typ, builder := range resolved {
+			if builder == imageName {
+				delete(resolved, typ)
+			}
+		}
+
+		// Check if layers need builders that aren't configured
+		layerOrder, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err != nil {
+			continue
+		}
+		for _, layerName := range layerOrder {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			if layer.PixiManifest() != "" && !resolved.HasBuilder("pixi") {
+				errs.Add("image %q: layer %q has pixi manifest but no builders.pixi configured", imageName, layerName)
+			}
+			if layer.HasPackageJson && !resolved.HasBuilder("npm") {
+				errs.Add("image %q: layer %q has package.json but no builders.npm configured", imageName, layerName)
+			}
+			if layer.HasAur && !resolved.HasBuilder("aur") {
+				errs.Add("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
+			}
 		}
 	}
 }

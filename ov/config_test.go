@@ -183,51 +183,45 @@ func TestImageNames(t *testing.T) {
 	}
 }
 
-func TestResolveImageBuilder(t *testing.T) {
+func TestResolveImageBuilders(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
 			Pkg:       PkgFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
-			Builder:   "default-builder",
+			Builders:  BuildersMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
 		Images: map[string]ImageConfig{
 			"default-builder": {Layers: []string{}},
 			"custom-builder":  {Layers: []string{}},
 			"uses-default":    {Layers: []string{}},
-			"uses-custom":     {Layers: []string{}, Builder: "custom-builder"},
-			"no-builder":      {Layers: []string{}, Builder: ""},
+			"uses-custom":     {Layers: []string{}, Builders: BuildersMap{"pixi": "custom-builder"}},
 		},
 	}
 
-	// Image with no explicit builder inherits defaults.builder
+	// Image with no explicit builders inherits defaults.builders
 	resolved, err := cfg.ResolveImage("uses-default", "test")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builder != "default-builder" {
-		t.Errorf("Builder = %q, want %q", resolved.Builder, "default-builder")
+	if resolved.Builders.BuilderFor("pixi") != "default-builder" {
+		t.Errorf("Builders[pixi] = %q, want %q", resolved.Builders.BuilderFor("pixi"), "default-builder")
 	}
 
-	// Image with explicit builder overrides defaults
+	// Image with explicit builders overrides defaults per-type
 	resolved, err = cfg.ResolveImage("uses-custom", "test")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builder != "custom-builder" {
-		t.Errorf("Builder = %q, want %q", resolved.Builder, "custom-builder")
+	if resolved.Builders.BuilderFor("pixi") != "custom-builder" {
+		t.Errorf("Builders[pixi] = %q, want %q", resolved.Builders.BuilderFor("pixi"), "custom-builder")
+	}
+	// npm should still be inherited from defaults
+	if resolved.Builders.BuilderFor("npm") != "default-builder" {
+		t.Errorf("Builders[npm] = %q, want %q", resolved.Builders.BuilderFor("npm"), "default-builder")
 	}
 
-	// Image with empty builder gets defaults
-	resolved, err = cfg.ResolveImage("no-builder", "test")
-	if err != nil {
-		t.Fatalf("ResolveImage() error = %v", err)
-	}
-	if resolved.Builder != "default-builder" {
-		t.Errorf("Builder = %q, want %q", resolved.Builder, "default-builder")
-	}
-
-	// No defaults.builder → empty
+	// No defaults.builders → empty
 	cfg2 := &Config{
 		Defaults: ImageConfig{Pkg: PkgFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
@@ -238,8 +232,44 @@ func TestResolveImageBuilder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builder != "" {
-		t.Errorf("Builder = %q, want empty", resolved.Builder)
+	if len(resolved.Builders) != 0 {
+		t.Errorf("Builders = %v, want empty", resolved.Builders)
+	}
+
+	// Self-reference filtered out
+	cfg3 := &Config{
+		Defaults: ImageConfig{
+			Pkg:       PkgFormats{"rpm"},
+			Platforms: []string{"linux/amd64"},
+			Builders:  BuildersMap{"pixi": "my-builder"},
+		},
+		Images: map[string]ImageConfig{
+			"my-builder": {Layers: []string{}},
+		},
+	}
+	resolved, err = cfg3.ResolveImage("my-builder", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builders.HasBuilder("pixi") {
+		t.Errorf("Self-referencing builder should be filtered, got %v", resolved.Builders)
+	}
+
+	// Inheritance from base image
+	cfg4 := &Config{
+		Defaults: ImageConfig{Pkg: PkgFormats{"pac"}, Platforms: []string{"linux/amd64"}},
+		Images: map[string]ImageConfig{
+			"base-img":    {Pkg: PkgFormats{"pac"}, Layers: []string{}, Builders: BuildersMap{"aur": "aur-builder"}},
+			"aur-builder": {Layers: []string{}},
+			"child-img":   {Base: "base-img", Layers: []string{}},
+		},
+	}
+	resolved, err = cfg4.ResolveImage("child-img", "test")
+	if err != nil {
+		t.Fatalf("ResolveImage() error = %v", err)
+	}
+	if resolved.Builders.BuilderFor("aur") != "aur-builder" {
+		t.Errorf("Builders[aur] = %q, want %q (inherited from base)", resolved.Builders.BuilderFor("aur"), "aur-builder")
 	}
 }
 

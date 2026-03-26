@@ -122,8 +122,14 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(resolved.FullTag)
 		case "base":
 			fmt.Println(resolved.Base)
-		case "builder":
-			fmt.Println(resolved.Builder)
+		case "builders":
+			for typ, builder := range resolved.Builders {
+				fmt.Printf("%s: %s\n", typ, builder)
+			}
+		case "builds":
+			for _, b := range resolved.Builds {
+				fmt.Println(b)
+			}
 		case "pkg":
 			fmt.Println(resolved.Pkg)
 		case "registry":

@@ -232,18 +232,12 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 			deps = append(deps, img.Base)
 		}
 		// Collect all builder images this image may depend on
-		builders := make(map[string]bool)
-		if img.Builder != "" && img.Builder != name {
-			builders[img.Builder] = true
-		}
-		if img.AurBuilder != "" && img.AurBuilder != name {
-			builders[img.AurBuilder] = true
-		}
-		// Only add builder dependencies if image actually needs multi-stage builds
-		if len(builders) > 0 && ImageNeedsBuilder(img, images, layers) {
-			for builder := range builders {
-				if _, ok := images[builder]; ok {
-					deps = append(deps, builder)
+		if ImageNeedsBuilder(img, images, layers) {
+			for _, builder := range img.Builders.AllBuilders() {
+				if builder != name {
+					if _, ok := images[builder]; ok {
+						deps = append(deps, builder)
+					}
 				}
 			}
 		}
@@ -388,10 +382,12 @@ func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Lay
 		if !img.IsExternalBase {
 			deps = append(deps, img.Base)
 		}
-		if img.Builder != "" && img.Builder != name {
-			if _, ok := images[img.Builder]; ok {
-				if ImageNeedsBuilder(img, images, layers) {
-					deps = append(deps, img.Builder)
+		if ImageNeedsBuilder(img, images, layers) {
+			for _, builder := range img.Builders.AllBuilders() {
+				if builder != name {
+					if _, ok := images[builder]; ok {
+						deps = append(deps, builder)
+					}
 				}
 			}
 		}
@@ -451,9 +447,15 @@ func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 // (including those inherited from parent images via base chain)
 func LayersProvidedByImage(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) (map[string]bool, error) {
 	provided := make(map[string]bool)
+	visited := make(map[string]bool)
 
 	var collect func(name string) error
 	collect = func(name string) error {
+		if visited[name] {
+			return fmt.Errorf("image cycle detected at %q", name)
+		}
+		visited[name] = true
+
 		img, ok := images[name]
 		if !ok {
 			return fmt.Errorf("image %q not found", name)

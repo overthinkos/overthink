@@ -425,14 +425,11 @@ func filterImages(order []string, requested []string, images map[string]*Resolve
 		if !img.IsExternalBase {
 			addDeps(img.Base)
 		}
-		if img.Builder != "" && img.Builder != name {
-			if _, ok := images[img.Builder]; ok {
-				addDeps(img.Builder)
-			}
-		}
-		if img.AurBuilder != "" && img.AurBuilder != name {
-			if _, ok := images[img.AurBuilder]; ok {
-				addDeps(img.AurBuilder)
+		for _, builder := range img.Builders.AllBuilders() {
+			if builder != name {
+				if _, ok := images[builder]; ok {
+					addDeps(builder)
+				}
 			}
 		}
 	}

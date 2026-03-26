@@ -226,13 +226,13 @@ func TestFilterImagesIncludesBuilder(t *testing.T) {
 		"fedora": {
 			Name:           "fedora",
 			IsExternalBase: true,
-			Builder:        "builder",
+			Builders:       BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 		"app": {
 			Name:           "app",
 			Base:           "fedora",
 			IsExternalBase: false,
-			Builder:        "builder",
+			Builders:       BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 

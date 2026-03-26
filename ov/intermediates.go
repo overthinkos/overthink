@@ -196,12 +196,18 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 		result[name] = &cp
 	}
 
-	builderName := cfg.Defaults.Builder
+	// Collect all builder image names to exclude from intermediate generation
+	builderNames := make(map[string]bool)
+	for _, builder := range cfg.Defaults.Builders {
+		if builder != "" {
+			builderNames[builder] = true
+		}
+	}
 
 	// Group images by their direct parent (Base field)
 	siblingGroups := make(map[string][]string)
 	for name, img := range images {
-		if name == builderName {
+		if builderNames[name] {
 			continue
 		}
 		siblingGroups[img.Base] = append(siblingGroups[img.Base], name)
@@ -405,7 +411,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
 		GID:            resolveIntPtr(cfg.Defaults.GID, nil, 1000),
 		Merge:          cfg.Defaults.Merge,
-		Builder:        cfg.Defaults.Builder,
+		Builders:       BuildersMap(cfg.Defaults.Builders),
 		Auto:           true,
 	}
 	if len(img.PkgFormats) == 0 {

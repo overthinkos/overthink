@@ -216,7 +216,7 @@ func TestAutoDetection_KdbxFallback(t *testing.T) {
 	// Auto mode with kdbx configured but no keyring
 	os.Unsetenv("OV_SECRET_BACKEND")
 	t.Setenv("OV_KDBX_PATH", dbPath)
-	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "") // disable keyring
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/dev/null/invalid") // disable keyring (empty string causes D-Bus to try defaults and hang)
 
 	store := DefaultCredentialStore()
 	// Should be either "kdbx" (if keyring probe fails) or "keyring" (if running on a desktop)

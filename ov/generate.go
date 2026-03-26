@@ -273,9 +273,6 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
 	}
 
-	// Resolve builder ref for this image (builder itself doesn't use builder stages)
-	builderRef := g.builderRefForImage(imageName)
-
 	// Emit per-layer pixi build stages
 	// Cache mounts for pixi/rattler caches prevent bloating build stage layers
 	// (e.g. CUDA libraries cached by pixi can add 10GB+ to intermediate layers)
@@ -283,11 +280,12 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		layer := g.Layers[layerName]
 		manifest := layer.PixiManifest()
 		if manifest != "" {
-			if builderRef == "" {
-				return fmt.Errorf("image %q: layer %q has pixi manifest but no builder configured", imageName, layerName)
+			pixiBuilderRef := g.builderRefForFormat(imageName, "pixi")
+			if pixiBuilderRef == "" {
+				return fmt.Errorf("image %q: layer %q has pixi manifest but no builders.pixi configured", imageName, layerName)
 			}
 			copySrc := g.layerCopySource(layerName)
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", builderRef, layer.Name))
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", pixiBuilderRef, layer.Name))
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			if layer.HasPixiLock {
@@ -322,11 +320,12 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasPackageJson {
-			if builderRef == "" {
-				return fmt.Errorf("image %q: layer %q has package.json but no builder configured", imageName, layerName)
+			npmBuilderRef := g.builderRefForFormat(imageName, "npm")
+			if npmBuilderRef == "" {
+				return fmt.Errorf("image %q: layer %q has package.json but no builders.npm configured", imageName, layerName)
 			}
 			copySrc := g.layerCopySource(layerName)
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", builderRef, layer.Name))
+			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", npmBuilderRef, layer.Name))
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
 			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/package.json package.json\n", img.UID, img.GID, copySrc))
@@ -335,14 +334,14 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	// Emit per-layer AUR build stages (pac images only)
-	aurBuilderRef := g.aurBuilderRefForImage(imageName)
+	// Emit per-layer AUR build stages
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		aur := layer.AurConfig()
 		if img.SupportsPkg("aur") && aur != nil && len(aur.Packages) > 0 {
+			aurBuilderRef := g.builderRefForFormat(imageName, "aur")
 			if aurBuilderRef == "" {
-				return fmt.Errorf("image %q: layer %q has aur packages but no aur_builder configured", imageName, layerName)
+				return fmt.Errorf("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
 			}
 			g.writeAurBuildStage(&b, layer.Name, aur, img, aurBuilderRef)
 		}
@@ -642,14 +641,15 @@ func (g *Generator) resolveBaseImage(img *ResolvedImage) string {
 	return parentImg.FullTag
 }
 
-// builderRefForImage returns the full tag of the builder image for a given image,
-// or "" if the image has no builder or is the builder itself.
-func (g *Generator) builderRefForImage(imageName string) string {
+// builderRefForFormat returns the full tag of the builder image for a given format,
+// or "" if no builder is configured for that format.
+func (g *Generator) builderRefForFormat(imageName, format string) string {
 	img := g.Images[imageName]
-	if img.Builder == "" || img.Builder == imageName {
+	builder := img.Builders.BuilderFor(format)
+	if builder == "" || builder == imageName {
 		return ""
 	}
-	if builderImg, ok := g.Images[img.Builder]; ok {
+	if builderImg, ok := g.Images[builder]; ok {
 		return builderImg.FullTag
 	}
 	return ""
@@ -1107,38 +1107,6 @@ func (g *Generator) writeAurInstallStep(b *strings.Builder, layerName string) {
 	b.WriteString("    rm -rf /tmp/aur-pkgs\n")
 }
 
-// deduplicatePackages removes duplicate package names across format lists
-// based on priority order. Higher-priority formats (earlier in pkgOrder) win.
-func deduplicatePackages(pkgLists map[string][]string, pkgOrder []string) map[string][]string {
-	seen := make(map[string]bool)
-	result := make(map[string][]string)
-	for _, format := range pkgOrder {
-		pkgs := pkgLists[format]
-		var filtered []string
-		for _, pkg := range pkgs {
-			if !seen[pkg] {
-				seen[pkg] = true
-				filtered = append(filtered, pkg)
-			}
-		}
-		result[format] = filtered
-	}
-	return result
-}
-
-// aurBuilderRefForImage returns the full tag of the AUR builder image,
-// or "" if the image has no aur_builder.
-func (g *Generator) aurBuilderRefForImage(imageName string) string {
-	img := g.Images[imageName]
-	if img.AurBuilder == "" || img.AurBuilder == imageName {
-		return ""
-	}
-	if builderImg, ok := g.Images[img.AurBuilder]; ok {
-		return builderImg.FullTag
-	}
-	return ""
-}
-
 func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg string) {
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
 	if pkg == "deb" {
@@ -1198,6 +1166,13 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if img.AcmeEmail != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))
 	}
+
+	// Package and builder labels
+	writeJSONLabel(b, LabelPkg, img.PkgFormats)
+	if len(img.Builders) > 0 {
+		writeJSONLabel(b, LabelBuilders, map[string]string(img.Builders))
+	}
+	writeJSONLabel(b, LabelBuilds, img.Builds)
 
 	// JSON array labels (omitted when empty)
 	writeJSONLabel(b, LabelPorts, img.Ports)

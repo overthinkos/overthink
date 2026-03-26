@@ -76,6 +76,34 @@ type SecurityConfig struct {
 	Mounts      []string `yaml:"mounts,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 }
 
+// BuildersMap is a map of build type → builder image name.
+// Valid build types: pixi, npm, cargo, aur.
+type BuildersMap map[string]string
+
+// BuilderFor returns the builder image name for the given format, or "".
+func (m BuildersMap) BuilderFor(format string) string {
+	return m[format]
+}
+
+// HasBuilder returns true if a builder is configured for the given format.
+func (m BuildersMap) HasBuilder(format string) bool {
+	return m[format] != ""
+}
+
+// AllBuilders returns a deduplicated sorted list of builder image names.
+func (m BuildersMap) AllBuilders() []string {
+	seen := make(map[string]bool)
+	var builders []string
+	for _, b := range m {
+		if b != "" && !seen[b] {
+			seen[b] = true
+			builders = append(builders, b)
+		}
+	}
+	sortStrings(builders)
+	return builders
+}
+
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
 	Enabled   *bool         `yaml:"enabled,omitempty"`
@@ -88,7 +116,6 @@ type ImageConfig struct {
 	Tag       string        `yaml:"tag,omitempty"`
 	Registry  string        `yaml:"registry,omitempty"`
 	Pkg       PkgFormats    `yaml:"pkg,omitempty"`
-	PkgOrder  []string      `yaml:"pkg_order,omitempty"`  // priority order for per-package deduplication
 	Layers    []string      `yaml:"layers,omitempty"`
 	Ports     []string      `yaml:"ports,omitempty"`    // runtime port mappings ["host:container"]
 	User      string        `yaml:"user,omitempty"`     // username (default: "user")
@@ -96,8 +123,8 @@ type ImageConfig struct {
 	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
-	Builder    string            `yaml:"builder,omitempty"`      // builder image name (per-image, falls back to defaults)
-	AurBuilder string            `yaml:"aur_builder,omitempty"`  // AUR builder image name for yay multi-stage builds
+	Builders   BuildersMap       `yaml:"builders,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
+	Builds     []string          `yaml:"builds,omitempty"`       // what this builder image can build (pixi, npm, cargo, aur)
 	DNS        string            `yaml:"dns,omitempty"`          // DNS hostname for traefik routing and tunnels
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
 	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
@@ -137,7 +164,6 @@ type ResolvedImage struct {
 	Registry  string
 	Pkg        string   // primary format (first entry in PkgFormats) — for bootstrap/cache mount decisions
 	PkgFormats []string // all supported formats — for layer section activation
-	PkgOrder   []string // priority order for per-package deduplication
 	Layers    []string
 	Ports     []string // runtime port mappings
 
@@ -150,10 +176,10 @@ type ResolvedImage struct {
 	// Merge configuration
 	Merge *MergeConfig // layer merge settings (nil means use CLI defaults)
 
-	// Builder image name (resolved: image -> defaults -> "")
-	Builder string
-	// AUR builder image name (resolved: image -> defaults -> "")
-	AurBuilder string
+	// Builder configuration (resolved: image -> base image -> defaults -> {})
+	Builders BuildersMap // build type → builder image name
+	// Builder capability declaration (image-specific, not inherited)
+	Builds []string // what this builder image can build
 
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
@@ -305,12 +331,6 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 	}
 	resolved.Pkg = resolved.PkgFormats[0] // primary format
 
-	// Resolve pkg_order: image -> defaults -> nil
-	resolved.PkgOrder = img.PkgOrder
-	if len(resolved.PkgOrder) == 0 {
-		resolved.PkgOrder = c.Defaults.PkgOrder
-	}
-
 	// Layers are not inherited, they're image-specific
 	// Strip @ prefix and :version suffixes — layer map keys use bare refs
 	resolved.Layers = make([]string, len(img.Layers))
@@ -346,17 +366,30 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Merge = c.Defaults.Merge
 	}
 
-	// Resolve builder: image -> defaults -> ""
-	resolved.Builder = img.Builder
-	if resolved.Builder == "" {
-		resolved.Builder = c.Defaults.Builder
+	// Resolve builders: image -> base image (if internal) -> defaults -> {}
+	resolved.Builders = make(BuildersMap)
+	for typ, builder := range c.Defaults.Builders {
+		resolved.Builders[typ] = builder
+	}
+	if !resolved.IsExternalBase {
+		if baseImg, ok := c.Images[resolved.Base]; ok {
+			for typ, builder := range baseImg.Builders {
+				resolved.Builders[typ] = builder
+			}
+		}
+	}
+	for typ, builder := range img.Builders {
+		resolved.Builders[typ] = builder
+	}
+	// Filter self-references (builder images must not use themselves)
+	for typ, builder := range resolved.Builders {
+		if builder == name {
+			delete(resolved.Builders, typ)
+		}
 	}
 
-	// Resolve AUR builder: image -> defaults -> ""
-	resolved.AurBuilder = img.AurBuilder
-	if resolved.AurBuilder == "" {
-		resolved.AurBuilder = c.Defaults.AurBuilder
-	}
+	// Builds: image-specific capability declaration, NOT inherited
+	resolved.Builds = img.Builds
 
 	// Resolve DNS: image -> defaults -> ""
 	resolved.DNS = img.DNS

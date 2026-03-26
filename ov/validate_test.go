@@ -323,9 +323,9 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 
 	err := Validate(cfg, layers)
 	if err == nil {
-		t.Error("expected error for aur packages without aur_builder")
+		t.Error("expected error for aur packages without builders.aur")
 	}
-	if !strings.Contains(err.Error(), "no aur_builder configured") {
+	if !strings.Contains(err.Error(), "no builders.aur configured") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -945,8 +945,8 @@ func TestValidateSelfBuilder(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"myimg": {
-				Layers:  []string{"pixi"},
-				Builder: "myimg",
+				Layers:   []string{"pixi"},
+				Builders: BuildersMap{"pixi": "myimg"},
 			},
 		},
 	}
@@ -958,15 +958,15 @@ func TestValidateSelfBuilder(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for self-referencing builder")
 	}
-	if !strings.Contains(err.Error(), "cannot be its own builder") {
+	if !strings.Contains(err.Error(), "cannot reference self") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
 
 func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
-	// Builder image inheriting defaults.builder that points to itself is NOT an error
+	// Builder image inheriting defaults.builders that points to itself is NOT an error
 	cfg := &Config{
-		Defaults: ImageConfig{Builder: "builder"},
+		Defaults: ImageConfig{Builders: BuildersMap{"pixi": "builder", "npm": "builder"}},
 		Images: map[string]ImageConfig{
 			"builder": {Layers: []string{"pixi"}},
 		},
@@ -985,8 +985,8 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"app": {
-				Layers:  []string{"pixi"},
-				Builder: "nonexistent",
+				Layers:   []string{"pixi"},
+				Builders: BuildersMap{"pixi": "nonexistent"},
 			},
 		},
 	}
@@ -998,7 +998,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent per-image builder")
 	}
-	if !strings.Contains(err.Error(), "builder \"nonexistent\" not found") {
+	if !strings.Contains(err.Error(), "not found in images.yml") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

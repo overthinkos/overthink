@@ -5,10 +5,13 @@ defaults:
   platforms:
     - linux/amd64
   pkg: rpm
+  builders:
+    pixi: fedora-builder
+    npm: fedora-builder
+    cargo: fedora-builder
   merge:
     auto: true
     max_mb: 128
-  builder: fedora-builder
 
 images:
 
@@ -23,6 +26,7 @@ images:
 
   fedora-builder:
     base: fedora
+    builds: [pixi, npm, cargo]
     layers:
       - pixi
       - nodejs
@@ -40,13 +44,16 @@ images:
 
   archlinux:
     base: "docker.io/library/archlinux:latest"
-    pkg: [pac]
-    builder: ""
+    pkg: pac
+    builders:
+      pixi: archlinux-builder
+      npm: archlinux-builder
+      cargo: archlinux-builder
+      aur: archlinux-builder
 
   archlinux-builder:
     base: archlinux
-    pkg: [pac]
-    builder: ""
+    builds: [pixi, npm, cargo, aur]
     layers:
       - pixi
       - nodejs
@@ -56,9 +63,6 @@ images:
   arch-test:
     base: archlinux
     pkg: [pac, aur]
-    builder: archlinux-builder
-    aur_builder: archlinux-builder
-    pkg_order: [pac, aur]
     layers:
       - arch-pac-test
       - arch-aur-test

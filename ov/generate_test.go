@@ -496,28 +496,33 @@ func TestWriteRootYmlPac(t *testing.T) {
 	}
 }
 
-func TestAurBuilderRefForImage(t *testing.T) {
+func TestBuilderRefForFormat(t *testing.T) {
 	g := &Generator{
 		Images: map[string]*ResolvedImage{
 			"arch-img": {
-				AurBuilder: "archlinux-builder",
+				Builders: BuildersMap{"aur": "archlinux-builder", "pixi": "archlinux-builder"},
 			},
 			"archlinux-builder": {
 				FullTag: "ghcr.io/overthinkos/archlinux-builder:2026.84.1200",
 			},
 			"no-aur-img": {
-				AurBuilder: "",
+				Builders: BuildersMap{},
 			},
 		},
 	}
 
-	ref := g.aurBuilderRefForImage("arch-img")
+	ref := g.builderRefForFormat("arch-img", "aur")
 	if ref != "ghcr.io/overthinkos/archlinux-builder:2026.84.1200" {
-		t.Errorf("aurBuilderRefForImage() = %q, want full tag", ref)
+		t.Errorf("builderRefForFormat(aur) = %q, want full tag", ref)
 	}
 
-	ref = g.aurBuilderRefForImage("no-aur-img")
+	ref = g.builderRefForFormat("arch-img", "pixi")
+	if ref != "ghcr.io/overthinkos/archlinux-builder:2026.84.1200" {
+		t.Errorf("builderRefForFormat(pixi) = %q, want full tag", ref)
+	}
+
+	ref = g.builderRefForFormat("no-aur-img", "aur")
 	if ref != "" {
-		t.Errorf("aurBuilderRefForImage() = %q, want empty", ref)
+		t.Errorf("builderRefForFormat(aur) = %q, want empty", ref)
 	}
 }

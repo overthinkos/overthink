@@ -168,13 +168,13 @@ func TestResolveImageOrderWithBuilder(t *testing.T) {
 			Name:           "fedora",
 			Base:           "quay.io/fedora/fedora:43",
 			IsExternalBase: true,
-			Builder:        "builder",
+			Builders:       BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 		"app": {
 			Name:           "app",
 			Base:           "fedora",
 			IsExternalBase: false,
-			Builder:        "builder",
+			Builders:       BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 

@@ -24,8 +24,11 @@ tasks:
           setcap cap_setgid=ep /usr/bin/newgidmap
         fi
 
-      # Nested podman config: host networking (netavark can't create namespaces),
-      # host userns (newuidmap fails in nested containers), cgroupfs (sysfs mount blocked)
+      # Nested podman config for container-in-container support:
+      # - cgroups=disabled: cgroup filesystem is read-only at nesting depth 2+
+      # - netns=host: netavark can't create network namespaces inside containers
+      # - userns=host: newuidmap fails in nested user namespaces
+      # - cgroup_manager=cgroupfs: systemd cgroup manager unavailable in containers
       - |
         mkdir -p /etc/containers
         cat > /etc/containers/containers.conf <<'TOML'
@@ -33,6 +36,7 @@ tasks:
         cgroup_manager = "cgroupfs"
 
         [containers]
+        cgroups = "disabled"
         netns = "host"
         userns = "host"
         TOML

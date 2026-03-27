@@ -67,6 +67,16 @@ images:
       - arch-pac-test
       - arch-aur-test
 
+  arch-ov:
+    base: archlinux
+    pkg: pac
+    uid: 0
+    gid: 0
+    user: root
+    network: host
+    layers:
+      - arch-ov
+
   fedora-test:
     enabled: false
     base: fedora

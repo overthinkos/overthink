@@ -567,53 +567,55 @@ type ConfigCmd struct {
 
 // ConfigGetCmd prints the resolved value for a key
 type ConfigGetCmd struct {
-	Key string `arg:"" help:"Config key (engine.build, engine.run, run_mode, auto_enable, bind_address)"`
+	Key string `arg:"" help:"Config key"`
 }
 
 func (c *ConfigGetCmd) Run() error {
-	// Show resolved value (env > config > default)
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
+	// vnc.password.* keys use their own resolution path
+	if strings.HasPrefix(c.Key, "vnc.password.") {
+		val, err := GetConfigValue(c.Key)
+		if err != nil {
+			return err
+		}
+		fmt.Println(val)
+		return nil
 	}
 
+	// For engine keys, try to resolve the actual engine (shows "podman" instead of "auto")
 	switch c.Key {
-	case "engine.build":
-		fmt.Println(rt.BuildEngine)
-	case "engine.run":
-		fmt.Println(rt.RunEngine)
-	case "engine.rootful":
-		fmt.Println(rt.Rootful)
-	case "run_mode":
-		fmt.Println(rt.RunMode)
-	case "auto_enable":
-		if rt.AutoEnable {
-			fmt.Println("true")
-		} else {
-			fmt.Println("false")
+	case "engine.build", "engine.run", "engine.rootful":
+		rt, err := ResolveRuntime()
+		if err == nil {
+			switch c.Key {
+			case "engine.build":
+				fmt.Println(rt.BuildEngine)
+			case "engine.run":
+				fmt.Println(rt.RunEngine)
+			case "engine.rootful":
+				fmt.Println(rt.Rootful)
+			}
+			return nil
 		}
-	case "bind_address":
-		fmt.Println(rt.BindAddress)
-	case "encrypted_storage_path":
-		fmt.Println(rt.EncryptedStoragePath)
+		// Fall through to ListConfigValues if engine detection fails
 	case "secret_backend":
 		// Show the resolved backend, not just the config value
 		store := DefaultCredentialStore()
 		fmt.Println(store.Name())
-	case "vm.backend":
-		fmt.Println(rt.VmBackend)
-	default:
-		if strings.HasPrefix(c.Key, "vnc.password.") {
-			val, err := GetConfigValue(c.Key)
-			if err != nil {
-				return err
-			}
-			fmt.Println(val)
+		return nil
+	}
+
+	// All keys: use ListConfigValues (no engine detection needed)
+	vals, err := ListConfigValues()
+	if err != nil {
+		return err
+	}
+	for _, v := range vals {
+		if v.Key == c.Key {
+			fmt.Println(v.Value)
 			return nil
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vnc.password.<image>)", c.Key)
 	}
-	return nil
+	return fmt.Errorf("unknown config key %q (run 'ov config list' to see valid keys)", c.Key)
 }
 
 // ConfigSetCmd sets a config value

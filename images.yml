@@ -73,6 +73,7 @@ images:
     uid: 0
     gid: 0
     user: root
+    network: host
     layers:
       - arch-ov
       - nvidia

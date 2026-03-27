@@ -73,9 +73,9 @@ images:
     uid: 0
     gid: 0
     user: root
-    network: host
     layers:
       - arch-ov
+      - nvidia
 
   fedora-test:
     enabled: false
@@ -142,6 +142,7 @@ images:
   nvidia:
     base: fedora-nonfree
     layers:
+      - nvidia
       - cuda
     platforms:
       - linux/amd64

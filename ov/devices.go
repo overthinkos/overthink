@@ -144,6 +144,31 @@ func LogDetectedDevices(detected DetectedDevices) {
 	}
 }
 
+// EnsureCDI checks if NVIDIA CDI specs exist for podman. If not, attempts
+// to generate them via nvidia-ctk. This enables GPU access in nested containers
+// where CDI specs from the host are not inherited.
+func EnsureCDI() {
+	// Check if CDI spec already exists
+	cdiPaths := []string{"/etc/cdi/nvidia.yaml", "/var/run/cdi/nvidia.yaml"}
+	for _, p := range cdiPaths {
+		if _, err := os.Stat(p); err == nil {
+			return // CDI spec exists
+		}
+	}
+
+	// Try to generate CDI spec
+	ctk, err := exec.LookPath("nvidia-ctk")
+	if err != nil {
+		return // nvidia-ctk not installed, can't generate
+	}
+
+	os.MkdirAll("/etc/cdi", 0755)
+	cmd := exec.Command(ctk, "cdi", "generate", "--output=/etc/cdi/nvidia.yaml")
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	_ = cmd.Run() // Best effort — if it fails, podman gives a clear CDI error
+}
+
 // appendGroupsForAMDGPU adds "keep-groups" for AMD GPU access. Podman's
 // keep-groups preserves all host supplementary groups (video, render, etc.)
 // inside the container. It is mutually exclusive with explicit group names.

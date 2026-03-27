@@ -88,12 +88,18 @@ func generateQuadlet(cfg QuadletConfig) string {
 	for _, s := range cfg.Secrets {
 		b.WriteString(fmt.Sprintf("Secret=%s,target=%s\n", s.Name, s.Target))
 	}
-	if cfg.GPU {
+	if cfg.GPU && !cfg.Security.Privileged {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")
 	}
 	if cfg.Security.Privileged {
 		b.WriteString("SecurityLabelDisable=true\n")
 		b.WriteString("PodmanArgs=--privileged\n")
+		// Pass security_opt even when privileged — nested containers need explicit opts
+		for _, opt := range cfg.Security.SecurityOpt {
+			if opt != "label=disable" { // already handled by SecurityLabelDisable
+				b.WriteString(fmt.Sprintf("PodmanArgs=--security-opt %s\n", opt))
+			}
+		}
 	} else {
 		for _, cap := range cfg.Security.CapAdd {
 			b.WriteString(fmt.Sprintf("AddCapability=%s\n", cap))

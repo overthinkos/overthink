@@ -61,6 +61,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	engine := rt.RunEngine
 
+	// Ensure NVIDIA CDI specs exist for nested container GPU access
+	if detected.GPU && engine == "podman" {
+		EnsureCDI()
+	}
+
 	var imageRef string
 	var uid, gid int
 	var ports []string
@@ -290,6 +295,11 @@ func (c *StartCmd) runRemote(ref string) error {
 	engine := rt.RunEngine
 	if ctx.Resolved != nil {
 		engine = ResolveImageEngineFromMeta(&ImageMetadata{Engine: ctx.Resolved.Engine}, rt.RunEngine)
+	}
+
+	// Ensure NVIDIA CDI specs exist for nested container GPU access
+	if detected.GPU && engine == "podman" {
+		EnsureCDI()
 	}
 
 	volumes, err := ctx.CollectVolumes()

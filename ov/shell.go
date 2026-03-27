@@ -99,6 +99,11 @@ func (c *ShellCmd) Run() error {
 	}
 	engine := rt.RunEngine
 
+	// Ensure NVIDIA CDI specs exist for nested container GPU access
+	if detected.GPU && engine == "podman" {
+		EnsureCDI()
+	}
+
 	var imageRef string
 	var uid, gid int
 	var ports []string
@@ -265,6 +270,11 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return err
 	}
 	engine := rt.RunEngine
+
+	// Ensure NVIDIA CDI specs exist for nested container GPU access
+	if detected.GPU && engine == "podman" {
+		EnsureCDI()
+	}
 
 	ctx, err := ResolveRemoteImage(ref, c.Tag)
 	if err != nil {

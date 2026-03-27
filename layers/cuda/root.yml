@@ -1,4 +1,3 @@
-# CUDA post-install config (packages + repo installed via layer.yml)
 version: '3'
 
 tasks:
@@ -23,10 +22,3 @@ tasks:
           done < <(find ./usr/lib64 -maxdepth 1 -name '*.so' -type l -print0 2>/dev/null)
         fi
         cd / && rm -rf "$CUDNN_DIR"
-      # Create vulkan compatibility symlinks for nvidia-ctk CDI
-      - |
-        mkdir -p /etc/vulkan/icd.d
-        [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
-          ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
-        [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
-          ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true

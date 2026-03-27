@@ -14,7 +14,7 @@ import (
 
 // ToolStatus represents the live availability of a desktop automation tool.
 type ToolStatus struct {
-	Name   string `json:"name"`             // "cdp", "vnc", "sway", "wl", "sun"
+	Name   string `json:"name"`             // "cdp", "vnc", "sway", "wl"
 	Status string `json:"status"`           // "ok", "unreachable", "-"
 	Port   int    `json:"port,omitempty"`   // actual host port probed (0 for socket-based)
 	Detail string `json:"detail,omitempty"` // extra info: tab count, resolution, version
@@ -382,7 +382,6 @@ func probeAllTools(engine, containerName, imageName, instance string) []ToolStat
 		func() ToolStatus { return checkVncStatus(imageName, instance) },
 		func() ToolStatus { return checkSwayStatus(engine, containerName) },
 		func() ToolStatus { return checkWlStatus(engine, containerName) },
-		func() ToolStatus { return checkSunStatus(imageName, instance) },
 	}
 
 	results := make([]ToolStatus, len(checks))

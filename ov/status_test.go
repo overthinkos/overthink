@@ -63,7 +63,6 @@ func TestSummarizeToolsTable(t *testing.T) {
 			{Name: "vnc", Status: "ok", Port: 5900},
 			{Name: "sway", Status: "ok"},
 			{Name: "wl", Status: "ok"},
-			{Name: "sun", Status: "-"},
 		}, "cdp:9222,sway,vnc:5900,wl"},
 		{"remapped port", []ToolStatus{
 			{Name: "cdp", Status: "ok", Port: 9223},
@@ -86,7 +85,6 @@ func TestSummarizeToolsDetail(t *testing.T) {
 		{Name: "vnc", Status: "ok", Port: 5900},
 		{Name: "sway", Status: "ok"},
 		{Name: "wl", Status: "ok"},
-		{Name: "sun", Status: "-"},
 	}
 	got := summarizeToolsDetail(tools)
 	want := "cdp:9222 (ok), sway (ok), vnc:5900 (ok), wl (ok)"

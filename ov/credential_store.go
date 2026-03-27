@@ -20,11 +20,9 @@ type CredentialStore interface {
 	Name() string
 }
 
-// Credential service names for the three credential types.
+// Credential service name.
 const (
-	CredServiceVNC             = "ov/vnc"
-	CredServiceSunshineUser    = "ov/sunshine-user"
-	CredServiceSunshinePassword = "ov/sunshine-password"
+	CredServiceVNC = "ov/vnc"
 )
 
 var (
@@ -253,8 +251,6 @@ func (c *ConfigMigrateSecretsCmd) Run() error {
 
 	// Clear plaintext credential maps from config
 	cfg.VncPasswords = nil
-	cfg.SunshineUsers = nil
-	cfg.SunshinePasswords = nil
 	if err := SaveRuntimeConfig(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "\nWARNING: Failed to clear plaintext credentials from config: %v\n", err)
 		fmt.Fprintln(os.Stderr, "Credentials were copied to keyring but plaintext copies remain.")
@@ -272,10 +268,6 @@ func credentialConfigKey(service, key string) string {
 	switch service {
 	case CredServiceVNC:
 		return "vnc.password." + key
-	case CredServiceSunshineUser:
-		return "sunshine.user." + key
-	case CredServiceSunshinePassword:
-		return "sunshine.password." + key
 	default:
 		return service + "." + key
 	}

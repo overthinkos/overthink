@@ -1,7 +1,0 @@
-depends:
-  - sway
-  - waybar
-
-rpm:
-  packages:
-    - fuse-libs

@@ -7,7 +7,7 @@ import (
 
 func TestCollectSecretsFromLabels(t *testing.T) {
 	labelSecrets := []LabelSecret{
-		{Name: "sunshine-password", Target: "/run/secrets/sunshine_password", Env: "SUNSHINE_PASSWORD"},
+		{Name: "api-key", Target: "/run/secrets/api_key", Env: "API_KEY"},
 		{Name: "vnc-password", Target: "/run/secrets/vnc_password"},
 	}
 
@@ -16,16 +16,16 @@ func TestCollectSecretsFromLabels(t *testing.T) {
 		t.Fatalf("expected 2 secrets, got %d", len(secrets))
 	}
 
-	if secrets[0].Name != "ov-my-image-sunshine-password" {
-		t.Errorf("secret[0].Name = %q, want %q", secrets[0].Name, "ov-my-image-sunshine-password")
+	if secrets[0].Name != "ov-my-image-api-key" {
+		t.Errorf("secret[0].Name = %q, want %q", secrets[0].Name, "ov-my-image-api-key")
 	}
-	if secrets[0].Target != "/run/secrets/sunshine_password" {
+	if secrets[0].Target != "/run/secrets/api_key" {
 		t.Errorf("secret[0].Target = %q", secrets[0].Target)
 	}
-	if secrets[0].Env != "SUNSHINE_PASSWORD" {
+	if secrets[0].Env != "API_KEY" {
 		t.Errorf("secret[0].Env = %q", secrets[0].Env)
 	}
-	if secrets[0].SecretName != "sunshine-password" {
+	if secrets[0].SecretName != "api-key" {
 		t.Errorf("secret[0].SecretName = %q", secrets[0].SecretName)
 	}
 
@@ -77,8 +77,6 @@ func TestCredServiceForSecret(t *testing.T) {
 		want   string
 	}{
 		{"VNC_PASSWORD", CredServiceVNC},
-		{"SUNSHINE_USER", CredServiceSunshineUser},
-		{"SUNSHINE_PASSWORD", CredServiceSunshinePassword},
 		{"CUSTOM_SECRET", "ov/secret"},
 	}
 	for _, tt := range tests {

@@ -133,10 +133,6 @@ func credServiceForSecret(envVar string) string {
 	switch envVar {
 	case "VNC_PASSWORD":
 		return CredServiceVNC
-	case "SUNSHINE_USER":
-		return CredServiceSunshineUser
-	case "SUNSHINE_PASSWORD":
-		return CredServiceSunshinePassword
 	default:
 		return "ov/secret"
 	}

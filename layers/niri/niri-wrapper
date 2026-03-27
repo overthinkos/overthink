@@ -6,14 +6,6 @@
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 
-# Sunshine input: enable noop libseat if uinput is available.
-# fake-udev (separate service) handles device discovery via synthetic netlink events.
-if [ -e /dev/uinput ]; then
-    export LIBSEAT_BACKEND=noop
-    mkdir -p /run/udev/data
-    touch /run/udev/control
-fi
-
 # Clean up stale sockets from previous runs (supervisord restarts).
 rm -f "$XDG_RUNTIME_DIR"/wayland-* "$XDG_RUNTIME_DIR"/niri.*.sock
 

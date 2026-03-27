@@ -44,7 +44,7 @@ Two components with a clean split:
 Source: `ov/`. Registry inspection via go-containerregistry.
 
 **Credential & Secret Management** -- Abstracted via `CredentialStore` interface:
-- **Host-side credentials** (VNC passwords, Sunshine creds) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
+- **Host-side credentials** (VNC passwords) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
 - **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. `ov secrets` commands manage entries directly.
 - **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At runtime, `ov enable`/`ov start` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. Docker falls back to env var injection.
 - **Resolution chain:** env var > keyring > config file > default. Migration: `ov config migrate-secrets`.
@@ -75,7 +75,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (140 layers)
++-- layers/<name>/            # Layer directories (128 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -155,9 +155,6 @@ For layer-specific rules (install files, packages, port_relay, secrets, cache mo
 - **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
 - Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
 
-**Sunshine input (fake-udev):** Container sysfs doesn't reflect host-created virtual input devices. The sunshine and sunshine-niri layers include a `fake-udev` service that sends synthetic `NETLINK_KOBJECT_UEVENT` messages to inject Sunshine's passthrough devices (vendor `0xBEEF`) into the compositor's libinput. Requires `security.mounts` (`/dev/input`, tmpfs `/run/udev`), `security.cap_add` (`NET_ADMIN`), and `LIBSEAT_BACKEND=noop`. Sway variant's sway-wrapper dynamically adds the `libinput` backend when `/dev/uinput` is present (sets `LIBSEAT_BACKEND=noop`). The base sway layer uses `WLR_BACKENDS=headless` only.
-- Source: `layers/sunshine/fake-udev`, `layers/sunshine-niri/fake-udev`, `layers/sway/sway-wrapper`, `layers/niri/niri-wrapper`
-
 **Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov enable`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
 - Source: `ov/config.go` (`SecurityConfig.Mounts`), `ov/quadlet.go`, `ov/start.go`
 
@@ -179,8 +176,6 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `wl sway` | `/ov:wl` (sway subgroup) |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
-| `sun` | `/ov:sun` |
-| `moon` | `/ov:moon` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
 | `config` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
@@ -251,10 +246,10 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 19 | Operations | "How do I use X?" |
+| `ov` | 16 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 137 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 39 | Image reference | "What does image X look like?" |
+| `ov-layers` | 125 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 29 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -271,35 +266,14 @@ Real tasks chain through skills in predictable patterns:
 Use CDP first. Use `ov cdp click --wl` for selkies-desktop (no VNC). Use `ov wl` for screenshots, input, window management (`toplevel`, `close`, `fullscreen`), clipboard, and AT-SPI2 accessibility (`ov wl atspi find/click`). Use `ov wl sway` for sway-specific IPC features (tree, workspaces, layout, move, resize).
 On NVIDIA headless: `ov wl` is the primary tool — VNC screenshots are gray (upstream wayvnc bug), but `ov wl screenshot` works perfectly with gles2.
 For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` commands are sway-specific and won't work on labwc.
-For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diagnostics, and Moonlight pairing.
 
 **Deploy a service:**
 `/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
-
-**Set up Sunshine streaming (recommended — X11):**
-`/ov-layers:sunshine-x11` (X11 capture, no fake-udev) -> `/ov:sun` (credentials) -> connect with Moonlight client
-Uses Xorg headless (dummy driver + libinput) + Openbox + X11 native capture. All features work. Image: `sunshine-desktop-x11`.
-**Note:** `/ov:moon` is a host-side control plane only (pairing, app list, launch/quit). It does NOT stream video/audio/input. For end-to-end testing, use `sway-browser-vnc-moonlight` (Moonlight GUI inside a container) or a desktop Moonlight client.
-
-**Set up Sunshine streaming (Sway — input broken):**
-`/ov:sun` (passwd, config) -> `/ov:moon` (pair, launch, quit) -> `/ov-layers:sunshine` (layer properties) -> `/ov:service` (lifecycle)
-
-**Set up Niri Sunshine streaming (experimental — capture broken):**
-`/ov-layers:niri` (compositor) -> `/ov-layers:sunshine-niri` (streaming) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
-Niri is Smithay-based (not wlroots). Built from QaidVoid/niri fork with virtual output support. Capture path pending (niri doesn't expose wlr-screencopy).
-
-**Set up Mutter Sunshine streaming (portal-native — working):**
-`/ov-layers:mutter` (compositor) -> `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) -> `/ov:sun` (credentials) -> `/ov:moon` (pairing)
-Mutter uses D-Bus `org.gnome.Mutter.ScreenCast` (not Wayland protocol). `XDG_SESSION_TYPE=wayland` required. Portal dialog auto-accepted via AT-SPI2. Zero security declarations. Image: `sunshine-desktop-mutter`.
 
 **Set up Selkies streaming (browser-accessible — working):**
 `/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
 Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://localhost:3000` — no client app needed. NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
 **Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (grim), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Includes `wl-tools` + `a11y-tools` layers.
-
-**Set up Wolf streaming (container-native):**
-`/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
-Wolf is self-contained (own compositor, audio, input). No sway/pipewire needed. Uses Podman socket for per-app containers.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -339,12 +313,10 @@ Examples where multiple skills cover one topic:
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
 - **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
-- **Sunshine:** `/ov:sun` (server: credentials, config) vs `/ov:moon` (client: pairing, launch, quit) vs `/ov-layers:sunshine-x11` (recommended, X11 capture) vs `/ov-layers:sunshine` (Sway, input broken) vs `/ov-images:sunshine-desktop-x11` (recommended image)
-- **Wolf:** `/ov-layers:wolf` (layer properties, build-from-source) vs `/ov-images:wolf` (image definition) vs `/ov:moon` (client pairing — same GameStream protocol as Sunshine)
-- **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer) vs `/ov-layers:sunshine-niri` (streaming layer) vs `/ov-images:sunshine-desktop-niri` (experimental, capture broken)
-- **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer) vs `/ov-layers:sunshine-kwin` (portal capture) vs `/ov-images:sunshine-desktop-kwin` (disabled, KWin screencast protocol missing in virtual mode)
-- **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer) vs `/ov-layers:sunshine-mutter` (portal capture + AT-SPI2 auto-accept) vs `/ov-images:sunshine-desktop-mutter` (working, first portal-native streaming)
-- **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer) vs `/ov-layers:sunshine-x11` (streaming) vs `/ov-images:sunshine-desktop-x11` (image)
+- **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer)
+- **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer)
+- **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer)
+- **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 
 ### Desktop Automation Hierarchy

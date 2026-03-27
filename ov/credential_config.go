@@ -74,16 +74,6 @@ func setConfigCredential(cfg *RuntimeConfig, service, key, value string) {
 			cfg.VncPasswords = make(map[string]string)
 		}
 		cfg.VncPasswords[key] = value
-	case CredServiceSunshineUser:
-		if cfg.SunshineUsers == nil {
-			cfg.SunshineUsers = make(map[string]string)
-		}
-		cfg.SunshineUsers[key] = value
-	case CredServiceSunshinePassword:
-		if cfg.SunshinePasswords == nil {
-			cfg.SunshinePasswords = make(map[string]string)
-		}
-		cfg.SunshinePasswords[key] = value
 	default:
 		// Unknown service — store in VncPasswords as a generic fallback.
 		// This shouldn't happen in practice.
@@ -107,10 +97,6 @@ func configCredentialMap(cfg *RuntimeConfig, service string) map[string]string {
 	switch service {
 	case CredServiceVNC:
 		return cfg.VncPasswords
-	case CredServiceSunshineUser:
-		return cfg.SunshineUsers
-	case CredServiceSunshinePassword:
-		return cfg.SunshinePasswords
 	default:
 		return nil
 	}
@@ -119,7 +105,7 @@ func configCredentialMap(cfg *RuntimeConfig, service string) map[string]string {
 // HasPlaintextCredentials returns the number of plaintext credentials
 // currently stored in config.yml credential maps.
 func HasPlaintextCredentials(cfg *RuntimeConfig) int {
-	return len(cfg.VncPasswords) + len(cfg.SunshineUsers) + len(cfg.SunshinePasswords)
+	return len(cfg.VncPasswords)
 }
 
 // PlaintextCredentialEntries returns all plaintext credential entries as
@@ -128,12 +114,6 @@ func PlaintextCredentialEntries(cfg *RuntimeConfig) []struct{ Service, Key, Valu
 	var entries []struct{ Service, Key, Value string }
 	for k, v := range cfg.VncPasswords {
 		entries = append(entries, struct{ Service, Key, Value string }{CredServiceVNC, k, v})
-	}
-	for k, v := range cfg.SunshineUsers {
-		entries = append(entries, struct{ Service, Key, Value string }{CredServiceSunshineUser, k, v})
-	}
-	for k, v := range cfg.SunshinePasswords {
-		entries = append(entries, struct{ Service, Key, Value string }{CredServiceSunshinePassword, k, v})
 	}
 	return entries
 }

@@ -102,8 +102,6 @@ func TestConfigFileStoreRoundtrip(t *testing.T) {
 		value   string
 	}{
 		{CredServiceVNC, "my-image", "vncpass123"},
-		{CredServiceSunshineUser, "my-image", "admin"},
-		{CredServiceSunshinePassword, "my-image", "sunpass456"},
 	}
 
 	for _, tt := range tests {
@@ -147,12 +145,10 @@ func TestConfigFileStoreName(t *testing.T) {
 
 func TestHasPlaintextCredentials(t *testing.T) {
 	cfg := &RuntimeConfig{
-		VncPasswords:      map[string]string{"img1": "pw1"},
-		SunshineUsers:     map[string]string{"img1": "admin"},
-		SunshinePasswords: map[string]string{"img1": "pw2"},
+		VncPasswords: map[string]string{"img1": "pw1"},
 	}
-	if n := HasPlaintextCredentials(cfg); n != 3 {
-		t.Errorf("HasPlaintextCredentials = %d, want 3", n)
+	if n := HasPlaintextCredentials(cfg); n != 1 {
+		t.Errorf("HasPlaintextCredentials = %d, want 1", n)
 	}
 }
 

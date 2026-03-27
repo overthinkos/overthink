@@ -25,7 +25,6 @@ type CLI struct {
 	List     ListCmd     `cmd:"" help:"List components"`
 	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
 	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
-	Moon     MoonCmd     `cmd:"" help:"GameStream client protocol (pair, launch, quit)"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
@@ -35,7 +34,6 @@ type CLI struct {
 	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
 	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
-	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
 	// Sway commands moved to: ov wl sway <subcommand>
 	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
@@ -605,7 +603,7 @@ func (c *ConfigGetCmd) Run() error {
 	case "vm.backend":
 		fmt.Println(rt.VmBackend)
 	default:
-		if strings.HasPrefix(c.Key, "vnc.password.") || strings.HasPrefix(c.Key, "sunshine.user.") || strings.HasPrefix(c.Key, "sunshine.password.") {
+		if strings.HasPrefix(c.Key, "vnc.password.") {
 			val, err := GetConfigValue(c.Key)
 			if err != nil {
 				return err
@@ -613,7 +611,7 @@ func (c *ConfigGetCmd) Run() error {
 			fmt.Println(val)
 			return nil
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", c.Key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vnc.password.<image>)", c.Key)
 	}
 	return nil
 }

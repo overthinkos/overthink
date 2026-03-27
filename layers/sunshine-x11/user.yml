@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  install:
-    cmds:
-      - mkdir -p ~/.local/bin ~/.config/sunshine
-      - cp /ctx/sunshine-x11-wrapper ~/.local/bin/sunshine-x11-wrapper
-      - chmod +x ~/.local/bin/sunshine-x11-wrapper

@@ -126,21 +126,16 @@ func TestKdbxStore_MultipleServices(t *testing.T) {
 	defer cleanup()
 
 	store.Set(CredServiceVNC, "img", "vnc-pass")
-	store.Set(CredServiceSunshineUser, "img", "sun-user")
-	store.Set(CredServiceSunshinePassword, "img", "sun-pass")
+	store.Set("ov/secret", "img", "secret-val")
 
 	v1, _ := store.Get(CredServiceVNC, "img")
-	v2, _ := store.Get(CredServiceSunshineUser, "img")
-	v3, _ := store.Get(CredServiceSunshinePassword, "img")
+	v2, _ := store.Get("ov/secret", "img")
 
 	if v1 != "vnc-pass" {
 		t.Errorf("vnc = %q", v1)
 	}
-	if v2 != "sun-user" {
-		t.Errorf("sunshine-user = %q", v2)
-	}
-	if v3 != "sun-pass" {
-		t.Errorf("sunshine-password = %q", v3)
+	if v2 != "secret-val" {
+		t.Errorf("secret = %q", v2)
 	}
 }
 

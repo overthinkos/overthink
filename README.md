@@ -124,7 +124,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Services & Infrastructure
 
-**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm. **sunshine** — Game streaming server (Moonlight-compatible) on `:47990` with NVENC GPU encoding and fake-udev for virtual input devices in containers. **wolf** — Container-native game streaming server (Games on Whales) with built-in Smithay compositor, GStreamer encoding, and per-app container orchestration via Podman socket. Built from source on Fedora.
+**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
 
 ### GPU & Machine Learning
 
@@ -136,7 +136,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Applications
 
-**openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope and XWayland for game streaming via Sunshine/Moonlight. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
+**openclaw** — AI gateway on `:18789`. **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
 
 ### Utilities
 
@@ -151,14 +151,10 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 Some layers are pure composition — they pull in a curated set of other layers:
 **sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
-**sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA. Includes fake-udev for virtual input device injection in containers.
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
-**niri-desktop-sunshine** = niri-desktop + sunshine-niri. Niri desktop with Sunshine streaming (experimental — capture pending upstream protocol support).
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
-**x11-desktop-sunshine** = x11-desktop + sunshine-x11. X11 desktop with Sunshine streaming via native X11 capture and XTest input injection. All features work — recommended for Sunshine.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**mutter-desktop-sunshine** = mutter-desktop + sunshine-mutter. Portal-native Sunshine streaming — zero fake-udev, zero NET_ADMIN. Uses D-Bus ScreenCast + AT-SPI2 auto-accept for the permission dialog.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + a11y-tools + xterm + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots via pixelflux rendering pipeline (grim doesn't work nested). Full `ov wl` automation: input, window management, clipboard, resolution, accessibility introspection, XWayland apps via xterm. No VNC or Moonlight client needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + a11y-tools + xterm + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots via pixelflux rendering pipeline (grim doesn't work nested). Full `ov wl` automation: input, window management, clipboard, resolution, accessibility introspection, XWayland apps via xterm. No VNC needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
@@ -232,10 +228,6 @@ ov wl sway msg/tree/workspaces/outputs # Sway IPC commands (requires sway)
 ov wl sway focus/move/resize/kill      # Sway window management
 ov wl sway layout/workspace/floating   # Sway layout and workspace control
 ov wl sway reload                      # Reload sway configuration
-ov sun status/passwd/pair/clients      # Sunshine server management
-ov sun config/set/restart/url          # Sunshine config and service control
-ov moon pair <image> --auto            # Moonlight pairing (fully automated)
-ov moon status/apps/launch/quit        # GameStream client protocol
 ```
 
 ### Persistent Sessions

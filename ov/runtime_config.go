@@ -26,8 +26,6 @@ type RuntimeConfig struct {
 	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
-	SunshineUsers        map[string]string `yaml:"sunshine_users,omitempty"`     // Sunshine Web UI usernames keyed by image[-instance]
-	SunshinePasswords    map[string]string `yaml:"sunshine_passwords,omitempty"` // Sunshine Web UI passwords keyed by image[-instance]
 	KeyringKeys          []string          `yaml:"keyring_keys,omitempty"`       // Shadow index: names of keys stored in keyring (no values)
 }
 
@@ -319,17 +317,7 @@ func GetConfigValue(key string) (string, error) {
 			val, _ := ResolveCredential("", CredServiceVNC, name, "")
 			return val, nil
 		}
-		if strings.HasPrefix(key, "sunshine.user.") {
-			name := strings.TrimPrefix(key, "sunshine.user.")
-			val, _ := ResolveCredential("", CredServiceSunshineUser, name, "")
-			return val, nil
-		}
-		if strings.HasPrefix(key, "sunshine.password.") {
-			name := strings.TrimPrefix(key, "sunshine.password.")
-			val, _ := ResolveCredential("", CredServiceSunshinePassword, name, "")
-			return val, nil
-		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -397,11 +385,7 @@ func SetConfigValue(key, value string) error {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		if strings.HasPrefix(key, "sunshine.user.") || strings.HasPrefix(key, "sunshine.password.") {
-			// Sunshine credentials are free-form strings, no validation needed.
-			break
-		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -453,14 +437,6 @@ func SetConfigValue(key, value string) error {
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Set(CredServiceVNC, name, value)
-		}
-		if strings.HasPrefix(key, "sunshine.user.") {
-			name := strings.TrimPrefix(key, "sunshine.user.")
-			return DefaultCredentialStore().Set(CredServiceSunshineUser, name, value)
-		}
-		if strings.HasPrefix(key, "sunshine.password.") {
-			name := strings.TrimPrefix(key, "sunshine.password.")
-			return DefaultCredentialStore().Set(CredServiceSunshinePassword, name, value)
 		}
 	}
 
@@ -521,15 +497,8 @@ func ResetConfigValue(key string) error {
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
-		} else if strings.HasPrefix(key, "sunshine.user.") {
-			name := strings.TrimPrefix(key, "sunshine.user.")
-			return DefaultCredentialStore().Delete(CredServiceSunshineUser, name)
-		} else if strings.HasPrefix(key, "sunshine.password.") {
-			name := strings.TrimPrefix(key, "sunshine.password.")
-			return DefaultCredentialStore().Delete(CredServiceSunshinePassword, name)
-		} else {
-			return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>, sunshine.user.<image>, sunshine.password.<image>)", key)
 		}
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)

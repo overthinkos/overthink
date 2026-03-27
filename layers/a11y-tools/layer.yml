@@ -1,0 +1,7 @@
+depends:
+  - dbus
+
+rpm:
+  packages:
+    - python3-pyatspi
+    - python3-gobject

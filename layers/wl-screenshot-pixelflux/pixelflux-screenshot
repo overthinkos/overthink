@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Capture a screenshot from pixelflux's rendering pipeline.
+
+Taps into the same ScreenCapture API that powers selkies WebSocket streaming.
+Collects one full frame of JPEG stripes, decodes and stitches them with Pillow,
+outputs PNG to stdout.
+
+Usage:
+    pixelflux-screenshot                    # full desktop PNG to stdout
+    pixelflux-screenshot --region X,Y WxH   # region capture (TODO)
+"""
+import ctypes
+import io
+import os
+import sys
+import threading
+
+os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp")
+
+from pixelflux import CaptureSettings, ScreenCapture, StripeCallback
+from PIL import Image
+
+# Collect stripes for one complete frame
+_stripes = {}  # y_start -> (jpeg_bytes, stripe_height)
+_target_frame = 0
+_frame_complete = threading.Event()
+_capture_width = 0
+_capture_height = 0
+
+
+def _on_stripe(result_ptr, _user_data):
+    """Callback from pixelflux for each encoded stripe."""
+    result = result_ptr.contents
+    frame_id = result.frame_id
+
+    # Only collect stripes from the first frame
+    if frame_id != _target_frame:
+        if frame_id > _target_frame and len(_stripes) > 0:
+            # Next frame started — first frame is complete
+            _frame_complete.set()
+        return
+
+    size = result.size
+    if size <= 0:
+        return
+
+    # Raw data has a 4-byte header (frame_id byte + y_offset) then JPEG
+    raw = bytes(ctypes.string_at(result.data, size))
+
+    # Find JPEG start marker (FF D8)
+    jpeg_start = raw.find(b"\xff\xd8")
+    if jpeg_start < 0:
+        return
+
+    jpeg_data = raw[jpeg_start:]
+    y_start = result.stripe_y_start
+    _stripes[y_start] = jpeg_data
+
+
+def main():
+    global _capture_width, _capture_height
+
+    # Detect current resolution from wlr-randr output
+    import subprocess
+
+    try:
+        out = subprocess.check_output(
+            ["wlr-randr"], env={**os.environ, "WAYLAND_DISPLAY": "wayland-0"},
+            stderr=subprocess.DEVNULL, text=True,
+        )
+        for line in out.splitlines():
+            line = line.strip()
+            if "current" in line and "px" in line:
+                # Parse "1280x720 px (current)"
+                res = line.split()[0]
+                w, h = res.split("x")
+                _capture_width = int(w)
+                _capture_height = int(h)
+                break
+    except Exception:
+        pass
+
+    if _capture_width == 0 or _capture_height == 0:
+        _capture_width = 1280
+        _capture_height = 720
+
+    cb = StripeCallback(_on_stripe)
+    sc = ScreenCapture()
+
+    settings = CaptureSettings()
+    settings.capture_width = _capture_width
+    settings.capture_height = _capture_height
+    settings.capture_x = 0
+    settings.capture_y = 0
+    settings.scale = 1.0
+    settings.target_fps = 10.0  # Fast enough to get one frame quickly
+    settings.output_mode = 0  # JPEG
+    settings.jpeg_quality = 95
+    settings.capture_cursor = True
+    settings.debug_logging = False
+    settings.use_cpu = True
+
+    def run_capture():
+        sc.start_capture(settings, cb)
+
+    t = threading.Thread(target=run_capture, daemon=True)
+    t.start()
+
+    # Wait for one complete frame
+    if not _frame_complete.wait(timeout=10):
+        # If frame_complete wasn't set by frame transition, check if we have stripes
+        if len(_stripes) == 0:
+            print("pixelflux-screenshot: no frames received", file=sys.stderr)
+            sc.stop_capture()
+            sys.exit(1)
+
+    sc.stop_capture()
+
+    if not _stripes:
+        print("pixelflux-screenshot: no stripe data", file=sys.stderr)
+        sys.exit(1)
+
+    # Decode and stitch stripes into a full image
+    canvas = Image.new("RGB", (_capture_width, _capture_height))
+
+    for y_start in sorted(_stripes.keys()):
+        jpeg_data = _stripes[y_start]
+        try:
+            stripe_img = Image.open(io.BytesIO(jpeg_data))
+            canvas.paste(stripe_img, (0, y_start))
+        except Exception as e:
+            print(f"pixelflux-screenshot: failed to decode stripe at y={y_start}: {e}",
+                  file=sys.stderr)
+
+    # Output PNG to stdout
+    buf = io.BytesIO()
+    canvas.save(buf, format="PNG")
+    sys.stdout.buffer.write(buf.getvalue())
+    sys.stdout.buffer.flush()
+
+    print(f"pixelflux-screenshot: {_capture_width}x{_capture_height}, "
+          f"{len(_stripes)} stripes", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

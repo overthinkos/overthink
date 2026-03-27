@@ -75,7 +75,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (136 layers)
++-- layers/<name>/            # Layer directories (140 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -253,7 +253,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 19 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 133 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 137 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 39 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
@@ -267,9 +267,10 @@ Real tasks chain through skills in predictable patterns:
 `/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:config` or `/ov:service` (state)
 
 **Desktop automation:**
-`/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (Wayland + X11: grim, wtype, wlrctl, xdotool, import) -> `/ov:sway` (window: focus, layout)
-Use CDP first. Use WL for screenshots (`ov wl screenshot`), input, and X11 window interaction (`ov wl windows`, `ov wl focus`). Use Sway for window management.
+`/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (compositor-agnostic: screenshots, input, window mgmt, clipboard, AT-SPI2) -> `/ov:sway` (sway-only: tree, layout, move, resize)
+Use CDP first. Use `ov cdp click --wl` for selkies-desktop (no VNC). Use `ov wl` for screenshots, input, window management (`toplevel`, `close`, `fullscreen`), clipboard, and AT-SPI2 accessibility (`ov wl atspi find/click`). Use Sway for sway-specific IPC features.
 On NVIDIA headless: `ov wl` is the primary tool — VNC screenshots are gray (upstream wayvnc bug), but `ov wl screenshot` works perfectly with gles2.
+For selkies-desktop (labwc): `ov wl` is the ONLY desktop automation tool — `ov sway` and `ov vnc` don't work on labwc.
 For Sunshine images: use `/ov:sun` for credential setup, `/ov:sun diag` for diagnostics, and Moonlight pairing.
 
 **Deploy a service:**
@@ -294,6 +295,7 @@ Mutter uses D-Bus `org.gnome.Mutter.ScreenCast` (not Wayland protocol). `XDG_SES
 **Set up Selkies streaming (browser-accessible — working):**
 `/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
 Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://localhost:3000` — no client app needed. NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
+**Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (grim), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Includes `wl-tools` + `a11y-tools` layers.
 
 **Set up Wolf streaming (container-native):**
 `/ov-layers:wolf` (layer properties) -> `/ov:moon` (pair, launch, quit) -> `/ov:service` (lifecycle)
@@ -347,14 +349,18 @@ Examples where multiple skills cover one topic:
 
 ### Desktop Automation Hierarchy
 
-Four abstraction levels for interacting with container desktops:
+Six abstraction levels for interacting with container desktops:
 
 | Level | Skill | Interface | When to use |
 |-------|-------|-----------|-------------|
-| DOM | `/ov:cdp` | CSS selectors, JS eval | First choice -- structured, reliable |
-| Wayland | `/ov:wl` | grim, wtype, wlrctl | Screenshots + input via Wayland protocols (works on NVIDIA headless) |
+| Semantic | `/ov:wl` atspi | AT-SPI2 tree | Find elements by name/role -- most reliable for non-web UIs |
+| DOM | `/ov:cdp` | CSS selectors, JS eval | Chrome content -- structured, fast |
+| AX Tree | `/ov:cdp` axtree | CDP Accessibility | Chrome UI elements, menus, buttons via CDP |
+| Wayland | `/ov:wl` | grim, wtype, wlrctl | Screenshots, input, windows -- compositor-agnostic (sway + labwc) |
 | Pixel | `/ov:vnc` | VNC coordinates, framebuffer | Remote access -- when TCP connectivity needed |
-| Window | `/ov:sway` | Focus, layout, workspace | Window management, app launching |
+| Window | `/ov:sway` | Focus, layout, workspace | Sway-only power features (tree, layout, move, resize) |
+
+**CDP → WL bridge:** Use `ov cdp click <image> <tab> <selector> --wl` to find elements by CSS selector and click via wlrctl. Critical for selkies-desktop (no VNC server). Same pattern as `--vnc` but uses Wayland pointer.
 
 ### ov-dev Agents
 

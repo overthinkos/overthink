@@ -47,7 +47,69 @@ type CdpCmd struct {
 	Wait       CdpWaitCmd       `cmd:"" help:"Wait for an element to appear"`
 	Raw        CdpRawCmd        `cmd:"" help:"Send a raw CDP command"`
 	Coords     CdpCoordsCmd     `cmd:"" help:"Show element coordinates in viewport and desktop systems"`
+	Axtree     CdpAxtreeCmd     `cmd:"" help:"Get Chrome accessibility tree"`
 	Status     CdpStatusCmd     `cmd:"" help:"Check Chrome DevTools Protocol availability"`
+}
+
+// CdpAxtreeCmd retrieves the Chrome accessibility tree via CDP.
+type CdpAxtreeCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	TabID    string `arg:"" help:"Tab ID (from browser list)"`
+	Query    string `arg:"" optional:"" help:"Filter by name or role substring"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+func (c *CdpAxtreeCmd) Run() error {
+	client, err := connectTab(c.Image, c.TabID, c.Instance)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	result, err := client.Call("Accessibility.getFullAXTree", nil)
+	if err != nil {
+		return fmt.Errorf("getting accessibility tree: %w", err)
+	}
+
+	// The result contains a "nodes" array. If a query filter is provided,
+	// filter the nodes by name or role containing the query string.
+	if c.Query == "" {
+		// Pretty-print the full tree.
+		var pretty json.RawMessage
+		if err := json.Unmarshal(result, &pretty); err == nil {
+			out, _ := json.MarshalIndent(pretty, "", "  ")
+			fmt.Println(string(out))
+		} else {
+			fmt.Println(string(result))
+		}
+		return nil
+	}
+
+	var tree struct {
+		Nodes []json.RawMessage `json:"nodes"`
+	}
+	if err := json.Unmarshal(result, &tree); err != nil {
+		// If we can't parse, just print the raw result.
+		fmt.Println(string(result))
+		return nil
+	}
+
+	query := strings.ToLower(c.Query)
+	var matches []json.RawMessage
+	for _, node := range tree.Nodes {
+		nodeStr := strings.ToLower(string(node))
+		if strings.Contains(nodeStr, query) {
+			matches = append(matches, node)
+		}
+	}
+
+	out, err := json.MarshalIndent(matches, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshaling filtered tree: %w", err)
+	}
+	fmt.Println(string(out))
+	fmt.Fprintf(os.Stderr, "Found %d matching nodes\n", len(matches))
+	return nil
 }
 
 // CdpStatusCmd checks if CDP is reachable.
@@ -513,6 +575,7 @@ type CdpClickCmd struct {
 	Selector string `arg:"" help:"CSS selector of element to click"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
 	VNC      bool   `long:"vnc" help:"Deliver click via VNC instead of CDP (translates viewport coords to desktop coords)"`
+	WL       bool   `long:"wl" help:"Deliver click via Wayland pointer (wlrctl) instead of CDP (for selkies-desktop/labwc)"`
 }
 
 func (c *CdpClickCmd) Run() error {
@@ -566,6 +629,30 @@ func (c *CdpClickCmd) Run() error {
 			return fmt.Errorf("VNC click at (%d, %d): %w", desktopX, desktopY, err)
 		}
 		fmt.Fprintf(os.Stderr, "Clicked element at viewport (%.0f, %.0f) → desktop (%d, %d) via VNC\n",
+			coords.X, coords.Y, desktopX, desktopY)
+		return nil
+	}
+
+	// If --wl is set, translate viewport coords to desktop coords and click via wlrctl.
+	if c.WL {
+		offset, err := cdpGetWindowOffset(client)
+		if err != nil {
+			return fmt.Errorf("getting window offset for WL translation: %w", err)
+		}
+		desktopX := int(coords.X + offset.ScreenX)
+		desktopY := int(coords.Y + offset.ScreenY + offset.ChromeHeight)
+		engine, containerName, err := resolveContainer(c.Image, c.Instance)
+		if err != nil {
+			return fmt.Errorf("resolving container for WL click: %w", err)
+		}
+		shellCmd := fmt.Sprintf(
+			"wlrctl pointer move -10000 -10000 && wlrctl pointer move %d %d && sleep 0.05 && wlrctl pointer click left",
+			desktopX, desktopY,
+		)
+		if err := execWlCmd(engine, containerName, shellCmd); err != nil {
+			return fmt.Errorf("WL click at (%d, %d): %w", desktopX, desktopY, err)
+		}
+		fmt.Fprintf(os.Stderr, "Clicked element at viewport (%.0f, %.0f) → desktop (%d, %d) via wlrctl\n",
 			coords.X, coords.Y, desktopX, desktopY)
 		return nil
 	}

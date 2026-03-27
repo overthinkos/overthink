@@ -303,3 +303,43 @@ func strContains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestCdpClickWlFlag(t *testing.T) {
+	// Verify the CdpClickCmd struct has the WL field.
+	cmd := CdpClickCmd{WL: true}
+	if !cmd.WL {
+		t.Error("CdpClickCmd.WL should be true")
+	}
+}
+
+func TestCdpAxtreeCmd(t *testing.T) {
+	// Verify the CdpAxtreeCmd struct exists and has expected fields.
+	cmd := CdpAxtreeCmd{
+		Image: "test",
+		TabID: "tab1",
+		Query: "button",
+	}
+	if cmd.Image != "test" || cmd.TabID != "tab1" || cmd.Query != "button" {
+		t.Error("CdpAxtreeCmd fields not set correctly")
+	}
+}
+
+func TestCdpCmdSubcommands(t *testing.T) {
+	// Verify CdpCmd struct has all expected subcommands.
+	var cmd CdpCmd
+	_ = cmd.Open
+	_ = cmd.List
+	_ = cmd.Close
+	_ = cmd.Text
+	_ = cmd.Html
+	_ = cmd.Url
+	_ = cmd.Screenshot
+	_ = cmd.Click
+	_ = cmd.Type
+	_ = cmd.Eval
+	_ = cmd.Wait
+	_ = cmd.Raw
+	_ = cmd.Coords
+	_ = cmd.Axtree
+	_ = cmd.Status
+}

@@ -3,4 +3,8 @@ layers:
   - chrome
   - labwc
   - waybar-labwc
+  - wl-tools
+  - wl-screenshot-pixelflux
+  - a11y-tools
+  - xterm
   - selkies

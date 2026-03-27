@@ -1,1 +1,1 @@
-google-chrome-stable --ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks --user-data-dir=$HOME/.chrome-debug --remote-debugging-port=9222 --no-first-run --no-sandbox --start-maximized &
+google-chrome-stable --ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks --force-renderer-accessibility --user-data-dir=$HOME/.chrome-debug --remote-debugging-port=9222 --no-first-run --no-sandbox --start-maximized &

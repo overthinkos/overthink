@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  install:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/pixelflux-screenshot ~/.local/bin/pixelflux-screenshot
+      - chmod +x ~/.local/bin/pixelflux-screenshot

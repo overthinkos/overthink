@@ -2,6 +2,7 @@ layers:
   - pipewire
   - xdg-portal
   - wl-tools
+  - wl-screenshot-grim
   - chrome-sway
   - xfce4-terminal
   - thunar

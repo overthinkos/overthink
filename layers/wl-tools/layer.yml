@@ -1,11 +1,10 @@
-depends:
-  - sway
-
 rpm:
   packages:
-    - grim
     - wtype
     - wlrctl
     - xdotool
     - xprop
     - xwininfo
+    - wl-clipboard
+    - wlr-randr
+    - ydotool

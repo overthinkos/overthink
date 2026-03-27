@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-136 layers. 48 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+140 layers. 48 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -149,7 +149,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
+**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
 **sway-desktop-sunshine** = sway-desktop + sunshine. GPU-accelerated game streaming via Sunshine/Moonlight, full NVENC pipeline on NVIDIA. Includes fake-udev for virtual input device injection in containers.
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
@@ -158,7 +158,7 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **x11-desktop-sunshine** = x11-desktop + sunshine-x11. X11 desktop with Sunshine streaming via native X11 capture and XTest input injection. All features work — recommended for Sunshine.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
 **mutter-desktop-sunshine** = mutter-desktop + sunshine-mutter. Portal-native Sunshine streaming — zero fake-udev, zero NET_ADMIN. Uses D-Bus ScreenCast + AT-SPI2 auto-accept for the permission dialog.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Waybar provides a bottom taskbar with app launchers. No VNC or Moonlight client needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + a11y-tools + xterm + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots via pixelflux rendering pipeline (grim doesn't work nested). Full `ov wl` automation: input, window management, clipboard, resolution, accessibility introspection, XWayland apps via xterm. No VNC or Moonlight client needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
@@ -209,18 +209,25 @@ ov service status/start/stop/restart   # Manage supervisord services in containe
 
 ```
 ov cdp open/list/close <image>         # Chrome tab management via DevTools
-ov cdp click <image> <tab> <selector>  # Click element (--vnc for VNC-visible click)
+ov cdp click <image> <tab> <selector>  # Click element (--vnc for VNC, --wl for Wayland)
+ov cdp axtree <image> <tab> [query]   # Chrome accessibility tree
 ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, capture
 ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
 ov cdp status <image>                  # Check CDP availability and port
 ov vnc screenshot/click/type/key       # VNC framebuffer interaction
 ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
 ov vnc status <image>                  # Check VNC server, show resolution
-ov wl screenshot/click/type/key        # Desktop interaction (grim + wtype + wlrctl)
-ov wl mouse <image> <x> <y>            # Move pointer
-ov wl windows <image>                  # List X11 windows (xdotool)
-ov wl focus <image> <title>            # Focus X11 window by title/class
-ov wl status <image>                   # Check Wayland tool availability
+ov wl screenshot/click/type/key/mouse   # Compositor-agnostic desktop interaction
+ov wl key-combo <image> <keys>         # Key combinations (ctrl+c, alt+tab)
+ov wl double-click/scroll/drag         # Advanced input (scroll, drag, double-click)
+ov wl toplevel/windows <image>         # List windows (wlrctl toplevel, xdotool)
+ov wl focus/close/fullscreen/minimize  # Window management via wlrctl toplevel
+ov wl exec <image> <command>           # Launch application in container
+ov wl resolution <image> <WxH>         # Set output resolution (wlr-randr)
+ov wl clipboard <image> get/set/clear  # Read/write Wayland clipboard
+ov wl geometry/xprop <image>           # Window position and X11 properties
+ov wl atspi <image> tree/find/click    # Accessibility tree introspection (AT-SPI2)
+ov wl status <image>                   # Check all tool availability
 ov sway msg <image> <command>          # Sway compositor control
 ov sway status <image>                 # Check Sway compositor availability
 ov sun status/passwd/pair/clients      # Sunshine server management
@@ -333,7 +340,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 188 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 197 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

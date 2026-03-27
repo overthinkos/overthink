@@ -34,7 +34,8 @@ volumes:
     path: /var/lib/containers/storage
 
 security:
-  privileged: true
+  cap_add:
+    - ALL
   security_opt:
     - label=disable
     - seccomp=unconfined

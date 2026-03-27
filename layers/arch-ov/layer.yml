@@ -35,6 +35,9 @@ volumes:
 
 security:
   privileged: true
+  security_opt:
+    - label=disable
+    - seccomp=unconfined
 
 env:
   OV_BUILD_ENGINE: "podman"

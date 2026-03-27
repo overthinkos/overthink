@@ -93,6 +93,12 @@ func appendUnique(dst []string, items ...string) []string {
 func SecurityArgs(sec SecurityConfig) []string {
 	if sec.Privileged {
 		args := []string{"--privileged"}
+		// Pass security_opt even when privileged — nested containers need
+		// explicit label=disable and seccomp=unconfined since --privileged
+		// alone doesn't propagate through container nesting levels.
+		for _, opt := range sec.SecurityOpt {
+			args = append(args, "--security-opt", opt)
+		}
 		if sec.ShmSize != "" {
 			args = append(args, "--shm-size", sec.ShmSize)
 		}

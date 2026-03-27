@@ -24,10 +24,15 @@ tasks:
           setcap cap_setgid=ep /usr/bin/newgidmap
         fi
 
-      # Nested podman: default to host networking (netavark can't create namespaces inside containers)
+      # Nested podman config: host networking (netavark can't create namespaces),
+      # host userns (newuidmap fails in nested containers), cgroupfs (sysfs mount blocked)
       - |
         mkdir -p /etc/containers
         cat > /etc/containers/containers.conf <<'TOML'
+        [engine]
+        cgroup_manager = "cgroupfs"
+
         [containers]
         netns = "host"
+        userns = "host"
         TOML

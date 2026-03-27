@@ -1,4 +1,5 @@
 {
+  "includeCoAuthoredBy": false,
   "enabledPlugins": {
     "ov@ov-plugins": true,
     "ov-dev@ov-plugins": true,

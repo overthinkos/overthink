@@ -5,6 +5,34 @@ Built on `supervisord` and `ov` (Go CLI). Designed to work equally well from the
 
 ---
 
+
+## Always follow the Five Cornerstones of AI Scut Testing
+
+### Your Assumptions Are the Enemy
+
+- The thing you didn't think to test is the thing that will break.
+
+### Small Bugs Have Big Friends
+
+- Every issue you dismissed as nonessential is tomorrow's catastrophe.
+
+### It's Broken Until It Runs Live
+
+- Localhost and mocks are deceptive liars.
+
+### Check Every Damn Thing
+
+- Methodically. Tediously. No shortcuts.
+
+### Then Check It Again
+
+Because you missed something. You always do.
+
+## Prioritize Clean Architecture Above All Else
+
+Always pick the cleanest long-term approach and prioritize having a clean codebase with any deprecated code fully removed above everything.
+You have all the time in the world and taking the time to get things properly done is ALWAYS worth the effort.
+
 ## Architecture Overview
 
 Two components with a clean split:
@@ -337,3 +365,76 @@ The `ov-dev` plugin includes 3 blocking enforcement agents (automatic, not invok
 | layer-validator | Before editing `layer.yml` | Validates structure and field types |
 | root-cause-analyzer | Any error in output | Deep 8-step root cause analysis |
 | testing-validator | Claiming something "works" | Verifies actual local test results |
+
+
+## AI Attribution (Fedora Policy Compliant)
+
+Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council/policy/ai-contribution-policy/), Claude **MUST** include the `Assisted-by: Claude` trailer with a **confidence statement** in all commits:
+
+```
+<commit message>
+
+Assisted-by: Claude (fully tested and validated)
+```
+
+## Confidence Statements (Required)
+
+All AI-assisted contributions **MUST** include a confidence statement indicating verification level:
+
+| Statement | When to Use | Evidence |
+|-----------|-------------|----------|
+| `fully tested and validated` | Overlay testing + all 9 testing standards met | Complete LOCAL system verification |
+| `analysed on a live system` | Observed live system behavior, logs checked | Partial testing, live analysis |
+| `syntax check only` | Pre-commit hooks passed, no functional testing | ShellCheck, yamllint, etc. passed |
+| `theoretical suggestion` | No validation performed | AVOID - indicates unverified code |
+
+**Choosing the Right Level:**
+
+1. **Used overlay testing + verified all functionality?** → `fully tested and validated`
+2. **Observed live system behavior, checked logs?** → `analysed on a live system`
+3. **Only ran pre-commit hooks?** → `syntax check only`
+4. **No validation at all?** → `theoretical suggestion` (avoid when possible)
+
+**Examples:**
+
+```
+Fix: Add fuse-overlayfs for container startup
+
+Tested via overlay session on LOCAL system.
+All 9 testing standards verified.
+
+Assisted-by: Claude (fully tested and validated)
+```
+
+```
+Refactor: Simplify build cache logic
+
+Reviewed logic and checked logs on live system.
+
+Assisted-by: Claude (analysed on a live system)
+```
+
+```
+Feat: Add initial WinBoat support structure
+
+Skeleton implementation, pre-commit validation passed.
+Requires testing on Windows environment.
+
+Assisted-by: Claude (syntax check only)
+```
+
+**MANDATORY for Claude:**
+
+- **ALWAYS** include confidence statement - this is non-negotiable
+- Trailer goes after commit body, separated by blank line
+- Required for ALL Claude-assisted commits (code, docs, configs)
+- Only exception: trivial grammar/spelling corrections
+
+**GitHub Issues and PRs:**
+
+When creating issues or PR descriptions, include at the end:
+
+```markdown
+---
+*Assisted-by: Claude (fully tested and validated)*
+```

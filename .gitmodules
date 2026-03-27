@@ -3,4 +3,4 @@
 	url = git@github.com:overthinkos/overthink-plugins.git
 [submodule "pkg/arch"]
 	path = pkg/arch
-	url = https://github.com/overthinkos/overthink-arch.git
+	url = git@github.com:overthinkos/overthink-arch.git

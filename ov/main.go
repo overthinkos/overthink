@@ -36,7 +36,7 @@ type CLI struct {
 	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
 	Sun      SunCmd      `cmd:"" help:"Manage Sunshine game streaming in running containers"`
-	Sway     SwayCmd     `cmd:"" help:"Control Sway compositor in running containers"`
+	// Sway commands moved to: ov wl sway <subcommand>
 	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
@@ -44,7 +44,7 @@ type CLI struct {
 	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
 	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
 	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl       WlCmd       `cmd:"" help:"Wayland-native desktop interaction (grim + wtype + wlrctl)"`
+	Wl       WlCmd       `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 }
 
 // GenerateCmd generates Containerfiles

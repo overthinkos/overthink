@@ -228,8 +228,10 @@ ov wl clipboard <image> get/set/clear  # Read/write Wayland clipboard
 ov wl geometry/xprop <image>           # Window position and X11 properties
 ov wl atspi <image> tree/find/click    # Accessibility tree introspection (AT-SPI2)
 ov wl status <image>                   # Check all tool availability
-ov sway msg <image> <command>          # Sway compositor control
-ov sway status <image>                 # Check Sway compositor availability
+ov wl sway msg/tree/workspaces/outputs # Sway IPC commands (requires sway)
+ov wl sway focus/move/resize/kill      # Sway window management
+ov wl sway layout/workspace/floating   # Sway layout and workspace control
+ov wl sway reload                      # Reload sway configuration
 ov sun status/passwd/pair/clients      # Sunshine server management
 ov sun config/set/restart/url          # Sunshine config and service control
 ov moon pair <image> --auto            # Moonlight pairing (fully automated)

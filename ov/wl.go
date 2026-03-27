@@ -34,6 +34,24 @@ type WlCmd struct {
 	Xprop       WlXpropCmd       `cmd:"" help:"Query X11 window properties (via xprop)"`
 	Geometry    WlGeometryCmd    `cmd:"" help:"Get window geometry (compositor-agnostic)"`
 	Atspi       WlAtspiCmd       `cmd:"" help:"Query accessibility tree (via AT-SPI2)"`
+	Sway        WlSwayCmd        `cmd:"" help:"Sway-specific compositor commands (requires sway)"`
+}
+
+// WlSwayCmd groups sway IPC commands. These require the sway compositor
+// and use swaymsg. They will error on non-sway compositors (labwc, niri).
+type WlSwayCmd struct {
+	Msg        WlSwayMsgCmd        `cmd:"" help:"Run a swaymsg command"`
+	Tree       WlSwayTreeCmd       `cmd:"" help:"Get window/container tree (JSON)"`
+	Workspaces WlSwayWorkspacesCmd `cmd:"" help:"List workspaces (JSON)"`
+	Outputs    WlSwayOutputsCmd    `cmd:"" help:"List outputs (JSON)"`
+	Focus      WlSwayFocusCmd      `cmd:"" help:"Focus window by direction or criteria"`
+	Move       WlSwayMoveCmd       `cmd:"" help:"Move focused window (direction, workspace, or scratchpad)"`
+	Resize     WlSwayResizeCmd     `cmd:"" help:"Resize focused window"`
+	Kill       WlSwayKillCmd       `cmd:"" help:"Close the focused window"`
+	Floating   WlSwayFloatingCmd   `cmd:"" help:"Toggle floating on focused window"`
+	Layout     WlSwayLayoutCmd     `cmd:"" help:"Set layout mode (tabbed, stacking, splitv, splith)"`
+	Workspace  WlSwayWorkspaceCmd  `cmd:"" help:"Switch to a workspace"`
+	Reload     WlSwayReloadCmd     `cmd:"" help:"Reload sway configuration"`
 }
 
 // WlScreenshotCmd captures the desktop as a PNG image.
@@ -1187,6 +1205,335 @@ func (c *WlAtspiCmd) Run() error {
 	default:
 		return fmt.Errorf("unknown atspi action %q (valid: tree, find, click)", c.Action)
 	}
+}
+
+// --- Sway subcommand structs ---
+
+type WlSwayMsgCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Command  string `arg:"" help:"Sway command to execute"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayTreeCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayWorkspacesCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayOutputsCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayFocusCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Target   string `arg:"" help:"Direction (left/right/up/down) or [criteria]"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayMoveCmd struct {
+	Image    string   `arg:"" help:"Image name (use . for local)"`
+	Target   []string `arg:"" help:"Direction, 'scratchpad', or 'workspace N'"`
+	Instance string   `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayResizeCmd struct {
+	Image     string `arg:"" help:"Image name (use . for local)"`
+	Dimension string `arg:"" help:"Dimension: width or height"`
+	Amount    string `arg:"" help:"Amount (e.g. 10px, -10px, 5ppt)"`
+	Instance  string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayKillCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayFloatingCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayLayoutCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Mode     string `arg:"" help:"Layout mode: tabbed, stacking, splitv, splith, toggle"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayWorkspaceCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Number   int    `arg:"" help:"Workspace number"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+type WlSwayReloadCmd struct {
+	Image    string `arg:"" help:"Image name (use . for local)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+}
+
+// --- Sway subcommand Run methods ---
+
+func (c *WlSwayMsgCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, c.Command)
+}
+
+func (c *WlSwayTreeCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "-t", "get_tree")
+}
+
+func (c *WlSwayWorkspacesCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "-t", "get_workspaces")
+}
+
+func (c *WlSwayOutputsCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "-t", "get_outputs")
+}
+
+func (c *WlSwayFocusCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	// If target looks like criteria (contains brackets or =), wrap as [criteria] focus.
+	if strings.Contains(c.Target, "=") || strings.HasPrefix(c.Target, "[") {
+		criteria := c.Target
+		if !strings.HasPrefix(criteria, "[") {
+			criteria = "[" + criteria + "]"
+		}
+		return execSwaymsg(engine, name, criteria+" focus")
+	}
+	return execSwaymsg(engine, name, "focus", c.Target)
+}
+
+func (c *WlSwayMoveCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	target := strings.Join(c.Target, " ")
+	if strings.HasPrefix(target, "workspace") {
+		ws := strings.TrimPrefix(target, "workspace ")
+		return execSwaymsg(engine, name, "move", "container", "to", "workspace", "number", ws)
+	}
+	return execSwaymsg(engine, name, "move", target)
+}
+
+func (c *WlSwayResizeCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	amount := c.Amount
+	direction := "grow"
+	if strings.HasPrefix(amount, "-") {
+		direction = "shrink"
+		amount = strings.TrimPrefix(amount, "-")
+	}
+	return execSwaymsg(engine, name, "resize", direction, c.Dimension, amount)
+}
+
+func (c *WlSwayKillCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "kill")
+}
+
+func (c *WlSwayFloatingCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "floating", "toggle")
+}
+
+func (c *WlSwayLayoutCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "layout", c.Mode)
+}
+
+func (c *WlSwayWorkspaceCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "workspace", "number", fmt.Sprintf("%d", c.Number))
+}
+
+func (c *WlSwayReloadCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	return execSwaymsg(engine, name, "reload")
+}
+
+// --- Sway IPC helpers ---
+
+// swaymsgShellCmd builds a shell command that discovers SWAYSOCK and runs swaymsg.
+func swaymsgShellCmd(args ...string) string {
+	quoted := make([]string, len(args))
+	for i, a := range args {
+		quoted[i] = shellQuote(a)
+	}
+	return fmt.Sprintf(
+		`export SWAYSOCK=$(ls -t /tmp/sway-ipc.*.sock 2>/dev/null | head -1) && [ -n "$SWAYSOCK" ] && swaymsg %s`,
+		strings.Join(quoted, " "),
+	)
+}
+
+// execSwaymsg runs swaymsg inside a container (or locally when engine is empty).
+func execSwaymsg(engine, containerName string, args ...string) error {
+	shellCmd := swaymsgShellCmd(args...)
+	var cmd *exec.Cmd
+	if engine == "" {
+		cmd = exec.Command("sh", "-c", shellCmd)
+	} else {
+		cmd = exec.Command(engine, "exec", containerName, "sh", "-c", shellCmd)
+	}
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// captureSwaymsg runs swaymsg and captures stdout as bytes.
+func captureSwaymsg(engine, containerName string, args ...string) ([]byte, error) {
+	shellCmd := swaymsgShellCmd(args...)
+	var cmd *exec.Cmd
+	if engine == "" {
+		cmd = exec.Command("sh", "-c", shellCmd)
+	} else {
+		cmd = exec.Command(engine, "exec", containerName, "sh", "-c", shellCmd)
+	}
+	return cmd.Output()
+}
+
+// checkSwayStatus probes the Sway compositor via IPC socket.
+func checkSwayStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "sway", Status: "-"}
+	data, err := captureSwaymsg(engine, containerName, "-t", "get_outputs")
+	if err != nil {
+		return ts
+	}
+	ts.Status = "ok"
+	var outputs []struct {
+		Name        string `json:"name"`
+		CurrentMode struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"current_mode"`
+	}
+	if err := json.Unmarshal(data, &outputs); err == nil && len(outputs) > 0 {
+		o := outputs[0]
+		ts.Detail = fmt.Sprintf("%s %dx%d", o.Name, o.CurrentMode.Width, o.CurrentMode.Height)
+	}
+	return ts
+}
+
+// SwayRect represents a window's position and size on the desktop.
+type SwayRect struct {
+	X      int `json:"x"`
+	Y      int `json:"y"`
+	Width  int `json:"width"`
+	Height int `json:"height"`
+}
+
+type swayWindowProperties struct {
+	Class string `json:"class"`
+}
+
+type swayNode struct {
+	Name             string                `json:"name"`
+	AppID            string                `json:"app_id"`
+	Rect             SwayRect              `json:"rect"`
+	Focused          bool                  `json:"focused"`
+	FullscreenMode   int                   `json:"fullscreen_mode"`
+	WindowProperties *swayWindowProperties `json:"window_properties,omitempty"`
+	Nodes            []swayNode            `json:"nodes"`
+	FloatingNodes    []swayNode            `json:"floating_nodes"`
+}
+
+// FindWindowRect searches the sway tree for a window matching appID or X11 class.
+func FindWindowRect(engine, containerName, appID string) (SwayRect, error) {
+	data, err := captureSwaymsg(engine, containerName, "-t", "get_tree")
+	if err != nil {
+		return SwayRect{}, fmt.Errorf("querying sway tree: %w", err)
+	}
+	var root swayNode
+	if err := json.Unmarshal(data, &root); err != nil {
+		return SwayRect{}, fmt.Errorf("parsing sway tree: %w", err)
+	}
+	rect, found := searchSwayNode(&root, appID)
+	if !found {
+		return SwayRect{}, fmt.Errorf("window with app_id or class %q not found in sway tree", appID)
+	}
+	return rect, nil
+}
+
+func searchSwayNode(node *swayNode, appID string) (SwayRect, bool) {
+	var matches []swayNode
+	collectSwayMatches(node, appID, &matches)
+	if len(matches) == 0 {
+		return SwayRect{}, false
+	}
+	best := matches[0]
+	for _, m := range matches[1:] {
+		if m.Focused {
+			best = m
+			break
+		}
+		if m.FullscreenMode > best.FullscreenMode {
+			best = m
+		} else if m.FullscreenMode == best.FullscreenMode &&
+			m.Rect.Width*m.Rect.Height > best.Rect.Width*best.Rect.Height {
+			best = m
+		}
+	}
+	return best.Rect, true
+}
+
+func collectSwayMatches(node *swayNode, appID string, matches *[]swayNode) {
+	matched := (node.AppID == appID) ||
+		(node.WindowProperties != nil && node.WindowProperties.Class == appID)
+	if matched && node.Rect.Width > 0 {
+		*matches = append(*matches, *node)
+	}
+	for i := range node.Nodes {
+		collectSwayMatches(&node.Nodes[i], appID, matches)
+	}
+	for i := range node.FloatingNodes {
+		collectSwayMatches(&node.FloatingNodes[i], appID, matches)
+	}
+}
+
+// shellQuote wraps a string in single quotes for shell safety.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
 // --- Helper functions ---

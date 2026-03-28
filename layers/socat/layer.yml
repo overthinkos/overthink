@@ -4,3 +4,8 @@ rpm:
   packages:
     - socat
     - iproute
+
+pac:
+  packages:
+    - socat
+    - iproute2

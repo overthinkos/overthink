@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - mkdir -p ~/.local/share/sherpa-onnx/runtime ~/.local/share/sherpa-onnx/models
       - |

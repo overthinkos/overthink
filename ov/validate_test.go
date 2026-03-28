@@ -44,7 +44,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid pkg")
 	}
-	if !strings.Contains(err.Error(), "is not valid") {
+	if !strings.Contains(err.Error(), "must be a package format") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -258,7 +258,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid pkg value")
 	}
-	if !strings.Contains(err.Error(), "is not valid") {
+	if !strings.Contains(err.Error(), "must be a package format") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

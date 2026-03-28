@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # Create Vulkan ICD symlinks for nvidia-ctk CDI
       - |

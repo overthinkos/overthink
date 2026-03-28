@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-130 layers. 39 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+130 layers. 40 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -30,14 +30,34 @@ A layer is a reusable building block — packages, config, services. An image is
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
-- **`layer.yml`** — The layer's manifest: system packages (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR packages via yay), dependencies on other layers, environment variables, ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
+- **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
 - **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user)
 - **`package.json`** — npm packages for Node.js (multi-stage build, runs as user)
 - **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user)
-- **`root.yml`** — Custom install script (Taskfile format) that runs as root — for anything packages can't cover
-- **`user.yml`** — Custom install script (Taskfile format) that runs as the container user
+- **`root.yml`** — Custom install script (Taskfile format) with tag-based task dispatch (`all:` for common, `rpm:`/`pac:`/`fedora:` for specific) that runs as root
+- **`user.yml`** — Custom install script (Taskfile format) with the same tag-based dispatch that runs as the container user
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
+
+### Tag-Based Multi-Distro Support
+
+A single layer can target multiple distros. The `pkg:` field in `images.yml` defines tags — format, distro name, and version:
+
+```yaml
+fedora:
+  base: "quay.io/fedora/fedora:43"
+  pkg: [rpm, fedora, "fedora:43"]
+
+archlinux:
+  base: "docker.io/library/archlinux:latest"
+  pkg: [pac, archlinux]
+```
+
+These tags flow through to all three layer file types:
+- **`layer.yml`** — Package sections matching any tag are activated (`rpm:`, `pac:`, `fedora:`, `fedora:43:`)
+- **`root.yml` / `user.yml`** — Tasks matching any tag are called in order (`all:` → `rpm:` → `fedora:` → `fedora:43:`)
+
+This means `fedora-ov` and `arch-ov` can share the exact same layer list — only the packages and scripts differ per distro. Tags are embedded in built images as OCI labels (`org.overthinkos.tags`) for runtime introspection.
 
 ### Docker or Podman — Your Choice
 
@@ -140,7 +160,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access.
+**gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 

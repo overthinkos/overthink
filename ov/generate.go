@@ -338,7 +338,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		aur := layer.AurConfig()
-		if img.SupportsPkg("aur") && aur != nil && len(aur.Packages) > 0 {
+		if img.SupportsTag("aur") && aur != nil && len(aur.Packages) > 0 {
 			aurBuilderRef := g.builderRefForFormat(imageName, "aur")
 			if aurBuilderRef == "" {
 				return fmt.Errorf("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
@@ -923,24 +923,31 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	deb := layer.DebConfig()
 	pac := layer.PacConfig()
 	aur := layer.AurConfig()
-	if img.SupportsPkg("rpm") && rpm != nil && len(rpm.Packages) > 0 {
+	if img.SupportsTag("rpm") && rpm != nil && len(rpm.Packages) > 0 {
 		g.writeDnfInstall(b, rpm)
 	}
-	if img.SupportsPkg("deb") && deb != nil && len(deb.Packages) > 0 {
+	if img.SupportsTag("deb") && deb != nil && len(deb.Packages) > 0 {
 		g.writeAptInstall(b, deb)
 	}
-	if img.SupportsPkg("pac") && pac != nil && len(pac.Packages) > 0 {
+	if img.SupportsTag("pac") && pac != nil && len(pac.Packages) > 0 {
 		g.writePacmanInstall(b, pac)
 	}
 
 	// 1b. AUR packages: install pre-built packages from multi-stage build (root)
-	if img.SupportsPkg("aur") && aur != nil && len(aur.Packages) > 0 {
+	if img.SupportsTag("aur") && aur != nil && len(aur.Packages) > 0 {
 		g.writeAurInstallStep(b, layer.Name)
+	}
+
+	// 1c. Tag-specific packages (distro/version sections, installed with primary format tool)
+	for _, tag := range img.Tags {
+		if tagCfg := layer.TagSection(tag); tagCfg != nil && len(tagCfg.Packages) > 0 {
+			g.writeTagPackages(b, tagCfg.Packages, img.Pkg)
+		}
 	}
 
 	// 2. root.yml (root)
 	if layer.HasRootYml {
-		g.writeRootYml(b, stageName, img.Pkg)
+		g.writeRootYml(b, stageName, layer, img)
 	}
 
 	// 4. Cargo.toml (user)
@@ -958,7 +965,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 			asUser = true
 		}
-		g.writeUserYml(b, stageName, img)
+		g.writeUserYml(b, stageName, layer, img)
 	}
 
 	// Reset to root for next layer (skip for last layer when no root steps follow)
@@ -1107,17 +1114,35 @@ func (g *Generator) writeAurInstallStep(b *strings.Builder, layerName string) {
 	b.WriteString("    rm -rf /tmp/aur-pkgs\n")
 }
 
-func (g *Generator) writeRootYml(b *strings.Builder, layerName string, pkg string) {
+func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
+	// Resolve which tasks to call: intersection of image tags and defined tasks
+	tasks := img.MatchingTasks(layer.RootYmlTasks)
+	if len(tasks) == 0 {
+		return // no matching tasks for this image's tags
+	}
+
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	if pkg == "deb" {
+	if img.Pkg == "deb" {
 		b.WriteString("    --mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
 		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
-	} else if pkg == "pac" {
+	} else if img.Pkg == "pac" {
 		b.WriteString("    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
 	} else {
 		b.WriteString("    --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
 	}
-	b.WriteString("    cd /ctx && task -t root.yml install\n")
+	b.WriteString(fmt.Sprintf("    cd /ctx && task -t root.yml %s\n", strings.Join(tasks, " ")))
+}
+
+// writeTagPackages installs packages from a tag-specific section using the primary format's tool.
+func (g *Generator) writeTagPackages(b *strings.Builder, packages []string, pkg string) {
+	switch pkg {
+	case "rpm":
+		g.writeDnfInstall(b, &RpmConfig{Packages: packages})
+	case "deb":
+		g.writeAptInstall(b, &DebConfig{Packages: packages})
+	case "pac":
+		g.writePacmanInstall(b, &PacConfig{Packages: packages})
+	}
 }
 
 func (g *Generator) writeCargoToml(b *strings.Builder, layerName string, img *ResolvedImage) {
@@ -1126,10 +1151,16 @@ func (g *Generator) writeCargoToml(b *strings.Builder, layerName string, img *Re
 	b.WriteString("    cargo install --path /ctx\n")
 }
 
-func (g *Generator) writeUserYml(b *strings.Builder, layerName string, img *ResolvedImage) {
+func (g *Generator) writeUserYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
+	// Resolve which tasks to call: intersection of image tags and defined tasks
+	tasks := img.MatchingTasks(layer.UserYmlTasks)
+	if len(tasks) == 0 {
+		return // no matching tasks for this image's tags
+	}
+
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
 	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
-	b.WriteString("    cd /ctx && task -t user.yml install\n")
+	b.WriteString(fmt.Sprintf("    cd /ctx && task -t user.yml %s\n", strings.Join(tasks, " ")))
 }
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.
@@ -1168,7 +1199,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Package and builder labels
-	writeJSONLabel(b, LabelPkg, img.PkgFormats)
+	writeJSONLabel(b, LabelTags, img.Tags)
 	if len(img.Builders) > 0 {
 		writeJSONLabel(b, LabelBuilders, map[string]string(img.Builders))
 	}

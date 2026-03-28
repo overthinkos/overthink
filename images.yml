@@ -17,7 +17,7 @@ images:
 
   fedora:
     base: "quay.io/fedora/fedora:43"
-    pkg: rpm
+    pkg: [rpm, fedora, "fedora:43"]
 
   fedora-nonfree:
     base: fedora
@@ -44,7 +44,7 @@ images:
 
   archlinux:
     base: "docker.io/library/archlinux:latest"
-    pkg: pac
+    pkg: [pac, archlinux]
     builders:
       pixi: archlinux-builder
       npm: archlinux-builder
@@ -69,13 +69,30 @@ images:
 
   arch-ov:
     base: archlinux
-    pkg: pac
     uid: 0
     gid: 0
     user: root
     network: host
     layers:
-      - arch-ov
+      - ov-full
+      - golang
+      - gh
+      - sshd
+      - container-nesting
+      - nvidia
+
+  fedora-ov:
+    base: fedora
+    uid: 0
+    gid: 0
+    user: root
+    network: host
+    layers:
+      - ov-full
+      - golang
+      - gh
+      - sshd
+      - container-nesting
       - nvidia
 
   fedora-test:

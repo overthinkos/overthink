@@ -3,6 +3,10 @@ rpm:
     - openssh-server
     - openssh-clients
 
+pac:
+  packages:
+    - openssh
+
 ports:
   - 22
 

@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - go install github.com/steipete/gogcli/cmd/gog@latest
       - go clean -cache

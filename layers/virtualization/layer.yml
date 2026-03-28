@@ -15,3 +15,10 @@ rpm:
     - tigervnc
     - virt-manager
     - virt-viewer
+
+pac:
+  packages:
+    - qemu-full
+    - qemu-img
+    - virtiofsd
+    - libvirt

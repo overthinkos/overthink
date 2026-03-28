@@ -2,6 +2,6 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - npm install -g @anthropic-ai/claude-code

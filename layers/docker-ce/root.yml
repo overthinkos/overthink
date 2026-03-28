@@ -2,6 +2,6 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf

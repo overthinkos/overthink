@@ -60,6 +60,12 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
+**Tag-based multi-distro support** -- Images define tags via `pkg:` field: `pkg: [rpm, fedora, "fedora:43"]`. Tags control which sections activate in `layer.yml` and which tasks run in `root.yml`/`user.yml`. The implicit tag `all` always matches.
+- `layer.yml`: Package sections matching any tag are merged and installed (`rpm:`, `pac:`, `fedora:`, `fedora:43:`)
+- `root.yml`/`user.yml`: Tasks named after tags are called in order: `all` → format → distro → version
+- Tags stored in OCI label `org.overthinkos.tags` for runtime introspection
+- Source: `ov/config.go` (`ResolvedImage.Tags`, `MatchingTasks`), `ov/generate.go` (`writeRootYml`, `writeTagPackages`), `ov/layers.go` (`TagSections`, `parseTaskfileTaskNames`)
+
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `ov/generate.go` near line 297.
 
 ---
@@ -75,7 +81,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (130 layers)
++-- layers/<name>/            # Layer directories (~130 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf
 ```
@@ -145,6 +151,8 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
 - Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
 - MUST invoke skills before exploring the codebase. Skills are the primary knowledge source, not the code itself
+- `root.yml`/`user.yml` use `all:` task for common logic, with optional tag-specific tasks (`rpm:`, `pac:`, `fedora:`, etc.). Never use `install:` as a task name
+- `pkg:` field in `images.yml` accepts tags: `pkg: [rpm, fedora, "fedora:43"]`. First entry must be a format (rpm/deb/pac/aur). Tags inherit through base chain
 
 For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
 

@@ -2,7 +2,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # Copy system_files to root filesystem
       - cp -a /ctx/system_files/* / 2>/dev/null || true

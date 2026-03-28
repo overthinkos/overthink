@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - mkdir -p ~/.config/sway/config.d
       - cp /ctx/chrome-sway.conf ~/.config/sway/config.d/chrome-sway.conf

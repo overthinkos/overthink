@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - mkdir -p /etc/X11
       # Allow non-console users to run Xorg (Fedora's Xorg.wrap restriction)

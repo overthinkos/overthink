@@ -3,3 +3,7 @@ description: Go programming language compiler
 rpm:
   packages:
     - golang-bin
+
+pac:
+  packages:
+    - go

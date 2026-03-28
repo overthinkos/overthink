@@ -71,7 +71,9 @@ type ExtractYAML struct {
 	Dest   string `yaml:"dest"`   // Destination in target image (e.g., "/opt/immich/server")
 }
 
-// LayerYAML represents the parsed layer.yml file
+// LayerYAML represents the parsed layer.yml file.
+// Unknown top-level keys are captured as tag-based package sections
+// (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
 	Version        string            `yaml:"version,omitempty"`  // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Status         string            `yaml:"status,omitempty"`   // working, testing, broken (default: testing)
@@ -97,6 +99,65 @@ type LayerYAML struct {
 	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
+
+	// Dynamic tag-based package sections (distro/version specific).
+	// Populated by custom UnmarshalYAML for unknown keys.
+	TagSections map[string]*TagPkgConfig `yaml:"-"`
+}
+
+// layerYAMLKnownFields lists all known top-level keys in layer.yml.
+// Any key not in this set is treated as a tag-based package section.
+var layerYAMLKnownFields = map[string]bool{
+	"description": true, "version": true, "status": true, "info": true,
+	"layers": true, "depends": true, "engine": true, "env": true,
+	"path_append": true, "ports": true, "route": true, "service": true,
+	"rpm": true, "deb": true, "pac": true, "aur": true,
+	"volumes": true, "aliases": true, "extract": true, "security": true,
+	"system_services": true, "libvirt": true, "hooks": true,
+	"port_relay": true, "secrets": true,
+}
+
+// TagPkgConfig is a simplified package config for distro/version-specific sections.
+// Packages are installed using the primary format's tool (dnf, apt, pacman).
+type TagPkgConfig struct {
+	Packages []string `yaml:"packages,omitempty"`
+}
+
+func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
+	// Use type alias to avoid infinite recursion
+	type layerYAMLAlias LayerYAML
+	var alias layerYAMLAlias
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*ly = LayerYAML(alias)
+
+	// Capture unknown keys as tag sections
+	if value.Kind == yaml.MappingNode {
+		ly.TagSections = make(map[string]*TagPkgConfig)
+		for i := 0; i < len(value.Content)-1; i += 2 {
+			key := value.Content[i].Value
+			if !layerYAMLKnownFields[key] {
+				var cfg TagPkgConfig
+				if err := value.Content[i+1].Decode(&cfg); err != nil {
+					continue // skip unparseable sections
+				}
+				if len(cfg.Packages) == 0 {
+					continue // skip empty sections
+				}
+				// Expand comma-separated keys (e.g., "debian,ubuntu")
+				parts := strings.Split(key, ",")
+				for _, part := range parts {
+					part = strings.TrimSpace(part)
+					if part != "" {
+						ly.TagSections[part] = &cfg
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // RouteYAML represents a route declaration in layer.yml
@@ -181,6 +242,8 @@ type Layer struct {
 	HasLibvirt         bool
 	HasPortRelay       bool
 	HasAur             bool
+	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
+	UserYmlTasks       []string // task names defined in user.yml
 
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with :version for remote ref collection
@@ -197,6 +260,7 @@ type Layer struct {
 	debConfig   *DebConfig
 	pacConfig   *PacConfig
 	aurConfig   *AurConfig
+	tagSections map[string]*TagPkgConfig // distro/version-specific package sections
 	ports       []string
 	portSpecs   []PortSpec // full PortSpec data with protocol info
 	envConfig   *EnvConfig
@@ -272,6 +336,14 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
 
+	// Parse task names from root.yml/user.yml for tag-based task dispatch
+	if layer.HasRootYml {
+		layer.RootYmlTasks = parseTaskfileTaskNames(filepath.Join(path, "root.yml"))
+	}
+	if layer.HasUserYml {
+		layer.UserYmlTasks = parseTaskfileTaskNames(filepath.Join(path, "user.yml"))
+	}
+
 	// Scan for systemd service files
 	serviceFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
 	if len(serviceFiles) > 0 {
@@ -317,6 +389,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.debConfig = ly.Deb
 		layer.pacConfig = ly.Pac
 		layer.aurConfig = ly.Aur
+		layer.tagSections = ly.TagSections
 		if ly.Aur != nil && len(ly.Aur.Packages) > 0 {
 			layer.HasAur = true
 		}
@@ -453,6 +526,14 @@ func (l *Layer) PacConfig() *PacConfig {
 // AurConfig returns the AUR package config (pre-populated from layer.yml)
 func (l *Layer) AurConfig() *AurConfig {
 	return l.aurConfig
+}
+
+// TagSection returns the tag-based package config for the given tag, or nil.
+func (l *Layer) TagSection(tag string) *TagPkgConfig {
+	if l.tagSections == nil {
+		return nil
+	}
+	return l.tagSections[tag]
 }
 
 // EnvConfig returns the environment config (pre-populated from layer.yml)
@@ -747,4 +828,26 @@ func dirExists(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// parseTaskfileTaskNames extracts top-level task names from a Taskfile (root.yml/user.yml).
+// Returns the list of task names (e.g., ["all", "rpm", "fedora:43"]).
+func parseTaskfileTaskNames(path string) []string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+
+	var tf struct {
+		Tasks map[string]interface{} `yaml:"tasks"`
+	}
+	if err := yaml.Unmarshal(data, &tf); err != nil {
+		return nil
+	}
+
+	names := make([]string, 0, len(tf.Tasks))
+	for name := range tf.Tasks {
+		names = append(names, name)
+	}
+	return names
 }

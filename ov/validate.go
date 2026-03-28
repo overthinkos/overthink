@@ -123,37 +123,39 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	return nil
 }
 
-// validatePkgValues ensures pkg entries are valid formats
+// validatePkgValues ensures pkg/tag entries are valid.
+// The first entry must be a package format (rpm, deb, pac, aur).
+// Subsequent entries can be distro names or version tags (e.g., "fedora", "fedora:43").
 func validatePkgValues(cfg *Config, errs *ValidationError) {
-	validPkg := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
+	validPkgFormat := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
+
+	validateTags := func(context string, tags PkgFormats) {
+		if len(tags) == 0 {
+			return
+		}
+		// First entry must be a valid package format
+		if !validPkgFormat[tags[0]] {
+			errs.Add("%s: first pkg entry %q must be a package format (rpm, deb, pac, or aur)", context, tags[0])
+		}
+		// Check for duplicates; subsequent entries are free-form tags
+		seen := make(map[string]bool)
+		for _, p := range tags {
+			if seen[p] {
+				errs.Add("%s: duplicate pkg entry %q", context, p)
+			}
+			seen[p] = true
+		}
+	}
 
 	// Validate defaults.pkg
-	seen := make(map[string]bool)
-	for _, p := range cfg.Defaults.Pkg {
-		if !validPkg[p] {
-			errs.Add("defaults: pkg entry %q is not valid (must be rpm, deb, pac, or aur)", p)
-		}
-		if seen[p] {
-			errs.Add("defaults: duplicate pkg entry %q", p)
-		}
-		seen[p] = true
-	}
+	validateTags("defaults", cfg.Defaults.Pkg)
 
 	// Validate per-image pkg
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		seen := make(map[string]bool)
-		for _, p := range img.Pkg {
-			if !validPkg[p] {
-				errs.Add("image %q: pkg entry %q is not valid (must be rpm, deb, pac, or aur)", name, p)
-			}
-			if seen[p] {
-				errs.Add("image %q: duplicate pkg entry %q", name, p)
-			}
-			seen[p] = true
-		}
+		validateTags(fmt.Sprintf("image %q", name), img.Pkg)
 	}
 }
 

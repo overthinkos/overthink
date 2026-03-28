@@ -5,6 +5,9 @@ rpm:
     - gvisor-tap-vsock
     - podman-machine
 
+pac:
+  packages: []
+
 layers:
   - ov
   - virtualization

@@ -405,7 +405,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Layers:         ownLayers,
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
-		PkgFormats:     []string(cfg.Defaults.Pkg),
+		Tags:           append([]string{"all"}, []string(cfg.Defaults.Pkg)...),
 		Platforms:      platforms,
 		User:           cfg.Defaults.User,
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
@@ -414,10 +414,10 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Builders:       BuildersMap(cfg.Defaults.Builders),
 		Auto:           true,
 	}
-	if len(img.PkgFormats) == 0 {
-		img.PkgFormats = []string{"rpm"}
+	if len(img.Tags) <= 1 { // only "all"
+		img.Tags = []string{"all", "rpm"}
 	}
-	img.Pkg = img.PkgFormats[0]
+	img.Pkg = img.Tags[1] // first tag after "all" is the primary format
 	if img.User == "" {
 		img.User = "user"
 	}

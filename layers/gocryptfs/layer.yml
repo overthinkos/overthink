@@ -3,3 +3,7 @@ description: Encrypted filesystem (gocryptfs) for ov enc operations
 rpm:
   packages:
     - gocryptfs
+
+pac:
+  packages:
+    - gocryptfs

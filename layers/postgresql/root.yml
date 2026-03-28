@@ -1,6 +1,6 @@
 version: '3'
 tasks:
-  install:
+  all:
     cmds:
       # Initialize database cluster as user (PostgreSQL refuses to run as root)
       - |

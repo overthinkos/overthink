@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -162,8 +163,8 @@ type ResolvedImage struct {
 	Platforms []string
 	Tag       string
 	Registry  string
-	Pkg        string   // primary format (first entry in PkgFormats) — for bootstrap/cache mount decisions
-	PkgFormats []string // all supported formats — for layer section activation
+	Pkg  string   // primary format (first entry in Tags) — for bootstrap/cache mount decisions
+	Tags []string // resolved tags: ["all", format, distro, "distro:version", ...] — for section/task activation
 	Layers    []string
 	Ports     []string // runtime port mappings
 
@@ -205,14 +206,52 @@ type ResolvedImage struct {
 	FullTag        string // registry/name:tag
 }
 
-// SupportsPkg returns true if this image supports the given package format.
-func (img *ResolvedImage) SupportsPkg(format string) bool {
-	for _, f := range img.PkgFormats {
-		if f == format {
+// SupportsTag returns true if this image has the given tag.
+// Tags include format (rpm, deb, pac), distro (fedora, archlinux),
+// version (fedora:43), and the implicit "all".
+func (img *ResolvedImage) SupportsTag(tag string) bool {
+	for _, t := range img.Tags {
+		if t == tag {
 			return true
 		}
 	}
 	return false
+}
+
+// MatchingTasks returns the subset of definedTasks that match this image's tags,
+// ordered by tag hierarchy (all → format → distro → version).
+// Comma-separated task names (e.g., "debian,ubuntu") match if any component
+// is in the image's tag set.
+func (img *ResolvedImage) MatchingTasks(definedTasks []string) []string {
+	// Build a set of defined task names for quick lookup
+	defined := make(map[string]bool, len(definedTasks))
+	for _, t := range definedTasks {
+		defined[t] = true
+	}
+
+	var result []string
+	// Walk image tags in order (all → format → distro → version)
+	for _, tag := range img.Tags {
+		if defined[tag] {
+			result = append(result, tag)
+		}
+	}
+
+	// Also check comma-separated task names against image tags
+	for _, taskName := range definedTasks {
+		if strings.Contains(taskName, ",") {
+			parts := strings.Split(taskName, ",")
+			for _, part := range parts {
+				part = strings.TrimSpace(part)
+				if img.SupportsTag(part) {
+					result = append(result, taskName)
+					break
+				}
+			}
+		}
+	}
+
+	return result
 }
 
 // LoadConfig reads and parses images.yml, then merges deploy.yml overrides.
@@ -315,21 +354,25 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Registry = c.Defaults.Registry
 	}
 
-	// Resolve pkg formats: image -> base image (if internal) -> defaults -> ["rpm"]
-	resolved.PkgFormats = []string(img.Pkg)
-	if len(resolved.PkgFormats) == 0 && !resolved.IsExternalBase {
+	// Resolve tags: image -> base image (if internal) -> defaults -> ["rpm"]
+	// Tags include format (rpm/deb/pac), distro (fedora/archlinux), and version (fedora:43).
+	// The implicit "all" tag is always prepended.
+	tags := []string(img.Pkg)
+	if len(tags) == 0 && !resolved.IsExternalBase {
 		// Inherit from base image
 		if baseImg, ok := c.Images[resolved.Base]; ok {
-			resolved.PkgFormats = []string(baseImg.Pkg)
+			tags = []string(baseImg.Pkg)
 		}
 	}
-	if len(resolved.PkgFormats) == 0 {
-		resolved.PkgFormats = []string(c.Defaults.Pkg)
+	if len(tags) == 0 {
+		tags = []string(c.Defaults.Pkg)
 	}
-	if len(resolved.PkgFormats) == 0 {
-		resolved.PkgFormats = []string{"rpm"}
+	if len(tags) == 0 {
+		tags = []string{"rpm"}
 	}
-	resolved.Pkg = resolved.PkgFormats[0] // primary format
+	resolved.Pkg = tags[0] // primary format
+	// Prepend "all" so it's always first in the tag list
+	resolved.Tags = append([]string{"all"}, tags...)
 
 	// Layers are not inherited, they're image-specific
 	// Strip @ prefix and :version suffixes — layer map keys use bare refs

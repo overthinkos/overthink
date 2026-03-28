@@ -4,3 +4,8 @@ rpm:
   packages:
     - gh
     - git
+
+pac:
+  packages:
+    - github-cli
+    - git

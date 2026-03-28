@@ -124,7 +124,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				FullTag:        "ghcr.io/test/test-image:latest",
 				Layers:         []string{"svc"},
 				Pkg:            "rpm",
-				PkgFormats:     []string{"rpm"},
+				Tags:           []string{"all", "rpm"},
 				User:           "user",
 				UID:            1000,
 				GID:            1000,
@@ -482,7 +482,13 @@ func TestWriteAurInstallStep(t *testing.T) {
 func TestWriteRootYmlPac(t *testing.T) {
 	g := &Generator{}
 	var b strings.Builder
-	g.writeRootYml(&b, "test-layer", "pac")
+	layer := &Layer{
+		Name:         "test-layer",
+		HasRootYml:   true,
+		RootYmlTasks: []string{"all"},
+	}
+	img := &ResolvedImage{Pkg: "pac", Tags: []string{"all", "pac"}}
+	g.writeRootYml(&b, "test-layer", layer, img)
 	out := b.String()
 
 	if !strings.Contains(out, "/var/cache/pacman/pkg") {
@@ -493,6 +499,9 @@ func TestWriteRootYmlPac(t *testing.T) {
 	}
 	if strings.Contains(out, "/var/cache/apt") {
 		t.Error("should not use apt cache for pac")
+	}
+	if !strings.Contains(out, "task -t root.yml all") {
+		t.Error("should call tag-based tasks")
 	}
 }
 

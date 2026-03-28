@@ -2,6 +2,6 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true

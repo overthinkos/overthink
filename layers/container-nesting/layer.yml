@@ -1,0 +1,38 @@
+description: Container-in-container support (engines, rootless config, tunnels, credentials)
+
+rpm:
+  repos:
+    - name: tailscale-stable
+      url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
+  packages:
+    - buildah
+    - fuse-overlayfs
+    - shadow-utils
+    - skopeo
+    - tailscale
+    - libsecret
+
+pac:
+  packages:
+    - buildah
+    - docker
+    - fuse-overlayfs
+    - shadow
+    - skopeo
+    - tailscale
+    - libsecret
+
+volumes:
+  - name: storage
+    path: /var/lib/containers/storage
+
+security:
+  cap_add:
+    - ALL
+  security_opt:
+    - label=disable
+    - seccomp=unconfined
+
+env:
+  OV_BUILD_ENGINE: "podman"
+  OV_RUN_ENGINE: "podman"

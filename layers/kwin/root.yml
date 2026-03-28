@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # kwin_wayland ships with cap_sys_nice file capability which prevents
       # execution in rootless containers (kernel blocks exec of binaries with

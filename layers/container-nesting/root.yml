@@ -1,23 +1,13 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
-      - |
-        # makepkg refuses to run as root — create temporary builder
-        useradd -m _builder
-        su - _builder -c '
-          git clone https://github.com/overthinkos/overthink-arch.git /tmp/ov-build
-          cd /tmp/ov-build
-          makepkg --noconfirm
-        '
-        pacman -U --noconfirm /tmp/ov-build/*.pkg.tar.zst
-        userdel -r _builder
-        rm -rf /tmp/ov-build
-
-      # Rootless podman: subuid/subgid + file capabilities
+      # Rootless podman: subuid/subgid for root user
       - echo "root:100000:65536" >> /etc/subuid
       - echo "root:100000:65536" >> /etc/subgid
+
+      # File capabilities for rootless user namespace mapping
       - |
         if [ -f /usr/bin/newuidmap ]; then
           setcap cap_setuid=ep /usr/bin/newuidmap

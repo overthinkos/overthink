@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       - mkdir -p ~/.local/bin ~/.config/openbox
       - cp /ctx/openbox-wrapper ~/.local/bin/openbox-wrapper

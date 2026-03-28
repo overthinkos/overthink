@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # Download selkies source, strip av/cryptography deps (not needed for websocket mode),
       # then install. This is the same approach as the LSIO Dockerfile.

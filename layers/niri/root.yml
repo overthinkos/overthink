@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # Build niri from QaidVoid/niri feat/virtual branch (virtual output support).
       # Based on niri main (b07bde3e, 2026-03-10) + virtual output commit (df8a2f04).

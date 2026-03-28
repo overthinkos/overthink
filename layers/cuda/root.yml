@@ -1,7 +1,7 @@
 version: '3'
 
 tasks:
-  install:
+  all:
     cmds:
       # Extract cuDNN headers from cuda-cudnn-devel (bypasses driver dependency)
       - |

@@ -609,7 +609,7 @@ func TestBuildStartArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{})
+	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, true)
 
 	found := false
 	for i, arg := range args {
@@ -633,7 +633,7 @@ func TestBuildStartArgsWithBindMountsPodman(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{})
+	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, true)
 
 	found := false
 	for _, arg := range args {

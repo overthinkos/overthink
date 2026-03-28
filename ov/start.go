@@ -73,6 +73,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
 	var network string
+	var hasSupervisord bool
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -103,6 +104,9 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		gid = resolved.GID
 		ports = resolved.Ports
 		network = resolved.Network
+		// Check if image has supervisord services
+		resolvedLayers, _ := ResolveLayerOrder(img.Layers, layers, nil)
+		hasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, layers)
 	} else {
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
 		if err := EnsureImage(imageRef, rt); err != nil {
@@ -127,6 +131,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		volumes = meta.Volumes
 		security = meta.Security
 		network = meta.Network
+		hasSupervisord = len(meta.Supervisord) > 0
 
 		// Resolve bind mounts from labels
 		var deployMounts []BindMountConfig
@@ -202,7 +207,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, resolvedNetwork)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, hasSupervisord, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -334,10 +339,17 @@ func (c *StartCmd) runRemote(ref string) error {
 		return netErr
 	}
 
+	// Check if remote image has supervisord services
+	remoteHasSupervisord := false
+	if ctx.Layers != nil {
+		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
+		remoteHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+	}
+
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, resolvedNetwork)
+		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteHasSupervisord, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -399,23 +411,31 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		}
 	}
 
+	// Check if remote image has supervisord services
+	remoteQHasSupervisord := false
+	if ctx.Layers != nil {
+		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
+		remoteQHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+	}
+
 	qcfg := QuadletConfig{
-		ImageName:   ctx.ImageName,
-		ImageRef:    ctx.ImageRef,
-		Workspace:   absWorkspace,
-		Ports:       ports,
-		Volumes:     volumes,
-		BindMounts:  bindMounts,
-		GPU:         detected.GPU,
-		BindAddress: rt.BindAddress,
-		UID:         ctx.Resolved.UID,
-		GID:         ctx.Resolved.GID,
-		Env:         envVars,
-		Instance:    c.Instance,
-		Security:    security,
-		Network:     resolvedNetwork,
-		Status:      ctx.Resolved.Status,
-		Info:        ctx.Resolved.Info,
+		ImageName:      ctx.ImageName,
+		ImageRef:       ctx.ImageRef,
+		Workspace:      absWorkspace,
+		Ports:          ports,
+		Volumes:        volumes,
+		BindMounts:     bindMounts,
+		GPU:            detected.GPU,
+		BindAddress:    rt.BindAddress,
+		UID:            ctx.Resolved.UID,
+		GID:            ctx.Resolved.GID,
+		Env:            envVars,
+		Instance:       c.Instance,
+		Security:       security,
+		Network:        resolvedNetwork,
+		Status:         ctx.Resolved.Status,
+		Info:           ctx.Resolved.Info,
+		HasSupervisord: remoteQHasSupervisord,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -625,8 +645,9 @@ func stopTunnelForImage(imageName string) {
 	}
 }
 
-// buildStartArgs constructs the container run argument list for detached supervisord.
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, network ...string) []string {
+// buildStartArgs constructs the container run argument list for a detached service.
+// If hasSupervisord is true, the container runs supervisord; otherwise it runs sleep infinity.
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, hasSupervisord bool, network ...string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -664,8 +685,27 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	for _, e := range envVars {
 		args = append(args, "-e", e)
 	}
-	args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
+	if hasSupervisord {
+		args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
+	} else {
+		args = append(args, imageRef, "sleep", "infinity")
+	}
 	return args
+}
+
+// imageHasSupervisordFromLayers checks if any layer in the list has supervisord
+// services or port relays, indicating the image needs supervisord as its entrypoint.
+func imageHasSupervisordFromLayers(layerNames []string, layers map[string]*Layer) bool {
+	for _, name := range layerNames {
+		layer, ok := layers[name]
+		if !ok {
+			continue
+		}
+		if layer.HasSupervisord || layer.HasPortRelay {
+			return true
+		}
+	}
+	return false
 }
 
 // containerName returns the deterministic container name for an image.

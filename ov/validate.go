@@ -134,10 +134,77 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
+	// Validate supervisord dependency
+	validateSupervisord(cfg, layers, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}
 	return nil
+}
+
+// validateSupervisord checks that images with supervisord services (layers with
+// service: or port_relay: fields) have the "supervisord" layer in their resolved
+// dependency chain. Without supervisord, ov start/enable will fail at runtime.
+func validateSupervisord(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	for imgName, img := range cfg.Images {
+		if img.Enabled != nil && !*img.Enabled {
+			continue
+		}
+
+		// Resolve all layers for this image (own + transitive deps)
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err != nil {
+			continue // other validators handle resolution errors
+		}
+
+		// Check if any layer has supervisord services or port relays
+		var needsSupervisord []string
+		for _, layerName := range resolved {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			if layer.HasSupervisord {
+				needsSupervisord = append(needsSupervisord, layerName+" (service)")
+			}
+			if layer.HasPortRelay {
+				needsSupervisord = append(needsSupervisord, layerName+" (port_relay)")
+			}
+		}
+
+		if len(needsSupervisord) == 0 {
+			continue
+		}
+
+		// Check if "supervisord" is in the resolved layers
+		hasSupervisordLayer := false
+		for _, layerName := range resolved {
+			if layerName == "supervisord" {
+				hasSupervisordLayer = true
+				break
+			}
+		}
+
+		// Also check base chain — supervisord may be provided by a parent image
+		if !hasSupervisordLayer {
+			images, resolveErr := cfg.ResolveAllImages("unused", ".")
+			if resolveErr == nil {
+				allLayers := collectAllImageLayers(imgName, images, layers)
+				for _, l := range allLayers {
+					if l == "supervisord" {
+						hasSupervisordLayer = true
+						break
+					}
+				}
+			}
+		}
+
+		if !hasSupervisordLayer {
+			errs.Add("image %q has layers that require supervisord (%s) but does not include the \"supervisord\" layer in its dependency chain; add \"supervisord\" to the image's layers or a base image",
+				imgName, strings.Join(needsSupervisord, ", "))
+		}
+	}
 }
 
 // validateBuildAndDistro validates build: and distro: entries.

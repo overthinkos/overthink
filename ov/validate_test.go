@@ -1097,11 +1097,13 @@ func TestValidatePortRelayValid(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
 		Images: map[string]ImageConfig{
-			"test": {Layers: []string{"socat", "chrome"}},
+			"test": {Layers: []string{"supervisord", "socat", "chrome"}},
 		},
 	}
 	layers := map[string]*Layer{
-		"socat": {Name: "socat", HasRootYml: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
+		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasRootYml: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+		"python":      {Name: "python", HasRootYml: true},
+		"socat":       {Name: "socat", HasRootYml: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {
 			Name:         "chrome",
 			HasUserYml:   true,

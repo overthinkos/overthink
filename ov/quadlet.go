@@ -23,12 +23,13 @@ type QuadletConfig struct {
 	Env         []string            // runtime env vars (KEY=VALUE pairs)
 	EnvFile     string              // absolute path to env file for EnvironmentFile= directive
 	Instance    string              // instance name for running multiple containers of same image
-	Security    SecurityConfig      // container security options
-	Network     string              // container network mode (e.g. "host", "none")
-	Version     string              // image definition version (CalVer)
-	Status      string              // effective status (working, testing, broken)
-	Info        string              // status description
-	Secrets     []CollectedSecret   // container secrets (podman Secret= directives)
+	Security       SecurityConfig      // container security options
+	Network        string              // container network mode (e.g. "host", "none")
+	Version        string              // image definition version (CalVer)
+	Status         string              // effective status (working, testing, broken)
+	Info           string              // status description
+	Secrets        []CollectedSecret   // container secrets (podman Secret= directives)
+	HasSupervisord bool                // true if image has supervisord services
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -130,7 +131,11 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if cfg.EnvFile != "" {
 		b.WriteString(fmt.Sprintf("EnvironmentFile=%s\n", cfg.EnvFile))
 	}
-	b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
+	if cfg.HasSupervisord {
+		b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
+	} else {
+		b.WriteString("Exec=sleep infinity\n")
+	}
 
 	b.WriteString("\n[Service]\n")
 	b.WriteString("Restart=always\n")

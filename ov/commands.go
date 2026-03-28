@@ -176,24 +176,25 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
 	qcfg := QuadletConfig{
-		ImageName:   c.Image,
-		ImageRef:    imageRef,
-		Workspace:   absWorkspace,
-		Ports:       ports,
-		Volumes:     volumes,
-		BindMounts:  bindMounts,
-		GPU:         detected.GPU,
-		BindAddress: rt.BindAddress,
-		Tunnel:      tunnelCfg,
-		UID:         uid,
-		GID:         gid,
-		Env:         envVars,
-		EnvFile:     quadletEnvFile,
-		Instance:    c.Instance,
-		Security:    security,
-		Network:     resolvedNetwork,
-		Status:      meta.Status,
-		Info:        meta.Info,
+		ImageName:      c.Image,
+		ImageRef:       imageRef,
+		Workspace:      absWorkspace,
+		Ports:          ports,
+		Volumes:        volumes,
+		BindMounts:     bindMounts,
+		GPU:            detected.GPU,
+		BindAddress:    rt.BindAddress,
+		Tunnel:         tunnelCfg,
+		UID:            uid,
+		GID:            gid,
+		Env:            envVars,
+		EnvFile:        quadletEnvFile,
+		Instance:       c.Instance,
+		Security:       security,
+		Network:        resolvedNetwork,
+		Status:         meta.Status,
+		Info:           meta.Info,
+		HasSupervisord: len(meta.Supervisord) > 0,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -358,23 +359,31 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return netErr
 	}
 
+	// Check if remote image has supervisord services
+	remoteEnableHasSupervisord := false
+	if ctx.Layers != nil {
+		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
+		remoteEnableHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+	}
+
 	qcfg := QuadletConfig{
-		ImageName:   ctx.ImageName,
-		ImageRef:    ctx.ImageRef,
-		Workspace:   absWorkspace,
-		Ports:       ctx.Resolved.Ports,
-		Volumes:     volumes,
-		BindMounts:  bindMounts,
-		GPU:         detected.GPU,
-		BindAddress: rt.BindAddress,
-		UID:         ctx.Resolved.UID,
-		GID:         ctx.Resolved.GID,
-		Env:         envVars,
-		Instance:    c.Instance,
-		Security:    security,
-		Network:     resolvedNetwork,
-		Status:      ctx.Resolved.Status,
-		Info:        ctx.Resolved.Info,
+		ImageName:      ctx.ImageName,
+		ImageRef:       ctx.ImageRef,
+		Workspace:      absWorkspace,
+		Ports:          ctx.Resolved.Ports,
+		Volumes:        volumes,
+		BindMounts:     bindMounts,
+		GPU:            detected.GPU,
+		BindAddress:    rt.BindAddress,
+		UID:            ctx.Resolved.UID,
+		GID:            ctx.Resolved.GID,
+		Env:            envVars,
+		Instance:       c.Instance,
+		Security:       security,
+		Network:        resolvedNetwork,
+		Status:         ctx.Resolved.Status,
+		Info:           ctx.Resolved.Info,
+		HasSupervisord: remoteEnableHasSupervisord,
 	}
 
 	content := generateQuadlet(qcfg)

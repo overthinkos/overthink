@@ -83,7 +83,12 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	return Validate(cfg, layers)
+	_, buildCfg, builderCfg, err := LoadFormatConfigs(dir)
+	if err != nil {
+		return err
+	}
+
+	return Validate(cfg, layers, buildCfg, builderCfg)
 }
 
 // InspectCmd prints resolved config for an image

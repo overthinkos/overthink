@@ -1,0 +1,37 @@
+# distro.yml — Distro identity and bootstrap configuration
+#
+# Defines how each distro bootstraps a base image.
+# Key = distro name matched from image's distro: tags.
+# inherits: allows sharing config (e.g., ubuntu inherits debian).
+
+distros:
+  fedora:
+    bootstrap:
+      install_cmd: "dnf install -y --setopt=install_weak_deps=False"
+      packages: [curl, ca-certificates]
+      cache_mounts:
+        - dst: /var/cache/libdnf5
+          sharing: locked
+    workarounds:
+      - "rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true"
+
+  debian:
+    bootstrap:
+      install_cmd: "apt-get update && apt-get install -y --no-install-recommends"
+      packages: [curl, ca-certificates]
+      cache_mounts:
+        - dst: /var/cache/apt
+          sharing: locked
+        - dst: /var/lib/apt
+          sharing: locked
+
+  ubuntu:
+    inherits: debian
+
+  archlinux:
+    bootstrap:
+      install_cmd: "pacman -Syu --noconfirm"
+      packages: [curl, ca-certificates]
+      cache_mounts:
+        - dst: /var/cache/pacman/pkg
+          sharing: locked

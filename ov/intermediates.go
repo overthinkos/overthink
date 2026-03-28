@@ -416,7 +416,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Auto:           true,
 	}
 	if len(img.BuildFormats) == 0 {
-		img.BuildFormats = []string{"rpm"}
+		img.BuildFormats = []string{DefaultBuildFormat}
 	}
 	img.Pkg = img.BuildFormats[0]
 	// Build unified Tags: ["all"] + Distro + BuildFormats

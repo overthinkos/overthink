@@ -390,7 +390,7 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		buildFmts = []string(c.Defaults.Build)
 	}
 	if len(buildFmts) == 0 {
-		buildFmts = []string{"rpm"}
+		buildFmts = []string{DefaultBuildFormat}
 	}
 	resolved.BuildFormats = buildFmts
 	resolved.Pkg = buildFmts[0] // primary format for cache mounts

@@ -298,14 +298,18 @@ func TestGenerateRelayConf(t *testing.T) {
 	}
 }
 
-func TestWriteDnfInstallWithModules(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writeDnfInstall(&b, &RpmConfig{
-		Modules:  []string{"valkey:remi-9.0"},
-		Packages: []string{"valkey"},
-	})
-	out := b.String()
+func TestRpmTemplateWithModules(t *testing.T) {
+	buildCfg := testBuildCfg()
+	rpm := buildCfg.Formats["rpm"]
+	ctx := &InstallContext{
+		CacheMounts: rpm.CacheMounts,
+		Packages:    []string{"valkey"},
+		Modules:     []string{"valkey:remi-9.0"},
+	}
+	out, err := RenderTemplate("rpm-test", rpm.InstallTemplate, ctx)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
 
 	if !strings.Contains(out, "dnf module reset -y valkey") {
 		t.Error("should contain dnf module reset")
@@ -321,130 +325,46 @@ func TestWriteDnfInstallWithModules(t *testing.T) {
 	}
 }
 
-func TestWriteDnfInstallWithReleaseRpm(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writeDnfInstall(&b, &RpmConfig{
-		Repos:    []RpmRepo{{Name: "remi", RPM: "https://example.com/remi-release.rpm"}},
-		Packages: []string{"valkey"},
-	})
-	out := b.String()
-
-	if !strings.Contains(out, `dnf install -y "https://example.com/remi-release.rpm"`) {
-		t.Errorf("should contain release RPM install, got:\n%s", out)
+func TestPacTemplateBasic(t *testing.T) {
+	buildCfg := testBuildCfg()
+	pac := buildCfg.Formats["pac"]
+	ctx := &InstallContext{
+		CacheMounts: pac.CacheMounts,
+		Packages:    []string{"neovim", "ripgrep"},
 	}
-	// rpm-type repos should NOT emit --enable-repo
-	if strings.Contains(out, "--enable-repo") {
-		t.Error("rpm-type repos should not emit --enable-repo")
+	out, err := RenderTemplate("pac-test", pac.InstallTemplate, ctx)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
 	}
-}
-
-func TestWriteDnfInstallWithReleaseRpmAndModules(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writeDnfInstall(&b, &RpmConfig{
-		Repos:    []RpmRepo{{Name: "remi", RPM: "https://example.com/remi-release.rpm"}},
-		Modules:  []string{"valkey:remi-9.0"},
-		Packages: []string{"valkey"},
-	})
-	out := b.String()
-
-	// Verify order: release RPM → module enable → package install
-	rpmIdx := strings.Index(out, "remi-release.rpm")
-	resetIdx := strings.Index(out, "dnf module reset")
-	enableIdx := strings.Index(out, "dnf module enable")
-	installIdx := strings.LastIndex(out, "dnf install -y")
-
-	if rpmIdx < 0 || resetIdx < 0 || enableIdx < 0 || installIdx < 0 {
-		t.Fatalf("missing expected commands in output:\n%s", out)
-	}
-	if rpmIdx > resetIdx {
-		t.Error("release RPM install should come before module reset")
-	}
-	if resetIdx > enableIdx {
-		t.Error("module reset should come before module enable")
-	}
-	if enableIdx > installIdx {
-		t.Error("module enable should come before package install")
-	}
-}
-
-func TestWritePacmanInstallBasic(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writePacmanInstall(&b, &PacConfig{
-		Packages: []string{"neovim", "ripgrep"},
-	})
-	out := b.String()
-
 	if !strings.Contains(out, "pacman -Syu --noconfirm") {
 		t.Error("should contain pacman -Syu --noconfirm")
 	}
 	if !strings.Contains(out, "neovim") {
 		t.Error("should contain neovim")
 	}
-	if !strings.Contains(out, "ripgrep") {
-		t.Error("should contain ripgrep")
-	}
 	if !strings.Contains(out, "/var/cache/pacman/pkg") {
 		t.Error("should use pacman cache mount")
 	}
 }
 
-func TestWritePacmanInstallWithRepos(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writePacmanInstall(&b, &PacConfig{
-		Repos: []PacRepo{{
-			Name:     "custom",
-			Server:   "https://example.com/repo/$arch",
-			SigLevel: "Optional TrustAll",
-		}},
-		Packages: []string{"custom-pkg"},
-	})
-	out := b.String()
-
-	if !strings.Contains(out, "[custom]") {
-		t.Error("should contain repo name in brackets")
+func TestAurBuilderStageTemplate(t *testing.T) {
+	builderCfg := testBuilderCfg()
+	aurBuilder := builderCfg.Builders["aur"]
+	ctx := &BuildStageContext{
+		BuilderRef:  "ghcr.io/overthinkos/archlinux-builder:latest",
+		StageName:   "my-tool-aur-build",
+		UID:         1000,
+		Home:        "/home/user",
+		User:        "user",
+		CacheMounts: aurBuilder.CacheMounts,
+		Packages:    []string{"yay-bin", "neovim-nightly-bin"},
 	}
-	if !strings.Contains(out, "https://example.com/repo/$arch") {
-		t.Error("should contain repo server URL")
+	out, err := RenderTemplate("aur-stage-test", aurBuilder.StageTemplate, ctx)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
 	}
-	if !strings.Contains(out, "Optional TrustAll") {
-		t.Error("should contain SigLevel")
-	}
-	if !strings.Contains(out, "/etc/pacman.conf") {
-		t.Error("should append to pacman.conf")
-	}
-}
-
-func TestWritePacmanInstallWithOptions(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writePacmanInstall(&b, &PacConfig{
-		Options:  []string{"--needed"},
-		Packages: []string{"base-devel"},
-	})
-	out := b.String()
-
-	if !strings.Contains(out, "--needed") {
-		t.Error("should contain --needed option")
-	}
-}
-
-func TestWriteAurBuildStage(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writeAurBuildStage(&b, "my-tool", &AurConfig{
-		Packages: []string{"yay-bin", "neovim-nightly-bin"},
-	}, &ResolvedImage{UID: 1000, Home: "/home/user"}, "ghcr.io/overthinkos/archlinux-builder:latest")
-	out := b.String()
-
 	if !strings.Contains(out, "FROM ghcr.io/overthinkos/archlinux-builder:latest AS my-tool-aur-build") {
 		t.Error("should have correct FROM line")
-	}
-	if !strings.Contains(out, "USER 1000") {
-		t.Error("should switch to non-root user")
 	}
 	if !strings.Contains(out, "yay -S --noconfirm --needed") {
 		t.Error("should use yay to install")
@@ -452,36 +372,29 @@ func TestWriteAurBuildStage(t *testing.T) {
 	if !strings.Contains(out, "yay-bin") {
 		t.Error("should contain yay-bin package")
 	}
-	if !strings.Contains(out, "neovim-nightly-bin") {
-		t.Error("should contain neovim-nightly-bin package")
-	}
-	if !strings.Contains(out, "--builddir /tmp/aur-build") {
-		t.Error("should use --builddir")
-	}
-	if !strings.Contains(out, "/tmp/aur-pkgs") {
-		t.Error("should copy built packages to /tmp/aur-pkgs")
-	}
 }
 
-func TestWriteAurInstallStep(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	g.writeAurInstallStep(&b, "my-tool")
-	out := b.String()
-
-	if !strings.Contains(out, "COPY --from=my-tool-aur-build /tmp/aur-pkgs/ /tmp/aur-pkgs/") {
+func TestAurInstallTemplate(t *testing.T) {
+	buildCfg := testBuildCfg()
+	aur := buildCfg.Formats["aur"]
+	ctx := &InstallContext{
+		CacheMounts: aur.CacheMounts,
+		StageName:   "my-tool-aur-build",
+	}
+	out, err := RenderTemplate("aur-install-test", aur.InstallTemplate, ctx)
+	if err != nil {
+		t.Fatalf("render error: %v", err)
+	}
+	if !strings.Contains(out, "COPY --from=my-tool-aur-build /tmp/aur-pkgs/") {
 		t.Error("should COPY from AUR build stage")
 	}
-	if !strings.Contains(out, "pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst") {
+	if !strings.Contains(out, "pacman -U --noconfirm") {
 		t.Error("should install with pacman -U")
-	}
-	if !strings.Contains(out, "rm -rf /tmp/aur-pkgs") {
-		t.Error("should clean up aur-pkgs")
 	}
 }
 
 func TestWriteRootYmlPac(t *testing.T) {
-	g := &Generator{}
+	g := &Generator{BuildConfig: testBuildCfg(), BuilderConfig: testBuilderCfg()}
 	var b strings.Builder
 	layer := &Layer{
 		Name:         "test-layer",

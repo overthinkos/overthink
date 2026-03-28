@@ -488,7 +488,7 @@ func TestValidateTunnelInvalidProvider(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for invalid provider")
 	}
@@ -508,7 +508,7 @@ func TestValidateTunnelMustSpecifyScope(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for tunnel with no public/private scope")
 	}
@@ -529,7 +529,7 @@ func TestValidateTunnelBothAllConflict(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for both public: all and private: all")
 	}
@@ -551,7 +551,7 @@ func TestValidateTunnelCloudflarePrivateError(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for cloudflare with private ports")
 	}
@@ -572,7 +572,7 @@ func TestValidateTunnelCloudflareMissingDNS(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for missing dns")
 	}
@@ -594,7 +594,7 @@ func TestValidateTunnelCloudflareInvalidTunnelName(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for invalid tunnel name")
 	}
@@ -615,7 +615,7 @@ func TestValidateTunnelValidTailscale(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	// Should have no tunnel errors (there may be other validation errors like missing layers)
 	if err != nil {
 		errStr := err.Error()
@@ -638,7 +638,7 @@ func TestValidateTunnelValidCloudflare(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	// Should have no tunnel errors
 	if err != nil {
 		errStr := err.Error()
@@ -660,7 +660,7 @@ func TestValidateTunnelTailscaleInvalidPublicPort(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Fatal("expected error for invalid public port")
 	}
@@ -757,7 +757,7 @@ func TestValidateTunnelPublicPortConflict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			layers := map[string]*Layer{}
-			err := Validate(tt.cfg, layers)
+			err := Validate(tt.cfg, layers, testBuildCfg(), testBuilderCfg())
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected validation error")

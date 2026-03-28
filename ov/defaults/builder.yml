@@ -1,0 +1,99 @@
+# builder.yml — Multi-stage build definitions
+#
+# Each builder detects its trigger (files or config sections),
+# generates a build stage, and copies artifacts back.
+#
+# Detection:
+#   detect_files: triggered when layer has any of these files
+#   detect_config: triggered when layer has this format section with packages
+#
+# Execution:
+#   inline: true — no multi-stage, runs in main image (e.g., cargo)
+#   stage_template — multi-stage FROM builder, builds in separate stage
+#   install_template — inline RUN in main image
+
+builders:
+  pixi:
+    detect_files: [pixi.toml, pyproject.toml, environment.yml]
+    cache_mounts:
+      - dst: /tmp/pixi-cache
+      - dst: /tmp/rattler-cache
+    env:
+      PIXI_CACHE_DIR: /tmp/pixi-cache
+      RATTLER_CACHE_DIR: /tmp/rattler-cache
+    install_commands:
+      pixi.toml: "pixi install"
+      pixi.toml+lock: "pixi install --frozen"
+      pyproject.toml: "pixi install --manifest-path pyproject.toml"
+      environment.yml: "pixi project import environment.yml && pixi install"
+    manylinux_fix: |
+      RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.34" }\n' >> {{.Manifest}}
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      {{- if .HasLockFile}}
+      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/pixi.lock pixi.lock
+      {{- end}}
+      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/{{.Manifest}} {{.Manifest}}
+      {{.ManylinuxFix}}
+      ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
+      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
+    copy_artifacts:
+      - src: "{{.Home}}"
+        dst: "{{.Home}}"
+        chown: true
+    copy_binary:
+      src: /usr/local/bin/pixi
+      dst: /usr/local/bin/pixi
+
+  npm:
+    detect_files: [package.json]
+    cache_mounts:
+      - dst: /tmp/npm-cache
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/package.json package.json
+      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
+    copy_artifacts:
+      - src: "{{.Home}}"
+        dst: "{{.Home}}"
+        chown: true
+
+  cargo:
+    detect_files: [Cargo.toml]
+    requires_src_dir: true
+    inline: true
+    cache_mounts:
+      - dst: /tmp/cargo-cache
+    install_template: |
+      RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
+          {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
+
+  aur:
+    detect_config: aur
+    cache_mounts:
+      - dst: /var/cache/pacman/pkg
+        sharing: locked
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER root
+      RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      RUN {{cacheMounts .CacheMounts}} \
+          mkdir -p /tmp/aur-build && \
+          cp /etc/makepkg.conf /tmp/makepkg.conf && \
+          sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
+          yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
+      {{- range .Options}} {{.}}{{end}}
+      {{- range .Packages}} \
+            {{.}}{{end}} && \
+          mkdir -p /tmp/aur-pkgs && \
+          find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
+    copy_artifacts:
+      - src: /tmp/aur-pkgs/
+        dst: /tmp/aur-pkgs/
+        chown: false

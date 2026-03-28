@@ -33,11 +33,11 @@ func (e *ValidationError) HasErrors() bool {
 }
 
 // Validate validates the configuration and layers
-func Validate(cfg *Config, layers map[string]*Layer) error {
+func Validate(cfg *Config, layers map[string]*Layer, buildCfg *BuildConfig, builderCfg *BuilderConfig) error {
 	errs := &ValidationError{}
 
 	// Validate build and distro values
-	validateBuildAndDistro(cfg, errs)
+	validateBuildAndDistro(cfg, buildCfg, errs)
 
 	// Validate layers referenced in images
 	validateLayerReferences(cfg, layers, errs)
@@ -73,7 +73,7 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	validateAliases(cfg, layers, errs)
 
 	// Validate builders and builds
-	validateBuilders(cfg, layers, errs)
+	validateBuilders(cfg, layers, builderCfg, errs)
 
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
@@ -124,15 +124,13 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 }
 
 // validateBuildAndDistro validates build: and distro: entries.
-// build: must contain only valid package formats (rpm, deb, pac, aur).
+// build: entries are checked against build.yml format definitions.
 // distro: is free-form (any string, including distro:version).
-func validateBuildAndDistro(cfg *Config, errs *ValidationError) {
-	validBuildFormat := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
-
+func validateBuildAndDistro(cfg *Config, buildCfg *BuildConfig, errs *ValidationError) {
 	validateBuild := func(context string, build BuildFormats) {
 		for _, b := range build {
-			if !validBuildFormat[b] {
-				errs.Add("%s: build entry %q is not valid (must be rpm, deb, pac, or aur)", context, b)
+			if !buildCfg.ValidFormat(b) {
+				errs.Add("%s: build entry %q is not valid (known formats: %s)", context, b, strings.Join(buildCfg.FormatNames(), ", "))
 			}
 		}
 		// Check for duplicates
@@ -598,13 +596,11 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 }
 
 // validateBuilders validates builders and builds configuration
-func validateBuilders(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	validBuildTypes := map[string]bool{"pixi": true, "npm": true, "cargo": true, "aur": true}
-
+func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *BuilderConfig, errs *ValidationError) {
 	// Validate defaults.builders entries
 	for typ, builder := range cfg.Defaults.Builders {
-		if !validBuildTypes[typ] {
-			errs.Add("defaults.builders: build type %q is not valid (must be pixi, npm, cargo, or aur)", typ)
+		if !builderCfg.ValidBuilderType(typ) {
+			errs.Add("defaults.builders: build type %q is not valid (known builders: %s)", typ, strings.Join(builderCfg.BuilderNames(), ", "))
 		}
 		if builder != "" {
 			builderImg, exists := cfg.Images[builder]
@@ -624,15 +620,15 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 
 		// Validate builds: entries (capability declarations on builder images)
 		for _, b := range img.Builds {
-			if !validBuildTypes[b] {
-				errs.Add("image %q: builds entry %q is not valid (must be pixi, npm, cargo, or aur)", imageName, b)
+			if !builderCfg.ValidBuilderType(b) {
+				errs.Add("image %q: builds entry %q is not valid (known builders: %s)", imageName, b, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
 		}
 
 		// Validate builders: entries (per-type builder assignments)
 		for typ, builder := range img.Builders {
-			if !validBuildTypes[typ] {
-				errs.Add("image %q: builders.%s is not a valid build type (must be pixi, npm, cargo, or aur)", imageName, typ)
+			if !builderCfg.ValidBuilderType(typ) {
+				errs.Add("image %q: builders.%s is not a valid build type (known builders: %s)", imageName, typ, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
 			if builder == imageName {
 				errs.Add("image %q: builders.%s cannot reference self", imageName, typ)
@@ -682,7 +678,10 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 			}
 		}
 
-		// Check if layers need builders that aren't configured
+		// Check if layers need builders that aren't configured.
+		// Detection is fully config-driven from builder.yml:
+		//   detect_files: layer has any of these files
+		//   detect_config: layer has this format section with packages
 		layerOrder, err := ResolveLayerOrder(img.Layers, layers, nil)
 		if err != nil {
 			continue
@@ -692,14 +691,20 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 			if !ok {
 				continue
 			}
-			if layer.PixiManifest() != "" && !resolved.HasBuilder("pixi") {
-				errs.Add("image %q: layer %q has pixi manifest but no builders.pixi configured", imageName, layerName)
-			}
-			if layer.HasPackageJson && !resolved.HasBuilder("npm") {
-				errs.Add("image %q: layer %q has package.json but no builders.npm configured", imageName, layerName)
-			}
-			if layer.HasAur && !resolved.HasBuilder("aur") {
-				errs.Add("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
+			for builderName, builderDef := range builderCfg.Builders {
+				needed := false
+				for _, f := range builderDef.DetectFiles {
+					if layerHasFile(layer, f) {
+						needed = true
+						break
+					}
+				}
+				if builderDef.DetectConfig != "" && layerHasFormatConfig(layer, builderDef.DetectConfig) {
+					needed = true
+				}
+				if needed && !resolved.HasBuilder(builderName) {
+					errs.Add("image %q: layer %q needs builder %q but no builders.%s configured", imageName, layerName, builderName, builderName)
+				}
 			}
 		}
 	}
@@ -1439,4 +1444,29 @@ func validateVersionFields(cfg *Config, layers map[string]*Layer, errs *Validati
 			errs.Add("image %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, img.Version)
 		}
 	}
+}
+
+// layerHasFile checks if a layer has a specific file (used for builder detection).
+func layerHasFile(layer *Layer, filename string) bool {
+	switch filename {
+	case "pixi.toml":
+		return layer.HasPixiToml
+	case "pyproject.toml":
+		return layer.HasPyprojectToml
+	case "environment.yml":
+		return layer.HasEnvironmentYml
+	case "package.json":
+		return layer.HasPackageJson
+	case "Cargo.toml":
+		return layer.HasCargoToml
+	default:
+		return fileExists(filepath.Join(layer.Path, filename))
+	}
+}
+
+// layerHasFormatConfig checks if a layer has a non-empty config section for a format.
+// Fully generic — uses the FormatSection accessor which checks both typed and dynamic sections.
+func layerHasFormatConfig(layer *Layer, formatName string) bool {
+	section := layer.FormatSection(formatName)
+	return section != nil && len(section.Packages) > 0
 }

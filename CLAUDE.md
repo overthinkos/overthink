@@ -65,7 +65,7 @@ Generation is idempotent. `.build/` is disposable and gitignored.
 - `build:` — Package formats tied to builders: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Replaces old `pkg:` field.
 - `builds:` — Builder capabilities on builder images (unchanged): `builds: [pixi, npm, cargo]`
 - Tags union (`org.overthinkos.tags`) = `["all"]` + distro + build formats — used for task matching
-- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/generate.go` (distro-first override), `ov/layers.go` (`TagSections`, `parseTaskfileTaskNames`)
+- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/format_config.go` (YAML config loading), `ov/format_template.go` (template rendering), `ov/defaults/distro.yml` + `build.yml` + `builder.yml` (format definitions)
 
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `ov/generate.go` near line 297.
 
@@ -77,6 +77,7 @@ Generation is idempotent. `.build/` is disposable and gitignored.
 project/
 +-- bin/ov                    # Built by `task build:ov` (gitignored)
 +-- ov/                       # Go module (go 1.25.3, kong CLI, go-containerregistry)
++-- ov/defaults/              # Embedded YAML configs (distro.yml, build.yml, builder.yml)
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
 +-- setup.sh                  # Bootstrap: downloads task, builds ov

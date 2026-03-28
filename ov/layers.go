@@ -107,14 +107,35 @@ type LayerYAML struct {
 
 // layerYAMLKnownFields lists all known top-level keys in layer.yml.
 // Any key not in this set is treated as a tag-based package section.
-var layerYAMLKnownFields = map[string]bool{
-	"description": true, "version": true, "status": true, "info": true,
-	"layers": true, "depends": true, "engine": true, "env": true,
-	"path_append": true, "ports": true, "route": true, "service": true,
-	"rpm": true, "deb": true, "pac": true, "aur": true,
-	"volumes": true, "aliases": true, "extract": true, "security": true,
-	"system_services": true, "libvirt": true, "hooks": true,
-	"port_relay": true, "secrets": true,
+// Format names (rpm, deb, pac, aur) are included as known fields because
+// they have typed YAML structs. New formats defined in build.yml that don't
+// have typed structs are handled via TagSections → formatSections conversion.
+var layerYAMLKnownFields map[string]bool
+
+func init() {
+	layerYAMLKnownFields = map[string]bool{
+		"description": true, "version": true, "status": true, "info": true,
+		"layers": true, "depends": true, "engine": true, "env": true,
+		"path_append": true, "ports": true, "route": true, "service": true,
+		"volumes": true, "aliases": true, "extract": true, "security": true,
+		"system_services": true, "libvirt": true, "hooks": true,
+		"port_relay": true, "secrets": true,
+	}
+	// Add default format names from embedded build.yml
+	buildCfg, err := loadBuildConfig("")
+	if err == nil {
+		for name := range buildCfg.Formats {
+			layerYAMLKnownFields[name] = true
+		}
+	}
+}
+
+// PackageSection represents a generic format-specific package config in layer.yml.
+// All fields from the YAML section are available in Raw for template rendering.
+type PackageSection struct {
+	FormatName string                 // "rpm", "deb", "pac", "aur", etc.
+	Packages   []string               // extracted from Raw["packages"] for quick access
+	Raw        map[string]interface{} // all fields from YAML, passed to templates
 }
 
 // TagPkgConfig is a simplified package config for distro/version-specific sections.
@@ -256,11 +277,12 @@ type Layer struct {
 	SubPathPrefix  string // e.g. "layers/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from layer.yml
-	rpmConfig   *RpmConfig
-	debConfig   *DebConfig
-	pacConfig   *PacConfig
-	aurConfig   *AurConfig
-	tagSections map[string]*TagPkgConfig // distro/version-specific package sections
+	rpmConfig      *RpmConfig
+	debConfig      *DebConfig
+	pacConfig      *PacConfig
+	aurConfig      *AurConfig
+	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
+	tagSections    map[string]*TagPkgConfig   // distro/version-specific package sections
 	ports       []string
 	portSpecs   []PortSpec // full PortSpec data with protocol info
 	envConfig   *EnvConfig
@@ -384,7 +406,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.HasPorts = len(ly.Ports) > 0
 		layer.HasRoute = ly.Route != nil
 
-		// Pre-populate package config
+		// Pre-populate package config (typed + generic)
 		layer.rpmConfig = ly.Rpm
 		layer.debConfig = ly.Deb
 		layer.pacConfig = ly.Pac
@@ -392,6 +414,25 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.tagSections = ly.TagSections
 		if ly.Aur != nil && len(ly.Aur.Packages) > 0 {
 			layer.HasAur = true
+		}
+
+		// Build generic format sections from typed configs.
+		// Uses a typed-config map so no format name is hardcoded in the loop.
+		layer.formatSections = make(map[string]*PackageSection)
+		typedConfigs := map[string]interface{}{
+			"rpm": ly.Rpm,
+			"deb": ly.Deb,
+			"pac": ly.Pac,
+			"aur": ly.Aur,
+		}
+		for name, cfg := range typedConfigs {
+			if cfg == nil {
+				continue
+			}
+			section := typedToPackageSection(name, cfg)
+			if section != nil && len(section.Packages) > 0 {
+				layer.formatSections[name] = section
+			}
 		}
 
 		// Pre-populate ports cache
@@ -528,12 +569,56 @@ func (l *Layer) AurConfig() *AurConfig {
 	return l.aurConfig
 }
 
+// FormatSection returns the generic package section for a format, or nil.
+func (l *Layer) FormatSection(name string) *PackageSection {
+	if l.formatSections == nil {
+		return nil
+	}
+	return l.formatSections[name]
+}
+
+// HasFormatPackages returns true if any format section has packages.
+func (l *Layer) HasFormatPackages() bool {
+	for _, s := range l.formatSections {
+		if len(s.Packages) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // TagSection returns the tag-based package config for the given tag, or nil.
 func (l *Layer) TagSection(tag string) *TagPkgConfig {
 	if l.tagSections == nil {
 		return nil
 	}
 	return l.tagSections[tag]
+}
+
+// typedToPackageSection converts a typed config (RpmConfig, etc.) to a generic PackageSection.
+// Uses YAML marshal/unmarshal to get a clean map[string]interface{} representation.
+func typedToPackageSection(formatName string, cfg interface{}) *PackageSection {
+	// Marshal to YAML then unmarshal to map — generic conversion
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil
+	}
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil
+	}
+
+	section := &PackageSection{
+		FormatName: formatName,
+		Raw:        raw,
+	}
+
+	// Extract packages for quick access
+	if pkgs, ok := raw["packages"]; ok {
+		section.Packages = toStringSlice(pkgs)
+	}
+
+	return section
 }
 
 // EnvConfig returns the environment config (pre-populated from layer.yml)

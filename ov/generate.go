@@ -20,6 +20,9 @@ type Generator struct {
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by ov build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
+	DistroConfig   *DistroConfig     // from distro.yml
+	BuildConfig    *BuildConfig      // from build.yml
+	BuilderConfig  *BuilderConfig    // from builder.yml
 }
 
 // globalOrderForImage returns the layer order for an image by filtering the
@@ -116,12 +119,18 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
+	// Load format configs (distro.yml, build.yml, builder.yml)
+	distroCfg, buildCfg, builderCfg, err := LoadFormatConfigs(dir)
+	if err != nil {
+		return nil, err
+	}
+
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := Validate(cfg, layers); err != nil {
+	if err := Validate(cfg, layers, buildCfg, builderCfg); err != nil {
 		return nil, err
 	}
 
@@ -157,6 +166,9 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
 		GlobalOrder:    globalOrder,
+		DistroConfig:   distroCfg,
+		BuildConfig:    buildCfg,
+		BuilderConfig:  builderCfg,
 	}, nil
 }
 
@@ -273,77 +285,37 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
 	}
 
-	// Emit per-layer pixi build stages
-	// Cache mounts for pixi/rattler caches prevent bloating build stage layers
-	// (e.g. CUDA libraries cached by pixi can add 10GB+ to intermediate layers)
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		manifest := layer.PixiManifest()
-		if manifest != "" {
-			pixiBuilderRef := g.builderRefForFormat(imageName, "pixi")
-			if pixiBuilderRef == "" {
-				return fmt.Errorf("image %q: layer %q has pixi manifest but no builders.pixi configured", imageName, layerName)
+	// Emit per-layer multi-stage build stages — fully config-driven from builder.yml.
+	// Each builder in builder.yml declares detect_files and/or detect_config.
+	// For each layer that matches, the builder's stage_template is rendered.
+	if g.BuilderConfig != nil {
+		// Process builders in deterministic order
+		builderNames := g.BuilderConfig.BuilderNames()
+		for _, builderName := range builderNames {
+			builderDef := g.BuilderConfig.Builders[builderName]
+			if builderDef.Inline {
+				continue // inline builders handled in writeLayerSteps
 			}
-			copySrc := g.layerCopySource(layerName)
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-pixi-build\n", pixiBuilderRef, layer.Name))
-			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
-			if layer.HasPixiLock {
-				b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/pixi.lock pixi.lock\n", img.UID, img.GID, copySrc))
+			if builderDef.StageTemplate == "" {
+				continue
 			}
-			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/%s %s\n", img.UID, img.GID, copySrc, manifest, manifest))
-			// Ensure pixi resolves manylinux wheels for the builder's actual glibc.
-			// Pixi 0.66.0's resolver detects the platform as manylinux_2_28 even on glibc 2.42,
-			// rejecting wheels tagged manylinux_2_34+. This injects [system-requirements] to fix it.
-			b.WriteString(fmt.Sprintf("RUN grep -q 'system-requirements' %s || printf '\\n[system-requirements]\\nlibc = { family = \"glibc\", version = \"2.34\" }\\n' >> %s\n", manifest, manifest))
-			b.WriteString("ENV PIXI_CACHE_DIR=/tmp/pixi-cache\n")
-			b.WriteString("ENV RATTLER_CACHE_DIR=/tmp/rattler-cache\n")
-			cacheMounts := fmt.Sprintf("--mount=type=cache,dst=/tmp/pixi-cache,uid=%d,gid=%d "+
-				"--mount=type=cache,dst=/tmp/rattler-cache,uid=%d,gid=%d ",
-				img.UID, img.GID, img.UID, img.GID)
-			// Install and then remove manifests so they're not included when we COPY the home dir
-			cleanup := fmt.Sprintf(" && rm -f %s pixi.lock", manifest)
-			if manifest == "environment.yml" {
-				b.WriteString(fmt.Sprintf("RUN %spixi project import %s && pixi install%s\n", cacheMounts, manifest, cleanup))
-			} else if manifest == "pyproject.toml" {
-				b.WriteString(fmt.Sprintf("RUN %spixi install --manifest-path pyproject.toml%s\n", cacheMounts, cleanup))
-			} else if layer.HasPixiLock {
-				b.WriteString(fmt.Sprintf("RUN %spixi install --frozen%s\n", cacheMounts, cleanup))
-			} else {
-				b.WriteString(fmt.Sprintf("RUN %spixi install%s\n", cacheMounts, cleanup))
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if !g.layerNeedsBuilder(layer, builderDef) {
+					continue
+				}
+				builderRef := g.builderRefForFormat(imageName, builderName)
+				if builderRef == "" {
+					return fmt.Errorf("image %q: layer %q needs builder %q but no builders.%s configured", imageName, layerName, builderName, builderName)
+				}
+				ctx := g.buildStageContext(layer, builderName, builderDef, img, builderRef)
+				rendered, err := RenderTemplate(builderName+"-stage", builderDef.StageTemplate, ctx)
+				if err != nil {
+					return fmt.Errorf("image %q: rendering %s stage for layer %q: %w", imageName, builderName, layerName, err)
+				}
+				b.WriteString(rendered)
+				b.WriteString("\n")
 			}
-			b.WriteString("\n")
-		}
-	}
-
-	// Emit per-layer npm build stages
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasPackageJson {
-			npmBuilderRef := g.builderRefForFormat(imageName, "npm")
-			if npmBuilderRef == "" {
-				return fmt.Errorf("image %q: layer %q has package.json but no builders.npm configured", imageName, layerName)
-			}
-			copySrc := g.layerCopySource(layerName)
-			b.WriteString(fmt.Sprintf("FROM %s AS %s-npm-build\n", npmBuilderRef, layer.Name))
-			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-			b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
-			b.WriteString(fmt.Sprintf("COPY --chown=%d:%d %s/package.json package.json\n", img.UID, img.GID, copySrc))
-				b.WriteString(fmt.Sprintf("RUN --mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
-			b.WriteString("    node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs npm install -g && rm -f package.json\n\n")
-		}
-	}
-
-	// Emit per-layer AUR build stages
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		aur := layer.AurConfig()
-		if img.SupportsBuild("aur") && aur != nil && len(aur.Packages) > 0 {
-			aurBuilderRef := g.builderRefForFormat(imageName, "aur")
-			if aurBuilderRef == "" {
-				return fmt.Errorf("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
-			}
-			g.writeAurBuildStage(&b, layer.Name, aur, img, aurBuilderRef)
 		}
 	}
 
@@ -483,47 +455,50 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit image metadata labels
 	g.writeLabels(&b, imageName, layerOrder, img)
 
-	// Copy pixi environments
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.PixiManifest() != "" {
-			b.WriteString(fmt.Sprintf("# Copy pixi environment: %s\n", layerName))
-			b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build --chown=%d:%d %s %s\n", layer.Name, img.UID, img.GID, img.Home, img.Home))
-		}
-	}
+	// Copy builder artifacts — fully config-driven from builder.yml copy_artifacts/copy_binary
+	if g.BuilderConfig != nil {
+		builderNames := g.BuilderConfig.BuilderNames()
+		for _, builderName := range builderNames {
+			builderDef := g.BuilderConfig.Builders[builderName]
+			if builderDef.Inline || builderDef.StageTemplate == "" {
+				continue
+			}
 
-	// Ensure pixi binary is present if any pixi layer exists
-	hasPixi := false
-	for _, layerName := range layerOrder {
-		if g.Layers[layerName].PixiManifest() != "" {
-			hasPixi = true
-			break
-		}
-	}
-	if hasPixi {
-		for _, layerName := range layerOrder {
-			layer := g.Layers[layerName]
-			if layer.PixiManifest() != "" {
-				b.WriteString(fmt.Sprintf("COPY --from=%s-pixi-build /usr/local/bin/pixi /usr/local/bin/pixi\n\n", layer.Name))
-				break
+			// Find layers that triggered this builder
+			hasArtifacts := false
+			binaryCopied := false
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if !g.layerNeedsBuilder(layer, builderDef) {
+					continue
+				}
+				stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
+
+				// Copy artifacts
+				for _, art := range builderDef.CopyArtifacts {
+					if !hasArtifacts {
+						b.WriteString(fmt.Sprintf("# Copy %s artifacts\n", builderName))
+						hasArtifacts = true
+					}
+					src := expandBuilderPath(art.Src, img)
+					dst := expandBuilderPath(art.Dst, img)
+					if art.Chown {
+						b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n", stageName, img.UID, img.GID, src, dst))
+					} else {
+						b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, src, dst))
+					}
+				}
+
+				// Copy binary (only once, from first matching layer)
+				if builderDef.CopyBinary != nil && !binaryCopied {
+					b.WriteString(fmt.Sprintf("COPY --from=%s %s %s\n", stageName, builderDef.CopyBinary.Src, builderDef.CopyBinary.Dst))
+					binaryCopied = true
+				}
+			}
+			if hasArtifacts || binaryCopied {
+				b.WriteString("\n")
 			}
 		}
-	}
-
-	// Copy npm environments from build stages
-	hasNpm := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasPackageJson {
-			if !hasNpm {
-				b.WriteString("# Copy npm packages\n")
-				hasNpm = true
-			}
-			b.WriteString(fmt.Sprintf("COPY --from=%s-npm-build --chown=%d:%d %s %s\n", layer.Name, img.UID, img.GID, img.Home, img.Home))
-		}
-	}
-	if hasNpm {
-		b.WriteString("\n")
 	}
 
 	// Copy extracted files from multi-stage builds
@@ -655,27 +630,47 @@ func (g *Generator) builderRefForFormat(imageName, format string) string {
 	return ""
 }
 
-// writeBootstrap writes the bootstrap preamble for external base images
+// writeBootstrap writes the bootstrap preamble for external base images.
+// All distro-specific behavior is driven by distro.yml config.
 func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString("# Bootstrap\n")
 
-	// Install task
+	// Resolve distro config for bootstrap commands
+	var distroDef *DistroDef
+	if g.DistroConfig != nil {
+		distroDef = g.DistroConfig.ResolveDistro(img.Distro)
+	}
+
 	b.WriteString("RUN ")
-	if img.Pkg == "deb" {
-		b.WriteString("--mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
-		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
-		b.WriteString("    apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && \\\n    ")
-	} else if img.Pkg == "pac" {
-		b.WriteString("--mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
-		b.WriteString("    pacman -Syu --noconfirm curl ca-certificates && \\\n    ")
-	} else {
-		b.WriteString("--mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n    ")
+	// Cache mounts from distro config (or fall back to primary format's mounts)
+	var cacheMounts []CacheMountDef
+	if distroDef != nil {
+		cacheMounts = distroDef.Bootstrap.CacheMounts
+	} else if g.BuildConfig != nil {
+		if formatDef, ok := g.BuildConfig.Formats[img.Pkg]; ok {
+			cacheMounts = formatDef.CacheMounts
+		}
 	}
-	// Remove repos with corrupt zchunk metadata (dnf5 skip_if_unavailable doesn't handle this;
-	// disabling via sed is insufficient because the shared libdnf5 cache mount retains stale metadata)
-	if img.Pkg == "rpm" {
-		b.WriteString("rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true && \\\n    ")
+	for _, m := range cacheMounts {
+		sharing := m.Sharing
+		if sharing == "" {
+			sharing = "locked"
+		}
+		b.WriteString(fmt.Sprintf("--mount=type=cache,dst=%s,sharing=%s \\\n    ", m.Dst, sharing))
 	}
+
+	// Install bootstrap packages using distro's install command
+	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Packages) > 0 {
+		b.WriteString(fmt.Sprintf("%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Packages, " ")))
+	}
+
+	// Apply distro-specific workarounds
+	if distroDef != nil {
+		for _, w := range distroDef.Workarounds {
+			b.WriteString(w + " && \\\n    ")
+		}
+	}
+
 	b.WriteString("{ [ -L /usr/local ] && mkdir -p \"$(readlink /usr/local)\"; mkdir -p /usr/local/bin; } && \\\n")
 	b.WriteString("    ARCH=$(uname -m) && \\\n")
 	b.WriteString("    case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac && \\\n")
@@ -918,41 +913,46 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Track if we've switched to user mode
 	asUser := false
 
-	// 1. System packages from layer.yml
+	// 1. System packages from layer.yml — fully config-driven.
 	// Phase 1: Walk distro: tags — first matching section wins (override).
 	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
-	rpm := layer.RpmConfig()
-	deb := layer.DebConfig()
-	pac := layer.PacConfig()
-	aur := layer.AurConfig()
 	distroMatched := false
 	for _, tag := range img.Distro {
 		if tagCfg := layer.TagSection(tag); tagCfg != nil && len(tagCfg.Packages) > 0 {
-			g.writeTagPackages(b, tagCfg.Packages, img.Pkg)
+			g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg)
 			distroMatched = true
 			break
 		}
 	}
 
-	// If no distro override, install ALL build format sections in order
 	if !distroMatched {
 		for _, format := range img.BuildFormats {
-			switch format {
-			case "rpm":
-				if rpm != nil && len(rpm.Packages) > 0 {
-					g.writeDnfInstall(b, rpm)
+			section := layer.FormatSection(format)
+			if section == nil || len(section.Packages) == 0 {
+				continue
+			}
+			formatDef := g.BuildConfig.Formats[format]
+			if formatDef == nil {
+				continue
+			}
+			// Check if this format has a builder (multi-stage install step)
+			if builderDef, ok := g.BuilderConfig.Builders[format]; ok && !builderDef.Inline {
+				// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
+				ctx := &InstallContext{
+					CacheMounts: formatDef.CacheMounts,
+					Packages:    section.Packages,
+					StageName:   fmt.Sprintf("%s-%s-build", layer.Name, format),
 				}
-			case "deb":
-				if deb != nil && len(deb.Packages) > 0 {
-					g.writeAptInstall(b, deb)
+				rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx)
+				if err == nil {
+					b.WriteString(rendered)
 				}
-			case "pac":
-				if pac != nil && len(pac.Packages) > 0 {
-					g.writePacmanInstall(b, pac)
-				}
-			case "aur":
-				if aur != nil && len(aur.Packages) > 0 {
-					g.writeAurInstallStep(b, layer.Name)
+			} else {
+				// Regular format: render install template
+				ctx := NewInstallContext(section.Raw, formatDef.CacheMounts)
+				rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx)
+				if err == nil {
+					b.WriteString(rendered)
 				}
 			}
 		}
@@ -963,13 +963,31 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		g.writeRootYml(b, stageName, layer, img)
 	}
 
-	// 4. Cargo.toml (user)
-	if layer.HasCargoToml {
-		if !asUser {
-			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-			asUser = true
+	// 4. Inline builders (cargo, etc.) — config-driven from builder.yml
+	if g.BuilderConfig != nil {
+		for _, bName := range g.BuilderConfig.BuilderNames() {
+			bDef := g.BuilderConfig.Builders[bName]
+			if !bDef.Inline || bDef.InstallTemplate == "" {
+				continue
+			}
+			if !g.layerNeedsBuilder(layer, bDef) {
+				continue
+			}
+			if !asUser {
+				b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
+				asUser = true
+			}
+			ctx := &BuildStageContext{
+				LayerStage:  stageName,
+				UID:         img.UID,
+				GID:         img.GID,
+				CacheMounts: bDef.CacheMounts,
+			}
+			rendered, err := RenderTemplate(bName+"-inline", bDef.InstallTemplate, ctx)
+			if err == nil {
+				b.WriteString(rendered)
+			}
 		}
-		g.writeCargoToml(b, stageName, img)
 	}
 
 	// 5. user.yml (user)
@@ -990,142 +1008,9 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	return asUser
 }
 
-func (g *Generator) writeDnfInstall(b *strings.Builder, rpm *RpmConfig) {
-	b.WriteString("RUN --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
-
-	// Release RPMs: install first to add repo definitions
-	for _, repo := range rpm.Repos {
-		if repo.RPM != "" {
-			b.WriteString(fmt.Sprintf("    dnf install -y %q && \\\n", repo.RPM))
-		}
-	}
-
-	// Repo files: add disabled, import GPG keys
-	for _, repo := range rpm.Repos {
-		if repo.URL != "" {
-			b.WriteString(fmt.Sprintf("    dnf5 config-manager addrepo --from-repofile=%q 2>/dev/null || true && \\\n", repo.URL))
-			b.WriteString(fmt.Sprintf("    dnf5 config-manager setopt %q && \\\n", repo.Name+".enabled=0"))
-			if repo.GPGKey != "" {
-				b.WriteString(fmt.Sprintf("    rpm --import %s || true && \\\n", repo.GPGKey))
-			}
-		}
-	}
-
-	// COPR repos: enable first
-	for _, repo := range rpm.Copr {
-		b.WriteString(fmt.Sprintf("    dnf5 copr enable -y %s && \\\n", repo))
-	}
-
-	// Module streams: reset and enable
-	for _, mod := range rpm.Modules {
-		moduleName := strings.SplitN(mod, ":", 2)[0]
-		b.WriteString(fmt.Sprintf("    dnf module reset -y %s && \\\n", moduleName))
-		b.WriteString(fmt.Sprintf("    dnf module enable -y %s && \\\n", mod))
-	}
-
-	b.WriteString("    dnf install -y")
-
-	// Extra options
-	for _, opt := range rpm.Options {
-		b.WriteString(fmt.Sprintf(" %s", opt))
-	}
-
-	// Enable repos for this install (url-type repos only; rpm-type repos enable themselves)
-	for _, repo := range rpm.Repos {
-		if repo.URL != "" {
-			b.WriteString(fmt.Sprintf(" --enable-repo=%q", repo.Name))
-		}
-	}
-
-	// Exclude patterns
-	for _, excl := range rpm.Exclude {
-		b.WriteString(fmt.Sprintf(" --exclude='%s'", excl))
-	}
-
-	// Packages
-	for _, pkg := range rpm.Packages {
-		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
-	}
-
-	// Disable COPR repos after install
-	for _, repo := range rpm.Copr {
-		b.WriteString(fmt.Sprintf(" && \\\n    dnf5 config-manager setopt \"copr:copr.fedorainfracloud.org:%s.enabled=0\"", strings.ReplaceAll(repo, "/", ":")))
-	}
-
-	b.WriteString("\n")
-}
-
-func (g *Generator) writeAptInstall(b *strings.Builder, deb *DebConfig) {
-	b.WriteString("RUN --mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
-	b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
-	b.WriteString("    apt-get update && apt-get install -y --no-install-recommends")
-	for _, pkg := range deb.Packages {
-		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
-	}
-	b.WriteString("\n")
-}
-
-func (g *Generator) writePacmanInstall(b *strings.Builder, pac *PacConfig) {
-	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
-
-	// Add custom repos to pacman.conf
-	for _, repo := range pac.Repos {
-		sigLevel := repo.SigLevel
-		if sigLevel == "" {
-			sigLevel = "Optional TrustAll"
-		}
-		b.WriteString(fmt.Sprintf("    printf '[%s]\\nServer = %s\\nSigLevel = %s\\n' >> /etc/pacman.conf && \\\n", repo.Name, repo.Server, sigLevel))
-	}
-
-	b.WriteString("    pacman -Syu --noconfirm")
-
-	// Extra options
-	for _, opt := range pac.Options {
-		b.WriteString(fmt.Sprintf(" %s", opt))
-	}
-
-	// Packages
-	for _, pkg := range pac.Packages {
-		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
-	}
-
-	b.WriteString("\n")
-}
-
-func (g *Generator) writeAurBuildStage(b *strings.Builder, layerName string, aur *AurConfig, img *ResolvedImage, aurBuilderRef string) {
-	b.WriteString(fmt.Sprintf("FROM %s AS %s-aur-build\n", aurBuilderRef, layerName))
-	// Configure passwordless sudo for the build user (required by yay/makepkg)
-	b.WriteString("USER root\n")
-	b.WriteString(fmt.Sprintf("RUN echo '%s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder\n", img.User))
-	b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-	b.WriteString(fmt.Sprintf("WORKDIR %s\n", img.Home))
-	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
-	b.WriteString("    mkdir -p /tmp/aur-build && \\\n")
-	b.WriteString("    cp /etc/makepkg.conf /tmp/makepkg.conf && \\\n")
-	b.WriteString("    sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \\\n")
-	b.WriteString("    yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
-
-	// Extra options
-	for _, opt := range aur.Options {
-		b.WriteString(fmt.Sprintf(" %s", opt))
-	}
-
-	// Packages
-	for _, pkg := range aur.Packages {
-		b.WriteString(fmt.Sprintf(" \\\n      %s", pkg))
-	}
-
-	b.WriteString(" && \\\n")
-	b.WriteString("    mkdir -p /tmp/aur-pkgs && \\\n")
-	b.WriteString("    find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \\;\n\n")
-}
-
-func (g *Generator) writeAurInstallStep(b *strings.Builder, layerName string) {
-	b.WriteString(fmt.Sprintf("COPY --from=%s-aur-build /tmp/aur-pkgs/ /tmp/aur-pkgs/\n", layerName))
-	b.WriteString("RUN --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
-	b.WriteString("    pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst && \\\n")
-	b.WriteString("    rm -rf /tmp/aur-pkgs\n")
-}
+// Old format-specific write functions removed — all generation is now
+// config-driven via build.yml templates rendered by renderFormatInstall*
+// and builder.yml templates rendered by buildStageContext + RenderTemplate.
 
 func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
 	// Resolve which tasks to call: intersection of image tags and defined tasks
@@ -1135,33 +1020,123 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *La
 	}
 
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	if img.Pkg == "deb" {
-		b.WriteString("    --mount=type=cache,dst=/var/cache/apt,sharing=locked \\\n")
-		b.WriteString("    --mount=type=cache,dst=/var/lib/apt,sharing=locked \\\n")
-	} else if img.Pkg == "pac" {
-		b.WriteString("    --mount=type=cache,dst=/var/cache/pacman/pkg,sharing=locked \\\n")
-	} else {
-		b.WriteString("    --mount=type=cache,dst=/var/cache/libdnf5,sharing=locked \\\n")
+	// Cache mounts from primary format's config
+	var formatDef *FormatDef
+	if g.BuildConfig != nil {
+		formatDef = g.BuildConfig.Formats[img.Pkg]
+	}
+	if formatDef != nil {
+		for _, m := range formatDef.CacheMounts {
+			sharing := m.Sharing
+			if sharing == "" {
+				sharing = "locked"
+			}
+			b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s,sharing=%s \\\n", m.Dst, sharing))
+		}
 	}
 	b.WriteString(fmt.Sprintf("    cd /ctx && task -t root.yml %s\n", strings.Join(tasks, " ")))
 }
 
-// writeTagPackages installs packages from a tag-specific section using the primary format's tool.
-func (g *Generator) writeTagPackages(b *strings.Builder, packages []string, pkg string) {
-	switch pkg {
-	case "rpm":
-		g.writeDnfInstall(b, &RpmConfig{Packages: packages})
-	case "deb":
-		g.writeAptInstall(b, &DebConfig{Packages: packages})
-	case "pac":
-		g.writePacmanInstall(b, &PacConfig{Packages: packages})
-	}
+// expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
+func expandBuilderPath(path string, img *ResolvedImage) string {
+	path = strings.ReplaceAll(path, "{{.Home}}", img.Home)
+	return path
 }
 
-func (g *Generator) writeCargoToml(b *strings.Builder, layerName string, img *ResolvedImage) {
-	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=/tmp/cargo-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
-	b.WriteString("    cargo install --path /ctx\n")
+// layerNeedsBuilder checks if a layer triggers a builder's detection criteria.
+func (g *Generator) layerNeedsBuilder(layer *Layer, builderDef *BuilderDef) bool {
+	for _, f := range builderDef.DetectFiles {
+		if layerHasFile(layer, f) {
+			return true
+		}
+	}
+	if builderDef.DetectConfig != "" {
+		section := layer.FormatSection(builderDef.DetectConfig)
+		if section != nil && len(section.Packages) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// buildStageContext creates the template context for a builder's stage_template.
+func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedImage, builderRef string) *BuildStageContext {
+	stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
+	ctx := &BuildStageContext{
+		BuilderRef:  builderRef,
+		StageName:   stageName,
+		LayerStage:  layer.Name,
+		UID:         img.UID,
+		GID:         img.GID,
+		Home:        img.Home,
+		User:        img.User,
+		CacheMounts: builderDef.CacheMounts,
+	}
+
+	// Resolve manifest and install command for file-detected builders (pixi)
+	if len(builderDef.InstallCommands) > 0 && len(builderDef.DetectFiles) > 0 {
+		manifest := ""
+		for _, f := range builderDef.DetectFiles {
+			if layerHasFile(layer, f) {
+				manifest = f
+				break
+			}
+		}
+		ctx.Manifest = manifest
+		ctx.HasLockFile = fileExists(filepath.Join(layer.Path, manifest+".lock")) ||
+			(manifest == "pixi.toml" && layer.HasPixiLock)
+
+		// Select install command from builder config
+		if ctx.HasLockFile {
+			if cmd, ok := builderDef.InstallCommands[manifest+"+lock"]; ok {
+				ctx.InstallCmd = cmd
+			}
+		}
+		if ctx.InstallCmd == "" {
+			if cmd, ok := builderDef.InstallCommands[manifest]; ok {
+				ctx.InstallCmd = cmd
+			}
+		}
+	}
+
+	// Resolve manylinux fix template
+	if builderDef.ManylinuxFix != "" && ctx.Manifest != "" {
+		rendered, err := RenderTemplate(builderName+"-manylinux", builderDef.ManylinuxFix, ctx)
+		if err == nil {
+			ctx.ManylinuxFix = rendered
+		}
+	}
+
+	// For config-detected builders (aur), extract packages/options from layer config
+	if builderDef.DetectConfig != "" {
+		section := layer.FormatSection(builderDef.DetectConfig)
+		if section != nil {
+			ctx.Packages = section.Packages
+			ctx.Options = toStringSlice(section.Raw["options"])
+		}
+	}
+
+	return ctx
+}
+
+// renderFormatInstallFromPackages renders install for a package list using the primary format's template.
+// Used for distro-override sections that only have packages (no repos, options, etc.).
+func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string) {
+	if g.BuildConfig == nil {
+		return
+	}
+	formatDef := g.BuildConfig.Formats[primaryFormat]
+	if formatDef == nil {
+		return
+	}
+	ctx := &InstallContext{
+		CacheMounts: formatDef.CacheMounts,
+		Packages:    packages,
+	}
+	rendered, err := RenderTemplate(primaryFormat+"-tag-install", formatDef.InstallTemplate, ctx)
+	if err == nil {
+		b.WriteString(rendered)
+	}
 }
 
 func (g *Generator) writeUserYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {

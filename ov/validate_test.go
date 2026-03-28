@@ -25,7 +25,7 @@ func TestValidateSuccess(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid pkg")
 	}
@@ -57,7 +57,7 @@ func TestValidateMissingLayer(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -76,7 +76,7 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 		"pixi": {Name: "pixi", HasRootYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -93,7 +93,7 @@ func TestValidateLayerNoInstallFiles(t *testing.T) {
 		"empty": {Name: "empty"}, // no install files
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for layer without install files")
 	}
@@ -114,7 +114,7 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for Cargo.toml without src/")
 	}
@@ -135,7 +135,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for rpm.copr without rpm.packages")
 	}
@@ -156,7 +156,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for rpm.repos without rpm.packages")
 	}
@@ -177,7 +177,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for rpm.modules without rpm.packages")
 	}
@@ -201,7 +201,7 @@ func TestValidateRepoUrlAndRpmBothSet(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for rpm.repos with both url and rpm")
 	}
@@ -225,7 +225,7 @@ func TestValidateRepoNeitherUrlNorRpm(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for rpm.repos with neither url nor rpm")
 	}
@@ -241,7 +241,7 @@ func TestValidatePacPkgValue(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("pkg: pac should be valid, got error: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid pkg value")
 	}
@@ -274,7 +274,7 @@ func TestValidatePacReposMissingServer(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for pac.repos without server")
 	}
@@ -294,7 +294,7 @@ func TestValidatePacReposMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for pac.repos without name")
 	}
@@ -318,10 +318,13 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 			Name:      "aur-layer",
 			HasAur:    true,
 			aurConfig: &AurConfig{Packages: []string{"yay-bin"}},
+			formatSections: map[string]*PackageSection{
+				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}},
+			},
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for aur packages without builders.aur")
 	}
@@ -342,7 +345,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for unknown dependency")
 	}
@@ -361,7 +364,7 @@ func TestValidateImageCycle(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for image cycle")
 	}
@@ -382,7 +385,7 @@ func TestValidateLayerCycle(t *testing.T) {
 		"c": {Name: "c", HasRootYml: true, Depends: []string{"a"}},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for layer cycle")
 	}
@@ -400,7 +403,7 @@ func TestValidateMultipleErrors(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected errors")
 	}
@@ -429,7 +432,7 @@ func TestValidateLayerPortsValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -448,7 +451,7 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -470,7 +473,7 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -497,7 +500,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 		"web": {Name: "web", HasUserYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -516,7 +519,7 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 		"web": {Name: "web", HasUserYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid port mapping")
 	}
@@ -538,7 +541,7 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 		"web": {Name: "web", HasUserYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for bad port format")
 	}
@@ -560,7 +563,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for route missing host")
 	}
@@ -582,7 +585,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for route missing port")
 	}
@@ -604,7 +607,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for route invalid port")
 	}
@@ -629,7 +632,7 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -659,7 +662,7 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -685,7 +688,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 		"pixi": {Name: "pixi", HasRootYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() should pass when bad image is disabled, got: %v", err)
 	}
@@ -704,7 +707,7 @@ func TestValidateVolumesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -723,7 +726,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing volume name")
 	}
@@ -745,7 +748,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing volume path")
 	}
@@ -767,7 +770,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid volume name")
 	}
@@ -792,7 +795,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for duplicate volume name")
 	}
@@ -819,7 +822,7 @@ func TestValidateAliasesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -838,7 +841,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing alias name")
 	}
@@ -860,7 +863,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for missing alias command")
 	}
@@ -885,7 +888,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for duplicate alias name")
 	}
@@ -907,7 +910,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid alias name")
 	}
@@ -932,7 +935,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 		"svc": {Name: "svc", HasUserYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for duplicate image alias name")
 	}
@@ -954,7 +957,7 @@ func TestValidateSelfBuilder(t *testing.T) {
 		"pixi": {Name: "pixi", HasRootYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for self-referencing builder")
 	}
@@ -975,7 +978,7 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 		"pixi": {Name: "pixi", HasRootYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -994,7 +997,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		"pixi": {Name: "pixi", HasRootYml: true},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for nonexistent per-image builder")
 	}
@@ -1039,7 +1042,7 @@ func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("expected no error for composing layer without install files, got: %v", err)
 	}
@@ -1054,7 +1057,7 @@ func TestValidateLayerIncludesCycle(t *testing.T) {
 		"b": {Name: "b", HasRootYml: true, IncludedLayers: []string{"a"}},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for circular layer composition")
 	}
@@ -1068,7 +1071,7 @@ func TestValidateLayerIncludesMissing(t *testing.T) {
 		"desktop": {Name: "desktop", IncludedLayers: []string{"nonexistent"}},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for unknown layer in includes")
 	}
@@ -1117,7 +1120,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -1139,7 +1142,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for invalid port_relay port")
 	}
@@ -1164,7 +1167,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for port_relay port not in layer ports")
 	}
@@ -1186,7 +1189,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for port_relay without ports")
 	}
@@ -1211,7 +1214,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for duplicate port_relay port")
 	}
@@ -1238,7 +1241,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers)
+	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
 	if err == nil {
 		t.Error("expected error for port_relay without socat layer")
 	}

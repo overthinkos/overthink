@@ -140,7 +140,7 @@ func (c *VmCreateCmd) Run() error {
 	if loadedCfg, cfgErr := LoadConfig(dir); cfgErr == nil {
 		cfg = loadedCfg
 		calverTag := "latest"
-		if resolved, resolveErr := cfg.ResolveImage(c.Image, calverTag); resolveErr == nil {
+		if resolved, resolveErr := cfg.ResolveImage(c.Image, calverTag, dir); resolveErr == nil {
 			if resolved.Vm != nil {
 				ram = resolved.Vm.Ram
 				cpus = resolved.Vm.Cpus
@@ -793,7 +793,7 @@ func (c *VmSshCmd) Run() error {
 	// Resolve SSH port and user from images.yml if not explicitly overridden
 	dir, _ := os.Getwd()
 	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
-		if resolved, resolveErr := cfg.ResolveImage(c.Image, "latest"); resolveErr == nil {
+		if resolved, resolveErr := cfg.ResolveImage(c.Image, "latest", dir); resolveErr == nil {
 			if resolved.Vm != nil && resolved.Vm.SshPort != 0 && c.Port == 2222 {
 				c.Port = resolved.Vm.SshPort
 			}

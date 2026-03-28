@@ -12,6 +12,9 @@ defaults:
   merge:
     auto: true
     max_mb: 128
+  format_config:
+    distro: distro.yml
+    builder: builder.yml
 
 images:
 

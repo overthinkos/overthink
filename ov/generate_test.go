@@ -299,8 +299,8 @@ func TestGenerateRelayConf(t *testing.T) {
 }
 
 func TestRpmTemplateWithModules(t *testing.T) {
-	buildCfg := testBuildCfg()
-	rpm := buildCfg.Formats["rpm"]
+	fedora := testDistroDef("fedora")
+	rpm := fedora.Formats["rpm"]
 	ctx := &InstallContext{
 		CacheMounts: rpm.CacheMounts,
 		Packages:    []string{"valkey"},
@@ -326,8 +326,8 @@ func TestRpmTemplateWithModules(t *testing.T) {
 }
 
 func TestPacTemplateBasic(t *testing.T) {
-	buildCfg := testBuildCfg()
-	pac := buildCfg.Formats["pac"]
+	arch := testDistroDef("archlinux")
+	pac := arch.Formats["pac"]
 	ctx := &InstallContext{
 		CacheMounts: pac.CacheMounts,
 		Packages:    []string{"neovim", "ripgrep"},
@@ -375,8 +375,8 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 }
 
 func TestAurInstallTemplate(t *testing.T) {
-	buildCfg := testBuildCfg()
-	aur := buildCfg.Formats["aur"]
+	arch := testDistroDef("archlinux")
+	aur := arch.Formats["aur"]
 	ctx := &InstallContext{
 		CacheMounts: aur.CacheMounts,
 		StageName:   "my-tool-aur-build",
@@ -394,14 +394,14 @@ func TestAurInstallTemplate(t *testing.T) {
 }
 
 func TestWriteRootYmlPac(t *testing.T) {
-	g := &Generator{BuildConfig: testBuildCfg(), BuilderConfig: testBuilderCfg()}
+	g := &Generator{}
 	var b strings.Builder
 	layer := &Layer{
 		Name:         "test-layer",
 		HasRootYml:   true,
 		RootYmlTasks: []string{"all"},
 	}
-	img := &ResolvedImage{Pkg: "pac", BuildFormats: []string{"pac"}, Tags: []string{"all", "pac"}}
+	img := &ResolvedImage{Pkg: "pac", BuildFormats: []string{"pac"}, Tags: []string{"all", "pac"}, DistroDef: testDistroDef("archlinux"), BuilderConfig: testBuilderCfg()}
 	g.writeRootYml(&b, "test-layer", layer, img)
 	out := b.String()
 

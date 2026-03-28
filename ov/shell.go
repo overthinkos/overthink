@@ -118,7 +118,7 @@ func (c *ShellCmd) Run() error {
 	dir, _ := os.Getwd()
 	cfg, cfgErr := LoadConfig(dir)
 	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused")
+		resolved, err := cfg.ResolveImage(c.Image, "unused", dir)
 		if err != nil {
 			return err
 		}

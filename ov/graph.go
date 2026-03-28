@@ -210,7 +210,12 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 		if !ok {
 			continue
 		}
-		if layer.PixiManifest() != "" || layer.HasPackageJson || layer.HasCargoToml || layer.HasAur {
+		// Check file-based builder triggers
+		if layer.PixiManifest() != "" || layer.HasPackageJson || layer.HasCargoToml {
+			return true
+		}
+		// Check config-based builder triggers (any format with a matching builder)
+		if layer.HasFormatPackages() {
 			return true
 		}
 	}

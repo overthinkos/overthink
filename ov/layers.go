@@ -86,10 +86,6 @@ type LayerYAML struct {
 	Ports          []PortSpec        `yaml:"ports,omitempty"`
 	Route          *RouteYAML        `yaml:"route,omitempty"`
 	Service        string            `yaml:"service,omitempty"`
-	Rpm            *RpmConfig        `yaml:"rpm,omitempty"`
-	Deb            *DebConfig        `yaml:"deb,omitempty"`
-	Pac            *PacConfig        `yaml:"pac,omitempty"`
-	Aur            *AurConfig        `yaml:"aur,omitempty"`
 	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
 	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
@@ -100,33 +96,38 @@ type LayerYAML struct {
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 
-	// Dynamic tag-based package sections (distro/version specific).
-	// Populated by custom UnmarshalYAML for unknown keys.
-	TagSections map[string]*TagPkgConfig `yaml:"-"`
+	// Populated by custom UnmarshalYAML:
+	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
+	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
 }
 
-// layerYAMLKnownFields lists all known top-level keys in layer.yml.
-// Any key not in this set is treated as a tag-based package section.
-// Format names (rpm, deb, pac, aur) are included as known fields because
-// they have typed YAML structs. New formats defined in build.yml that don't
-// have typed structs are handled via TagSections → formatSections conversion.
-var layerYAMLKnownFields map[string]bool
+// layerYAMLKnownFields lists non-format top-level keys in layer.yml.
+// Unknown keys are routed to FormatSections (if matching a distro.yml format)
+// or TagSections (otherwise).
+var layerYAMLKnownFields = map[string]bool{
+	"description": true, "version": true, "status": true, "info": true,
+	"layers": true, "depends": true, "engine": true, "env": true,
+	"path_append": true, "ports": true, "route": true, "service": true,
+	"volumes": true, "aliases": true, "extract": true, "security": true,
+	"system_services": true, "libvirt": true, "hooks": true,
+	"port_relay": true, "secrets": true,
+}
 
-func init() {
-	layerYAMLKnownFields = map[string]bool{
-		"description": true, "version": true, "status": true, "info": true,
-		"layers": true, "depends": true, "engine": true, "env": true,
-		"path_append": true, "ports": true, "route": true, "service": true,
-		"volumes": true, "aliases": true, "extract": true, "security": true,
-		"system_services": true, "libvirt": true, "hooks": true,
-		"port_relay": true, "secrets": true,
+// layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
+// Must be populated by calling SetFormatNames before scanning layers.
+var layerYAMLFormatNames map[string]bool
+
+// SetFormatNames registers format names from a DistroConfig for layer YAML parsing.
+// Collects all format names across all distros (including inherited ones).
+// Must be called before ScanAllLayersWithConfig to ensure format sections
+// (e.g., rpm:, deb:) are correctly distinguished from tag sections.
+func SetFormatNames(dc *DistroConfig) {
+	layerYAMLFormatNames = make(map[string]bool)
+	if dc == nil {
+		return
 	}
-	// Add default format names from embedded build.yml
-	buildCfg, err := loadBuildConfig("")
-	if err == nil {
-		for name := range buildCfg.Formats {
-			layerYAMLKnownFields[name] = true
-		}
+	for _, name := range dc.AllFormatNames() {
+		layerYAMLFormatNames[name] = true
 	}
 }
 
@@ -153,18 +154,42 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 	}
 	*ly = LayerYAML(alias)
 
-	// Capture unknown keys as tag sections
+	// Capture unknown keys as format sections or tag sections.
+	// Keys matching distro.yml format names → FormatSections (parsed as raw maps).
+	// All other unknown keys → TagSections (parsed as {packages: [...]}).
 	if value.Kind == yaml.MappingNode {
+		ly.FormatSections = make(map[string]*PackageSection)
 		ly.TagSections = make(map[string]*TagPkgConfig)
 		for i := 0; i < len(value.Content)-1; i += 2 {
 			key := value.Content[i].Value
-			if !layerYAMLKnownFields[key] {
+			if layerYAMLKnownFields[key] {
+				continue // handled by standard YAML decoder
+			}
+
+			if layerYAMLFormatNames[key] {
+				// Format section: parse as raw map for template rendering
+				var raw map[string]interface{}
+				if err := value.Content[i+1].Decode(&raw); err != nil {
+					continue
+				}
+				section := &PackageSection{
+					FormatName: key,
+					Raw:        raw,
+				}
+				if pkgs, ok := raw["packages"]; ok {
+					section.Packages = toStringSlice(pkgs)
+				}
+				if len(section.Packages) > 0 {
+					ly.FormatSections[key] = section
+				}
+			} else {
+				// Tag section: parse as simple {packages: [...]}
 				var cfg TagPkgConfig
 				if err := value.Content[i+1].Decode(&cfg); err != nil {
-					continue // skip unparseable sections
+					continue
 				}
 				if len(cfg.Packages) == 0 {
-					continue // skip empty sections
+					continue
 				}
 				// Expand comma-separated keys (e.g., "debian,ubuntu")
 				parts := strings.Split(key, ",")
@@ -187,51 +212,9 @@ type RouteYAML struct {
 	Port int    `yaml:"port"`
 }
 
-// RpmConfig represents RPM package configuration in layer.yml
-type RpmConfig struct {
-	Packages []string  `yaml:"packages,omitempty"`
-	Copr     []string  `yaml:"copr,omitempty"`
-	Repos    []RpmRepo `yaml:"repos,omitempty"`
-	Modules  []string  `yaml:"modules,omitempty"` // "module:stream" format (e.g. "valkey:remi-9.0")
-	Exclude  []string  `yaml:"exclude,omitempty"`
-	Options  []string  `yaml:"options,omitempty"`
-}
-
-// RpmRepo represents an external RPM repository.
-// Exactly one of URL or RPM must be set.
-// URL: .repo file URL (added via dnf5 config-manager, enabled only during install)
-// RPM: release RPM URL (installed via dnf install, repos enabled by default)
-type RpmRepo struct {
-	Name   string `yaml:"name"`
-	URL    string `yaml:"url,omitempty"`
-	RPM    string `yaml:"rpm,omitempty"`
-	GPGKey string `yaml:"gpgkey,omitempty"`
-}
-
-// DebConfig represents Debian package configuration in layer.yml
-type DebConfig struct {
-	Packages []string `yaml:"packages,omitempty"`
-}
-
-// PacConfig represents Pacman package configuration in layer.yml
-type PacConfig struct {
-	Packages []string  `yaml:"packages,omitempty"` // official repo packages (pacman -S)
-	Repos    []PacRepo `yaml:"repos,omitempty"`    // custom pacman repos
-	Options  []string  `yaml:"options,omitempty"`  // extra pacman flags
-}
-
-// PacRepo represents a custom Pacman repository
-type PacRepo struct {
-	Name     string `yaml:"name"`
-	Server   string `yaml:"server"`
-	SigLevel string `yaml:"siglevel,omitempty"` // e.g. "Optional TrustAll"
-}
-
-// AurConfig represents AUR package configuration in layer.yml
-type AurConfig struct {
-	Packages []string `yaml:"packages,omitempty"` // AUR packages (yay -S, multi-stage build)
-	Options  []string `yaml:"options,omitempty"`  // extra yay flags
-}
+// Format-specific structs (RpmConfig, DebConfig, PacConfig, AurConfig) removed.
+// All format sections are now parsed dynamically as PackageSection via distro.yml format names.
+// See PackageSection type and LayerYAML.UnmarshalYAML for the generic parsing.
 
 // Layer represents a layer directory and its contents
 type Layer struct {
@@ -262,7 +245,6 @@ type Layer struct {
 	SystemServiceUnits []string // system-level systemd units to enable (e.g. "sshd")
 	HasLibvirt         bool
 	HasPortRelay       bool
-	HasAur             bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 	UserYmlTasks       []string // task names defined in user.yml
 
@@ -277,10 +259,6 @@ type Layer struct {
 	SubPathPrefix  string // e.g. "layers/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from layer.yml
-	rpmConfig      *RpmConfig
-	debConfig      *DebConfig
-	pacConfig      *PacConfig
-	aurConfig      *AurConfig
 	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
 	tagSections    map[string]*TagPkgConfig   // distro/version-specific package sections
 	ports       []string
@@ -406,34 +384,14 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.HasPorts = len(ly.Ports) > 0
 		layer.HasRoute = ly.Route != nil
 
-		// Pre-populate package config (typed + generic)
-		layer.rpmConfig = ly.Rpm
-		layer.debConfig = ly.Deb
-		layer.pacConfig = ly.Pac
-		layer.aurConfig = ly.Aur
+		// Package config: format sections and tag sections are populated by
+		// the custom UnmarshalYAML on LayerYAML. Format sections are detected
+		// by matching top-level keys against distro.yml format names.
+		layer.formatSections = ly.FormatSections
+		if layer.formatSections == nil {
+			layer.formatSections = make(map[string]*PackageSection)
+		}
 		layer.tagSections = ly.TagSections
-		if ly.Aur != nil && len(ly.Aur.Packages) > 0 {
-			layer.HasAur = true
-		}
-
-		// Build generic format sections from typed configs.
-		// Uses a typed-config map so no format name is hardcoded in the loop.
-		layer.formatSections = make(map[string]*PackageSection)
-		typedConfigs := map[string]interface{}{
-			"rpm": ly.Rpm,
-			"deb": ly.Deb,
-			"pac": ly.Pac,
-			"aur": ly.Aur,
-		}
-		for name, cfg := range typedConfigs {
-			if cfg == nil {
-				continue
-			}
-			section := typedToPackageSection(name, cfg)
-			if section != nil && len(section.Packages) > 0 {
-				layer.formatSections[name] = section
-			}
-		}
 
 		// Pre-populate ports cache
 		if layer.HasPorts {
@@ -517,11 +475,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 // HasInstallFiles returns true if the layer has at least one install file
 func (l *Layer) HasInstallFiles() bool {
-	hasRpm := l.rpmConfig != nil && len(l.rpmConfig.Packages) > 0
-	hasDeb := l.debConfig != nil && len(l.debConfig.Packages) > 0
-	hasPac := l.pacConfig != nil && len(l.pacConfig.Packages) > 0
-	hasAur := l.aurConfig != nil && len(l.aurConfig.Packages) > 0
-	return hasRpm || hasDeb || hasPac || hasAur || l.HasRootYml ||
+	return l.HasFormatPackages() || l.HasRootYml ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
 		l.HasPackageJson || l.HasCargoToml || l.HasUserYml
 }
@@ -549,26 +503,6 @@ func (l *Layer) PixiManifest() string {
 	return ""
 }
 
-// RpmConfig returns the RPM package config (pre-populated from layer.yml)
-func (l *Layer) RpmConfig() *RpmConfig {
-	return l.rpmConfig
-}
-
-// DebConfig returns the Debian package config (pre-populated from layer.yml)
-func (l *Layer) DebConfig() *DebConfig {
-	return l.debConfig
-}
-
-// PacConfig returns the Pacman package config (pre-populated from layer.yml)
-func (l *Layer) PacConfig() *PacConfig {
-	return l.pacConfig
-}
-
-// AurConfig returns the AUR package config (pre-populated from layer.yml)
-func (l *Layer) AurConfig() *AurConfig {
-	return l.aurConfig
-}
-
 // FormatSection returns the generic package section for a format, or nil.
 func (l *Layer) FormatSection(name string) *PackageSection {
 	if l.formatSections == nil {
@@ -593,32 +527,6 @@ func (l *Layer) TagSection(tag string) *TagPkgConfig {
 		return nil
 	}
 	return l.tagSections[tag]
-}
-
-// typedToPackageSection converts a typed config (RpmConfig, etc.) to a generic PackageSection.
-// Uses YAML marshal/unmarshal to get a clean map[string]interface{} representation.
-func typedToPackageSection(formatName string, cfg interface{}) *PackageSection {
-	// Marshal to YAML then unmarshal to map — generic conversion
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return nil
-	}
-	var raw map[string]interface{}
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return nil
-	}
-
-	section := &PackageSection{
-		FormatName: formatName,
-		Raw:        raw,
-	}
-
-	// Extract packages for quick access
-	if pkgs, ok := raw["packages"]; ok {
-		section.Packages = toStringSlice(pkgs)
-	}
-
-	return section
 }
 
 // EnvConfig returns the environment config (pre-populated from layer.yml)

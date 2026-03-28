@@ -54,7 +54,7 @@ func (c *VmBuildCmd) Run() error {
 
 	cfg, cfgErr := LoadConfig(dir)
 	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(imageName, calverTag)
+		resolved, err := cfg.ResolveImage(imageName, calverTag, dir)
 		if err != nil {
 			return err
 		}

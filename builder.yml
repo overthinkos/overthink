@@ -33,9 +33,9 @@ builders:
       USER {{.UID}}
       WORKDIR {{.Home}}
       {{- if .HasLockFile}}
-      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/pixi.lock pixi.lock
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/pixi.lock pixi.lock
       {{- end}}
-      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/{{.Manifest}} {{.Manifest}}
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
       {{.ManylinuxFix}}
       ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
       RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
@@ -55,7 +55,7 @@ builders:
       FROM {{.BuilderRef}} AS {{.StageName}}
       USER {{.UID}}
       WORKDIR {{.Home}}
-      COPY --chown={{.UID}}:{{.GID}} {{.LayerStage}}/package.json package.json
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
       RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
     copy_artifacts:
       - src: "{{.Home}}"

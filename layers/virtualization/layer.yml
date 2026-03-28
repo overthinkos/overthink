@@ -1,4 +1,6 @@
 rpm:
+  options:
+    - --allowerasing
   packages:
     - bindfs
     - genisoimage

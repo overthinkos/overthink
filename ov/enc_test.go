@@ -306,7 +306,7 @@ func TestValidateBindMountsValid(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "bind_mounts") {
@@ -328,7 +328,7 @@ func TestValidateBindMountsMissingName(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
@@ -350,7 +350,7 @@ func TestValidateBindMountsInvalidName(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for invalid name")
 	}
@@ -373,7 +373,7 @@ func TestValidateBindMountsDuplicateName(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for duplicate name")
 	}
@@ -395,7 +395,7 @@ func TestValidateBindMountsMissingPath(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for missing path")
 	}
@@ -417,7 +417,7 @@ func TestValidateBindMountsEncryptedWithHost(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for encrypted mount with host")
 	}
@@ -439,7 +439,7 @@ func TestValidateBindMountsPlainWithoutHost(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for plain mount without host")
 	}
@@ -470,7 +470,7 @@ func TestValidateBindMountsVolumeNameOverride(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	// Should NOT be a validation error (just a note on stderr)
 	if err != nil {
 		errStr := err.Error()

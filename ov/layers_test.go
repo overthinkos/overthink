@@ -36,8 +36,8 @@ func TestLayerPixi(t *testing.T) {
 	if !pixi.HasUserYml {
 		t.Error("pixi should have user.yml")
 	}
-	if pixi.RpmConfig() != nil {
-		t.Error("pixi should not have rpm config")
+	if pixi.FormatSection("rpm") != nil {
+		t.Error("pixi should not have rpm format section")
 	}
 	if pixi.HasPixiToml {
 		t.Error("pixi should not have pixi.toml")
@@ -77,29 +77,29 @@ func TestLayerNodejs(t *testing.T) {
 		t.Fatal("nodejs layer not found")
 	}
 
-	// Test package config from layer.yml
-	rpm := nodejs.RpmConfig()
+	// Test package config from layer.yml via generic FormatSection
+	rpm := nodejs.FormatSection("rpm")
 	if rpm == nil {
-		t.Fatal("nodejs should have rpm config")
+		t.Fatal("nodejs should have rpm format section")
 	}
 	if !reflect.DeepEqual(rpm.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("RpmConfig().Packages = %v, want [nodejs npm]", rpm.Packages)
+		t.Errorf("FormatSection(rpm).Packages = %v, want [nodejs npm]", rpm.Packages)
 	}
 
-	deb := nodejs.DebConfig()
+	deb := nodejs.FormatSection("deb")
 	if deb == nil {
-		t.Fatal("nodejs should have deb config")
+		t.Fatal("nodejs should have deb format section")
 	}
 	if !reflect.DeepEqual(deb.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("DebConfig().Packages = %v, want [nodejs npm]", deb.Packages)
+		t.Errorf("FormatSection(deb).Packages = %v, want [nodejs npm]", deb.Packages)
 	}
 
-	pac := nodejs.PacConfig()
+	pac := nodejs.FormatSection("pac")
 	if pac == nil {
-		t.Fatal("nodejs should have pac config")
+		t.Fatal("nodejs should have pac format section")
 	}
 	if !reflect.DeepEqual(pac.Packages, []string{"nodejs", "npm"}) {
-		t.Errorf("PacConfig().Packages = %v, want [nodejs npm]", pac.Packages)
+		t.Errorf("FormatSection(pac).Packages = %v, want [nodejs npm]", pac.Packages)
 	}
 }
 
@@ -114,39 +114,36 @@ func TestLayerPacTool(t *testing.T) {
 		t.Fatal("pac-tool layer not found")
 	}
 
-	// Test pac config
-	pac := pacTool.PacConfig()
+	// Test pac config via generic FormatSection
+	pac := pacTool.FormatSection("pac")
 	if pac == nil {
-		t.Fatal("pac-tool should have pac config")
+		t.Fatal("pac-tool should have pac format section")
 	}
 	if !reflect.DeepEqual(pac.Packages, []string{"neovim", "ripgrep"}) {
-		t.Errorf("PacConfig().Packages = %v, want [neovim ripgrep]", pac.Packages)
+		t.Errorf("FormatSection(pac).Packages = %v, want [neovim ripgrep]", pac.Packages)
 	}
-	if len(pac.Repos) != 1 || pac.Repos[0].Name != "custom-repo" {
-		t.Errorf("PacConfig().Repos = %v, want [{custom-repo ...}]", pac.Repos)
+	// Test raw fields accessible for templates
+	repos := toMapSlice(pac.Raw["repos"])
+	if len(repos) != 1 {
+		t.Errorf("pac repos count = %d, want 1", len(repos))
 	}
-	if pac.Repos[0].Server != "https://example.com/repo/$arch" {
-		t.Errorf("PacConfig().Repos[0].Server = %v, want https://example.com/repo/$arch", pac.Repos[0].Server)
-	}
-	if pac.Repos[0].SigLevel != "Optional TrustAll" {
-		t.Errorf("PacConfig().Repos[0].SigLevel = %v, want 'Optional TrustAll'", pac.Repos[0].SigLevel)
-	}
-	if !reflect.DeepEqual(pac.Options, []string{"--needed"}) {
-		t.Errorf("PacConfig().Options = %v, want [--needed]", pac.Options)
+	options := toStringSlice(pac.Raw["options"])
+	if !reflect.DeepEqual(options, []string{"--needed"}) {
+		t.Errorf("pac options = %v, want [--needed]", options)
 	}
 
-	// Test aur config
-	aur := pacTool.AurConfig()
+	// Test aur config via generic FormatSection
+	aur := pacTool.FormatSection("aur")
 	if aur == nil {
-		t.Fatal("pac-tool should have aur config")
+		t.Fatal("pac-tool should have aur format section")
 	}
 	if !reflect.DeepEqual(aur.Packages, []string{"yay-bin", "neovim-nightly-bin"}) {
-		t.Errorf("AurConfig().Packages = %v, want [yay-bin neovim-nightly-bin]", aur.Packages)
+		t.Errorf("FormatSection(aur).Packages = %v, want [yay-bin neovim-nightly-bin]", aur.Packages)
 	}
 
-	// Test HasAur flag
-	if !pacTool.HasAur {
-		t.Error("pac-tool should have HasAur=true")
+	// Test HasFormatPackages (replaces HasAur)
+	if !pacTool.HasFormatPackages() {
+		t.Error("pac-tool should have format packages")
 	}
 
 	// Test HasInstallFiles

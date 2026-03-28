@@ -403,7 +403,7 @@ func TestResolveTunnelConfigCloudflarePortMap(t *testing.T) {
 
 func TestConfigResolveTunnel(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{},
+		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"myapp": {
 				Base:   "fedora:43",
@@ -415,7 +415,7 @@ func TestConfigResolveTunnel(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test")
+	resolved, err := cfg.ResolveImage("myapp", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -433,6 +433,7 @@ func TestConfigResolveTunnel(t *testing.T) {
 func TestConfigResolveTunnelFromDefaults(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
+			Build:  BuildFormats{"rpm"},
 			Tunnel: &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}},
 		},
 		Images: map[string]ImageConfig{
@@ -444,7 +445,7 @@ func TestConfigResolveTunnelFromDefaults(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test")
+	resolved, err := cfg.ResolveImage("myapp", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -458,6 +459,7 @@ func TestConfigResolveTunnelFromDefaults(t *testing.T) {
 
 func TestConfigResolveTunnelNil(t *testing.T) {
 	cfg := &Config{
+		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
 		Images: map[string]ImageConfig{
 			"myapp": {
 				Base:   "fedora:43",
@@ -466,7 +468,7 @@ func TestConfigResolveTunnelNil(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test")
+	resolved, err := cfg.ResolveImage("myapp", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -488,7 +490,7 @@ func TestValidateTunnelInvalidProvider(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for invalid provider")
 	}
@@ -508,7 +510,7 @@ func TestValidateTunnelMustSpecifyScope(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for tunnel with no public/private scope")
 	}
@@ -529,7 +531,7 @@ func TestValidateTunnelBothAllConflict(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for both public: all and private: all")
 	}
@@ -551,7 +553,7 @@ func TestValidateTunnelCloudflarePrivateError(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for cloudflare with private ports")
 	}
@@ -572,7 +574,7 @@ func TestValidateTunnelCloudflareMissingDNS(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for missing dns")
 	}
@@ -594,7 +596,7 @@ func TestValidateTunnelCloudflareInvalidTunnelName(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for invalid tunnel name")
 	}
@@ -615,7 +617,7 @@ func TestValidateTunnelValidTailscale(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	// Should have no tunnel errors (there may be other validation errors like missing layers)
 	if err != nil {
 		errStr := err.Error()
@@ -638,7 +640,7 @@ func TestValidateTunnelValidCloudflare(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	// Should have no tunnel errors
 	if err != nil {
 		errStr := err.Error()
@@ -660,7 +662,7 @@ func TestValidateTunnelTailscaleInvalidPublicPort(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testBuildCfg(), testBuilderCfg())
+	err := Validate(cfg, layers, "")
 	if err == nil {
 		t.Fatal("expected error for invalid public port")
 	}
@@ -757,7 +759,7 @@ func TestValidateTunnelPublicPortConflict(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			layers := map[string]*Layer{}
-			err := Validate(tt.cfg, layers, testBuildCfg(), testBuilderCfg())
+			err := Validate(tt.cfg, layers, "")
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected validation error")

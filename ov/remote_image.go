@@ -52,7 +52,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 
 	// Resolve the image
 	calverTag := ComputeCalVer()
-	resolved, err := cfg.ResolveImage(parsed.Name, calverTag)
+	resolved, err := cfg.ResolveImage(parsed.Name, calverTag, cachePath)
 	if err != nil {
 		return nil, fmt.Errorf("resolving image %q in %s: %w", parsed.Name, parsed.RepoPath, err)
 	}

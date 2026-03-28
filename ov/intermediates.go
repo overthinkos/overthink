@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -415,10 +416,23 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Builders:       BuildersMap(cfg.Defaults.Builders),
 		Auto:           true,
 	}
+	// Inherit build formats from parent if defaults is empty
 	if len(img.BuildFormats) == 0 {
-		img.BuildFormats = []string{DefaultBuildFormat}
+		if parent, ok := result[parentName]; ok {
+			img.BuildFormats = parent.BuildFormats
+		}
+	}
+	if len(img.BuildFormats) == 0 {
+		fmt.Fprintf(os.Stderr, "Warning: auto-intermediate %s has no build formats (set build: in defaults)\n", name)
+		return
 	}
 	img.Pkg = img.BuildFormats[0]
+	// Inherit format configs from parent image (auto-intermediates share the same configs)
+	if parent, ok := result[parentName]; ok {
+		img.DistroConfig = parent.DistroConfig
+		img.DistroDef = parent.DistroDef
+		img.BuilderConfig = parent.BuilderConfig
+	}
 	// Build unified Tags: ["all"] + Distro + BuildFormats
 	img.Tags = append([]string{"all"}, img.Distro...)
 	img.Tags = append(img.Tags, img.BuildFormats...)

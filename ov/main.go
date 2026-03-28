@@ -78,17 +78,21 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
+	// Load default format configs for SetFormatNames before layer scanning
+	if cfg.Defaults.FormatConfig != nil {
+		distroCfg, _, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+		if err != nil {
+			return fmt.Errorf("loading default format configs: %w", err)
+		}
+		SetFormatNames(distroCfg)
+	}
+
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	_, buildCfg, builderCfg, err := LoadFormatConfigs(dir)
-	if err != nil {
-		return err
-	}
-
-	return Validate(cfg, layers, buildCfg, builderCfg)
+	return Validate(cfg, layers, dir)
 }
 
 // InspectCmd prints resolved config for an image
@@ -114,7 +118,7 @@ func (c *InspectCmd) Run() error {
 
 func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	calverTag := ComputeCalVer()
-	resolved, err := cfg.ResolveImage(c.Image, calverTag)
+	resolved, err := cfg.ResolveImage(c.Image, calverTag, dir)
 	if err != nil {
 		return err
 	}
@@ -418,7 +422,7 @@ func (c *ListTargetsCmd) Run() error {
 	}
 
 	calverTag := ComputeCalVer()
-	images, err := cfg.ResolveAllImages(calverTag)
+	images, err := cfg.ResolveAllImages(calverTag, dir)
 	if err != nil {
 		return err
 	}

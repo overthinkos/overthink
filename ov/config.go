@@ -106,6 +106,13 @@ func (m BuildersMap) AllBuilders() []string {
 	return builders
 }
 
+// FormatConfigRefs holds optional references to format config files (distro.yml, builder.yml).
+// Each ref can be a local path relative to the project root or a remote @host/org/repo/path:version ref.
+type FormatConfigRefs struct {
+	Distro  string `yaml:"distro,omitempty"`
+	Builder string `yaml:"builder,omitempty"`
+}
+
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
 	Enabled   *bool         `yaml:"enabled,omitempty"`
@@ -137,8 +144,9 @@ type ImageConfig struct {
 	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
 	Network    string            `yaml:"network,omitempty"`      // container network mode (e.g. "host", "none", "slirp4netns")
 	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
-	Vm         *VmConfig         `yaml:"vm,omitempty"`           // virtual machine settings (bootc images)
-	Libvirt    []string          `yaml:"libvirt,omitempty"`      // raw libvirt XML snippets for VM configuration
+	Vm           *VmConfig         `yaml:"vm,omitempty"`            // virtual machine settings (bootc images)
+	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
+	FormatConfig *FormatConfigRefs `yaml:"format_config,omitempty"` // refs to distro.yml, builder.yml
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -204,6 +212,11 @@ type ResolvedImage struct {
 
 	// Per-image run engine override (resolved from image config and layer requirements)
 	Engine string `json:"engine,omitempty"`
+
+	// Format configs (resolved per-image from format_config refs)
+	DistroConfig  *DistroConfig  `json:"-"` // from distro.yml
+	DistroDef     *DistroDef     `json:"-"` // resolved distro definition (cached)
+	BuilderConfig *BuilderConfig `json:"-"` // from builder.yml
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -302,7 +315,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 }
 
 // ResolveImage resolves a single image's configuration by applying defaults
-func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, error) {
+func (c *Config) ResolveImage(name string, calverTag string, dir string) (*ResolvedImage, error) {
 	img, ok := c.Images[name]
 	if !ok {
 		return nil, fmt.Errorf("image %q not found in images.yml", name)
@@ -379,7 +392,7 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Distro = c.Defaults.Distro
 	}
 
-	// Resolve build: image -> base image (if internal) -> defaults -> ["rpm"]
+	// Resolve build: image -> base image (if internal) -> defaults (required)
 	buildFmts := []string(img.Build)
 	if len(buildFmts) == 0 && !resolved.IsExternalBase {
 		if baseImg, ok := c.Images[resolved.Base]; ok {
@@ -390,7 +403,7 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		buildFmts = []string(c.Defaults.Build)
 	}
 	if len(buildFmts) == 0 {
-		buildFmts = []string{DefaultBuildFormat}
+		return nil, fmt.Errorf("image %s: build: field required (set in image, base, or defaults)", name)
 	}
 	resolved.BuildFormats = buildFmts
 	resolved.Pkg = buildFmts[0] // primary format for cache mounts
@@ -509,17 +522,34 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.FullTag = fmt.Sprintf("%s:%s", name, resolved.Tag)
 	}
 
+	// Resolve format configs (per-image → defaults)
+	// Only load if format_config refs exist (build mode). Runtime mode skips this.
+	if img.FormatConfig != nil || c.Defaults.FormatConfig != nil {
+		distroCfg, builderCfg, err := LoadFormatConfigsForImage(
+			img.FormatConfig, c.Defaults.FormatConfig, dir,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("image %s: %w", name, err)
+		}
+		resolved.DistroConfig = distroCfg
+		resolved.BuilderConfig = builderCfg
+		// Cache resolved distro definition for quick access to formats
+		if distroCfg != nil {
+			resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
+		}
+	}
+
 	return resolved, nil
 }
 
 // ResolveAllImages resolves all enabled images in the config
-func (c *Config) ResolveAllImages(calverTag string) (map[string]*ResolvedImage, error) {
+func (c *Config) ResolveAllImages(calverTag string, dir string) (map[string]*ResolvedImage, error) {
 	resolved := make(map[string]*ResolvedImage)
 	for name, img := range c.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		ri, err := c.ResolveImage(name, calverTag)
+		ri, err := c.ResolveImage(name, calverTag, dir)
 		if err != nil {
 			return nil, err
 		}

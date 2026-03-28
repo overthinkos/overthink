@@ -78,7 +78,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	dir, _ := os.Getwd()
 	cfg, cfgErr := LoadConfig(dir)
 	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused")
+		resolved, err := cfg.ResolveImage(c.Image, "unused", dir)
 		if err != nil {
 			return err
 		}
@@ -219,7 +219,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Start tunnel if configured
 	if cfgErr == nil {
-		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused")
+		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused", dir)
 		if resolveErr == nil && resolved.Tunnel != nil {
 			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 			if scanErr == nil {
@@ -590,7 +590,7 @@ func stopTunnelForImage(imageName string) {
 	if err == nil {
 		cfg, cfgErr := LoadConfig(dir)
 		if cfgErr == nil {
-			resolved, resolveErr := cfg.ResolveImage(imageName, "unused")
+			resolved, resolveErr := cfg.ResolveImage(imageName, "unused", dir)
 			if resolveErr == nil && resolved.Tunnel != nil {
 				layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
 				if scanErr == nil {

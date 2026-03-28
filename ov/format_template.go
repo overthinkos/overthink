@@ -25,19 +25,16 @@ var templateFuncs = template.FuncMap{
 	},
 
 	// cacheMountsOwned renders cache mounts with uid/gid ownership.
+	// Returns the mount flags with a trailing line continuation for chaining.
 	"cacheMountsOwned": func(mounts []CacheMountDef, uid, gid int) string {
 		if len(mounts) == 0 {
 			return ""
 		}
 		var parts []string
 		for _, m := range mounts {
-			sharing := m.Sharing
-			if sharing == "" {
-				sharing = "locked"
-			}
 			parts = append(parts, fmt.Sprintf("--mount=type=cache,dst=%s,uid=%d,gid=%d", m.Dst, uid, gid))
 		}
-		return strings.Join(parts, " \\\n    ")
+		return strings.Join(parts, " \\\n    ") + " \\\n    "
 	},
 
 	// quote returns a shell-safe quoted string.
@@ -110,6 +107,7 @@ type BuildStageContext struct {
 	BuilderRef   string
 	StageName    string
 	LayerStage   string // scratch stage name for COPY --from
+	CopySrc      string // build context path for layer files (e.g., "layers/python")
 	UID          int
 	GID          int
 	Home         string

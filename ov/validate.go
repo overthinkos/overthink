@@ -33,11 +33,26 @@ func (e *ValidationError) HasErrors() bool {
 }
 
 // Validate validates the configuration and layers
-func Validate(cfg *Config, layers map[string]*Layer, buildCfg *BuildConfig, builderCfg *BuilderConfig) error {
+func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	errs := &ValidationError{}
 
+	// Load default format configs for global validation
+	var defaultDistroCfg *DistroConfig
+	var defaultBuilderCfg *BuilderConfig
+	if cfg.Defaults.FormatConfig != nil {
+		dc, blc, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+		if err != nil {
+			errs.Add("loading default format configs: %v", err)
+		} else {
+			defaultDistroCfg = dc
+			defaultBuilderCfg = blc
+		}
+	}
+
 	// Validate build and distro values
-	validateBuildAndDistro(cfg, buildCfg, errs)
+	if defaultDistroCfg != nil {
+		validateBuildAndDistro(cfg, defaultDistroCfg, errs)
+	}
 
 	// Validate layers referenced in images
 	validateLayerReferences(cfg, layers, errs)
@@ -55,7 +70,7 @@ func Validate(cfg *Config, layers map[string]*Layer, buildCfg *BuildConfig, buil
 	validateBaseReferences(cfg, errs)
 
 	// Validate no circular dependencies in images
-	validateImageDAG(cfg, layers, errs)
+	validateImageDAG(cfg, layers, dir, errs)
 
 	// Validate ports
 	validatePorts(cfg, layers, errs)
@@ -73,7 +88,9 @@ func Validate(cfg *Config, layers map[string]*Layer, buildCfg *BuildConfig, buil
 	validateAliases(cfg, layers, errs)
 
 	// Validate builders and builds
-	validateBuilders(cfg, layers, builderCfg, errs)
+	if defaultBuilderCfg != nil {
+		validateBuilders(cfg, layers, defaultBuilderCfg, errs)
+	}
 
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
@@ -124,13 +141,13 @@ func Validate(cfg *Config, layers map[string]*Layer, buildCfg *BuildConfig, buil
 }
 
 // validateBuildAndDistro validates build: and distro: entries.
-// build: entries are checked against build.yml format definitions.
+// build: entries are checked against distro.yml format definitions.
 // distro: is free-form (any string, including distro:version).
-func validateBuildAndDistro(cfg *Config, buildCfg *BuildConfig, errs *ValidationError) {
+func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *ValidationError) {
 	validateBuild := func(context string, build BuildFormats) {
 		for _, b := range build {
-			if !buildCfg.ValidFormat(b) {
-				errs.Add("%s: build entry %q is not valid (known formats: %s)", context, b, strings.Join(buildCfg.FormatNames(), ", "))
+			if !distroCfg.ValidFormat(b) {
+				errs.Add("%s: build entry %q is not valid (known formats: %s)", context, b, strings.Join(distroCfg.AllFormatNames(), ", "))
 			}
 		}
 		// Check for duplicates
@@ -330,47 +347,32 @@ func validateEnvFiles(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validatePkgConfig validates rpm/deb/pac/aur config in layer.yml
+// validatePkgConfig validates format-specific config in layer.yml.
+// Uses generic FormatSection access — no format-specific code.
 func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		rpm := layer.RpmConfig()
-		if rpm != nil {
-			// copr without packages is an error
-			if len(rpm.Copr) > 0 && len(rpm.Packages) == 0 {
-				errs.Add("layer %q layer.yml: rpm.copr requires rpm.packages", name)
+		for formatName, section := range layer.formatSections {
+			if section.Raw == nil {
+				continue
 			}
-			// url-type repos without packages is an error
-			for _, repo := range rpm.Repos {
-				if repo.URL != "" && len(rpm.Packages) == 0 {
-					errs.Add("layer %q layer.yml: rpm.repos requires rpm.packages", name)
-					break
+			// Validate repos entries have required fields
+			if repos := toMapSlice(section.Raw["repos"]); len(repos) > 0 {
+				if len(section.Packages) == 0 {
+					errs.Add("layer %q layer.yml: %s.repos requires %s.packages", name, formatName, formatName)
 				}
-			}
-			// modules without packages is an error
-			if len(rpm.Modules) > 0 && len(rpm.Packages) == 0 {
-				errs.Add("layer %q layer.yml: rpm.modules requires rpm.packages", name)
-			}
-			// repos: exactly one of url or rpm must be set
-			for _, repo := range rpm.Repos {
-				if repo.URL == "" && repo.RPM == "" {
-					errs.Add("layer %q layer.yml: rpm.repos entry %q requires url or rpm", name, repo.Name)
-				}
-				if repo.URL != "" && repo.RPM != "" {
-					errs.Add("layer %q layer.yml: rpm.repos entry %q has both url and rpm (pick one)", name, repo.Name)
+				for _, repo := range repos {
+					repoName := fmt.Sprint(repo["name"])
+					if repoName == "" || repoName == "<nil>" {
+						errs.Add("layer %q layer.yml: %s.repos entry requires name", name, formatName)
+					}
 				}
 			}
-		}
-
-		// Validate pac config
-		pac := layer.PacConfig()
-		if pac != nil {
-			for _, repo := range pac.Repos {
-				if repo.Name == "" {
-					errs.Add("layer %q layer.yml: pac.repos entry requires name", name)
-				}
-				if repo.Server == "" {
-					errs.Add("layer %q layer.yml: pac.repos entry %q requires server", name, repo.Name)
-				}
+			// Validate copr/modules require packages
+			if copr := toStringSlice(section.Raw["copr"]); len(copr) > 0 && len(section.Packages) == 0 {
+				errs.Add("layer %q layer.yml: %s.copr requires %s.packages", name, formatName, formatName)
+			}
+			if modules := toStringSlice(section.Raw["modules"]); len(modules) > 0 && len(section.Packages) == 0 {
+				errs.Add("layer %q layer.yml: %s.modules requires %s.packages", name, formatName, formatName)
 			}
 		}
 	}
@@ -385,20 +387,31 @@ func validateBaseReferences(cfg *Config, errs *ValidationError) {
 }
 
 // validateImageDAG checks for circular image dependencies
-func validateImageDAG(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, errs *ValidationError) {
 	calverTag := "test"
-	images, err := cfg.ResolveAllImages(calverTag)
-	if err != nil {
-		errs.Add("resolving images: %v", err)
+	// Try to resolve images — some fields may be missing during basic validation
+	images := make(map[string]*ResolvedImage)
+	for name, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+		ri, err := cfg.ResolveImage(name, calverTag, dir)
+		if err != nil {
+			// Skip images that can't resolve (e.g., missing build: field)
+			continue
+		}
+		images[name] = ri
+	}
+	if len(images) == 0 {
 		return
 	}
 
-	_, err = ResolveImageOrder(images, layers)
-	if err != nil {
-		if cycleErr, ok := err.(*CycleError); ok {
+	_, orderErr := ResolveImageOrder(images, layers)
+	if orderErr != nil {
+		if cycleErr, ok := orderErr.(*CycleError); ok {
 			errs.Add("image dependency cycle: %s", strings.Join(cycleErr.Cycle, " -> "))
 		} else {
-			errs.Add("image DAG error: %v", err)
+			errs.Add("image DAG error: %v", orderErr)
 		}
 	}
 }
@@ -1100,17 +1113,7 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 			}
 		}
 		// Warn if layer has system_services but no system packages
-		hasSystemPkgs := false
-		if rpm := layer.RpmConfig(); rpm != nil && len(rpm.Packages) > 0 {
-			hasSystemPkgs = true
-		}
-		if deb := layer.DebConfig(); deb != nil && len(deb.Packages) > 0 {
-			hasSystemPkgs = true
-		}
-		if pac := layer.PacConfig(); pac != nil && len(pac.Packages) > 0 {
-			hasSystemPkgs = true
-		}
-		if !hasSystemPkgs {
+		if !layer.HasFormatPackages() {
 			errs.Add("layer %q: system_services requires system packages that provide those units", name)
 		}
 	}

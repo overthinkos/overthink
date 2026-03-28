@@ -116,7 +116,7 @@ func TestResolveImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, tt.calverTag)
+			resolved, err := cfg.ResolveImage(tt.imageName, tt.calverTag, "")
 			if err != nil {
 				t.Fatalf("ResolveImage() error = %v", err)
 			}
@@ -149,7 +149,7 @@ func TestResolveImageNotFound(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	_, err = cfg.ResolveImage("nonexistent", "2026.45.1415")
+	_, err = cfg.ResolveImage("nonexistent", "2026.45.1415", "")
 	if err == nil {
 		t.Error("ResolveImage() expected error for nonexistent image")
 	}
@@ -200,7 +200,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 
 	// Image with no explicit builders inherits defaults.builders
-	resolved, err := cfg.ResolveImage("uses-default", "test")
+	resolved, err := cfg.ResolveImage("uses-default", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -209,7 +209,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 
 	// Image with explicit builders overrides defaults per-type
-	resolved, err = cfg.ResolveImage("uses-custom", "test")
+	resolved, err = cfg.ResolveImage("uses-custom", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -228,7 +228,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"app": {Layers: []string{}},
 		},
 	}
-	resolved, err = cfg2.ResolveImage("app", "test")
+	resolved, err = cfg2.ResolveImage("app", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -247,7 +247,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"my-builder": {Layers: []string{}},
 		},
 	}
-	resolved, err = cfg3.ResolveImage("my-builder", "test")
+	resolved, err = cfg3.ResolveImage("my-builder", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -264,7 +264,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"child-img":   {Base: "base-img", Layers: []string{}},
 		},
 	}
-	resolved, err = cfg4.ResolveImage("child-img", "test")
+	resolved, err = cfg4.ResolveImage("child-img", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -289,7 +289,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image with explicit ports
-	resolved, err := cfg.ResolveImage("with-ports", "test")
+	resolved, err := cfg.ResolveImage("with-ports", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -298,7 +298,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image inheriting default ports
-	resolved, err = cfg.ResolveImage("inherit-ports", "test")
+	resolved, err = cfg.ResolveImage("inherit-ports", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -307,7 +307,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
-	resolved, err = cfg.ResolveImage("no-ports", "test")
+	resolved, err = cfg.ResolveImage("no-ports", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -324,7 +324,7 @@ func TestFullTag(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	resolved, err := cfg.ResolveImage("base", "2026.45.1415")
+	resolved, err := cfg.ResolveImage("base", "2026.45.1415", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -358,7 +358,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// disabled-image is excluded from ResolveAllImages()
-	all, err := cfg.ResolveAllImages("test")
+	all, err := cfg.ResolveAllImages("test", "")
 	if err != nil {
 		t.Fatalf("ResolveAllImages() error = %v", err)
 	}
@@ -367,7 +367,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// ResolveImage returns error for disabled image
-	_, err = cfg.ResolveImage("disabled-image", "test")
+	_, err = cfg.ResolveImage("disabled-image", "test", "")
 	if err == nil {
 		t.Error("ResolveImage() should return error for disabled image")
 	}
@@ -376,7 +376,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// Enabled images still work
-	_, err = cfg.ResolveImage("base", "test")
+	_, err = cfg.ResolveImage("base", "test", "")
 	if err != nil {
 		t.Errorf("ResolveImage() unexpected error for enabled image: %v", err)
 	}

@@ -2,19 +2,25 @@ package main
 
 import (
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
-func TestLoadEmbeddedDistroConfig(t *testing.T) {
-	cfg, err := loadDistroConfig("/nonexistent")
-	if err != nil {
-		t.Fatalf("loading embedded distro config: %v", err)
+func TestLoadDistroConfigFromFile(t *testing.T) {
+	refs := &FormatConfigRefs{
+		Distro:  "testdata/defaults/distro.yml",
+		Builder: "testdata/defaults/builder.yml",
 	}
-	if cfg == nil || len(cfg.Distros) == 0 {
+	distroCfg, _, err := LoadFormatConfigsForImage(nil, refs, ".")
+	if err != nil {
+		t.Fatalf("loading distro config: %v", err)
+	}
+	if distroCfg == nil || len(distroCfg.Distros) == 0 {
 		t.Fatal("expected non-empty distro config")
 	}
 
 	// Check fedora exists
-	fedora, ok := cfg.Distros["fedora"]
+	fedora, ok := distroCfg.Distros["fedora"]
 	if !ok {
 		t.Fatal("expected fedora distro definition")
 	}
@@ -28,57 +34,11 @@ func TestLoadEmbeddedDistroConfig(t *testing.T) {
 		t.Errorf("fedora cache mount = %q, want /var/cache/libdnf5", fedora.Bootstrap.CacheMounts[0].Dst)
 	}
 
-	// Check ubuntu inherits debian
-	ubuntu, ok := cfg.Distros["ubuntu"]
-	if !ok {
-		t.Fatal("expected ubuntu distro definition")
+	// Check fedora has rpm format
+	if fedora.Formats == nil || fedora.Formats["rpm"] == nil {
+		t.Fatal("expected fedora to have rpm format")
 	}
-	if ubuntu.Inherits != "debian" {
-		t.Errorf("ubuntu.inherits = %q, want debian", ubuntu.Inherits)
-	}
-
-	// Test ResolveDistro
-	resolved := cfg.ResolveDistro([]string{"fedora:43", "fedora"})
-	if resolved == nil {
-		t.Fatal("ResolveDistro returned nil for fedora:43")
-	}
-	if resolved.Bootstrap.InstallCmd != fedora.Bootstrap.InstallCmd {
-		t.Error("ResolveDistro did not resolve to fedora")
-	}
-
-	// Test inherits resolution
-	resolvedUbuntu := cfg.ResolveDistro([]string{"ubuntu"})
-	if resolvedUbuntu == nil {
-		t.Fatal("ResolveDistro returned nil for ubuntu")
-	}
-	if resolvedUbuntu.Bootstrap.InstallCmd == "" {
-		t.Error("ubuntu should inherit debian's bootstrap install_cmd")
-	}
-}
-
-func TestLoadEmbeddedBuildConfig(t *testing.T) {
-	cfg, err := loadBuildConfig("/nonexistent")
-	if err != nil {
-		t.Fatalf("loading embedded build config: %v", err)
-	}
-	if cfg == nil || len(cfg.Formats) == 0 {
-		t.Fatal("expected non-empty build config")
-	}
-
-	// Check all four formats exist
-	for _, name := range []string{"rpm", "deb", "pac", "aur"} {
-		if !cfg.ValidFormat(name) {
-			t.Errorf("expected format %q to be valid", name)
-		}
-	}
-
-	// Check unknown format is invalid
-	if cfg.ValidFormat("apk") {
-		t.Error("apk should not be valid in default config")
-	}
-
-	// Check rpm has install template
-	rpm := cfg.Formats["rpm"]
+	rpm := fedora.Formats["rpm"]
 	if rpm.InstallTemplate == "" {
 		t.Error("rpm install_template is empty")
 	}
@@ -89,54 +49,52 @@ func TestLoadEmbeddedBuildConfig(t *testing.T) {
 		t.Error("rpm section_fields is empty")
 	}
 
-	// Check aur format exists and has install template
-	aur := cfg.Formats["aur"]
-	if aur == nil {
-		t.Fatal("expected aur format definition")
+	// Check ubuntu inherits debian (including formats)
+	ubuntu, ok := distroCfg.Distros["ubuntu"]
+	if !ok {
+		t.Fatal("expected ubuntu distro definition")
 	}
-	if aur.InstallTemplate == "" {
-		t.Error("aur install_template is empty")
+	if ubuntu.Inherits != "debian" {
+		t.Errorf("ubuntu.inherits = %q, want debian", ubuntu.Inherits)
+	}
+
+	// Test ResolveDistro
+	resolved := distroCfg.ResolveDistro([]string{"fedora:43", "fedora"})
+	if resolved == nil {
+		t.Fatal("ResolveDistro returned nil for fedora:43")
+	}
+	if resolved.Bootstrap.InstallCmd != fedora.Bootstrap.InstallCmd {
+		t.Error("ResolveDistro did not resolve to fedora")
+	}
+
+	// Test inherits resolution includes formats
+	resolvedUbuntu := distroCfg.ResolveDistro([]string{"ubuntu"})
+	if resolvedUbuntu == nil {
+		t.Fatal("ResolveDistro returned nil for ubuntu")
+	}
+	if resolvedUbuntu.Bootstrap.InstallCmd == "" {
+		t.Error("ubuntu should inherit debian's bootstrap install_cmd")
+	}
+	if resolvedUbuntu.Formats == nil || resolvedUbuntu.Formats["deb"] == nil {
+		t.Error("ubuntu should inherit debian's deb format")
+	}
+
+	// Check archlinux has both pac and aur formats
+	archResolved := distroCfg.ResolveDistro([]string{"archlinux"})
+	if archResolved == nil {
+		t.Fatal("ResolveDistro returned nil for archlinux")
+	}
+	if archResolved.Formats["pac"] == nil {
+		t.Error("archlinux should have pac format")
+	}
+	if archResolved.Formats["aur"] == nil {
+		t.Error("archlinux should have aur format")
 	}
 }
 
-func TestLoadEmbeddedBuilderConfig(t *testing.T) {
-	cfg, err := loadBuilderConfig("/nonexistent")
-	if err != nil {
-		t.Fatalf("loading embedded builder config: %v", err)
-	}
-	if cfg == nil || len(cfg.Builders) == 0 {
-		t.Fatal("expected non-empty builder config")
-	}
-
-	// Check all four builders exist (pixi, npm, cargo, aur)
-	for _, name := range []string{"pixi", "npm", "cargo", "aur"} {
-		if !cfg.ValidBuilderType(name) {
-			t.Errorf("expected builder %q to be valid", name)
-		}
-	}
-
-	// Check pixi detect files
-	pixi := cfg.Builders["pixi"]
-	if len(pixi.DetectFiles) == 0 {
-		t.Error("pixi detect_files is empty")
-	}
-	if pixi.StageTemplate == "" {
-		t.Error("pixi stage_template is empty")
-	}
-
-	// Check cargo is inline
-	cargo := cfg.Builders["cargo"]
-	if !cargo.Inline {
-		t.Error("cargo should be inline")
-	}
-	if !cargo.RequiresSrcDir {
-		t.Error("cargo should require src dir")
-	}
-}
-
-func TestFormatNames(t *testing.T) {
-	cfg, _ := loadBuildConfig("/nonexistent")
-	names := cfg.FormatNames()
+func TestAllFormatNames(t *testing.T) {
+	dc := testDistroConfig()
+	names := dc.AllFormatNames()
 	if len(names) != 4 {
 		t.Errorf("expected 4 format names, got %d: %v", len(names), names)
 	}
@@ -146,27 +104,94 @@ func TestFormatNames(t *testing.T) {
 	}
 }
 
+func TestValidFormat(t *testing.T) {
+	dc := testDistroConfig()
+	for _, name := range []string{"rpm", "deb", "pac", "aur"} {
+		if !dc.ValidFormat(name) {
+			t.Errorf("expected format %q to be valid", name)
+		}
+	}
+	if dc.ValidFormat("apk") {
+		t.Error("apk should not be valid in default config")
+	}
+}
+
+func TestLoadBuilderConfigFromFile(t *testing.T) {
+	refs := &FormatConfigRefs{
+		Distro:  "testdata/defaults/distro.yml",
+		Builder: "testdata/defaults/builder.yml",
+	}
+	_, builderCfg, err := LoadFormatConfigsForImage(nil, refs, ".")
+	if err != nil {
+		t.Fatalf("loading builder config: %v", err)
+	}
+	if builderCfg == nil || len(builderCfg.Builders) == 0 {
+		t.Fatal("expected non-empty builder config")
+	}
+
+	// Check all four builders exist (pixi, npm, cargo, aur)
+	for _, name := range []string{"pixi", "npm", "cargo", "aur"} {
+		if !builderCfg.ValidBuilderType(name) {
+			t.Errorf("expected builder %q to be valid", name)
+		}
+	}
+
+	// Check pixi detect files
+	pixi := builderCfg.Builders["pixi"]
+	if len(pixi.DetectFiles) == 0 {
+		t.Error("pixi detect_files is empty")
+	}
+	if pixi.StageTemplate == "" {
+		t.Error("pixi stage_template is empty")
+	}
+
+	// Check cargo is inline
+	cargo := builderCfg.Builders["cargo"]
+	if !cargo.Inline {
+		t.Error("cargo should be inline")
+	}
+	if !cargo.RequiresSrcDir {
+		t.Error("cargo should require src dir")
+	}
+}
+
 func TestBuilderNames(t *testing.T) {
-	cfg, _ := loadBuilderConfig("/nonexistent")
-	names := cfg.BuilderNames()
+	_, builderCfg, _ := LoadFormatConfigsForImage(nil, &FormatConfigRefs{
+		Distro:  "testdata/defaults/distro.yml",
+		Builder: "testdata/defaults/builder.yml",
+	}, ".")
+	names := builderCfg.BuilderNames()
 	if len(names) != 4 {
 		t.Errorf("expected 4 builder names, got %d: %v", len(names), names)
 	}
 }
 
-func TestTypedToPackageSection(t *testing.T) {
-	rpm := &RpmConfig{
-		Packages: []string{"vim", "git"},
-		Copr:     []string{"owner/repo"},
-		Repos: []RpmRepo{
-			{Name: "test", URL: "https://example.com/repo"},
-		},
-		Options: []string{"--nogpgcheck"},
+func TestDynamicFormatSectionParsing(t *testing.T) {
+	// Ensure format names are registered for YAML parsing
+	SetFormatNames(testDistroConfig())
+
+	// Test that YAML with format sections parses into FormatSections
+	yamlData := `
+rpm:
+  packages:
+    - vim
+    - git
+  copr:
+    - owner/repo
+  repos:
+    - name: test
+      url: https://example.com/repo
+  options:
+    - --nogpgcheck
+`
+	var ly LayerYAML
+	if err := yaml.Unmarshal([]byte(yamlData), &ly); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
 	}
 
-	section := typedToPackageSection("rpm", rpm)
-	if section == nil {
-		t.Fatal("expected non-nil section")
+	section, ok := ly.FormatSections["rpm"]
+	if !ok {
+		t.Fatal("expected rpm format section")
 	}
 	if section.FormatName != "rpm" {
 		t.Errorf("FormatName = %q, want rpm", section.FormatName)
@@ -177,7 +202,6 @@ func TestTypedToPackageSection(t *testing.T) {
 	if section.Raw == nil {
 		t.Fatal("Raw is nil")
 	}
-	// Verify raw fields are accessible
 	if _, ok := section.Raw["copr"]; !ok {
 		t.Error("Raw missing copr field")
 	}
@@ -190,8 +214,8 @@ func TestTypedToPackageSection(t *testing.T) {
 }
 
 func TestAurBuilderDetectConfig(t *testing.T) {
-	cfg, _ := loadBuilderConfig("/nonexistent")
-	aur := cfg.Builders["aur"]
+	builderCfg := testBuilderCfg()
+	aur := builderCfg.Builders["aur"]
 	if aur == nil {
 		t.Fatal("expected aur builder definition")
 	}
@@ -200,5 +224,54 @@ func TestAurBuilderDetectConfig(t *testing.T) {
 	}
 	if aur.StageTemplate == "" {
 		t.Error("aur stage_template is empty")
+	}
+}
+
+func TestResolveFormatConfigDataEmpty(t *testing.T) {
+	data, err := ResolveFormatConfigData("", ".")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if data != nil {
+		t.Error("expected nil data for empty ref")
+	}
+}
+
+func TestResolveFormatConfigDataLocal(t *testing.T) {
+	data, err := ResolveFormatConfigData("testdata/defaults/distro.yml", ".")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Error("expected non-empty data for local ref")
+	}
+}
+
+func TestResolveFormatConfigDataMissing(t *testing.T) {
+	_, err := ResolveFormatConfigData("nonexistent.yml", ".")
+	if err == nil {
+		t.Error("expected error for missing file")
+	}
+}
+
+func TestLoadFormatConfigsForImageFallback(t *testing.T) {
+	// Per-image ref overrides defaults
+	imgRefs := &FormatConfigRefs{
+		Distro: "testdata/defaults/distro.yml",
+	}
+	defRefs := &FormatConfigRefs{
+		Distro:  "nonexistent.yml", // should not be used
+		Builder: "testdata/defaults/builder.yml",
+	}
+
+	distroCfg, builderCfg, err := LoadFormatConfigsForImage(imgRefs, defRefs, ".")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if distroCfg == nil || len(distroCfg.Distros) == 0 {
+		t.Error("expected distro config from per-image ref")
+	}
+	if builderCfg == nil || len(builderCfg.Builders) == 0 {
+		t.Error("expected builder config from default ref")
 	}
 }

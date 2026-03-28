@@ -20,9 +20,6 @@ type Generator struct {
 	BuildDir       string
 	Containerfiles map[string]string // cached content per image (used by ov build to pipe via stdin)
 	GlobalOrder    []string          // popularity-weighted global layer order for cache optimization
-	DistroConfig   *DistroConfig     // from distro.yml
-	BuildConfig    *BuildConfig      // from build.yml
-	BuilderConfig  *BuilderConfig    // from builder.yml
 }
 
 // globalOrderForImage returns the layer order for an image by filtering the
@@ -119,18 +116,22 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
-	// Load format configs (distro.yml, build.yml, builder.yml)
-	distroCfg, buildCfg, builderCfg, err := LoadFormatConfigs(dir)
-	if err != nil {
-		return nil, err
+	// Load default format configs early — needed for SetFormatNames before layer scanning
+	if cfg.Defaults.FormatConfig == nil {
+		return nil, fmt.Errorf("defaults.format_config is required in images.yml")
 	}
+	defaultDistroCfg, _, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+	if err != nil {
+		return nil, fmt.Errorf("loading default format configs: %w", err)
+	}
+	SetFormatNames(defaultDistroCfg)
 
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := Validate(cfg, layers, buildCfg, builderCfg); err != nil {
+	if err := Validate(cfg, layers, dir); err != nil {
 		return nil, err
 	}
 
@@ -139,7 +140,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		tag = ComputeCalVer()
 	}
 
-	images, err := cfg.ResolveAllImages(tag)
+	images, err := cfg.ResolveAllImages(tag, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -166,9 +167,6 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
 		GlobalOrder:    globalOrder,
-		DistroConfig:   distroCfg,
-		BuildConfig:    buildCfg,
-		BuilderConfig:  builderCfg,
 	}, nil
 }
 
@@ -288,11 +286,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit per-layer multi-stage build stages — fully config-driven from builder.yml.
 	// Each builder in builder.yml declares detect_files and/or detect_config.
 	// For each layer that matches, the builder's stage_template is rendered.
-	if g.BuilderConfig != nil {
+	if img.BuilderConfig != nil {
 		// Process builders in deterministic order
-		builderNames := g.BuilderConfig.BuilderNames()
+		builderNames := img.BuilderConfig.BuilderNames()
 		for _, builderName := range builderNames {
-			builderDef := g.BuilderConfig.Builders[builderName]
+			builderDef := img.BuilderConfig.Builders[builderName]
 			if builderDef.Inline {
 				continue // inline builders handled in writeLayerSteps
 			}
@@ -456,10 +454,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	g.writeLabels(&b, imageName, layerOrder, img)
 
 	// Copy builder artifacts — fully config-driven from builder.yml copy_artifacts/copy_binary
-	if g.BuilderConfig != nil {
-		builderNames := g.BuilderConfig.BuilderNames()
+	if img.BuilderConfig != nil {
+		builderNames := img.BuilderConfig.BuilderNames()
 		for _, builderName := range builderNames {
-			builderDef := g.BuilderConfig.Builders[builderName]
+			builderDef := img.BuilderConfig.Builders[builderName]
 			if builderDef.Inline || builderDef.StageTemplate == "" {
 				continue
 			}
@@ -637,8 +635,8 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 
 	// Resolve distro config for bootstrap commands
 	var distroDef *DistroDef
-	if g.DistroConfig != nil {
-		distroDef = g.DistroConfig.ResolveDistro(img.Distro)
+	if img.DistroConfig != nil {
+		distroDef = img.DistroConfig.ResolveDistro(img.Distro)
 	}
 
 	b.WriteString("RUN ")
@@ -646,8 +644,8 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	var cacheMounts []CacheMountDef
 	if distroDef != nil {
 		cacheMounts = distroDef.Bootstrap.CacheMounts
-	} else if g.BuildConfig != nil {
-		if formatDef, ok := g.BuildConfig.Formats[img.Pkg]; ok {
+	} else if img.DistroDef != nil {
+		if formatDef, ok := img.DistroDef.Formats[img.Pkg]; ok {
 			cacheMounts = formatDef.CacheMounts
 		}
 	}
@@ -919,7 +917,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	distroMatched := false
 	for _, tag := range img.Distro {
 		if tagCfg := layer.TagSection(tag); tagCfg != nil && len(tagCfg.Packages) > 0 {
-			g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg)
+			g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg, img)
 			distroMatched = true
 			break
 		}
@@ -931,12 +929,15 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			if section == nil || len(section.Packages) == 0 {
 				continue
 			}
-			formatDef := g.BuildConfig.Formats[format]
+			if img.DistroDef == nil || img.DistroDef.Formats == nil {
+				continue
+			}
+			formatDef := img.DistroDef.Formats[format]
 			if formatDef == nil {
 				continue
 			}
 			// Check if this format has a builder (multi-stage install step)
-			if builderDef, ok := g.BuilderConfig.Builders[format]; ok && !builderDef.Inline {
+			if builderDef, ok := img.BuilderConfig.Builders[format]; ok && !builderDef.Inline {
 				// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
 				ctx := &InstallContext{
 					CacheMounts: formatDef.CacheMounts,
@@ -964,9 +965,9 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	}
 
 	// 4. Inline builders (cargo, etc.) — config-driven from builder.yml
-	if g.BuilderConfig != nil {
-		for _, bName := range g.BuilderConfig.BuilderNames() {
-			bDef := g.BuilderConfig.Builders[bName]
+	if img.BuilderConfig != nil {
+		for _, bName := range img.BuilderConfig.BuilderNames() {
+			bDef := img.BuilderConfig.Builders[bName]
 			if !bDef.Inline || bDef.InstallTemplate == "" {
 				continue
 			}
@@ -1009,7 +1010,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 }
 
 // Old format-specific write functions removed — all generation is now
-// config-driven via build.yml templates rendered by renderFormatInstall*
+// config-driven via distro.yml format templates rendered by renderFormatInstall*
 // and builder.yml templates rendered by buildStageContext + RenderTemplate.
 
 func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
@@ -1022,8 +1023,8 @@ func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *La
 	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
 	// Cache mounts from primary format's config
 	var formatDef *FormatDef
-	if g.BuildConfig != nil {
-		formatDef = g.BuildConfig.Formats[img.Pkg]
+	if img.DistroDef != nil {
+		formatDef = img.DistroDef.Formats[img.Pkg]
 	}
 	if formatDef != nil {
 		for _, m := range formatDef.CacheMounts {
@@ -1066,6 +1067,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 		BuilderRef:  builderRef,
 		StageName:   stageName,
 		LayerStage:  layer.Name,
+		CopySrc:     g.layerCopySource(layer.Name),
 		UID:         img.UID,
 		GID:         img.GID,
 		Home:        img.Home,
@@ -1121,11 +1123,11 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 
 // renderFormatInstallFromPackages renders install for a package list using the primary format's template.
 // Used for distro-override sections that only have packages (no repos, options, etc.).
-func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string) {
-	if g.BuildConfig == nil {
+func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages []string, primaryFormat string, img *ResolvedImage) {
+	if img.DistroDef == nil {
 		return
 	}
-	formatDef := g.BuildConfig.Formats[primaryFormat]
+	formatDef := img.DistroDef.Formats[primaryFormat]
 	if formatDef == nil {
 		return
 	}

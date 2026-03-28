@@ -4,32 +4,31 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// DefaultBuildFormat is the fallback when no build: field is specified anywhere.
-// This is only used as a last resort — images.yml defaults.build should always be set.
-const DefaultBuildFormat = "rpm"
-
 // --- Distro Config ---
 
 // DistroConfig represents the distro.yml configuration.
+// Each distro defines bootstrap behavior AND package format definitions.
 type DistroConfig struct {
 	Distros map[string]*DistroDef `yaml:"distros"`
 }
 
-// DistroDef defines distro-specific bootstrap and workarounds.
+// DistroDef defines distro-specific bootstrap, workarounds, and package formats.
 type DistroDef struct {
-	Inherits    string       `yaml:"inherits,omitempty"`
-	Bootstrap   BootstrapDef `yaml:"bootstrap"`
-	Workarounds []string     `yaml:"workarounds,omitempty"`
+	Inherits    string                `yaml:"inherits,omitempty"`
+	Bootstrap   BootstrapDef          `yaml:"bootstrap"`
+	Workarounds []string              `yaml:"workarounds,omitempty"`
+	Formats     map[string]*FormatDef `yaml:"formats,omitempty"`
 }
 
 // BootstrapDef defines how to bootstrap a base image.
 type BootstrapDef struct {
-	InstallCmd string          `yaml:"install_cmd"`
-	Packages   []string        `yaml:"packages"`
+	InstallCmd  string          `yaml:"install_cmd"`
+	Packages    []string        `yaml:"packages"`
 	CacheMounts []CacheMountDef `yaml:"cache_mounts"`
 }
 
@@ -39,9 +38,23 @@ type CacheMountDef struct {
 	Sharing string `yaml:"sharing,omitempty"` // default: "locked"
 }
 
+// FormatDef defines a package format (rpm, deb, pac, aur, apk, etc.).
+type FormatDef struct {
+	CacheMounts     []CacheMountDef  `yaml:"cache_mounts"`
+	SectionFields   map[string]string `yaml:"section_fields"`
+	InstallTemplate string            `yaml:"install_template"`
+	Validate        []FormatRule      `yaml:"validate,omitempty"`
+}
+
+// FormatRule is a validation rule for format section fields.
+type FormatRule struct {
+	Field string `yaml:"field"`
+	Rule  string `yaml:"rule"`
+}
+
 // ResolveDistro finds the distro definition matching the image's distro tags.
 // Walks tags in order, strips :version suffix to match base distro name.
-// Follows inherits: chains with cycle detection.
+// Follows inherits: chains with cycle detection, inheriting formats from parent.
 func (dc *DistroConfig) ResolveDistro(distroTags []string) *DistroDef {
 	if dc == nil {
 		return nil
@@ -74,9 +87,63 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	resolved := dc.resolveInherits(parent, maxDepth-1)
 	// Child overrides parent for non-zero fields
 	if def.Bootstrap.InstallCmd != "" {
+		// Child has its own bootstrap — use child, but inherit formats if missing
+		if len(def.Formats) == 0 && len(resolved.Formats) > 0 {
+			merged := &DistroDef{
+				Inherits:    def.Inherits,
+				Bootstrap:   def.Bootstrap,
+				Workarounds: def.Workarounds,
+				Formats:     resolved.Formats,
+			}
+			return merged
+		}
 		return def
 	}
+	// Child has no bootstrap — inherit everything from parent, but overlay child's formats
+	if len(def.Formats) > 0 {
+		merged := &DistroDef{
+			Inherits:    def.Inherits,
+			Bootstrap:   resolved.Bootstrap,
+			Workarounds: resolved.Workarounds,
+			Formats:     def.Formats,
+		}
+		return merged
+	}
 	return resolved
+}
+
+// AllFormatNames returns a sorted, deduplicated list of all format names across all distros.
+func (dc *DistroConfig) AllFormatNames() []string {
+	if dc == nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	for _, distro := range dc.Distros {
+		resolved := dc.resolveInherits(distro, 10)
+		for name := range resolved.Formats {
+			seen[name] = true
+		}
+	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sortStrings(names)
+	return names
+}
+
+// ValidFormat returns true if any distro defines this format name.
+func (dc *DistroConfig) ValidFormat(name string) bool {
+	if dc == nil {
+		return false
+	}
+	for _, distro := range dc.Distros {
+		resolved := dc.resolveInherits(distro, 10)
+		if _, ok := resolved.Formats[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func indexOf(s string, c byte) int {
@@ -86,49 +153,6 @@ func indexOf(s string, c byte) int {
 		}
 	}
 	return -1
-}
-
-// --- Build Config ---
-
-// BuildConfig represents the build.yml configuration.
-type BuildConfig struct {
-	Formats map[string]*FormatDef `yaml:"formats"`
-}
-
-// FormatDef defines a package format (rpm, deb, pac, aur, apk, etc.).
-type FormatDef struct {
-	CacheMounts     []CacheMountDef   `yaml:"cache_mounts"`
-	SectionFields   map[string]string  `yaml:"section_fields"`
-	InstallTemplate string            `yaml:"install_template"`
-	Validate        []FormatRule       `yaml:"validate,omitempty"`
-}
-
-// FormatRule is a validation rule for format section fields.
-type FormatRule struct {
-	Field string `yaml:"field"`
-	Rule  string `yaml:"rule"`
-}
-
-// ValidFormat returns true if the given name is a defined format.
-func (bc *BuildConfig) ValidFormat(name string) bool {
-	if bc == nil {
-		return false
-	}
-	_, ok := bc.Formats[name]
-	return ok
-}
-
-// FormatNames returns sorted list of defined format names.
-func (bc *BuildConfig) FormatNames() []string {
-	if bc == nil {
-		return nil
-	}
-	names := make([]string, 0, len(bc.Formats))
-	for name := range bc.Formats {
-		names = append(names, name)
-	}
-	sortStrings(names)
-	return names
 }
 
 // --- Builder Config ---
@@ -185,56 +209,93 @@ func (bc *BuilderConfig) BuilderNames() []string {
 
 // --- Loading ---
 
-// LoadFormatConfigs loads distro.yml, build.yml, builder.yml.
-// Project-level files override embedded defaults. Missing files use defaults.
-func LoadFormatConfigs(dir string) (*DistroConfig, *BuildConfig, *BuilderConfig, error) {
-	distro, err := loadDistroConfig(dir)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("loading distro.yml: %w", err)
+// ResolveFormatConfigData resolves a format config reference to raw YAML bytes.
+// ref can be:
+//   - empty string: returns nil (fall through to next level)
+//   - @host/org/repo/path:version: downloads remote repo and reads file from cache
+//   - bare path: reads relative to dir
+func ResolveFormatConfigData(ref, dir string) ([]byte, error) {
+	if ref == "" {
+		return nil, nil
 	}
-	build, err := loadBuildConfig(dir)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("loading build.yml: %w", err)
-	}
-	builder, err := loadBuilderConfig(dir)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("loading builder.yml: %w", err)
-	}
-	return distro, build, builder, nil
-}
 
-func loadDistroConfig(dir string) (*DistroConfig, error) {
-	data := loadOrDefault(filepath.Join(dir, "distro.yml"), defaultDistroYAML)
-	var cfg DistroConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	if strings.HasPrefix(ref, "@") {
+		parsed := ParseRemoteRef(ref)
+		cachePath, err := EnsureRepoDownloaded(parsed.RepoPath, parsed.Version)
+		if err != nil {
+			return nil, fmt.Errorf("downloading %s: %w", ref, err)
+		}
+		filePath := filepath.Join(cachePath, parsed.SubPath)
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("reading remote config %s (at %s): %w", ref, filePath, err)
+		}
+		return data, nil
 	}
-	return &cfg, nil
-}
 
-func loadBuildConfig(dir string) (*BuildConfig, error) {
-	data := loadOrDefault(filepath.Join(dir, "build.yml"), defaultBuildYAML)
-	var cfg BuildConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-func loadBuilderConfig(dir string) (*BuilderConfig, error) {
-	data := loadOrDefault(filepath.Join(dir, "builder.yml"), defaultBuilderYAML)
-	var cfg BuilderConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, err
-	}
-	return &cfg, nil
-}
-
-// loadOrDefault reads a file; if it doesn't exist, returns the default bytes.
-func loadOrDefault(path string, defaultData []byte) []byte {
+	// Local path relative to project dir
+	path := filepath.Join(dir, ref)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return defaultData
+		return nil, fmt.Errorf("reading config %s: %w", path, err)
 	}
-	return data
+	return data, nil
+}
+
+// resolveConfigRef resolves a single config type through the fallback chain:
+// per-image ref → defaults ref → error.
+func resolveConfigRef(configType string, imgRef, defaultRef, dir string) ([]byte, error) {
+	// Try per-image ref first
+	if imgRef != "" {
+		return ResolveFormatConfigData(imgRef, dir)
+	}
+	// Try defaults ref
+	if defaultRef != "" {
+		return ResolveFormatConfigData(defaultRef, dir)
+	}
+	return nil, fmt.Errorf("%s: no format_config ref specified (set in defaults or per-image)", configType)
+}
+
+// LoadFormatConfigsForImage loads distro and builder configs for a single image.
+// Resolution chain per config type: per-image format_config → defaults format_config → error.
+func LoadFormatConfigsForImage(imgRefs, defaultRefs *FormatConfigRefs, dir string) (*DistroConfig, *BuilderConfig, error) {
+	imgDistro, imgBuilder := "", ""
+	if imgRefs != nil {
+		imgDistro = imgRefs.Distro
+		imgBuilder = imgRefs.Builder
+	}
+	defDistro, defBuilder := "", ""
+	if defaultRefs != nil {
+		defDistro = defaultRefs.Distro
+		defBuilder = defaultRefs.Builder
+	}
+
+	// Resolve distro.yml (contains both bootstrap and format definitions)
+	distroData, err := resolveConfigRef("distro.yml", imgDistro, defDistro, dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	var distroCfg DistroConfig
+	if err := yaml.Unmarshal(distroData, &distroCfg); err != nil {
+		return nil, nil, fmt.Errorf("parsing distro.yml: %w", err)
+	}
+
+	// Resolve builder.yml
+	builderData, err := resolveConfigRef("builder.yml", imgBuilder, defBuilder, dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	var builderCfg BuilderConfig
+	if err := yaml.Unmarshal(builderData, &builderCfg); err != nil {
+		return nil, nil, fmt.Errorf("parsing builder.yml: %w", err)
+	}
+
+	return &distroCfg, &builderCfg, nil
+}
+
+// LoadDefaultFormatConfigs loads format configs from the defaults format_config refs.
+// Used during early initialization (before per-image resolution) to get the default
+// DistroConfig for format name registration.
+func LoadDefaultFormatConfigs(defaultRefs *FormatConfigRefs, dir string) (*DistroConfig, *BuilderConfig, error) {
+	return LoadFormatConfigsForImage(nil, defaultRefs, dir)
 }

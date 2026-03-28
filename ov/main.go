@@ -31,7 +31,7 @@ type CLI struct {
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
-	Start    StartCmd    `cmd:"" help:"Start a service container with supervisord (detached)"`
+	Start    StartCmd    `cmd:"" help:"Start a container as a background service (detached)"`
 	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
 	// Sway commands moved to: ov wl sway <subcommand>

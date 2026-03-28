@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-130 layers. 34 image definitions. Docker and Podman. `linux/amd64` and `linux/arm64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+130 layers. 41 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -69,9 +69,9 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Two Process Managers, Two Levels
 
-**Inside containers**, Overthink uses **supervisord** — a lightweight process manager that runs multiple services within a single container. When a layer declares a `service:` in its `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container.
+**Inside containers**, Overthink uses **supervisord** — a lightweight process manager that runs multiple services within a single container. When a layer declares a `service:` in its `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without supervisord services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into without requiring a process manager.
 
-**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and supervisord manages the services inside it. Two levels, cleanly separated.
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and supervisord (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
 
 **In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level, running services like sshd and cloud-init directly. No supervisord needed because it's a real operating system, not a container.
 

@@ -1,7 +1,7 @@
 # Overthink — The Container Management Experience for You and Your AI
 
 Compose, build, deploy, and manage container images from a library of fully configurable layers.
-Built on `supervisord` and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
+Built on `supervisord` (for service images) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
 
 ---
 
@@ -157,6 +157,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - `root.yml`/`user.yml` use `all:` task for common logic, with optional tag-specific tasks (`rpm:`, `pac:`, `fedora:`, etc.). Never use `install:` as a task name
 - `distro:` field defines identity tags: `distro: ["fedora:43", fedora]`. First matching section overrides packages. Inherited through base chain
 - `build:` field defines package formats: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Inherited through base chain. Default: `[rpm]`
+- Images with layers that have `service:` or `port_relay:` fields MUST include the `supervisord` layer in their dependency chain. `ov validate` enforces this as a hard error. Images without these fields use `sleep infinity` as entrypoint (no supervisord needed)
 
 For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
 

@@ -338,7 +338,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		aur := layer.AurConfig()
-		if img.SupportsTag("aur") && aur != nil && len(aur.Packages) > 0 {
+		if img.SupportsBuild("aur") && aur != nil && len(aur.Packages) > 0 {
 			aurBuilderRef := g.builderRefForFormat(imageName, "aur")
 			if aurBuilderRef == "" {
 				return fmt.Errorf("image %q: layer %q has aur packages but no builders.aur configured", imageName, layerName)
@@ -918,30 +918,43 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Track if we've switched to user mode
 	asUser := false
 
-	// 1. System packages from layer.yml (root)
+	// 1. System packages from layer.yml
+	// Phase 1: Walk distro: tags — first matching section wins (override).
+	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
 	rpm := layer.RpmConfig()
 	deb := layer.DebConfig()
 	pac := layer.PacConfig()
 	aur := layer.AurConfig()
-	if img.SupportsTag("rpm") && rpm != nil && len(rpm.Packages) > 0 {
-		g.writeDnfInstall(b, rpm)
-	}
-	if img.SupportsTag("deb") && deb != nil && len(deb.Packages) > 0 {
-		g.writeAptInstall(b, deb)
-	}
-	if img.SupportsTag("pac") && pac != nil && len(pac.Packages) > 0 {
-		g.writePacmanInstall(b, pac)
-	}
-
-	// 1b. AUR packages: install pre-built packages from multi-stage build (root)
-	if img.SupportsTag("aur") && aur != nil && len(aur.Packages) > 0 {
-		g.writeAurInstallStep(b, layer.Name)
-	}
-
-	// 1c. Tag-specific packages (distro/version sections, installed with primary format tool)
-	for _, tag := range img.Tags {
+	distroMatched := false
+	for _, tag := range img.Distro {
 		if tagCfg := layer.TagSection(tag); tagCfg != nil && len(tagCfg.Packages) > 0 {
 			g.writeTagPackages(b, tagCfg.Packages, img.Pkg)
+			distroMatched = true
+			break
+		}
+	}
+
+	// If no distro override, install ALL build format sections in order
+	if !distroMatched {
+		for _, format := range img.BuildFormats {
+			switch format {
+			case "rpm":
+				if rpm != nil && len(rpm.Packages) > 0 {
+					g.writeDnfInstall(b, rpm)
+				}
+			case "deb":
+				if deb != nil && len(deb.Packages) > 0 {
+					g.writeAptInstall(b, deb)
+				}
+			case "pac":
+				if pac != nil && len(pac.Packages) > 0 {
+					g.writePacmanInstall(b, pac)
+				}
+			case "aur":
+				if aur != nil && len(aur.Packages) > 0 {
+					g.writeAurInstallStep(b, layer.Name)
+				}
+			}
 		}
 	}
 
@@ -1198,12 +1211,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))
 	}
 
-	// Package and builder labels
+	// Distro, build, and builder labels
 	writeJSONLabel(b, LabelTags, img.Tags)
+	writeJSONLabel(b, LabelDistro, img.Distro)
+	writeJSONLabel(b, LabelBuild, img.BuildFormats)
 	if len(img.Builders) > 0 {
 		writeJSONLabel(b, LabelBuilders, map[string]string(img.Builders))
 	}
-	writeJSONLabel(b, LabelBuilds, img.Builds)
+	writeJSONLabel(b, LabelBuilds, img.BuilderCapabilities)
 
 	// JSON array labels (omitted when empty)
 	writeJSONLabel(b, LabelPorts, img.Ports)

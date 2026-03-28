@@ -45,6 +45,8 @@ const (
 	LabelLayerVersions  = "org.overthinkos.layer_versions"
 	LabelSecrets        = "org.overthinkos.secrets"
 	LabelTags           = "org.overthinkos.tags"
+	LabelDistro         = "org.overthinkos.distro"
+	LabelBuild          = "org.overthinkos.build"
 	LabelBuilders       = "org.overthinkos.builders"
 	LabelBuilds         = "org.overthinkos.builds"
 )
@@ -106,7 +108,9 @@ type ImageMetadata struct {
 	Info           string            // aggregated status info
 	LayerVersions  map[string]string // layer name -> CalVer version
 	Secrets        []LabelSecret     // secret requirements (metadata only, no values)
-	Tags           []string          // resolved tags: format, distro, version
+	Tags           []string          // union: all + distro + build formats (for task matching)
+	Distro         []string          // distro identity tags
+	BuildFormats   []string          // build format list (rpm, pac, etc.)
 	Builders       map[string]string // build type → builder image
 	Builds         []string          // what this builder can build
 }
@@ -342,10 +346,24 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Tags (format, distro, version)
+	// Tags (union: all + distro + build formats)
 	if v := labels[LabelTags]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Tags); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelTags, err)
+		}
+	}
+
+	// Distro tags
+	if v := labels[LabelDistro]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Distro); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelDistro, err)
+		}
+	}
+
+	// Build formats
+	if v := labels[LabelBuild]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.BuildFormats); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuild, err)
 		}
 	}
 

@@ -36,8 +36,8 @@ func (e *ValidationError) HasErrors() bool {
 func Validate(cfg *Config, layers map[string]*Layer) error {
 	errs := &ValidationError{}
 
-	// Validate pkg values
-	validatePkgValues(cfg, errs)
+	// Validate build and distro values
+	validateBuildAndDistro(cfg, errs)
 
 	// Validate layers referenced in images
 	validateLayerReferences(cfg, layers, errs)
@@ -123,39 +123,37 @@ func Validate(cfg *Config, layers map[string]*Layer) error {
 	return nil
 }
 
-// validatePkgValues ensures pkg/tag entries are valid.
-// The first entry must be a package format (rpm, deb, pac, aur).
-// Subsequent entries can be distro names or version tags (e.g., "fedora", "fedora:43").
-func validatePkgValues(cfg *Config, errs *ValidationError) {
-	validPkgFormat := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
+// validateBuildAndDistro validates build: and distro: entries.
+// build: must contain only valid package formats (rpm, deb, pac, aur).
+// distro: is free-form (any string, including distro:version).
+func validateBuildAndDistro(cfg *Config, errs *ValidationError) {
+	validBuildFormat := map[string]bool{"rpm": true, "deb": true, "pac": true, "aur": true}
 
-	validateTags := func(context string, tags PkgFormats) {
-		if len(tags) == 0 {
-			return
-		}
-		// First entry must be a valid package format
-		if !validPkgFormat[tags[0]] {
-			errs.Add("%s: first pkg entry %q must be a package format (rpm, deb, pac, or aur)", context, tags[0])
-		}
-		// Check for duplicates; subsequent entries are free-form tags
-		seen := make(map[string]bool)
-		for _, p := range tags {
-			if seen[p] {
-				errs.Add("%s: duplicate pkg entry %q", context, p)
+	validateBuild := func(context string, build BuildFormats) {
+		for _, b := range build {
+			if !validBuildFormat[b] {
+				errs.Add("%s: build entry %q is not valid (must be rpm, deb, pac, or aur)", context, b)
 			}
-			seen[p] = true
+		}
+		// Check for duplicates
+		seen := make(map[string]bool)
+		for _, b := range build {
+			if seen[b] {
+				errs.Add("%s: duplicate build entry %q", context, b)
+			}
+			seen[b] = true
 		}
 	}
 
-	// Validate defaults.pkg
-	validateTags("defaults", cfg.Defaults.Pkg)
+	// Validate defaults
+	validateBuild("defaults", cfg.Defaults.Build)
 
-	// Validate per-image pkg
+	// Validate per-image
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		validateTags(fmt.Sprintf("image %q", name), img.Pkg)
+		validateBuild(fmt.Sprintf("image %q", name), img.Build)
 	}
 }
 

@@ -9,7 +9,7 @@ func TestValidateSuccess(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
 		Images: map[string]ImageConfig{
@@ -34,7 +34,7 @@ func TestValidateSuccess(t *testing.T) {
 func TestValidateInvalidPkg(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
-			Pkg: PkgFormats{"invalid"},
+			Build: BuildFormats{"invalid"},
 		},
 		Images: map[string]ImageConfig{},
 	}
@@ -44,7 +44,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid pkg")
 	}
-	if !strings.Contains(err.Error(), "must be a package format") {
+	if !strings.Contains(err.Error(), "is not valid") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -236,7 +236,7 @@ func TestValidateRepoNeitherUrlNorRpm(t *testing.T) {
 
 func TestValidatePacPkgValue(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Pkg: PkgFormats{"pac"}},
+		Defaults: ImageConfig{Build: BuildFormats{"pac"}},
 		Images:   map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{}
@@ -249,7 +249,7 @@ func TestValidatePacPkgValue(t *testing.T) {
 
 func TestValidateInvalidPkgValue(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Pkg: PkgFormats{"zypper"}},
+		Defaults: ImageConfig{Build: BuildFormats{"zypper"}},
 		Images:   map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{}
@@ -258,7 +258,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for invalid pkg value")
 	}
-	if !strings.Contains(err.Error(), "must be a package format") {
+	if !strings.Contains(err.Error(), "is not valid") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -308,7 +308,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		Images: map[string]ImageConfig{
 			"arch-img": {
 				Base:   "archlinux:latest",
-				Pkg:    PkgFormats{"pac"},
+				Build:  BuildFormats{"pac"},
 				Layers: []string{"aur-layer"},
 			},
 		},
@@ -393,7 +393,7 @@ func TestValidateLayerCycle(t *testing.T) {
 
 func TestValidateMultipleErrors(t *testing.T) {
 	cfg := &Config{
-		Defaults: ImageConfig{Pkg: PkgFormats{"invalid"}},
+		Defaults: ImageConfig{Build: BuildFormats{"invalid"}},
 		Images: map[string]ImageConfig{
 			"test": {Layers: []string{"missing1", "missing2"}},
 		},
@@ -483,7 +483,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
 		Images: map[string]ImageConfig{
@@ -639,7 +639,7 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
 		Images: map[string]ImageConfig{
@@ -669,7 +669,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
 		Images: map[string]ImageConfig{
@@ -677,7 +677,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 			"bad-disabled": {
 				Enabled: boolPtr(false),
 				Layers:  []string{"nonexistent-layer"},
-				Pkg:     PkgFormats{"invalid"},
+				Build:   BuildFormats{"invalid"},
 			},
 		},
 	}

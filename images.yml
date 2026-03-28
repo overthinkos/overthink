@@ -4,7 +4,7 @@ defaults:
 
   platforms:
     - linux/amd64
-  pkg: rpm
+  build: [rpm]
   builders:
     pixi: fedora-builder
     npm: fedora-builder
@@ -17,7 +17,8 @@ images:
 
   fedora:
     base: "quay.io/fedora/fedora:43"
-    pkg: [rpm, fedora, "fedora:43"]
+    distro: ["fedora:43", fedora]
+    builds: [pixi, npm, cargo]
 
   fedora-nonfree:
     base: fedora
@@ -35,16 +36,18 @@ images:
   ubuntu:
     enabled: false
     base: "ubuntu:24.04"
-    pkg: deb
+    build: [deb]
 
   debian:
     enabled: false
     base: "debian:13"
-    pkg: deb
+    build: [deb]
 
   archlinux:
     base: "docker.io/library/archlinux:latest"
-    pkg: [pac, archlinux]
+    distro: [archlinux]
+    build: [pac]
+    builds: [pixi, npm, cargo, aur]
     builders:
       pixi: archlinux-builder
       npm: archlinux-builder
@@ -62,7 +65,7 @@ images:
 
   arch-test:
     base: archlinux
-    pkg: [pac, aur]
+    build: [pac, aur]
     layers:
       - arch-pac-test
       - arch-aur-test

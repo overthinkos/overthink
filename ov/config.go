@@ -15,11 +15,12 @@ type Config struct {
 	Images   map[string]ImageConfig `yaml:"images"`
 }
 
-// PkgFormats handles YAML unmarshal of pkg as either a string or a list.
+// BuildFormats handles YAML unmarshal of the build: field.
+// Package formats tied to the defined builders, installed in list order.
 // Single string "rpm" becomes ["rpm"]. List ["pac", "aur"] stays as-is.
-type PkgFormats []string
+type BuildFormats []string
 
-func (p *PkgFormats) UnmarshalYAML(value *yaml.Node) error {
+func (b *BuildFormats) UnmarshalYAML(value *yaml.Node) error {
 	// Try string first
 	if value.Kind == yaml.ScalarNode {
 		var s string
@@ -27,7 +28,7 @@ func (p *PkgFormats) UnmarshalYAML(value *yaml.Node) error {
 			return err
 		}
 		if s != "" {
-			*p = PkgFormats{s}
+			*b = BuildFormats{s}
 		}
 		return nil
 	}
@@ -36,7 +37,7 @@ func (p *PkgFormats) UnmarshalYAML(value *yaml.Node) error {
 	if err := value.Decode(&list); err != nil {
 		return err
 	}
-	*p = PkgFormats(list)
+	*b = BuildFormats(list)
 	return nil
 }
 
@@ -116,7 +117,8 @@ type ImageConfig struct {
 	Platforms []string      `yaml:"platforms,omitempty"`
 	Tag       string        `yaml:"tag,omitempty"`
 	Registry  string        `yaml:"registry,omitempty"`
-	Pkg       PkgFormats    `yaml:"pkg,omitempty"`
+	Distro    []string      `yaml:"distro,omitempty"`       // distro tags ["fedora:43", "fedora"] — first-match for packages
+	Build     BuildFormats  `yaml:"build,omitempty"`        // package formats ["rpm"] — all installed in order
 	Layers    []string      `yaml:"layers,omitempty"`
 	Ports     []string      `yaml:"ports,omitempty"`    // runtime port mappings ["host:container"]
 	User      string        `yaml:"user,omitempty"`     // username (default: "user")
@@ -163,8 +165,10 @@ type ResolvedImage struct {
 	Platforms []string
 	Tag       string
 	Registry  string
-	Pkg  string   // primary format (first entry in Tags) — for bootstrap/cache mount decisions
-	Tags []string // resolved tags: ["all", format, distro, "distro:version", ...] — for section/task activation
+	Pkg          string   // primary build format (first entry in BuildFormats) — for cache mounts, bootstrap
+	Distro       []string // resolved distro tags: ["fedora:43", "fedora"]
+	BuildFormats []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
+	Tags         []string // union: ["all"] + Distro + BuildFormats — for task matching
 	Layers    []string
 	Ports     []string // runtime port mappings
 
@@ -180,7 +184,7 @@ type ResolvedImage struct {
 	// Builder configuration (resolved: image -> base image -> defaults -> {})
 	Builders BuildersMap // build type → builder image name
 	// Builder capability declaration (image-specific, not inherited)
-	Builds []string // what this builder image can build
+	BuilderCapabilities []string // what this builder image can build (from builds: field)
 
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
@@ -212,6 +216,16 @@ type ResolvedImage struct {
 func (img *ResolvedImage) SupportsTag(tag string) bool {
 	for _, t := range img.Tags {
 		if t == tag {
+			return true
+		}
+	}
+	return false
+}
+
+// SupportsBuild returns true if this image has the given build format.
+func (img *ResolvedImage) SupportsBuild(format string) bool {
+	for _, b := range img.BuildFormats {
+		if b == format {
 			return true
 		}
 	}
@@ -354,25 +368,36 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		resolved.Registry = c.Defaults.Registry
 	}
 
-	// Resolve tags: image -> base image (if internal) -> defaults -> ["rpm"]
-	// Tags include format (rpm/deb/pac), distro (fedora/archlinux), and version (fedora:43).
-	// The implicit "all" tag is always prepended.
-	tags := []string(img.Pkg)
-	if len(tags) == 0 && !resolved.IsExternalBase {
-		// Inherit from base image
+	// Resolve distro: image -> base image (if internal) -> defaults -> []
+	resolved.Distro = img.Distro
+	if len(resolved.Distro) == 0 && !resolved.IsExternalBase {
 		if baseImg, ok := c.Images[resolved.Base]; ok {
-			tags = []string(baseImg.Pkg)
+			resolved.Distro = baseImg.Distro
 		}
 	}
-	if len(tags) == 0 {
-		tags = []string(c.Defaults.Pkg)
+	if len(resolved.Distro) == 0 {
+		resolved.Distro = c.Defaults.Distro
 	}
-	if len(tags) == 0 {
-		tags = []string{"rpm"}
+
+	// Resolve build: image -> base image (if internal) -> defaults -> ["rpm"]
+	buildFmts := []string(img.Build)
+	if len(buildFmts) == 0 && !resolved.IsExternalBase {
+		if baseImg, ok := c.Images[resolved.Base]; ok {
+			buildFmts = []string(baseImg.Build)
+		}
 	}
-	resolved.Pkg = tags[0] // primary format
-	// Prepend "all" so it's always first in the tag list
-	resolved.Tags = append([]string{"all"}, tags...)
+	if len(buildFmts) == 0 {
+		buildFmts = []string(c.Defaults.Build)
+	}
+	if len(buildFmts) == 0 {
+		buildFmts = []string{"rpm"}
+	}
+	resolved.BuildFormats = buildFmts
+	resolved.Pkg = buildFmts[0] // primary format for cache mounts
+
+	// Build unified Tags for task matching: ["all"] + Distro + BuildFormats
+	resolved.Tags = append([]string{"all"}, resolved.Distro...)
+	resolved.Tags = append(resolved.Tags, resolved.BuildFormats...)
 
 	// Layers are not inherited, they're image-specific
 	// Strip @ prefix and :version suffixes — layer map keys use bare refs
@@ -431,8 +456,8 @@ func (c *Config) ResolveImage(name string, calverTag string) (*ResolvedImage, er
 		}
 	}
 
-	// Builds: image-specific capability declaration, NOT inherited
-	resolved.Builds = img.Builds
+	// BuilderCapabilities: image-specific capability declaration, NOT inherited
+	resolved.BuilderCapabilities = img.Builds
 
 	// Resolve DNS: image -> defaults -> ""
 	resolved.DNS = img.DNS

@@ -16,8 +16,8 @@ func TestLoadConfig(t *testing.T) {
 	if cfg.Defaults.Registry != "ghcr.io/test" {
 		t.Errorf("Defaults.Registry = %q, want %q", cfg.Defaults.Registry, "ghcr.io/test")
 	}
-	if len(cfg.Defaults.Pkg) != 1 || cfg.Defaults.Pkg[0] != "rpm" {
-		t.Errorf("Defaults.Pkg = %v, want [rpm]", cfg.Defaults.Pkg)
+	if len(cfg.Defaults.Build) != 1 || cfg.Defaults.Build[0] != "rpm" {
+		t.Errorf("Defaults.Build = %v, want [rpm]", cfg.Defaults.Build)
 	}
 
 	// Check images exist
@@ -187,7 +187,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Builders:  BuildersMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
@@ -223,7 +223,7 @@ func TestResolveImageBuilders(t *testing.T) {
 
 	// No defaults.builders → empty
 	cfg2 := &Config{
-		Defaults: ImageConfig{Pkg: PkgFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
+		Defaults: ImageConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
 			"app": {Layers: []string{}},
 		},
@@ -239,7 +239,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	// Self-reference filtered out
 	cfg3 := &Config{
 		Defaults: ImageConfig{
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Builders:  BuildersMap{"pixi": "my-builder"},
 		},
@@ -257,9 +257,9 @@ func TestResolveImageBuilders(t *testing.T) {
 
 	// Inheritance from base image
 	cfg4 := &Config{
-		Defaults: ImageConfig{Pkg: PkgFormats{"pac"}, Platforms: []string{"linux/amd64"}},
+		Defaults: ImageConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
-			"base-img":    {Pkg: PkgFormats{"pac"}, Layers: []string{}, Builders: BuildersMap{"aur": "aur-builder"}},
+			"base-img":    {Build: BuildFormats{"pac"}, Layers: []string{}, Builders: BuildersMap{"aur": "aur-builder"}},
 			"aur-builder": {Layers: []string{}},
 			"child-img":   {Base: "base-img", Layers: []string{}},
 		},
@@ -277,7 +277,7 @@ func TestResolveImagePorts(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Registry:  "ghcr.io/test",
-			Pkg:       PkgFormats{"rpm"},
+			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 			Ports:     []string{"80:80"},
 		},

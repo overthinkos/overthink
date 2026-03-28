@@ -125,8 +125,16 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s: %s\n", typ, builder)
 			}
 		case "builds":
-			for _, b := range resolved.Builds {
+			for _, b := range resolved.BuilderCapabilities {
 				fmt.Println(b)
+			}
+		case "build":
+			for _, b := range resolved.BuildFormats {
+				fmt.Println(b)
+			}
+		case "distro":
+			for _, d := range resolved.Distro {
+				fmt.Println(d)
 			}
 		case "pkg":
 			fmt.Println(resolved.Pkg)

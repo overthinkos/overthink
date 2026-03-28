@@ -124,6 +124,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				FullTag:        "ghcr.io/test/test-image:latest",
 				Layers:         []string{"svc"},
 				Pkg:            "rpm",
+				BuildFormats:   []string{"rpm"},
 				Tags:           []string{"all", "rpm"},
 				User:           "user",
 				UID:            1000,
@@ -487,7 +488,7 @@ func TestWriteRootYmlPac(t *testing.T) {
 		HasRootYml:   true,
 		RootYmlTasks: []string{"all"},
 	}
-	img := &ResolvedImage{Pkg: "pac", Tags: []string{"all", "pac"}}
+	img := &ResolvedImage{Pkg: "pac", BuildFormats: []string{"pac"}, Tags: []string{"all", "pac"}}
 	g.writeRootYml(&b, "test-layer", layer, img)
 	out := b.String()
 

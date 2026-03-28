@@ -60,11 +60,12 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 Generation is idempotent. `.build/` is disposable and gitignored.
 
-**Tag-based multi-distro support** -- Images define tags via `pkg:` field: `pkg: [rpm, fedora, "fedora:43"]`. Tags control which sections activate in `layer.yml` and which tasks run in `root.yml`/`user.yml`. The implicit tag `all` always matches.
-- `layer.yml`: Package sections matching any tag are merged and installed (`rpm:`, `pac:`, `fedora:`, `fedora:43:`)
-- `root.yml`/`user.yml`: Tasks named after tags are called in order: `all` → format → distro → version
-- Tags stored in OCI label `org.overthinkos.tags` for runtime introspection
-- Source: `ov/config.go` (`ResolvedImage.Tags`, `MatchingTasks`), `ov/generate.go` (`writeRootYml`, `writeTagPackages`), `ov/layers.go` (`TagSections`, `parseTaskfileTaskNames`)
+**Multi-distro support via `distro:` and `build:` fields:**
+- `distro:` — Distro identity tags in priority order: `distro: ["fedora:43", fedora]`. For packages: first matching section wins (override). For tasks: all matching run (additive).
+- `build:` — Package formats tied to builders: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Replaces old `pkg:` field.
+- `builds:` — Builder capabilities on builder images (unchanged): `builds: [pixi, npm, cargo]`
+- Tags union (`org.overthinkos.tags`) = `["all"]` + distro + build formats — used for task matching
+- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/generate.go` (distro-first override), `ov/layers.go` (`TagSections`, `parseTaskfileTaskNames`)
 
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `ov/generate.go` near line 297.
 
@@ -111,7 +112,7 @@ plugins/
 +-- ov/                               # Operations (16 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-layers/                        # Layer reference (127 skills)
-+-- ov-images/                        # Image reference (30 skills)
++-- ov-images/                        # Image reference (31 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -152,7 +153,8 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
 - MUST invoke skills before exploring the codebase. Skills are the primary knowledge source, not the code itself
 - `root.yml`/`user.yml` use `all:` task for common logic, with optional tag-specific tasks (`rpm:`, `pac:`, `fedora:`, etc.). Never use `install:` as a task name
-- `pkg:` field in `images.yml` accepts tags: `pkg: [rpm, fedora, "fedora:43"]`. First entry must be a format (rpm/deb/pac/aur). Tags inherit through base chain
+- `distro:` field defines identity tags: `distro: ["fedora:43", fedora]`. First matching section overrides packages. Inherited through base chain
+- `build:` field defines package formats: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Inherited through base chain. Default: `[rpm]`
 
 For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
 
@@ -257,7 +259,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 16 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-layers` | 127 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 30 | Image reference | "What does image X look like?" |
+| `ov-images` | 31 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 

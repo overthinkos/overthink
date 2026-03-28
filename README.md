@@ -39,25 +39,29 @@ Each layer lives in its own directory under `layers/` and can use any combinatio
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
-### Tag-Based Multi-Distro Support
+### Multi-Distro Support: `distro:` and `build:`
 
-A single layer can target multiple distros. The `pkg:` field in `images.yml` defines tags — format, distro name, and version:
+A single layer can target multiple distros. Two fields in `images.yml` control the behavior:
 
 ```yaml
 fedora:
   base: "quay.io/fedora/fedora:43"
-  pkg: [rpm, fedora, "fedora:43"]
+  distro: ["fedora:43", fedora]    # identity tags, priority order
+  build: [rpm]                      # package formats, all installed in order
+  builds: [pixi, npm, cargo]       # multi-stage build capabilities
 
 archlinux:
   base: "docker.io/library/archlinux:latest"
-  pkg: [pac, archlinux]
+  distro: [archlinux]
+  build: [pac]
+  builds: [pixi, npm, cargo, aur]
 ```
 
-These tags flow through to all three layer file types:
-- **`layer.yml`** — Package sections matching any tag are activated (`rpm:`, `pac:`, `fedora:`, `fedora:43:`)
-- **`root.yml` / `user.yml`** — Tasks matching any tag are called in order (`all:` → `rpm:` → `fedora:` → `fedora:43:`)
+These flow through to all three layer file types:
+- **`layer.yml`** — `distro:` tags are checked first (first match wins, prevents version conflicts). If no distro section matches, `build:` formats install ALL matching sections in order.
+- **`root.yml` / `user.yml`** — **Additive**: all matching tasks run (`all:` → distro tags → build formats)
 
-This means `fedora-ov` and `arch-ov` can share the exact same layer list — only the packages and scripts differ per distro. Tags are embedded in built images as OCI labels (`org.overthinkos.tags`) for runtime introspection.
+This means `fedora-ov` and `arch-ov` share the exact same layer list — only the packages and scripts differ per distro.
 
 ### Docker or Podman — Your Choice
 

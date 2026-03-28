@@ -73,7 +73,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var bindMounts []ResolvedBindMount
 	var security SecurityConfig
 	var network string
-	var hasSupervisord bool
+	var entrypoint []string
 
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
@@ -104,9 +104,9 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		gid = resolved.GID
 		ports = resolved.Ports
 		network = resolved.Network
-		// Check if image has supervisord services
+		// Resolve entrypoint from init config
 		resolvedLayers, _ := ResolveLayerOrder(img.Layers, layers, nil)
-		hasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, layers)
+		entrypoint = resolveEntrypoint(resolved.InitConfig, layers, resolvedLayers, resolved.Bootc)
 	} else {
 		imageRef = resolveShellImageRef("", c.Image, c.Tag)
 		if err := EnsureImage(imageRef, rt); err != nil {
@@ -131,7 +131,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		volumes = meta.Volumes
 		security = meta.Security
 		network = meta.Network
-		hasSupervisord = len(meta.Supervisord) > 0
+		entrypoint = resolveEntrypointFromMeta(meta)
 
 		// Resolve bind mounts from labels
 		var deployMounts []BindMountConfig
@@ -207,7 +207,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, hasSupervisord, resolvedNetwork)
+	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -339,17 +339,17 @@ func (c *StartCmd) runRemote(ref string) error {
 		return netErr
 	}
 
-	// Check if remote image has supervisord services
-	remoteHasSupervisord := false
+	// Resolve entrypoint from init config
+	remoteEntrypoint := []string{"sleep", "infinity"}
 	if ctx.Layers != nil {
 		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+		remoteEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
 	}
 
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteHasSupervisord, resolvedNetwork)
+		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteEntrypoint, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -411,11 +411,11 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		}
 	}
 
-	// Check if remote image has supervisord services
-	remoteQHasSupervisord := false
+	// Resolve entrypoint for quadlet
+	remoteQEntrypoint := []string{"sleep", "infinity"}
 	if ctx.Layers != nil {
 		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteQHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+		remoteQEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
 	}
 
 	qcfg := QuadletConfig{
@@ -435,7 +435,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		Network:        resolvedNetwork,
 		Status:         ctx.Resolved.Status,
 		Info:           ctx.Resolved.Info,
-		HasSupervisord: remoteQHasSupervisord,
+		Entrypoint:     remoteQEntrypoint,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -646,8 +646,9 @@ func stopTunnelForImage(imageName string) {
 }
 
 // buildStartArgs constructs the container run argument list for a detached service.
-// If hasSupervisord is true, the container runs supervisord; otherwise it runs sleep infinity.
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, hasSupervisord bool, network ...string) []string {
+// entrypoint is the init system command (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
+// or the fallback (e.g., ["sleep", "infinity"]).
+func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, entrypoint []string, network ...string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
@@ -685,27 +686,52 @@ func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	for _, e := range envVars {
 		args = append(args, "-e", e)
 	}
-	if hasSupervisord {
-		args = append(args, imageRef, "supervisord", "-n", "-c", "/etc/supervisord.conf")
-	} else {
-		args = append(args, imageRef, "sleep", "infinity")
-	}
+	args = append(args, imageRef)
+	args = append(args, entrypoint...)
 	return args
 }
 
-// imageHasSupervisordFromLayers checks if any layer in the list has supervisord
-// services or port relays, indicating the image needs supervisord as its entrypoint.
-func imageHasSupervisordFromLayers(layerNames []string, layers map[string]*Layer) bool {
-	for _, name := range layerNames {
-		layer, ok := layers[name]
-		if !ok {
-			continue
-		}
-		if layer.HasSupervisord || layer.HasPortRelay {
-			return true
+// resolveEntrypoint determines the init system entrypoint for an image.
+// Uses init.yml config when available, falls back to well-known defaults.
+func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOrder []string, isBootc bool) []string {
+	if initConfig != nil {
+		initName, initDef := initConfig.ResolveInitSystem(layers, layerOrder, isBootc, "")
+		if initName != "" && initDef != nil && len(initDef.Entrypoint) > 0 {
+			return initDef.Entrypoint
 		}
 	}
-	return false
+	return []string{"sleep", "infinity"}
+}
+
+// resolveEntrypointFromMeta determines the entrypoint from image metadata (runtime mode).
+func resolveEntrypointFromMeta(meta *ImageMetadata) []string {
+	if meta.Init == "" {
+		return []string{"sleep", "infinity"}
+	}
+	// Try loading init.yml from project directory
+	dir, _ := os.Getwd()
+	cfg, _ := LoadConfig(dir)
+	if cfg != nil {
+		initCfg, err := LoadInitConfigForImage(
+			cfg.Defaults.FormatConfig, cfg.Defaults.FormatConfig, dir,
+		)
+		if err == nil && initCfg != nil {
+			if def, ok := initCfg.Inits[meta.Init]; ok {
+				if len(def.Entrypoint) > 0 {
+					return def.Entrypoint
+				}
+			}
+		}
+	}
+	// Fallback for well-known init systems
+	switch meta.Init {
+	case "supervisord":
+		return []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}
+	case "systemd":
+		return nil // systemd images boot via VM, no container entrypoint
+	default:
+		return []string{"sleep", "infinity"}
+	}
 }
 
 // containerName returns the deterministic container name for an image.

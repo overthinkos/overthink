@@ -29,7 +29,7 @@ type QuadletConfig struct {
 	Status         string              // effective status (working, testing, broken)
 	Info           string              // status description
 	Secrets        []CollectedSecret   // container secrets (podman Secret= directives)
-	HasSupervisord bool                // true if image has supervisord services
+	Entrypoint     []string            // init system entrypoint (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -131,8 +131,8 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if cfg.EnvFile != "" {
 		b.WriteString(fmt.Sprintf("EnvironmentFile=%s\n", cfg.EnvFile))
 	}
-	if cfg.HasSupervisord {
-		b.WriteString("Exec=supervisord -n -c /etc/supervisord.conf\n")
+	if len(cfg.Entrypoint) > 0 {
+		b.WriteString(fmt.Sprintf("Exec=%s\n", strings.Join(cfg.Entrypoint, " ")))
 	} else {
 		b.WriteString("Exec=sleep infinity\n")
 	}

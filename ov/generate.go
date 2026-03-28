@@ -126,10 +126,16 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 	}
 	SetFormatNames(defaultDistroCfg)
 
+	// Load default init config for layer init system detection
+	defaultInitCfg, _ := LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
+
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
+
+	// Populate init systems on layers from init.yml config
+	PopulateLayerInitSystems(layers, defaultInitCfg)
 
 	if err := Validate(cfg, layers, dir); err != nil {
 		return nil, err
@@ -329,29 +335,15 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	// Check if this is a service image (has supervisord layers or port relays)
-	hasServices := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasSupervisord || layer.HasPortRelay {
-			hasServices = true
-			break
-		}
+	// Detect active init systems from layers (driven by init.yml config)
+	activeInits := make(map[string]*InitDef)
+	if img.InitConfig != nil {
+		activeInits = img.InitConfig.ActiveInits(g.Layers, layerOrder, img.Bootc)
 	}
-
-	// Check if this image has systemd service files (for bootc images)
-	hasSystemdServices := false
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasSystemdServices {
-			hasSystemdServices = true
-			break
-		}
+	// Store init system on ResolvedImage for downstream use (labels, etc.)
+	if img.InitConfig != nil {
+		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, img.Bootc, "")
 	}
-
-	// For bootc images with systemd services, skip supervisord assembly
-	useSystemd := img.Bootc && hasSystemdServices
-	useSupervisord := hasServices && !useSystemd
 
 	// Check if this image has route layers and traefik
 	hasRoutes := false
@@ -375,59 +367,58 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY .build/%s/traefik-routes.yml /routes.yml\n\n", imageName))
 	}
 
-	// Emit supervisord config stage if needed
-	// When a child image adds services, include parent-provided supervisor configs
-	// too so the assembled supervisord.conf contains all services from the full chain.
-	if useSupervisord {
-		supervisordLayerOrder := layerOrder
+	// Emit init system stages (fragment assembly or file copy)
+	// When a child image adds services, include parent-provided configs
+	// so the assembled config contains all services from the full chain.
+	for initName, def := range activeInits {
+		initLayerOrder := layerOrder
 		if !img.IsExternalBase {
-			// Collect ALL layers across entire base chain for complete supervisord assembly
 			full := collectAllImageLayers(imageName, g.Images, g.Layers)
 			if len(full) > 0 {
-				supervisordLayerOrder = full
+				initLayerOrder = full
 			}
 		}
-		if err := g.generateSupervisordFragments(imageName, supervisordLayerOrder); err != nil {
+		if err := g.generateInitFragments(imageName, initName, def, initLayerOrder); err != nil {
 			return err
 		}
-		b.WriteString("FROM scratch AS supervisord-conf\n")
-		b.WriteString("COPY templates/supervisord.header.conf /supervisor/00-header.conf\n")
-		for i, layerName := range supervisordLayerOrder {
+
+		// Emit scratch stage with COPY lines for fragments
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", def.StageName))
+		if def.StageHeaderCopy != "" {
+			b.WriteString(def.StageHeaderCopy + "\n")
+		}
+		for i, layerName := range initLayerOrder {
 			layer := g.Layers[layerName]
-			if layer.HasSupervisord {
-				b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%02d-%s.conf /supervisor/%02d-%s.conf\n", imageName, i+1, layerName, i+1, layerName))
+			// Service content fragments (fragment_assembly model)
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layerName)
+				copyLine, err := def.RenderStageFragmentCopy(imageName, fileName)
+				if err != nil {
+					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, layerName, err)
+				}
+				b.WriteString(copyLine + "\n")
 			}
-			if layer.HasPortRelay {
-				for _, port := range layer.PortRelay() {
+			// Relay fragments
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				for _, port := range layer.PortRelayPorts {
 					confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
-					b.WriteString(fmt.Sprintf("COPY .build/%s/supervisor/%s /supervisor/%s\n", imageName, confName, confName))
+					copyLine, err := def.RenderStageFragmentCopy(imageName, confName)
+					if err != nil {
+						return fmt.Errorf("rendering relay copy for %s/%s port %d: %w", initName, layerName, port, err)
+					}
+					b.WriteString(copyLine + "\n")
 				}
 			}
-		}
-		b.WriteString("\n")
-	}
-
-	// Emit systemd services stage for bootc images
-	if useSystemd {
-		systemdLayerOrder := layerOrder
-		if !img.IsExternalBase {
-			full := collectAllImageLayers(imageName, g.Images, g.Layers)
-			if len(full) > 0 {
-				systemdLayerOrder = full
-			}
-		}
-		if err := g.generateSystemdFragments(imageName, systemdLayerOrder); err != nil {
-			return err
-		}
-		b.WriteString("FROM scratch AS systemd-services\n")
-		for _, layerName := range systemdLayerOrder {
-			layer := g.Layers[layerName]
-			if !layer.HasSystemdServices {
-				continue
-			}
-			for _, svcPath := range layer.SystemdServices {
-				svcName := filepath.Base(svcPath)
-				b.WriteString(fmt.Sprintf("COPY .build/%s/systemd/%s /systemd/%s\n", imageName, svcName, svcName))
+			// File copy model: copy detected service files
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				for _, svcPath := range layer.ServiceFiles() {
+					svcName := filepath.Base(svcPath)
+					copyLine, err := def.RenderStageFragmentCopy(imageName, svcName)
+					if err != nil {
+						return fmt.Errorf("rendering service file copy for %s/%s: %w", initName, layerName, err)
+					}
+					b.WriteString(copyLine + "\n")
+				}
 			}
 		}
 		b.WriteString("\n")
@@ -522,63 +513,65 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Process each layer
-	// Post-layer steps (supervisord, traefik, bootc) run as root,
+	// Post-layer steps (init assembly, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
-	needsRootAfter := useSupervisord || useSystemd || (hasRoutes && hasTraefik) || img.Bootc
+	needsRootAfter := len(activeInits) > 0 || (hasRoutes && hasTraefik) || img.Bootc
 	inUserMode := false
 	for i, layerName := range layerOrder {
 		isLast := i == len(layerOrder)-1
 		inUserMode = g.writeLayerSteps(&b, layerName, img, isLast && !needsRootAfter)
 	}
 
-	// Assemble supervisord config if needed
-	if useSupervisord {
-		b.WriteString("# Assemble supervisord.conf\n")
-		b.WriteString("RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \\\n")
-		b.WriteString("    cat /supervisor/*.conf > /etc/supervisord.conf\n\n")
-	}
+	// Assemble init system configs (driven by init.yml templates)
+	for initName, def := range activeInits {
+		assembly, err := def.RenderAssemblyTemplate()
+		if err != nil {
+			return fmt.Errorf("rendering assembly for %s: %w", initName, err)
+		}
+		if assembly != "" {
+			b.WriteString(assembly)
+			if !strings.HasSuffix(assembly, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
 
-	// Install systemd service files for bootc images
-	if useSystemd {
-		b.WriteString("# Install systemd user services\n")
-		b.WriteString("RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \\\n")
-		b.WriteString("    cp /systemd/*.service /usr/lib/systemd/user/ && \\\n")
-		b.WriteString("    for svc in /systemd/*.service; do systemctl --global enable \"$(basename \"$svc\")\"; done\n\n")
+		// System-level service enablement (e.g., systemctl enable sshd)
+		var systemUnits []string
+		for _, layerName := range layerOrder {
+			layer := g.Layers[layerName]
+			systemUnits = append(systemUnits, layer.SystemServiceUnits()...)
+		}
+		sysEnable, err := def.RenderSystemEnableTemplate(systemUnits)
+		if err != nil {
+			return fmt.Errorf("rendering system enable for %s: %w", initName, err)
+		}
+		if sysEnable != "" {
+			b.WriteString(sysEnable)
+			if !strings.HasSuffix(sysEnable, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
+
+		// Post-assembly step (e.g., bootc container lint)
+		postAssembly, err := def.RenderPostAssemblyTemplate()
+		if err != nil {
+			return fmt.Errorf("rendering post-assembly for %s: %w", initName, err)
+		}
+		if postAssembly != "" {
+			b.WriteString(postAssembly)
+			if !strings.HasSuffix(postAssembly, "\n") {
+				b.WriteString("\n")
+			}
+			b.WriteString("\n")
+		}
 	}
 
 	// Copy traefik dynamic routes if needed
 	if hasRoutes && hasTraefik {
 		b.WriteString("# Traefik dynamic routes\n")
 		b.WriteString("COPY --from=traefik-routes /routes.yml /etc/traefik/dynamic/routes.yml\n\n")
-	}
-
-	// Enable system-level services (sshd, qemu-guest-agent, cloud-init, etc.)
-	if img.Bootc {
-		var systemUnits []string
-		for _, layerName := range layerOrder {
-			layer := g.Layers[layerName]
-			if layer.HasSystemServices {
-				systemUnits = append(systemUnits, layer.SystemServiceUnits...)
-			}
-		}
-		if len(systemUnits) > 0 {
-			b.WriteString("# Enable system-level services\n")
-			b.WriteString("RUN")
-			for i, unit := range systemUnits {
-				if i > 0 {
-					b.WriteString(" && \\\n   ")
-				} else {
-					b.WriteString(" ")
-				}
-				b.WriteString(fmt.Sprintf("systemctl enable %s", unit))
-			}
-			b.WriteString("\n\n")
-		}
-	}
-
-	// Bootc lint if applicable (must run as root)
-	if img.Bootc {
-		b.WriteString("RUN bootc container lint\n\n")
 	}
 
 	// Final USER directive (use UID for robustness)
@@ -825,28 +818,36 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
 }
 
-// generateSupervisordFragments writes supervisor configs from layer.yml to .build/<image>/supervisor/
-func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []string) error {
-	fragDir := filepath.Join(g.BuildDir, imageName, "supervisor")
+// generateInitFragments writes init system config fragments to .build/<image>/<fragmentDir>/
+// Handles both fragment_assembly (supervisord) and file_copy (systemd) models.
+func (g *Generator) generateInitFragments(imageName, initName string, def *InitDef, layerOrder []string) error {
+	fragDir := filepath.Join(g.BuildDir, imageName, def.FragmentDir)
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
 		return err
 	}
 
 	for i, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasSupervisord {
-			content := layer.ServiceConf()
-			if !strings.HasSuffix(content, "\n") {
-				content += "\n"
+
+		// Fragment assembly model: render service content via template
+		if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+			content, err := def.RenderFragmentTemplate(layer.ServiceConf(), layerName, i+1)
+			if err != nil {
+				return fmt.Errorf("rendering fragment for %s/%s: %w", initName, layerName, err)
 			}
 			fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
 			if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
 				return err
 			}
 		}
-		if layer.HasPortRelay {
-			for _, port := range layer.PortRelay() {
-				content := generateRelayConf(port)
+
+		// Port relay fragments (via relay_template)
+		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+			for _, port := range layer.PortRelayPorts {
+				content, err := def.RenderRelayTemplate(port, layerName, i+1)
+				if err != nil {
+					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, layerName, port, err)
+				}
 				confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
 				fragFile := filepath.Join(fragDir, confName)
 				if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
@@ -854,44 +855,18 @@ func (g *Generator) generateSupervisordFragments(imageName string, layerOrder []
 				}
 			}
 		}
-	}
-	return nil
-}
 
-// generateRelayConf returns a supervisord config fragment for a port relay.
-func generateRelayConf(port int) string {
-	return fmt.Sprintf(`[program:relay-%d]
-command=/usr/local/bin/relay-wrapper %d
-autostart=true
-autorestart=true
-priority=1
-startsecs=0
-stdout_logfile=/dev/fd/1
-stdout_logfile_maxbytes=0
-redirect_stderr=true
-`, port, port)
-}
-
-// generateSystemdFragments copies systemd .service files from layers to .build/<image>/systemd/
-func (g *Generator) generateSystemdFragments(imageName string, layerOrder []string) error {
-	fragDir := filepath.Join(g.BuildDir, imageName, "systemd")
-	if err := os.MkdirAll(fragDir, 0755); err != nil {
-		return err
-	}
-
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if !layer.HasSystemdServices {
-			continue
-		}
-		for _, svcPath := range layer.SystemdServices {
-			content, err := os.ReadFile(svcPath)
-			if err != nil {
-				return fmt.Errorf("reading systemd service %s: %w", svcPath, err)
-			}
-			destFile := filepath.Join(fragDir, filepath.Base(svcPath))
-			if err := os.WriteFile(destFile, content, 0644); err != nil {
-				return err
+		// File copy model: copy detected service files
+		if def.Model == "file_copy" {
+			for _, svcPath := range layer.ServiceFiles() {
+				content, err := os.ReadFile(svcPath)
+				if err != nil {
+					return fmt.Errorf("reading service file %s: %w", svcPath, err)
+				}
+				destFile := filepath.Join(fragDir, filepath.Base(svcPath))
+				if err := os.WriteFile(destFile, content, 0644); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1261,7 +1236,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelHooks, hooks)
 	}
 
-	// Bootc-only labels: VM config, libvirt snippets, system services
+	// Bootc-only labels: VM config, libvirt snippets
 	if img.Bootc {
 		if img.Vm != nil {
 			writeJSONLabel(b, LabelVm, img.Vm)
@@ -1269,32 +1244,32 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 		libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
 		writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
+	}
 
-		var systemdUnits []string
-		for _, layerName := range layerOrder {
-			layer := g.Layers[layerName]
-			if layer.HasSystemServices {
-				systemdUnits = append(systemdUnits, layer.SystemServiceUnits...)
+	// Init system label: active init system name + per-init service list
+	if img.InitConfig != nil {
+		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, img.Bootc, "")
+		if labelInitSystem != "" && labelInitDef != nil {
+			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
+			// Collect service names for this init system
+			var serviceNames []string
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				if layer.HasInit(labelInitSystem) {
+					serviceNames = append(serviceNames, layerName)
+				}
+			}
+			if labelInitDef.LabelKey != "" {
+				writeJSONLabel(b, labelInitDef.LabelKey, serviceNames)
 			}
 		}
-		writeJSONLabel(b, LabelSystemd, systemdUnits)
 	}
-
-	// Supervisord services: collected from layers (all images)
-	var supervisordServices []string
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if layer.HasSupervisord {
-			supervisordServices = append(supervisordServices, layerName)
-		}
-	}
-	writeJSONLabel(b, LabelSupervisord, supervisordServices)
 
 	// Port relay: collected from layers
 	var portRelay []int
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		portRelay = append(portRelay, layer.PortRelay()...)
+		portRelay = append(portRelay, layer.PortRelayPorts...)
 	}
 	writeJSONLabel(b, LabelPortRelay, portRelay)
 

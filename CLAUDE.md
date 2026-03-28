@@ -1,7 +1,7 @@
 # Overthink — The Container Management Experience for You and Your AI
 
 Compose, build, deploy, and manage container images from a library of fully configurable layers.
-Built on `supervisord` (for service images) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
+Built on a generic init system framework (`init.yml`) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
 
 ---
 
@@ -55,17 +55,26 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 **What gets generated** (`ov generate`):
 - `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
 - `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
-- `.build/<image>/supervisor/*.conf` -- supervisord service configs (only for images with `service` layers)
+- `.build/<image>/<fragment_dir>/*.conf` -- init system service configs (driven by `init.yml`, e.g., `supervisor/` for supervisord, `systemd/` for systemd)
 - `.build/_layers/<name>` -- symlinks to remote layer directories (only when remote layers used)
 
 Generation is idempotent. `.build/` is disposable and gitignored.
+
+**Generic init system support via `init.yml`:**
+- Init systems (supervisord, systemd, s6, etc.) are fully defined in `init.yml` at project root
+- Each init system declares: detection rules (`layer_fields`, `layer_files`), build model (`fragment_assembly` or `file_copy`), Go templates for fragment generation, Containerfile stage emission, config assembly, entrypoint, runtime service management commands, and OCI labels
+- Adding a new init system requires only editing `init.yml` -- no Go code changes
+- `service:` field in layer.yml maps to supervisord (via `layer_fields: [service]`), `*.service` files and `system_services:` map to systemd (via `layer_files` and `layer_fields`)
+- Images use `org.overthinkos.init` OCI label to identify their init system at runtime
+- Per-init service list stored in `org.overthinkos.services.<init>` label
+- Source: `init.yml` (definitions), `ov/init_config.go` (Go structs + loading + template rendering)
 
 **Multi-distro support via `distro:` and `build:` fields:**
 - `distro:` — Distro identity tags in priority order: `distro: ["fedora:43", fedora]`. For packages: first matching section wins (override). For tasks: all matching run (additive).
 - `build:` — Package formats tied to builders: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Replaces old `pkg:` field.
 - `builds:` — Builder capabilities on builder images (unchanged): `builds: [pixi, npm, cargo]`
 - Tags union (`org.overthinkos.tags`) = `["all"]` + distro + build formats — used for task matching
-- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/format_config.go` (YAML config loading), `ov/format_template.go` (template rendering), `distro.yml` + `builder.yml` (format definitions at project root, referenced via `format_config:` in `images.yml`)
+- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/format_config.go` (YAML config loading), `ov/format_template.go` (template rendering), `ov/init_config.go` (init system config), `distro.yml` + `builder.yml` + `init.yml` (format definitions at project root, referenced via `format_config:` in `images.yml`)
 
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
 
@@ -79,6 +88,7 @@ project/
 +-- ov/                       # Go module (go 1.25.3, kong CLI, go-containerregistry)
 +-- distro.yml                # Distro bootstrap + package format definitions (referenced via images.yml)
 +-- builder.yml               # Multi-stage builder definitions (referenced via images.yml)
++-- init.yml                  # Init system definitions: supervisord, systemd (referenced via images.yml)
 +-- .build/                   # Generated (gitignored)
 +-- images.yml                # Image definitions
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
@@ -86,7 +96,7 @@ project/
 +-- taskfiles/                # Build.yml, Setup.yml
 +-- layers/<name>/            # Layer directories (~130 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
-+-- templates/                # supervisord.header.conf
++-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
 
 ### Two-Layer Sync Architecture
@@ -157,7 +167,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - `root.yml`/`user.yml` use `all:` task for common logic, with optional tag-specific tasks (`rpm:`, `pac:`, `fedora:`, etc.). Never use `install:` as a task name
 - `distro:` field defines identity tags: `distro: ["fedora:43", fedora]`. First matching section overrides packages. Inherited through base chain
 - `build:` field defines package formats: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Inherited through base chain. Default: `[rpm]`
-- Images with layers that have `service:` or `port_relay:` fields MUST include the `supervisord` layer in their dependency chain. `ov validate` enforces this as a hard error. Images without these fields use `sleep infinity` as entrypoint (no supervisord needed)
+- Images with layers that trigger an init system (via `service:`, `port_relay:`, `system_services:`, or `*.service` files) must include the init system's `depends_layer` in their dependency chain. `ov validate` enforces this as a hard error (e.g., supervisord layers need the `supervisord` layer). Detection rules and dependencies are defined in `init.yml`, not hardcoded
 
 For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
 
@@ -184,7 +194,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `shell` | `/ov:shell` |
 | `start`, `stop`, `enable`, `disable`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
-| `service start/stop/restart/status` (supervisord) | `/ov:service` |
+| `service start/stop/restart/status` | `/ov:service` |
 | `cdp` | `/ov:cdp` |
 | `wl sway` | `/ov:wl` (sway subgroup) |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |

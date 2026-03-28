@@ -24,7 +24,7 @@ One of Overthink's design goals is running sandboxed [OpenClaw](https://github.c
 
 ### Layers, Images, and Multi-Service Containers
 
-A layer is a reusable building block — packages, config, services. An image is layers stacked on a base. The key insight: **you can combine multiple services into a single container image** just by listing layers. Need PostgreSQL, Redis, a Python API, and a reverse proxy in one container? Add those four layers to your image. `ov` resolves dependencies, generates an optimized Containerfile, and wires up supervisord to run all services together when the container starts.
+A layer is a reusable building block — packages, config, services. An image is layers stacked on a base. The key insight: **you can combine multiple services into a single container image** just by listing layers. Need PostgreSQL, Redis, a Python API, and a reverse proxy in one container? Add those four layers to your image. `ov` resolves dependencies, generates an optimized Containerfile, and wires up the init system (supervisord for containers, systemd for bootc VMs) to run all services together when the container starts.
 
 ### Building Layers: Package Managers & Config Files
 
@@ -67,13 +67,15 @@ This means `fedora-ov` and `arch-ov` share the exact same layer list — only th
 
 Docker is the container tool most people know. Podman is a newer alternative from Red Hat that runs without a background daemon and integrates natively with Linux systemd. `ov` works with either — same commands, same images, same results. Switch with `ov config set engine.build podman`.
 
-### Two Process Managers, Two Levels
+### Init Systems: Generic, Configurable, Extensible
 
-**Inside containers**, Overthink uses **supervisord** — a lightweight process manager that runs multiple services within a single container. When a layer declares a `service:` in its `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without supervisord services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into without requiring a process manager.
+**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares `service:` in `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
 
-**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and supervisord (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
 
-**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level, running services like sshd and cloud-init directly. No supervisord needed because it's a real operating system, not a container.
+**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers use `system_services:` to declare systemd units (like sshd) or add `*.service` files for user-level services. No supervisord needed because it's a real operating system, not a container.
+
+**Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing `init.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
 
 ### Quadlets: Containers as System Services
 
@@ -148,7 +150,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Services & Infrastructure
 
-**supervisord** — Process manager that ties multi-service containers together. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
+**supervisord** — Default init system for managing multiple services in container images (via `service:` field in layer.yml). Configurable via `init.yml`. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
 
 ### GPU & Machine Learning
 
@@ -189,7 +191,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Develop** — `ov shell <image>` drops you into an interactive container with all your layers, volumes mounted, GPU passed through. Change code, rebuild, iterate.
 
-**Run** — `ov start <image>` launches a detached service container with supervisord managing your processes, traefik routing your services, and persistent volumes for data.
+**Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
 **Deploy** — `ov enable <image>` reads the image's embedded labels, generates a quadlet, saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image.
 
@@ -222,7 +224,7 @@ ov status [<image>] [--all] [--json]   # Service status (table/detail/JSON)
 ov disable/logs/update <image>        # Service lifecycle
 ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
-ov service status/start/stop/restart   # Manage supervisord services in container
+ov service status/start/stop/restart   # Manage services inside container
 ```
 
 ### Desktop Automation

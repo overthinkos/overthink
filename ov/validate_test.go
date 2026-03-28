@@ -1110,8 +1110,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
-			HasPortRelay: true,
-			portRelay:    []int{9222},
+			PortRelayPorts: []int{9222},
 		},
 	}
 
@@ -1132,8 +1131,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 			HasPorts:     true,
 			ports:        []string{"99999"},
 			portSpecs:    []PortSpec{{Port: 99999, Protocol: "http"}},
-			HasPortRelay: true,
-			portRelay:    []int{99999},
+			PortRelayPorts: []int{99999},
 		},
 	}
 
@@ -1157,8 +1155,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 			HasPorts:     true,
 			ports:        []string{"8080"},
 			portSpecs:    []PortSpec{{Port: 8080, Protocol: "http"}},
-			HasPortRelay: true,
-			portRelay:    []int{9222},
+			PortRelayPorts: []int{9222},
 		},
 	}
 
@@ -1179,8 +1176,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 		"svc": {
 			Name:         "svc",
 			HasUserYml:   true,
-			HasPortRelay: true,
-			portRelay:    []int{9222},
+			PortRelayPorts: []int{9222},
 		},
 	}
 
@@ -1204,8 +1200,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
-			HasPortRelay: true,
-			portRelay:    []int{9222, 9222},
+			PortRelayPorts: []int{9222, 9222},
 		},
 	}
 
@@ -1231,8 +1226,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
-			HasPortRelay: true,
-			portRelay:    []int{9222},
+			PortRelayPorts: []int{9222},
 		},
 	}
 

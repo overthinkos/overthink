@@ -87,10 +87,19 @@ func (c *ValidateCmd) Run() error {
 		SetFormatNames(distroCfg)
 	}
 
+	// Load default init config for layer init system detection
+	var defaultInitCfg *InitConfig
+	if cfg.Defaults.FormatConfig != nil {
+		defaultInitCfg, _ = LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
+	}
+
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
+
+	// Populate init systems on layers from init.yml config
+	PopulateLayerInitSystems(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir)
 }
@@ -454,7 +463,7 @@ func (c *ListTargetsCmd) Run() error {
 	return nil
 }
 
-// ListServicesCmd lists layers with supervisord.conf
+// ListServicesCmd lists layers that trigger any init system
 type ListServicesCmd struct{}
 
 func (c *ListServicesCmd) Run() error {
@@ -473,7 +482,7 @@ func (c *ListServicesCmd) Run() error {
 		return err
 	}
 
-	services := ServiceLayers(layers)
+	services := InitLayers(layers)
 	for _, layer := range services {
 		fmt.Println(layer.Name)
 	}

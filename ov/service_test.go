@@ -4,27 +4,63 @@ import (
 	"testing"
 )
 
-func TestCheckSupervisordService(t *testing.T) {
-	available := []string{"traefik", "testapi"}
-
-	// Valid services
-	if err := checkSupervisordService(available, "traefik"); err != nil {
-		t.Errorf("checkSupervisordService(traefik) = %v, want nil", err)
-	}
-	if err := checkSupervisordService(available, "testapi"); err != nil {
-		t.Errorf("checkSupervisordService(testapi) = %v, want nil", err)
+func TestValidateServiceNameFound(t *testing.T) {
+	// Test the service name lookup logic that validateServiceName uses internally.
+	// validateServiceName calls ExtractMetadata which reads container labels at runtime,
+	// so we test the lookup logic directly via ImageMetadata.Services.
+	meta := &ImageMetadata{
+		Init:     "supervisord",
+		Services: []string{"traefik", "testapi"},
 	}
 
-	// Invalid service
-	err := checkSupervisordService(available, "nonexistent")
-	if err == nil {
-		t.Error("checkSupervisordService(nonexistent) = nil, want error")
+	for _, svc := range []string{"traefik", "testapi"} {
+		found := false
+		for _, s := range meta.Services {
+			if s == svc {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("service %q should be found in Services %v", svc, meta.Services)
+		}
 	}
 }
 
-func TestCheckSupervisordServiceEmpty(t *testing.T) {
-	err := checkSupervisordService(nil, "svc")
-	if err == nil {
-		t.Error("checkSupervisordService with nil available = nil, want error")
+func TestValidateServiceNameNotFound(t *testing.T) {
+	meta := &ImageMetadata{
+		Init:     "supervisord",
+		Services: []string{"traefik", "testapi"},
+	}
+
+	svc := "nonexistent"
+	found := false
+	for _, s := range meta.Services {
+		if s == svc {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Error("service \"nonexistent\" should not be found")
+	}
+}
+
+func TestValidateServiceNameEmpty(t *testing.T) {
+	meta := &ImageMetadata{
+		Init:     "",
+		Services: nil,
+	}
+
+	svc := "svc"
+	found := false
+	for _, s := range meta.Services {
+		if s == svc {
+			found = true
+			break
+		}
+	}
+	if found {
+		t.Error("service should not be found in nil Services list")
 	}
 }

@@ -1,0 +1,116 @@
+# init.yml — Init system definitions
+#
+# Each init system defines how to detect, build, assemble, and manage services.
+# Key = init system name used in images.yml init: field and auto-detection.
+#
+# Detection:
+#   layer_fields: which layer.yml fields trigger this init system
+#   layer_files: which files in layer directories trigger this init system
+#
+# Build models:
+#   fragment_assembly — numbered fragments concatenated into single config (supervisord)
+#   file_copy — service files copied to system path and enabled (systemd)
+#
+# Template functions: cacheMounts, quote, default, splitFirst, replace, join, printf
+# Template context varies by field — see init_config.go for context struct definitions.
+
+inits:
+  supervisord:
+    # Detection: which layer.yml fields / file patterns trigger this init system
+    layer_fields: [service]
+    layer_files: []
+    depends_layer: supervisord
+
+    # Build model: numbered fragments → cat into single config file
+    model: fragment_assembly
+
+    # Fragment generation
+    header_file: templates/supervisord.header.conf
+    fragment_dir: supervisor
+    # Context: .Content (raw service: field), .LayerName, .Index
+    fragment_template: |
+      {{.Content}}
+    # Context: .Port (int), .LayerName, .Index
+    relay_template: |
+      [program:relay-{{.Port}}]
+      command=/usr/local/bin/relay-wrapper {{.Port}}
+      autostart=true
+      autorestart=true
+      priority=1
+      startsecs=0
+      stdout_logfile=/dev/fd/1
+      stdout_logfile_maxbytes=0
+      redirect_stderr=true
+
+    # Containerfile scratch stage
+    stage_name: supervisord-conf
+    stage_header_copy: "COPY templates/supervisord.header.conf /supervisor/00-header.conf"
+    # Context: .ImageName, .FragmentDir, .FileName
+    stage_fragment_copy: "COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}"
+
+    # Containerfile assembly step (runs as root)
+    assembly_template: |
+      # Assemble supervisord.conf
+      RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \
+          cat /supervisor/*.conf > /etc/supervisord.conf
+
+    # Runtime entrypoint
+    entrypoint: ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
+    fallback_entrypoint: ["sleep", "infinity"]
+
+    # Service management (ov service start/stop/status/restart)
+    management_tool: supervisorctl
+    management_commands:
+      status: "status"
+      start: "start {{.Service}}"
+      stop: "stop {{.Service}}"
+      restart: "restart {{.Service}}"
+
+    # OCI label for service list
+    label_key: org.overthinkos.services.supervisord
+
+  systemd:
+    layer_fields: [system_services]
+    layer_files: ["*.service"]
+    depends_layer: ""
+    requires_bootc: true
+
+    # Build model: copy service files to system path and enable
+    model: file_copy
+    fragment_dir: systemd
+
+    # Containerfile scratch stage
+    stage_name: systemd-services
+    stage_fragment_copy: "COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}"
+
+    # Install user-level service files + enable globally
+    assembly_template: |
+      # Install systemd user services
+      RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \
+          cp /systemd/*.service /usr/lib/systemd/user/ && \
+          for svc in /systemd/*.service; do systemctl --global enable "$(basename "$svc")"; done
+
+    # System-level service enablement (for system_services: field)
+    # Context: .Units ([]string)
+    system_enable_template: |
+      # Enable system-level services
+      RUN{{range $i, $unit := .Units}}{{if $i}} && \
+         {{else}} {{end}}systemctl enable {{$unit}}{{end}}
+
+    # Post-assembly step (bootc lint)
+    post_assembly_template: |
+      RUN bootc container lint
+
+    # No entrypoint — systemd is PID 1 via bootc
+    entrypoint: []
+    fallback_entrypoint: ["sleep", "infinity"]
+
+    # Service management
+    management_tool: systemctl
+    management_commands:
+      status: "--user status {{.Service}}"
+      start: "--user start {{.Service}}"
+      stop: "--user stop {{.Service}}"
+      restart: "--user restart {{.Service}}"
+
+    label_key: org.overthinkos.services.systemd

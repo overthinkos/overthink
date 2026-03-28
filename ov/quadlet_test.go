@@ -9,12 +9,12 @@ import (
 
 func TestGenerateQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:      "fedora-test",
-		ImageRef:       "ghcr.io/overthinkos/fedora-test:latest",
-		Workspace:      "/home/user/project",
-		Ports:          []string{"8000:8000", "8080:8080"},
-		BindAddress:    "127.0.0.1",
-		HasSupervisord: true,
+		ImageName:   "fedora-test",
+		ImageRef:    "ghcr.io/overthinkos/fedora-test:latest",
+		Workspace:   "/home/user/project",
+		Ports:       []string{"8000:8000", "8080:8080"},
+		BindAddress: "127.0.0.1",
+		Entrypoint:  []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"},
 	}
 
 	got := generateQuadlet(cfg)

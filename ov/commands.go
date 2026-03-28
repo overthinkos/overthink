@@ -194,7 +194,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Network:        resolvedNetwork,
 		Status:         meta.Status,
 		Info:           meta.Info,
-		HasSupervisord: len(meta.Supervisord) > 0,
+		Entrypoint:     resolveEntrypointFromMeta(meta),
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -359,11 +359,11 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		return netErr
 	}
 
-	// Check if remote image has supervisord services
-	remoteEnableHasSupervisord := false
+	// Resolve entrypoint for quadlet
+	remoteEnableEntrypoint := []string{"sleep", "infinity"}
 	if ctx.Layers != nil {
 		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteEnableHasSupervisord = imageHasSupervisordFromLayers(resolvedLayers, ctx.Layers)
+		remoteEnableEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
 	}
 
 	qcfg := QuadletConfig{
@@ -383,7 +383,7 @@ func (c *EnableCmd) runRemoteEnable(rt *ResolvedRuntime, ref string) error {
 		Network:        resolvedNetwork,
 		Status:         ctx.Resolved.Status,
 		Info:           ctx.Resolved.Info,
-		HasSupervisord: remoteEnableHasSupervisord,
+		Entrypoint:     remoteEnableEntrypoint,
 	}
 
 	content := generateQuadlet(qcfg)

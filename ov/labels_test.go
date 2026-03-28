@@ -35,8 +35,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelVm:        `{"disk_size":"20 GiB","ram":"8G","cpus":4,"ssh_port":2222}`,
 			LabelLibvirt:   `["<devices><channel/></devices>"]`,
 			LabelRoutes:    `[{"host":"openclaw.localhost","port":18789}]`,
-			LabelSystemd:     `["sshd"]`,
-			LabelSupervisord: `["traefik","testapi"]`,
+			LabelInit:                              "supervisord",
+			"org.overthinkos.services.supervisord": `["traefik","testapi"]`,
 			LabelEnvLayers: `{"CUDA_HOME":"/usr/local/cuda"}`,
 			LabelPathAppend: `["/opt/bin"]`,
 			LabelSkills:     "https://github.com/overthinkos/overthink-plugins/blob/main/ov-images/skills/openclaw/SKILL.md",
@@ -175,16 +175,15 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 		t.Errorf("Routes = %v, want %v", meta.Routes, wantRoutes)
 	}
 
-	// Systemd units
-	wantSysSvc := []string{"sshd"}
-	if !reflect.DeepEqual(meta.Systemd, wantSysSvc) {
-		t.Errorf("Systemd = %v, want %v", meta.Systemd, wantSysSvc)
+	// Init system
+	if meta.Init != "supervisord" {
+		t.Errorf("Init = %q, want %q", meta.Init, "supervisord")
 	}
 
-	// Supervisord services
-	wantSupervisord := []string{"traefik", "testapi"}
-	if !reflect.DeepEqual(meta.Supervisord, wantSupervisord) {
-		t.Errorf("Supervisord = %v, want %v", meta.Supervisord, wantSupervisord)
+	// Services for active init system
+	wantServices := []string{"traefik", "testapi"}
+	if !reflect.DeepEqual(meta.Services, wantServices) {
+		t.Errorf("Services = %v, want %v", meta.Services, wantServices)
 	}
 
 	// Layer env vars
@@ -341,10 +340,9 @@ func TestWriteLabelsPortRelay(t *testing.T) {
 		},
 		Layers: map[string]*Layer{
 			"chrome": {
-				Name:         "chrome",
-				HasUserYml:   true,
-				HasPortRelay: true,
-				portRelay:    []int{9222},
+				Name:           "chrome",
+				HasUserYml:     true,
+				PortRelayPorts: []int{9222},
 			},
 		},
 	}
@@ -386,11 +384,11 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		},
 		Layers: map[string]*Layer{
 			"svc": {
-				Name:       "svc",
-				HasUserYml: true,
-				HasSupervisord: true,
-				serviceConf:    "[program:svc]\ncommand=svc serve",
-				HasVolumes: true,
+				Name:        "svc",
+				HasUserYml:  true,
+				InitSystems: map[string]bool{"supervisord": true},
+				serviceConf: "[program:svc]\ncommand=svc serve",
+				HasVolumes:  true,
 				volumes: []VolumeYAML{
 					{Name: "data", Path: "/home/user/.myapp"},
 				},
@@ -421,6 +419,14 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		DNS:     "myapp.example.com",
 		AcmeEmail: "admin@example.com",
 		Vm:       &VmConfig{Ram: "4G", Cpus: 2},
+		InitConfig: &InitConfig{
+			Inits: map[string]*InitDef{
+				"supervisord": {
+					LayerFields: []string{"service"},
+					LabelKey:    "org.overthinkos.services.supervisord",
+				},
+			},
+		},
 	}
 
 	var b strings.Builder
@@ -467,7 +473,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelVm, `"ram":"4G"`},
 		{LabelEnvLayers, `"APP_ENV":"prod"`},
 		{LabelPathAppend, `["/opt/myapp/bin"]`},
-		{LabelSupervisord, `["svc"]`},
+		{"org.overthinkos.services.supervisord", `["svc"]`},
 	}
 
 	for _, c := range jsonChecks {
@@ -515,7 +521,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		LabelBootc, LabelBindMounts, LabelSecurity, LabelNetwork,
 		LabelTunnel, LabelDNS, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
-		LabelSystemd, LabelSupervisord, LabelEnvLayers, LabelPathAppend,
+		LabelInit, LabelEnvLayers, LabelPathAppend,
 		LabelPortRelay, LabelSkills,
 	}
 	for _, label := range omitted {
@@ -563,10 +569,9 @@ func TestLabelRoundTrip(t *testing.T) {
 					Vars:       map[string]string{"LANG": "en_US.UTF-8"},
 					PathAppend: []string{"/opt/svc/bin"},
 				},
-				HasSupervisord:     true,
-				serviceConf:        "[program:svc]\ncommand=svc serve",
-				HasSystemServices:  true,
-				SystemServiceUnits: []string{"sshd", "docker"},
+				InitSystems:    map[string]bool{"supervisord": true},
+				serviceConf:    "[program:svc]\ncommand=svc serve",
+				systemServices: []string{"sshd", "docker"},
 			},
 		},
 	}
@@ -584,6 +589,14 @@ func TestLabelRoundTrip(t *testing.T) {
 		DNS:      "roundtrip.example.com",
 		AcmeEmail: "test@example.com",
 		Vm:        &VmConfig{Ram: "8G", Cpus: 4, SshPort: 2222, DiskSize: "30 GiB"},
+		InitConfig: &InitConfig{
+			Inits: map[string]*InitDef{
+				"supervisord": {
+					LayerFields: []string{"service"},
+					LabelKey:    "org.overthinkos.services.supervisord",
+				},
+			},
+		},
 	}
 
 	var b strings.Builder
@@ -709,16 +722,15 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Errorf("Routes = %v, want %v", meta.Routes, wantRoutes)
 	}
 
-	// Systemd units
-	wantSysSvc := []string{"sshd", "docker"}
-	if !reflect.DeepEqual(meta.Systemd, wantSysSvc) {
-		t.Errorf("Systemd = %v, want %v", meta.Systemd, wantSysSvc)
+	// Init system
+	if meta.Init != "supervisord" {
+		t.Errorf("Init = %q, want %q", meta.Init, "supervisord")
 	}
 
-	// Supervisord services
-	wantSupervisord := []string{"svc"}
-	if !reflect.DeepEqual(meta.Supervisord, wantSupervisord) {
-		t.Errorf("Supervisord = %v, want %v", meta.Supervisord, wantSupervisord)
+	// Services for active init system (supervisord)
+	wantSvcNames := []string{"svc"}
+	if !reflect.DeepEqual(meta.Services, wantSvcNames) {
+		t.Errorf("Services = %v, want %v", meta.Services, wantSvcNames)
 	}
 
 	// Layer env

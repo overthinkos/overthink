@@ -15,6 +15,7 @@ defaults:
   format_config:
     distro: distro.yml
     builder: builder.yml
+    init: init.yml
 
 images:
 

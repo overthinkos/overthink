@@ -106,11 +106,12 @@ func (m BuildersMap) AllBuilders() []string {
 	return builders
 }
 
-// FormatConfigRefs holds optional references to format config files (distro.yml, builder.yml).
+// FormatConfigRefs holds optional references to format config files (distro.yml, builder.yml, init.yml).
 // Each ref can be a local path relative to the project root or a remote @host/org/repo/path:version ref.
 type FormatConfigRefs struct {
 	Distro  string `yaml:"distro,omitempty"`
 	Builder string `yaml:"builder,omitempty"`
+	Init    string `yaml:"init,omitempty"`
 }
 
 // ImageConfig represents configuration for a single image or defaults
@@ -146,7 +147,8 @@ type ImageConfig struct {
 	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
 	Vm           *VmConfig         `yaml:"vm,omitempty"`            // virtual machine settings (bootc images)
 	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
-	FormatConfig *FormatConfigRefs `yaml:"format_config,omitempty"` // refs to distro.yml, builder.yml
+	FormatConfig *FormatConfigRefs `yaml:"format_config,omitempty"` // refs to distro.yml, builder.yml, init.yml
+	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -217,6 +219,9 @@ type ResolvedImage struct {
 	DistroConfig  *DistroConfig  `json:"-"` // from distro.yml
 	DistroDef     *DistroDef     `json:"-"` // resolved distro definition (cached)
 	BuilderConfig *BuilderConfig `json:"-"` // from builder.yml
+	InitConfig    *InitConfig    `json:"-"` // from init.yml
+	InitSystem    string         `json:"-"` // resolved init system name ("supervisord", "systemd", "")
+	InitDef       *InitDef       `json:"-"` // resolved init definition (cached)
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -537,6 +542,15 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		if distroCfg != nil {
 			resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
 		}
+
+		// Load init config (from init.yml)
+		initCfg, err := LoadInitConfigForImage(
+			img.FormatConfig, c.Defaults.FormatConfig, dir,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("image %s: %w", name, err)
+		}
+		resolved.InitConfig = initCfg
 	}
 
 	return resolved, nil

@@ -112,7 +112,7 @@ func TestParseShmBytes(t *testing.T) {
 
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
-	args := buildStartArgs("docker", "myimage:latest", "/workspace", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, true)
+	args := buildStartArgs("docker", "myimage:latest", "/workspace", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"})
 	found := false
 	for _, arg := range args {
 		if arg == "--privileged" {

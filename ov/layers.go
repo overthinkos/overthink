@@ -231,7 +231,6 @@ type Layer struct {
 	HasCargoToml      bool
 	HasSrcDir         bool
 	HasUserYml        bool
-	HasSupervisord    bool
 	HasEnv            bool
 	HasPorts          bool
 	HasRoute          bool
@@ -239,13 +238,12 @@ type Layer struct {
 	HasAliases        bool
 	HasPixiLock       bool
 	HasExtract        bool
-	HasSystemdServices  bool
-	SystemdServices    []string // paths to *.service files in layer dir (user-level)
-	HasSystemServices  bool
-	SystemServiceUnits []string // system-level systemd units to enable (e.g. "sshd")
 	HasLibvirt         bool
-	HasPortRelay       bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
+
+	// Init system detection (populated by PopulateLayerInitSystems)
+	InitSystems    map[string]bool   // set of init system names this layer triggers
+	PortRelayPorts []int             // port_relay: field (init-agnostic)
 	UserYmlTasks       []string // task names defined in user.yml
 
 	Depends           []string // bare refs (version stripped) for resolution
@@ -261,20 +259,21 @@ type Layer struct {
 	// Pre-populated from layer.yml
 	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
 	tagSections    map[string]*TagPkgConfig   // distro/version-specific package sections
-	ports       []string
-	portSpecs   []PortSpec // full PortSpec data with protocol info
-	envConfig   *EnvConfig
-	route       *RouteConfig
-	serviceConf string
-	volumes     []VolumeYAML
-	aliases     []AliasYAML
-	extract     []ExtractYAML
-	security    *SecurityConfig
-	libvirt     []string
-	hooks       *HooksConfig
-	portRelay   []int
-	secrets     []SecretYAML
-	engine      string // required run engine from layer.yml ("docker", "podman", or "")
+	ports          []string
+	portSpecs      []PortSpec // full PortSpec data with protocol info
+	envConfig      *EnvConfig
+	route          *RouteConfig
+	serviceConf    string   // raw content of service: field (supervisord INI fragment)
+	serviceFiles   []string // paths to *.service files in layer dir (systemd user-level)
+	systemServices []string // system-level service units to enable (e.g., "sshd")
+	volumes        []VolumeYAML
+	aliases        []AliasYAML
+	extract        []ExtractYAML
+	security       *SecurityConfig
+	libvirt        []string
+	hooks          *HooksConfig
+	secrets        []SecretYAML
+	engine         string // required run engine from layer.yml ("docker", "podman", or "")
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -344,11 +343,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.UserYmlTasks = parseTaskfileTaskNames(filepath.Join(path, "user.yml"))
 	}
 
-	// Scan for systemd service files
-	serviceFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
-	if len(serviceFiles) > 0 {
-		layer.HasSystemdServices = true
-		layer.SystemdServices = serviceFiles
+	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystems)
+	svcFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
+	if len(svcFiles) > 0 {
+		layer.serviceFiles = svcFiles
 	}
 
 	// Parse layer.yml if present
@@ -378,7 +376,6 @@ func scanLayer(path string, name string) (*Layer, error) {
 		for i, ref := range ly.Layers {
 			layer.IncludedLayers[i] = BareRef(ref)
 		}
-		layer.HasSupervisord = ly.Service != ""
 		layer.serviceConf = ly.Service
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
 		layer.HasPorts = len(ly.Ports) > 0
@@ -443,10 +440,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.security = ly.Security
 
 		// Pre-populate system services
-		if len(ly.SystemServices) > 0 {
-			layer.HasSystemServices = true
-			layer.SystemServiceUnits = ly.SystemServices
-		}
+		layer.systemServices = ly.SystemServices
 
 		// Pre-populate libvirt snippets
 		if len(ly.Libvirt) > 0 {
@@ -458,10 +452,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.hooks = ly.Hooks
 
 		// Pre-populate port relay
-		if len(ly.PortRelay) > 0 {
-			layer.HasPortRelay = true
-			layer.portRelay = ly.PortRelay
-		}
+		layer.PortRelayPorts = ly.PortRelay
 
 		// Pre-populate secrets
 		layer.secrets = ly.SecretsYAML
@@ -484,9 +475,9 @@ func (l *Layer) HasInstallFiles() bool {
 // that contributes to the Containerfile (env, ports, volumes, etc.)
 func (l *Layer) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
-		l.HasVolumes || l.HasAliases || l.HasSupervisord || l.HasExtract ||
-		l.HasSystemdServices || l.HasSystemServices || l.HasLibvirt ||
-		l.HasPortRelay
+		l.HasVolumes || l.HasAliases || l.HasExtract || l.HasLibvirt ||
+		l.HasAnyInit() || len(l.PortRelayPorts) > 0 ||
+		len(l.serviceFiles) > 0 || len(l.systemServices) > 0
 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists
@@ -550,9 +541,62 @@ func (l *Layer) PortSpecs() []PortSpec {
 	return l.portSpecs
 }
 
-// ServiceConf returns the supervisord service fragment from layer.yml
+// ServiceConf returns the service: field content from layer.yml (supervisord INI fragment)
 func (l *Layer) ServiceConf() string {
 	return l.serviceConf
+}
+
+// ServiceFiles returns detected *.service file paths from the layer directory (systemd user-level)
+func (l *Layer) ServiceFiles() []string {
+	return l.serviceFiles
+}
+
+// SystemServiceUnits returns system-level service units to enable (e.g., "sshd")
+func (l *Layer) SystemServiceUnits() []string {
+	return l.systemServices
+}
+
+// HasAnyInit returns true if this layer triggers any init system.
+func (l *Layer) HasAnyInit() bool {
+	return len(l.InitSystems) > 0
+}
+
+// HasInit returns true if this layer triggers the named init system.
+func (l *Layer) HasInit(initName string) bool {
+	return l.InitSystems[initName]
+}
+
+// PopulateLayerInitSystems sets InitSystems on all layers based on the init config.
+// Must be called after scanning layers and loading init config.
+func PopulateLayerInitSystems(layers map[string]*Layer, initCfg *InitConfig) {
+	if initCfg == nil {
+		return
+	}
+	for _, layer := range layers {
+		layer.InitSystems = make(map[string]bool)
+		for initName, def := range initCfg.Inits {
+			// Check layer_fields
+			for _, field := range def.LayerFields {
+				switch field {
+				case "service":
+					if layer.serviceConf != "" {
+						layer.InitSystems[initName] = true
+					}
+				case "system_services":
+					if len(layer.systemServices) > 0 {
+						layer.InitSystems[initName] = true
+					}
+				}
+			}
+			// Check layer_files
+			for _, pattern := range def.LayerFiles {
+				matches, _ := filepath.Glob(filepath.Join(layer.Path, pattern))
+				if len(matches) > 0 {
+					layer.InitSystems[initName] = true
+				}
+			}
+		}
+	}
 }
 
 // RouteConfig represents a route file declaration
@@ -615,11 +659,6 @@ func (l *Layer) Hooks() *HooksConfig {
 	return l.hooks
 }
 
-// PortRelay returns the port relay declarations (pre-populated from layer.yml)
-func (l *Layer) PortRelay() []int {
-	return l.portRelay
-}
-
 // Secrets returns the secret declarations (pre-populated from layer.yml)
 func (l *Layer) Secrets() []SecretYAML {
 	return l.secrets
@@ -630,26 +669,15 @@ func (l *Layer) Engine() string {
 	return l.engine
 }
 
-// ServiceLayers returns layers that have supervisord.conf
-func ServiceLayers(layers map[string]*Layer) []*Layer {
-	var services []*Layer
+// InitLayers returns layers that trigger any init system.
+func InitLayers(layers map[string]*Layer) []*Layer {
+	var result []*Layer
 	for _, layer := range layers {
-		if layer.HasSupervisord {
-			services = append(services, layer)
+		if layer.HasAnyInit() || len(layer.PortRelayPorts) > 0 {
+			result = append(result, layer)
 		}
 	}
-	return services
-}
-
-// SystemdServiceLayers returns layers that have systemd .service files
-func SystemdServiceLayers(layers map[string]*Layer) []*Layer {
-	var services []*Layer
-	for _, layer := range layers {
-		if layer.HasSystemdServices {
-			services = append(services, layer)
-		}
-	}
-	return services
+	return result
 }
 
 // VolumeLayers returns layers that have volume declarations

@@ -153,7 +153,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 	}
 }
 
-func TestGenerateSupervisordFragments(t *testing.T) {
+func TestGenerateInitFragments(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	g := &Generator{
@@ -164,23 +164,29 @@ func TestGenerateSupervisordFragments(t *testing.T) {
 				HasRootYml: true,
 			},
 			"svc": {
-				Name:           "svc",
-				HasSupervisord: true,
-				HasUserYml:     true,
-				serviceConf:    "[program:svc]\ncommand=svc serve\nautostart=true\n",
+				Name:        "svc",
+				InitSystems: map[string]bool{"supervisord": true},
+				HasUserYml:  true,
+				serviceConf: "[program:svc]\ncommand=svc serve\nautostart=true\n",
 			},
 			"other": {
-				Name:           "other",
-				HasSupervisord: true,
-				HasUserYml:     true,
-				serviceConf:    "[program:other]\ncommand=other run",
+				Name:        "other",
+				InitSystems: map[string]bool{"supervisord": true},
+				HasUserYml:  true,
+				serviceConf: "[program:other]\ncommand=other run",
 			},
 		},
 	}
 
-	err := g.generateSupervisordFragments("test-image", []string{"python", "svc", "other"})
+	supervisordDef := &InitDef{
+		Model:            "fragment_assembly",
+		FragmentDir:      "supervisor",
+		FragmentTemplate: "{{.Content}}",
+	}
+
+	err := g.generateInitFragments("test-image", "supervisord", supervisordDef, []string{"python", "svc", "other"})
 	if err != nil {
-		t.Fatalf("generateSupervisordFragments() error = %v", err)
+		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
 	// svc fragment should be at position 02 (index 1 + 1)
@@ -214,8 +220,10 @@ func TestGenerateSupervisordFragments(t *testing.T) {
 	}
 }
 
-func TestGenerateRelaySupervisordFragments(t *testing.T) {
+func TestGenerateRelayInitFragments(t *testing.T) {
 	tmpDir := t.TempDir()
+
+	relayTmpl := "[program:relay-{{.Port}}]\ncommand=/usr/local/bin/relay-wrapper {{.Port}}\nautostart=true\nautorestart=true\npriority=1\nstartsecs=0\nstdout_logfile=/dev/fd/1\nstdout_logfile_maxbytes=0\nredirect_stderr=true\n"
 
 	g := &Generator{
 		BuildDir: tmpDir,
@@ -225,19 +233,25 @@ func TestGenerateRelaySupervisordFragments(t *testing.T) {
 				HasRootYml: true,
 			},
 			"chrome": {
-				Name:         "chrome",
-				HasUserYml:   true,
-				HasPortRelay: true,
-				portRelay:    []int{9222},
-				HasSupervisord: true,
-				serviceConf:   "[program:chrome]\ncommand=chrome\nautostart=true\n",
+				Name:           "chrome",
+				HasUserYml:     true,
+				PortRelayPorts: []int{9222},
+				InitSystems:    map[string]bool{"supervisord": true},
+				serviceConf:    "[program:chrome]\ncommand=chrome\nautostart=true\n",
 			},
 		},
 	}
 
-	err := g.generateSupervisordFragments("test-image", []string{"socat", "chrome"})
+	supervisordDef := &InitDef{
+		Model:            "fragment_assembly",
+		FragmentDir:      "supervisor",
+		FragmentTemplate: "{{.Content}}",
+		RelayTemplate:    relayTmpl,
+	}
+
+	err := g.generateInitFragments("test-image", "supervisord", supervisordDef, []string{"socat", "chrome"})
 	if err != nil {
-		t.Fatalf("generateSupervisordFragments() error = %v", err)
+		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
 	// Regular service config should exist
@@ -275,8 +289,16 @@ func TestGenerateRelaySupervisordFragments(t *testing.T) {
 	}
 }
 
-func TestGenerateRelayConf(t *testing.T) {
-	conf := generateRelayConf(9222)
+func TestRenderRelayTemplate(t *testing.T) {
+	relayTmpl := "[program:relay-{{.Port}}]\ncommand=/usr/local/bin/relay-wrapper {{.Port}}\nautostart=true\nautorestart=true\npriority=1\nstartsecs=0\nstdout_logfile=/dev/fd/1\nstdout_logfile_maxbytes=0\nredirect_stderr=true\n"
+	def := &InitDef{
+		RelayTemplate: relayTmpl,
+	}
+
+	conf, err := def.RenderRelayTemplate(9222, "chrome", 1)
+	if err != nil {
+		t.Fatalf("RenderRelayTemplate() error = %v", err)
+	}
 
 	if !strings.Contains(conf, "[program:relay-9222]") {
 		t.Error("should contain [program:relay-9222]")

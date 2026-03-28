@@ -425,34 +425,33 @@ func TestLayerPortRelayFromYAML(t *testing.T) {
 		t.Fatal("webservice layer not found")
 	}
 
-	if !ws.HasPortRelay {
+	if len(ws.PortRelayPorts) == 0 {
 		t.Error("webservice should have port_relay")
 	}
 
-	relay := ws.PortRelay()
+	relay := ws.PortRelayPorts
 	if len(relay) != 1 || relay[0] != 8080 {
-		t.Errorf("PortRelay() = %v, want [8080]", relay)
+		t.Errorf("PortRelayPorts = %v, want [8080]", relay)
 	}
 }
 
 func TestLayerPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
 	layer := &Layer{
-		Name:         "chrome",
-		HasUserYml:   true,
-		HasPortRelay: true,
-		portRelay:    []int{9222},
-		HasPorts:     true,
-		ports:        []string{"9222"},
-		portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
+		Name:           "chrome",
+		HasUserYml:     true,
+		PortRelayPorts: []int{9222},
+		HasPorts:       true,
+		ports:          []string{"9222"},
+		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}},
 	}
 
-	if !layer.HasPortRelay {
+	if len(layer.PortRelayPorts) == 0 {
 		t.Error("layer should have port_relay")
 	}
-	relay := layer.PortRelay()
+	relay := layer.PortRelayPorts
 	if len(relay) != 1 || relay[0] != 9222 {
-		t.Errorf("PortRelay() = %v, want [9222]", relay)
+		t.Errorf("PortRelayPorts = %v, want [9222]", relay)
 	}
 }
 
@@ -462,31 +461,27 @@ func TestLayerPortRelayNone(t *testing.T) {
 		HasRootYml: true,
 	}
 
-	if layer.HasPortRelay {
+	if len(layer.PortRelayPorts) != 0 {
 		t.Error("basic layer should not have port_relay")
-	}
-	if len(layer.PortRelay()) != 0 {
-		t.Errorf("PortRelay() = %v, want nil/empty", layer.PortRelay())
 	}
 }
 
 func TestLayerPortRelayMultiple(t *testing.T) {
 	layer := &Layer{
-		Name:         "multi",
-		HasUserYml:   true,
-		HasPortRelay: true,
-		portRelay:    []int{9222, 5900},
-		HasPorts:     true,
-		ports:        []string{"9222", "5900"},
-		portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},
+		Name:           "multi",
+		HasUserYml:     true,
+		PortRelayPorts: []int{9222, 5900},
+		HasPorts:       true,
+		ports:          []string{"9222", "5900"},
+		portSpecs:      []PortSpec{{Port: 9222, Protocol: "http"}, {Port: 5900, Protocol: "tcp"}},
 	}
 
-	relay := layer.PortRelay()
+	relay := layer.PortRelayPorts
 	if len(relay) != 2 {
-		t.Fatalf("PortRelay() returned %d ports, want 2", len(relay))
+		t.Fatalf("PortRelayPorts returned %d ports, want 2", len(relay))
 	}
 	if relay[0] != 9222 || relay[1] != 5900 {
-		t.Errorf("PortRelay() = %v, want [9222 5900]", relay)
+		t.Errorf("PortRelayPorts = %v, want [9222 5900]", relay)
 	}
 }
 

@@ -134,8 +134,19 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
-	// Validate supervisord dependency
-	validateSupervisord(cfg, layers, errs)
+	// Validate init system dependencies (driven by init.yml)
+	var defaultInitCfg *InitConfig
+	if cfg.Defaults.FormatConfig != nil {
+		ic, icErr := LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
+		if icErr != nil {
+			errs.Add("loading default init config: %v", icErr)
+		} else {
+			defaultInitCfg = ic
+		}
+	}
+	if defaultInitCfg != nil {
+		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
+	}
 
 	if errs.HasErrors() {
 		return errs
@@ -143,10 +154,14 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	return nil
 }
 
-// validateSupervisord checks that images with supervisord services (layers with
-// service: or port_relay: fields) have the "supervisord" layer in their resolved
-// dependency chain. Without supervisord, ov start/enable will fail at runtime.
-func validateSupervisord(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+// validateInitDependencies checks that images using an init system have the
+// required dependency layer in their resolved dependency chain.
+// For example, images with supervisord services must include the "supervisord" layer.
+func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[string]*Layer, errs *ValidationError) {
+	if initCfg == nil {
+		return
+	}
+
 	for imgName, img := range cfg.Images {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
@@ -158,51 +173,59 @@ func validateSupervisord(cfg *Config, layers map[string]*Layer, errs *Validation
 			continue // other validators handle resolution errors
 		}
 
-		// Check if any layer has supervisord services or port relays
-		var needsSupervisord []string
-		for _, layerName := range resolved {
-			layer, ok := layers[layerName]
-			if !ok {
+		// For each init system with a depends_layer, check if it's needed and present
+		for initName, def := range initCfg.Inits {
+			if def.DependsLayer == "" {
+				continue // no dependency requirement (e.g., systemd is provided by base OS)
+			}
+
+			// Check if any layer requires this init system
+			var needsInit []string
+			for _, layerName := range resolved {
+				layer, ok := layers[layerName]
+				if !ok {
+					continue
+				}
+				if layer.HasInit(initName) {
+					needsInit = append(needsInit, layerName+" ("+initName+")")
+				}
+				// port_relay triggers init systems with relay_template
+				if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+					needsInit = append(needsInit, layerName+" (port_relay)")
+				}
+			}
+
+			if len(needsInit) == 0 {
 				continue
 			}
-			if layer.HasSupervisord {
-				needsSupervisord = append(needsSupervisord, layerName+" (service)")
-			}
-			if layer.HasPortRelay {
-				needsSupervisord = append(needsSupervisord, layerName+" (port_relay)")
-			}
-		}
 
-		if len(needsSupervisord) == 0 {
-			continue
-		}
-
-		// Check if "supervisord" is in the resolved layers
-		hasSupervisordLayer := false
-		for _, layerName := range resolved {
-			if layerName == "supervisord" {
-				hasSupervisordLayer = true
-				break
+			// Check if the depends_layer is in the resolved layers
+			hasDepLayer := false
+			for _, layerName := range resolved {
+				if layerName == def.DependsLayer {
+					hasDepLayer = true
+					break
+				}
 			}
-		}
 
-		// Also check base chain — supervisord may be provided by a parent image
-		if !hasSupervisordLayer {
-			images, resolveErr := cfg.ResolveAllImages("unused", ".")
-			if resolveErr == nil {
-				allLayers := collectAllImageLayers(imgName, images, layers)
-				for _, l := range allLayers {
-					if l == "supervisord" {
-						hasSupervisordLayer = true
-						break
+			// Also check base chain — dependency may be provided by a parent image
+			if !hasDepLayer {
+				images, resolveErr := cfg.ResolveAllImages("unused", ".")
+				if resolveErr == nil {
+					allLayers := collectAllImageLayers(imgName, images, layers)
+					for _, l := range allLayers {
+						if l == def.DependsLayer {
+							hasDepLayer = true
+							break
+						}
 					}
 				}
 			}
-		}
 
-		if !hasSupervisordLayer {
-			errs.Add("image %q has layers that require supervisord (%s) but does not include the \"supervisord\" layer in its dependency chain; add \"supervisord\" to the image's layers or a base image",
-				imgName, strings.Join(needsSupervisord, ", "))
+			if !hasDepLayer {
+				errs.Add("image %q has layers requiring %s (%s) but missing the %q layer in its dependency chain; add %q to the image's layers or a base image",
+					imgName, initName, strings.Join(needsInit, ", "), def.DependsLayer, def.DependsLayer)
+			}
 		}
 	}
 }
@@ -1148,10 +1171,10 @@ func validateRemoteLayers(cfg *Config, layers map[string]*Layer, errs *Validatio
 // validateSystemdServices validates systemd .service files in layers
 func validateSystemdServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasSystemdServices {
+		if len(layer.ServiceFiles()) == 0 {
 			continue
 		}
-		for _, svcPath := range layer.SystemdServices {
+		for _, svcPath := range layer.ServiceFiles() {
 			info, err := os.Stat(svcPath)
 			if err != nil {
 				errs.Add("layer %q: systemd service file %q not readable: %v", name, filepath.Base(svcPath), err)
@@ -1166,12 +1189,11 @@ func validateSystemdServices(cfg *Config, layers map[string]*Layer, errs *Valida
 
 // validateSystemServices validates system_services entries in layers
 func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	// system_services requires rpm packages to provide the units
 	for name, layer := range layers {
-		if !layer.HasSystemServices {
+		if len(layer.SystemServiceUnits()) == 0 {
 			continue
 		}
-		for _, unit := range layer.SystemServiceUnits {
+		for _, unit := range layer.SystemServiceUnits() {
 			if unit == "" {
 				errs.Add("layer %q: system_services entry cannot be empty", name)
 			}
@@ -1179,7 +1201,6 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 				errs.Add("layer %q: system_services entry %q must be a unit name (no paths or spaces)", name, unit)
 			}
 		}
-		// Warn if layer has system_services but no system packages
 		if !layer.HasFormatPackages() {
 			errs.Add("layer %q: system_services requires system packages that provide those units", name)
 		}
@@ -1196,7 +1217,7 @@ func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *Validat
 		for _, layerRef := range img.Layers {
 			bare := BareRef(layerRef)
 			layer, ok := layers[bare]
-			if !ok || !layer.HasSystemServices {
+			if !ok || len(layer.SystemServiceUnits()) == 0 {
 				continue
 			}
 			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (systemd units will be ignored)\n", imageName, bare)
@@ -1365,12 +1386,12 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 // validatePortRelay validates port_relay declarations in layers
 func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasPortRelay {
+		if len(layer.PortRelayPorts) == 0 {
 			continue
 		}
 		// Validate each port
 		portSet := make(map[int]bool)
-		for _, port := range layer.PortRelay() {
+		for _, port := range layer.PortRelayPorts {
 			if port < 1 || port > 65535 {
 				errs.Add("layer %q port_relay: %d is not a valid port number (1-65535)", name, port)
 			}
@@ -1386,7 +1407,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 			for _, ps := range layer.PortSpecs() {
 				layerPorts[ps.Port] = true
 			}
-			for _, port := range layer.PortRelay() {
+			for _, port := range layer.PortRelayPorts {
 				if !layerPorts[port] {
 					errs.Add("layer %q port_relay: port %d is not declared in the layer's ports", name, port)
 				}
@@ -1412,7 +1433,7 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 			if !ok {
 				continue
 			}
-			if layer.HasPortRelay {
+			if len(layer.PortRelayPorts) > 0 {
 				hasRelay = true
 			}
 			if layerName == "socat" {

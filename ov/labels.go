@@ -32,8 +32,7 @@ const (
 	LabelVm             = "org.overthinkos.vm"
 	LabelLibvirt        = "org.overthinkos.libvirt"
 	LabelRoutes         = "org.overthinkos.routes"
-	LabelSystemd     = "org.overthinkos.systemd"
-	LabelSupervisord = "org.overthinkos.supervisord"
+	LabelInit           = "org.overthinkos.init"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
 	LabelEngine         = "org.overthinkos.engine"
@@ -96,8 +95,8 @@ type ImageMetadata struct {
 	Vm             *VmConfig
 	Libvirt        []string
 	Routes         []LabelRoute
-	Systemd      []string
-	Supervisord  []string
+	Init           string            // active init system name ("supervisord", "systemd", "")
+	Services       []string          // service names for the active init system
 	EnvLayers      map[string]string
 	PathAppend     []string
 	Engine         string
@@ -276,17 +275,17 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Systemd units (bootc only)
-	if v := labels[LabelSystemd]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Systemd); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSystemd, err)
-		}
-	}
+	// Init system
+	meta.Init = labels[LabelInit]
 
-	// Supervisord services
-	if v := labels[LabelSupervisord]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Supervisord); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelSupervisord, err)
+	// Services: read from init-specific label key
+	// The label key is stored as org.overthinkos.services.<init> (e.g., org.overthinkos.services.supervisord)
+	if meta.Init != "" {
+		svcLabel := "org.overthinkos.services." + meta.Init
+		if v := labels[svcLabel]; v != "" {
+			if err := json.Unmarshal([]byte(v), &meta.Services); err != nil {
+				return nil, fmt.Errorf("parsing %s: %w", svcLabel, err)
+			}
 		}
 	}
 

@@ -6,5 +6,5 @@ tasks:
       - mkdir -p ~/.local/bin ~/.config/waybar
       - cp /ctx/waybar-labwc-wrapper ~/.local/bin/waybar-labwc-wrapper
       - chmod +x ~/.local/bin/waybar-labwc-wrapper
-      - cp /ctx/config.jsonc ~/.config/waybar/config.jsonc
+      - cp /ctx/config.json ~/.config/waybar/config
       - cp /ctx/style.css ~/.config/waybar/style.css

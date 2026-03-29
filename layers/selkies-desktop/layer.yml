@@ -3,6 +3,9 @@ layers:
   - chrome
   - labwc
   - waybar-labwc
+  - desktop-fonts
+  - swaync
+  - pavucontrol
   - wl-tools
   - wl-screenshot-pixelflux
   - wl-record-pixelflux

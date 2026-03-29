@@ -14,7 +14,6 @@ rpm:
     - sway
     - xorg-x11-server-Xwayland
     - fuzzel
-    - mako
     - mesa-dri-drivers
     - mesa-vulkan-drivers
     - libglvnd-egl

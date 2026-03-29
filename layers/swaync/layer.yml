@@ -1,16 +1,16 @@
 depends:
-  - labwc
+  - dbus
 
 rpm:
   packages:
-    - waybar
+    - SwayNotificationCenter
 
 service: |
-  [program:waybar]
-  command=%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper
+  [program:swaync]
+  command=%(ENV_HOME)s/.local/bin/swaync-wrapper
   autostart=true
   autorestart=true
-  priority=15
+  priority=14
   startsecs=0
   environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
   stdout_logfile=/dev/fd/1

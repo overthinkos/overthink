@@ -8,6 +8,9 @@ layers:
   - xfce4-terminal
   - thunar
   - waybar
+  - desktop-fonts
+  - swaync
+  - pavucontrol
   - tmux
   - asciinema
   - fastfetch

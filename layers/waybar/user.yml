@@ -6,9 +6,7 @@ tasks:
       - mkdir -p ~/.local/bin ~/.config/waybar
       - cp /ctx/waybar-wrapper ~/.local/bin/waybar-wrapper
       - chmod +x ~/.local/bin/waybar-wrapper
-      - cp /ctx/config.jsonc ~/.config/waybar/config
+      - cp /ctx/config.json ~/.config/waybar/config
       - cp /ctx/style.css ~/.config/waybar/style.css
       - cp /ctx/sway-autotile ~/.local/bin/sway-autotile
       - chmod +x ~/.local/bin/sway-autotile
-      - cp /ctx/sway-float-toggle ~/.local/bin/sway-float-toggle
-      - chmod +x ~/.local/bin/sway-float-toggle

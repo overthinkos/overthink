@@ -1,161 +1,153 @@
-/* Waybar bottom bar — Catppuccin Mocha with high contrast for VNC */
+/* === Base === */
 
 * {
-    font-family: "DejaVu Sans Mono", "Noto Sans Mono", monospace;
-    font-size: 14px;
+    font-family: "JetBrains Mono", "Symbols Nerd Font", monospace;
+    font-size: 13px;
     min-height: 0;
 }
 
 window#waybar {
-    background-color: #11111b;
+    background-color: rgba(30, 30, 46, 0.9);
     color: #cdd6f4;
+    border-bottom: 2px solid rgba(137, 180, 250, 0.3);
 }
 
-/* App launcher buttons — high contrast, fixed width */
-#custom-files,
-#custom-chrome,
-#custom-terminal {
-    background-color: #45475a;
-    color: #cdd6f4;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 12px;
-    margin: 4px 3px;
-    min-width: 64px;
-    font-weight: bold;
-}
-
-#custom-files:hover,
-#custom-chrome:hover,
-#custom-terminal:hover {
-    background-color: #585b70;
-    border-color: #89b4fa;
-}
-
-/* Window control buttons — fixed width, distinct colors */
-#custom-float {
-    background-color: #45475a;
-    color: #89b4fa;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-    font-weight: bold;
-}
-
-#custom-float:hover {
-    background-color: #89b4fa;
-    color: #1e1e2e;
-}
-
-#custom-move-left,
-#custom-move-right {
-    background-color: #45475a;
-    color: #cdd6f4;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-    font-weight: bold;
-}
-
-#custom-move-left:hover,
-#custom-move-right:hover {
-    background-color: #585b70;
-    border-color: #cdd6f4;
-}
-
-#custom-minimize {
-    background-color: #45475a;
-    color: #f9e2af;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-    font-weight: bold;
-}
-
-#custom-minimize:hover {
-    background-color: #f9e2af;
-    color: #1e1e2e;
-}
-
-#custom-restore {
-    background-color: #45475a;
-    color: #a6e3a1;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-    font-weight: bold;
-}
-
-#custom-restore:hover {
-    background-color: #a6e3a1;
-    color: #1e1e2e;
-}
-
-#custom-close {
-    background-color: #45475a;
-    color: #f38ba8;
-    border: 1px solid #585b70;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-    font-weight: bold;
-}
-
-#custom-close:hover {
-    background-color: #f38ba8;
-    color: #1e1e2e;
-}
-
-/* Taskbar — per-window tabs */
-#taskbar button {
-    background-color: #313244;
-    color: #a6adc8;
-    border: 1px solid #45475a;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-}
-
-#taskbar button.active {
-    background-color: #585b70;
-    color: #cdd6f4;
-    border-color: #89b4fa;
-}
-
-#taskbar button:hover {
-    background-color: #45475a;
-}
-
-/* Workspace indicators */
-#workspaces button {
-    background-color: transparent;
-    color: #cdd6f4;
-    border-radius: 6px;
-    padding: 4px 8px;
-    margin: 4px 2px;
-    min-width: 28px;
-}
-
-#workspaces button.focused {
-    background-color: #585b70;
+tooltip {
+    background: rgba(30, 30, 46, 0.95);
     border: 1px solid #89b4fa;
+    border-radius: 8px;
+}
+
+tooltip label {
+    color: #cdd6f4;
+}
+
+/* === Module defaults === */
+
+#workspaces,
+#mode,
+#taskbar,
+#clock,
+#cpu,
+#memory,
+#disk,
+#network,
+#pulseaudio,
+#tray,
+#custom-notification {
+    padding: 0 10px;
+    margin: 3px 2px;
+    border-radius: 6px;
+    background-color: rgba(49, 50, 68, 0.6);
+}
+
+/* === Workspaces (Sway only, hidden on labwc) === */
+
+#workspaces button {
+    padding: 0 6px;
+    color: #a6adc8;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
 }
 
 #workspaces button:hover {
-    background-color: #45475a;
+    background: rgba(137, 180, 250, 0.2);
+    color: #cdd6f4;
 }
 
-/* Clock */
+#workspaces button.focused,
+#workspaces button.active {
+    background: rgba(137, 180, 250, 0.3);
+    color: #89b4fa;
+}
+
+#workspaces button.urgent {
+    background: rgba(243, 139, 168, 0.4);
+    color: #f38ba8;
+}
+
+#mode {
+    background-color: rgba(250, 179, 135, 0.3);
+    color: #fab387;
+    font-weight: bold;
+}
+
+/* === Taskbar (labwc + Sway) === */
+
+#taskbar button {
+    padding: 0 4px;
+    color: #cdd6f4;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+}
+
+#taskbar button:hover {
+    background: rgba(137, 180, 250, 0.2);
+}
+
+#taskbar button.active {
+    background: rgba(137, 180, 250, 0.3);
+}
+
+/* === Clock === */
+
 #clock {
-    padding: 4px 8px;
-    margin: 4px 4px;
+    color: #89b4fa;
+    font-weight: bold;
+}
+
+/* === System monitors === */
+
+#cpu {
+    color: #a6e3a1;
+}
+
+#memory {
+    color: #cba6f7;
+}
+
+#disk {
+    color: #f9e2af;
+}
+
+/* === Network === */
+
+#network {
+    color: #94e2d5;
+}
+
+#network.disconnected {
+    color: #f38ba8;
+}
+
+/* === Audio === */
+
+#pulseaudio {
+    color: #f9e2af;
+}
+
+#pulseaudio.muted {
+    color: #6c7086;
+}
+
+/* === Tray === */
+
+#tray {
+    padding: 0 6px;
+}
+
+#tray > .passive {
+    -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+    -gtk-icon-effect: highlight;
+}
+
+/* === Notifications (swaync) === */
+
+#custom-notification {
+    color: #89b4fa;
 }

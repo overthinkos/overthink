@@ -13,7 +13,6 @@ security:
 
 rpm:
   packages:
-    - liberation-fonts
     - vulkan-loader
     - mesa-dri-drivers
     - alsa-lib

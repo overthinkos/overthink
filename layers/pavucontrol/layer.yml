@@ -1,0 +1,6 @@
+depends:
+  - pipewire
+
+rpm:
+  packages:
+    - pavucontrol

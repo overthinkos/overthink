@@ -1,0 +1,7 @@
+rpm:
+  copr:
+    - che/nerd-fonts
+  packages:
+    - jetbrains-mono-fonts
+    - liberation-fonts
+    - nerd-fonts

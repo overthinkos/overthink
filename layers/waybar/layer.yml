@@ -4,8 +4,6 @@ depends:
 rpm:
   packages:
     - waybar
-    - dejavu-sans-mono-fonts
-    - google-noto-sans-mono-fonts
 
 service: |
   [program:waybar]

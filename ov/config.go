@@ -386,23 +386,19 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.Registry = c.Defaults.Registry
 	}
 
-	// Resolve distro: image -> base image (if internal) -> defaults -> []
+	// Resolve distro: image -> walk base chain (if internal) -> defaults -> []
 	resolved.Distro = img.Distro
-	if len(resolved.Distro) == 0 && !resolved.IsExternalBase {
-		if baseImg, ok := c.Images[resolved.Base]; ok {
-			resolved.Distro = baseImg.Distro
-		}
+	if len(resolved.Distro) == 0 {
+		resolved.Distro = c.walkBaseChainDistro(resolved.Base)
 	}
 	if len(resolved.Distro) == 0 {
 		resolved.Distro = c.Defaults.Distro
 	}
 
-	// Resolve build: image -> base image (if internal) -> defaults (required)
+	// Resolve build: image -> walk base chain (if internal) -> defaults (required)
 	buildFmts := []string(img.Build)
-	if len(buildFmts) == 0 && !resolved.IsExternalBase {
-		if baseImg, ok := c.Images[resolved.Base]; ok {
-			buildFmts = []string(baseImg.Build)
-		}
+	if len(buildFmts) == 0 {
+		buildFmts = c.walkBaseChainBuild(resolved.Base)
 	}
 	if len(buildFmts) == 0 {
 		buildFmts = []string(c.Defaults.Build)
@@ -678,6 +674,56 @@ func resolveVmConfig(img, defaults *VmConfig) *VmConfig {
 		}
 	}
 	return vm
+}
+
+// walkBaseChainDistro walks the base chain through images.yml entries to find
+// the first ancestor with a distro: field set. Returns nil if no ancestor
+// defines distro tags or the chain reaches an external base image.
+func (c *Config) walkBaseChainDistro(baseName string) []string {
+	seen := make(map[string]bool)
+	current := baseName
+	for {
+		if seen[current] {
+			return nil // cycle detected
+		}
+		seen[current] = true
+		baseImg, ok := c.Images[current]
+		if !ok || !baseImg.IsEnabled() {
+			return nil // external base or disabled
+		}
+		if len(baseImg.Distro) > 0 {
+			return baseImg.Distro
+		}
+		if baseImg.Base == "" {
+			return nil
+		}
+		current = baseImg.Base
+	}
+}
+
+// walkBaseChainBuild walks the base chain through images.yml entries to find
+// the first ancestor with a build: field set. Returns nil if no ancestor
+// defines build formats or the chain reaches an external base image.
+func (c *Config) walkBaseChainBuild(baseName string) []string {
+	seen := make(map[string]bool)
+	current := baseName
+	for {
+		if seen[current] {
+			return nil // cycle detected
+		}
+		seen[current] = true
+		baseImg, ok := c.Images[current]
+		if !ok || !baseImg.IsEnabled() {
+			return nil // external base or disabled
+		}
+		if len(baseImg.Build) > 0 {
+			return []string(baseImg.Build)
+		}
+		if baseImg.Base == "" {
+			return nil
+		}
+		current = baseImg.Base
+	}
 }
 
 // sortStrings sorts a slice of strings in place

@@ -1,0 +1,5 @@
+description: Desktop video recorder via pixelflux H.264 pipeline
+
+depends:
+  - selkies
+  - ffmpeg

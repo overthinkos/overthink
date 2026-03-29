@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Record desktop video from pixelflux's rendering pipeline.
+
+Primary: Uses H.264 output mode (output_mode=1) for direct encoded capture.
+Fallback: Uses JPEG stripes (output_mode=0) with ffmpeg re-encoding.
+
+Usage:
+    pixelflux-record output.mp4                     # 30fps, video only
+    pixelflux-record output.mp4 --fps 60            # 60fps
+    pixelflux-record output.mp4 --audio             # video + PulseAudio audio
+    pixelflux-record output.mp4 --fps 60 --audio    # 60fps + audio
+
+Stop recording with SIGINT (Ctrl-C) or SIGTERM.
+"""
+import argparse
+import ctypes
+import io
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+os.environ.setdefault("XDG_RUNTIME_DIR", "/tmp")
+
+from pixelflux import CaptureSettings, ScreenCapture, StripeCallback
+from PIL import Image
+
+# --- Global state ---
+_running = True
+_frame_count = 0
+_ffmpeg_proc = None
+_sc = None
+
+# JPEG fallback state
+_stripes = {}
+_current_frame_id = -1
+_capture_width = 0
+_capture_height = 0
+_pipe_lock = threading.Lock()
+
+
+def signal_handler(sig, frame):
+    """Graceful shutdown on SIGINT/SIGTERM."""
+    global _running
+    _running = False
+
+
+def detect_resolution():
+    """Detect current resolution from wlr-randr output."""
+    try:
+        out = subprocess.check_output(
+            ["wlr-randr"],
+            env={**os.environ, "WAYLAND_DISPLAY": "wayland-0"},
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        for line in out.splitlines():
+            line = line.strip()
+            if "current" in line and "px" in line:
+                res = line.split()[0]
+                w, h = res.split("x")
+                return int(w), int(h)
+    except Exception:
+        pass
+    return 1280, 720
+
+
+def build_h264_ffmpeg_cmd(output, fps, audio):
+    """Build ffmpeg command for H.264 muxing (no re-encode)."""
+    cmd = ["ffmpeg", "-y", "-f", "h264", "-r", str(fps), "-i", "pipe:0"]
+    if audio:
+        cmd += ["-f", "pulse", "-i", "default.monitor",
+                "-c:a", "aac", "-b:a", "128k"]
+    cmd += ["-c:v", "copy", "-movflags", "+faststart", output]
+    return cmd
+
+
+def build_jpeg_ffmpeg_cmd(output, fps, audio):
+    """Build ffmpeg command for JPEG re-encoding."""
+    cmd = ["ffmpeg", "-y", "-f", "image2pipe", "-c:v", "mjpeg",
+           "-r", str(fps), "-i", "pipe:0"]
+    if audio:
+        cmd += ["-f", "pulse", "-i", "default.monitor",
+                "-c:a", "aac", "-b:a", "128k"]
+    cmd += ["-c:v", "libx264", "-preset", "fast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", output]
+    return cmd
+
+
+def on_h264_frame(result_ptr, _user_data):
+    """H.264 callback: write encoded data directly to ffmpeg pipe."""
+    global _frame_count
+    if not _running:
+        return
+    result = result_ptr.contents
+    if result.size <= 0:
+        return
+    data = bytes(ctypes.string_at(result.data, result.size))
+    try:
+        with _pipe_lock:
+            _ffmpeg_proc.stdin.write(data)
+        _frame_count += 1
+    except (BrokenPipeError, ValueError):
+        pass
+
+
+def on_jpeg_stripe(result_ptr, _user_data):
+    """JPEG callback: collect stripes, assemble and write full frames."""
+    global _frame_count, _current_frame_id, _stripes
+    if not _running:
+        return
+    result = result_ptr.contents
+    frame_id = result.frame_id
+
+    if frame_id != _current_frame_id:
+        if _current_frame_id >= 0 and _stripes:
+            # Previous frame complete — stitch and write
+            _write_jpeg_frame()
+        _stripes = {}
+        _current_frame_id = frame_id
+
+    if result.size <= 0:
+        return
+
+    raw = bytes(ctypes.string_at(result.data, result.size))
+    jpeg_start = raw.find(b"\xff\xd8")
+    if jpeg_start < 0:
+        return
+
+    _stripes[result.stripe_y_start] = raw[jpeg_start:]
+
+
+def _write_jpeg_frame():
+    """Stitch JPEG stripes into a full frame and write to ffmpeg pipe."""
+    global _frame_count
+    try:
+        canvas = Image.new("RGB", (_capture_width, _capture_height))
+        for y_start in sorted(_stripes.keys()):
+            jpeg_data = _stripes[y_start]
+            try:
+                stripe_img = Image.open(io.BytesIO(jpeg_data))
+                canvas.paste(stripe_img, (0, y_start))
+            except Exception:
+                pass
+
+        buf = io.BytesIO()
+        canvas.save(buf, format="JPEG", quality=90)
+        with _pipe_lock:
+            _ffmpeg_proc.stdin.write(buf.getvalue())
+        _frame_count += 1
+    except (BrokenPipeError, ValueError):
+        pass
+
+
+def main():
+    global _ffmpeg_proc, _sc, _running, _capture_width, _capture_height
+
+    parser = argparse.ArgumentParser(
+        description="Record desktop video from pixelflux pipeline")
+    parser.add_argument("output", help="Output file path (e.g. recording.mp4)")
+    parser.add_argument("--fps", type=int, default=30,
+                        help="Frames per second (default: 30)")
+    parser.add_argument("--audio", action="store_true",
+                        help="Include PulseAudio audio capture")
+    args = parser.parse_args()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    _capture_width, _capture_height = detect_resolution()
+
+    settings = CaptureSettings()
+    settings.capture_width = _capture_width
+    settings.capture_height = _capture_height
+    settings.capture_x = 0
+    settings.capture_y = 0
+    settings.scale = 1.0
+    settings.target_fps = float(args.fps)
+    settings.capture_cursor = True
+    settings.debug_logging = False
+
+    sc = ScreenCapture()
+    _sc = sc
+
+    # Try H.264 mode first, fall back to JPEG
+    mode = "h264"
+    try:
+        settings.output_mode = 1
+        settings.h264_streaming_mode = True
+        settings.h264_fullframe = True
+        settings.use_cpu = True
+        ffmpeg_cmd = build_h264_ffmpeg_cmd(args.output, args.fps, args.audio)
+        cb = StripeCallback(on_h264_frame)
+    except (AttributeError, TypeError):
+        mode = "jpeg"
+        settings.output_mode = 0
+        settings.jpeg_quality = 90
+        settings.use_cpu = True
+        ffmpeg_cmd = build_jpeg_ffmpeg_cmd(args.output, args.fps, args.audio)
+        cb = StripeCallback(on_jpeg_stripe)
+
+    _ffmpeg_proc = subprocess.Popen(
+        ffmpeg_cmd, stdin=subprocess.PIPE, stderr=sys.stderr)
+
+    start_time = time.time()
+    print(f"pixelflux-record: recording {_capture_width}x{_capture_height}"
+          f"@{args.fps}fps ({mode} mode)"
+          f"{' +audio' if args.audio else ''}", file=sys.stderr)
+    print(f"pixelflux-record: output: {args.output}", file=sys.stderr)
+    print(f"pixelflux-record: stop with Ctrl-C or SIGTERM", file=sys.stderr)
+
+    def run_capture():
+        sc.start_capture(settings, cb)
+
+    t = threading.Thread(target=run_capture, daemon=True)
+    t.start()
+
+    # Wait for stop signal
+    while _running:
+        time.sleep(0.1)
+
+    # Graceful shutdown
+    print(f"\npixelflux-record: stopping...", file=sys.stderr)
+    sc.stop_capture()
+
+    # Flush any remaining JPEG frame in fallback mode
+    if mode == "jpeg" and _stripes:
+        _write_jpeg_frame()
+
+    if _ffmpeg_proc.stdin:
+        try:
+            _ffmpeg_proc.stdin.close()
+        except Exception:
+            pass
+
+    try:
+        _ffmpeg_proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        _ffmpeg_proc.kill()
+
+    duration = time.time() - start_time
+    print(f"pixelflux-record: saved {args.output} "
+          f"({_frame_count} frames, {duration:.1f}s, "
+          f"{_frame_count / max(duration, 0.001):.1f} avg fps)",
+          file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

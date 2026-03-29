@@ -94,7 +94,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (~130 layers)
++-- layers/<name>/            # Layer directories (~133 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -121,9 +121,9 @@ Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
 ```
 plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
-+-- ov/                               # Operations (16 skills)
++-- ov/                               # Operations (17 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (127 skills)
++-- ov-layers/                        # Layer reference (130 skills)
 +-- ov-images/                        # Image reference (31 skills)
 ```
 
@@ -197,6 +197,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `service start/stop/restart/status` | `/ov:service` |
 | `cdp` | `/ov:cdp` |
 | `wl sway` | `/ov:wl` (sway subgroup) |
+| `record start/stop/list/cmd/term` | `/ov:record` |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
 | `wl` | `/ov:wl` |
@@ -222,6 +223,10 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Deploy a service:** `ov enable <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet from image labels + deploy.yml. No `images.yml` needed for deployment.
 Skills: `/ov:deploy` -> `/ov:service` (lifecycle)
+
+**Record a session:**
+`ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` / `ov record term` (interact) -> `ov record stop <image> -o output`
+Skills: `/ov:record` -> `/ov-layers:wl-record-pixelflux` or `/ov-layers:wf-recorder` (desktop) or `/ov-layers:asciinema` (terminal)
 
 **Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov config set engine.build podman`.
 
@@ -269,9 +274,9 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 16 | Operations | "How do I use X?" |
+| `ov` | 17 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 127 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 130 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 31 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
@@ -340,6 +345,7 @@ Examples where multiple skills cover one topic:
 - **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer)
 - **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer)
 - **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer)
+- **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 
 ### Desktop Automation Hierarchy

@@ -1,0 +1,5 @@
+description: Wayland screen recorder for wlroots compositors
+
+rpm:
+  packages:
+    - wf-recorder

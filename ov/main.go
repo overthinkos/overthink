@@ -26,6 +26,7 @@ type CLI struct {
 	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
 	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd      `cmd:"" help:"Scaffold new components"`
+	Record   RecordCmd   `cmd:"" help:"Record terminal sessions or desktop video"`
 	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`

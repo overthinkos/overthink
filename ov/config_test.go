@@ -381,3 +381,111 @@ func TestEnabledField(t *testing.T) {
 		t.Errorf("ResolveImage() unexpected error for enabled image: %v", err)
 	}
 }
+
+func TestResolveImageDistroBaseChain(t *testing.T) {
+	// Tests that distro: tags propagate through the entire base chain,
+	// not just the immediate parent.
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Build:     BuildFormats{"rpm"},
+			Platforms: []string{"linux/amd64"},
+		},
+		Images: map[string]ImageConfig{
+			// Level 0: defines distro
+			"fedora": {
+				Base:   "quay.io/fedora/fedora:43",
+				Distro: []string{"fedora:43", "fedora"},
+				Layers: []string{},
+			},
+			// Level 1: no distro set, should inherit from fedora
+			"fedora-nonfree": {
+				Base:   "fedora",
+				Layers: []string{},
+			},
+			// Level 2: no distro set, should inherit through fedora-nonfree -> fedora
+			"nvidia": {
+				Base:   "fedora-nonfree",
+				Layers: []string{},
+			},
+			// Level 3: no distro set, should inherit through nvidia -> fedora-nonfree -> fedora
+			"ml-app": {
+				Base:   "nvidia",
+				Layers: []string{},
+			},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		imageName  string
+		wantDistro []string
+	}{
+		{"level 0: defines distro", "fedora", []string{"fedora:43", "fedora"}},
+		{"level 1: inherits from parent", "fedora-nonfree", []string{"fedora:43", "fedora"}},
+		{"level 2: inherits through chain", "nvidia", []string{"fedora:43", "fedora"}},
+		{"level 3: inherits through deep chain", "ml-app", []string{"fedora:43", "fedora"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := cfg.ResolveImage(tt.imageName, "test", "")
+			if err != nil {
+				t.Fatalf("ResolveImage() error = %v", err)
+			}
+			if !reflect.DeepEqual(resolved.Distro, tt.wantDistro) {
+				t.Errorf("Distro = %v, want %v", resolved.Distro, tt.wantDistro)
+			}
+		})
+	}
+}
+
+func TestResolveImageBuildBaseChain(t *testing.T) {
+	// Tests that build: formats propagate through the base chain.
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Platforms: []string{"linux/amd64"},
+		},
+		Images: map[string]ImageConfig{
+			// Level 0: defines build
+			"archlinux": {
+				Base:   "docker.io/library/archlinux:latest",
+				Build:  BuildFormats{"pac"},
+				Layers: []string{},
+			},
+			// Level 1: no build set, should inherit from archlinux
+			"arch-extended": {
+				Base:   "archlinux",
+				Layers: []string{},
+			},
+			// Level 2: no build set, should inherit through chain
+			"arch-app": {
+				Base:   "arch-extended",
+				Layers: []string{},
+			},
+		},
+	}
+
+	tests := []struct {
+		name      string
+		imageName string
+		wantBuild []string
+	}{
+		{"level 0: defines build", "archlinux", []string{"pac"}},
+		{"level 1: inherits from parent", "arch-extended", []string{"pac"}},
+		{"level 2: inherits through chain", "arch-app", []string{"pac"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := cfg.ResolveImage(tt.imageName, "test", "")
+			if err != nil {
+				t.Fatalf("ResolveImage() error = %v", err)
+			}
+			if !reflect.DeepEqual(resolved.BuildFormats, tt.wantBuild) {
+				t.Errorf("BuildFormats = %v, want %v", resolved.BuildFormats, tt.wantBuild)
+			}
+		})
+	}
+}

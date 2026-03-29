@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-130 layers. 41 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+133 layers. 41 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -166,7 +166,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -175,12 +175,12 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + chrome-sway + xfce4-terminal + thunar + waybar. Base desktop — no display server.
+**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + tmux + asciinema. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + a11y-tools + xterm + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots via pixelflux rendering pipeline (grim doesn't work nested). Full `ov wl` automation: input, window management, clipboard, resolution, accessibility introspection, XWayland apps via xterm. No VNC needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via pixelflux rendering pipeline (grim/wf-recorder don't work nested). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
@@ -254,6 +254,18 @@ ov wl sway msg/tree/workspaces/outputs # Sway IPC commands (requires sway)
 ov wl sway focus/move/resize/kill      # Sway window management
 ov wl sway layout/workspace/floating   # Sway layout and workspace control
 ov wl sway reload                      # Reload sway configuration
+```
+
+### Recording
+
+```
+ov record start <image> [-n NAME]      # Start recording (auto-detects mode)
+ov record start <image> -m terminal    # Record terminal session (asciinema)
+ov record start <image> -m desktop     # Record desktop video (pixelflux/wf-recorder)
+ov record stop <image> [-n NAME] [-o F] # Stop recording, optionally copy to host
+ov record list <image>                 # List active recordings
+ov record cmd <image> "command"        # Send command to recording terminal
+ov record term <image> "command"       # Run command in visible desktop terminal
 ```
 
 ### Persistent Sessions
@@ -360,7 +372,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 176 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 180 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

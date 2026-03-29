@@ -3,7 +3,10 @@ layers:
   - xdg-portal
   - wl-tools
   - wl-screenshot-grim
+  - wf-recorder
   - chrome-sway
   - xfce4-terminal
   - thunar
   - waybar
+  - tmux
+  - asciinema

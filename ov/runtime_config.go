@@ -314,7 +314,22 @@ func GetConfigValue(key string) (string, error) {
 	default:
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
-			val, _ := ResolveCredential("", CredServiceVNC, name, "")
+			val, source := ResolveCredential("", CredServiceVNC, name, "")
+			if source == "locked" {
+				return "<LOCKED>", nil
+			}
+			// In auto mode, config file fallback may return empty while the
+			// keyring holds the actual value but is locked. Check shadow index.
+			if val == "" && GetKeyringState() == KeyringLocked {
+				kr := &KeyringStore{}
+				if keys, err := kr.List(CredServiceVNC); err == nil {
+					for _, k := range keys {
+						if k == name {
+							return "<LOCKED>", nil
+						}
+					}
+				}
+			}
 			return val, nil
 		}
 		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)

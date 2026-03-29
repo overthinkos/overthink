@@ -41,9 +41,17 @@ func DefaultCredentialStore() CredentialStore {
 		case "keyring":
 			store := &KeyringStore{}
 			if err := store.Probe(); err != nil {
-				fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'keyring' but system keyring is not available: %v\n", err)
-				fmt.Fprintf(os.Stderr, "Falling back to config file. Fix the keyring or run: ov config set secret_backend config\n")
-				defaultStoreVal = &ConfigFileStore{}
+				state := GetKeyringState()
+				if state == KeyringLocked {
+					fmt.Fprintf(os.Stderr, "WARNING: System keyring is locked. Credentials are unavailable until unlocked.\n")
+					fmt.Fprintf(os.Stderr, "  Unlock your keyring, or switch backend: ov config set secret_backend config\n")
+					// Keep KeyringStore so callers get KeyringLockedError (not silent empty results)
+					defaultStoreVal = store
+				} else {
+					fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'keyring' but system keyring is not available: %v\n", err)
+					fmt.Fprintf(os.Stderr, "Falling back to config file. Fix the keyring or run: ov config set secret_backend config\n")
+					defaultStoreVal = &ConfigFileStore{}
+				}
 				return
 			}
 			defaultStoreVal = store
@@ -65,6 +73,11 @@ func DefaultCredentialStore() CredentialStore {
 				defaultStoreVal = store
 				return
 			}
+			state := GetKeyringState()
+			if state == KeyringLocked {
+				fmt.Fprintf(os.Stderr, "WARNING: System keyring is locked. Using config file for credentials.\n")
+				fmt.Fprintf(os.Stderr, "  Unlock your keyring, or run: ov config set secret_backend config\n")
+			}
 			// 2. Try kdbx if configured and file exists (no password prompt)
 			if path, keyFile := resolveKdbxPaths(); path != "" {
 				kdbx := &KdbxStore{path: path, keyFile: keyFile}
@@ -85,14 +98,17 @@ func DefaultCredentialStore() CredentialStore {
 func PrintStoreInfo() {
 	storeInfoOnce.Do(func() {
 		store := DefaultCredentialStore()
-		switch store.Name() {
-		case "keyring":
+		name := store.Name()
+		switch {
+		case name == "keyring (locked)":
+			// Warning already printed by DefaultCredentialStore()
+		case name == "keyring":
 			fmt.Fprintf(os.Stderr, "Using system keyring for credential storage.\n")
 			fmt.Fprintf(os.Stderr, "To force a specific backend: ov config set secret_backend keyring|config\n")
-		case "kdbx":
+		case name == "kdbx":
 			fmt.Fprintf(os.Stderr, "Using KeePass database for credential storage.\n")
 			fmt.Fprintf(os.Stderr, "To force a specific backend: ov config set secret_backend keyring|kdbx|config\n")
-		case "config":
+		case name == "config":
 			backend := resolveSecretBackend()
 			if backend == "config" {
 				// User explicitly chose config — no advisory needed
@@ -107,7 +123,8 @@ func PrintStoreInfo() {
 }
 
 // ResolveCredential checks env var, then the credential store chain.
-// Returns the value and its source ("env", "keyring", "config", or "default").
+// Returns the value and its source ("env", "keyring", "config", "locked", or "default").
+// When the keyring is locked, returns the default value with source "locked".
 func ResolveCredential(envVar, service, key, defaultVal string) (value, source string) {
 	if envVar != "" {
 		if v := os.Getenv(envVar); v != "" {
@@ -118,11 +135,19 @@ func ResolveCredential(envVar, service, key, defaultVal string) (value, source s
 	store := DefaultCredentialStore()
 	if v, err := store.Get(service, key); err == nil && v != "" {
 		return v, store.Name()
+	} else if IsKeyringLocked(err) {
+		// Keyring is locked — check config file fallback, then return "locked"
+		fallback := &ConfigFileStore{}
+		if v, err := fallback.Get(service, key); err == nil && v != "" {
+			return v, "config"
+		}
+		return defaultVal, "locked"
 	}
 
 	// If the primary store is keyring or kdbx, also check config file as fallback
 	// (for credentials not yet migrated)
-	if store.Name() == "keyring" || store.Name() == "kdbx" {
+	storeName := store.Name()
+	if storeName == "keyring" || storeName == "keyring (locked)" || storeName == "kdbx" {
 		fallback := &ConfigFileStore{}
 		if v, err := fallback.Get(service, key); err == nil && v != "" {
 			return v, "config"
@@ -173,6 +198,7 @@ func resetDefaultStore() {
 	defaultStoreOnce = sync.Once{}
 	defaultStoreVal = nil
 	storeInfoOnce = sync.Once{}
+	resetKeyringState()
 }
 
 // ConfigMigrateSecretsCmd migrates plaintext credentials from config.yml to the system keyring.

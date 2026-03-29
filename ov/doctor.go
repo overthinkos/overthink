@@ -646,16 +646,25 @@ func secretStorageChecks() []CheckResult {
 	var checks []CheckResult
 
 	// Check 1: Secret backend availability
-	keyring := &KeyringStore{}
-	if err := keyring.Probe(); err == nil {
+	kr := &KeyringStore{}
+	if err := kr.Probe(); err == nil {
 		checks = append(checks, CheckResult{
 			Name:    "Secret backend",
 			Status:  CheckOK,
 			Version: "system keyring",
 		})
 	} else {
+		state := GetKeyringState()
 		backend := resolveSecretBackend()
-		if backend == "config" {
+		if state == KeyringLocked {
+			checks = append(checks, CheckResult{
+				Name:        "Secret backend",
+				Status:      CheckWarning,
+				Version:     "system keyring (LOCKED)",
+				Detail:      "keyring is locked — credentials unavailable until unlocked",
+				InstallHint: "Unlock your keyring, or run: ov config set secret_backend config",
+			})
+		} else if backend == "config" {
 			checks = append(checks, CheckResult{
 				Name:    "Secret backend",
 				Status:  CheckOK,

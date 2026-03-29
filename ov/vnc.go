@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"image/png"
+	"io"
+	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -256,15 +258,24 @@ func checkVncStatus(image, instance string) ToolStatus {
 	ts.Port = extractPortFromAddress(address)
 	ts.Status = "unreachable"
 
-	password := resolveVNCPassword(resolveImageName(image), instance)
-	client, err := NewVNCClient(address, password)
+	// Lightweight probe: TCP connect + RFB banner read (no password needed).
+	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
 	if err != nil {
 		return ts
 	}
-	defer client.Close()
+	defer conn.Close()
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var banner [12]byte
+	if _, err := io.ReadFull(conn, banner[:]); err != nil {
+		return ts
+	}
+	if !strings.HasPrefix(string(banner[:]), "RFB ") {
+		return ts
+	}
 
 	ts.Status = "ok"
-	ts.Detail = fmt.Sprintf("%dx%d %s", client.Width(), client.Height(), client.DesktopName())
+	ts.Detail = strings.TrimSpace(string(banner[:]))
 	return ts
 }
 

@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""In-process capture bridge for pixelflux-based screenshot and recording.
+
+Taps into the selkies WebSocket stream (localhost:8081) to receive the same
+H.264 frames that the browser sees. Serves them via a Unix socket to
+pixelflux-screenshot and pixelflux-record.
+
+This avoids creating a second ScreenCapture (the Rust backend only supports
+one active capture at a time). Instead, we connect as a WebSocket client to
+the existing selkies streaming server and relay frames.
+
+Architecture:
+    selkies process (existing capture)
+        └── WebSocket :8081 broadcasts H.264 frames
+            └── This bridge (internal WebSocket client)
+                └── Unix socket /tmp/ov-capture.sock
+                    ├── pixelflux-screenshot (SCREENSHOT → PNG)
+                    └── pixelflux-record (STREAM → continuous JPEG)
+
+Protocol on /tmp/ov-capture.sock:
+    SCREENSHOT\n  → 4-byte big-endian length + PNG data
+    STREAM\n      → continuous (4-byte length + raw frame data) until disconnect
+
+Started by selkies-wrapper. When run as __main__, starts the capture bridge
+in a background thread, then runs selkies main().
+"""
+import asyncio
+import io
+import json
+import os
+import socket
+import struct
+import subprocess
+import sys
+import threading
+import time
+
+SOCK_PATH = "/tmp/ov-capture.sock"
+WS_URL = "ws://localhost:8081"
+
+# Frame ring buffer — WebSocket bridge appends, clients read
+_frame_buffer = []       # list of raw frame bytes
+_frame_seq = 0           # monotonically increasing sequence number
+_frame_cond = threading.Condition()  # notified on each new frame
+_ws_connected = threading.Event()
+_bridge_running = True
+
+
+def _ws_bridge():
+    """Background thread: connect to selkies WebSocket, collect frames."""
+    global _bridge_running
+
+    # Wait for selkies to start (WebSocket server needs time)
+    for attempt in range(60):
+        try:
+            import websockets.sync.client as ws_sync
+            with ws_sync.connect(WS_URL, open_timeout=2) as ws:
+                # Handshake
+                mode = ws.recv()  # MODE websockets
+                settings = ws.recv()  # JSON settings
+                ws.send("SETTINGS," + json.dumps({"displayId": "primary", "framerate": 30}))
+                ws.send("START_VIDEO")
+
+                print("capture-bridge: connected to selkies WebSocket", file=sys.stderr)
+                _ws_connected.set()
+
+                # Accumulate frames
+                h264_buf = bytearray()
+                while _bridge_running:
+                    try:
+                        msg = ws.recv(timeout=5)
+                    except TimeoutError:
+                        continue
+
+                    if isinstance(msg, bytes):
+                        with _frame_cond:
+                            global _frame_seq
+                            _frame_buffer.append(msg)
+                            _frame_seq += 1
+                            # Keep last 90 frames (~3 seconds at 30fps)
+                            while len(_frame_buffer) > 90:
+                                _frame_buffer.pop(0)
+                            _frame_cond.notify_all()
+                    elif isinstance(msg, str):
+                        # Ignore text messages (settings updates, cursor, etc.)
+                        pass
+
+                break  # Clean exit
+
+        except Exception as e:
+            if attempt < 59:
+                time.sleep(1)
+            else:
+                print(f"capture-bridge: failed to connect after 60 attempts: {e}", file=sys.stderr)
+
+
+def _handle_screenshot(conn):
+    """Decode latest H.264 frames to a single PNG screenshot."""
+    if not _ws_connected.is_set():
+        _ws_connected.wait(timeout=30)
+
+    with _frame_cond:
+        if not _frame_buffer:
+            # Wait for at least one frame
+            _frame_cond.wait(timeout=10)
+        if not _frame_buffer:
+            conn.sendall(struct.pack(">I", 0))
+            return
+        # Grab all buffered frames for H.264 decoding (need IDR + deltas)
+        raw_data = b"".join(_frame_buffer)
+
+    # Decode H.264 to PNG via ffmpeg
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-f", "h264", "-i", "pipe:0",
+             "-frames:v", "1", "-f", "image2pipe", "-c:v", "png", "pipe:1"],
+            input=raw_data,
+            capture_output=True,
+            timeout=10,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            png_data = proc.stdout
+            conn.sendall(struct.pack(">I", len(png_data)))
+            conn.sendall(png_data)
+            return
+    except Exception as e:
+        print(f"capture-bridge: ffmpeg error: {e}", file=sys.stderr)
+
+    conn.sendall(struct.pack(">I", 0))
+
+
+def _handle_stream(conn):
+    """Stream raw H.264 frame data to the client for recording."""
+    if not _ws_connected.is_set():
+        _ws_connected.wait(timeout=30)
+
+    # Use a dedicated queue for this stream client to avoid missing frames
+    client_queue = []
+
+    def _drain_new_frames():
+        """Collect all new frames since last check."""
+        nonlocal last_seq
+        with _frame_cond:
+            if _frame_seq <= last_seq:
+                _frame_cond.wait(timeout=0.5)
+            if _frame_seq <= last_seq:
+                return
+            new_count = _frame_seq - last_seq
+            available = len(_frame_buffer)
+            take = min(new_count, available)
+            if take > 0:
+                client_queue.extend(_frame_buffer[-take:])
+            last_seq = _frame_seq
+
+    try:
+        with _frame_cond:
+            last_seq = _frame_seq
+
+        while _bridge_running:
+            _drain_new_frames()
+
+            while client_queue:
+                frame_data = client_queue.pop(0)
+                try:
+                    conn.sendall(struct.pack(">I", len(frame_data)))
+                    conn.sendall(frame_data)
+                except (BrokenPipeError, ConnectionError, OSError):
+                    return
+    except Exception:
+        pass
+
+
+def _handle_client(conn):
+    """Handle a single Unix socket client connection."""
+    try:
+        data = b""
+        while b"\n" not in data:
+            chunk = conn.recv(1024)
+            if not chunk:
+                return
+            data += chunk
+
+        request = data.split(b"\n")[0].decode().strip()
+
+        if request == "SCREENSHOT":
+            _handle_screenshot(conn)
+        elif request == "STREAM":
+            _handle_stream(conn)
+        else:
+            print(f"capture-bridge: unknown request: {request!r}", file=sys.stderr)
+    except Exception as e:
+        print(f"capture-bridge: client error: {e}", file=sys.stderr)
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _run_socket_server():
+    """Run the Unix socket server for capture requests."""
+    try:
+        os.unlink(SOCK_PATH)
+    except OSError:
+        pass
+
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    server.bind(SOCK_PATH)
+    os.chmod(SOCK_PATH, 0o666)
+    server.listen(5)
+    print(f"capture-bridge: listening on {SOCK_PATH}", file=sys.stderr)
+
+    while _bridge_running:
+        try:
+            conn, _ = server.accept()
+            t = threading.Thread(target=_handle_client, args=(conn,), daemon=True)
+            t.start()
+        except Exception as e:
+            print(f"capture-bridge: accept error: {e}", file=sys.stderr)
+
+
+def start():
+    """Start the capture bridge (WebSocket client + Unix socket server)."""
+    # Start WebSocket bridge thread
+    ws_thread = threading.Thread(target=_ws_bridge, daemon=True, name="ws-bridge")
+    ws_thread.start()
+
+    # Start Unix socket server thread
+    sock_thread = threading.Thread(target=_run_socket_server, daemon=True, name="sock-server")
+    sock_thread.start()
+
+    return ws_thread, sock_thread
+
+
+if __name__ == "__main__":
+    # Start capture bridge threads
+    start()
+
+    # Run selkies main (WebSocket server, frame capture, etc.)
+    from selkies.__main__ import main
+    main()

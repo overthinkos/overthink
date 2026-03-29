@@ -6,4 +6,6 @@ tasks:
       - mkdir -p ~/.local/bin ~/.config/selkies
       - cp /ctx/selkies-wrapper ~/.local/bin/selkies-wrapper
       - chmod +x ~/.local/bin/selkies-wrapper
+      - cp /ctx/selkies-capture-server ~/.local/bin/selkies-capture-server
+      - chmod +x ~/.local/bin/selkies-capture-server
       - cp /ctx/nginx.conf ~/.config/selkies/nginx.conf

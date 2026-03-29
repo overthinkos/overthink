@@ -38,6 +38,10 @@ else
     echo "selkies-wrapper: WARNING: PulseAudio not available after ${TIMEOUT}s"
 fi
 
-exec "$HOME/.pixi/envs/default/bin/selkies" \
-    --addr="0.0.0.0" \
-    --mode="websockets"
+# Start the in-process capture server alongside selkies.
+# The capture server shares pixelflux's global WaylandBackend so it can
+# capture the full composited desktop (labwc renders into pixelflux's
+# compositor). Standalone scripts can't do this — they create their own
+# empty compositor. See selkies-capture-server for protocol details.
+CAPTURE_SERVER="$HOME/.local/bin/selkies-capture-server"
+exec python3 "$CAPTURE_SERVER" --addr="0.0.0.0" --mode="websockets"

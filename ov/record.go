@@ -302,20 +302,23 @@ func (c *RecordTermCmd) Run() error {
 		}
 	}
 
-	// Build terminal command with -hold to keep window open after command exits
+	// Build terminal command with -hold to keep window open after command exits.
+	// Wrap in sh -c so compound commands (&&, ||, ;) work correctly.
+	wrappedCmd := fmt.Sprintf("sh -c %s", shellQuote(c.Command))
 	var termCmd string
 	switch term {
 	case "xterm":
-		termCmd = fmt.Sprintf("xterm -hold -e %s", shellQuote(c.Command))
+		// xterm is X11-only, needs DISPLAY for XWayland
+		termCmd = fmt.Sprintf("DISPLAY=:0 xterm -hold -e %s", wrappedCmd)
 	case "xfce4-terminal":
-		termCmd = fmt.Sprintf("xfce4-terminal --hold -e %s", shellQuote(c.Command))
+		// GTK/Wayland-native, doesn't need DISPLAY
+		termCmd = fmt.Sprintf("xfce4-terminal --hold -e %s", wrappedCmd)
 	default:
-		// Generic fallback: assume -e flag works
-		termCmd = fmt.Sprintf("%s -e %s", term, shellQuote(c.Command))
+		termCmd = fmt.Sprintf("%s -e %s", term, wrappedCmd)
 	}
 
-	// Launch via Wayland exec (same pattern as WlExecCmd)
-	shellCmd := fmt.Sprintf("export DISPLAY=:0; %s &", termCmd)
+	// Launch via Wayland exec
+	shellCmd := fmt.Sprintf("%s &", termCmd)
 	if err := execWlCmd(engine, name, shellCmd); err != nil {
 		return fmt.Errorf("launching terminal: %w", err)
 	}

@@ -1,0 +1,5 @@
+description: Fast system information tool (neofetch successor)
+
+rpm:
+  packages:
+    - fastfetch

@@ -304,15 +304,19 @@ func (c *RecordTermCmd) Run() error {
 
 	// Build terminal command with -hold to keep window open after command exits.
 	// Wrap in sh -c so compound commands (&&, ||, ;) work correctly.
+	// Note: xterm -e takes all remaining args as a command. xfce4-terminal -e
+	// takes only ONE arg, so we use -x (--execute) which takes all remaining args.
 	wrappedCmd := fmt.Sprintf("sh -c %s", shellQuote(c.Command))
 	var termCmd string
 	switch term {
 	case "xterm":
-		// xterm is X11-only, needs DISPLAY for XWayland
+		// xterm is X11-only, needs DISPLAY for XWayland.
+		// xterm -e takes all remaining args as the command.
 		termCmd = fmt.Sprintf("DISPLAY=:0 xterm -hold -e %s", wrappedCmd)
 	case "xfce4-terminal":
-		// GTK/Wayland-native, doesn't need DISPLAY
-		termCmd = fmt.Sprintf("xfce4-terminal --hold -e %s", wrappedCmd)
+		// GTK/Wayland-native, doesn't need DISPLAY.
+		// -x (--execute) takes all remaining args (unlike -e which takes one).
+		termCmd = fmt.Sprintf("xfce4-terminal --hold -x %s", wrappedCmd)
 	default:
 		termCmd = fmt.Sprintf("%s -e %s", term, wrappedCmd)
 	}

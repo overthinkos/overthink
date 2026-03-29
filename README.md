@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-133 layers. 41 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+134 layers. 41 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -166,7 +166,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -175,12 +175,12 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + tmux + asciinema. Base desktop — no display server.
+**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + tmux + asciinema + fastfetch. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via capture bridge that taps into the selkies WebSocket stream (grim/wf-recorder don't work nested). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via capture bridge that taps into the selkies WebSocket stream (grim/wf-recorder don't work nested). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

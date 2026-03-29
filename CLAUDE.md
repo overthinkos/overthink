@@ -94,7 +94,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (~133 layers)
++-- layers/<name>/            # Layer directories (~134 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -123,7 +123,7 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (17 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (130 skills)
++-- ov-layers/                        # Layer reference (131 skills)
 +-- ov-images/                        # Image reference (31 skills)
 ```
 
@@ -276,7 +276,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 17 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 130 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 131 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 31 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains

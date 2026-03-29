@@ -10,4 +10,5 @@ layers:
   - xterm
   - tmux
   - asciinema
+  - fastfetch
   - selkies

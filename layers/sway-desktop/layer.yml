@@ -10,3 +10,4 @@ layers:
   - waybar
   - tmux
   - asciinema
+  - fastfetch

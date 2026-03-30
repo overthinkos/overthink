@@ -308,8 +308,8 @@ func TestGenerateQuadletWithTailscalePublicCustomPort(t *testing.T) {
 
 func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 	cfg := QuadletConfig{
-		ImageName:   "immich-cuda",
-		ImageRef:    "ghcr.io/overthinkos/immich-cuda:latest",
+		ImageName:   "immich-ml",
+		ImageRef:    "ghcr.io/overthinkos/immich-ml:latest",
 		Workspace:   "/home/user/project",
 		Ports:       []string{"2283:2283"},
 		BindAddress: "127.0.0.1",

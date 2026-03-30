@@ -372,7 +372,7 @@ images:
     platforms:
       - linux/amd64
 
-  immich-cuda:
+  immich-ml:
     base: fedora
     layers:
       - nodejs24

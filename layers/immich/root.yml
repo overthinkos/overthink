@@ -32,3 +32,10 @@ tasks:
 
       # Clean up
       - rm -rf /tmp/immich
+
+      # Register immich-specific PostgreSQL extensions for docker-entrypoint-initdb.d
+      - |
+        cat > /docker-entrypoint-initdb.d/01-immich-extensions.sql <<'EOF'
+        CREATE EXTENSION IF NOT EXISTS vector;
+        CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
+        EOF

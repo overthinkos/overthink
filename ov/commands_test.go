@@ -17,10 +17,11 @@ func TestEnableCmd_DirectModeError(t *testing.T) {
 
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
-	os.Unsetenv("OV_RUN_MODE")
 	os.Unsetenv("OV_AUTO_ENABLE")
+	// Explicitly force direct mode (default is now auto → quadlet when podman+systemctl present)
+	os.Setenv("OV_RUN_MODE", "direct")
+	defer os.Unsetenv("OV_RUN_MODE")
 
-	// run_mode defaults to "direct"
 	cmd := &EnableCmd{Image: "fedora-test"}
 	err := cmd.Run()
 	if err == nil {
@@ -41,7 +42,9 @@ func TestDisableCmd_DirectModeError(t *testing.T) {
 
 	os.Unsetenv("OV_BUILD_ENGINE")
 	os.Unsetenv("OV_RUN_ENGINE")
-	os.Unsetenv("OV_RUN_MODE")
+	// Explicitly force direct mode (default is now auto → quadlet when podman+systemctl present)
+	os.Setenv("OV_RUN_MODE", "direct")
+	defer os.Unsetenv("OV_RUN_MODE")
 
 	cmd := &DisableCmd{Image: "fedora-test"}
 	err := cmd.Run()

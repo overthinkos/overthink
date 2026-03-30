@@ -135,6 +135,21 @@ func encExtpassArgs(imageID string) ([]string, func()) {
 	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()) }
 }
 
+// resolveEncPassphrase resolves the gocryptfs passphrase for an image.
+// Resolution order: GOCRYPTFS_PASSWORD env var → credential store (kdbx/keyring/config) → interactive prompt.
+func resolveEncPassphrase(imageName string) (string, error) {
+	// 1. Test/CI override
+	if pw := os.Getenv("GOCRYPTFS_PASSWORD"); pw != "" {
+		return pw, nil
+	}
+	// 2. Credential store (kdbx / keyring / config)
+	if val, _ := ResolveCredential("", "ov/enc", imageName, ""); val != "" {
+		return val, nil
+	}
+	// 3. Interactive prompt (fallback when no kdbx or key not stored)
+	return askPassword("ov-"+imageName, "Passphrase for ov-"+imageName+":")
+}
+
 // EncInitCmd initializes gocryptfs cipher directories
 type EncInitCmd struct {
 	Image  string `arg:"" help:"Image name from images.yml"`
@@ -147,8 +162,11 @@ func (c *EncInitCmd) Run() error {
 		return err
 	}
 
-	volID := "ov-" + c.Image
-	extpassArgs, cleanup := encExtpassArgs(volID)
+	passphrase, err := resolveEncPassphrase(c.Image)
+	if err != nil {
+		return err
+	}
+	extpassArgs, cleanup := encExtpassArgs("ov-" + c.Image)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -164,7 +182,6 @@ func (c *EncInitCmd) Run() error {
 			continue
 		}
 
-		// Create directories
 		if err := os.MkdirAll(cipherDir, 0700); err != nil {
 			return fmt.Errorf("creating cipher dir for %s: %w", m.Name, err)
 		}
@@ -172,10 +189,10 @@ func (c *EncInitCmd) Run() error {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
-		// Run gocryptfs -init with shared password
 		args := append([]string{"-init"}, extpassArgs...)
 		args = append(args, cipherDir)
 		cmd := exec.Command("gocryptfs", args...)
+		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -198,9 +215,11 @@ func (c *EncMountCmd) Run() error {
 		return err
 	}
 
-	// Use per-image password ID so all volumes share a single prompt
-	volID := "ov-" + c.Image
-	extpassArgs, cleanup := encExtpassArgs(volID)
+	passphrase, err := resolveEncPassphrase(c.Image)
+	if err != nil {
+		return err
+	}
+	extpassArgs, cleanup := encExtpassArgs("ov-" + c.Image)
 	defer cleanup()
 
 	for _, m := range mounts {
@@ -220,19 +239,89 @@ func (c *EncMountCmd) Run() error {
 			continue
 		}
 
-		// Ensure plain dir exists
 		if err := os.MkdirAll(plainDir, 0700); err != nil {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
 		args := append(extpassArgs, "-allow_other", cipherDir, plainDir)
 		cmd := exec.Command("gocryptfs", args...)
+		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("mounting %s: %w", m.Name, err)
 		}
 		fmt.Fprintf(os.Stderr, "Mounted %s at %s\n", m.Name, plainDir)
+	}
+	return nil
+}
+
+// ensureEncryptedMounts auto-initializes and mounts encrypted volumes as needed.
+// Called by ov start to transparently handle encrypted volume setup without
+// requiring the user to run ov enc init/mount manually first.
+// Resolves the enc passphrase once (kdbx → keyring → interactive prompt).
+func ensureEncryptedMounts(imageName string) error {
+	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	if err != nil || len(mounts) == 0 {
+		return nil // no encrypted mounts configured
+	}
+
+	anyNotReady := false
+	for _, m := range mounts {
+		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
+		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		if !isEncryptedInitialized(cipherDir) || !isEncryptedMounted(plainDir) {
+			anyNotReady = true
+			break
+		}
+	}
+	if !anyNotReady {
+		return nil
+	}
+
+	passphrase, err := resolveEncPassphrase(imageName)
+	if err != nil {
+		return fmt.Errorf("resolving enc passphrase for %s: %w", imageName, err)
+	}
+	extpassArgs, cleanup := encExtpassArgs("ov-" + imageName)
+	defer cleanup()
+
+	for _, m := range mounts {
+		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
+		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+
+		if !isEncryptedInitialized(cipherDir) {
+			fmt.Fprintf(os.Stderr, "Initializing encrypted volume %s for %s...\n", m.Name, imageName)
+			if err := os.MkdirAll(cipherDir, 0700); err != nil {
+				return fmt.Errorf("creating cipher dir for %s: %w", m.Name, err)
+			}
+			if err := os.MkdirAll(plainDir, 0700); err != nil {
+				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
+			}
+			args := append([]string{"-init"}, extpassArgs...)
+			args = append(args, cipherDir)
+			cmd := exec.Command("gocryptfs", args...)
+			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("gocryptfs -init for %s: %w", m.Name, err)
+			}
+		}
+		if !isEncryptedMounted(plainDir) {
+			if err := os.MkdirAll(plainDir, 0700); err != nil {
+				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
+			}
+			args := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+			cmd := exec.Command("gocryptfs", args...)
+			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, err)
+			}
+			fmt.Fprintf(os.Stderr, "Mounted encrypted volume %s\n", m.Name)
+		}
 	}
 	return nil
 }
@@ -450,8 +539,9 @@ func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
 }
 
 // generateEncUnit produces a companion systemd service unit for gocryptfs mounts.
-func generateEncUnit(imageName string, mounts []ResolvedBindMount, storagePath string) string {
-	// Filter to encrypted mounts only
+// It delegates to `ov enc mount`/`ov enc unmount` which have full credential-store
+// integration (kdbx → keyring → interactive prompt via systemd-ask-password).
+func generateEncUnit(imageName string, mounts []ResolvedBindMount, ovBin string) string {
 	var encrypted []ResolvedBindMount
 	for _, m := range mounts {
 		if m.Encrypted {
@@ -471,24 +561,8 @@ func generateEncUnit(imageName string, mounts []ResolvedBindMount, storagePath s
 	b.WriteString("\n[Service]\n")
 	b.WriteString("Type=oneshot\n")
 	b.WriteString("RemainAfterExit=yes\n")
-
-	// Use per-image password ID so all volumes share a single prompt.
-	// Each ExecStart checks if already FUSE-mounted (e.g. via ov enc mount) and skips if so.
-	// Quoting: outer double-quotes (systemd), inner single-quotes (bash → gocryptfs extpass).
-	volID := "ov-" + imageName
-	extpass := fmt.Sprintf("systemd-ask-password --id=%s --timeout=0 --echo=masked Passphrase:", volID)
-
-	for _, m := range encrypted {
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
-		b.WriteString(fmt.Sprintf("ExecStart=/bin/bash -c \"findmnt -n -o FSTYPE %s 2>/dev/null | grep -q fuse.gocryptfs && exit 0; gocryptfs -extpass '%s' -allow_other %s %s\"\n",
-			plainDir, extpass, cipherDir, plainDir))
-	}
-	for _, m := range encrypted {
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
-		b.WriteString(fmt.Sprintf("ExecStop=-fusermount3 -u %s\n", plainDir))
-	}
-
+	b.WriteString(fmt.Sprintf("ExecStart=%s enc mount %s\n", ovBin, imageName))
+	b.WriteString(fmt.Sprintf("ExecStop=%s enc unmount %s\n", ovBin, imageName))
 	b.WriteString("\n[Install]\n")
 	b.WriteString("WantedBy=default.target\n")
 

@@ -152,7 +152,8 @@ func TestGenerateCryptoUnit(t *testing.T) {
 		{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
 
-	got := generateEncUnit("myapp", mounts, "/data/enc")
+	ovBin := "/usr/bin/ov"
+	got := generateEncUnit("myapp", mounts, ovBin)
 
 	if !strings.Contains(got, "ov-myapp-enc.service") {
 		t.Errorf("expected filename in comment, got:\n%s", got)
@@ -166,20 +167,11 @@ func TestGenerateCryptoUnit(t *testing.T) {
 	if !strings.Contains(got, "RemainAfterExit=yes") {
 		t.Errorf("expected RemainAfterExit, got:\n%s", got)
 	}
-	if !strings.Contains(got, "gocryptfs -extpass") {
-		t.Errorf("expected ExecStart with gocryptfs, got:\n%s", got)
+	if !strings.Contains(got, "ExecStart=/usr/bin/ov enc mount myapp") {
+		t.Errorf("expected ExecStart delegating to ov enc mount, got:\n%s", got)
 	}
-	if !strings.Contains(got, "--id=ov-myapp") {
-		t.Errorf("expected --id=ov-myapp in extpass, got:\n%s", got)
-	}
-	if !strings.Contains(got, "/data/enc/ov-myapp-secrets/cipher") {
-		t.Errorf("expected cipher dir in ExecStart, got:\n%s", got)
-	}
-	if !strings.Contains(got, "/data/enc/ov-myapp-secrets/plain") {
-		t.Errorf("expected plain dir in ExecStart, got:\n%s", got)
-	}
-	if !strings.Contains(got, "ExecStop=-fusermount3 -u") {
-		t.Errorf("expected ExecStop with fusermount3, got:\n%s", got)
+	if !strings.Contains(got, "ExecStop=/usr/bin/ov enc unmount myapp") {
+		t.Errorf("expected ExecStop delegating to ov enc unmount, got:\n%s", got)
 	}
 	if !strings.Contains(got, "WantedBy=default.target") {
 		t.Errorf("expected WantedBy, got:\n%s", got)
@@ -191,7 +183,7 @@ func TestGenerateCryptoUnitNoEncrypted(t *testing.T) {
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp", Encrypted: false},
 	}
 
-	got := generateEncUnit("myapp", mounts, "/data/enc")
+	got := generateEncUnit("myapp", mounts, "/usr/bin/ov")
 	if got != "" {
 		t.Errorf("expected empty string for no encrypted mounts, got: %s", got)
 	}
@@ -203,14 +195,14 @@ func TestGenerateCryptoUnitMultiple(t *testing.T) {
 		{Name: "models", HostPath: "/data/enc/ov-myapp-models/plain", ContPath: "/home/user/.models", Encrypted: true},
 	}
 
-	got := generateEncUnit("myapp", mounts, "/data/enc")
+	got := generateEncUnit("myapp", mounts, "/usr/bin/ov")
 
-	// Should have two ExecStart and two ExecStop lines
-	if strings.Count(got, "ExecStart=") != 2 {
-		t.Errorf("expected 2 ExecStart lines, got:\n%s", got)
+	// Multiple volumes are handled by a single ov enc mount call
+	if strings.Count(got, "ExecStart=") != 1 {
+		t.Errorf("expected 1 ExecStart line (ov enc mount handles all volumes), got:\n%s", got)
 	}
-	if strings.Count(got, "ExecStop=") != 2 {
-		t.Errorf("expected 2 ExecStop lines, got:\n%s", got)
+	if strings.Count(got, "ExecStop=") != 1 {
+		t.Errorf("expected 1 ExecStop line (ov enc unmount handles all volumes), got:\n%s", got)
 	}
 }
 

@@ -1274,15 +1274,17 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelPortRelay, portRelay)
 
 	// Secrets: collected from layers (metadata only, no values)
+	// Deduplicate by name+env composite key: same podman secret can inject into multiple env vars.
 	var labelSecrets []LabelSecret
 	secretSeen := make(map[string]bool)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		for _, s := range layer.Secrets() {
-			if secretSeen[s.Name] {
+			key := s.Name + ":" + s.Env
+			if secretSeen[key] {
 				continue
 			}
-			secretSeen[s.Name] = true
+			secretSeen[key] = true
 			target := s.Target
 			if target == "" {
 				target = "/run/secrets/" + s.Name

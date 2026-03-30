@@ -173,6 +173,16 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		fmt.Fprintf(os.Stderr, "Warning: port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
 	}
 
+	// Collect and provision secrets from image labels
+	collectedSecrets := CollectSecretsFromLabels(c.Image, meta.Secrets)
+	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, collectedSecrets)
+	if err != nil {
+		return err
+	}
+	for _, kv := range fallbackEnv {
+		envVars = appendEnvUnique(envVars, kv)
+	}
+
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
 	qcfg := QuadletConfig{
@@ -195,6 +205,7 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 		Status:         meta.Status,
 		Info:           meta.Info,
 		Entrypoint:     resolveEntrypointFromMeta(meta),
+		Secrets:        provisioned,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -252,7 +263,11 @@ func (c *EnableCmd) runEnable(rt *ResolvedRuntime) error {
 
 	// Write companion crypto service if encrypted bind mounts are configured
 	if hasEncryptedBindMounts(bindMounts) {
-		encContent := generateEncUnit(c.Image, bindMounts, rt.EncryptedStoragePath)
+		ovBin, err := os.Executable()
+		if err != nil {
+			ovBin = "ov" // fallback to PATH
+		}
+		encContent := generateEncUnit(c.Image, bindMounts, ovBin)
 		if encContent != "" {
 			svcDir, err := systemdUserDir()
 			if err != nil {

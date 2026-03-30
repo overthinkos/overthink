@@ -320,7 +320,7 @@ func CreateKdbxDatabase(path, password string) error {
 	ovGroup := gokeepasslib.NewGroup()
 	ovGroup.Name = "ov"
 
-	for _, svc := range []string{"vnc", "secret"} {
+	for _, svc := range []string{"vnc", "secret", "enc"} {
 		g := gokeepasslib.NewGroup()
 		g.Name = svc
 		ovGroup.Groups = append(ovGroup.Groups, g)

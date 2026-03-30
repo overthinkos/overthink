@@ -54,6 +54,19 @@ func (p PortScope) MarshalJSON() ([]byte, error) {
 	return []byte("null"), nil
 }
 
+func (p PortScope) MarshalYAML() (interface{}, error) {
+	if p.All {
+		return "all", nil
+	}
+	if len(p.PortMap) > 0 {
+		return p.PortMap, nil
+	}
+	if len(p.Ports) > 0 {
+		return p.Ports, nil
+	}
+	return nil, nil
+}
+
 func (p *PortScope) UnmarshalJSON(data []byte) error {
 	if string(data) == "null" {
 		return nil

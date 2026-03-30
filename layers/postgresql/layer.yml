@@ -8,9 +8,7 @@ rpm:
 
 env:
   PGDATA: "~/.postgresql/data"
-  POSTGRES_DB: "immich"
-  POSTGRES_USER: "immich"
-  POSTGRES_PASSWORD: "immich"
+  POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
 
 ports:
   - 5432
@@ -21,11 +19,10 @@ volumes:
 
 service: |
   [program:postgresql]
-  command=/usr/bin/postgres -D %(ENV_PGDATA)s -c unix_socket_directories=%(ENV_HOME)s/.postgresql -c listen_addresses=127.0.0.1
+  command=/usr/local/bin/postgresql-entrypoint.sh
   autostart=true
   autorestart=true
   stdout_logfile=/dev/stdout
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=10
-  environment=PGDATA="%(ENV_PGDATA)s",HOME="%(ENV_HOME)s"

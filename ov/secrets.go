@@ -123,7 +123,11 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 			return val, src
 		}
 	}
-	// Generic lookup by secret name
+	// Try by full podman secret name (e.g. "ov-immich-db-password") — matches `ov secrets set ov/secret ov-immich-db-password`
+	if val, src := ResolveCredential("", "ov/secret", s.Name, ""); val != "" {
+		return val, src
+	}
+	// Fallback: try by bare secret name (e.g. "db-password")
 	val, src := ResolveCredential("", "ov/secret", s.SecretName, "")
 	return val, src
 }

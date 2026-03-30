@@ -11,10 +11,11 @@ env:
   IMMICH_MEDIA_LOCATION: "~/.immich/library"
   IMMICH_MACHINE_LEARNING_ENABLED: "false"
   SHARP_FORCE_GLOBAL_LIBVIPS: "1"
+  POSTGRES_USER: "immich"
+  POSTGRES_DB: "immich"
   DB_HOSTNAME: "127.0.0.1"
   DB_PORT: "5432"
   DB_USERNAME: "immich"
-  DB_PASSWORD: "immich"
   DB_DATABASE_NAME: "immich"
   REDIS_HOSTNAME: "127.0.0.1"
   REDIS_PORT: "6379"
@@ -45,13 +46,19 @@ volumes:
   - name: cache
     path: "~/.immich/cache"
 
+secrets:
+  - name: db-password
+    env: DB_PASSWORD
+  - name: db-password
+    env: POSTGRES_PASSWORD
+
 route:
   host: "immich.localhost"
   port: 2283
 
 service: |
   [program:immich-db-init]
-  command=bash -c 'for i in $(seq 1 30); do psql -h %(ENV_HOME)s/.postgresql -U user -d postgres -c "SELECT 1" >/dev/null 2>&1 && break; sleep 1; done; psql -h %(ENV_HOME)s/.postgresql -U user -d postgres -c "SELECT 1 FROM pg_database WHERE datname='"'"'immich'"'"'" | grep -q 1 || psql -h %(ENV_HOME)s/.postgresql -U user -d postgres -f %(ENV_HOME)s/.postgresql/init.sql; psql -h %(ENV_HOME)s/.postgresql -U user -d immich -c "CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"'
+  command=bash -c 'for i in $(seq 1 120); do pg_isready -h %(ENV_HOME)s/.postgresql -U %(ENV_POSTGRES_USER)s >/dev/null 2>&1 && exit 0; sleep 1; done; echo "PostgreSQL timed out after 120s" >&2; exit 1'
   autostart=true
   autorestart=false
   startsecs=0
@@ -59,7 +66,7 @@ service: |
   stdout_logfile=/dev/stdout
   stdout_logfile_maxbytes=0
   redirect_stderr=true
-  priority=20
+  priority=15
 
   [program:immich-server]
   command=node /opt/immich/server/dist/main

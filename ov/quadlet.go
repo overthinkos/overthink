@@ -87,7 +87,11 @@ func generateQuadlet(cfg QuadletConfig) string {
 		}
 	}
 	for _, s := range cfg.Secrets {
-		b.WriteString(fmt.Sprintf("Secret=%s,target=%s\n", s.Name, s.Target))
+		if s.Env != "" {
+			b.WriteString(fmt.Sprintf("Secret=%s,type=env,target=%s\n", s.Name, s.Env))
+		} else {
+			b.WriteString(fmt.Sprintf("Secret=%s,target=%s\n", s.Name, s.Target))
+		}
 	}
 	if cfg.GPU && !cfg.Security.Privileged {
 		b.WriteString("AddDevice=nvidia.com/gpu=all\n")

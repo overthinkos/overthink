@@ -135,7 +135,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		BuildEngine:          resolveValue(os.Getenv("OV_BUILD_ENGINE"), cfg.Engine.Build, "auto"),
 		RunEngine:            resolveValue(os.Getenv("OV_RUN_ENGINE"), cfg.Engine.Run, "auto"),
 		Rootful:              resolveValue(os.Getenv("OV_ENGINE_ROOTFUL"), cfg.Engine.Rootful, "auto"),
-		RunMode:              resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "direct"),
+		RunMode:              resolveValue(os.Getenv("OV_RUN_MODE"), cfg.RunMode, "auto"),
 		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
@@ -155,6 +155,11 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		if detectErr != nil {
 			return nil, fmt.Errorf("engine.run: %w", detectErr)
 		}
+	}
+
+	// Auto-detect run mode: default to quadlet when podman + systemd are present
+	if rt.RunMode == "auto" {
+		rt.RunMode = detectRunMode(rt.RunEngine)
 	}
 
 	if err := validateEngine(rt.BuildEngine, "engine.build"); err != nil {
@@ -207,10 +212,20 @@ func validateEngine(value, field string) error {
 }
 
 func validateRunMode(value string) error {
-	if value != "direct" && value != "quadlet" {
-		return fmt.Errorf("run_mode must be \"direct\" or \"quadlet\", got %q", value)
+	if value != "auto" && value != "direct" && value != "quadlet" {
+		return fmt.Errorf("run_mode must be \"auto\", \"direct\", or \"quadlet\", got %q", value)
 	}
 	return nil
+}
+
+// detectRunMode returns "quadlet" when podman and systemd are present, otherwise "direct".
+func detectRunMode(runEngine string) string {
+	if runEngine == "podman" {
+		if _, err := exec.LookPath("systemctl"); err == nil {
+			return "quadlet"
+		}
+	}
+	return "direct"
 }
 
 func validateBindAddress(value string) error {
@@ -595,7 +610,7 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
 		resolve("engine.rootful", "OV_ENGINE_ROOTFUL", cfg.Engine.Rootful, "auto"),
-		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "direct"),
+		resolve("run_mode", "OV_RUN_MODE", cfg.RunMode, "auto"),
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),

@@ -51,3 +51,6 @@ output/
 
 # RPM packages
 *.rpm
+
+# KeePass credential databases (local, not committed)
+*.kdbx

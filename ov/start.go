@@ -157,6 +157,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
+	// Auto-initialize and mount encrypted volumes if needed
+	if err := ensureEncryptedMounts(c.Image); err != nil {
+		return err
+	}
+
 	// Verify bind mounts
 	if err := verifyBindMounts(bindMounts, c.Image); err != nil {
 		return err
@@ -518,6 +523,11 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 		if err := enable.runEnable(rt); err != nil {
 			return err
 		}
+	}
+
+	// Auto-initialize and mount encrypted volumes if needed
+	if err := ensureEncryptedMounts(c.Image); err != nil {
+		return err
 	}
 
 	svc := serviceNameInstance(c.Image, c.Instance)

@@ -375,45 +375,48 @@ type cloudflaredTunnel struct {
 	Name string `json:"name"`
 }
 
-func cloudflareTunnelStart(cfg TunnelConfig) error {
+// cloudflareTunnelSetup creates the tunnel, writes config YAML, and routes DNS.
+// Called by ov config (quadlet mode) for setup-only, and by cloudflareTunnelStart (direct mode).
+// Returns the tunnel name and config file path.
+func cloudflareTunnelSetup(cfg TunnelConfig) (tunnelName, configPath string, err error) {
 	name := cfg.TunnelName
 
 	// 1. Check if tunnel already exists
 	uuid, err := findCloudflaredTunnel(name)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	// 2. Create tunnel if it doesn't exist
 	if uuid == "" {
 		uuid, err = createCloudflaredTunnel(name)
 		if err != nil {
-			return err
+			return "", "", err
 		}
 	}
 
 	// 3. Find credentials file
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return fmt.Errorf("determining home directory: %w", err)
+		return "", "", fmt.Errorf("determining home directory: %w", err)
 	}
 	credsFile := filepath.Join(home, ".cloudflared", uuid+".json")
 	if _, err := os.Stat(credsFile); err != nil {
-		return fmt.Errorf("credentials file not found at %s (run 'cloudflared tunnel login' first): %w", credsFile, err)
+		return "", "", fmt.Errorf("credentials file not found at %s (run 'cloudflared tunnel login' first): %w", credsFile, err)
 	}
 
 	// 4. Write config file
 	configDir, err := tunnelConfigDir()
 	if err != nil {
-		return err
+		return "", "", err
 	}
 	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("creating tunnel config dir: %w", err)
+		return "", "", fmt.Errorf("creating tunnel config dir: %w", err)
 	}
 
 	cfgPath, err := tunnelConfigPath(name)
 	if err != nil {
-		return err
+		return "", "", err
 	}
 
 	// Build ingress rules from public ports
@@ -434,13 +437,15 @@ func cloudflareTunnelStart(cfg TunnelConfig) error {
 	configContent := fmt.Sprintf("tunnel: %s\ncredentials-file: %s\ningress:\n%s", uuid, credsFile, ingress.String())
 
 	if err := os.WriteFile(cfgPath, []byte(configContent), 0600); err != nil {
-		return fmt.Errorf("writing tunnel config: %w", err)
+		return "", "", fmt.Errorf("writing tunnel config: %w", err)
 	}
+	fmt.Fprintf(os.Stderr, "Wrote tunnel config %s\n", cfgPath)
 
 	// 5. Route DNS for each hostname (idempotent)
 	hostnames := collectUniqueHostnames(cfg)
 	for _, h := range hostnames {
-		dnsCmd := exec.Command("cloudflared", "tunnel", "route", "dns", name, h)
+		fmt.Fprintf(os.Stderr, "Routing DNS %s → tunnel %s\n", h, name)
+		dnsCmd := exec.Command("cloudflared", "tunnel", "route", "dns", "--overwrite-dns", name, h)
 		dnsCmd.Stdout = os.Stderr
 		dnsCmd.Stderr = os.Stderr
 		if err := dnsCmd.Run(); err != nil {
@@ -448,7 +453,18 @@ func cloudflareTunnelStart(cfg TunnelConfig) error {
 		}
 	}
 
-	// 6. Start cloudflared in background
+	return name, cfgPath, nil
+}
+
+// cloudflareTunnelStart sets up the tunnel (create, config, DNS) then starts the cloudflared process.
+// Used in direct mode. In quadlet mode, ov config calls cloudflareTunnelSetup and the systemd service runs cloudflared.
+func cloudflareTunnelStart(cfg TunnelConfig) error {
+	name, cfgPath, err := cloudflareTunnelSetup(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Start cloudflared in background
 	cmd := exec.Command("cloudflared", "tunnel", "--config", cfgPath, "run", name)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -456,7 +472,7 @@ func cloudflareTunnelStart(cfg TunnelConfig) error {
 		return fmt.Errorf("starting cloudflared: %w", err)
 	}
 
-	// 7. Write PID file
+	// Write PID file
 	pidPath, err := tunnelPIDPath(name)
 	if err != nil {
 		return err

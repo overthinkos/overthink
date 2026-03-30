@@ -1,12 +1,10 @@
 version: '3'
 tasks:
   all:
-    vars:
-      IMMICH_VERSION: v2.5.6
     cmds:
-      # Download and extract immich source
-      - curl -L https://github.com/immich-app/immich/archive/refs/tags/{{.IMMICH_VERSION}}.tar.gz | tar xz -C /tmp
-      - mv /tmp/immich-$(echo {{.IMMICH_VERSION}} | sed 's/^v//') /tmp/immich
+      # Download and extract immich source (version from layer.yml env: IMMICH_VERSION)
+      - curl -L https://github.com/immich-app/immich/archive/refs/tags/$IMMICH_VERSION.tar.gz | tar xz -C /tmp
+      - mv /tmp/immich-$(echo $IMMICH_VERSION | sed 's/^v//') /tmp/immich
 
       # Build server with pnpm
       - cd /tmp/immich && pnpm install --frozen-lockfile

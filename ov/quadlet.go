@@ -55,6 +55,10 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("[Unit]\n")
 	b.WriteString(fmt.Sprintf("Description=Overthink %s\n", desc))
 	b.WriteString("After=network-online.target\n")
+	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "cloudflare" {
+		tunnelSvc := tunnelServiceFilename(cfg.ImageName)
+		b.WriteString(fmt.Sprintf("Wants=%s\n", tunnelSvc))
+	}
 
 	b.WriteString("\n[Container]\n")
 	b.WriteString(fmt.Sprintf("Image=%s\n", cfg.ImageRef))

@@ -288,6 +288,11 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			return fmt.Errorf("writing tunnel service file: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Wrote %s\n", tunnelPath)
+
+		// Setup: create tunnel, write cloudflared config, route DNS
+		if _, _, setupErr := cloudflareTunnelSetup(*tunnelCfg); setupErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", setupErr)
+		}
 	}
 
 	// Clean up stale enc service from previous ov versions
@@ -305,6 +310,14 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
+
+	// Enable tunnel service so it auto-starts with the container
+	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
+		enableCmd := exec.Command("systemctl", "--user", "enable", tunnelServiceFilename(c.Image))
+		if output, err := enableCmd.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not enable tunnel service: %v\n%s", err, strings.TrimSpace(string(output)))
+		}
+	}
 
 	// Initialize and mount encrypted volumes
 	if hasEncryptedBindMounts(bindMounts) {

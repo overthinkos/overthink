@@ -197,7 +197,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted bind-mount volumes. `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted bind-mount volumes. `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 

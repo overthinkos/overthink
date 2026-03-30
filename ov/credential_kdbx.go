@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -34,18 +35,63 @@ func defaultKdbxAskPassword() (string, error) {
 	if pw := os.Getenv("OV_KDBX_PASSWORD"); pw != "" {
 		return pw, nil
 	}
-	// 2. systemd-ask-password with kernel keyring caching
-	if _, err := exec.LookPath("systemd-ask-password"); err == nil {
-		return askPassword("ov-kdbx", "KeePass database password:")
+
+	// 2. Check kernel keyring cache
+	cacheEnabled, cacheTimeout := resolveKdbxCacheConfig()
+	if cacheEnabled {
+		if cached, err := keyringGet(keyringKeyName); err == nil && cached != "" {
+			return cached, nil
+		}
 	}
-	// 3. Terminal fallback
-	fmt.Fprint(os.Stderr, "KeePass database password: ")
-	pw, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
+
+	// 3. Prompt: systemd-ask-password or terminal fallback
+	var pw string
+	var err error
+	if _, lookErr := exec.LookPath("systemd-ask-password"); lookErr == nil {
+		pw, err = askPassword("ov-kdbx", "KeePass database password:")
+	} else {
+		fmt.Fprint(os.Stderr, "KeePass database password: ")
+		raw, termErr := term.ReadPassword(int(os.Stdin.Fd()))
+		fmt.Fprintln(os.Stderr)
+		if termErr != nil {
+			return "", fmt.Errorf("reading password: %w", termErr)
+		}
+		pw = string(raw)
+	}
 	if err != nil {
-		return "", fmt.Errorf("reading password: %w", err)
+		return "", err
 	}
-	return string(pw), nil
+
+	// 4. Cache in kernel keyring for future invocations
+	if cacheEnabled && pw != "" {
+		if storeErr := keyringSet(keyringKeyName, pw, cacheTimeout); storeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not cache kdbx password in keyring: %v\n", storeErr)
+		}
+	}
+
+	return pw, nil
+}
+
+// resolveKdbxCacheConfig returns whether kernel keyring caching is enabled and the TTL.
+func resolveKdbxCacheConfig() (enabled bool, timeoutSec int) {
+	enabled = true    // default
+	timeoutSec = 3600 // default: 1 hour
+
+	if v := os.Getenv("OV_KDBX_CACHE"); v != "" {
+		enabled = v != "false" && v != "0"
+	} else if cfg, err := LoadRuntimeConfig(); err == nil && cfg.KdbxCache != nil {
+		enabled = *cfg.KdbxCache
+	}
+
+	if v := os.Getenv("OV_KDBX_CACHE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			timeoutSec = n
+		}
+	} else if cfg, err := LoadRuntimeConfig(); err == nil && cfg.KdbxCacheTimeout > 0 {
+		timeoutSec = cfg.KdbxCacheTimeout
+	}
+
+	return
 }
 
 // password returns the cached database password, prompting at most once per process.

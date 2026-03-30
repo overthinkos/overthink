@@ -24,6 +24,8 @@ type RuntimeConfig struct {
 	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "kdbx", "config"
 	SecretsKdbxPath      string            `yaml:"secrets_kdbx_path,omitempty"`  // Path to .kdbx database file
 	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
+	KdbxCache            *bool             `yaml:"kdbx_cache,omitempty"`            // Cache kdbx password in kernel keyring (default: true)
+	KdbxCacheTimeout     int               `yaml:"kdbx_cache_timeout,omitempty"`    // Kernel keyring TTL in seconds (default: 3600)
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
 	KeyringKeys          []string          `yaml:"keyring_keys,omitempty"`       // Shadow index: names of keys stored in keyring (no values)
@@ -309,6 +311,16 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.SecretsKdbxPath, nil
 	case "secrets.kdbx_key_file":
 		return cfg.SecretsKdbxKeyFile, nil
+	case "secrets.kdbx_cache":
+		if cfg.KdbxCache != nil {
+			return fmt.Sprintf("%t", *cfg.KdbxCache), nil
+		}
+		return "true", nil // default
+	case "secrets.kdbx_cache_timeout":
+		if cfg.KdbxCacheTimeout > 0 {
+			return fmt.Sprintf("%d", cfg.KdbxCacheTimeout), nil
+		}
+		return "3600", nil // default
 	case "vm.backend":
 		return cfg.Vm.Backend, nil
 	case "vm.disk_size":
@@ -347,7 +359,7 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -387,6 +399,14 @@ func SetConfigValue(key, value string) error {
 		// Any non-empty path is valid
 	case "secrets.kdbx_key_file":
 		// Any non-empty path is valid
+	case "secrets.kdbx_cache":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("secrets.kdbx_cache must be \"true\" or \"false\", got %q", value)
+		}
+	case "secrets.kdbx_cache_timeout":
+		if _, err := strconv.Atoi(value); err != nil {
+			return fmt.Errorf("secrets.kdbx_cache_timeout must be an integer (seconds), got %q", value)
+		}
 	case "vm.backend":
 		if value != "auto" && value != "libvirt" && value != "qemu" {
 			return fmt.Errorf("vm.backend must be \"auto\", \"libvirt\", or \"qemu\", got %q", value)
@@ -415,7 +435,7 @@ func SetConfigValue(key, value string) error {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -447,6 +467,12 @@ func SetConfigValue(key, value string) error {
 		cfg.SecretsKdbxPath = value
 	case "secrets.kdbx_key_file":
 		cfg.SecretsKdbxKeyFile = value
+	case "secrets.kdbx_cache":
+		b := value == "true"
+		cfg.KdbxCache = &b
+	case "secrets.kdbx_cache_timeout":
+		n, _ := strconv.Atoi(value)
+		cfg.KdbxCacheTimeout = n
 	case "vm.backend":
 		cfg.Vm.Backend = value
 	case "vm.disk_size":
@@ -508,6 +534,10 @@ func ResetConfigValue(key string) error {
 		cfg.SecretsKdbxPath = ""
 	case "secrets.kdbx_key_file":
 		cfg.SecretsKdbxKeyFile = ""
+	case "secrets.kdbx_cache":
+		cfg.KdbxCache = nil
+	case "secrets.kdbx_cache_timeout":
+		cfg.KdbxCacheTimeout = 0
 	case "vm.backend":
 		cfg.Vm.Backend = ""
 	case "vm.disk_size":
@@ -528,7 +558,7 @@ func ResetConfigValue(key string) error {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -606,6 +636,44 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: "vm.cpus", Value: "2", Source: "default"}
 	}
 
+	kdbxCacheEntry := func(cfg *RuntimeConfig) configKeySource {
+		envVal := os.Getenv("OV_KDBX_CACHE")
+		if envVal != "" {
+			source := "env (OV_KDBX_CACHE)"
+			if DotenvLoaded("OV_KDBX_CACHE") {
+				source = "env (.env)"
+			}
+			val := "true"
+			if envVal == "false" || envVal == "0" {
+				val = "false"
+			}
+			return configKeySource{Key: "secrets.kdbx_cache", Value: val, Source: source}
+		}
+		if cfg.KdbxCache != nil {
+			val := "false"
+			if *cfg.KdbxCache {
+				val = "true"
+			}
+			return configKeySource{Key: "secrets.kdbx_cache", Value: val, Source: "config"}
+		}
+		return configKeySource{Key: "secrets.kdbx_cache", Value: "true", Source: "default"}
+	}
+
+	kdbxCacheTimeoutEntry := func(cfg *RuntimeConfig) configKeySource {
+		envVal := os.Getenv("OV_KDBX_CACHE_TIMEOUT")
+		if envVal != "" {
+			source := "env (OV_KDBX_CACHE_TIMEOUT)"
+			if DotenvLoaded("OV_KDBX_CACHE_TIMEOUT") {
+				source = "env (.env)"
+			}
+			return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: envVal, Source: source}
+		}
+		if cfg.KdbxCacheTimeout > 0 {
+			return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: fmt.Sprintf("%d", cfg.KdbxCacheTimeout), Source: "config"}
+		}
+		return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: "3600", Source: "default"}
+	}
+
 	return []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
@@ -617,6 +685,8 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
 		resolve("secrets.kdbx_path", "OV_KDBX_PATH", cfg.SecretsKdbxPath, ""),
 		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),
+		kdbxCacheEntry(cfg),
+		kdbxCacheTimeoutEntry(cfg),
 		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),
 		resolve("vm.disk_size", "OV_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
 		resolve("vm.root_size", "OV_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),

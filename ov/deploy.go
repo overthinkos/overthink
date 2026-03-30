@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -23,7 +24,7 @@ type DeployImageConfig struct {
 	Tunnel     *TunnelYAML          `yaml:"tunnel,omitempty"`
 	DNS        string               `yaml:"dns,omitempty"`
 	AcmeEmail  string               `yaml:"acme_email,omitempty"`
-	BindMounts []BindMountConfig    `yaml:"bind_mounts,omitempty"`
+	Volumes    []DeployVolumeConfig `yaml:"volumes,omitempty"`
 	Ports      []string             `yaml:"ports,omitempty"`
 	Env        []string             `yaml:"env,omitempty"`
 	EnvFile    string               `yaml:"env_file,omitempty"`
@@ -31,6 +32,14 @@ type DeployImageConfig struct {
 	Network    string               `yaml:"network,omitempty"`
 	Engine     string               `yaml:"engine,omitempty"`
 	Secrets    []DeploySecretConfig `yaml:"secrets,omitempty"`
+}
+
+// DeployVolumeConfig overrides the backing for a layer-declared volume.
+type DeployVolumeConfig struct {
+	Name string `yaml:"name"`                    // matches layer volume name
+	Type string `yaml:"type,omitempty"`           // "volume" (default), "bind", "encrypted"
+	Host string `yaml:"host,omitempty"`           // explicit host path (bind type only, optional)
+	Path string `yaml:"path,omitempty"`           // container path (only for deploy-only volumes not in any layer)
 }
 
 // DeploySecretConfig overrides or provides a secret for deployment.
@@ -107,9 +116,6 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.AcmeEmail != "" {
 			img.AcmeEmail = overlay.AcmeEmail
 		}
-		if overlay.BindMounts != nil {
-			img.BindMounts = overlay.BindMounts
-		}
 		if overlay.Ports != nil {
 			img.Ports = overlay.Ports
 		}
@@ -160,17 +166,6 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 	if overlay.AcmeEmail != "" {
 		meta.AcmeEmail = overlay.AcmeEmail
 	}
-	if overlay.BindMounts != nil {
-		var labelMounts []LabelBindMount
-		for _, bm := range overlay.BindMounts {
-			labelMounts = append(labelMounts, LabelBindMount{
-				Name:      bm.Name,
-				Path:      bm.Path,
-				Encrypted: bm.Encrypted,
-			})
-		}
-		meta.BindMounts = labelMounts
-	}
 	if overlay.Ports != nil {
 		meta.Ports = overlay.Ports
 	}
@@ -219,45 +214,85 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
 	}
 }
 
-// resolveBindMountsFromLabels resolves host paths for label-derived bind mounts.
-// Plain mounts use deploy.yml host path or convention (~/.local/share/ov/bind/<image>/<name>).
-// Encrypted mounts use the encrypted storage path.
-func resolveBindMountsFromLabels(imageName string, mounts []LabelBindMount, home string, encStoragePath string, deployMounts []BindMountConfig) []ResolvedBindMount {
-	if len(mounts) == 0 {
-		return nil
+// ResolveVolumeBacking splits image volumes into named volumes and bind mounts
+// based on deploy.yml volume configuration.
+// Volumes without a deploy override remain as named volumes.
+// Volumes with type=bind or type=encrypted become ResolvedBindMount.
+// Deploy-only volumes (with Path set, not in labels) are also supported.
+func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVolumes []DeployVolumeConfig, home string, encStoragePath string, volumesPath string) ([]VolumeMount, []ResolvedBindMount) {
+	// Index deploy volume configs by name
+	deployByName := make(map[string]DeployVolumeConfig, len(deployVolumes))
+	for _, dv := range deployVolumes {
+		deployByName[dv.Name] = dv
 	}
 
-	// Index deploy.yml mounts by name for host path lookups
-	deployByName := make(map[string]BindMountConfig, len(deployMounts))
-	for _, dm := range deployMounts {
-		deployByName[dm.Name] = dm
-	}
+	// Track which deploy entries matched a label volume
+	matched := make(map[string]bool)
 
-	var resolved []ResolvedBindMount
-	for _, m := range mounts {
-		containerPath := ExpandPath(m.Path, home)
-		var hostPath string
+	var volumes []VolumeMount
+	var bindMounts []ResolvedBindMount
 
-		if m.Encrypted {
-			// Encrypted mounts use gocryptfs storage (same path as resolveBindMounts in enc.go)
-			hostPath = encryptedPlainDir(encStoragePath, imageName, m.Name)
-		} else if dm, ok := deployByName[m.Name]; ok && dm.Host != "" {
-			// Plain mount with deploy.yml host override
-			hostPath = expandHostHome(dm.Host)
-		} else {
-			// Convention: ~/.local/share/ov/bind/<image>/<name>
-			userHome, _ := os.UserHomeDir()
-			hostPath = filepath.Join(userHome, ".local", "share", "ov", "bind", imageName, m.Name)
+	for _, vol := range labelVolumes {
+		// Extract short name from "ov-<image>-<name>"
+		shortName := strings.TrimPrefix(vol.VolumeName, "ov-"+imageName+"-")
+
+		dv, hasOverride := deployByName[shortName]
+		if hasOverride {
+			matched[shortName] = true
 		}
 
-		resolved = append(resolved, ResolvedBindMount{
-			Name:      m.Name,
-			HostPath:  hostPath,
-			ContPath:  containerPath,
-			Encrypted: m.Encrypted,
-		})
+		if hasOverride && (dv.Type == "bind" || dv.Type == "encrypted") {
+			var hostPath string
+			if dv.Type == "encrypted" {
+				hostPath = encryptedPlainDir(encStoragePath, imageName, shortName)
+			} else if dv.Host != "" {
+				hostPath = expandHostHome(dv.Host)
+			} else {
+				// Auto path: <volumesPath>/<image>/<name>
+				hostPath = filepath.Join(volumesPath, imageName, shortName)
+			}
+			bindMounts = append(bindMounts, ResolvedBindMount{
+				Name:      shortName,
+				HostPath:  hostPath,
+				ContPath:  vol.ContainerPath,
+				Encrypted: dv.Type == "encrypted",
+			})
+		} else {
+			// Default: keep as named volume
+			volumes = append(volumes, vol)
+		}
 	}
-	return resolved
+
+	// Add deploy-only volumes (not in any layer, must have Path)
+	for _, dv := range deployVolumes {
+		if matched[dv.Name] || dv.Path == "" {
+			continue
+		}
+		containerPath := ExpandPath(dv.Path, home)
+		if dv.Type == "bind" || dv.Type == "encrypted" {
+			var hostPath string
+			if dv.Type == "encrypted" {
+				hostPath = encryptedPlainDir(encStoragePath, imageName, dv.Name)
+			} else if dv.Host != "" {
+				hostPath = expandHostHome(dv.Host)
+			} else {
+				hostPath = filepath.Join(volumesPath, imageName, dv.Name)
+			}
+			bindMounts = append(bindMounts, ResolvedBindMount{
+				Name:      dv.Name,
+				HostPath:  hostPath,
+				ContPath:  containerPath,
+				Encrypted: dv.Type == "encrypted",
+			})
+		} else {
+			volumes = append(volumes, VolumeMount{
+				VolumeName:    "ov-" + imageName + "-" + dv.Name,
+				ContainerPath: containerPath,
+			})
+		}
+	}
+
+	return volumes, bindMounts
 }
 
 // LoadDeployFile reads a deploy.yml from an arbitrary path.
@@ -314,8 +349,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.AcmeEmail != "" {
 				existing.AcmeEmail = overlay.AcmeEmail
 			}
-			if overlay.BindMounts != nil {
-				existing.BindMounts = overlay.BindMounts
+			if overlay.Volumes != nil {
+				existing.Volumes = overlay.Volumes
 			}
 			if overlay.Ports != nil {
 				existing.Ports = overlay.Ports
@@ -378,6 +413,7 @@ type SaveDeployStateInput struct {
 	EnvFile   string
 	Network   string
 	Security  *SecurityConfig
+	Volumes   []DeployVolumeConfig
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
@@ -387,8 +423,11 @@ func saveDeployState(imageName string, input SaveDeployStateInput) {
 	if dc == nil {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 	}
-	entry := dc.Images[imageName] // preserve existing fields (tunnel, bind_mounts, etc.)
+	entry := dc.Images[imageName] // preserve existing fields (tunnel, volumes, etc.)
 	entry.Workspace = input.Workspace
+	if input.Volumes != nil {
+		entry.Volumes = input.Volumes
+	}
 	if input.Ports != nil {
 		entry.Ports = input.Ports
 	}
@@ -418,24 +457,23 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 			continue
 		}
 		entry := DeployImageConfig{
-			Version:    img.Version,
-			Status:     img.Status,
-			Info:       img.Info,
-			Ports:      img.Ports,
-			Tunnel:     img.Tunnel,
-			DNS:        img.DNS,
-			AcmeEmail:  img.AcmeEmail,
-			BindMounts: img.BindMounts,
-			Env:        img.Env,
-			EnvFile:    img.EnvFile,
-			Security:   img.Security,
-			Network:    img.Network,
-			Engine:     img.Engine,
+			Version:   img.Version,
+			Status:    img.Status,
+			Info:      img.Info,
+			Ports:     img.Ports,
+			Tunnel:    img.Tunnel,
+			DNS:       img.DNS,
+			AcmeEmail: img.AcmeEmail,
+			Env:       img.Env,
+			EnvFile:   img.EnvFile,
+			Security:  img.Security,
+			Network:   img.Network,
+			Engine:    img.Engine,
 		}
 		// Only include if at least one field is set
 		if entry.Version != "" || entry.Status != "" || entry.Info != "" ||
 			entry.Ports != nil || entry.Tunnel != nil || entry.DNS != "" ||
-			entry.AcmeEmail != "" || entry.BindMounts != nil || entry.Env != nil ||
+			entry.AcmeEmail != "" || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" ||
 			entry.Engine != "" {
 			dc.Images[name] = entry
@@ -444,16 +482,3 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 	return dc
 }
 
-// BindMountNames returns a set of bind mount names for use as an exclusion filter.
-func BindMountNames(mounts []BindMountConfig) map[string]bool {
-	if len(mounts) == 0 {
-		return nil
-	}
-	names := make(map[string]bool, len(mounts))
-	for _, m := range mounts {
-		if m.Name != "" {
-			names[m.Name] = true
-		}
-	}
-	return names
-}

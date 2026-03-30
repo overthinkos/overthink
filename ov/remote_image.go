@@ -138,17 +138,8 @@ func (ctx *RemoteImageContext) CollectVolumes() ([]VolumeMount, error) {
 	return CollectImageVolumes(
 		ctx.Config, ctx.Layers, ctx.ImageName,
 		ctx.Resolved.Home,
-		BindMountNames(ctx.Config.Images[ctx.ImageName].BindMounts),
+		nil,
 	)
-}
-
-// CollectBindMounts resolves bind mounts for the remote image.
-func (ctx *RemoteImageContext) CollectBindMounts(encryptedStoragePath string) []ResolvedBindMount {
-	img := ctx.Config.Images[ctx.ImageName]
-	if len(img.BindMounts) > 0 {
-		return resolveBindMounts(ctx.ImageName, img.BindMounts, ctx.Resolved.Home, encryptedStoragePath)
-	}
-	return nil
 }
 
 // RemoteContainerName returns the container name for a remote ref.

@@ -1202,20 +1202,6 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	aliases, _ := CollectImageAliases(g.Config, g.Layers, imageName)
 	writeJSONLabel(b, LabelAliases, aliases)
 
-	// Bind mounts: strip host paths (host-specific), keep name/path/encrypted
-	imgCfg := g.Config.Images[imageName]
-	if len(imgCfg.BindMounts) > 0 {
-		var labelMounts []LabelBindMount
-		for _, bm := range imgCfg.BindMounts {
-			labelMounts = append(labelMounts, LabelBindMount{
-				Name:      bm.Name,
-				Path:      bm.Path,
-				Encrypted: bm.Encrypted,
-			})
-		}
-		writeJSONLabel(b, LabelBindMounts, labelMounts)
-	}
-
 	// Security: collected from layers + image config
 	security := CollectSecurity(g.Config, g.Layers, imageName)
 	if security.Privileged || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
@@ -1223,6 +1209,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Tunnel config
+	imgCfg := g.Config.Images[imageName]
 	if imgCfg.Tunnel != nil {
 		writeJSONLabel(b, LabelTunnel, imgCfg.Tunnel)
 	}

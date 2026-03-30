@@ -32,11 +32,6 @@ func (c *SeedCmd) Run() error {
 	dc, _ := LoadDeployConfig()
 	MergeDeployOntoMetadata(meta, dc)
 
-	if len(meta.BindMounts) == 0 {
-		fmt.Fprintln(os.Stderr, "No bind mounts configured")
-		return nil
-	}
-
 	var imageRef string
 	if meta.Registry != "" {
 		imageRef = fmt.Sprintf("%s/%s:%s", meta.Registry, c.Image, c.Tag)
@@ -45,27 +40,23 @@ func (c *SeedCmd) Run() error {
 	}
 	uid, gid := meta.UID, meta.GID
 
-	// Build volume path map from label volumes
-	volPaths := make(map[string]string)
-	for _, vol := range meta.Volumes {
-		shortName := strings.TrimPrefix(vol.VolumeName, "ov-"+c.Image+"-")
-		volPaths[shortName] = vol.ContainerPath
-	}
-
-	var deployMounts []BindMountConfig
+	// Resolve volume backing from labels + deploy config
+	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
 		if overlay, ok := dc.Images[c.Image]; ok {
-			deployMounts = overlay.BindMounts
+			deployVolumes = overlay.Volumes
 		}
 	}
-	bindMounts := resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+	_, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+
+	if len(bindMounts) == 0 {
+		fmt.Fprintln(os.Stderr, "No bind-backed volumes configured (use ov config --bind to configure)")
+		return nil
+	}
 
 	seeded := 0
 	for _, bm := range bindMounts {
-		contPath, ok := volPaths[bm.Name]
-		if !ok {
-			continue
-		}
+		contPath := bm.ContPath
 
 		if !isDirEmpty(bm.HostPath) {
 			fmt.Fprintf(os.Stderr, "%s: skipping (not empty)\n", bm.Name)

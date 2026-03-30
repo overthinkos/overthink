@@ -35,10 +35,10 @@ images:
     tunnel:
       provider: cloudflare
       public: [8080]
-    bind_mounts:
+    volumes:
       - name: data
+        type: encrypted
         path: "~/.myapp"
-        encrypted: true
     ports:
       - "8080:8080"
 `
@@ -71,8 +71,8 @@ images:
 	if img.Tunnel == nil || img.Tunnel.Provider != "cloudflare" {
 		t.Errorf("Tunnel = %+v, want cloudflare provider", img.Tunnel)
 	}
-	if len(img.BindMounts) != 1 || img.BindMounts[0].Name != "data" {
-		t.Errorf("BindMounts = %+v, want 1 mount named data", img.BindMounts)
+	if len(img.Volumes) != 1 || img.Volumes[0].Name != "data" {
+		t.Errorf("Volumes = %+v, want 1 volume named data", img.Volumes)
 	}
 	if len(img.Ports) != 1 || img.Ports[0] != "8080:8080" {
 		t.Errorf("Ports = %v, want [8080:8080]", img.Ports)
@@ -180,47 +180,59 @@ func TestMergeDeployOverlayTunnel(t *testing.T) {
 	}
 }
 
-func TestMergeDeployOverlayBindMounts(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {Layers: []string{"svc"}},
-		},
+func TestResolveVolumeBacking(t *testing.T) {
+	labelVolumes := []VolumeMount{
+		{VolumeName: "ov-myapp-data", ContainerPath: "/home/user/.myapp"},
+		{VolumeName: "ov-myapp-cache", ContainerPath: "/home/user/.myapp/cache"},
 	}
-	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
-			"myapp": {
-				BindMounts: []BindMountConfig{
-					{Name: "data", Path: "~/.myapp", Encrypted: true},
-				},
-			},
-		},
+	deployVolumes := []DeployVolumeConfig{
+		{Name: "data", Type: "bind", Host: "/mnt/nas/data"},
 	}
 
-	MergeDeployOverlay(cfg, dc)
+	volumes, binds := ResolveVolumeBacking("myapp", labelVolumes, deployVolumes, "/home/user", "/enc", "/vol")
 
-	img := cfg.Images["myapp"]
-	if len(img.BindMounts) != 1 || img.BindMounts[0].Name != "data" {
-		t.Errorf("BindMounts = %+v, want 1 mount named data", img.BindMounts)
+	// "cache" should remain a named volume
+	if len(volumes) != 1 || volumes[0].VolumeName != "ov-myapp-cache" {
+		t.Errorf("volumes = %+v, want 1 named volume for cache", volumes)
+	}
+	// "data" should be a bind mount
+	if len(binds) != 1 || binds[0].Name != "data" || binds[0].HostPath != "/mnt/nas/data" {
+		t.Errorf("binds = %+v, want 1 bind mount for data with host /mnt/nas/data", binds)
 	}
 }
 
-func TestBindMountNames(t *testing.T) {
-	tests := []struct {
-		name   string
-		mounts []BindMountConfig
-		want   map[string]bool
-	}{
-		{"nil", nil, nil},
-		{"empty", []BindMountConfig{}, nil},
-		{"one", []BindMountConfig{{Name: "data"}}, map[string]bool{"data": true}},
-		{"two", []BindMountConfig{{Name: "data"}, {Name: "cache"}}, map[string]bool{"data": true, "cache": true}},
+func TestResolveVolumeBackingAutoPath(t *testing.T) {
+	labelVolumes := []VolumeMount{
+		{VolumeName: "ov-myapp-data", ContainerPath: "/home/user/.myapp"},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := BindMountNames(tt.mounts)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("BindMountNames() = %v, want %v", got, tt.want)
-			}
-		})
+	deployVolumes := []DeployVolumeConfig{
+		{Name: "data", Type: "bind"}, // no host path → auto
+	}
+
+	_, binds := ResolveVolumeBacking("myapp", labelVolumes, deployVolumes, "/home/user", "/enc", "/vol")
+
+	if len(binds) != 1 || binds[0].HostPath != "/vol/myapp/data" {
+		t.Errorf("binds = %+v, want auto path /vol/myapp/data", binds)
+	}
+}
+
+func TestResolveVolumeBackingEncrypted(t *testing.T) {
+	labelVolumes := []VolumeMount{
+		{VolumeName: "ov-myapp-secrets", ContainerPath: "/home/user/.secrets"},
+	}
+	deployVolumes := []DeployVolumeConfig{
+		{Name: "secrets", Type: "encrypted"},
+	}
+
+	volumes, binds := ResolveVolumeBacking("myapp", labelVolumes, deployVolumes, "/home/user", "/enc", "/vol")
+
+	if len(volumes) != 0 {
+		t.Errorf("volumes = %+v, want 0 named volumes", volumes)
+	}
+	if len(binds) != 1 || !binds[0].Encrypted {
+		t.Errorf("binds = %+v, want 1 encrypted bind mount", binds)
+	}
+	if binds[0].HostPath != "/enc/ov-myapp-secrets/plain" {
+		t.Errorf("HostPath = %q, want /enc/ov-myapp-secrets/plain", binds[0].HostPath)
 	}
 }

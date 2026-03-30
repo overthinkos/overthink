@@ -3,4 +3,4 @@ tasks:
   all:
     cmds:
       # Create required directories
-      - mkdir -p ~/.immich/library ~/.immich/cache
+      - mkdir -p ~/.immich/library ~/.immich/cache ~/.immich/import ~/.immich/external

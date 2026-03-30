@@ -9,41 +9,13 @@ import (
 	"strings"
 )
 
-// BindMountConfig represents a bind mount declaration in images.yml
-type BindMountConfig struct {
-	Name      string `yaml:"name"`
-	Host      string `yaml:"host,omitempty"`      // host path (plain mounts only)
-	Path      string `yaml:"path"`                // container path
-	Encrypted bool   `yaml:"encrypted,omitempty"` // true = gocryptfs managed
-}
-
-// ResolvedBindMount is ready for -v flags
+// ResolvedBindMount is ready for -v flags.
+// Represents a volume backed by a host path (either plain bind or encrypted gocryptfs).
 type ResolvedBindMount struct {
 	Name      string // e.g. "secrets"
 	HostPath  string // effective host path (plain: expanded host, encrypted: plain dir)
 	ContPath  string // container path (expanded)
 	Encrypted bool   // for status/mount checks
-}
-
-// resolveBindMounts resolves bind mount configs into ready-to-use mounts.
-// home is the container user's home dir (for expanding container paths).
-// storagePath is the encrypted storage base dir.
-func resolveBindMounts(imageName string, mounts []BindMountConfig, home, storagePath string) []ResolvedBindMount {
-	var resolved []ResolvedBindMount
-	for _, m := range mounts {
-		rm := ResolvedBindMount{
-			Name:      m.Name,
-			ContPath:  expandHome(m.Path, home),
-			Encrypted: m.Encrypted,
-		}
-		if m.Encrypted {
-			rm.HostPath = encryptedPlainDir(storagePath, imageName, m.Name)
-		} else {
-			rm.HostPath = expandHostHome(m.Host)
-		}
-		resolved = append(resolved, rm)
-	}
-	return resolved
 }
 
 // encryptedVolumeName returns the directory name for an encrypted volume: ov-<image>-<name>
@@ -154,7 +126,7 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 // encInit initializes gocryptfs cipher directories for an image.
 // If volume is non-empty, only that volume is initialized.
 func encInit(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
@@ -203,7 +175,7 @@ func encInit(imageName, volume string) error {
 // encMount mounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is mounted.
 func encMount(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
@@ -252,7 +224,7 @@ func encMount(imageName, volume string) error {
 // encUnmount unmounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is unmounted.
 func encUnmount(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
@@ -282,7 +254,7 @@ func encUnmount(imageName, volume string) error {
 
 // encStatus prints the status of encrypted bind mounts for an image.
 func encStatus(imageName string) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
@@ -312,7 +284,7 @@ func encStatus(imageName string) error {
 
 // encPasswd changes the gocryptfs password for all encrypted volumes of an image.
 func encPasswd(imageName string) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
@@ -387,7 +359,7 @@ func encPasswd(imageName string) error {
 // requiring the user to run ov config init/mount manually first.
 // Resolves the enc passphrase once (kdbx → keyring → interactive prompt).
 func ensureEncryptedMounts(imageName string, autoGenerate bool) error {
-	mounts, storagePath, err := loadEncryptedMounts(imageName)
+	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil || len(mounts) == 0 {
 		return nil // no encrypted mounts configured
 	}
@@ -469,51 +441,28 @@ func defaultAskPassword(id, prompt string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
-// loadEncryptedMounts loads the encrypted bind mounts for an image and returns them
-// along with the resolved encrypted storage path.
-func loadEncryptedMounts(imageName string) ([]BindMountConfig, string, error) {
+// loadEncryptedVolumes loads encrypted volume configs from deploy.yml for an image.
+// Returns the deploy volume configs with type=encrypted and the encrypted storage path.
+func loadEncryptedVolumes(imageName string) ([]DeployVolumeConfig, string, error) {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return nil, "", err
 	}
 
-	// Try images.yml first
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		img, ok := cfg.Images[imageName]
-		if !ok {
-			return nil, "", fmt.Errorf("image %q not found in images.yml", imageName)
-		}
-
-		var encrypted []BindMountConfig
-		for _, m := range img.BindMounts {
-			if m.Encrypted {
-				encrypted = append(encrypted, m)
-			}
-		}
-		return encrypted, rt.EncryptedStoragePath, nil
+	dc, _ := LoadDeployConfig()
+	if dc == nil {
+		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	// Label fallback
-	engine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
-	imageRef := fmt.Sprintf("%s:latest", imageName)
-	meta, metaErr := ExtractMetadata(engine, imageRef)
-	if metaErr != nil {
-		return nil, "", metaErr
-	}
-	if meta == nil {
-		return nil, "", fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	overlay, ok := dc.Images[imageName]
+	if !ok {
+		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	var encrypted []BindMountConfig
-	for _, m := range meta.BindMounts {
-		if m.Encrypted {
-			encrypted = append(encrypted, BindMountConfig{
-				Name:      m.Name,
-				Path:      m.Path,
-				Encrypted: true,
-			})
+	var encrypted []DeployVolumeConfig
+	for _, dv := range overlay.Volumes {
+		if dv.Type == "encrypted" {
+			encrypted = append(encrypted, dv)
 		}
 	}
 	return encrypted, rt.EncryptedStoragePath, nil

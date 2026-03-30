@@ -9,7 +9,7 @@
 #   tunnel       — Tailscale/Cloudflare tunnel config
 #   dns          — DNS hostname (for Cloudflare tunnels)
 #   acme_email   — ACME/Let's Encrypt email
-#   bind_mounts  — Host-path bind mounts (plain or encrypted)
+#   volumes      — Per-volume backing config (bind mount or encrypted)
 #   env          — Environment variables (KEY=VALUE list)
 #   env_file     — Path to .env file
 #   security     — Container security overrides
@@ -60,15 +60,15 @@ images:
   #     - "OLLAMA_MAX_LOADED_MODELS=2"
   #   # env_file: "/path/to/.env"
   #
-  #   # Bind mount host directories into container
-  #   bind_mounts:
+  #   # Configure volume backing (set via ov config --bind/--encrypt)
+  #   volumes:
   #     - name: data
-  #       host: "~/openclaw-data"
-  #       path: "~/.openclaw"
-  #   # Encrypted bind mount (managed by ov enc)
-  #   #   - name: secrets
-  #   #     path: "~/.openclaw/secrets"
-  #   #     encrypted: true
+  #       type: bind
+  #       host: "~/openclaw-data"       # explicit host path
+  #     - name: cache
+  #       type: bind                     # auto path: ~/.local/share/ov/volumes/<image>/cache
+  #     - name: secrets
+  #       type: encrypted                # gocryptfs managed
   #
   #   # Security overrides
   #   # security:

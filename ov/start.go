@@ -76,6 +76,15 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var network string
 	var entrypoint []string
 
+	// Load deploy.yml for volume backing config
+	dc, _ := LoadDeployConfig()
+	var deployVolumes []DeployVolumeConfig
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deployVolumes = overlay.Volumes
+		}
+	}
+
 	// Try images.yml first, fall back to image labels
 	dir, _ := os.Getwd()
 	cfg, cfgErr := LoadConfig(dir)
@@ -90,22 +99,19 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		}
 		// Resolve per-image engine
 		engine = ResolveImageEngine(cfg, layers, c.Image, rt.RunEngine)
-		volumes, err = CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
+		allVolumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, nil)
 		if err != nil {
 			return err
 		}
 		security = CollectSecurity(cfg, layers, c.Image)
-		// Resolve bind mounts
-		img := cfg.Images[c.Image]
-		if len(img.BindMounts) > 0 {
-			bindMounts = resolveBindMounts(c.Image, img.BindMounts, resolved.Home, rt.EncryptedStoragePath)
-		}
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, deployVolumes, resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
 		gid = resolved.GID
 		ports = resolved.Ports
 		network = resolved.Network
 		// Resolve entrypoint from init config
+		img := cfg.Images[c.Image]
 		resolvedLayers, _ := ResolveLayerOrder(img.Layers, layers, nil)
 		entrypoint = resolveEntrypoint(resolved.InitConfig, layers, resolvedLayers, resolved.Bootc)
 	} else {
@@ -123,25 +129,17 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		// Resolve per-image engine from labels
 		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 		// Apply deploy.yml overrides
-		dc, _ := LoadDeployConfig()
 		MergeDeployOntoMetadata(meta, dc)
 
 		uid = meta.UID
 		gid = meta.GID
 		ports = meta.Ports
-		volumes = meta.Volumes
 		security = meta.Security
 		network = meta.Network
 		entrypoint = resolveEntrypointFromMeta(meta)
 
-		// Resolve bind mounts from labels
-		var deployMounts []BindMountConfig
-		if dc != nil {
-			if overlay, ok := dc.Images[c.Image]; ok {
-				deployMounts = overlay.BindMounts
-			}
-		}
-		bindMounts = resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
+		// Resolve volume backing from labels + deploy config
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
@@ -313,11 +311,11 @@ func (c *StartCmd) runRemote(ref string) error {
 		EnsureCDI()
 	}
 
-	volumes, err := ctx.CollectVolumes()
+	allVolumes, err := ctx.CollectVolumes()
 	if err != nil {
 		return err
 	}
-	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, nil, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
 		return err
@@ -374,11 +372,11 @@ func (c *StartCmd) runRemote(ref string) error {
 
 func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, absWorkspace string, detected DetectedDevices) error {
 	// For quadlet with remote refs: resolve and generate quadlet file
-	volumes, err := ctx.CollectVolumes()
+	allVolumes, err := ctx.CollectVolumes()
 	if err != nil {
 		return err
 	}
-	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, nil, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Ensure image is in podman
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}

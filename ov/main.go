@@ -176,7 +176,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, BindMountNames(cfg.Images[c.Image].BindMounts))
+			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, nil)
 			if err != nil {
 				return err
 			}
@@ -223,13 +223,14 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			}
 			fmt.Println(engine)
 		case "bind_mounts":
-			img := cfg.Images[c.Image]
-			for _, bm := range img.BindMounts {
-				encrypted := "no"
-				if bm.Encrypted {
-					encrypted = "yes"
+			// bind_mounts are now deploy-time only; show deploy.yml volume config
+			dc, _ := LoadDeployConfig()
+			if dc != nil {
+				if overlay, ok := dc.Images[c.Image]; ok {
+					for _, dv := range overlay.Volumes {
+						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
+					}
 				}
-				fmt.Printf("%s\t%s\t%s\t%s\n", bm.Name, bm.Host, bm.Path, encrypted)
 			}
 		case "version":
 			fmt.Println(resolved.Version)
@@ -312,12 +313,14 @@ func (c *InspectCmd) runFromLabels() error {
 			}
 			fmt.Println(engine)
 		case "bind_mounts":
-			for _, bm := range meta.BindMounts {
-				encrypted := "no"
-				if bm.Encrypted {
-					encrypted = "yes"
+			// bind_mounts are now deploy-time only; show deploy.yml volume config
+			dc, _ := LoadDeployConfig()
+			if dc != nil {
+				if overlay, ok := dc.Images[c.Image]; ok {
+					for _, dv := range overlay.Volumes {
+						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
+					}
 				}
-				fmt.Printf("%s\t\t%s\t%s\n", bm.Name, bm.Path, encrypted)
 			}
 		case "version":
 			// Not available from labels (image version is a build-time concept)

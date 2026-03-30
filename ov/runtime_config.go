@@ -21,6 +21,7 @@ type RuntimeConfig struct {
 	AutoEnable           *bool             `yaml:"auto_enable,omitempty"`
 	BindAddress          string            `yaml:"bind_address,omitempty"`
 	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
+	VolumesPath          string            `yaml:"volumes_path,omitempty"`
 	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "kdbx", "config"
 	SecretsKdbxPath      string            `yaml:"secrets_kdbx_path,omitempty"`  // Path to .kdbx database file
 	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
@@ -58,6 +59,7 @@ type ResolvedRuntime struct {
 	AutoEnable           bool   // auto-enable quadlet on first start
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
+	VolumesPath          string // base path for bind mount volume data
 	VmBackend            string // "auto", "libvirt", or "qemu"
 }
 
@@ -141,6 +143,7 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		AutoEnable:           resolveAutoEnable(os.Getenv("OV_AUTO_ENABLE"), cfg.AutoEnable),
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
+		VolumesPath:          resolveVolumesPath(os.Getenv("OV_VOLUMES_PATH"), cfg.VolumesPath),
 		VmBackend:            resolveValue(os.Getenv("OV_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
@@ -251,6 +254,20 @@ func resolveEncryptedStoragePath(envVal, cfgVal string) string {
 	return filepath.Join(home, ".local", "share", "ov", "encrypted")
 }
 
+func resolveVolumesPath(envVal, cfgVal string) string {
+	if envVal != "" {
+		return expandHostHome(envVal)
+	}
+	if cfgVal != "" {
+		return expandHostHome(cfgVal)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".local", "share", "ov", "volumes")
+	}
+	return filepath.Join(home, ".local", "share", "ov", "volumes")
+}
+
 // expandHostHome expands ~ and $HOME in a path using the actual user's home directory.
 func expandHostHome(path string) string {
 	home, err := os.UserHomeDir()
@@ -305,6 +322,8 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.BindAddress, nil
 	case "encrypted_storage_path":
 		return cfg.EncryptedStoragePath, nil
+	case "volumes_path":
+		return cfg.VolumesPath, nil
 	case "secret_backend":
 		return cfg.SecretBackend, nil
 	case "secrets.kdbx_path":
@@ -359,7 +378,7 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -390,6 +409,8 @@ func SetConfigValue(key, value string) error {
 			return err
 		}
 	case "encrypted_storage_path":
+		// Any non-empty path is valid
+	case "volumes_path":
 		// Any non-empty path is valid
 	case "secret_backend":
 		if value != "auto" && value != "keyring" && value != "kdbx" && value != "config" {
@@ -459,6 +480,8 @@ func SetConfigValue(key, value string) error {
 		cfg.BindAddress = value
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = value
+	case "volumes_path":
+		cfg.VolumesPath = value
 	case "secret_backend":
 		cfg.SecretBackend = value
 		// Reset cached default store so the new backend takes effect
@@ -527,6 +550,8 @@ func ResetConfigValue(key string) error {
 		cfg.BindAddress = ""
 	case "encrypted_storage_path":
 		cfg.EncryptedStoragePath = ""
+	case "volumes_path":
+		cfg.VolumesPath = ""
 	case "secret_backend":
 		cfg.SecretBackend = ""
 		resetDefaultStore()
@@ -617,8 +642,9 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: "auto_enable", Value: "true", Source: "default"}
 	}
 
-	// Resolve encrypted_storage_path default
+	// Resolve path defaults
 	defaultStoragePath := resolveEncryptedStoragePath("", "")
+	defaultVolumesPath := resolveVolumesPath("", "")
 
 	// Resolve vm.cpus separately since it's an int
 	vmCpusEntry := func() configKeySource {
@@ -682,6 +708,7 @@ func ListConfigValues() ([]configKeySource, error) {
 		autoEnableEntry(),
 		resolve("bind_address", "OV_BIND_ADDRESS", cfg.BindAddress, "127.0.0.1"),
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
+		resolve("volumes_path", "OV_VOLUMES_PATH", cfg.VolumesPath, defaultVolumesPath),
 		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
 		resolve("secrets.kdbx_path", "OV_KDBX_PATH", cfg.SecretsKdbxPath, ""),
 		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),

@@ -21,7 +21,6 @@ const (
 	LabelPorts          = "org.overthinkos.ports"
 	LabelVolumes        = "org.overthinkos.volumes"
 	LabelAliases        = "org.overthinkos.aliases"
-	LabelBindMounts     = "org.overthinkos.bind_mounts"
 	LabelSecurity       = "org.overthinkos.security"
 	LabelNetwork        = "org.overthinkos.network"
 	LabelTunnel         = "org.overthinkos.tunnel"
@@ -59,13 +58,6 @@ type LabelVolume struct {
 	Path string `json:"path"`
 }
 
-// LabelBindMount represents a bind mount in the label JSON (host-path-agnostic).
-type LabelBindMount struct {
-	Name      string `json:"name"`
-	Path      string `json:"path"`
-	Encrypted bool   `json:"encrypted,omitempty"`
-}
-
 // LabelRoute represents a traefik route in the label JSON.
 type LabelRoute struct {
 	Host string `json:"host"`
@@ -84,7 +76,6 @@ type ImageMetadata struct {
 	Ports          []string
 	Volumes        []VolumeMount
 	Aliases        []CollectedAlias
-	BindMounts     []LabelBindMount
 	Security       SecurityConfig
 	Network        string
 	Tunnel         *TunnelYAML
@@ -210,13 +201,6 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelAliases]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Aliases); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelAliases, err)
-		}
-	}
-
-	// Bind mounts
-	if v := labels[LabelBindMounts]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.BindMounts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBindMounts, err)
 		}
 	}
 

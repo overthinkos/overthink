@@ -14,7 +14,7 @@ type QuadletConfig struct {
 	Workspace   string              // absolute host path to mount at /workspace
 	Ports       []string            // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
 	Volumes     []VolumeMount       // named volumes from layer.yml declarations
-	BindMounts  []ResolvedBindMount // bind mounts from images.yml
+	BindMounts  []ResolvedBindMount // bind-backed volumes from deploy config
 	GPU         bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
 	BindAddress string              // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
 	Tunnel      *TunnelConfig       // tunnel configuration (nil if no tunnel)

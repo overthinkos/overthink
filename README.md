@@ -193,11 +193,11 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov config <image>` reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), mounts encrypted volumes, saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image. `ov start` also auto-configures on first launch (disable with `--enable=false`).
+**Deploy** — `ov config <image>` reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image. `ov start` also auto-configures on first launch (disable with `--enable=false`).
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted bind-mount volumes. `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted volumes. `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
@@ -220,9 +220,12 @@ ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
 ov start <image> [--build]             # Start service container (auto-configures on first start)
 ov start <image> --enable=false        # Start without auto-configuring
 ov stop <image>                        # Stop container
-ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + encrypted volumes
+ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + volume backing
 ov config <image> --password auto      # Auto-generate all secrets
 ov config <image> --password manual    # Prompt for each secret
+ov config <image> --bind name[=path]   # Configure volume as host bind mount
+ov config <image> --encrypt name       # Configure volume as encrypted (gocryptfs)
+ov config <image> -v name:type[:path]  # Per-volume backing (volume|bind|encrypted)
 ov config remove <image>               # Remove quadlet + deploy.yml entry
 ov config mount/unmount <image>        # Mount/unmount encrypted volumes
 ov config status <image>               # Encrypted volume status
@@ -320,7 +323,7 @@ ov version
 
 ```
 ov new layer <name>                            # Scaffold a new layer
-ov seed <image>                                # Seed bind mount dirs
+ov seed <image>                                # Seed bind-backed volume dirs
 ov alias install/uninstall <image>             # Host command aliases
 ov --kdbx <path> <command>                     # Use specific kdbx database
 ov settings get/set/list/reset/path            # Runtime configuration

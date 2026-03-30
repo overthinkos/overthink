@@ -51,6 +51,20 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - **Resolution chain:** env var > keyring > config file > default. Migration: `ov settings migrate-secrets`.
 - Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
 
+**Volume Management** -- Unified deploy-time volume backing:
+- Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
+- All volumes default to Docker/Podman named volumes (`ov-<image>-<name>`)
+- At `ov config` time, any volume's backing can be changed per-volume: named volume (default), host bind mount, or encrypted (gocryptfs)
+- Flags: `--volume name:type[:path]` (canonical), `--bind name[=path]` (shorthand), `--encrypt name` (shorthand)
+- Env var automation: `OV_VOLUMES_<IMAGE>` (e.g., `OV_VOLUMES_IMMICH="library:bind:/mnt/nas,import:bind"`)
+- Auto-path for bind mounts without explicit host path: `<volumes_path>/<image>/<name>` (default: `~/.local/share/ov/volumes/`)
+- Configurable base: `ov settings set volumes_path /mnt/nas/ov-volumes` (env: `OV_VOLUMES_PATH`)
+- Deploy.yml persists volume config: `volumes: [{name: data, type: bind, host: ~/data}]`
+- Encrypted volumes use gocryptfs at `<encrypted_storage_path>/ov-<image>-<name>/{cipher,plain}`
+- `ov seed` copies image data into empty bind-backed volume directories
+- There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
+- Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
+
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
 **What gets generated** (`ov generate`):
@@ -311,7 +325,7 @@ Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://loca
 `/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
 
 **Full image lifecycle (build -> deploy -> test):**
-`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, bind mounts) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
+`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
 
 ### Continuous Improvement: Feeding Insights Back Into Skills
 

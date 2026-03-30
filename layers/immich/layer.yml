@@ -45,6 +45,10 @@ volumes:
     path: "~/.immich/library"
   - name: cache
     path: "~/.immich/cache"
+  - name: import
+    path: "~/.immich/import"
+  - name: external
+    path: "~/.immich/external"
 
 secrets:
   - name: db-password

@@ -32,6 +32,9 @@ type ImageConfigSetupCmd struct {
 	Port        []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
 	KeepMounted bool     `long:"keep-mounted" help:"Keep encrypted volumes mounted after setup"`
 	Password    string   `long:"password" default:"auto" enum:"auto,manual" help:"auto: generate secrets (default), manual: prompt for each"`
+	VolumeFlag  []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
+	Bind        []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
+	Encrypt     []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -106,32 +109,22 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	uid, gid := meta.UID, meta.GID
 	ports := meta.Ports
-	volumes := meta.Volumes
 	security := meta.Security
 	network := meta.Network
 
-	// Resolve bind mounts from labels + deploy.yml host paths
-	var deployMounts []BindMountConfig
-	if dc != nil {
+	// Parse volume flags into deploy volume configs (CLI > env > deploy.yml)
+	deployVolumes := c.parseVolumeFlags()
+	if len(deployVolumes) == 0 {
+		deployVolumes = parseVolumeEnv(c.Image)
+	}
+	if len(deployVolumes) == 0 && dc != nil {
 		if overlay, ok := dc.Images[c.Image]; ok {
-			deployMounts = overlay.BindMounts
+			deployVolumes = overlay.Volumes
 		}
 	}
-	bindMounts := resolveBindMountsFromLabels(c.Image, meta.BindMounts, meta.Home, rt.EncryptedStoragePath, deployMounts)
 
-	// Filter out named volumes that are overridden by bind mounts (same name = same container path)
-	bmNames := make(map[string]bool)
-	for _, bm := range bindMounts {
-		bmNames[bm.Name] = true
-	}
-	prefix := "ov-" + c.Image + "-"
-	var filteredVolumes []VolumeMount
-	for _, vol := range volumes {
-		if !bmNames[strings.TrimPrefix(vol.VolumeName, prefix)] {
-			filteredVolumes = append(filteredVolumes, vol)
-		}
-	}
-	volumes = filteredVolumes
+	// Resolve volume backing from labels + deploy config
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	if meta.Registry != "" {
 		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
@@ -254,6 +247,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		EnvFile:   quadletEnvFile,
 		Network:   resolvedNetwork,
 		Security:  &security,
+		Volumes:   deployVolumes,
 	})
 
 	content := generateQuadlet(qcfg)
@@ -381,11 +375,17 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 		return err
 	}
 
-	volumes, err := ctx.CollectVolumes()
+	allVolumes, err := ctx.CollectVolumes()
 	if err != nil {
 		return err
 	}
-	bindMounts := ctx.CollectBindMounts(rt.EncryptedStoragePath)
+
+	// Parse volume flags for remote config
+	deployVolumes := c.parseVolumeFlags()
+	if len(deployVolumes) == 0 {
+		deployVolumes = parseVolumeEnv(ctx.ImageName)
+	}
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, deployVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Ensure image is in podman
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
@@ -531,4 +531,85 @@ func (c *ImageConfigRemoveCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Disabled %s\n", svc)
 	return nil
+}
+
+// parseVolumeFlags converts --volume, --bind, --encrypt flags into DeployVolumeConfig.
+func (c *ImageConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
+	var configs []DeployVolumeConfig
+	seen := make(map[string]bool)
+
+	// Parse --volume name:type[:path]
+	for _, v := range c.VolumeFlag {
+		parts := strings.SplitN(v, ":", 3)
+		dv := DeployVolumeConfig{Name: parts[0]}
+		if len(parts) >= 2 {
+			dv.Type = parts[1]
+		}
+		if len(parts) >= 3 {
+			dv.Host = parts[2]
+		}
+		if dv.Type == "" {
+			dv.Type = "volume"
+		}
+		if !seen[dv.Name] {
+			configs = append(configs, dv)
+			seen[dv.Name] = true
+		}
+	}
+
+	// Parse --bind name or name=path
+	for _, b := range c.Bind {
+		if seen[b] || seen[strings.SplitN(b, "=", 2)[0]] {
+			continue
+		}
+		if idx := strings.IndexByte(b, '='); idx >= 0 {
+			name := b[:idx]
+			host := b[idx+1:]
+			configs = append(configs, DeployVolumeConfig{Name: name, Type: "bind", Host: host})
+			seen[name] = true
+		} else {
+			configs = append(configs, DeployVolumeConfig{Name: b, Type: "bind"})
+			seen[b] = true
+		}
+	}
+
+	// Parse --encrypt name
+	for _, e := range c.Encrypt {
+		if !seen[e] {
+			configs = append(configs, DeployVolumeConfig{Name: e, Type: "encrypted"})
+			seen[e] = true
+		}
+	}
+
+	return configs
+}
+
+// parseVolumeEnv parses OV_VOLUMES_<IMAGE> env var into DeployVolumeConfig.
+func parseVolumeEnv(imageName string) []DeployVolumeConfig {
+	envKey := "OV_VOLUMES_" + strings.ToUpper(strings.ReplaceAll(imageName, "-", "_"))
+	envVal := os.Getenv(envKey)
+	if envVal == "" {
+		return nil
+	}
+
+	var configs []DeployVolumeConfig
+	for _, entry := range strings.Split(envVal, ",") {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, ":", 3)
+		dv := DeployVolumeConfig{Name: parts[0]}
+		if len(parts) >= 2 {
+			dv.Type = parts[1]
+		}
+		if len(parts) >= 3 {
+			dv.Host = parts[2]
+		}
+		if dv.Type == "" {
+			dv.Type = "volume"
+		}
+		configs = append(configs, dv)
+	}
+	return configs
 }

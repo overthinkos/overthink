@@ -98,9 +98,6 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate tunnel configuration
 	validateTunnel(cfg, layers, errs)
 
-	// Validate bind mounts
-	validateBindMounts(cfg, layers, errs)
-
 	// Validate layer composition (layers: field)
 	validateLayerIncludes(layers, errs)
 
@@ -1055,92 +1052,6 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		}
 		sort.Strings(names)
 		errs.Add("images %s: tailscale public port %d used by multiple images (each needs a unique port)", formatImageList(names), port)
-	}
-}
-
-// validateBindMounts validates bind mount declarations in images
-func validateBindMounts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		if len(img.BindMounts) == 0 {
-			continue
-		}
-
-		seen := make(map[string]bool)
-		for _, bm := range img.BindMounts {
-			// Name is required and must match pattern
-			if bm.Name == "" {
-				errs.Add("image %q bind_mounts: missing required \"name\" field", imageName)
-			} else if !volumeNameRe.MatchString(bm.Name) {
-				errs.Add("image %q bind_mounts: name %q must be lowercase alphanumeric with hyphens", imageName, bm.Name)
-			} else if seen[bm.Name] {
-				errs.Add("image %q bind_mounts: duplicate name %q", imageName, bm.Name)
-			} else {
-				seen[bm.Name] = true
-			}
-
-			// Path is required
-			if bm.Path == "" {
-				errs.Add("image %q bind_mounts: missing required \"path\" field for %q", imageName, bm.Name)
-			}
-
-			// Encrypted vs plain rules
-			if bm.Encrypted {
-				if bm.Host != "" {
-					errs.Add("image %q bind_mounts: encrypted mount %q must not have \"host\" (ov manages storage)", imageName, bm.Name)
-				}
-			} else {
-				if bm.Host == "" {
-					errs.Add("image %q bind_mounts: plain mount %q requires \"host\" path", imageName, bm.Name)
-				}
-			}
-		}
-
-		// Check for name collisions with layer volumes
-		if len(img.Layers) > 0 {
-			resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
-			if err == nil {
-				volNames := make(map[string]bool)
-				for _, layerName := range resolved {
-					layer, ok := layers[layerName]
-					if !ok || !layer.HasVolumes {
-						continue
-					}
-					for _, vol := range layer.Volumes() {
-						volNames[vol.Name] = true
-					}
-				}
-				for _, bm := range img.BindMounts {
-					if bm.Name != "" && volNames[bm.Name] {
-						fmt.Fprintf(os.Stderr, "Note: image %q bind mount %q overrides layer volume with same name\n", imageName, bm.Name)
-					}
-				}
-			}
-		}
-	}
-
-	// Non-fatal warning if gocryptfs not in PATH when encrypted mounts exist
-	hasEncrypted := false
-	for _, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		for _, bm := range img.BindMounts {
-			if bm.Encrypted {
-				hasEncrypted = true
-				break
-			}
-		}
-		if hasEncrypted {
-			break
-		}
-	}
-	if hasEncrypted {
-		if _, err := exec_LookPath("gocryptfs"); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: gocryptfs not found in PATH (required for encrypted bind mounts)\n")
-		}
 	}
 }
 

@@ -24,7 +24,6 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelPorts:    `["18789:18789"]`,
 			LabelVolumes:  `[{"name":"data","path":"/home/user/.openclaw"}]`,
 			LabelAliases:  `[{"name":"openclaw","command":"openclaw"}]`,
-			LabelBindMounts: `[{"name":"config","path":"/home/user/.config","encrypted":true}]`,
 			LabelSecurity: `{"privileged":true,"cap_add":["NET_ADMIN"]}`,
 			LabelNetwork:  "host",
 			LabelTunnel:   `{"provider":"tailscale","public":[18789]}`,
@@ -99,14 +98,6 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 	}
 	if !reflect.DeepEqual(meta.Aliases, wantAliases) {
 		t.Errorf("Aliases = %v, want %v", meta.Aliases, wantAliases)
-	}
-
-	// Bind mounts
-	wantBindMounts := []LabelBindMount{
-		{Name: "config", Path: "/home/user/.config", Encrypted: true},
-	}
-	if !reflect.DeepEqual(meta.BindMounts, wantBindMounts) {
-		t.Errorf("BindMounts = %v, want %v", meta.BindMounts, wantBindMounts)
 	}
 
 	// Security
@@ -285,9 +276,6 @@ func TestExtractMetadataMinimalLabels(t *testing.T) {
 	if len(meta.Aliases) != 0 {
 		t.Errorf("Aliases = %v, want empty", meta.Aliases)
 	}
-	if len(meta.BindMounts) != 0 {
-		t.Errorf("BindMounts = %v, want empty", meta.BindMounts)
-	}
 	if meta.Tunnel != nil {
 		t.Errorf("Tunnel = %v, want nil", meta.Tunnel)
 	}
@@ -378,7 +366,6 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 					Ports:      []string{"8080:8080"},
 					Tunnel:     tunnel,
 					Env:        []string{"KEY=val"},
-					BindMounts: []BindMountConfig{{Name: "data", Path: "/data", Encrypted: true}},
 				},
 			},
 		},
@@ -466,7 +453,6 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelPorts, `["8080:8080"]`},
 		{LabelVolumes, `[{"name":"data","path":"/home/user/.myapp"}]`},
 		{LabelAliases, `[{"name":"myapp-cli","command":"myapp"}]`},
-		{LabelBindMounts, `[{"name":"data","path":"/data","encrypted":true}]`},
 		{LabelTunnel, `"provider":"tailscale"`},
 		{LabelEnv, `["KEY=val"]`},
 		{LabelRoutes, `[{"host":"myapp.localhost","port":8080}]`},
@@ -518,7 +504,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 	// Empty/nil fields should not be emitted
 	omitted := []string{
 		LabelPorts, LabelVolumes, LabelAliases, LabelRegistry,
-		LabelBootc, LabelBindMounts, LabelSecurity, LabelNetwork,
+		LabelBootc, LabelSecurity, LabelNetwork,
 		LabelTunnel, LabelDNS, LabelAcmeEmail, LabelEnv,
 		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
 		LabelInit, LabelEnvLayers, LabelPathAppend,
@@ -542,9 +528,6 @@ func TestLabelRoundTrip(t *testing.T) {
 					Aliases: []AliasConfig{{Name: "extra", Command: "extra-cmd"}},
 					Tunnel:  tunnel,
 					Env:     []string{"FOO=bar", "BAZ=qux"},
-					BindMounts: []BindMountConfig{
-						{Name: "secrets", Path: "/run/secrets", Encrypted: true},
-					},
 				},
 			},
 		},
@@ -667,14 +650,6 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Fatalf("Aliases count = %d, want 2", len(meta.Aliases))
 	}
 
-	// Bind mounts
-	wantBindMounts := []LabelBindMount{
-		{Name: "secrets", Path: "/run/secrets", Encrypted: true},
-	}
-	if !reflect.DeepEqual(meta.BindMounts, wantBindMounts) {
-		t.Errorf("BindMounts = %v, want %v", meta.BindMounts, wantBindMounts)
-	}
-
 	// Security (from layer)
 	if !reflect.DeepEqual(meta.Security.CapAdd, []string{"SYS_PTRACE"}) {
 		t.Errorf("Security.CapAdd = %v, want [SYS_PTRACE]", meta.Security.CapAdd)
@@ -782,26 +757,6 @@ func TestLabelVolumeJSON(t *testing.T) {
 	want := `{"name":"data","path":"/home/user/.myapp"}`
 	if string(data) != want {
 		t.Errorf("json.Marshal(LabelVolume) = %s, want %s", data, want)
-	}
-}
-
-func TestLabelBindMountJSON(t *testing.T) {
-	bm := LabelBindMount{Name: "config", Path: "/home/user/.config", Encrypted: true}
-	data, err := json.Marshal(bm)
-	if err != nil {
-		t.Fatalf("json.Marshal() error = %v", err)
-	}
-	want := `{"name":"config","path":"/home/user/.config","encrypted":true}`
-	if string(data) != want {
-		t.Errorf("json.Marshal(LabelBindMount) = %s, want %s", data, want)
-	}
-
-	// Non-encrypted omits the field
-	bm2 := LabelBindMount{Name: "data", Path: "/data"}
-	data2, _ := json.Marshal(bm2)
-	want2 := `{"name":"data","path":"/data"}`
-	if string(data2) != want2 {
-		t.Errorf("json.Marshal(LabelBindMount) = %s, want %s", data2, want2)
 	}
 }
 

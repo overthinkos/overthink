@@ -167,11 +167,11 @@ func TestGenerateCryptoUnit(t *testing.T) {
 	if !strings.Contains(got, "RemainAfterExit=yes") {
 		t.Errorf("expected RemainAfterExit, got:\n%s", got)
 	}
-	if !strings.Contains(got, "ExecStart=/usr/bin/ov enc mount myapp") {
-		t.Errorf("expected ExecStart delegating to ov enc mount, got:\n%s", got)
+	if !strings.Contains(got, "ExecStart=/usr/bin/ov config mount myapp") {
+		t.Errorf("expected ExecStart delegating to ov config mount, got:\n%s", got)
 	}
-	if !strings.Contains(got, "ExecStop=/usr/bin/ov enc unmount myapp") {
-		t.Errorf("expected ExecStop delegating to ov enc unmount, got:\n%s", got)
+	if !strings.Contains(got, "ExecStop=/usr/bin/ov config unmount myapp") {
+		t.Errorf("expected ExecStop delegating to ov config unmount, got:\n%s", got)
 	}
 	if !strings.Contains(got, "WantedBy=default.target") {
 		t.Errorf("expected WantedBy, got:\n%s", got)
@@ -197,12 +197,12 @@ func TestGenerateCryptoUnitMultiple(t *testing.T) {
 
 	got := generateEncUnit("myapp", mounts, "/usr/bin/ov")
 
-	// Multiple volumes are handled by a single ov enc mount call
+	// Multiple volumes are handled by a single ov config mount call
 	if strings.Count(got, "ExecStart=") != 1 {
-		t.Errorf("expected 1 ExecStart line (ov enc mount handles all volumes), got:\n%s", got)
+		t.Errorf("expected 1 ExecStart line (ov config mount handles all volumes), got:\n%s", got)
 	}
 	if strings.Count(got, "ExecStop=") != 1 {
-		t.Errorf("expected 1 ExecStop line (ov enc unmount handles all volumes), got:\n%s", got)
+		t.Errorf("expected 1 ExecStop line (ov config unmount handles all volumes), got:\n%s", got)
 	}
 }
 
@@ -264,8 +264,8 @@ func TestVerifyBindMountsEncryptedNotMounted(t *testing.T) {
 	if !strings.Contains(err.Error(), "not mounted") {
 		t.Errorf("error should mention 'not mounted', got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "ov enc mount") {
-		t.Errorf("error should suggest 'ov enc mount', got: %v", err)
+	if !strings.Contains(err.Error(), "ov config mount") {
+		t.Errorf("error should suggest 'ov config mount', got: %v", err)
 	}
 }
 
@@ -542,11 +542,12 @@ func TestQuadletWithEncryptedBindMounts(t *testing.T) {
 
 	got := generateQuadlet(cfg)
 
-	if !strings.Contains(got, "Requires=ov-myapp-enc.service") {
-		t.Errorf("expected Requires for crypto service, got:\n%s", got)
+	// Enc service dependency was removed — ov start handles mounting inline
+	if strings.Contains(got, "Requires=ov-myapp-enc.service") {
+		t.Errorf("should NOT have Requires for enc service (removed), got:\n%s", got)
 	}
-	if !strings.Contains(got, "After=ov-myapp-enc.service") {
-		t.Errorf("expected After for crypto service, got:\n%s", got)
+	if strings.Contains(got, "After=ov-myapp-enc.service") {
+		t.Errorf("should NOT have After for enc service (removed), got:\n%s", got)
 	}
 	if !strings.Contains(got, "Volume=/data/enc/ov-myapp-secrets/plain:/home/user/.secrets") {
 		t.Errorf("expected Volume for encrypted bind mount, got:\n%s", got)
@@ -645,23 +646,23 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	isEncryptedMounted = func(plainDir string) bool { return true }
 	defer func() { isEncryptedMounted = origMounted }()
 
-	cmd := &EncPasswdCmd{Image: "myapp"}
-	// We can't call Run() directly because loadEncryptedMounts needs images.yml,
-	// so test the logic by simulating what Run() does.
+	imageName := "myapp"
+	// We can't call encPasswd() directly because loadEncryptedMounts needs images.yml,
+	// so test the logic by simulating what encPasswd() does.
 	mounts := []BindMountConfig{
 		{Name: "secrets", Path: "~/.secrets", Encrypted: true},
 	}
 	storagePath := "/data/enc"
 
 	for _, m := range mounts {
-		plainDir := encryptedPlainDir(storagePath, cmd.Image, m.Name)
+		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
 		if isEncryptedMounted(plainDir) {
-			err := fmt.Errorf("encrypted volume %q is still mounted; run 'ov enc unmount %s' first", m.Name, cmd.Image)
+			err := fmt.Errorf("encrypted volume %q is still mounted; run 'ov config unmount %s' first", m.Name, imageName)
 			if !strings.Contains(err.Error(), "still mounted") {
 				t.Errorf("expected 'still mounted' in error, got: %v", err)
 			}
-			if !strings.Contains(err.Error(), "ov enc unmount") {
-				t.Errorf("expected 'ov enc unmount' hint in error, got: %v", err)
+			if !strings.Contains(err.Error(), "ov config unmount") {
+				t.Errorf("expected 'ov config unmount' hint in error, got: %v", err)
 			}
 			return
 		}

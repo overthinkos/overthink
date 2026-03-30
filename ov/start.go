@@ -17,7 +17,8 @@ type StartCmd struct {
 	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
 	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Port []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
+	Port   []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
+	Enable bool     `long:"enable" default:"true" help:"Auto-configure if not already enabled (use --enable=false to skip)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -158,7 +159,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
 	// Auto-initialize and mount encrypted volumes if needed
-	if err := ensureEncryptedMounts(c.Image); err != nil {
+	if err := ensureEncryptedMounts(c.Image, false); err != nil {
 		return err
 	}
 
@@ -491,42 +492,43 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	}
 
 	if !exists {
-		if !rt.AutoEnable {
-			return fmt.Errorf("not enabled; run 'ov enable %s' first, or set auto_enable=true", c.Image)
+		if !c.Enable {
+			return fmt.Errorf("not configured; run 'ov config %s' first", c.Image)
 		}
-		// Auto-enable: generate quadlet file
-		enable := &EnableCmd{
+		// Auto-configure: generate quadlet file + provision secrets + enc setup
+		setup := &ImageConfigSetupCmd{
 			Image:           c.Image,
 			Workspace:       c.Workspace,
 			Tag:             c.Tag,
 			Env:             c.Env,
 			EnvFile:         c.EnvFile,
 			Instance:        c.Instance,
-			Port:         c.Port,
+			Port:            c.Port,
 			AutoDetectFlags: c.AutoDetectFlags,
+			// KeepMounted: false — let ov start handle mounting below
 		}
-		if err := enable.runEnable(rt); err != nil {
+		if err := setup.runConfig(rt); err != nil {
 			return err
 		}
 	} else if c.hasConfigOverrides() {
 		// Quadlet exists but config flags changed — regenerate
-		enable := &EnableCmd{
+		setup := &ImageConfigSetupCmd{
 			Image:           c.Image,
 			Workspace:       c.Workspace,
 			Tag:             c.Tag,
 			Env:             c.Env,
 			EnvFile:         c.EnvFile,
 			Instance:        c.Instance,
-			Port:         c.Port,
+			Port:            c.Port,
 			AutoDetectFlags: c.AutoDetectFlags,
 		}
-		if err := enable.runEnable(rt); err != nil {
+		if err := setup.runConfig(rt); err != nil {
 			return err
 		}
 	}
 
 	// Auto-initialize and mount encrypted volumes if needed
-	if err := ensureEncryptedMounts(c.Image); err != nil {
+	if err := ensureEncryptedMounts(c.Image, false); err != nil {
 		return err
 	}
 

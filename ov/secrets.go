@@ -1,11 +1,24 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/term"
 )
+
+// generateRandomHex generates a cryptographically random hex string of the given byte length.
+func generateRandomHex(bytes int) string {
+	b := make([]byte, bytes)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand failed: " + err.Error())
+	}
+	return hex.EncodeToString(b)
+}
 
 // SecretYAML represents a secret declaration in layer.yml.
 type SecretYAML struct {
@@ -46,7 +59,7 @@ func CollectSecretsFromLabels(imageName string, labelSecrets []LabelSecret) []Co
 
 // ProvisionPodmanSecrets creates podman secrets from the credential store.
 // Returns the secrets that were successfully provisioned and any that fell back to env vars.
-func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []CollectedSecret) (provisioned []CollectedSecret, fallbackEnv []string, err error) {
+func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []CollectedSecret, autoGenerate bool) (provisioned []CollectedSecret, fallbackEnv []string, err error) {
 	if engine == "docker" {
 		fmt.Fprintln(os.Stderr, "NOTE: Docker secrets require Swarm mode (not available).")
 		fmt.Fprintln(os.Stderr, "Falling back to environment variable injection for secrets.")
@@ -69,19 +82,67 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 	if len(secrets) > 0 {
 		fmt.Fprintln(os.Stderr, "Provisioning container secrets:")
 	}
+	// promptedValues caches values entered interactively for a given podman secret name.
+	// Two CollectedSecrets sharing the same Name (but different Env vars) only prompt once.
+	promptedValues := make(map[string]string)
+	interactive := term.IsTerminal(int(os.Stdin.Fd()))
+
 	for _, s := range secrets {
 		val, source := resolveSecretValue(s, imageName, instance)
 		if val == "" {
-			fmt.Fprintf(os.Stderr, "  %-40s → no value configured\n", s.Name)
-			fmt.Fprintf(os.Stderr, "\n")
-			fmt.Fprintf(os.Stderr, "WARNING: Secret '%s' has no value configured.\n", s.SecretName)
-			fmt.Fprintf(os.Stderr, "The container may fail to start properly.\n\n")
-			fmt.Fprintf(os.Stderr, "To set it:\n")
-			if s.Env != "" {
-				fmt.Fprintf(os.Stderr, "  %s=xxx ov enable %s  (env var override)\n", s.Env, imageName)
+			if autoGenerate {
+				// Auto-generate: reuse if same podman secret name already generated
+				if cached, ok := promptedValues[s.Name]; ok {
+					val = cached
+					source = "auto-generated"
+				} else {
+					generated := generateRandomHex(32)
+					store := DefaultCredentialStore()
+					if storeErr := store.Set("ov/secret", s.Name, generated); storeErr != nil {
+						fmt.Fprintf(os.Stderr, "  Warning: could not persist secret '%s': %v\n", s.Name, storeErr)
+					}
+					promptedValues[s.Name] = generated
+					val = generated
+					source = "auto-generated"
+				}
+			} else if interactive {
+				if cached, ok := promptedValues[s.Name]; ok {
+					val = cached
+					source = "user input"
+				} else {
+					prompt := fmt.Sprintf("Enter value for secret '%s'", s.SecretName)
+					if s.Env != "" {
+						prompt += fmt.Sprintf(" (%s)", s.Env)
+					}
+					prompt += ": "
+					entered, promptErr := promptPassword(prompt)
+					if promptErr != nil {
+						fmt.Fprintf(os.Stderr, "  %-40s → prompt failed: %v\n", s.Name, promptErr)
+						continue
+					}
+					if entered == "" {
+						fmt.Fprintf(os.Stderr, "  %-40s → skipped (no value entered)\n", s.Name)
+						continue
+					}
+					store := DefaultCredentialStore()
+					if storeErr := store.Set("ov/secret", s.Name, entered); storeErr != nil {
+						fmt.Fprintf(os.Stderr, "  Warning: could not persist secret '%s': %v\n", s.Name, storeErr)
+					}
+					promptedValues[s.Name] = entered
+					val = entered
+					source = "user input"
+				}
+			} else {
+				fmt.Fprintf(os.Stderr, "  %-40s → no value configured\n", s.Name)
+				fmt.Fprintf(os.Stderr, "\nWARNING: Secret '%s' has no value configured.\n", s.SecretName)
+				fmt.Fprintf(os.Stderr, "The container may fail to start properly.\n\n")
+				fmt.Fprintf(os.Stderr, "To set it:\n")
+				if s.Env != "" {
+					fmt.Fprintf(os.Stderr, "  %s=xxx ov config %s  (env var override)\n", s.Env, imageName)
+				}
+				fmt.Fprintf(os.Stderr, "  ov secrets set ov/secret %s\n\n", s.Name)
+				continue
 			}
-			fmt.Fprintf(os.Stderr, "  ov config set <credential-key> YOUR_VALUE\n\n")
-			continue
 		}
 
 		if err := ensurePodmanSecret(engine, s.Name, val); err != nil {

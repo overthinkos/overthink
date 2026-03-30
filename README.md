@@ -65,13 +65,13 @@ This means `fedora-ov` and `arch-ov` share the exact same layer list — only th
 
 ### Docker or Podman — Your Choice
 
-Docker is the container tool most people know. Podman is a newer alternative from Red Hat that runs without a background daemon and integrates natively with Linux systemd. `ov` works with either — same commands, same images, same results. Switch with `ov config set engine.build podman`.
+Docker is the container tool most people know. Podman is a newer alternative from Red Hat that runs without a background daemon and integrates natively with Linux systemd. `ov` works with either — same commands, same images, same results. Switch with `ov settings set engine.build podman`.
 
 ### Init Systems: Generic, Configurable, Extensible
 
 **Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares `service:` in `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
 
-**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov enable`, it generates a Podman quadlet that registers your container as a systemd service. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
 
 **In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers use `system_services:` to declare systemd units (like sshd) or add `*.service` files for user-level services. No supervisord needed because it's a real operating system, not a container.
 
@@ -79,7 +79,7 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Quadlets: Containers as System Services
 
-With Docker, you'd use `docker compose` or a restart policy to keep a container running. Podman quadlets are different: they describe a container as a native systemd service — the same system that manages SSH, networking, and everything else on your Linux box. `ov enable <image>` generates the quadlet file and registers it. After that, `systemctl start/stop/status` just work — your container starts on boot, restarts on failure, and shows up in `journalctl` logs like any other service.
+With Docker, you'd use `docker compose` or a restart policy to keep a container running. Podman quadlets are different: they describe a container as a native systemd service — the same system that manages SSH, networking, and everything else on your Linux box. `ov config <image>` generates the quadlet file, provisions secrets, and mounts encrypted volumes — all in one command. After that, `systemctl start/stop/status` just work — your container starts on boot, restarts on failure, and shows up in `journalctl` logs like any other service.
 
 ### Bootc: The Container *Is* the OS
 
@@ -130,8 +130,8 @@ ov shell fedora
 ov build jupyter
 ov start jupyter
 
-# Deploy as a systemd service
-ov enable jupyter
+# Configure as a systemd service (quadlet + secrets + encrypted volumes)
+ov config jupyter
 
 # Build a bootable VM disk image
 ov vm build openclaw-browser-bootc --type qcow2
@@ -166,7 +166,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov enc` operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -193,11 +193,11 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov enable <image>` reads the image's embedded labels, generates a quadlet, saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image.
+**Deploy** — `ov config <image>` reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), mounts encrypted volumes, saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. Your container starts on boot, restarts on failure, and integrates with `systemctl`. No project source needed — just the image. `ov start` also auto-configures on first launch (disable with `--enable=false`).
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov enc init/mount` handles encrypted bind-mount volumes. `ov config migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted bind-mount volumes. `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
@@ -217,11 +217,18 @@ ov merge <image> [--dry-run]           # Merge small layers in built images
 
 ```
 ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
-ov start <image> [--build]             # Start service container
+ov start <image> [--build]             # Start service container (auto-configures on first start)
+ov start <image> --enable=false        # Start without auto-configuring
 ov stop <image>                        # Stop container
-ov enable <image> [-w PATH]            # Systemd quadlet + save to deploy.yml
+ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + encrypted volumes
+ov config <image> --password auto      # Auto-generate all secrets
+ov config <image> --password manual    # Prompt for each secret
+ov config remove <image>               # Remove quadlet + deploy.yml entry
+ov config mount/unmount <image>        # Mount/unmount encrypted volumes
+ov config status <image>               # Encrypted volume status
+ov config passwd <image>               # Change encryption password
 ov status [<image>] [--all] [--json]   # Service status (table/detail/JSON)
-ov disable/logs/update <image>        # Service lifecycle
+ov logs/update <image>                 # Service lifecycle
 ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage services inside container
@@ -315,10 +322,9 @@ ov version
 ov new layer <name>                            # Scaffold a new layer
 ov seed <image>                                # Seed bind mount dirs
 ov alias install/uninstall <image>             # Host command aliases
-ov enc init/mount/unmount/status <image>    # Encrypted volumes
-ov enc passwd <image>                       # Change encryption password
-ov config get/set/list/reset/path              # Runtime configuration
-ov config migrate-secrets [--dry-run]          # Move plaintext creds to system keyring
+ov --kdbx <path> <command>                     # Use specific kdbx database
+ov settings get/set/list/reset/path            # Runtime configuration
+ov settings migrate-secrets [--dry-run]        # Move plaintext creds to system keyring
 ov secrets init [path]                         # Create KeePass .kdbx database
 ov secrets list/get/set/delete                 # Manage kdbx entries directly
 ov secrets import [--dry-run]                  # Import creds into kdbx from config/keyring

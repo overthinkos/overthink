@@ -11,15 +11,14 @@ import (
 
 // CLI defines the command-line interface structure
 type CLI struct {
+	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
+
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
 	Build    BuildCmd    `cmd:"" help:"Build container images"`
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Config   ConfigCmd   `cmd:"" help:"Manage runtime configuration"`
-	Deploy   DeployCmd   `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Disable  DisableCmd  `cmd:"" help:"Disable service auto-start (quadlet only)"`
-	Doctor   DoctorCmd   `cmd:"" help:"Check host dependencies and report status"`
-	Enable   EnableCmd   `cmd:"" help:"Enable a service (quadlet: generate .container + reload)"`
-	Enc      EncCmd      `cmd:"" help:"Manage encrypted bind mounts"`
+	Config   ImageConfigCmd `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Deploy   DeployCmd      `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Doctor   DoctorCmd      `cmd:"" help:"Check host dependencies and report status"`
 	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
 	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
 	List     ListCmd     `cmd:"" help:"List components"`
@@ -31,6 +30,7 @@ type CLI struct {
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Seed     SeedCmd     `cmd:"" help:"Seed empty bind mount directories from image data"`
 	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
+	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
 	Start    StartCmd    `cmd:"" help:"Start a container as a background service (detached)"`
 	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
@@ -582,22 +582,22 @@ func (c *NewLayerCmd) Run() error {
 	return ScaffoldLayer(dir, c.Name)
 }
 
-// ConfigCmd groups config subcommands
-type ConfigCmd struct {
-	Get            ConfigGetCmd            `cmd:"" help:"Print resolved value for a config key"`
-	Set            ConfigSetCmd            `cmd:"" help:"Set a config value"`
-	List           ConfigListCmd           `cmd:"" help:"Show all settings with source"`
-	Reset          ConfigResetCmd          `cmd:"" help:"Remove a key from config (revert to default)"`
-	Path           ConfigPathCmd           `cmd:"" help:"Print config file path"`
+// SettingsCmd groups settings subcommands (renamed from ConfigCmd to free `ov config` for image configuration).
+type SettingsCmd struct {
+	Get            SettingsGetCmd          `cmd:"" help:"Print resolved value for a config key"`
+	Set            SettingsSetCmd          `cmd:"" help:"Set a config value"`
+	List           SettingsListCmd         `cmd:"" help:"Show all settings with source"`
+	Reset          SettingsResetCmd        `cmd:"" help:"Remove a key from config (revert to default)"`
+	Path           SettingsPathCmd         `cmd:"" help:"Print config file path"`
 	MigrateSecrets ConfigMigrateSecretsCmd `cmd:"migrate-secrets" help:"Migrate plaintext credentials from config.yml to system keyring"`
 }
 
-// ConfigGetCmd prints the resolved value for a key
-type ConfigGetCmd struct {
+// SettingsGetCmd prints the resolved value for a key
+type SettingsGetCmd struct {
 	Key string `arg:"" help:"Config key"`
 }
 
-func (c *ConfigGetCmd) Run() error {
+func (c *SettingsGetCmd) Run() error {
 	// vnc.password.* keys use their own resolution path
 	if strings.HasPrefix(c.Key, "vnc.password.") {
 		val, err := GetConfigValue(c.Key)
@@ -642,16 +642,16 @@ func (c *ConfigGetCmd) Run() error {
 			return nil
 		}
 	}
-	return fmt.Errorf("unknown config key %q (run 'ov config list' to see valid keys)", c.Key)
+	return fmt.Errorf("unknown config key %q (run 'ov settings list' to see valid keys)", c.Key)
 }
 
-// ConfigSetCmd sets a config value
-type ConfigSetCmd struct {
+// SettingsSetCmd sets a config value
+type SettingsSetCmd struct {
 	Key   string `arg:"" help:"Config key"`
 	Value string `arg:"" help:"Config value"`
 }
 
-func (c *ConfigSetCmd) Run() error {
+func (c *SettingsSetCmd) Run() error {
 	if err := SetConfigValue(c.Key, c.Value); err != nil {
 		return err
 	}
@@ -659,10 +659,10 @@ func (c *ConfigSetCmd) Run() error {
 	return nil
 }
 
-// ConfigListCmd shows all settings
-type ConfigListCmd struct{}
+// SettingsListCmd shows all settings
+type SettingsListCmd struct{}
 
-func (c *ConfigListCmd) Run() error {
+func (c *SettingsListCmd) Run() error {
 	vals, err := ListConfigValues()
 	if err != nil {
 		return err
@@ -673,12 +673,12 @@ func (c *ConfigListCmd) Run() error {
 	return nil
 }
 
-// ConfigResetCmd removes a key from config
-type ConfigResetCmd struct {
+// SettingsResetCmd removes a key from config
+type SettingsResetCmd struct {
 	Key string `arg:"" optional:"" help:"Config key to reset (omit to reset all)"`
 }
 
-func (c *ConfigResetCmd) Run() error {
+func (c *SettingsResetCmd) Run() error {
 	if err := ResetConfigValue(c.Key); err != nil {
 		return err
 	}
@@ -690,10 +690,10 @@ func (c *ConfigResetCmd) Run() error {
 	return nil
 }
 
-// ConfigPathCmd prints the config file path
-type ConfigPathCmd struct{}
+// SettingsPathCmd prints the config file path
+type SettingsPathCmd struct{}
 
-func (c *ConfigPathCmd) Run() error {
+func (c *SettingsPathCmd) Run() error {
 	path, err := RuntimeConfigPath()
 	if err != nil {
 		return err
@@ -726,6 +726,12 @@ func main() {
 		kong.Description("Overthink - the container management experience for you and your AI"),
 		kong.UsageOnError(),
 	)
+
+	// Set global --kdbx flag into env so resolveKdbxPaths() picks it up everywhere
+	if cli.Kdbx != "" {
+		os.Setenv("OV_KDBX_PATH", cli.Kdbx)
+	}
+
 	err := ctx.Run()
 	ctx.FatalIfErrorf(err)
 }

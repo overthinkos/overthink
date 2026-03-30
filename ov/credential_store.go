@@ -59,10 +59,11 @@ func DefaultCredentialStore() CredentialStore {
 			path, keyFile := resolveKdbxPaths()
 			if path == "" {
 				fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'kdbx' but secrets.kdbx_path is not configured.\n")
-				fmt.Fprintf(os.Stderr, "Run: ov secrets init  (or: ov config set secrets.kdbx_path /path/to/database.kdbx)\n")
+				fmt.Fprintf(os.Stderr, "Run: ov secrets init  (or: ov settings set secrets.kdbx_path /path/to/database.kdbx)\n")
 				defaultStoreVal = &ConfigFileStore{}
 				return
 			}
+			storeInfoOnce.Do(func() { fmt.Fprintf(os.Stderr, "Using kdbx: %s\n", path) })
 			defaultStoreVal = &KdbxStore{path: path, keyFile: keyFile}
 		case "config":
 			defaultStoreVal = &ConfigFileStore{}
@@ -82,6 +83,7 @@ func DefaultCredentialStore() CredentialStore {
 			if path, keyFile := resolveKdbxPaths(); path != "" {
 				kdbx := &KdbxStore{path: path, keyFile: keyFile}
 				if err := kdbx.Probe(); err == nil {
+					storeInfoOnce.Do(func() { fmt.Fprintf(os.Stderr, "Using kdbx: %s\n", path) })
 					defaultStoreVal = kdbx
 					return
 				}

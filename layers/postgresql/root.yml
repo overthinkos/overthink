@@ -56,7 +56,7 @@ tasks:
 
             pg_ctl -D "$PGDATA" -o "-c unix_socket_directories=$SOCKET_DIR -c listen_addresses=''" -w start
 
-            if [ "$POSTGRES_DB" != "$POSTGRES_USER" ]; then
+            if [ "$POSTGRES_DB" != "postgres" ]; then
                 psql -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --host="$SOCKET_DIR" postgres \
                     -c "CREATE DATABASE \"$POSTGRES_DB\"" \
                     -c "GRANT ALL PRIVILEGES ON DATABASE \"$POSTGRES_DB\" TO \"$POSTGRES_USER\"" \

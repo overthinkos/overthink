@@ -39,15 +39,15 @@ Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
 - **Build mode:** Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`.
-- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov enable`/`start`/`stop`/`status`/`logs`/`update`/`remove`/`seed` all work standalone with just the container image.
+- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov config`/`start`/`stop`/`status`/`logs`/`update`/`remove`/`seed` all work standalone with just the container image.
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
 **Credential & Secret Management** -- Abstracted via `CredentialStore` interface:
 - **Host-side credentials** (VNC passwords) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
-- **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. `ov secrets` commands manage entries directly.
-- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At runtime, `ov enable`/`ov start` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. Docker falls back to env var injection.
-- **Resolution chain:** env var > keyring > config file > default. Migration: `ov config migrate-secrets`.
+- **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. Override with `ov --kdbx <path>` global flag. `ov secrets` commands manage entries directly.
+- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At configure time, `ov config <image>` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. `--password auto` generates all secrets automatically; `--password manual` prompts for each. Docker falls back to env var injection. Encrypted volumes are mounted inline by `ov start` (no companion systemd enc service).
+- **Resolution chain:** env var > keyring > config file > default. Migration: `ov settings migrate-secrets`.
 - Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
@@ -171,14 +171,14 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 
 For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
 
-**Credential security:** Config files (`config.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov config migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
+**Credential security:** Config files (`settings.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov settings migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
 
 **GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime:
 - **NVIDIA:** CUDA images get `--gpus all` / CDI device injection automatically
 - **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
 - Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
 
-**Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov enable`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
+**Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov config`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
 - Source: `ov/config.go` (`SecurityConfig.Mounts`), `ov/quadlet.go`, `ov/start.go`
 
 ---
@@ -192,7 +192,8 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
 | `build`, `merge` | `/ov:build` |
 | `shell` | `/ov:shell` |
-| `start`, `stop`, `enable`, `disable`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
+| `config <image>` (setup: quadlet + secrets + encrypted volumes), `config remove <image>`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
+| `start` (`--enable/--enable=false`), `stop`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` | `/ov:service` |
 | `cdp` | `/ov:cdp` |
@@ -202,9 +203,8 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `vnc` | `/ov:vnc` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
-| `config` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
-| `secrets` (init, list, get, set, delete, import, export, path) | `/ov:config` |
-| `enc` | `/ov:enc` |
+| `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
+| `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |
 | `doctor` | Host dependency + secret storage checks (no skill -- standalone diagnostic) |
@@ -221,14 +221,14 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Deploy a service:** `ov enable <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet from image labels + deploy.yml. No `images.yml` needed for deployment.
+**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes from image labels + deploy.yml. `--password auto` generates all secrets; `--password manual` prompts. `ov start <image>` auto-configures on first start (`--enable`, default true; suppress with `--enable=false`). No `images.yml` needed for deployment.
 Skills: `/ov:deploy` -> `/ov:service` (lifecycle)
 
 **Record a session:**
 `ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` / `ov record term` (interact) -> `ov record stop <image> -o output`
 Skills: `/ov:record` -> `/ov-layers:wl-record-pixelflux` or `/ov-layers:wf-recorder` (desktop) or `/ov-layers:asciinema` (terminal)
 
-**Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov config set engine.build podman`.
+**Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov settings set engine.build podman`.
 
 ---
 
@@ -287,7 +287,7 @@ Real tasks chain through skills in predictable patterns:
 `/ov:layer` (format, rules) -> `/ov-layers:<similar>` (existing pattern) -> `/ov:image` (add to image) -> `/ov:build`
 
 **Debug a runtime issue:**
-`/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:config` or `/ov:service` (state)
+`/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:settings` or `/ov:service` (state)
 
 **Desktop automation:**
 `/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (compositor-agnostic: screenshots, input, window mgmt, clipboard, AT-SPI2) -> `/ov:wl` sway subgroup (sway-only: tree, layout, move, resize)
@@ -296,7 +296,7 @@ On NVIDIA headless: `ov wl` is the primary tool — VNC screenshots are gray (up
 For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` commands are sway-specific and won't work on labwc.
 
 **Deploy a service:**
-`/ov:deploy` (quadlet, tunnels) + `/ov:enc` (if encrypted) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
+`/ov:deploy` (quadlet, tunnels) + `/ov:config` (setup: secrets, encrypted volumes) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
 
 **Set up Selkies streaming (browser-accessible — working):**
 `/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
@@ -310,7 +310,7 @@ Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://loca
 `/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
 
 **Full image lifecycle (build -> deploy -> test):**
-`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, bind mounts) -> `/ov:service` (enable, start, status, logs) -> `/ov-images:<name>` (ports, verification)
+`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, bind mounts) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
 
 ### Continuous Improvement: Feeding Insights Back Into Skills
 

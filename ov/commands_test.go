@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-func TestEnableCmd_DirectModeError(t *testing.T) {
+func TestImageConfigSetupCmd_DirectModeError(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
@@ -22,17 +22,17 @@ func TestEnableCmd_DirectModeError(t *testing.T) {
 	os.Setenv("OV_RUN_MODE", "direct")
 	defer os.Unsetenv("OV_RUN_MODE")
 
-	cmd := &EnableCmd{Image: "fedora-test"}
+	cmd := &ImageConfigSetupCmd{Image: "fedora-test"}
 	err := cmd.Run()
 	if err == nil {
-		t.Fatal("expected error for enable in direct mode")
+		t.Fatal("expected error for config in direct mode")
 	}
 	if !strings.Contains(err.Error(), "run_mode=quadlet") {
 		t.Errorf("error should mention run_mode=quadlet, got: %v", err)
 	}
 }
 
-func TestDisableCmd_DirectModeError(t *testing.T) {
+func TestImageConfigRemoveCmd_DirectModeError(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.yml")
 
@@ -46,10 +46,10 @@ func TestDisableCmd_DirectModeError(t *testing.T) {
 	os.Setenv("OV_RUN_MODE", "direct")
 	defer os.Unsetenv("OV_RUN_MODE")
 
-	cmd := &DisableCmd{Image: "fedora-test"}
+	cmd := &ImageConfigRemoveCmd{Image: "fedora-test"}
 	err := cmd.Run()
 	if err == nil {
-		t.Fatal("expected error for disable in direct mode")
+		t.Fatal("expected error for config remove in direct mode")
 	}
 	if !strings.Contains(err.Error(), "run_mode=quadlet") {
 		t.Errorf("error should mention run_mode=quadlet, got: %v", err)

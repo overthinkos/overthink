@@ -47,20 +47,26 @@ func (c *SecretsInitCmd) Run() error {
 		return fmt.Errorf("database already exists at %s (use --force to overwrite)", path)
 	}
 
-	// Prompt for password with confirmation
-	pw1, err := promptPassword("New KeePass database password: ")
-	if err != nil {
-		return err
-	}
-	pw2, err := promptPassword("Confirm password: ")
-	if err != nil {
-		return err
-	}
-	if pw1 != pw2 {
-		return fmt.Errorf("passwords do not match")
-	}
-	if pw1 == "" {
-		return fmt.Errorf("password cannot be empty")
+	// Use OV_KDBX_PASSWORD env var if set (for automation/CI), otherwise prompt
+	var pw1 string
+	if envPw := os.Getenv("OV_KDBX_PASSWORD"); envPw != "" {
+		pw1 = envPw
+	} else {
+		var err error
+		pw1, err = promptPassword("New KeePass database password: ")
+		if err != nil {
+			return err
+		}
+		pw2, err := promptPassword("Confirm password: ")
+		if err != nil {
+			return err
+		}
+		if pw1 != pw2 {
+			return fmt.Errorf("passwords do not match")
+		}
+		if pw1 == "" {
+			return fmt.Errorf("password cannot be empty")
+		}
 	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // ResolvedBindMount is ready for -v flags.
@@ -31,6 +32,16 @@ func encryptedCipherDir(storagePath, imageName, name string) string {
 // encryptedPlainDir returns the plain (FUSE mount point) directory path.
 func encryptedPlainDir(storagePath, imageName, name string) string {
 	return filepath.Join(storagePath, encryptedVolumeName(imageName, name), "plain")
+}
+
+// resolveEncVolumeDir returns the volume directory for an encrypted volume.
+// If the volume has an explicit Host path, use it directly.
+// Otherwise, use the global default: <storagePath>/ov-<image>-<name>.
+func resolveEncVolumeDir(vol DeployVolumeConfig, defaultStoragePath, imageName string) string {
+	if vol.Host != "" {
+		return expandHostHome(vol.Host)
+	}
+	return filepath.Join(defaultStoragePath, encryptedVolumeName(imageName, vol.Name))
 }
 
 // isEncryptedInitialized checks if gocryptfs has been initialized (gocryptfs.conf exists).
@@ -123,6 +134,41 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 	return askPassword("ov-"+imageName, "Passphrase for ov-"+imageName+":")
 }
 
+// resolveEncPassphraseForMount resolves the gocryptfs passphrase with backend-aware
+// waiting behavior. When running under systemd (INVOCATION_ID set) with a keyring
+// backend, it polls until the keyring is unlocked (e.g., after PAM login).
+// Non-keyring backends under systemd fail immediately (no prompt possible).
+// Interactive callers use the normal resolution chain.
+func resolveEncPassphraseForMount(imageName string) (string, error) {
+	if os.Getenv("INVOCATION_ID") != "" {
+		// Running under systemd (e.g., ExecStartPre in quadlet)
+		store := DefaultCredentialStore()
+		if _, isKeyring := store.(*KeyringStore); isKeyring {
+			// Keyring backend: poll until unlocked
+			for {
+				val, src := ResolveCredential("", "ov/enc", imageName, "")
+				if val != "" {
+					return val, nil
+				}
+				if src == "locked" {
+					fmt.Fprintf(os.Stderr, "Waiting for keyring unlock (ov-enc/%s)...\n", imageName)
+					time.Sleep(5 * time.Second)
+					continue
+				}
+				return "", fmt.Errorf("encryption passphrase not found for %s (credential store: %s)", imageName, store.Name())
+			}
+		}
+		// Non-keyring backend under systemd: try resolve, fail if not found (no interactive prompt)
+		val, _ := ResolveCredential("", "ov/enc", imageName, "")
+		if val != "" {
+			return val, nil
+		}
+		return "", fmt.Errorf("encryption passphrase not found for %s; run 'ov start %s' interactively", imageName, imageName)
+	}
+	// Interactive: normal resolution (keyring → kdbx → prompt)
+	return resolveEncPassphrase(imageName, false)
+}
+
 // encInit initializes gocryptfs cipher directories for an image.
 // If volume is non-empty, only that volume is initialized.
 func encInit(imageName, volume string) error {
@@ -143,8 +189,9 @@ func encInit(imageName, volume string) error {
 			continue
 		}
 
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
 
 		if isEncryptedInitialized(cipherDir) {
 			fmt.Fprintf(os.Stderr, "%s: already initialized\n", m.Name)
@@ -174,13 +221,14 @@ func encInit(imageName, volume string) error {
 
 // encMount mounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is mounted.
+// Uses resolveEncPassphraseForMount which waits for keyring unlock under systemd.
 func encMount(imageName, volume string) error {
 	mounts, storagePath, err := loadEncryptedVolumes(imageName)
 	if err != nil {
 		return err
 	}
 
-	passphrase, err := resolveEncPassphrase(imageName, false)
+	passphrase, err := resolveEncPassphraseForMount(imageName)
 	if err != nil {
 		return err
 	}
@@ -192,8 +240,9 @@ func encMount(imageName, volume string) error {
 			continue
 		}
 
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedInitialized(cipherDir) {
 			return fmt.Errorf("encrypted volume %q not initialized; run 'ov config %s' first", m.Name, imageName)
@@ -234,7 +283,8 @@ func encUnmount(imageName, volume string) error {
 			continue
 		}
 
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedMounted(plainDir) {
 			fmt.Fprintf(os.Stderr, "%s: not mounted\n", m.Name)
@@ -266,8 +316,9 @@ func encStatus(imageName string) error {
 
 	fmt.Printf("%-20s %-12s %-8s %s\n", "NAME", "INITIALIZED", "MOUNTED", "PATH")
 	for _, m := range mounts {
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
 
 		initialized := "no"
 		if isEncryptedInitialized(cipherDir) {
@@ -295,7 +346,8 @@ func encPasswd(imageName string) error {
 
 	// All volumes must be unmounted before changing password
 	for _, m := range mounts {
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		plainDir := filepath.Join(volDir, "plain")
 		if isEncryptedMounted(plainDir) {
 			return fmt.Errorf("encrypted volume %q is still mounted; run 'ov config unmount %s' first", m.Name, imageName)
 		}
@@ -323,7 +375,8 @@ func encPasswd(imageName string) error {
 	}
 
 	for _, m := range mounts {
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
 
 		if !isEncryptedInitialized(cipherDir) {
 			fmt.Fprintf(os.Stderr, "%s: not initialized, skipping\n", m.Name)
@@ -366,8 +419,9 @@ func ensureEncryptedMounts(imageName string, autoGenerate bool) error {
 
 	anyNotReady := false
 	for _, m := range mounts {
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
 		if !isEncryptedInitialized(cipherDir) || !isEncryptedMounted(plainDir) {
 			anyNotReady = true
 			break
@@ -385,8 +439,9 @@ func ensureEncryptedMounts(imageName string, autoGenerate bool) error {
 	defer cleanup()
 
 	for _, m := range mounts {
-		cipherDir := encryptedCipherDir(storagePath, imageName, m.Name)
-		plainDir := encryptedPlainDir(storagePath, imageName, m.Name)
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		cipherDir := filepath.Join(volDir, "cipher")
+		plainDir := filepath.Join(volDir, "plain")
 
 		if !isEncryptedInitialized(cipherDir) {
 			fmt.Fprintf(os.Stderr, "Initializing encrypted volume %s for %s...\n", m.Name, imageName)
@@ -468,38 +523,8 @@ func loadEncryptedVolumes(imageName string) ([]DeployVolumeConfig, string, error
 	return encrypted, rt.EncryptedStoragePath, nil
 }
 
-// generateEncUnit produces a companion systemd service unit for gocryptfs mounts.
-// It delegates to `ov config mount`/`ov config unmount` which have full credential-store
-// integration (kdbx → keyring → interactive prompt via systemd-ask-password).
-func generateEncUnit(imageName string, mounts []ResolvedBindMount, ovBin string) string {
-	var encrypted []ResolvedBindMount
-	for _, m := range mounts {
-		if m.Encrypted {
-			encrypted = append(encrypted, m)
-		}
-	}
-	if len(encrypted) == 0 {
-		return ""
-	}
-
-	name := containerName(imageName)
-	var b strings.Builder
-
-	b.WriteString(fmt.Sprintf("# %s-enc.service (generated by ov config)\n", name))
-	b.WriteString("[Unit]\n")
-	b.WriteString(fmt.Sprintf("Description=gocryptfs mounts for %s\n", name))
-	b.WriteString("\n[Service]\n")
-	b.WriteString("Type=oneshot\n")
-	b.WriteString("RemainAfterExit=yes\n")
-	b.WriteString(fmt.Sprintf("ExecStart=%s config mount %s\n", ovBin, imageName))
-	b.WriteString(fmt.Sprintf("ExecStop=%s config unmount %s\n", ovBin, imageName))
-	b.WriteString("\n[Install]\n")
-	b.WriteString("WantedBy=default.target\n")
-
-	return b.String()
-}
-
-// encServiceFilename returns the systemd service filename for a crypto companion unit.
+// encServiceFilename returns the systemd service filename for a legacy crypto companion unit.
+// Used only for cleanup of stale enc services from older ov versions.
 func encServiceFilename(imageName string) string {
 	return containerName(imageName) + "-enc.service"
 }

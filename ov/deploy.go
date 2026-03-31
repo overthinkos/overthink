@@ -244,7 +244,13 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 		if hasOverride && (dv.Type == "bind" || dv.Type == "encrypted") {
 			var hostPath string
 			if dv.Type == "encrypted" {
-				hostPath = encryptedPlainDir(encStoragePath, imageName, shortName)
+				if dv.Host != "" {
+					// Explicit per-volume path: /path/{cipher,plain}
+					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
+				} else {
+					// Global default: <encStoragePath>/ov-<image>-<name>/{cipher,plain}
+					hostPath = encryptedPlainDir(encStoragePath, imageName, shortName)
+				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {
@@ -272,7 +278,11 @@ func ResolveVolumeBacking(imageName string, labelVolumes []VolumeMount, deployVo
 		if dv.Type == "bind" || dv.Type == "encrypted" {
 			var hostPath string
 			if dv.Type == "encrypted" {
-				hostPath = encryptedPlainDir(encStoragePath, imageName, dv.Name)
+				if dv.Host != "" {
+					hostPath = filepath.Join(expandHostHome(dv.Host), "plain")
+				} else {
+					hostPath = encryptedPlainDir(encStoragePath, imageName, dv.Name)
+				}
 			} else if dv.Host != "" {
 				hostPath = expandHostHome(dv.Host)
 			} else {

@@ -207,27 +207,34 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
+	ovBin, _ := os.Executable()
+	store := DefaultCredentialStore()
+	_, isKeyring := store.(*KeyringStore)
+
 	qcfg := QuadletConfig{
-		ImageName:  c.Image,
-		ImageRef:   imageRef,
-		Workspace:  absWorkspace,
-		Ports:      ports,
-		Volumes:    volumes,
-		BindMounts: bindMounts,
-		GPU:        detected.GPU,
-		BindAddress: rt.BindAddress,
-		Tunnel:     tunnelCfg,
-		UID:        uid,
-		GID:        gid,
-		Env:        envVars,
-		EnvFile:    quadletEnvFile,
-		Instance:   c.Instance,
-		Security:   security,
-		Network:    resolvedNetwork,
-		Status:     meta.Status,
-		Info:       meta.Info,
-		Entrypoint: resolveEntrypointFromMeta(meta),
-		Secrets:    provisioned,
+		ImageName:       c.Image,
+		ImageRef:        imageRef,
+		Workspace:       absWorkspace,
+		Ports:           ports,
+		Volumes:         volumes,
+		BindMounts:      bindMounts,
+		GPU:             detected.GPU,
+		BindAddress:     rt.BindAddress,
+		Tunnel:          tunnelCfg,
+		UID:             uid,
+		GID:             gid,
+		Env:             envVars,
+		EnvFile:         quadletEnvFile,
+		Instance:        c.Instance,
+		Security:        security,
+		Network:         resolvedNetwork,
+		Status:          meta.Status,
+		Info:            meta.Info,
+		Entrypoint:      resolveEntrypointFromMeta(meta),
+		Secrets:         provisioned,
+		OvBin:           ovBin,
+		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
+		KeyringBackend:  isKeyring,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -422,24 +429,31 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 		remoteEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
 	}
 
+	remoteOvBin, _ := os.Executable()
+	remoteStore := DefaultCredentialStore()
+	_, remoteIsKeyring := remoteStore.(*KeyringStore)
+
 	qcfg := QuadletConfig{
-		ImageName:  ctx.ImageName,
-		ImageRef:   ctx.ImageRef,
-		Workspace:  absWorkspace,
-		Ports:      ctx.Resolved.Ports,
-		Volumes:    volumes,
-		BindMounts: bindMounts,
-		GPU:        detected.GPU,
-		BindAddress: rt.BindAddress,
-		UID:        ctx.Resolved.UID,
-		GID:        ctx.Resolved.GID,
-		Env:        envVars,
-		Instance:   c.Instance,
-		Security:   security,
-		Network:    resolvedNetwork,
-		Status:     ctx.Resolved.Status,
-		Info:       ctx.Resolved.Info,
-		Entrypoint: remoteEntrypoint,
+		ImageName:       ctx.ImageName,
+		ImageRef:        ctx.ImageRef,
+		Workspace:       absWorkspace,
+		Ports:           ctx.Resolved.Ports,
+		Volumes:         volumes,
+		BindMounts:      bindMounts,
+		GPU:             detected.GPU,
+		BindAddress:     rt.BindAddress,
+		UID:             ctx.Resolved.UID,
+		GID:             ctx.Resolved.GID,
+		Env:             envVars,
+		Instance:        c.Instance,
+		Security:        security,
+		Network:         resolvedNetwork,
+		Status:          ctx.Resolved.Status,
+		Info:            ctx.Resolved.Info,
+		Entrypoint:      remoteEntrypoint,
+		OvBin:           remoteOvBin,
+		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
+		KeyringBackend:  remoteIsKeyring,
 	}
 
 	content := generateQuadlet(qcfg)
@@ -551,6 +565,10 @@ func (c *ImageConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 		if dv.Type == "" {
 			dv.Type = "volume"
 		}
+		// Normalize: accept both "encrypt" and "encrypted"
+		if dv.Type == "encrypt" {
+			dv.Type = "encrypted"
+		}
 		if !seen[dv.Name] {
 			configs = append(configs, dv)
 			seen[dv.Name] = true
@@ -608,6 +626,9 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 		}
 		if dv.Type == "" {
 			dv.Type = "volume"
+		}
+		if dv.Type == "encrypt" {
+			dv.Type = "encrypted"
 		}
 		configs = append(configs, dv)
 	}

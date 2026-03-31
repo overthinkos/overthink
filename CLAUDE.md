@@ -47,7 +47,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - **Host-side credentials** (VNC passwords) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
 - **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. Override with `ov --kdbx <path>` global flag. `ov secrets` commands manage entries directly.
 - **KeePass password caching** via Linux kernel keyring (`KEY_SPEC_USER_KEYRING`). The kdbx master password is cached for 1 hour by default after the first interactive prompt, so subsequent `ov` commands reuse it automatically. Resolution chain: `OV_KDBX_PASSWORD` env var > kernel keyring lookup (key: `ov-kdbx-password`) > interactive prompt (systemd-ask-password or terminal) > auto-store in kernel keyring with configured TTL. Config keys: `secrets.kdbx_cache` (env: `OV_KDBX_CACHE`, default: `true`), `secrets.kdbx_cache_timeout` (env: `OV_KDBX_CACHE_TIMEOUT`, default: `3600`). Uses `golang.org/x/sys/unix` keyctl syscalls. Source: `ov/keyctl.go`, `ov/credential_kdbx.go`.
-- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At configure time, `ov config <image>` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. `--password auto` generates all secrets automatically; `--password manual` prompts for each. Docker falls back to env var injection. Encrypted volumes are mounted inline by `ov start` (no companion systemd enc service).
+- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At configure time, `ov config <image>` provisions Podman secrets (`podman secret create`) and generates `Secret=` quadlet directives. `--password auto` generates all secrets automatically; `--password manual` prompts for each. Docker falls back to env var injection. Encrypted volumes are mounted via `ExecStartPre=ov config mount` in the quadlet. With Secret Service backend: auto-starts after login (waits for keyring unlock, `TimeoutStartSec=0`). With KeePass or no backend: requires `ov start` (prompts for password). Per-volume explicit paths supported via `--volume name:encrypt:/path`.
 - **Resolution chain:** env var > keyring > config file > default. Migration: `ov settings migrate-secrets`.
 - Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
 
@@ -55,12 +55,13 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
 - All volumes default to Docker/Podman named volumes (`ov-<image>-<name>`)
 - At `ov config` time, any volume's backing can be changed per-volume: named volume (default), host bind mount, or encrypted (gocryptfs)
-- Flags: `--volume name:type[:path]` (canonical), `--bind name[=path]` (shorthand), `--encrypt name` (shorthand)
+- Flags: `--volume name:type[:path]` (canonical), `--bind name[=path]` (shorthand), `--encrypt name` (shorthand). Type accepts both `encrypted` and `encrypt` (normalized)
+- Per-volume encrypted path: `--volume name:encrypt:/path` stores `cipher/` and `plain/` directly inside the specified path (no `ov-<image>-<name>` prefix). Without explicit path, uses global `encrypted_storage_path` with prefix (backward compat)
 - Env var automation: `OV_VOLUMES_<IMAGE>` (e.g., `OV_VOLUMES_IMMICH="library:bind:/mnt/nas,import:bind"`)
 - Auto-path for bind mounts without explicit host path: `<volumes_path>/<image>/<name>` (default: `~/.local/share/ov/volumes/`)
 - Configurable base: `ov settings set volumes_path /mnt/nas/ov-volumes` (env: `OV_VOLUMES_PATH`)
-- Deploy.yml persists volume config: `volumes: [{name: data, type: bind, host: ~/data}]`
-- Encrypted volumes use gocryptfs at `<encrypted_storage_path>/ov-<image>-<name>/{cipher,plain}`
+- Deploy.yml persists volume config: `volumes: [{name: data, type: bind, host: ~/data}]`. For encrypted type, `host:` stores the per-volume storage directory
+- Encrypted volumes (default, no host): gocryptfs at `<encrypted_storage_path>/ov-<image>-<name>/{cipher,plain}`. With explicit host path: `<host>/{cipher,plain}`
 - `ov seed` copies image data into empty bind-backed volume directories
 - There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
 - Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
@@ -207,7 +208,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
 | `build`, `merge` | `/ov:build` |
 | `shell` | `/ov:shell` |
-| `config <image>` (setup: quadlet + secrets + encrypted volumes), `config remove <image>`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
+| `config <image>` (setup: quadlet + secrets + encrypted volumes), `config remove <image>`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` (encrypted volumes) |
 | `start` (`--enable/--enable=false`), `stop`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` | `/ov:service` |

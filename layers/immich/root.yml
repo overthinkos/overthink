@@ -6,10 +6,10 @@ tasks:
       - curl -L https://github.com/immich-app/immich/archive/refs/tags/$IMMICH_VERSION.tar.gz | tar xz -C /tmp
       - mv /tmp/immich-$(echo $IMMICH_VERSION | sed 's/^v//') /tmp/immich
 
-      # Build server with pnpm
-      - cd /tmp/immich && pnpm install --frozen-lockfile
-      - cd /tmp/immich && pnpm --filter immich build
-      - cd /tmp/immich && pnpm --filter immich deploy --prod /opt/immich/server
+      # Build server with pnpm (use temp cache to avoid root-owned ~/.cache)
+      - cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+      - cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
+      - cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
 
       # Download geodata for reverse geocoding
       - |
@@ -21,12 +21,39 @@ tasks:
         curl -sL "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson" -o ne_10m_admin_0_countries.geojson
         date -I > geodata-date.txt
         echo '{}' > /build/build-lock.json
-        mkdir -p /build/corePlugin/dist
+        mkdir -p /build/corePlugin
         cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
 
       # Build web UI
-      - cd /tmp/immich && pnpm --filter @immich/sdk --filter immich-web build
+      - cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
       - cp -r /tmp/immich/web/build /build/www
+
+      # Build core plugin (TypeScript → WASM via extism-js)
+      - |
+        EXTISM_JS_VERSION=1.6.0
+        BINARYEN_VERSION=124
+        ARCH=$(uname -m)
+
+        # Install extism-js compiler
+        curl -sL "https://github.com/extism/js-pdk/releases/download/v${EXTISM_JS_VERSION}/extism-js-${ARCH}-linux-v${EXTISM_JS_VERSION}.gz" | gunzip > /usr/local/bin/extism-js
+        chmod +x /usr/local/bin/extism-js
+
+        # Install binaryen (wasm-opt, wasm-merge, etc. required by extism-js)
+        curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-${ARCH}-linux.tar.gz" | tar xz -C /tmp
+        cp /tmp/binaryen-version_${BINARYEN_VERSION}/bin/* /usr/local/bin/
+        rm -rf /tmp/binaryen-version_${BINARYEN_VERSION}
+
+        # Build plugin
+        cd /tmp/immich/plugins
+        npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+        npm_config_cache=/tmp/npm-root-cache pnpm run build
+
+        # Copy built artifacts
+        mkdir -p /build/corePlugin/dist
+        cp -r dist/* /build/corePlugin/dist/
+
+        # Clean up build tools
+        rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-eval /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
 
       # Clean up
       - rm -rf /tmp/immich

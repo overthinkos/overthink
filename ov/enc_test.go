@@ -74,65 +74,6 @@ func TestHasEncryptedBindMounts(t *testing.T) {
 	}
 }
 
-func TestGenerateCryptoUnit(t *testing.T) {
-	mounts := []ResolvedBindMount{
-		{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
-	}
-
-	ovBin := "/usr/bin/ov"
-	got := generateEncUnit("myapp", mounts, ovBin)
-
-	if !strings.Contains(got, "ov-myapp-enc.service") {
-		t.Errorf("expected filename in comment, got:\n%s", got)
-	}
-	if !strings.Contains(got, "Description=gocryptfs mounts for ov-myapp") {
-		t.Errorf("expected Description, got:\n%s", got)
-	}
-	if !strings.Contains(got, "Type=oneshot") {
-		t.Errorf("expected Type=oneshot, got:\n%s", got)
-	}
-	if !strings.Contains(got, "RemainAfterExit=yes") {
-		t.Errorf("expected RemainAfterExit, got:\n%s", got)
-	}
-	if !strings.Contains(got, "ExecStart=/usr/bin/ov config mount myapp") {
-		t.Errorf("expected ExecStart delegating to ov config mount, got:\n%s", got)
-	}
-	if !strings.Contains(got, "ExecStop=/usr/bin/ov config unmount myapp") {
-		t.Errorf("expected ExecStop delegating to ov config unmount, got:\n%s", got)
-	}
-	if !strings.Contains(got, "WantedBy=default.target") {
-		t.Errorf("expected WantedBy, got:\n%s", got)
-	}
-}
-
-func TestGenerateCryptoUnitNoEncrypted(t *testing.T) {
-	mounts := []ResolvedBindMount{
-		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp", Encrypted: false},
-	}
-
-	got := generateEncUnit("myapp", mounts, "/usr/bin/ov")
-	if got != "" {
-		t.Errorf("expected empty string for no encrypted mounts, got: %s", got)
-	}
-}
-
-func TestGenerateCryptoUnitMultiple(t *testing.T) {
-	mounts := []ResolvedBindMount{
-		{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
-		{Name: "models", HostPath: "/data/enc/ov-myapp-models/plain", ContPath: "/home/user/.models", Encrypted: true},
-	}
-
-	got := generateEncUnit("myapp", mounts, "/usr/bin/ov")
-
-	// Multiple volumes are handled by a single ov config mount call
-	if strings.Count(got, "ExecStart=") != 1 {
-		t.Errorf("expected 1 ExecStart line (ov config mount handles all volumes), got:\n%s", got)
-	}
-	if strings.Count(got, "ExecStop=") != 1 {
-		t.Errorf("expected 1 ExecStop line (ov config unmount handles all volumes), got:\n%s", got)
-	}
-}
-
 func TestCryptoServiceFilename(t *testing.T) {
 	tests := []struct {
 		image string
@@ -236,7 +177,7 @@ func TestQuadletWithBindMounts(t *testing.T) {
 	}
 }
 
-func TestQuadletWithEncryptedBindMounts(t *testing.T) {
+func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
@@ -245,19 +186,81 @@ func TestQuadletWithEncryptedBindMounts(t *testing.T) {
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 		},
+		OvBin:           "/usr/local/bin/ov",
+		EncryptedMounts: true,
+		KeyringBackend:  true,
 	}
 
 	got := generateQuadlet(cfg)
 
-	// Enc service dependency was removed — ov start handles mounting inline
-	if strings.Contains(got, "Requires=ov-myapp-enc.service") {
-		t.Errorf("should NOT have Requires for enc service (removed), got:\n%s", got)
+	// ExecStartPre mounts encrypted volumes before container starts
+	if !strings.Contains(got, "ExecStartPre=/usr/local/bin/ov config mount myapp") {
+		t.Errorf("expected ExecStartPre for encrypted mounts, got:\n%s", got)
 	}
-	if strings.Contains(got, "After=ov-myapp-enc.service") {
-		t.Errorf("should NOT have After for enc service (removed), got:\n%s", got)
+	// Keyring backend: wait indefinitely for keyring unlock
+	if !strings.Contains(got, "TimeoutStartSec=0") {
+		t.Errorf("expected TimeoutStartSec=0 for keyring backend, got:\n%s", got)
+	}
+	// Keyring backend: auto-start at boot (waits for keyring)
+	if !strings.Contains(got, "WantedBy=default.target") {
+		t.Errorf("expected WantedBy=default.target for keyring backend, got:\n%s", got)
 	}
 	if !strings.Contains(got, "Volume=/data/enc/ov-myapp-secrets/plain:/home/user/.secrets") {
 		t.Errorf("expected Volume for encrypted bind mount, got:\n%s", got)
+	}
+}
+
+func TestQuadletWithEncryptedBindMountsKdbx(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		BindMounts: []ResolvedBindMount{
+			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
+		},
+		OvBin:           "/usr/local/bin/ov",
+		EncryptedMounts: true,
+		KeyringBackend:  false, // kdbx or config backend
+	}
+
+	got := generateQuadlet(cfg)
+
+	// ExecStartPre still present as safety guard
+	if !strings.Contains(got, "ExecStartPre=/usr/local/bin/ov config mount myapp") {
+		t.Errorf("expected ExecStartPre for encrypted mounts, got:\n%s", got)
+	}
+	// Non-keyring: default timeout (not 0)
+	if strings.Contains(got, "TimeoutStartSec=0") {
+		t.Errorf("should NOT have TimeoutStartSec=0 for non-keyring backend, got:\n%s", got)
+	}
+	// Non-keyring: NO auto-start at boot (requires ov start)
+	if strings.Contains(got, "WantedBy=default.target") {
+		t.Errorf("should NOT have WantedBy for non-keyring encrypted service, got:\n%s", got)
+	}
+}
+
+func TestQuadletWithoutEncryptedMounts(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+	}
+
+	got := generateQuadlet(cfg)
+
+	// No encrypted mounts: no ExecStartPre
+	if strings.Contains(got, "ExecStartPre=") {
+		t.Errorf("should NOT have ExecStartPre without encrypted mounts, got:\n%s", got)
+	}
+	// Normal auto-start
+	if !strings.Contains(got, "WantedBy=default.target") {
+		t.Errorf("expected WantedBy=default.target for non-encrypted service, got:\n%s", got)
+	}
+	// Default timeout
+	if !strings.Contains(got, "TimeoutStartSec=900") {
+		t.Errorf("expected default TimeoutStartSec=900, got:\n%s", got)
 	}
 }
 

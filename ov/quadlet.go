@@ -30,6 +30,9 @@ type QuadletConfig struct {
 	Info           string              // status description
 	Secrets        []CollectedSecret   // container secrets (podman Secret= directives)
 	Entrypoint     []string            // init system entrypoint (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
+	OvBin          string              // absolute path to ov binary (for ExecStartPre)
+	EncryptedMounts bool               // true when any bind mount is encrypted
+	KeyringBackend  bool               // true when credential store is Secret Service (keyring)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -142,7 +145,21 @@ func generateQuadlet(cfg QuadletConfig) string {
 
 	b.WriteString("\n[Service]\n")
 	b.WriteString("Restart=always\n")
-	b.WriteString("TimeoutStartSec=900\n")
+	if cfg.EncryptedMounts && cfg.OvBin != "" {
+		imgArg := cfg.ImageName
+		if cfg.Instance != "" {
+			imgArg = cfg.ImageName + " -i " + cfg.Instance
+		}
+		b.WriteString(fmt.Sprintf("ExecStartPre=%s config mount %s\n", cfg.OvBin, imgArg))
+		if cfg.KeyringBackend {
+			// Wait indefinitely for keyring unlock (PAM login)
+			b.WriteString("TimeoutStartSec=0\n")
+		} else {
+			b.WriteString("TimeoutStartSec=900\n")
+		}
+	} else {
+		b.WriteString("TimeoutStartSec=900\n")
+	}
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" && len(cfg.Tunnel.Ports) > 0 {
 		for _, tp := range cfg.Tunnel.Ports {
 			port := fmt.Sprintf("%d", tp.Port)
@@ -175,7 +192,12 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 
 	b.WriteString("\n[Install]\n")
-	b.WriteString("WantedBy=default.target\n")
+	if cfg.EncryptedMounts && !cfg.KeyringBackend {
+		// Non-keyring backends can't auto-unlock at boot; require manual ov start
+		b.WriteString("# Encrypted volumes require 'ov start' (no keyring auto-unlock)\n")
+	} else {
+		b.WriteString("WantedBy=default.target\n")
+	}
 
 	return b.String()
 }

@@ -236,3 +236,25 @@ func TestResolveVolumeBackingEncrypted(t *testing.T) {
 		t.Errorf("HostPath = %q, want /enc/ov-myapp-secrets/plain", binds[0].HostPath)
 	}
 }
+
+func TestResolveVolumeBackingEncryptedWithHost(t *testing.T) {
+	labelVolumes := []VolumeMount{
+		{VolumeName: "ov-myapp-library", ContainerPath: "/home/user/.immich/library"},
+	}
+	deployVolumes := []DeployVolumeConfig{
+		{Name: "library", Type: "encrypted", Host: "/data/immich/library"},
+	}
+
+	volumes, binds := ResolveVolumeBacking("myapp", labelVolumes, deployVolumes, "/home/user", "/enc", "/vol")
+
+	if len(volumes) != 0 {
+		t.Errorf("volumes = %+v, want 0 named volumes", volumes)
+	}
+	if len(binds) != 1 || !binds[0].Encrypted {
+		t.Errorf("binds = %+v, want 1 encrypted bind mount", binds)
+	}
+	// Explicit Host path is used directly (no ov-image-name prefix)
+	if binds[0].HostPath != "/data/immich/library/plain" {
+		t.Errorf("HostPath = %q, want /data/immich/library/plain", binds[0].HostPath)
+	}
+}

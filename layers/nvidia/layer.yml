@@ -6,7 +6,6 @@ rpm:
       url: "https://negativo17.org/repos/fedora-multimedia.repo"
       gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   packages:
-    - nvidia-driver-libs
     - nvidia-container-toolkit
     - libva-nvidia-driver
 

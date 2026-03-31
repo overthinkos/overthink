@@ -31,6 +31,15 @@ var (
 	storeInfoOnce    sync.Once
 )
 
+// resetDefaultCredentialStore clears the cached credential store singleton,
+// forcing re-probe on the next DefaultCredentialStore() call. Used by the
+// keyring wait loop when the keyring is temporarily unavailable at boot.
+func resetDefaultCredentialStore() {
+	defaultStoreOnce = sync.Once{}
+	defaultStoreVal = nil
+	resetKeyringState()
+}
+
 // DefaultCredentialStore returns the active credential store based on the
 // secret_backend config key. It probes the keyring on first call when
 // backend is "auto" and caches the result.

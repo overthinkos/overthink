@@ -135,30 +135,37 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 }
 
 // resolveEncPassphraseForMount resolves the gocryptfs passphrase with backend-aware
-// waiting behavior. When running under systemd (INVOCATION_ID set) with a keyring
-// backend, it polls until the keyring is unlocked (e.g., after PAM login).
-// Non-keyring backends under systemd fail immediately (no prompt possible).
+// waiting behavior. When running under systemd (INVOCATION_ID set) with a keyring-capable
+// backend ("auto" or "keyring"), it polls until the keyring becomes available and unlocked
+// (e.g., after D-Bus starts and PAM login unlocks it).
+// Explicit non-keyring backends ("kdbx", "config") fail immediately under systemd.
 // Interactive callers use the normal resolution chain.
 func resolveEncPassphraseForMount(imageName string) (string, error) {
 	if os.Getenv("INVOCATION_ID") != "" {
 		// Running under systemd (e.g., ExecStartPre in quadlet)
-		store := DefaultCredentialStore()
-		if _, isKeyring := store.(*KeyringStore); isKeyring {
-			// Keyring backend: poll until unlocked
+		// Check the configured backend preference, not the runtime probe result.
+		// At early boot, the keyring may be temporarily unreachable (D-Bus not ready),
+		// causing DefaultCredentialStore() to fall back to ConfigFileStore even though
+		// the intended backend is keyring. We must wait in that case.
+		backend := resolveSecretBackend()
+		if backend == "auto" || backend == "keyring" || backend == "" {
+			// Keyring-capable backend: poll until keyring is available and passphrase resolves
 			for {
 				val, src := ResolveCredential("", "ov/enc", imageName, "")
 				if val != "" {
 					return val, nil
 				}
-				if src == "locked" {
+				if src == "locked" || src == "default" {
 					fmt.Fprintf(os.Stderr, "Waiting for keyring unlock (ov-enc/%s)...\n", imageName)
 					time.Sleep(5 * time.Second)
+					// Reset cached store — keyring may become available on next attempt
+					resetDefaultCredentialStore()
 					continue
 				}
-				return "", fmt.Errorf("encryption passphrase not found for %s (credential store: %s)", imageName, store.Name())
+				return "", fmt.Errorf("encryption passphrase not found for %s (source: %s)", imageName, src)
 			}
 		}
-		// Non-keyring backend under systemd: try resolve, fail if not found (no interactive prompt)
+		// Explicit non-keyring backend under systemd: try resolve, fail if not found
 		val, _ := ResolveCredential("", "ov/enc", imageName, "")
 		if val != "" {
 			return val, nil

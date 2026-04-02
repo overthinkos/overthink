@@ -3,7 +3,16 @@ package main
 import (
 	"fmt"
 	"slices"
+	"strings"
 )
+
+// knownServicePrefixes lists non-VNC service prefixes that use composite
+// keys in VncPasswords. Order matters: longer prefixes first for correct
+// matching when services share a common prefix.
+var knownServicePrefixes = []string{
+	"ov/secret/",
+	"ov/enc/",
+}
 
 // ConfigFileStore implements CredentialStore using the existing plaintext
 // credential maps in ~/.config/ov/config.yml. This is the fallback backend
@@ -41,16 +50,39 @@ func (c *ConfigFileStore) List(service string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	m := configCredentialMap(cfg, service)
-	if m == nil {
-		return nil, nil
+	switch service {
+	case CredServiceVNC:
+		if cfg.VncPasswords == nil {
+			return nil, nil
+		}
+		keys := make([]string, 0, len(cfg.VncPasswords))
+		for k := range cfg.VncPasswords {
+			// Skip composite keys (belong to other services)
+			if strings.Contains(k, "/") {
+				continue
+			}
+			keys = append(keys, k)
+		}
+		slices.Sort(keys)
+		return keys, nil
+	default:
+		// Non-VNC services use composite keys "service/key" in VncPasswords
+		if cfg.VncPasswords == nil {
+			return nil, nil
+		}
+		prefix := service + "/"
+		keys := make([]string, 0)
+		for k := range cfg.VncPasswords {
+			if strings.HasPrefix(k, prefix) {
+				keys = append(keys, strings.TrimPrefix(k, prefix))
+			}
+		}
+		if len(keys) == 0 {
+			return nil, nil
+		}
+		slices.Sort(keys)
+		return keys, nil
 	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys, nil
 }
 
 func (c *ConfigFileStore) Name() string {
@@ -59,40 +91,48 @@ func (c *ConfigFileStore) Name() string {
 
 // lookupConfigCredential reads a credential from the appropriate config map.
 func lookupConfigCredential(cfg *RuntimeConfig, service, key string) string {
-	m := configCredentialMap(cfg, service)
-	if m == nil {
+	if cfg.VncPasswords == nil {
 		return ""
 	}
-	return m[key]
+	switch service {
+	case CredServiceVNC:
+		return cfg.VncPasswords[key]
+	default:
+		// Non-VNC services are stored with composite key "service/key"
+		return cfg.VncPasswords[fmt.Sprintf("%s/%s", service, key)]
+	}
 }
 
 // setConfigCredential writes a credential to the appropriate config map.
 func setConfigCredential(cfg *RuntimeConfig, service, key, value string) {
+	if cfg.VncPasswords == nil {
+		cfg.VncPasswords = make(map[string]string)
+	}
 	switch service {
 	case CredServiceVNC:
-		if cfg.VncPasswords == nil {
-			cfg.VncPasswords = make(map[string]string)
-		}
 		cfg.VncPasswords[key] = value
 	default:
-		// Unknown service — store in VncPasswords as a generic fallback.
-		// This shouldn't happen in practice.
-		if cfg.VncPasswords == nil {
-			cfg.VncPasswords = make(map[string]string)
-		}
+		// Non-VNC services use composite key "service/key"
 		cfg.VncPasswords[fmt.Sprintf("%s/%s", service, key)] = value
 	}
 }
 
 // deleteConfigCredential removes a credential from the appropriate config map.
 func deleteConfigCredential(cfg *RuntimeConfig, service, key string) {
-	m := configCredentialMap(cfg, service)
-	if m != nil {
-		delete(m, key)
+	if cfg.VncPasswords == nil {
+		return
+	}
+	switch service {
+	case CredServiceVNC:
+		delete(cfg.VncPasswords, key)
+	default:
+		delete(cfg.VncPasswords, fmt.Sprintf("%s/%s", service, key))
 	}
 }
 
 // configCredentialMap returns the config map for a given service.
+// Only valid for CredServiceVNC; other services use composite keys.
+// Deprecated: prefer lookupConfigCredential/setConfigCredential/deleteConfigCredential directly.
 func configCredentialMap(cfg *RuntimeConfig, service string) map[string]string {
 	switch service {
 	case CredServiceVNC:
@@ -113,7 +153,28 @@ func HasPlaintextCredentials(cfg *RuntimeConfig) int {
 func PlaintextCredentialEntries(cfg *RuntimeConfig) []struct{ Service, Key, Value string } {
 	var entries []struct{ Service, Key, Value string }
 	for k, v := range cfg.VncPasswords {
-		entries = append(entries, struct{ Service, Key, Value string }{CredServiceVNC, k, v})
+		service, key := parseCompositeKey(k)
+		entries = append(entries, struct{ Service, Key, Value string }{service, key, v})
 	}
 	return entries
+}
+
+// parseCompositeKey splits a VncPasswords map key into (service, key).
+// Composite keys are "service/key" where service may contain slashes
+// (e.g., "ov/secret/my-key" -> service="ov/secret", key="my-key").
+// Non-composite keys are VNC passwords (e.g., "my-image" -> service=CredServiceVNC).
+func parseCompositeKey(compositeKey string) (service, key string) {
+	// Check known multi-slash service prefixes first
+	for _, prefix := range knownServicePrefixes {
+		if strings.HasPrefix(compositeKey, prefix) {
+			return strings.TrimSuffix(prefix, "/"), strings.TrimPrefix(compositeKey, prefix)
+		}
+	}
+	// No known prefix matched: if it contains a slash, treat as single-slash
+	// service/key (for future unknown services).
+	if idx := strings.Index(compositeKey, "/"); idx >= 0 {
+		return compositeKey[:idx], compositeKey[idx+1:]
+	}
+	// No slash at all: it's a bare VNC key
+	return CredServiceVNC, compositeKey
 }

@@ -142,10 +142,19 @@ func (t *TunnelYAML) UnmarshalYAML(value *yaml.Node) error {
 
 // TunnelPort represents a single port to tunnel with its protocol and access scope.
 type TunnelPort struct {
-	Port     int
-	Protocol string // "http" or "tcp"
-	Public   bool   // true = internet-accessible, false = private (tailnet-only)
-	Hostname string // cloudflare: per-port hostname (from map form)
+	Port        int    // Tailscale HTTPS listen port (must be valid serve port)
+	BackendPort int    // Localhost backend port (0 means same as Port)
+	Protocol    string // "http" or "tcp"
+	Public      bool   // true = internet-accessible, false = private (tailnet-only)
+	Hostname    string // cloudflare: per-port hostname (from map form)
+}
+
+// backend returns the localhost backend port, defaulting to Port if BackendPort is zero.
+func (tp TunnelPort) backend() int {
+	if tp.BackendPort != 0 {
+		return tp.BackendPort
+	}
+	return tp.Port
 }
 
 // TunnelConfig is the resolved, ready-to-execute tunnel configuration.
@@ -247,7 +256,7 @@ func tailscalePublicOneStart(tp TunnelPort) error {
 		return nil
 	}
 	port := strconv.Itoa(tp.Port)
-	target := fmt.Sprintf("http://127.0.0.1:%d", tp.Port)
+	target := fmt.Sprintf("http://127.0.0.1:%d", tp.backend())
 	cmd := exec.Command("tailscale", "funnel", "--bg", "--https="+port, target)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
@@ -296,12 +305,13 @@ func tailscalePrivateOneStart(tp TunnelPort) error {
 		return nil
 	}
 	port := strconv.Itoa(tp.Port)
+	backend := tp.backend()
 	var cmd *exec.Cmd
 	if tp.Protocol == "tcp" {
-		target := fmt.Sprintf("tcp://127.0.0.1:%d", tp.Port)
+		target := fmt.Sprintf("tcp://127.0.0.1:%d", backend)
 		cmd = exec.Command("tailscale", "serve", "--bg", "--tcp="+port, target)
 	} else {
-		target := fmt.Sprintf("http://127.0.0.1:%d", tp.Port)
+		target := fmt.Sprintf("http://127.0.0.1:%d", backend)
 		cmd = exec.Command("tailscale", "serve", "--bg", "--https="+port, target)
 	}
 	cmd.Stdout = os.Stderr
@@ -690,10 +700,11 @@ func ResolveTunnelConfig(t *TunnelYAML, imageName string, dns string, layers map
 		}
 		proto := resolveProto(cp, portProtos)
 		cfg.Ports = append(cfg.Ports, TunnelPort{
-			Port:     hp,
-			Protocol: proto,
-			Public:   publicSet[hp],
-			Hostname: publicHostnames[hp],
+			Port:        hp,
+			BackendPort: hp,
+			Protocol:    proto,
+			Public:      publicSet[hp],
+			Hostname:    publicHostnames[hp],
 		})
 	}
 
@@ -766,10 +777,11 @@ func TunnelConfigFromMetadata(meta *ImageMetadata) *TunnelConfig {
 		}
 		proto := resolveProto(cp, meta.PortProtos)
 		cfg.Ports = append(cfg.Ports, TunnelPort{
-			Port:     hp,
-			Protocol: proto,
-			Public:   publicSet[hp],
-			Hostname: publicHostnames[hp],
+			Port:        hp,
+			BackendPort: hp,
+			Protocol:    proto,
+			Public:      publicSet[hp],
+			Hostname:    publicHostnames[hp],
 		})
 	}
 

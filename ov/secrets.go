@@ -88,6 +88,17 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 
 	for _, s := range secrets {
+		// If a podman secret already exists, keep it unconditionally. ov config
+		// setup only CREATES missing secrets — it never overwrites existing ones.
+		// This prevents overwriting a password that a database (e.g., PostgreSQL)
+		// has already been initialized with. To force re-provisioning:
+		//   podman secret rm <name> && ov config setup <image>
+		if podmanSecretExists(engine, s.Name) {
+			fmt.Fprintf(os.Stderr, "  %-40s → kept (already provisioned)\n", s.Name)
+			provisioned = append(provisioned, s)
+			continue
+		}
+
 		val, source := resolveSecretValue(s, imageName, instance)
 		if val == "" {
 			if autoGenerate {
@@ -209,6 +220,15 @@ func credKeyForSecret(imageName, instance string) string {
 		return imageName + "-" + instance
 	}
 	return imageName
+}
+
+// podmanSecretExists checks whether a podman secret with the given name already exists.
+func podmanSecretExists(engine, name string) bool {
+	binary := EngineBinary(engine)
+	cmd := exec.Command(binary, "secret", "inspect", name)
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	return cmd.Run() == nil
 }
 
 // ensurePodmanSecret creates or replaces a podman secret.

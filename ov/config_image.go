@@ -208,8 +208,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// For quadlet, we use EnvironmentFile= instead of inline Environment= for file-sourced vars.
 	// Only pass CLI -e vars as inline Environment= entries.
 	ovBin, _ := os.Executable()
-	store := DefaultCredentialStore()
-	_, isKeyring := store.(*KeyringStore)
+	// Determine keyring backend from configured secret_backend setting, not runtime
+	// probe. At boot or when keyring is locked, DefaultCredentialStore() may return
+	// ConfigFileStore even though the user configured "keyring". The quadlet must
+	// reflect the intended backend so TimeoutStartSec=0 and WantedBy are correct.
+	backend := resolveSecretBackend()
+	isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
 	qcfg := QuadletConfig{
 		ImageName:       c.Image,
@@ -430,8 +434,8 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	}
 
 	remoteOvBin, _ := os.Executable()
-	remoteStore := DefaultCredentialStore()
-	_, remoteIsKeyring := remoteStore.(*KeyringStore)
+	remoteBackend := resolveSecretBackend()
+	remoteIsKeyring := remoteBackend == "keyring" || remoteBackend == "auto" || remoteBackend == ""
 
 	qcfg := QuadletConfig{
 		ImageName:       ctx.ImageName,

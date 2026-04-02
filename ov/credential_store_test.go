@@ -203,3 +203,131 @@ func TestResolveSecretBackendDefault(t *testing.T) {
 		t.Errorf("resolveSecretBackend() = %q, want %q", got, "auto")
 	}
 }
+
+// TestConfigFileStoreSecretRoundtrip verifies that "ov/secret" service
+// credentials stored via ConfigFileStore can be read back. This is a
+// regression test: before the fix, setConfigCredential stored these as
+// composite keys in VncPasswords, but lookupConfigCredential returned
+// nil for non-VNC services (only VNC was handled).
+func TestConfigFileStoreSecretRoundtrip(t *testing.T) {
+	dir := t.TempDir()
+	RuntimeConfigPath = func() (string, error) {
+		return filepath.Join(dir, "config.yml"), nil
+	}
+	defer func() { RuntimeConfigPath = defaultRuntimeConfigPath }()
+
+	store := &ConfigFileStore{}
+
+	// Store a secret (as ov config does for DB passwords)
+	secretName := "ov-immich-ml-db-password"
+	secretValue := "abc123def456"
+	if err := store.Set("ov/secret", secretName, secretValue); err != nil {
+		t.Fatalf("Set(ov/secret, %s): %v", secretName, err)
+	}
+
+	// Read it back (this was broken before the fix — returned empty string)
+	got, err := store.Get("ov/secret", secretName)
+	if err != nil {
+		t.Fatalf("Get(ov/secret, %s): %v", secretName, err)
+	}
+	if got != secretValue {
+		t.Errorf("Get(ov/secret, %s) = %q, want %q", secretName, got, secretValue)
+	}
+
+	// List should return the secret name
+	keys, err := store.List("ov/secret")
+	if err != nil {
+		t.Fatalf("List(ov/secret): %v", err)
+	}
+	if len(keys) != 1 || keys[0] != secretName {
+		t.Errorf("List(ov/secret) = %v, want [%s]", keys, secretName)
+	}
+
+	// Delete and verify gone
+	if err := store.Delete("ov/secret", secretName); err != nil {
+		t.Fatalf("Delete(ov/secret, %s): %v", secretName, err)
+	}
+	got, _ = store.Get("ov/secret", secretName)
+	if got != "" {
+		t.Errorf("Get after Delete = %q, want empty", got)
+	}
+}
+
+// TestConfigFileStoreVNCAndSecretIsolation verifies that VNC and ov/secret
+// credentials stored in the same underlying map don't interfere.
+func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
+	dir := t.TempDir()
+	RuntimeConfigPath = func() (string, error) {
+		return filepath.Join(dir, "config.yml"), nil
+	}
+	defer func() { RuntimeConfigPath = defaultRuntimeConfigPath }()
+
+	store := &ConfigFileStore{}
+
+	// Store both a VNC password and a secret
+	if err := store.Set(CredServiceVNC, "my-image", "vncpass"); err != nil {
+		t.Fatalf("Set VNC: %v", err)
+	}
+	if err := store.Set("ov/secret", "ov-my-image-db-password", "dbpass"); err != nil {
+		t.Fatalf("Set secret: %v", err)
+	}
+
+	// VNC List should only show VNC keys (not composite secret keys)
+	vncKeys, _ := store.List(CredServiceVNC)
+	if len(vncKeys) != 1 || vncKeys[0] != "my-image" {
+		t.Errorf("List(ov/vnc) = %v, want [my-image]", vncKeys)
+	}
+
+	// Secret List should only show secret keys
+	secretKeys, _ := store.List("ov/secret")
+	if len(secretKeys) != 1 || secretKeys[0] != "ov-my-image-db-password" {
+		t.Errorf("List(ov/secret) = %v, want [ov-my-image-db-password]", secretKeys)
+	}
+
+	// Values should be independently retrievable
+	vncVal, _ := store.Get(CredServiceVNC, "my-image")
+	if vncVal != "vncpass" {
+		t.Errorf("VNC Get = %q, want vncpass", vncVal)
+	}
+	secretVal, _ := store.Get("ov/secret", "ov-my-image-db-password")
+	if secretVal != "dbpass" {
+		t.Errorf("Secret Get = %q, want dbpass", secretVal)
+	}
+}
+
+// TestPlaintextCredentialEntriesCompositeKeys verifies that composite keys
+// (used for non-VNC services) are correctly parsed back into service/key pairs.
+func TestPlaintextCredentialEntriesCompositeKeys(t *testing.T) {
+	cfg := &RuntimeConfig{
+		VncPasswords: map[string]string{
+			"my-image":                         "vncpass",
+			"ov/secret/ov-immich-db-password":  "dbpass",
+		},
+	}
+	entries := PlaintextCredentialEntries(cfg)
+	if len(entries) != 2 {
+		t.Fatalf("PlaintextCredentialEntries len = %d, want 2", len(entries))
+	}
+	// Find each entry by value (map iteration order is non-deterministic)
+	foundVNC, foundSecret := false, false
+	for _, e := range entries {
+		switch e.Value {
+		case "vncpass":
+			if e.Service != CredServiceVNC || e.Key != "my-image" {
+				t.Errorf("VNC entry: service=%q key=%q, want ov/vnc/my-image", e.Service, e.Key)
+			}
+			foundVNC = true
+		case "dbpass":
+			if e.Service != "ov/secret" || e.Key != "ov-immich-db-password" {
+				t.Errorf("Secret entry: service=%q key=%q, want ov/secret/ov-immich-db-password", e.Service, e.Key)
+			}
+			foundSecret = true
+		}
+	}
+	if !foundVNC {
+		t.Error("VNC entry not found")
+	}
+	if !foundSecret {
+		t.Error("Secret entry not found")
+	}
+}

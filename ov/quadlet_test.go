@@ -316,7 +316,7 @@ func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 		Tunnel: &TunnelConfig{
 			Provider: "tailscale",
 			Ports: []TunnelPort{
-				{Port: 2283, Protocol: "http", Public: false},
+				{Port: 2283, BackendPort: 2283, Protocol: "http", Public: false},
 			},
 		},
 	}
@@ -324,14 +324,38 @@ func TestGenerateQuadletWithTailscalePrivate(t *testing.T) {
 	got := generateQuadlet(cfg)
 
 	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=2283 http://127.0.0.1:2283") {
-		t.Errorf("expected ExecStartPost for private port, got:\n%s", got)
+		t.Errorf("expected ExecStartPost for private port 2283, got:\n%s", got)
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=2283 off") {
-		t.Errorf("expected ExecStopPost for private port, got:\n%s", got)
+		t.Errorf("expected ExecStopPost for port 2283, got:\n%s", got)
 	}
-	// Private ports should not use tailscale funnel
 	if strings.Contains(got, "tailscale funnel") {
 		t.Errorf("private mode should not contain 'tailscale funnel', got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithTailscaleExplicitRemap(t *testing.T) {
+	// Explicit BackendPort: listen on 443, proxy to 2283.
+	cfg := QuadletConfig{
+		ImageName:   "myapp",
+		ImageRef:    "ghcr.io/test/myapp:latest",
+		Workspace:   "/home/user/project",
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Ports: []TunnelPort{
+				{Port: 443, BackendPort: 2283, Protocol: "http", Public: false},
+			},
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=443 http://127.0.0.1:2283") {
+		t.Errorf("expected remapped ExecStartPost (--https=443, backend 2283), got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=443 off") {
+		t.Errorf("expected ExecStopPost with listen port 443, got:\n%s", got)
 	}
 }
 

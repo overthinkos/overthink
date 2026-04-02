@@ -864,9 +864,9 @@ func TestResolveTunnelConfigWithProtocols(t *testing.T) {
 	}
 
 	want := []TunnelPort{
-		{Port: 18789, Protocol: "http", Public: false},
-		{Port: 5900, Protocol: "tcp", Public: false},
-		{Port: 9222, Protocol: "http", Public: false},
+		{Port: 18789, BackendPort: 18789, Protocol: "http", Public: false},
+		{Port: 5900, BackendPort: 5900, Protocol: "tcp", Public: false},
+		{Port: 9222, BackendPort: 9222, Protocol: "http", Public: false},
 	}
 	if !reflect.DeepEqual(cfg.Ports, want) {
 		t.Errorf("Ports = %+v, want %+v", cfg.Ports, want)
@@ -905,6 +905,41 @@ func TestTunnelConfigFromMetadataPublicPrivate(t *testing.T) {
 }
 
 // --- collectPortProtos ---
+
+func TestResolveTunnelConfigPreservesPort(t *testing.T) {
+	// Port 2283 is preserved as-is for Tailscale serve (tailnet-only).
+	// The isValidServePort restriction only applies to funnel (public).
+	tunnel := &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}
+	imagePorts := []string{"2283:2283"}
+	cfg := ResolveTunnelConfig(tunnel, "immich-ml", "", nil, nil, nil, imagePorts)
+
+	if len(cfg.Ports) != 1 {
+		t.Fatalf("got %d ports, want 1", len(cfg.Ports))
+	}
+	tp := cfg.Ports[0]
+	if tp.Port != 2283 {
+		t.Errorf("Port = %d, want 2283 (no remap for serve)", tp.Port)
+	}
+	if tp.BackendPort != 2283 {
+		t.Errorf("BackendPort = %d, want 2283", tp.BackendPort)
+	}
+	if tp.backend() != 2283 {
+		t.Errorf("backend() = %d, want 2283", tp.backend())
+	}
+}
+
+func TestTunnelPortBackendDefault(t *testing.T) {
+	// When BackendPort is 0, backend() should return Port.
+	tp := TunnelPort{Port: 443}
+	if tp.backend() != 443 {
+		t.Errorf("backend() = %d, want 443 (default to Port when BackendPort=0)", tp.backend())
+	}
+	// When BackendPort is set, backend() should return BackendPort.
+	tp = TunnelPort{Port: 443, BackendPort: 2283}
+	if tp.backend() != 2283 {
+		t.Errorf("backend() = %d, want 2283", tp.backend())
+	}
+}
 
 func TestCollectPortProtos(t *testing.T) {
 	layers := map[string]*Layer{

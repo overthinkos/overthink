@@ -264,13 +264,26 @@ func encMount(imageName, volume string) error {
 			return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 		}
 
-		args := append(extpassArgs, "-allow_other", cipherDir, plainDir)
-		cmd := exec.Command("gocryptfs", args...)
+		gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+		scopeUnit := fmt.Sprintf("ov-enc-%s-%s", imageName, m.Name)
+		scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
+		cmd := exec.Command("systemd-run", scopeArgs...)
 		cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("mounting %s: %w", m.Name, err)
+			// Stale scope from a previous run — stop it and retry
+			if stopErr := exec.Command("systemctl", "--user", "stop", scopeUnit+".scope").Run(); stopErr == nil {
+				cmd = exec.Command("systemd-run", scopeArgs...)
+				cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if retryErr := cmd.Run(); retryErr != nil {
+					return fmt.Errorf("mounting %s: %w", m.Name, retryErr)
+				}
+			} else {
+				return fmt.Errorf("mounting %s: %w", m.Name, err)
+			}
 		}
 		fmt.Fprintf(os.Stderr, "Mounted %s at %s\n", m.Name, plainDir)
 	}
@@ -304,6 +317,9 @@ func encUnmount(imageName, volume string) error {
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("unmounting %s: %w", m.Name, err)
 		}
+		// Stop the gocryptfs scope unit (gocryptfs may linger after fusermount)
+		scopeUnit := fmt.Sprintf("ov-enc-%s-%s.scope", imageName, m.Name)
+		exec.Command("systemctl", "--user", "stop", scopeUnit).Run() // best-effort
 		fmt.Fprintf(os.Stderr, "Unmounted %s\n", m.Name)
 	}
 	return nil
@@ -472,13 +488,25 @@ func ensureEncryptedMounts(imageName string, autoGenerate bool) error {
 			if err := os.MkdirAll(plainDir, 0700); err != nil {
 				return fmt.Errorf("creating plain dir for %s: %w", m.Name, err)
 			}
-			args := append(extpassArgs, "-allow_other", cipherDir, plainDir)
-			cmd := exec.Command("gocryptfs", args...)
+			gcArgs := append(extpassArgs, "-allow_other", cipherDir, plainDir)
+			scopeUnit := fmt.Sprintf("ov-enc-%s-%s", imageName, m.Name)
+			scopeArgs := append([]string{"--scope", "--user", "--unit=" + scopeUnit, "--", "gocryptfs"}, gcArgs...)
+			cmd := exec.Command("systemd-run", scopeArgs...)
 			cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
-				return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, err)
+				if stopErr := exec.Command("systemctl", "--user", "stop", scopeUnit+".scope").Run(); stopErr == nil {
+					cmd = exec.Command("systemd-run", scopeArgs...)
+					cmd.Env = append(os.Environ(), "GOCRYPTFS_PASSWORD="+passphrase)
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+					if retryErr := cmd.Run(); retryErr != nil {
+						return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, retryErr)
+					}
+				} else {
+					return fmt.Errorf("mounting encrypted volume %s: %w", m.Name, err)
+				}
 			}
 			fmt.Fprintf(os.Stderr, "Mounted encrypted volume %s\n", m.Name)
 		}

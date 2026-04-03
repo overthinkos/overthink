@@ -62,7 +62,7 @@ route:
 
 service: |
   [program:immich-db-init]
-  command=bash -c 'for i in $(seq 1 120); do pg_isready -h %(ENV_HOME)s/.postgresql -U %(ENV_POSTGRES_USER)s >/dev/null 2>&1 && exit 0; sleep 1; done; echo "PostgreSQL timed out after 120s" >&2; exit 1'
+  command=/usr/local/bin/immich-db-migrate.sh
   autostart=true
   autorestart=false
   startsecs=0
@@ -73,7 +73,7 @@ service: |
   priority=15
 
   [program:immich-server]
-  command=node /opt/immich/server/dist/main
+  command=/usr/local/bin/immich-server-start.sh
   directory=/opt/immich/server
   autostart=true
   autorestart=true

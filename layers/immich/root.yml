@@ -62,5 +62,55 @@ tasks:
       - |
         cat > /docker-entrypoint-initdb.d/01-immich-extensions.sql <<'EOF'
         CREATE EXTENSION IF NOT EXISTS vector;
+        CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
         CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
         EOF
+
+      # Database migration script — runs on every container start via supervisord
+      # Ensures extensions exist (handles both fresh installs and upgrades)
+      - |
+        cat > /usr/local/bin/immich-db-migrate.sh <<'MIGRATE'
+        #!/bin/bash
+        set -euo pipefail
+        HOME=${HOME:-/home/user}
+        SOCKET_DIR="$HOME/.postgresql"
+        POSTGRES_USER=${POSTGRES_USER:-immich}
+        POSTGRES_DB=${POSTGRES_DB:-immich}
+
+        # Wait for PostgreSQL (up to 600s — WAL recovery after heavy operations can take minutes)
+        for i in $(seq 1 600); do
+            pg_isready -h "$SOCKET_DIR" -U "$POSTGRES_USER" >/dev/null 2>&1 && break
+            sleep 1
+        done
+        if ! pg_isready -h "$SOCKET_DIR" -U "$POSTGRES_USER" >/dev/null 2>&1; then
+            echo "PostgreSQL timed out after 600s" >&2
+            exit 1
+        fi
+
+        # Ensure core extensions (idempotent — safe on every startup)
+        psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+            -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+            -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"
+
+        # Ensure VectorChord if available (conditional — works with or without vectorchord layer)
+        if psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+            "SELECT 1 FROM pg_available_extensions WHERE name = 'vchord'" | grep -q 1; then
+            psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+                -c "CREATE EXTENSION IF NOT EXISTS vchord CASCADE;"
+            echo "VectorChord extension ensured"
+        else
+            echo "VectorChord not available — skipping"
+        fi
+        MIGRATE
+        chmod +x /usr/local/bin/immich-db-migrate.sh
+
+      # Immich server startup wrapper — waits for PostgreSQL before starting node
+      - |
+        cat > /usr/local/bin/immich-server-start.sh <<'WRAPPER'
+        #!/bin/bash
+        until pg_isready -h "$HOME/.postgresql" -U "${POSTGRES_USER:-immich}" >/dev/null 2>&1; do
+            sleep 1
+        done
+        exec node /opt/immich/server/dist/main
+        WRAPPER
+        chmod +x /usr/local/bin/immich-server-start.sh

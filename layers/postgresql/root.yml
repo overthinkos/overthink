@@ -54,7 +54,12 @@ tasks:
 
             initdb "${INITDB_ARGS[@]}"
 
-            pg_ctl -D "$PGDATA" -o "-c unix_socket_directories=$SOCKET_DIR -c listen_addresses=''" -w start
+            SPL_OPTS=""
+            if [ -n "${POSTGRES_SHARED_PRELOAD_LIBRARIES:-}" ]; then
+                SPL_OPTS="-c shared_preload_libraries=$POSTGRES_SHARED_PRELOAD_LIBRARIES"
+            fi
+
+            pg_ctl -D "$PGDATA" -o "-c unix_socket_directories=$SOCKET_DIR -c listen_addresses='' $SPL_OPTS" -w start
 
             if [ "$POSTGRES_DB" != "postgres" ]; then
                 psql -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --host="$SOCKET_DIR" postgres \
@@ -79,8 +84,10 @@ tasks:
         fi
 
         mkdir -p "$SOCKET_DIR"
-        exec /usr/bin/postgres -D "$PGDATA" \
-            -c "unix_socket_directories=$SOCKET_DIR" \
-            -c "listen_addresses=127.0.0.1"
+        POSTGRES_ARGS=(-D "$PGDATA" -c "unix_socket_directories=$SOCKET_DIR" -c "listen_addresses=127.0.0.1")
+        if [ -n "${POSTGRES_SHARED_PRELOAD_LIBRARIES:-}" ]; then
+            POSTGRES_ARGS+=(-c "shared_preload_libraries=$POSTGRES_SHARED_PRELOAD_LIBRARIES")
+        fi
+        exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
         ENTRYPOINT
         chmod +x /usr/local/bin/postgresql-entrypoint.sh

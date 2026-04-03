@@ -1,0 +1,10 @@
+depends:
+  - postgresql
+
+rpm:
+  packages:
+    - unzip
+
+env:
+  VECTORCHORD_VERSION: "1.1.1"
+  POSTGRES_SHARED_PRELOAD_LIBRARIES: "vchord.so"

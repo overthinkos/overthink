@@ -284,6 +284,7 @@ images:
       - nodejs24
       - supervisord
       - postgresql
+      - vectorchord
       - redis
       - immich
     ports:
@@ -380,6 +381,7 @@ images:
       - python-ml
       - supervisord
       - postgresql
+      - vectorchord
       - redis
       - immich
       - immich-ml

@@ -1,0 +1,52 @@
+version: '3'
+tasks:
+  all:
+    cmds:
+      - |
+        # Detect architecture (matches VectorChord zip naming: x86_64, aarch64)
+        ARCH=$(uname -m)
+
+        # Detect PostgreSQL major version from postgres binary (avoids pg_config / libpq-devel dependency)
+        # postgres --version output: "postgres (PostgreSQL) 18.0"
+        PG_MAJOR=$(postgres --version | awk '{print $NF}' | cut -d. -f1)
+
+        # Detect PostgreSQL extension directories dynamically
+        # On Fedora x86_64/aarch64: /usr/lib64/pgsql/, sharedir is always /usr/share/pgsql/
+        PKGLIBDIR=$(dirname "$(find /usr/lib*/pgsql -name plpgsql.so -print -quit 2>/dev/null)")
+        SHAREDIR=/usr/share/pgsql
+
+        if [ -z "$PKGLIBDIR" ] || [ ! -d "$PKGLIBDIR" ]; then
+            echo "Error: Could not detect PostgreSQL pkglibdir (plpgsql.so not found)" >&2
+            exit 1
+        fi
+        if [ ! -d "$SHAREDIR/extension" ]; then
+            echo "Error: PostgreSQL sharedir not found at $SHAREDIR/extension" >&2
+            exit 1
+        fi
+
+        echo "Detected PostgreSQL ${PG_MAJOR}: pkglibdir=${PKGLIBDIR}, sharedir=${SHAREDIR}"
+
+        # Download VectorChord
+        VCHORD_URL="https://github.com/tensorchord/VectorChord/releases/download/${VECTORCHORD_VERSION}/postgresql-${PG_MAJOR}-vchord_${VECTORCHORD_VERSION}_${ARCH}-linux-gnu.zip"
+        echo "Downloading VectorChord ${VECTORCHORD_VERSION} for PostgreSQL ${PG_MAJOR} (${ARCH})..."
+        curl -fsSL "$VCHORD_URL" -o /tmp/vchord.zip
+
+        # Extract to PostgreSQL directories
+        cd /tmp
+        unzip -q vchord.zip
+
+        # Install shared library
+        cp /tmp/pkglibdir/vchord.so "$PKGLIBDIR/"
+        chmod 755 "$PKGLIBDIR/vchord.so"
+
+        # Install extension control and SQL files
+        cp /tmp/sharedir/extension/vchord.control "$SHAREDIR/extension/"
+        cp /tmp/sharedir/extension/vchord--*.sql "$SHAREDIR/extension/"
+
+        # Clean up
+        rm -rf /tmp/vchord.zip /tmp/pkglibdir /tmp/sharedir
+
+        # Verify installation
+        echo "VectorChord ${VECTORCHORD_VERSION} installed:"
+        ls -la "$PKGLIBDIR/vchord.so"
+        ls "$SHAREDIR/extension/vchord.control"

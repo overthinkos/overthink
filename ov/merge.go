@@ -19,11 +19,12 @@ import (
 
 // MergeCmd merges small layers in a built container image
 type MergeCmd struct {
-	Image  string `arg:"" optional:"" help:"Image name from images.yml"`
-	All    bool   `long:"all" help:"Merge all images with merge.auto enabled"`
-	MaxMB  int    `long:"max-mb" help:"Maximum size of a merged layer (MB)"`
-	Tag    string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	DryRun bool   `long:"dry-run" help:"Print merge plan without modifying the image"`
+	Image      string `arg:"" optional:"" help:"Image name from images.yml"`
+	All        bool   `long:"all" help:"Merge all images with merge.auto enabled"`
+	MaxMB      int    `long:"max-mb" help:"Maximum size of a merged layer (MB)"`
+	MaxTotalMB int    `long:"max-total-mb" help:"Maximum total image size for merge (MB, 0=no limit)"`
+	Tag        string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	DryRun     bool   `long:"dry-run" help:"Print merge plan without modifying the image"`
 }
 
 // MergeStep represents one step in the merge plan
@@ -33,6 +34,7 @@ type MergeStep struct {
 }
 
 const defaultMaxMB = 128
+const defaultMaxTotalMB = 0 // 0 = no limit
 
 func (c *MergeCmd) Run() error {
 	if c.Image == "" && !c.All {
@@ -116,6 +118,15 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 		maxMB = c.MaxMB
 	}
 
+	// Determine max_total_mb: CLI flags -> images.yml -> default
+	maxTotalMB := defaultMaxTotalMB
+	if resolved.Merge != nil && resolved.Merge.MaxTotalMB > 0 {
+		maxTotalMB = resolved.Merge.MaxTotalMB
+	}
+	if c.MaxTotalMB > 0 {
+		maxTotalMB = c.MaxTotalMB
+	}
+
 	maxBytes := int64(maxMB) * 1024 * 1024
 
 	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
@@ -150,13 +161,14 @@ func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 	}
 
 	// Skip merge for very large images to avoid OOM during layer decompression.
-	// The merge process decompresses layers in memory; images over 2GB compressed
-	// can exceed available memory on CI runners.
-	const maxTotalBytes = 2 * 1024 * 1024 * 1024 // 2 GB
-	if totalSize > maxTotalBytes {
-		fmt.Fprintf(os.Stderr, "Skipping merge: image too large (%.1f GB > 2 GB limit)\n",
-			float64(totalSize)/(1024*1024*1024))
-		return nil
+	// The merge process decompresses layers in memory. Set max_total_mb: 0 to disable.
+	if maxTotalMB > 0 {
+		maxTotalBytes := int64(maxTotalMB) * 1024 * 1024
+		if totalSize > maxTotalBytes {
+			fmt.Fprintf(os.Stderr, "Skipping merge: image too large (%.1f GB > %.1f GB limit, override with --max-total-mb)\n",
+				float64(totalSize)/(1024*1024*1024), float64(maxTotalBytes)/(1024*1024*1024))
+			return nil
+		}
 	}
 
 	steps := planMerge(sizes, maxBytes)

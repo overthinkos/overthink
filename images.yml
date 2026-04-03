@@ -12,6 +12,7 @@ defaults:
   merge:
     auto: true
     max_mb: 128
+    max_total_mb: 0    # 0 = no limit; set to e.g. 2048 on CI runners with limited RAM
   format_config:
     distro: distro.yml
     builder: builder.yml
@@ -214,6 +215,16 @@ images:
       - comfyui
     ports:
       - "8188:8188"
+    platforms:
+      - linux/amd64
+
+  unsloth-studio:
+    base: nvidia
+    layers:
+      - unsloth-studio
+    ports:
+      - "8888:8888"
+      - "8000:8000"
     platforms:
       - linux/amd64
 

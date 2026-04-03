@@ -1,0 +1,20 @@
+depends:
+  - cuda
+
+env:
+  NVIDIA_PYTHON_PROJECT: "~/.pixi"
+  LLAMA_CPP_PATH: "~/llama.cpp"
+  UNSLOTH_SKIP_LLAMA_CPP_INSTALL: "1"
+  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+  HF_HOME: "~/.cache/huggingface"
+
+path_append:
+  - "~/llama.cpp"
+
+volumes:
+  - name: models
+    path: "~/.cache/huggingface"
+
+aliases:
+  - name: unsloth
+    command: unsloth

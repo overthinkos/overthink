@@ -1,0 +1,24 @@
+depends:
+  - supervisord
+
+layers:
+  - unsloth
+
+ports:
+  - 8888
+  - 8000
+
+volumes:
+  - name: workspace
+    path: "~/workspace"
+
+service: |
+  [program:unsloth-studio]
+  command=pixi run start-studio
+  directory=%(ENV_HOME)s
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

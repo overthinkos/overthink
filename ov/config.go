@@ -43,8 +43,9 @@ func (b *BuildFormats) UnmarshalYAML(value *yaml.Node) error {
 
 // MergeConfig configures post-build layer merging
 type MergeConfig struct {
-	Auto  bool `yaml:"auto,omitempty"`   // enable automatic merging after builds
-	MaxMB int  `yaml:"max_mb,omitempty"` // maximum size of a merged layer (default: 1024)
+	Auto       bool `yaml:"auto,omitempty"`         // enable automatic merging after builds
+	MaxMB      int  `yaml:"max_mb,omitempty"`       // maximum size of a merged layer (default: 128)
+	MaxTotalMB int  `yaml:"max_total_mb,omitempty"` // maximum total image size for merge (0 = no limit)
 }
 
 // AliasConfig represents a command alias in images.yml

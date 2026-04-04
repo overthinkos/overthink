@@ -1,0 +1,9 @@
+description: GnuPG encryption and signing tools for GPG agent forwarding
+
+rpm:
+  packages:
+    - gnupg2
+
+pac:
+  packages:
+    - gnupg

@@ -27,6 +27,8 @@ type RuntimeConfig struct {
 	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
 	KdbxCache            *bool             `yaml:"kdbx_cache,omitempty"`            // Cache kdbx password in kernel keyring (default: true)
 	KdbxCacheTimeout     int               `yaml:"kdbx_cache_timeout,omitempty"`    // Kernel keyring TTL in seconds (default: 3600)
+	ForwardGpgAgent      *bool             `yaml:"forward_gpg_agent,omitempty"`     // Forward host GPG agent socket into containers (default: true)
+	ForwardSshAgent      *bool             `yaml:"forward_ssh_agent,omitempty"`     // Forward host SSH agent socket into containers (default: true)
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
 	KeyringKeys          []string          `yaml:"keyring_keys,omitempty"`       // Shadow index: names of keys stored in keyring (no values)
@@ -60,6 +62,8 @@ type ResolvedRuntime struct {
 	BindAddress          string // "127.0.0.1" or "0.0.0.0"
 	EncryptedStoragePath string // path for gocryptfs encrypted storage
 	VolumesPath          string // base path for bind mount volume data
+	ForwardGpgAgent      bool   // forward host GPG agent socket into containers
+	ForwardSshAgent      bool   // forward host SSH agent socket into containers
 	VmBackend            string // "auto", "libvirt", or "qemu"
 }
 
@@ -144,6 +148,8 @@ func ResolveRuntime() (*ResolvedRuntime, error) {
 		BindAddress:          resolveValue(os.Getenv("OV_BIND_ADDRESS"), cfg.BindAddress, "127.0.0.1"),
 		EncryptedStoragePath: resolveEncryptedStoragePath(os.Getenv("OV_ENCRYPTED_STORAGE_PATH"), cfg.EncryptedStoragePath),
 		VolumesPath:          resolveVolumesPath(os.Getenv("OV_VOLUMES_PATH"), cfg.VolumesPath),
+		ForwardGpgAgent:      resolveAutoEnable(os.Getenv("OV_FORWARD_GPG_AGENT"), cfg.ForwardGpgAgent),
+		ForwardSshAgent:      resolveAutoEnable(os.Getenv("OV_FORWARD_SSH_AGENT"), cfg.ForwardSshAgent),
 		VmBackend:            resolveValue(os.Getenv("OV_VM_BACKEND"), cfg.Vm.Backend, "auto"),
 	}
 
@@ -340,6 +346,22 @@ func GetConfigValue(key string) (string, error) {
 			return fmt.Sprintf("%d", cfg.KdbxCacheTimeout), nil
 		}
 		return "3600", nil // default
+	case "forward_gpg_agent":
+		if cfg.ForwardGpgAgent != nil {
+			if *cfg.ForwardGpgAgent {
+				return "true", nil
+			}
+			return "false", nil
+		}
+		return "", nil
+	case "forward_ssh_agent":
+		if cfg.ForwardSshAgent != nil {
+			if *cfg.ForwardSshAgent {
+				return "true", nil
+			}
+			return "false", nil
+		}
+		return "", nil
 	case "vm.backend":
 		return cfg.Vm.Backend, nil
 	case "vm.disk_size":
@@ -378,7 +400,7 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -428,6 +450,14 @@ func SetConfigValue(key, value string) error {
 		if _, err := strconv.Atoi(value); err != nil {
 			return fmt.Errorf("secrets.kdbx_cache_timeout must be an integer (seconds), got %q", value)
 		}
+	case "forward_gpg_agent":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("forward_gpg_agent must be \"true\" or \"false\", got %q", value)
+		}
+	case "forward_ssh_agent":
+		if value != "true" && value != "false" {
+			return fmt.Errorf("forward_ssh_agent must be \"true\" or \"false\", got %q", value)
+		}
 	case "vm.backend":
 		if value != "auto" && value != "libvirt" && value != "qemu" {
 			return fmt.Errorf("vm.backend must be \"auto\", \"libvirt\", or \"qemu\", got %q", value)
@@ -456,7 +486,7 @@ func SetConfigValue(key, value string) error {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -496,6 +526,12 @@ func SetConfigValue(key, value string) error {
 	case "secrets.kdbx_cache_timeout":
 		n, _ := strconv.Atoi(value)
 		cfg.KdbxCacheTimeout = n
+	case "forward_gpg_agent":
+		b := value == "true"
+		cfg.ForwardGpgAgent = &b
+	case "forward_ssh_agent":
+		b := value == "true"
+		cfg.ForwardSshAgent = &b
 	case "vm.backend":
 		cfg.Vm.Backend = value
 	case "vm.disk_size":
@@ -563,6 +599,10 @@ func ResetConfigValue(key string) error {
 		cfg.KdbxCache = nil
 	case "secrets.kdbx_cache_timeout":
 		cfg.KdbxCacheTimeout = 0
+	case "forward_gpg_agent":
+		cfg.ForwardGpgAgent = nil
+	case "forward_ssh_agent":
+		cfg.ForwardSshAgent = nil
 	case "vm.backend":
 		cfg.Vm.Backend = ""
 	case "vm.disk_size":
@@ -583,7 +623,7 @@ func ResetConfigValue(key string) error {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -640,6 +680,30 @@ func ListConfigValues() ([]configKeySource, error) {
 			return configKeySource{Key: "auto_enable", Value: val, Source: "config"}
 		}
 		return configKeySource{Key: "auto_enable", Value: "true", Source: "default"}
+	}
+
+	// Generic bool pointer entry (reusable for any *bool config key with default "true")
+	boolEntry := func(key, envName string, cfgVal *bool, defaultVal string) configKeySource {
+		envVal := os.Getenv(envName)
+		if envVal != "" {
+			val := "false"
+			if envVal == "true" || envVal == "1" {
+				val = "true"
+			}
+			source := "env (" + envName + ")"
+			if DotenvLoaded(envName) {
+				source = "env (.env)"
+			}
+			return configKeySource{Key: key, Value: val, Source: source}
+		}
+		if cfgVal != nil {
+			val := "false"
+			if *cfgVal {
+				val = "true"
+			}
+			return configKeySource{Key: key, Value: val, Source: "config"}
+		}
+		return configKeySource{Key: key, Value: defaultVal, Source: "default"}
 	}
 
 	// Resolve path defaults
@@ -714,6 +778,8 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),
 		kdbxCacheEntry(cfg),
 		kdbxCacheTimeoutEntry(cfg),
+		boolEntry("forward_gpg_agent", "OV_FORWARD_GPG_AGENT", cfg.ForwardGpgAgent, "true"),
+		boolEntry("forward_ssh_agent", "OV_FORWARD_SSH_AGENT", cfg.ForwardSshAgent, "true"),
 		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),
 		resolve("vm.disk_size", "OV_VM_DISK_SIZE", cfg.Vm.DiskSize, "10 GiB"),
 		resolve("vm.root_size", "OV_VM_ROOT_SIZE", cfg.Vm.RootSize, ""),

@@ -1,0 +1,9 @@
+description: OpenSSH client tools for SSH agent forwarding
+
+rpm:
+  packages:
+    - openssh-clients
+
+pac:
+  packages:
+    - openssh

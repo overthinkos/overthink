@@ -106,6 +106,7 @@ func (c *ShellCmd) Run() error {
 
 	var imageRef string
 	var uid, gid int
+	var home string
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
@@ -146,6 +147,7 @@ func (c *ShellCmd) Run() error {
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
 		gid = resolved.GID
+		home = resolved.Home
 		ports = resolved.Ports
 		network = resolved.Network
 		img := cfg.Images[c.Image]
@@ -171,6 +173,7 @@ func (c *ShellCmd) Run() error {
 
 		uid = meta.UID
 		gid = meta.GID
+		home = meta.Home
 		ports = meta.Ports
 		security = meta.Security
 		network = meta.Network
@@ -191,10 +194,21 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
+	// Resolve agent forwarding (SSH/GPG socket mounts)
+	var deployImage *DeployImageConfig
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deployImage = &overlay
+		}
+	}
+	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
+
 	// If the container is already running, exec into it instead of starting a new one
 	name := containerNameInstance(c.Image, c.Instance)
 	if containerRunning(engine, name) {
-		args := buildExecArgs(engine, name, uid, gid, c.Command, envVars)
+		// Exec path: inject env vars only (can't add volumes to running container)
+		execEnv := append(envVars, agentFwd.Env...)
+		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -226,6 +240,12 @@ func (c *ShellCmd) Run() error {
 	if detected.AMDGPU && detected.AMDGFXVersion != "" {
 		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 	}
+
+	// Inject agent forwarding mounts and env (new container path)
+	for _, v := range agentFwd.Volumes {
+		security.Mounts = appendUnique(security.Mounts, v)
+	}
+	envVars = append(envVars, agentFwd.Env...)
 
 	// Resolve network (default to shared "ov" network)
 	resolvedNetwork, err := ResolveNetwork(network, engine)
@@ -286,10 +306,14 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return envErr
 	}
 
+	// Resolve agent forwarding for remote images (no deploy.yml overlay)
+	remoteAgentFwd := ResolveAgentForwarding(rt, nil, ctx.Resolved.Home)
+
 	// If the container is already running, exec into it
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	if containerRunning(engine, name) {
-		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, envVars)
+		execEnv := append(envVars, remoteAgentFwd.Env...)
+		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, execEnv)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -326,6 +350,12 @@ func (c *ShellCmd) runRemote(ref string) error {
 	if detected.AMDGPU && detected.AMDGFXVersion != "" {
 		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 	}
+
+	// Inject agent forwarding mounts and env
+	for _, v := range remoteAgentFwd.Volumes {
+		security.Mounts = appendUnique(security.Mounts, v)
+	}
+	envVars = append(envVars, remoteAgentFwd.Env...)
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", engine)
@@ -380,6 +410,14 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	}
 	for _, bm := range bindMounts {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", bm.HostPath, bm.ContPath))
+	}
+	for _, m := range security.Mounts {
+		if strings.HasPrefix(m, "tmpfs:") {
+			// tmpfs:/path:options → --tmpfs /path:options
+			args = append(args, "--tmpfs", strings.TrimPrefix(m, "tmpfs:"))
+		} else {
+			args = append(args, "-v", m)
+		}
 	}
 	if engine == "podman" && len(bindMounts) > 0 {
 		args = append(args, fmt.Sprintf("--userns=keep-id:uid=%d,gid=%d", uid, gid))

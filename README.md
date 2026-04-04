@@ -114,6 +114,36 @@ ov build         # build all images
 cd ov && go build -o ../bin/ov .
 ```
 
+### Secret Management
+
+Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that direnv decrypts in memory when you enter the directory. No plaintext on disk.
+
+**Prerequisites:**
+- GPG key and gpg-agent running (locally or forwarded via SSH)
+- direnv installed and hooked into your shell
+- Custom `dotenv_gpg` function installed from [`gpg-agent-setup`](../gpg-agent-setup)
+
+**Setup:**
+```bash
+# Install the custom direnvrc (one-time)
+cp ~/Atrapub/gpg-agent-setup/direnv/direnvrc ~/.config/direnv/direnvrc
+
+# Allow direnv in this project
+direnv allow
+```
+
+After setup, `cd`ing into the project automatically decrypts `.secrets` and exports the variables. See `.env.example` for the list of available variables. See `gpg-agent-setup/CLAUDE.md` for the full GPG agent setup guide.
+
+**Managing .secrets with ov:**
+```bash
+ov secrets gpg encrypt -r <KEY_ID> -i .env -o .secrets   # Encrypt
+ov secrets gpg show                                       # View contents
+ov secrets gpg set API_KEY sk-test-abc                    # Add/update a key
+ov secrets gpg edit                                       # Edit in $EDITOR
+ov secrets gpg unset OLD_KEY                              # Remove a key
+ov secrets gpg recipients                                 # List who can decrypt
+```
+
 ## Quick Taste
 
 ```bash
@@ -166,7 +196,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**agent-forwarding** = gnupg + direnv + ssh-client — SSH/GPG agent socket forwarding into containers (included in all application images). **gnupg** — GnuPG encryption and signing tools. **direnv** — Automatic environment variable loading from `.envrc` files. **ssh-client** — OpenSSH client tools (lighter than sshd). **fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -352,10 +382,15 @@ ov seed <image>                                # Seed bind-backed volume dirs
 ov alias install/uninstall <image>             # Host command aliases
 ov --kdbx <path> <command>                     # Use specific kdbx database
 ov settings get/set/list/reset/path            # Runtime configuration
+ov settings set forward_gpg_agent false        # Disable GPG agent forwarding
+ov settings set forward_ssh_agent false        # Disable SSH agent forwarding
 ov settings migrate-secrets [--dry-run]        # Move plaintext creds to system keyring
 ov secrets init [path]                         # Create KeePass .kdbx database
 ov secrets list/get/set/delete                 # Manage kdbx entries directly
 ov secrets import [--dry-run]                  # Import creds into kdbx from config/keyring
+ov secrets gpg show/edit/encrypt/decrypt       # Manage GPG-encrypted .secrets files
+ov secrets gpg set/unset KEY [VALUE]           # Add/remove keys in .secrets
+ov secrets gpg add-recipient/recipients        # Manage GPG recipients
 ov udev status                                 # Show GPU device access status
 ov udev generate                               # Print udev rules to stdout
 ov udev install                                # Install udev rules (requires sudo)

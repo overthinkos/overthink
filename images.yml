@@ -72,6 +72,7 @@ images:
     base: archlinux
     build: [pac, aur]
     layers:
+      - agent-forwarding
       - arch-pac-test
       - arch-aur-test
 
@@ -82,6 +83,7 @@ images:
     user: root
     network: host
     layers:
+      - agent-forwarding
       - ov-full
       - golang
       - gh
@@ -96,6 +98,7 @@ images:
     user: root
     network: host
     layers:
+      - agent-forwarding
       - ov-full
       - golang
       - gh
@@ -107,6 +110,7 @@ images:
     enabled: false
     base: fedora
     layers:
+      - agent-forwarding
       - traefik
       - testapi
     ports:
@@ -117,6 +121,7 @@ images:
     enabled: false
     base: fedora
     layers:
+      - agent-forwarding
       - supervisord
       - valkey
     ports:
@@ -125,6 +130,7 @@ images:
   openclaw:
     base: fedora
     layers:
+      - agent-forwarding
       - openclaw
       - dbus
       - ov
@@ -134,6 +140,7 @@ images:
   openclaw-sway-browser:
     base: fedora
     layers:
+      - agent-forwarding
       - openclaw-full
       - sway-desktop-vnc
       - dbus
@@ -148,6 +155,7 @@ images:
   openclaw-ollama-sway-browser:
     base: nvidia
     layers:
+      - agent-forwarding
       - openclaw-full-ml
       - sway-desktop-vnc
       - ollama
@@ -164,6 +172,7 @@ images:
   sway-browser-vnc:
     base: fedora
     layers:
+      - agent-forwarding
       - sway-desktop-vnc
       - dbus
       - ov
@@ -176,6 +185,7 @@ images:
   nvidia:
     base: fedora-nonfree
     layers:
+      - agent-forwarding
       - nvidia
       - cuda
     platforms:
@@ -184,6 +194,7 @@ images:
   python-ml:
     base: nvidia
     layers:
+      - agent-forwarding
       - python-ml
     platforms:
       - linux/amd64
@@ -191,6 +202,7 @@ images:
   jupyter:
     base: nvidia
     layers:
+      - agent-forwarding
       - jupyter
       - dbus
       - ov
@@ -202,6 +214,7 @@ images:
   ollama:
     base: nvidia
     layers:
+      - agent-forwarding
       - ollama
       - dbus
       - ov
@@ -213,6 +226,7 @@ images:
   openclaw-ollama:
     base: nvidia
     layers:
+      - agent-forwarding
       - openclaw
       - ollama
       - dbus
@@ -226,6 +240,7 @@ images:
   comfyui:
     base: nvidia
     layers:
+      - agent-forwarding
       - comfyui
       - dbus
       - ov
@@ -237,6 +252,7 @@ images:
   unsloth-studio:
     base: nvidia
     layers:
+      - agent-forwarding
       - unsloth-studio
       - dbus
       - ov
@@ -249,6 +265,7 @@ images:
   githubrunner:
     base: fedora
     layers:
+      - agent-forwarding
       - github-runner
       - ov-full
       - dbus
@@ -264,6 +281,7 @@ images:
     base: "quay.io/fedora/fedora-bootc:43"
     bootc: true
     layers:
+      - agent-forwarding
       - bootc-base
       - openclaw
       - pipewire
@@ -288,6 +306,7 @@ images:
     platforms:
       - linux/amd64
     layers:
+      - agent-forwarding
       - build-toolchain
       - language-runtimes
       - ujust
@@ -311,6 +330,7 @@ images:
   immich:
     base: fedora-nonfree
     layers:
+      - agent-forwarding
       - nodejs24
       - supervisord
       - postgresql
@@ -331,6 +351,7 @@ images:
     platforms:
       - linux/amd64
     layers:
+      - agent-forwarding
       - sshd
       - ov-full
       - golang
@@ -352,6 +373,7 @@ images:
     enabled: false
     base: fedora
     layers:
+      - agent-forwarding
       - openclaw-full
     ports:
       - "18789:18789"
@@ -361,6 +383,7 @@ images:
     enabled: false
     base: fedora
     layers:
+      - agent-forwarding
       - openclaw-full
       - sway-desktop-vnc
     ports:
@@ -374,6 +397,7 @@ images:
     enabled: false
     base: nvidia
     layers:
+      - agent-forwarding
       - openclaw-full-ml
       - sway-desktop-vnc
       - ollama
@@ -388,6 +412,7 @@ images:
   selkies-desktop:
     base: fedora-nonfree
     layers:
+      - agent-forwarding
       - selkies-desktop
       - dbus
       - ov
@@ -400,6 +425,7 @@ images:
   selkies-desktop-nvidia:
     base: nvidia
     layers:
+      - agent-forwarding
       - selkies-desktop
       - dbus
       - ov
@@ -412,6 +438,7 @@ images:
   immich-ml:
     base: fedora
     layers:
+      - agent-forwarding
       - nodejs24
       - cuda
       - python-ml

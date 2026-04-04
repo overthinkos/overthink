@@ -51,6 +51,16 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - **Resolution chain:** env var > keyring > config file > default. Migration: `ov settings migrate-secrets`.
 - Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
 
+**Project-Level Environment Secrets (direnv + GPG)** -- Separate from ov's credential store:
+- Project-level env vars (e.g., `GMAIL_USER`, `GMAIL_PASSWORD`) are stored in `.secrets` — a GPG-encrypted file containing `KEY=VALUE` lines (same format as `.env`)
+- `.envrc` calls `dotenv_gpg_if_exists` which decrypts `.secrets` in memory via gpg-agent — no plaintext on disk
+- The `dotenv_gpg` / `dotenv_gpg_if_exists` functions come from `~/Atrapub/gpg-agent-setup/direnv/direnvrc` (must be installed to `~/.config/direnv/direnvrc`)
+- Prerequisites: gpg-agent running with passphrase cached (locally via KeePassXC/pinentry, or remotely via SSH agent forwarding)
+- Managed via `ov secrets gpg` subcommands: `show`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`. All shell out to `gpg`. Example: `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
+- `.secrets` is gitignored (`.gitignore`). `.env` is also gitignored and Syncthing-ignored
+- **Distinction:** `.secrets`/direnv handles project-level shell env vars loaded before any command. ov's credential store (`ov secrets`, keyring, kdbx) handles container-level secrets (VNC passwords, service credentials) provisioned at `ov config` time
+- Source: `~/Atrapub/gpg-agent-setup/direnv/direnvrc` (functions), `~/Atrapub/gpg-agent-setup/CLAUDE.md` (full setup guide)
+
 **Volume Management** -- Unified deploy-time volume backing:
 - Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
 - All volumes default to Docker/Podman named volumes (`ov-<image>-<name>`)
@@ -65,6 +75,17 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - `ov seed` copies image data into empty bind-backed volume directories
 - There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
 - Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
+
+**Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers:
+- SSH: host `$SSH_AUTH_SOCK` → container `/run/host-ssh-auth.sock` + `SSH_AUTH_SOCK` env var
+- GPG: host `S.gpg-agent` (detected via `gpgconf --list-dirs agent-socket`) → container `$HOME/.gnupg/S.gpg-agent` (home from `org.overthinkos.home` image label)
+- Settings: `forward_gpg_agent` and `forward_ssh_agent` (default: `true`). Env: `OV_FORWARD_GPG_AGENT`, `OV_FORWARD_SSH_AGENT`
+- Per-image override: `deploy.yml` `forward_gpg_agent` / `forward_ssh_agent` boolean fields on `DeployImageConfig`
+- Applied in: `ov shell` (new container: volumes + env; exec into running: env only), `ov start` (direct mode only), `ov cmd` (env only)
+- **NOT applied in quadlet mode** — socket paths are session-bound (change between SSH sessions, reboots); quadlets are static systemd units
+- Container has its own keyring — public keys must be imported separately (`gpg --export --armor KEY_ID | ov shell <image> -c 'gpg --import'`)
+- The `agent-forwarding` metalayer (`gnupg` + `direnv` + `ssh-client`) provides the container-side binaries. Included in all application images
+- Source: `ov/agent_forward.go` (socket detection, mount resolution), `ov/runtime_config.go` (settings)
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
@@ -112,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (~146 layers)
++-- layers/<name>/            # Layer directories (146 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -141,7 +162,7 @@ plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
 +-- ov/                               # Operations (20 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (140 skills)
++-- ov-layers/                        # Layer reference (146 skills)
 +-- ov-images/                        # Image reference (35 skills)
 ```
 
@@ -226,6 +247,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `alias` | `/ov:alias` |
 | `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
 | `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
+| `secrets gpg` (show, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |
 | `doctor` | Host dependency + secret storage checks (no skill -- standalone diagnostic) |
@@ -298,7 +320,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 |--------|--------|------|---------------------|
 | `ov` | 20 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 140 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 146 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 35 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains

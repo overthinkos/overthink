@@ -21,8 +21,31 @@ func (c *CmdCmd) Run() error {
 		return err
 	}
 
+	// Resolve agent forwarding env vars for exec
+	rt, rtErr := ResolveRuntime()
+	var agentEnv []string
+	if rtErr == nil {
+		dc, _ := LoadDeployConfig()
+		var deployImage *DeployImageConfig
+		if dc != nil {
+			if overlay, ok := dc.Images[c.Image]; ok {
+				deployImage = &overlay
+			}
+		}
+		// Use host user's home as a reasonable default for GPG socket path.
+		// For exec, sockets are already mounted — this only affects env vars.
+		hostHome, _ := os.UserHomeDir()
+		agentFwd := ResolveAgentForwarding(rt, deployImage, hostHome)
+		agentEnv = agentFwd.Env
+	}
+
 	start := time.Now()
-	cmd := exec.Command(engine, "exec", name, "sh", "-c", c.Command)
+	args := []string{engine, "exec"}
+	for _, e := range agentEnv {
+		args = append(args, "-e", e)
+	}
+	args = append(args, name, "sh", "-c", c.Command)
+	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin

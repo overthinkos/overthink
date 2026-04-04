@@ -1,0 +1,6 @@
+description: Agent forwarding support — GPG, SSH, and direnv for .secrets workflow
+
+layers:
+  - gnupg
+  - direnv
+  - ssh-client

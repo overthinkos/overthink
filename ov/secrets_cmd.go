@@ -13,7 +13,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// SecretsCmdGroup groups ov secrets subcommands for KeePass .kdbx management.
+// SecretsCmdGroup groups ov secrets subcommands for KeePass .kdbx management
+// and GPG-encrypted .secrets file management.
 type SecretsCmdGroup struct {
 	Init   SecretsInitCmd   `cmd:"" help:"Create a new .kdbx database for ov"`
 	List   SecretsListCmd   `cmd:"" help:"List all ov entries in kdbx"`
@@ -23,6 +24,7 @@ type SecretsCmdGroup struct {
 	Import SecretsImportCmd `cmd:"" help:"Import credentials from config/keyring into kdbx"`
 	Export SecretsExportCmd `cmd:"" help:"Export kdbx entries to stdout"`
 	Path   SecretsPathCmd   `cmd:"" help:"Print kdbx file path"`
+	Gpg    SecretsGpgCmd    `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
 }
 
 // --- Init ---

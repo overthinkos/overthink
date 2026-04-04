@@ -1,0 +1,9 @@
+description: direnv — automatic environment variable loading from .envrc files
+
+rpm:
+  packages:
+    - direnv
+
+pac:
+  packages:
+    - direnv

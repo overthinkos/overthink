@@ -69,6 +69,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	var imageRef string
 	var uid, gid int
+	var home string
 	var ports []string
 	var volumes []VolumeMount
 	var bindMounts []ResolvedBindMount
@@ -108,6 +109,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
 		gid = resolved.GID
+		home = resolved.Home
 		ports = resolved.Ports
 		network = resolved.Network
 		// Resolve entrypoint from init config
@@ -133,6 +135,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 		uid = meta.UID
 		gid = meta.GID
+		home = meta.Home
 		ports = meta.Ports
 		security = meta.Security
 		network = meta.Network
@@ -209,6 +212,19 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	if conflicts := CheckPortAvailability(ports, rt.BindAddress, engine); len(conflicts) > 0 {
 		return fmt.Errorf("port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
 	}
+
+	// Inject agent forwarding mounts and env (direct mode only)
+	var deployImage *DeployImageConfig
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deployImage = &overlay
+		}
+	}
+	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
+	for _, v := range agentFwd.Volumes {
+		security.Mounts = appendUnique(security.Mounts, v)
+	}
+	envVars = append(envVars, agentFwd.Env...)
 
 	name := containerNameInstance(c.Image, c.Instance)
 	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, resolvedNetwork)
@@ -349,6 +365,13 @@ func (c *StartCmd) runRemote(ref string) error {
 		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
 		remoteEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
 	}
+
+	// Inject agent forwarding (remote direct mode, no deploy.yml overlay)
+	remoteAgentFwd := ResolveAgentForwarding(rt, nil, ctx.Resolved.Home)
+	for _, v := range remoteAgentFwd.Volumes {
+		security.Mounts = appendUnique(security.Mounts, v)
+	}
+	envVars = append(envVars, remoteAgentFwd.Env...)
 
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,

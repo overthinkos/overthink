@@ -31,7 +31,9 @@ type DeployImageConfig struct {
 	Security   *SecurityConfig      `yaml:"security,omitempty"`
 	Network    string               `yaml:"network,omitempty"`
 	Engine     string               `yaml:"engine,omitempty"`
-	Secrets    []DeploySecretConfig `yaml:"secrets,omitempty"`
+	Secrets         []DeploySecretConfig `yaml:"secrets,omitempty"`
+	ForwardGpgAgent *bool                `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
+	ForwardSshAgent *bool                `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
 }
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.

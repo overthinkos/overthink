@@ -94,6 +94,8 @@ Generation is idempotent. `.build/` is disposable and gitignored.
 
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
 
+**Pixi build scripts:** The pixi builder supports an optional `build_script: build.sh` field in `builder.yml`. If a layer with `pixi.toml` also has a `build.sh`, the script runs in the pixi builder stage after `pixi install` completes. The script is bind-mounted from the layer context (same pattern as the cargo builder's `--mount=type=bind,from=<layer>-ctx`). This allows layers to run build-time logic (compiling C extensions, npm builds, binary patching) without installing build dependencies in the final image. Example: the `selkies` layer uses `build.sh` to pip-install selkies (C extensions need gcc) and build the web UI (needs nodejs/npm) — all in the builder image. Source: `builder.yml` `build_script` field, `ov/generate.go` `buildStageContext()`, `ov/format_template.go` `BuildStageContext.HasBuildScript`.
+
 ---
 
 ## Directory Structure
@@ -316,8 +318,8 @@ For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` comm
 
 **Set up Selkies streaming (browser-accessible — working):**
 `/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
-Uses labwc nested inside pixelflux's Wayland compositor. Access via `http://localhost:3000` — no client app needed. NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
-**Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (grim), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Includes `wl-tools` + `a11y-tools` layers.
+Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://localhost:3000` (HTTPS with self-signed Traefik cert — required for WebCodecs secure context). NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
+**Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (pixelflux-screenshot via capture bridge), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Screenshots work with or without a browser connected (capture bridge auto-switches between controller/viewer modes). Includes `wl-tools` + `a11y-tools` layers.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)

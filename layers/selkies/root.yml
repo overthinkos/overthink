@@ -3,32 +3,30 @@ version: '3'
 tasks:
   all:
     cmds:
-      # Download selkies source, strip av/cryptography deps (not needed for websocket mode),
-      # then install. This is the same approach as the LSIO Dockerfile.
+      # Move web UI from pixi build stage output to system directory
       - |
-        cd /tmp
-        curl -sL https://github.com/selkies-project/selkies/archive/af1a1c252563d2f136d641b81d6b1dd38a3a0d93.tar.gz | tar xzf -
-        cd selkies-*
-        sed -i '/"av>/d' pyproject.toml
-        sed -i '/cryptography/d' pyproject.toml
-        /home/user/.pixi/envs/default/bin/pip install .
-      # Build web UI dashboard
-      - |
-        cd /tmp/selkies-*/addons/gst-web-core
-        npm install && npm run build
-        cd ../selkies-dashboard
-        cp ../gst-web-core/dist/selkies-core.js src/
-        npm install && npm run build
         mkdir -p /usr/local/share/selkies/web
-        cp -r dist/* /usr/local/share/selkies/web/
-        cp ../gst-web-core/dist/selkies-core.js /usr/local/share/selkies/web/src/ 2>/dev/null || true
-        rm -rf /tmp/selkies-*
-      # Create NVRTC symlinks for pixelflux NVENC (pip installs libnvrtc.so.13 but no unversioned symlink)
+        cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+        rm -rf /home/user/.local/share/selkies-build
+      # Download traefik binary
       - |
-        NVRTC_DIR=/home/user/.pixi/envs/default/lib/python3.13/site-packages/nvidia/cu13/lib
-        if [ -f "$NVRTC_DIR/libnvrtc.so.13" ] && [ ! -f "$NVRTC_DIR/libnvrtc.so" ]; then
-          ln -s libnvrtc.so.13 "$NVRTC_DIR/libnvrtc.so"
-          ln -s libnvrtc-builtins.so.13.2 "$NVRTC_DIR/libnvrtc-builtins.so" 2>/dev/null || true
-        fi
-      # Remove build deps (only needed during install)
-      - dnf remove -y nodejs npm gcc python3-devel libxkbcommon-devel libevdev-devel kernel-headers || true
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ARCH=amd64;;
+          aarch64) ARCH=arm64;;
+          *) echo "Unsupported: $ARCH" >&2; exit 1;;
+        esac
+        curl -fsSL "https://github.com/traefik/traefik/releases/download/v3.4.0/traefik_v3.4.0_linux_${ARCH}.tar.gz" | tar -xzf - -C /usr/local/bin traefik
+      # Generate self-signed certificate (dev use — enables HTTPS secure context)
+      - |
+        mkdir -p /usr/local/share/selkies/certs
+        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+          -keyout /usr/local/share/selkies/certs/selkies.key \
+          -out /usr/local/share/selkies/certs/selkies.crt \
+          -days 3650 -nodes \
+          -subj "/CN=selkies" \
+          -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+        chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+      # Install traefik configs
+      - cp /ctx/traefik.yml /usr/local/share/selkies/traefik.yml
+      - cp /ctx/traefik-dynamic.yml /usr/local/share/selkies/traefik-dynamic.yml

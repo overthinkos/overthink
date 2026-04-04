@@ -15,6 +15,7 @@
 builders:
   pixi:
     detect_files: [pixi.toml, pyproject.toml, environment.yml]
+    build_script: build.sh
     cache_mounts:
       - dst: /tmp/pixi-cache
       - dst: /tmp/rattler-cache
@@ -38,7 +39,12 @@ builders:
       COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
       {{.ManylinuxFix}}
       ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
+      {{- if .HasBuildScript}}
+      RUN --mount=type=bind,from={{.LayerStage}},source=/{{.BuildScript}},target=/tmp/{{.BuildScript}} \
+          {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
+      {{- else}}
       RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
+      {{- end}}
     copy_artifacts:
       - src: "{{.Home}}"
         dst: "{{.Home}}"

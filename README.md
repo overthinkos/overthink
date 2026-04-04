@@ -158,7 +158,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Desktop Environments
 
-**sway** — Wayland compositor (wlroots, full desktop). **labwc** — Lightweight Wayland compositor (wlroots, nested desktop for Selkies streaming). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222`. **selkies** — Browser-accessible desktop streaming via pixelflux (Wayland capture) and pcmflux (audio) on `:3000`.
+**sway** — Wayland compositor (wlroots, full desktop). **labwc** — Lightweight Wayland compositor (wlroots, nested desktop for Selkies streaming). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222`. **selkies** — Browser-accessible desktop streaming via pixelflux (Wayland capture) and pcmflux (audio) on `:3000` (HTTPS via Traefik with self-signed cert).
 
 ### Applications
 
@@ -180,7 +180,7 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + desktop-fonts + swaync + pavucontrol + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000. labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via capture bridge that taps into the selkies WebSocket stream (grim/wf-recorder don't work nested). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + desktop-fonts + swaync + pavucontrol + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000 (HTTPS via Traefik with self-signed cert — required for WebCodecs). labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via a self-healing capture bridge that taps into the selkies WebSocket stream, auto-switching between controller mode (no browser) and viewer mode (browser active). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.

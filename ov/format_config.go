@@ -174,6 +174,7 @@ type BuilderDef struct {
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	InstallCommands map[string]string `yaml:"install_commands,omitempty"`
 	ManylinuxFix    string            `yaml:"manylinux_fix,omitempty"`
+	BuildScript     string            `yaml:"build_script,omitempty"`
 	CopyArtifacts   []CopyDef         `yaml:"copy_artifacts,omitempty"`
 	CopyBinary      *CopyDef          `yaml:"copy_binary,omitempty"`
 }

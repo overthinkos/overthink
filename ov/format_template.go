@@ -117,8 +117,10 @@ type BuildStageContext struct {
 	InstallCmd   string
 	ManylinuxFix string
 	CacheMounts  []CacheMountDef
-	Packages     []string // for config-detected builders (aur)
-	Options      []string // for config-detected builders (aur)
+	Packages       []string // for config-detected builders (aur)
+	Options        []string // for config-detected builders (aur)
+	HasBuildScript bool     // true if layer has a build script (e.g., build.sh)
+	BuildScript    string   // build script filename
 }
 
 // RenderTemplate renders a Go text/template with the given context.

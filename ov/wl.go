@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -1588,7 +1589,17 @@ func captureWlCmd(engine, containerName, shellCmd string) ([]byte, error) {
 	} else {
 		cmd = exec.Command(engine, "exec", containerName, "sh", "-c", wrapped)
 	}
-	return cmd.Output()
+	out, err := cmd.Output()
+	if err != nil {
+		// Extract stderr from ExitError so the user sees the actual reason
+		// (e.g., "capture failed (not connected)") instead of bare "exit status 1"
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return nil, fmt.Errorf("%s", strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return nil, err
+	}
+	return out, nil
 }
 
 // --- Key and button mappings ---

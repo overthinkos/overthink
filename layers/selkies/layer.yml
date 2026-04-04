@@ -11,11 +11,6 @@ env:
 
 ports:
   - 3000
-  - 8081
-
-route:
-  host: selkies.localhost
-  port: 3000
 
 security:
   shm_size: "1g"
@@ -26,19 +21,14 @@ volumes:
 
 rpm:
   packages:
-    - nginx
-    - nodejs
-    - npm
     - wl-clipboard
     - libICE
     - libSM
     - pulseaudio-libs
     - pulseaudio-utils
-    # GPU acceleration (VAAPI for AMD/Intel)
     - mesa-va-drivers
     - libva
     - libva-utils
-    # Debug/diagnostic tools
     - procps-ng
     - iproute
     - iputils
@@ -46,19 +36,23 @@ rpm:
     - htop
     - file
     - lsof
-    # Build deps for evdev/xkbcommon Python wheels (cleaned up in root.yml)
-    - gcc
-    - python3-devel
-    - libxkbcommon-devel
-    - libevdev-devel
-    - kernel-headers
 
 service: |
-  [program:nginx]
-  command=nginx -g "daemon off;" -c %(ENV_HOME)s/.config/selkies/nginx.conf
+  [program:traefik]
+  command=/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml
   autostart=true
   autorestart=true
   priority=18
+  startsecs=1
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:selkies-fileserver]
+  command=python3 %(ENV_HOME)s/.local/bin/selkies-fileserver
+  autostart=true
+  autorestart=true
+  priority=19
   startsecs=1
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0

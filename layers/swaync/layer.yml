@@ -11,7 +11,7 @@ service: |
   autostart=true
   autorestart=true
   priority=14
-  startsecs=0
+  startsecs=2
   environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0

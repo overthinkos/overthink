@@ -17,4 +17,9 @@ if [ ! -S "$SOCKET" ]; then
     exit 1
 fi
 
+# Kill any stale swaync instance (prevents D-Bus name conflict on restart)
+# Use -x for exact match — plain "pkill swaync" also matches swaync-wrapper
+pkill -9 -x swaync 2>/dev/null || true
+sleep 0.5
+
 exec swaync

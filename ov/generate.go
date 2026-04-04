@@ -1084,6 +1084,12 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 		}
 	}
 
+	// Detect optional build script (runs in builder stage after install)
+	if builderDef.BuildScript != "" && layerHasFile(layer, builderDef.BuildScript) {
+		ctx.HasBuildScript = true
+		ctx.BuildScript = builderDef.BuildScript
+	}
+
 	// For config-detected builders (aur), extract packages/options from layer config
 	if builderDef.DetectConfig != "" {
 		section := layer.FormatSection(builderDef.DetectConfig)

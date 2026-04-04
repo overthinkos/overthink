@@ -49,6 +49,7 @@ type CdpCmd struct {
 	Coords     CdpCoordsCmd     `cmd:"" help:"Show element coordinates in viewport and desktop systems"`
 	Axtree     CdpAxtreeCmd     `cmd:"" help:"Get Chrome accessibility tree"`
 	Status     CdpStatusCmd     `cmd:"" help:"Check Chrome DevTools Protocol availability"`
+	Spa        CdpSpaCmd        `cmd:"" help:"SPA-aware remote desktop interaction (selkies)"`
 }
 
 // CdpAxtreeCmd retrieves the Chrome accessibility tree via CDP.

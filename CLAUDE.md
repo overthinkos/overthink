@@ -112,7 +112,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (~143 layers)
++-- layers/<name>/            # Layer directories (~146 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -214,7 +214,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `start` (`--enable/--enable=false`), `stop`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` | `/ov:service` |
-| `cdp` | `/ov:cdp` |
+| `cdp`, `cdp spa` (click, type, key, key-combo, mouse, status) | `/ov:cdp` |
 | `wl sway` | `/ov:wl` (sway subgroup) |
 | `record start/stop/list/cmd/term` | `/ov:record` |
 | `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
@@ -320,6 +320,7 @@ For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` comm
 `/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
 Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://localhost:3000` (HTTPS with self-signed Traefik cert — required for WebCodecs secure context). NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
 **Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (pixelflux-screenshot via capture bridge), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Screenshots work with or without a browser connected (capture bridge auto-switches between controller/viewer modes). Includes `wl-tools` + `a11y-tools` layers.
+**Client-side interaction (browser-based RD):** The Selkies SPA uses a transparent `input#overlayInput` (z-index 3) on top of `canvas#videoCanvas` (z-index 2, pointer-events: none) to capture mouse/keyboard events. Events pass through the SPA's JavaScript → WebSocket → labwc. Keyboard passthrough works via VNC type, wtype, or CDP Input.dispatchKeyEvent — the SPA's onkeydown handler captures with stopImmediatePropagation. **Limitation:** Super key consumed by the client's compositor, Ctrl+T/W consumed by the client's Chrome — browser-based RD cannot forward compositor or browser shortcuts. Mouse coordinates have ~0.82x scaling between input and remote cursor position. Session state (all windows, typed text) survives client disconnection. See `/ov-images:selkies-desktop` for full DOM structure and coordinate mapping.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -368,10 +369,11 @@ Examples where multiple skills cover one topic:
 
 ### Desktop Automation Hierarchy
 
-Six abstraction levels for interacting with container desktops:
+Seven abstraction levels for interacting with container desktops:
 
 | Level | Skill | Interface | When to use |
 |-------|-------|-----------|-------------|
+| SPA | `/ov:cdp` spa | CDP Input events via SPA overlay | Remote desktop through browser (selkies) -- bypasses local compositor/Chrome shortcuts |
 | Semantic | `/ov:wl` atspi | AT-SPI2 tree | Find elements by name/role -- most reliable for non-web UIs |
 | DOM | `/ov:cdp` | CSS selectors, JS eval | Chrome content -- structured, fast |
 | AX Tree | `/ov:cdp` axtree | CDP Accessibility | Chrome UI elements, menus, buttons via CDP |
@@ -379,6 +381,7 @@ Six abstraction levels for interacting with container desktops:
 | Pixel | `/ov:vnc` | VNC coordinates, framebuffer | Remote access -- when TCP connectivity needed |
 | Window | `ov wl sway` | Sway IPC (swaymsg) | Sway-only: tree, layout, move, resize, workspaces |
 
+**CDP → SPA bridge:** Use `ov cdp spa key-combo <image> <tab> super+e` to send modifier combos (Super, Ctrl+T, Alt+F4) through the SPA to the remote desktop. CDP Input events bypass the local compositor and Chrome shortcut handlers -- this is the only way to send these combos to the remote desktop. Use `ov cdp spa click --scale 0.824,0.836` for coordinate-corrected mouse clicks on the SPA canvas.
 **CDP → WL bridge:** Use `ov cdp click <image> <tab> <selector> --wl` to find elements by CSS selector and click via wlrctl. Critical for selkies-desktop (no VNC server). Same pattern as `--vnc` but uses Wayland pointer.
 
 ### ov-dev Agents

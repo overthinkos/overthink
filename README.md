@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-143 layers. 35 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+146 layers. 35 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -158,7 +158,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Desktop Environments
 
-**sway** — Wayland compositor (wlroots, full desktop). **labwc** — Lightweight Wayland compositor (wlroots, nested desktop for Selkies streaming). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222`. **selkies** — Browser-accessible desktop streaming via pixelflux (Wayland capture) and pcmflux (audio) on `:3000` (HTTPS via Traefik with self-signed cert).
+**sway** — Wayland compositor (wlroots, full desktop). **labwc** — Lightweight Wayland compositor (wlroots, nested desktop for Selkies streaming). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222`. **selkies** — Browser-accessible desktop streaming via pixelflux (Wayland capture) and pcmflux (audio) on `:3000` (HTTPS via Traefik with self-signed cert — required for WebCodecs). Full mouse and keyboard passthrough via WebSocket. H.264 video at 60fps + Opus audio. Session state survives client disconnection.
 
 ### Applications
 
@@ -246,6 +246,11 @@ ov cdp axtree <image> <tab> [query]   # Chrome accessibility tree
 ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, capture
 ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
 ov cdp status <image>                  # Check CDP availability and port
+ov cdp spa click <image> <tab> <x> <y> # Click at canvas coords (SPA scale correction)
+ov cdp spa type <image> <tab> <text>   # Type into remote desktop via SPA
+ov cdp spa key <image> <tab> <key>     # Send key press via SPA
+ov cdp spa key-combo <image> <tab> <combo> # Modifier combo (super+e, ctrl+t, alt+F4)
+ov cdp spa mouse/status                # Move pointer, show SPA state
 ov vnc screenshot/click/type/key       # VNC framebuffer interaction
 ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
 ov vnc status <image>                  # Check VNC server, show resolution

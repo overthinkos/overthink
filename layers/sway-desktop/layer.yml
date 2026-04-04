@@ -3,6 +3,7 @@ layers:
   - xdg-portal
   - wl-tools
   - wl-screenshot-grim
+  - wl-overlay
   - wf-recorder
   - chrome-sway
   - xfce4-terminal

@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  all:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/ov-overlay ~/.local/bin/ov-overlay
+      - chmod +x ~/.local/bin/ov-overlay

@@ -3,4 +3,5 @@ layers:
   - xdg-portal-niri
   - niri
   - chrome-niri
+  - wl-overlay
   - niri-apps

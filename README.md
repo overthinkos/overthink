@@ -166,7 +166,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -175,12 +175,12 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 ### Composing Layers
 
 Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + desktop-fonts + swaync + pavucontrol + tmux + asciinema + fastfetch. Base desktop — no display server.
+**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wl-overlay + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + desktop-fonts + swaync + pavucontrol + tmux + asciinema + fastfetch. Base desktop — no display server.
 **sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
 **niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
 **x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
 **mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + desktop-fonts + swaync + pavucontrol + wl-tools + wl-screenshot-pixelflux + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000 (HTTPS via Traefik with self-signed cert — required for WebCodecs). labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via a self-healing capture bridge that taps into the selkies WebSocket stream, auto-switching between controller mode (no browser) and viewer mode (browser active). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
+**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + desktop-fonts + swaync + pavucontrol + wl-tools + wl-screenshot-pixelflux + wl-overlay + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000 (HTTPS via Traefik with self-signed cert — required for WebCodecs). labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via a self-healing capture bridge that taps into the selkies WebSocket stream, auto-switching between controller mode (no browser) and viewer mode (browser active). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
 **bootc-base** = sshd + guest agent + bootc config.
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
@@ -269,6 +269,16 @@ ov wl sway msg/tree/workspaces/outputs # Sway IPC commands (requires sway)
 ov wl sway focus/move/resize/kill      # Sway window management
 ov wl sway layout/workspace/floating   # Sway layout and workspace control
 ov wl sway reload                      # Reload sway configuration
+ov wl overlay show <image> --type text --text "Hello" --name intro  # Show overlay
+ov wl overlay show <image> --type lower-third --text "Name" --subtitle "Role"
+ov wl overlay show <image> --type countdown --seconds 3    # Auto-hiding countdown
+ov wl overlay show <image> --type highlight --region "X,Y,W,H"  # Highlight region
+ov wl overlay show <image> --type fade --color black       # Fade to black
+ov wl overlay show <image> --type watermark --text "DRAFT" # Corner watermark
+ov wl overlay hide <image> --name intro   # Remove specific overlay
+ov wl overlay hide <image> --all          # Remove all overlays
+ov wl overlay list <image>                # List active overlays (JSON)
+ov wl overlay status <image>              # Check overlay daemon health
 ```
 
 ### Command Execution

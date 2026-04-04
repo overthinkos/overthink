@@ -8,6 +8,7 @@ layers:
   - pavucontrol
   - wl-tools
   - wl-screenshot-pixelflux
+  - wl-overlay
   - wl-record-pixelflux
   - a11y-tools
   - xterm

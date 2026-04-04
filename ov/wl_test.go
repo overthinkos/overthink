@@ -185,4 +185,5 @@ func TestWlCmdSubcommands(t *testing.T) {
 	_ = cmd.Xprop
 	_ = cmd.Geometry
 	_ = cmd.Atspi
+	_ = cmd.Overlay
 }

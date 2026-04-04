@@ -35,6 +35,7 @@ type WlCmd struct {
 	Xprop       WlXpropCmd       `cmd:"" help:"Query X11 window properties (via xprop)"`
 	Geometry    WlGeometryCmd    `cmd:"" help:"Get window geometry (compositor-agnostic)"`
 	Atspi       WlAtspiCmd       `cmd:"" help:"Query accessibility tree (via AT-SPI2)"`
+	Overlay     WlOverlayCmd     `cmd:"" help:"Manage fullscreen overlays (via gtk4-layer-shell)"`
 	Sway        WlSwayCmd        `cmd:"" help:"Sway-specific compositor commands (requires sway)"`
 }
 

@@ -310,7 +310,7 @@ Real tasks chain through skills in predictable patterns:
 **Desktop automation:**
 `/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (compositor-agnostic: screenshots, input, window mgmt, clipboard, AT-SPI2) -> `/ov:wl` sway subgroup (sway-only: tree, layout, move, resize)
 Use CDP first. Use `ov cdp click --wl` for selkies-desktop (no VNC). Use `ov wl` for screenshots, input, window management (`toplevel`, `close`, `fullscreen`), clipboard, and AT-SPI2 accessibility (`ov wl atspi find/click`). Use `ov wl sway` for sway-specific IPC features (tree, workspaces, layout, move, resize).
-On NVIDIA headless: `ov wl` is the primary tool — VNC screenshots are gray (upstream wayvnc bug), but `ov wl screenshot` works perfectly with gles2.
+On NVIDIA headless: Both `ov vnc screenshot` and `ov wl screenshot` work correctly. VNC images use pixman (software renderer) via `sway-desktop-vnc`, with a DPMS workaround for wayvnc 0.9.1's headless power event bug.
 For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` commands are sway-specific and won't work on labwc.
 
 **Deploy a service:**

@@ -1,3 +1,6 @@
 layers:
   - sway-desktop
   - wayvnc
+
+env:
+  WLR_RENDERER: "pixman"

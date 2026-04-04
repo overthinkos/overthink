@@ -5,6 +5,7 @@ go 1.25.3
 require (
 	github.com/alecthomas/kong v1.14.0
 	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/google/go-containerregistry v0.20.7
 	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/tobischo/gokeepasslib/v3 v3.6.2
@@ -23,7 +24,6 @@ require (
 	github.com/docker/cli v29.0.3+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
-	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect

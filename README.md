@@ -166,7 +166,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Utilities
 
-**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -271,6 +271,16 @@ ov wl sway layout/workspace/floating   # Sway layout and workspace control
 ov wl sway reload                      # Reload sway configuration
 ```
 
+### Command Execution
+
+```
+ov cmd <image> "command"               # Run command in running container (with notification)
+ov dbus notify <image> "title" "body"  # Send desktop notification via D-Bus
+ov dbus list <image>                   # List available D-Bus services
+ov dbus call <image> <dest> <path> <method> [args...]  # Generic D-Bus method call
+ov dbus introspect <image> <dest> <path>  # Introspect D-Bus service
+```
+
 ### Recording
 
 ```
@@ -280,13 +290,13 @@ ov record start <image> -m desktop     # Record desktop video (pixelflux/wf-reco
 ov record stop <image> [-n NAME] [-o F] # Stop recording, optionally copy to host
 ov record list <image>                 # List active recordings
 ov record cmd <image> "command"        # Send command to recording terminal
-ov record term <image> "command"       # Run command in visible desktop terminal
 ```
 
 ### Persistent Sessions
 
 ```
 ov tmux shell <image>                  # Persistent shell (survives disconnects)
+ov tmux cmd <image> "cmd" -s <name>    # Send command to tmux session (with notification)
 ov tmux run <image> -s <name> "cmd"    # Start command in detached tmux session
 ov tmux attach <image> -s <name>       # Attach to session interactively
 ov tmux list <image>                   # List active sessions

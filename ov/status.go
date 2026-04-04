@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -371,6 +372,79 @@ func extractPortFromAddress(address string) int {
 
 // --- Tool probing ---
 
+// checkSupervisordStatus checks if supervisord is running and reports service counts.
+func checkSupervisordStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "supervisord", Status: "-"}
+
+	cmd := exec.Command(engine, "exec", containerName, "which", "supervisorctl")
+	if cmd.Run() != nil {
+		return ts
+	}
+
+	cmd = exec.Command(engine, "exec", containerName, "supervisorctl", "status")
+	out, err := cmd.Output()
+	if err != nil {
+		// supervisorctl exits 3 when any service isn't RUNNING, but still
+		// produces valid status output. Only treat as unreachable when
+		// there's genuinely no output (supervisord not running / socket error).
+		var exitErr *exec.ExitError
+		if !(errors.As(err, &exitErr) && len(out) > 0) {
+			ts.Status = "unreachable"
+			return ts
+		}
+	}
+
+	ts.Status = "ok"
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	running := 0
+	for _, line := range lines {
+		if strings.Contains(line, "RUNNING") {
+			running++
+		}
+	}
+	ts.Detail = fmt.Sprintf("%d/%d running", running, len(lines))
+	return ts
+}
+
+// checkDbusStatus checks D-Bus session bus availability inside a container.
+func checkDbusStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "dbus", Status: "-"}
+
+	cmd := exec.Command(engine, "exec", containerName, "sh", "-c", "pgrep -x dbus-daemon >/dev/null 2>&1")
+	if cmd.Run() != nil {
+		return ts
+	}
+
+	ts.Status = "ok"
+
+	var daemons []string
+	for _, daemon := range []string{"swaync", "mako", "dunst"} {
+		check := fmt.Sprintf("pgrep -x %s >/dev/null 2>&1", daemon)
+		cmd := exec.Command(engine, "exec", containerName, "sh", "-c", check)
+		if cmd.Run() == nil {
+			daemons = append(daemons, daemon)
+		}
+	}
+	if len(daemons) > 0 {
+		ts.Detail = "notify:" + strings.Join(daemons, ",")
+	}
+	return ts
+}
+
+// checkOvStatus checks if the ov binary is available inside a container.
+func checkOvStatus(engine, containerName string) ToolStatus {
+	ts := ToolStatus{Name: "ov", Status: "-"}
+	if checkToolAvailable(engine, containerName, "ov") != nil {
+		return ts
+	}
+	ts.Status = "ok"
+	cmd := exec.Command(engine, "exec", containerName, "ov", "version")
+	if out, err := cmd.CombinedOutput(); err == nil {
+		ts.Detail = strings.TrimSpace(string(out))
+	}
+	return ts
+}
+
 // probeAllTools probes all desktop tools concurrently for a running container.
 func probeAllTools(engine, containerName, imageName, instance string) []ToolStatus {
 	type indexedResult struct {
@@ -378,10 +452,13 @@ func probeAllTools(engine, containerName, imageName, instance string) []ToolStat
 		ts    ToolStatus
 	}
 	checks := []func() ToolStatus{
+		func() ToolStatus { return checkSupervisordStatus(engine, containerName) },
 		func() ToolStatus { return checkCdpStatus(engine, containerName) },
 		func() ToolStatus { return checkVncStatus(imageName, instance) },
 		func() ToolStatus { return checkSwayStatus(engine, containerName) },
 		func() ToolStatus { return checkWlStatus(engine, containerName) },
+		func() ToolStatus { return checkDbusStatus(engine, containerName) },
+		func() ToolStatus { return checkOvStatus(engine, containerName) },
 	}
 
 	results := make([]ToolStatus, len(checks))

@@ -209,15 +209,17 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 |----------|-------|
 | `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
 | `build`, `merge` | `/ov:build` |
+| `cmd <image> <command>` | Single command execution in running container (with D-Bus notification) |
 | `shell` | `/ov:shell` |
+| `dbus` (notify, call, list, introspect) | D-Bus interaction inside containers via native Go `godbus/dbus/v5` |
 | `config <image>` (setup: quadlet + secrets + encrypted volumes), `config remove <image>`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` (encrypted volumes) |
 | `start` (`--enable/--enable=false`), `stop`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` | `/ov:service` |
 | `cdp`, `cdp spa` (click, type, key, key-combo, mouse, status) | `/ov:cdp` |
 | `wl sway` | `/ov:wl` (sway subgroup) |
-| `record start/stop/list/cmd/term` | `/ov:record` |
-| `tmux shell/run/attach/list/capture/send/kill` | `/ov:tmux` |
+| `record start/stop/list/cmd` | `/ov:record` |
+| `tmux shell/cmd/run/attach/list/capture/send/kill` | `/ov:tmux` |
 | `vnc` | `/ov:vnc` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
@@ -243,7 +245,7 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 Skills: `/ov:deploy` -> `/ov:service` (lifecycle)
 
 **Record a session:**
-`ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` / `ov record term` (interact) -> `ov record stop <image> -o output`
+`ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` (interact) -> `ov record stop <image> -o output`
 Skills: `/ov:record` -> `/ov-layers:wl-record-pixelflux` or `/ov-layers:wf-recorder` (desktop) or `/ov-layers:asciinema` (terminal)
 
 **Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov settings set engine.build podman`.
@@ -364,6 +366,8 @@ Examples where multiple skills cover one topic:
 - **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer)
 - **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer)
 - **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer)
+- **D-Bus/Notifications:** `ov dbus` (native Go D-Bus commands) vs `/ov-layers:dbus` (session bus layer) vs `/ov-layers:swaync` (notification daemon) vs `/ov-layers:libnotify` (`notify-send` CLI)
+- **Command Execution:** `ov cmd` (single command with notification) vs `ov shell -c` (full container setup) vs `ov tmux cmd` (send to tmux session) vs `ov record cmd` (send to recording session)
 - **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 

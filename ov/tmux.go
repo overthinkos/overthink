@@ -11,6 +11,7 @@ import (
 // TmuxCmd manages tmux sessions inside running containers.
 type TmuxCmd struct {
 	Shell   TmuxShellCmd   `cmd:"" help:"Persistent shell — creates or reattaches to a tmux session"`
+	Cmd     TmuxCmdCmd     `cmd:"" help:"Send a command to a tmux session (with notification)"`
 	Run     TmuxRunCmd     `cmd:"" help:"Start a command in a new detached tmux session"`
 	Attach  TmuxAttachCmd  `cmd:"" help:"Attach to an existing tmux session (interactive)"`
 	List    TmuxListCmd    `cmd:"" help:"List active tmux sessions"`
@@ -50,6 +51,41 @@ func (c *TmuxShellCmd) Run() error {
 	// Create new session and attach (new-session without -d attaches immediately)
 	args := []string{engine, "exec", "-it", name, "tmux", "new-session", "-s", c.Session}
 	return syscall.Exec(enginePath, args, os.Environ())
+}
+
+// TmuxCmdCmd sends a command to an existing tmux session with notification.
+type TmuxCmdCmd struct {
+	Image    string `arg:"" help:"Image name"`
+	Command  string `arg:"" help:"Command to send"`
+	Session  string `short:"s" long:"session" required:"" help:"Session name"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
+	Notify   bool   `long:"notify" negatable:"" default:"true" help:"Send desktop notification (--no-notify to disable)"`
+}
+
+func (c *TmuxCmdCmd) Run() error {
+	engine, name, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	if err := checkTmuxInstalled(engine, name); err != nil {
+		return err
+	}
+	if !tmuxHasSession(engine, name, c.Session) {
+		return fmt.Errorf("tmux session %q not found in %s (use 'ov tmux list' to see sessions)", c.Session, name)
+	}
+
+	if err := sendTmuxCommand(engine, name, c.Session, c.Command); err != nil {
+		return err
+	}
+
+	if c.Notify {
+		sendContainerNotification(engine, name,
+			fmt.Sprintf("ov: sent to %s", c.Session),
+			c.Command)
+	}
+
+	fmt.Fprintf(os.Stderr, "Sent to %s: %s\n", c.Session, c.Command)
+	return nil
 }
 
 // TmuxRunCmd starts a command in a new detached tmux session.
@@ -239,4 +275,15 @@ func captureTmux(engine, containerName string, args ...string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// sendTmuxCommand sends a command string followed by Enter to a tmux session.
+func sendTmuxCommand(engine, containerName, session, command string) error {
+	if err := execTmux(engine, containerName, "send-keys", "-t", session, "-l", command); err != nil {
+		return fmt.Errorf("sending command to session %s: %w", session, err)
+	}
+	if err := execTmux(engine, containerName, "send-keys", "-t", session, "Enter"); err != nil {
+		return fmt.Errorf("sending Enter to session %s: %w", session, err)
+	}
+	return nil
 }

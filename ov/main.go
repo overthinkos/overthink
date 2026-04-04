@@ -16,7 +16,9 @@ type CLI struct {
 	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
 	Build    BuildCmd    `cmd:"" help:"Build container images"`
 	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
+	Cmd      CmdCmd      `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config   ImageConfigCmd `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Dbus     DbusCmd     `cmd:"" help:"Interact with D-Bus services inside containers"`
 	Deploy   DeployCmd      `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor   DoctorCmd      `cmd:"" help:"Check host dependencies and report status"`
 	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`

@@ -14,7 +14,6 @@ type RecordCmd struct {
 	Stop  RecordStopCmd  `cmd:"" help:"Stop a recording session and save output"`
 	List  RecordListCmd  `cmd:"" help:"List active recording sessions"`
 	Cmd   RecordCmdCmd   `cmd:"" help:"Send a command to the recording's terminal"`
-	Term  RecordTermCmd  `cmd:"" help:"Run a command in a visible desktop terminal"`
 }
 
 // RecordStartCmd starts a recording session inside a container.
@@ -259,75 +258,14 @@ func (c *RecordCmdCmd) Run() error {
 		return fmt.Errorf("no active recording %q (session %s not found)", c.Name, session)
 	}
 
-	// Send command text followed by Enter
-	if err := execTmux(engine, name, "send-keys", "-t", session, "-l", c.Command); err != nil {
-		return fmt.Errorf("sending command: %w", err)
-	}
-	if err := execTmux(engine, name, "send-keys", "-t", session, "Enter"); err != nil {
-		return fmt.Errorf("sending Enter: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Sent to %s: %s\n", session, c.Command)
-	return nil
-}
-
-// RecordTermCmd runs a command in a visible desktop terminal (for video recording).
-type RecordTermCmd struct {
-	Image    string `arg:"" help:"Image name"`
-	Command  string `arg:"" help:"Command to run in a visible terminal"`
-	Name     string `short:"n" long:"name" default:"default" help:"Recording name"`
-	Terminal string `long:"terminal" default:"" help:"Terminal emulator (auto-detected: xterm, xfce4-terminal)"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
-}
-
-func (c *RecordTermCmd) Run() error {
-	engine, name, err := resolveContainer(c.Image, c.Instance)
-	if err != nil {
+	if err := sendTmuxCommand(engine, name, session, c.Command); err != nil {
 		return err
 	}
 
-	// Warn if no active desktop recording (but don't error — the command is still useful)
-	session := recordSessionName(c.Name)
-	if !tmuxHasSession(engine, name, session) {
-		fmt.Fprintf(os.Stderr, "Warning: no active recording %q — terminal will still launch\n", c.Name)
-	}
+	sendContainerNotification(engine, name,
+		fmt.Sprintf("ov: sent to %s", session), c.Command)
 
-	// Auto-detect terminal emulator
-	term := c.Terminal
-	if term == "" {
-		var err error
-		term, err = detectTerminal(engine, name)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Build terminal command with -hold to keep window open after command exits.
-	// Wrap in sh -c so compound commands (&&, ||, ;) work correctly.
-	// Note: xterm -e takes all remaining args as a command. xfce4-terminal -e
-	// takes only ONE arg, so we use -x (--execute) which takes all remaining args.
-	wrappedCmd := fmt.Sprintf("sh -c %s", shellQuote(c.Command))
-	var termCmd string
-	switch term {
-	case "xterm":
-		// xterm is X11-only, needs DISPLAY for XWayland.
-		// xterm -e takes all remaining args as the command.
-		termCmd = fmt.Sprintf("DISPLAY=:0 xterm -hold -e %s", wrappedCmd)
-	case "xfce4-terminal":
-		// GTK/Wayland-native, doesn't need DISPLAY.
-		// -x (--execute) takes all remaining args (unlike -e which takes one).
-		termCmd = fmt.Sprintf("xfce4-terminal --hold -x %s", wrappedCmd)
-	default:
-		termCmd = fmt.Sprintf("%s -e %s", term, wrappedCmd)
-	}
-
-	// Launch via Wayland exec
-	shellCmd := fmt.Sprintf("%s &", termCmd)
-	if err := execWlCmd(engine, name, shellCmd); err != nil {
-		return fmt.Errorf("launching terminal: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Launched %q in %s (visible in desktop recording)\n", c.Command, term)
+	fmt.Fprintf(os.Stderr, "Sent to %s: %s\n", session, c.Command)
 	return nil
 }
 
@@ -398,17 +336,6 @@ func readRecordingMode(engine, containerName, name string) string {
 func cleanupModeFile(engine, containerName, name string) {
 	modeFile := "/tmp/ov-recordings/" + name + ".mode"
 	exec.Command(engine, "exec", containerName, "rm", "-f", modeFile).Run()
-}
-
-// detectTerminal finds the best available terminal emulator inside the container.
-func detectTerminal(engine, containerName string) (string, error) {
-	if checkToolAvailable(engine, containerName, "xterm") == nil {
-		return "xterm", nil
-	}
-	if checkToolAvailable(engine, containerName, "xfce4-terminal") == nil {
-		return "xfce4-terminal", nil
-	}
-	return "", fmt.Errorf("no terminal emulator available (need xterm or xfce4-terminal)")
 }
 
 // formatSize returns a human-readable file size string.

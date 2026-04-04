@@ -13,6 +13,7 @@ import (
 // These are project-level env files (KEY=VALUE), encrypted with GPG.
 type SecretsGpgCmd struct {
 	Show         SecretsGpgShowCmd         `cmd:"" help:"Decrypt and print .secrets to stdout"`
+	Env          SecretsGpgEnvCmd          `cmd:"" help:"Export decrypted .secrets as shell export statements"`
 	Edit         SecretsGpgEditCmd         `cmd:"" help:"Decrypt, edit in $EDITOR, re-encrypt"`
 	Encrypt      SecretsGpgEncryptCmd      `cmd:"" help:"Encrypt a plaintext env file to .secrets"`
 	Decrypt      SecretsGpgDecryptCmd      `cmd:"" help:"Decrypt .secrets to a plaintext file"`
@@ -36,6 +37,45 @@ func (c *SecretsGpgShowCmd) Run() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// --- env ---
+
+type SecretsGpgEnvCmd struct {
+	File string `short:"f" long:"file" default:".secrets" help:"Path to encrypted file"`
+}
+
+func (c *SecretsGpgEnvCmd) Run() error {
+	if err := requireGpg(); err != nil {
+		return err
+	}
+
+	// Silent skip if file doesn't exist (matches dotenv_gpg_if_exists behavior)
+	if _, err := os.Stat(c.File); os.IsNotExist(err) {
+		return nil
+	}
+
+	plaintext, err := gpgDecryptToBytes(c.File)
+	if err != nil {
+		return fmt.Errorf("decrypting %s: %w", c.File, err)
+	}
+
+	entries, err := ParseEnvBytes(plaintext)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		idx := strings.IndexByte(entry, '=')
+		if idx < 0 {
+			continue
+		}
+		key := entry[:idx]
+		value := entry[idx+1:]
+		fmt.Printf("export %s=%s\n", key, shellQuote(value))
+	}
+
+	return nil
 }
 
 // --- edit ---

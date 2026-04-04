@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -58,17 +59,19 @@ func LoadProcessDotenv(dir string) error {
 // Skips comments (#), blank lines, and supports KEY=VALUE and KEY="VALUE" (strips quotes).
 // Compatible with docker --env-file format.
 func ParseEnvFile(path string) ([]string, error) {
-	f, err := os.Open(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading env file %s: %w", path, err)
 	}
-	defer f.Close()
+	return ParseEnvBytes(data)
+}
 
+// ParseEnvBytes parses KEY=VALUE entries from raw bytes.
+// Skips comments (#), blank lines, and strips surrounding quotes from values.
+func ParseEnvBytes(data []byte) ([]string, error) {
 	var envs []string
-	scanner := bufio.NewScanner(f)
-	lineNum := 0
+	scanner := bufio.NewScanner(bytes.NewReader(data))
 	for scanner.Scan() {
-		lineNum++
 		line := strings.TrimSpace(scanner.Text())
 
 		// Skip blank lines and comments
@@ -99,7 +102,7 @@ func ParseEnvFile(path string) ([]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("reading env file %s: %w", path, err)
+		return nil, fmt.Errorf("parsing env data: %w", err)
 	}
 
 	return envs, nil

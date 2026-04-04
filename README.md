@@ -116,26 +116,24 @@ cd ov && go build -o ../bin/ov .
 
 ### Secret Management
 
-Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that direnv decrypts in memory when you enter the directory. No plaintext on disk.
+Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that `ov secrets gpg env` decrypts in memory when direnv loads the directory. No plaintext on disk.
 
 **Prerequisites:**
 - GPG key and gpg-agent running (locally or forwarded via SSH)
 - direnv installed and hooked into your shell
-- Custom `dotenv_gpg` function installed from [`gpg-agent-setup`](../gpg-agent-setup)
+- `ov` installed (provides `ov secrets gpg env`)
 
 **Setup:**
 ```bash
-# Install the custom direnvrc (one-time)
-cp ~/Atrapub/gpg-agent-setup/direnv/direnvrc ~/.config/direnv/direnvrc
-
-# Allow direnv in this project
+# Allow direnv in this project (one-time)
 direnv allow
 ```
 
-After setup, `cd`ing into the project automatically decrypts `.secrets` and exports the variables. See `.env.example` for the list of available variables. See `gpg-agent-setup/CLAUDE.md` for the full GPG agent setup guide.
+After setup, `cd`ing into the project automatically decrypts `.secrets` and exports the variables. The `.envrc` uses `eval "$(ov secrets gpg env)"` — no external direnvrc dependency needed.
 
 **Managing .secrets with ov:**
 ```bash
+ov secrets gpg env                                        # Decrypt for direnv/eval
 ov secrets gpg encrypt -r <KEY_ID> -i .env -o .secrets   # Encrypt
 ov secrets gpg show                                       # View contents
 ov secrets gpg set API_KEY sk-test-abc                    # Add/update a key
@@ -388,6 +386,7 @@ ov settings migrate-secrets [--dry-run]        # Move plaintext creds to system 
 ov secrets init [path]                         # Create KeePass .kdbx database
 ov secrets list/get/set/delete                 # Manage kdbx entries directly
 ov secrets import [--dry-run]                  # Import creds into kdbx from config/keyring
+ov secrets gpg env [-f FILE]                   # Decrypt .secrets for shell eval / direnv
 ov secrets gpg show/edit/encrypt/decrypt       # Manage GPG-encrypted .secrets files
 ov secrets gpg set/unset KEY [VALUE]           # Add/remove keys in .secrets
 ov secrets gpg add-recipient/recipients        # Manage GPG recipients
@@ -441,7 +440,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 197 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 204 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

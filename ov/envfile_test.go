@@ -40,6 +40,36 @@ MULTI=hello world
 	}
 }
 
+func TestParseEnvBytes(t *testing.T) {
+	content := []byte(`# This is a comment
+FOO=bar
+BAZ="quoted value"
+SINGLE='single quoted'
+EMPTY=
+NOVALUE
+
+# Another comment
+MULTI=hello world
+`)
+
+	got, err := ParseEnvBytes(content)
+	if err != nil {
+		t.Fatalf("ParseEnvBytes() error: %v", err)
+	}
+
+	want := []string{
+		"FOO=bar",
+		"BAZ=quoted value",
+		"SINGLE=single quoted",
+		"EMPTY=",
+		"NOVALUE",
+		"MULTI=hello world",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ParseEnvBytes() =\n  %v\nwant\n  %v", got, want)
+	}
+}
+
 func TestParseEnvFileNotFound(t *testing.T) {
 	_, err := ParseEnvFile("/nonexistent/.env")
 	if err == nil {

@@ -53,13 +53,13 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 **Project-Level Environment Secrets (direnv + GPG)** -- Separate from ov's credential store:
 - Project-level env vars (e.g., `GMAIL_USER`, `GMAIL_PASSWORD`) are stored in `.secrets` — a GPG-encrypted file containing `KEY=VALUE` lines (same format as `.env`)
-- `.envrc` calls `dotenv_gpg_if_exists` which decrypts `.secrets` in memory via gpg-agent — no plaintext on disk
-- The `dotenv_gpg` / `dotenv_gpg_if_exists` functions come from `~/Atrapub/gpg-agent-setup/direnv/direnvrc` (must be installed to `~/.config/direnv/direnvrc`)
+- `.envrc` calls `eval "$(ov secrets gpg env)"` which decrypts `.secrets` in memory via gpg-agent — no plaintext on disk. No external `direnvrc` dependency needed
 - Prerequisites: gpg-agent running with passphrase cached (locally via KeePassXC/pinentry, or remotely via SSH agent forwarding)
-- Managed via `ov secrets gpg` subcommands: `show`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`. All shell out to `gpg`. Example: `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
+- Managed via `ov secrets gpg` subcommands: `show`, `env`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`. All shell out to `gpg`. Example: `eval "$(ov secrets gpg env)"` to load secrets, `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
+- `ov secrets gpg env` silently exits 0 if `.secrets` doesn't exist (safe for `.envrc`). Outputs `export KEY='value'` lines parsed via `ParseEnvBytes` (skips comments/blanks, strips quotes)
 - `.secrets` is gitignored (`.gitignore`). `.env` is also gitignored and Syncthing-ignored
 - **Distinction:** `.secrets`/direnv handles project-level shell env vars loaded before any command. ov's credential store (`ov secrets`, keyring, kdbx) handles container-level secrets (VNC passwords, service credentials) provisioned at `ov config` time
-- Source: `~/Atrapub/gpg-agent-setup/direnv/direnvrc` (functions), `~/Atrapub/gpg-agent-setup/CLAUDE.md` (full setup guide)
+- Source: `ov/secrets_gpg.go` (`SecretsGpgEnvCmd`, GPG subcommands), `ov/envfile.go` (`ParseEnvBytes`)
 
 **Volume Management** -- Unified deploy-time volume backing:
 - Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
@@ -247,7 +247,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `alias` | `/ov:alias` |
 | `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
 | `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
-| `secrets gpg` (show, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
+| `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
 | `udev status/generate/install/remove` | `/ov:service` |
 | `vm` | `/ov:vm` |
 | `doctor` | Host dependency + secret storage checks (no skill -- standalone diagnostic) |
@@ -278,8 +278,8 @@ Use `/ov:wl-overlay` for in-recording overlays (title cards, lower-thirds, count
 
 ## Task Commands (bootstrap only)
 
-- `task build:ov` -- Build ov from source into `bin/ov`
-- `task build:install` -- Build and install ov to `~/.local/bin`
+- `task build:ov` -- Build ov from source into `bin/ov` and install as Arch package (auto-calls `build:install`)
+- `task build:install` -- Install ov as Arch package (uses pre-built binary from `bin/ov` via PKGBUILD, fast ~2s)
 - `task setup:builder` -- Create multi-platform buildx builder
 - `task setup:all` -- Full setup (build ov + create builder)
 

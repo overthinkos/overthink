@@ -2,16 +2,18 @@ version: '3'
 
 tasks:
   ov:
-    desc: Build ov from source
+    desc: Build ov from source and install as Arch package
     dir: "{{.ROOT_DIR}}"
     cmds:
       - mkdir -p bin layers/ov/bin
       - cd ov && go build -o ../bin/ov .
       - cp bin/ov layers/ov/bin/ov
+      - task: install
 
   install:
-    desc: Build and install ov to ~/.local/bin
-    dir: "{{.ROOT_DIR}}"
+    desc: Install ov as Arch package
+    dir: "{{.ROOT_DIR}}/pkg/arch"
     cmds:
-      - mkdir -p ~/.local/bin
-      - cd ov && go build -o ~/.local/bin/ov .
+      - mkdir -p src/ov-git
+      - cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
+      - makepkg -efi --noconfirm

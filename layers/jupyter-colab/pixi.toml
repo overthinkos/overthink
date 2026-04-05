@@ -1,0 +1,50 @@
+[project]
+name = "jupyter-colab"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64"]
+
+[dependencies]
+python = ">=3.13,<3.14"
+pip = "*"
+
+# JupyterLab core
+jupyterlab = ">=4.4.0"
+ipywidgets = ">=8.0"
+ipykernel = "*"
+nbconvert = "*"
+nbformat = "*"
+
+# Extensions
+jupyterlab-git = "*"
+jupyter-resource-usage = "*"
+
+# Data science essentials
+matplotlib = "*"
+seaborn = "*"
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+scipy = "*"
+tqdm = "*"
+
+# Data processing
+polars = "*"
+pyarrow = "*"
+duckdb = "*"
+
+# Utilities
+black = "*"
+pytest = "*"
+graphviz = "*"
+pyyaml = "*"
+
+[pypi-dependencies]
+jupyter-collaboration = ">=4.1.0"
+
+[tasks]
+start-jupyter = "bash -c 'if [ -n \"${JUPYTER_TOKEN_FILE:-}\" ] && [ -f \"${JUPYTER_TOKEN_FILE}\" ]; then TOKEN=$(cat \"${JUPYTER_TOKEN_FILE}\"); jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token=\"$TOKEN\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; else jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token=\"\" --ServerApp.password=\"\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; fi'"
+verify-jupyter = "python -c 'import jupyterlab; print(f\"JupyterLab: {jupyterlab.__version__}\")'"
+verify-collaboration = "python -c 'import jupyter_collaboration; print(f\"jupyter-collaboration: {jupyter_collaboration.__version__}\")'"
+
+[environments]
+default = { features = [], solve-group = "default" }

@@ -211,6 +211,16 @@ images:
     platforms:
       - linux/amd64
 
+  jupyter-colab:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - jupyter-colab
+      - dbus
+      - ov
+    ports:
+      - "8888:8888"
+
   ollama:
     base: nvidia
     layers:

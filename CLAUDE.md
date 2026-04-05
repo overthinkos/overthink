@@ -133,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (146 layers)
++-- layers/<name>/            # Layer directories (147 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -382,6 +382,7 @@ Rule of thumb:
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
 Examples where multiple skills cover one topic:
+- **Jupyter:** `/ov-layers:jupyter` (GPU/ML layer) vs `/ov-layers:jupyter-colab` (lightweight + collaboration) vs `/ov-images:jupyter` (GPU image) vs `/ov-images:jupyter-colab` (lightweight image)
 - **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)

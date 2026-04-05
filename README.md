@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-151 layers. 37 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+151 layers. 38 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -182,7 +182,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### GPU & Machine Learning
 
-**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **llama-cpp** — llama.cpp prebuilt binaries (llama-quantize, llama-cli) and GGUF conversion tools. Post-install layer — no pixi.toml, composable into any ML environment. **python-ml** — Core ML Python environment with PyTorch, vLLM runtime deps, and HuggingFace on top of CUDA. Meta-layer that composes `llama-cpp`. **jupyter** — Jupyter + ML libraries on `:8888`. **jupyter-colab** — Lightweight JupyterLab with real-time collaboration (jupyter-collaboration) on `:8888`, plus a built-in MCP server at `/mcp` for programmatic notebook access (13 tools: create/read/edit/execute cells, watch for changes, manage collaboration rooms). AI agents and humans can edit the same notebook simultaneously via CRDT. No GPU required. **jupyter-colab-ml** — Full CUDA ML stack + JupyterLab with real-time collaboration and CRDT MCP server on `:8888`. Combines the collaboration and MCP features of jupyter-colab with the complete ML training stack (PyTorch, vLLM, Unsloth, LangChain, evaluation tools). Meta-layer that composes `llama-cpp` + `unsloth`. **unsloth** — Unsloth LLM fine-tuning library with vLLM integration. Post-install layer — requires pixi environment from a parent layer (python-ml, jupyter-colab-ml, or unsloth-studio). **unsloth-studio** — Unsloth Studio fine-tuning web UI on `:8888` + vLLM API on `:8000`. Environment-owner meta-layer that composes `llama-cpp` + `unsloth` and owns its pixi.toml. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
+**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **llama-cpp** — llama.cpp prebuilt binaries (llama-quantize, llama-cli) and GGUF conversion tools. Post-install layer — no pixi.toml, composable into any ML environment. **python-ml** — Core ML Python environment with PyTorch, vLLM runtime deps, and HuggingFace on top of CUDA. Meta-layer that composes `llama-cpp`. **jupyter** — Jupyter + ML libraries on `:8888`. **jupyter-colab** — Lightweight JupyterLab with real-time collaboration (jupyter-collaboration) on `:8888`, plus a built-in MCP server at `/mcp` for programmatic notebook access (13 tools: create/read/edit/execute cells, watch for changes, manage collaboration rooms). AI agents and humans can edit the same notebook simultaneously via CRDT. No GPU required. **jupyter-colab-ml** — Full CUDA ML stack + JupyterLab with real-time collaboration and CRDT MCP server on `:8888`. Combines the collaboration and MCP features of jupyter-colab with the complete ML training stack (PyTorch, vLLM, Unsloth, LangChain, evaluation tools). Meta-layer that composes `llama-cpp` + `unsloth`. **jupyter-colab-ml-finetuning** — jupyter-colab-ml plus 37 Unsloth fine-tuning notebooks (SFT, GRPO, DPO, RLOO, QLoRA) provisioned into `~/workspace/finetuning/` at deploy time. **unsloth** — Unsloth LLM fine-tuning library with vLLM integration. Post-install layer — requires pixi environment from a parent layer (python-ml, jupyter-colab-ml, or unsloth-studio). **unsloth-studio** — Unsloth Studio fine-tuning web UI on `:8888` + vLLM API on `:8000`. Environment-owner meta-layer that composes `llama-cpp` + `unsloth` and owns its pixi.toml. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
 
 ### Desktop Environments
 
@@ -214,6 +214,7 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
 **python-ml** = cuda + llama-cpp. Core ML Python environment (meta-layer with pixi.toml).
 **jupyter-colab-ml** = cuda + llama-cpp + unsloth. Full ML + JupyterLab with CRDT MCP (meta-layer with pixi.toml).
+**jupyter-colab-ml-finetuning** = jupyter-colab-ml + notebook-templates + finetuning-notebooks. ML Jupyter with fine-tuning notebook collection.
 **unsloth-studio** = cuda + llama-cpp + unsloth. Fine-tuning studio with vLLM (meta-layer with pixi.toml).
 
 ### Data Layers
@@ -223,11 +224,11 @@ Some layers provide **data** instead of packages or services. A data layer uses 
 ```yaml
 # layers/notebook-templates/layer.yml
 volumes:
-  - name: notebooks
-    path: ~/notebooks
+  - name: workspace
+    path: ~/workspace
 data:
   - src: data/notebooks
-    volume: notebooks
+    volume: workspace
 ```
 
 At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories. `ov update` merges new data files non-destructively. Data layers need no packages, services, or install files — just data and a volume declaration.
@@ -265,10 +266,10 @@ ov merge <image> [--dry-run] [--max-total-mb N]  # Merge small layers in built i
 ### Run & Manage
 
 ```
-ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
+ov shell <image> [-c CMD] [--tty] [--bind name=path]  # Interactive shell
 ov start <image> [--build]             # Start service (ov config required first)
 ov stop <image>                        # Stop container
-ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + volumes + data
+ov config <image>                      # Unified setup: quadlet + secrets + volumes + data
 ov config <image> --password auto      # Auto-generate all secrets
 ov config <image> --password manual    # Prompt for each secret
 ov config <image> --bind name[=path]   # Configure volume as host bind mount
@@ -463,9 +464,9 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 226 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 228 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
-The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` or `jupyter-colab-ml` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter-colab` is the lightweight multi-arch variant (no GPU); `jupyter-colab-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain). See `/ov-layers:jupyter-colab`, `/ov-layers:jupyter-colab-ml`, and their image counterparts for details.
+The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` or `jupyter-colab-ml` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter-colab` is the lightweight multi-arch variant (no GPU); `jupyter-colab-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-colab-ml-finetuning` adds 37 Unsloth fine-tuning notebooks. See `/ov-layers:jupyter-colab`, `/ov-layers:jupyter-colab-ml`, and their image counterparts for details.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

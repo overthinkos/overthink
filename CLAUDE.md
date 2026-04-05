@@ -133,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (150 layers)
++-- layers/<name>/            # Layer directories (151 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -160,10 +160,10 @@ Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
 ```
 plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
-+-- ov/                               # Operations (21 skills)
++-- ov/                               # Operations (36 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (150 skills)
++-- ov-layers/                        # Layer reference (151 skills)
 +-- ov-images/                        # Image reference (37 skills)
 ```
 
@@ -283,9 +283,9 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `version` | `/ov:version` |
 | `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
 | `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
-| `udev status/generate/install/remove` | `/ov:service` |
+| `udev status/generate/install/remove` | `/ov:udev` |
 | `vm` | `/ov:vm` |
-| `doctor` | Host dependency + secret storage checks (no skill -- standalone diagnostic) |
+| `doctor` | `/ov:doctor` |
 
 ---
 
@@ -353,10 +353,10 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 21 | Operations | "How do I use X?" |
+| `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 150 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 151 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 37 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains

@@ -1,0 +1,6 @@
+info: "Unsloth fine-tuning notebook collection for unsloth-studio"
+
+data:
+  - src: data/finetuning
+    volume: workspace
+    dest: finetuning

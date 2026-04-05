@@ -182,7 +182,7 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### GPU & Machine Learning
 
-**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **python-ml** — ML Python environment on top of CUDA. **jupyter** — Jupyter + ML libraries on `:8888`. **jupyter-colab** — Lightweight JupyterLab with real-time collaboration (jupyter-collaboration) on `:8888`. No GPU required. **unsloth** — Unsloth LLM fine-tuning library with vLLM and llama.cpp. **unsloth-studio** — Unsloth Studio fine-tuning web UI on `:8888` + vLLM API on `:8000`. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
+**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **python-ml** — ML Python environment on top of CUDA. **jupyter** — Jupyter + ML libraries on `:8888`. **jupyter-colab** — Lightweight JupyterLab with real-time collaboration (jupyter-collaboration) on `:8888`, plus a built-in MCP server at `/mcp` for programmatic notebook access (13 tools: create/read/edit/execute cells, watch for changes, manage collaboration rooms). AI agents and humans can edit the same notebook simultaneously via CRDT. No GPU required. **unsloth** — Unsloth LLM fine-tuning library with vLLM and llama.cpp. **unsloth-studio** — Unsloth Studio fine-tuning web UI on `:8888` + vLLM API on `:8000`. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
 
 ### Desktop Environments
 
@@ -423,6 +423,7 @@ Overthink is designed to work hand-in-hand with [Claude Code](https://claude.com
   "enabledPlugins": {
     "ov@ov-plugins": true,
     "ov-dev@ov-plugins": true,
+    "ov-jupyter@ov-plugins": true,
     "ov-layers@ov-plugins": true,
     "ov-images@ov-plugins": true
   },
@@ -440,7 +441,9 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 204 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 205 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+
+The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. See `/ov-layers:jupyter-colab` and `/ov-images:jupyter-colab` for details.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

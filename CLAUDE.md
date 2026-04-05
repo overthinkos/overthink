@@ -160,10 +160,11 @@ Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
 ```
 plugins/
 +-- .claude-plugin/marketplace.json   # Central plugin registry
-+-- ov/                               # Operations (20 skills)
++-- ov/                               # Operations (21 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-layers/                        # Layer reference (146 skills)
-+-- ov-images/                        # Image reference (35 skills)
++-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
++-- ov-layers/                        # Layer reference (147 skills)
++-- ov-images/                        # Image reference (36 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -175,6 +176,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
   "enabledPlugins": {
     "ov@ov-plugins": true,
     "ov-dev@ov-plugins": true,
+    "ov-jupyter@ov-plugins": true,
     "ov-layers@ov-plugins": true,
     "ov-images@ov-plugins": true
   },
@@ -318,10 +320,11 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 20 | Operations | "How do I use X?" |
+| `ov` | 21 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
-| `ov-layers` | 146 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 35 | Image reference | "What does image X look like?" |
+| `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
+| `ov-layers` | 147 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 36 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -347,6 +350,10 @@ For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` comm
 Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://localhost:3000` (HTTPS with self-signed Traefik cert — required for WebCodecs secure context). NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
 **Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (pixelflux-screenshot via capture bridge), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Screenshots work with or without a browser connected (capture bridge auto-switches between controller/viewer modes). Includes `wl-tools` + `a11y-tools` layers.
 **Client-side interaction (browser-based RD):** The Selkies SPA uses a transparent `input#overlayInput` (z-index 3) on top of `canvas#videoCanvas` (z-index 2, pointer-events: none) to capture mouse/keyboard events. Events pass through the SPA's JavaScript → WebSocket → labwc. Keyboard passthrough works via VNC type, wtype, or CDP Input.dispatchKeyEvent — the SPA's onkeydown handler captures with stopImmediatePropagation. **Limitation:** Super key consumed by the client's compositor, Ctrl+T/W consumed by the client's Chrome — browser-based RD cannot forward compositor or browser shortcuts. Mouse coordinates have ~0.82x scaling between input and remote cursor position. Session state (all windows, typed text) survives client disconnection. See `/ov-images:selkies-desktop` for full DOM structure and coordinate mapping.
+
+**Programmatic notebook access (MCP):**
+`/ov-layers:jupyter-colab` (MCP tools, CRDT architecture) -> `/ov-images:jupyter-colab` (deployment, Claude Code config) -> `/ov:service` (lifecycle)
+Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -382,7 +389,7 @@ Rule of thumb:
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
 Examples where multiple skills cover one topic:
-- **Jupyter:** `/ov-layers:jupyter` (GPU/ML layer) vs `/ov-layers:jupyter-colab` (lightweight + collaboration) vs `/ov-images:jupyter` (GPU image) vs `/ov-images:jupyter-colab` (lightweight image)
+- **Jupyter:** `/ov-layers:jupyter` (GPU/ML layer) vs `/ov-layers:jupyter-colab` (lightweight + collaboration + MCP server with 13 tools) vs `/ov-images:jupyter` (GPU image) vs `/ov-images:jupyter-colab` (lightweight image + MCP deployment). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
 - **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)

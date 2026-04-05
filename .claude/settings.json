@@ -5,6 +5,7 @@
     "ov-dev@ov-plugins": true,
     "ov-layers@ov-plugins": true,
     "ov-images@ov-plugins": true,
+    "ov-jupyter@ov-plugins": true,
     "claude-md-management@claude-plugins-official": true,
     "gopls-lsp@claude-plugins-official": true
   },

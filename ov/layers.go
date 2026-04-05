@@ -71,6 +71,15 @@ type ExtractYAML struct {
 	Dest   string `yaml:"dest"`   // Destination in target image (e.g., "/opt/immich/server")
 }
 
+// DataYAML represents a data mapping from the layer directory to a volume staging area.
+// Data files are COPYed into /data/<volume>/[dest/] at build time and provisioned
+// into bind-backed volumes by ov config / ov update at deploy time.
+type DataYAML struct {
+	Src    string `yaml:"src"`              // source dir relative to layer dir (e.g., "data/notebooks")
+	Volume string `yaml:"volume"`           // target volume name (must match a volumes[].name in the image chain)
+	Dest   string `yaml:"dest,omitempty"`   // optional subdirectory within the volume path
+}
+
 // LayerYAML represents the parsed layer.yml file.
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
@@ -95,6 +104,7 @@ type LayerYAML struct {
 	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
+	Data           []DataYAML        `yaml:"data,omitempty"`
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -110,7 +120,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"path_append": true, "ports": true, "route": true, "service": true,
 	"volumes": true, "aliases": true, "extract": true, "security": true,
 	"system_services": true, "libvirt": true, "hooks": true,
-	"port_relay": true, "secrets": true,
+	"port_relay": true, "secrets": true, "data": true,
 }
 
 // layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
@@ -238,6 +248,7 @@ type Layer struct {
 	HasAliases        bool
 	HasPixiLock       bool
 	HasExtract        bool
+	HasData           bool
 	HasLibvirt         bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 
@@ -269,6 +280,7 @@ type Layer struct {
 	volumes        []VolumeYAML
 	aliases        []AliasYAML
 	extract        []ExtractYAML
+	data           []DataYAML
 	security       *SecurityConfig
 	libvirt        []string
 	hooks          *HooksConfig
@@ -436,6 +448,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.HasExtract = len(ly.Extract) > 0
 		layer.extract = ly.Extract
 
+		// Pre-populate data mappings
+		layer.HasData = len(ly.Data) > 0
+		layer.data = ly.Data
+
 		// Pre-populate security
 		layer.security = ly.Security
 
@@ -475,7 +491,7 @@ func (l *Layer) HasInstallFiles() bool {
 // that contributes to the Containerfile (env, ports, volumes, etc.)
 func (l *Layer) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
-		l.HasVolumes || l.HasAliases || l.HasExtract || l.HasLibvirt ||
+		l.HasVolumes || l.HasAliases || l.HasExtract || l.HasData || l.HasLibvirt ||
 		l.HasAnyInit() || len(l.PortRelayPorts) > 0 ||
 		len(l.serviceFiles) > 0 || len(l.systemServices) > 0
 }
@@ -642,6 +658,11 @@ func (l *Layer) Volumes() []VolumeYAML {
 // Extract returns the extract declarations (pre-populated from layer.yml)
 func (l *Layer) Extract() []ExtractYAML {
 	return l.extract
+}
+
+// Data returns the data mappings (pre-populated from layer.yml)
+func (l *Layer) Data() []DataYAML {
+	return l.data
 }
 
 // Security returns the security config (pre-populated from layer.yml, nil if not set)

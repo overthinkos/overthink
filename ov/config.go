@@ -149,6 +149,7 @@ type ImageConfig struct {
 	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
 	FormatConfig *FormatConfigRefs `yaml:"format_config,omitempty"` // refs to distro.yml, builder.yml, init.yml
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
+	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -222,6 +223,9 @@ type ResolvedImage struct {
 	InitConfig    *InitConfig    `json:"-"` // from init.yml
 	InitSystem    string         `json:"-"` // resolved init system name ("supervisord", "systemd", "")
 	InitDef       *InitDef       `json:"-"` // resolved init definition (cached)
+
+	// Data image (scratch-based, data-only)
+	DataImage bool // true = FROM scratch, no runtime, no init, no services
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -336,20 +340,26 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		Info:    img.Info,
 	}
 
-	// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"
-	resolved.Base = img.Base
-	if resolved.Base == "" {
-		resolved.Base = c.Defaults.Base
-	}
-	if resolved.Base == "" {
-		resolved.Base = "quay.io/fedora/fedora:43"
-	}
-
-	// Check if base is internal (another enabled image in images.yml) or external
-	if baseImg, isInternal := c.Images[resolved.Base]; isInternal && baseImg.IsEnabled() {
-		resolved.IsExternalBase = false
-	} else {
+	// Data images are always FROM scratch — no base resolution needed
+	if img.DataImage {
+		resolved.Base = "scratch"
 		resolved.IsExternalBase = true
+	} else {
+		// Resolve base: image -> defaults -> "quay.io/fedora/fedora:43"
+		resolved.Base = img.Base
+		if resolved.Base == "" {
+			resolved.Base = c.Defaults.Base
+		}
+		if resolved.Base == "" {
+			resolved.Base = "quay.io/fedora/fedora:43"
+		}
+
+		// Check if base is internal (another enabled image in images.yml) or external
+		if baseImg, isInternal := c.Images[resolved.Base]; isInternal && baseImg.IsEnabled() {
+			resolved.IsExternalBase = false
+		} else {
+			resolved.IsExternalBase = true
+		}
 	}
 
 	// Resolve bootc: image -> defaults -> false
@@ -395,7 +405,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.Distro = c.Defaults.Distro
 	}
 
-	// Resolve build: image -> walk base chain (if internal) -> defaults (required)
+	// Resolve build: image -> walk base chain (if internal) -> defaults (required, except for data images)
 	buildFmts := []string(img.Build)
 	if len(buildFmts) == 0 {
 		buildFmts = c.walkBaseChainBuild(resolved.Base)
@@ -403,11 +413,13 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	if len(buildFmts) == 0 {
 		buildFmts = []string(c.Defaults.Build)
 	}
-	if len(buildFmts) == 0 {
+	if len(buildFmts) == 0 && !img.DataImage {
 		return nil, fmt.Errorf("image %s: build: field required (set in image, base, or defaults)", name)
 	}
 	resolved.BuildFormats = buildFmts
-	resolved.Pkg = buildFmts[0] // primary format for cache mounts
+	if len(buildFmts) > 0 {
+		resolved.Pkg = buildFmts[0] // primary format for cache mounts
+	}
 
 	// Build unified Tags for task matching: ["all"] + Distro + BuildFormats
 	resolved.Tags = append([]string{"all"}, resolved.Distro...)
@@ -508,6 +520,9 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	if resolved.Engine == "" {
 		resolved.Engine = c.Defaults.Engine
 	}
+
+	// Data image flag (not inherited from defaults)
+	resolved.DataImage = img.DataImage
 
 	// Home directory will be resolved later (after inspecting base image)
 	if resolved.User == "root" {

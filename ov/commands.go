@@ -64,6 +64,9 @@ type UpdateCmd struct {
 	Tag      string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build    bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Seed      bool   `long:"seed" default:"true" negatable:"" help:"Sync data from new image into bind-backed volumes (default: true)"`
+	ForceSeed bool   `long:"force-seed" help:"Overwrite existing data in volumes (default: only add new files)"`
+	DataFrom  string `long:"data-from" help:"Sync data from this data image instead"`
 }
 
 func (c *UpdateCmd) Run() error {
@@ -94,6 +97,11 @@ func (c *UpdateCmd) Run() error {
 			return err
 		}
 
+		// Sync data from new image into bind-backed volumes (merge mode)
+		if c.Seed {
+			c.syncData(runEngine, imageRef, meta, rt)
+		}
+
 		svc := serviceNameInstance(c.Image, c.Instance)
 		check := exec.Command("systemctl", "--user", "is-active", svc)
 		if err := check.Run(); err == nil {
@@ -116,8 +124,90 @@ func (c *UpdateCmd) Run() error {
 	if err := EnsureImage(imageRef, imageRT); err != nil {
 		return err
 	}
+
+	// Sync data in direct mode too
+	if c.Seed {
+		c.syncData(runEngine, imageRef, meta, rt)
+	}
+
 	fmt.Fprintf(os.Stderr, "Image updated. Restart with: ov stop %s && ov start %s\n", c.Image, c.Image)
 	return nil
+}
+
+// syncData merges data from the (new) image into bind-backed volumes.
+// Uses merge mode (cp -an) to add new files without overwriting existing user data.
+func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata, rt *ResolvedRuntime) {
+	// Re-extract metadata from the new image
+	newMeta, err := ExtractMetadata(engine, imageRef)
+	if err != nil || newMeta == nil {
+		return
+	}
+
+	dataMeta := newMeta
+	dataRef := imageRef
+
+	// Use external data image if --data-from specified
+	if c.DataFrom != "" {
+		dataRef = c.DataFrom
+		if !strings.Contains(dataRef, ":") {
+			dataRef += ":latest"
+		}
+		dm, err := ExtractMetadata(engine, dataRef)
+		if err != nil || dm == nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not load data image %s: %v\n", dataRef, err)
+			return
+		}
+		dataMeta = dm
+	}
+
+	if len(dataMeta.DataEntries) == 0 {
+		return
+	}
+
+	// Load deploy config to find bind-backed volumes
+	dc, _ := LoadDeployConfig()
+	if dc == nil {
+		return
+	}
+	imgDeploy, ok := dc.Images[c.Image]
+	if !ok {
+		return
+	}
+
+	_, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volumes,
+		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	if len(bindMounts) == 0 {
+		return
+	}
+
+	mode := DataProvisionMerge
+	if c.ForceSeed {
+		mode = DataProvisionForce
+	}
+
+	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
+	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, mode)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
+		return
+	}
+
+	// Update deploy.yml with new data source
+	if seeded > 0 {
+		for i := range imgDeploy.Volumes {
+			for _, entry := range dataMeta.DataEntries {
+				if imgDeploy.Volumes[i].Name == entry.Volume {
+					imgDeploy.Volumes[i].DataSeeded = true
+					imgDeploy.Volumes[i].DataSource = dataRef
+				}
+			}
+		}
+		dc.Images[c.Image] = imgDeploy
+		if err := SaveDeployConfig(dc); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
+		}
+		fmt.Fprintf(os.Stderr, "Synced data for %d volume(s)\n", seeded)
+	}
 }
 
 func (c *UpdateCmd) runRemoteUpdate(ref string) error {

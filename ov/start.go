@@ -11,14 +11,13 @@ import (
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
 	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
+	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (direct mode only)"`
 	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
-	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
+	Env       []string `short:"e" long:"env" help:"Set container env var (direct mode only)"`
+	EnvFile   string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
 	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Port   []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
-	Enable bool     `long:"enable" default:"true" help:"Auto-configure if not already enabled (use --enable=false to skip)"`
+	Port      []string `short:"p" help:"Remap host port (direct mode only)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -513,42 +512,10 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	}
 
 	if !exists {
-		if !c.Enable {
-			return fmt.Errorf("not configured; run 'ov config %s' first", c.Image)
-		}
-		// Auto-configure: generate quadlet file + provision secrets + enc setup
-		setup := &ImageConfigSetupCmd{
-			Image:           c.Image,
-			Workspace:       c.Workspace,
-			Tag:             c.Tag,
-			Env:             c.Env,
-			EnvFile:         c.EnvFile,
-			Instance:        c.Instance,
-			Port:            c.Port,
-			AutoDetectFlags: c.AutoDetectFlags,
-			// KeepMounted: false — let ov start handle mounting below
-		}
-		if err := setup.runConfig(rt); err != nil {
-			return err
-		}
-	} else if c.hasConfigOverrides() {
-		// Quadlet exists but config flags changed — regenerate
-		setup := &ImageConfigSetupCmd{
-			Image:           c.Image,
-			Workspace:       c.Workspace,
-			Tag:             c.Tag,
-			Env:             c.Env,
-			EnvFile:         c.EnvFile,
-			Instance:        c.Instance,
-			Port:            c.Port,
-			AutoDetectFlags: c.AutoDetectFlags,
-		}
-		if err := setup.runConfig(rt); err != nil {
-			return err
-		}
+		return fmt.Errorf("not configured; run 'ov config %s' first", c.Image)
 	}
 
-	// Auto-initialize and mount encrypted volumes if needed
+	// Mount encrypted volumes if needed (runtime concern, not config)
 	if err := ensureEncryptedMounts(c.Image, false); err != nil {
 		return err
 	}
@@ -566,10 +533,6 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 
 // hasConfigOverrides returns true if the user passed any config flags that
 // should trigger quadlet regeneration (port maps, env vars, env file).
-func (c *StartCmd) hasConfigOverrides() bool {
-	return len(c.Port) > 0 || len(c.Env) > 0 || c.EnvFile != ""
-}
-
 // StopCmd stops a running container started by StartCmd
 type StopCmd struct {
 	Image    string `arg:"" help:"Image name or remote ref"`

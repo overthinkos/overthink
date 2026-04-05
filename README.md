@@ -213,6 +213,24 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
 
+### Data Layers
+
+Some layers provide **data** instead of packages or services. A data layer uses the `data:` field in `layer.yml` to map source directories to volume targets:
+
+```yaml
+# layers/notebook-templates/layer.yml
+volumes:
+  - name: notebooks
+    path: ~/notebooks
+data:
+  - src: data/notebooks
+    volume: notebooks
+```
+
+At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories. `ov update` merges new data files non-destructively. Data layers need no packages, services, or install files — just data and a volume declaration.
+
+**Data images** (`data_image: true` in images.yml) take this further: scratch-based images containing only data files and OCI labels, used as portable data bundles via `ov config --data-from <data-image>`.
+
 ## The Lifecycle
 
 Overthink covers the full lifecycle — from development to production — whether you're driving or your AI agent is:
@@ -221,11 +239,11 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov config <image>` reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login (the quadlet waits for the keyring to unlock), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. No project source needed — just the image. `ov start` also auto-configures on first launch (disable with `--enable=false`).
+**Deploy** — `ov config <image>` is the single entry point for deployment. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login (the quadlet waits for the keyring to unlock), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. No project source needed — just the image.
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
-**Manage** — `ov update` pulls new images and restarts services. `ov config mount/unmount` handles encrypted volumes (each mount runs as an independent `ov-enc-<image>-<volume>.scope` systemd unit that survives container restart/stop). `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
+**Manage** — `ov update` pulls new images, syncs data from data layers into bind-backed volumes (non-destructive merge by default, `--force-seed` to overwrite), and restarts services. `ov config mount/unmount` handles encrypted volumes (each mount runs as an independent `ov-enc-<image>-<volume>.scope` systemd unit that survives container restart/stop). `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
@@ -245,21 +263,23 @@ ov merge <image> [--dry-run] [--max-total-mb N]  # Merge small layers in built i
 
 ```
 ov shell <image> [-c CMD] [--tty]      # Interactive shell (--tty allocates PTY)
-ov start <image> [--build]             # Start service container (auto-configures on first start)
-ov start <image> --enable=false        # Start without auto-configuring
+ov start <image> [--build]             # Start service (ov config required first)
 ov stop <image>                        # Stop container
-ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + volume backing
+ov config <image> [-w PATH]            # Unified setup: quadlet + secrets + volumes + data
 ov config <image> --password auto      # Auto-generate all secrets
 ov config <image> --password manual    # Prompt for each secret
 ov config <image> --bind name[=path]   # Configure volume as host bind mount
 ov config <image> --encrypt name       # Configure volume as encrypted (gocryptfs)
 ov config <image> -v name:type[:path]  # Per-volume backing (volume|bind|encrypted)
+ov config <image> --force-seed         # Re-provision data into bind-backed volumes
+ov config <image> --data-from <img>    # Seed data from a separate data image
 ov config remove <image>               # Remove quadlet + deploy.yml entry
 ov config mount/unmount <image>        # Mount/unmount encrypted volumes
 ov config status <image>               # Encrypted volume status
 ov config passwd <image>               # Change encryption password
 ov status [<image>] [--all] [--json]   # Service status (table/detail/JSON)
-ov logs/update <image>                 # Service lifecycle
+ov logs <image> [-f]                   # Service logs
+ov update <image> [--force-seed]       # Update image, sync data, restart
 ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage services inside container
@@ -376,7 +396,6 @@ ov version
 
 ```
 ov new layer <name>                            # Scaffold a new layer
-ov seed <image>                                # Seed bind-backed volume dirs
 ov alias install/uninstall <image>             # Host command aliases
 ov --kdbx <path> <command>                     # Use specific kdbx database
 ov settings get/set/list/reset/path            # Runtime configuration

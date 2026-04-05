@@ -35,6 +35,9 @@ type ImageConfigSetupCmd struct {
 	VolumeFlag  []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
 	Bind        []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
 	Encrypt     []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
+	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
+	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
+	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -336,6 +339,83 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			}
 		}
 	}
+
+	// Reload deploy config after saveDeployState wrote the volumes
+	dc, _ = LoadDeployConfig()
+
+	// Provision data from image staging (/data/) into bind-backed volumes
+	if c.Seed && len(bindMounts) > 0 {
+		dataMeta := meta
+		dataRef := imageRef
+		dataEngine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
+
+		// Use external data image if --data-from specified
+		if c.DataFrom != "" {
+			dataRef = c.DataFrom
+			if !strings.Contains(dataRef, ":") {
+				dataRef += ":latest"
+			}
+			dm, err := ExtractMetadata(dataEngine, dataRef)
+			if err != nil {
+				return fmt.Errorf("extracting metadata from data image %s: %w", dataRef, err)
+			}
+			if dm == nil {
+				return fmt.Errorf("data image %s has no embedded metadata", dataRef)
+			}
+			dataMeta = dm
+		}
+
+		if len(dataMeta.DataEntries) > 0 {
+			// Determine provisioning mode
+			mode := DataProvisionInitial
+			if c.ForceSeed {
+				mode = DataProvisionForce
+			} else {
+				// Check if already seeded (idempotent re-run)
+				allSeeded := true
+				for _, dvc := range deployVolumes {
+					if dvc.DataSeeded {
+						continue
+					}
+					allSeeded = false
+					break
+				}
+				if allSeeded && len(deployVolumes) > 0 && !c.ForceSeed {
+					// Skip if all volumes already seeded and no force
+					fmt.Fprintln(os.Stderr, "Data already provisioned (use --force-seed to re-provision)")
+					goto skipDataProvision
+				}
+			}
+
+			fmt.Fprintln(os.Stderr, "Provisioning data into bind-backed volumes...")
+			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, mode)
+			if err != nil {
+				return fmt.Errorf("data provisioning: %w", err)
+			}
+
+			// Update deploy.yml with seeded state
+			if seeded > 0 {
+				if dc == nil {
+					dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+				}
+				imgDeploy := dc.Images[c.Image]
+				for i := range imgDeploy.Volumes {
+					for _, entry := range dataMeta.DataEntries {
+						if imgDeploy.Volumes[i].Name == entry.Volume {
+							imgDeploy.Volumes[i].DataSeeded = true
+							imgDeploy.Volumes[i].DataSource = dataRef
+						}
+					}
+				}
+				dc.Images[c.Image] = imgDeploy
+				if err := SaveDeployConfig(dc); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
+				}
+				fmt.Fprintf(os.Stderr, "Provisioned data for %d volume(s)\n", seeded)
+			}
+		}
+	}
+skipDataProvision:
 
 	// Run post_enable hooks from image labels
 	var hooks *HooksConfig

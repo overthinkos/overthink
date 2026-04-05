@@ -216,6 +216,7 @@ images:
     layers:
       - agent-forwarding
       - jupyter-colab
+      - notebook-templates
       - dbus
       - ov
     ports:

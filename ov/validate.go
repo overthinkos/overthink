@@ -131,6 +131,9 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
+	// Validate data layers and data images
+	validateDataLayers(cfg, layers, errs)
+
 	// Validate init system dependencies (driven by init.yml)
 	var defaultInitCfg *InitConfig
 	if cfg.Defaults.FormatConfig != nil {
@@ -289,8 +292,8 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 // validateLayerContents validates each layer has required files
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		// Layer must have at least one install file, unless it has a layers: field (composition)
-		if !layer.HasInstallFiles() && len(layer.IncludedLayers) == 0 {
+		// Layer must have at least one install file, a layers: field (composition), or data declarations
+		if !layer.HasInstallFiles() && len(layer.IncludedLayers) == 0 && !layer.HasData {
 			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
 		}
 
@@ -1471,4 +1474,89 @@ func layerHasFile(layer *Layer, filename string) bool {
 func layerHasFormatConfig(layer *Layer, formatName string) bool {
 	section := layer.FormatSection(formatName)
 	return section != nil && len(section.Packages) > 0
+}
+
+// validateDataLayers checks data layer declarations and data image constraints.
+func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	// Validate data src directories exist
+	for name, layer := range layers {
+		if !layer.HasData {
+			continue
+		}
+		for _, d := range layer.Data() {
+			srcPath := filepath.Join(layer.Path, d.Src)
+			if !dirExists(srcPath) {
+				errs.Add("layer %s: data src %q does not exist or is not a directory", name, d.Src)
+			}
+		}
+	}
+
+	// Validate per-image constraints
+	for imgName, img := range cfg.Images {
+		if !img.IsEnabled() {
+			continue
+		}
+
+		// Resolve layers for this image
+		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		if err != nil {
+			continue // layer resolution errors are caught elsewhere
+		}
+
+		// Collect all volume names declared in this image's layer chain
+		volumeNames := make(map[string]bool)
+		for _, layerName := range resolved {
+			layer, ok := layers[layerName]
+			if !ok {
+				continue
+			}
+			for _, v := range layer.Volumes() {
+				volumeNames[v.Name] = true
+			}
+		}
+
+		// Check that data volume references resolve
+		hasData := false
+		for _, layerName := range resolved {
+			layer, ok := layers[layerName]
+			if !ok || !layer.HasData {
+				continue
+			}
+			hasData = true
+			for _, d := range layer.Data() {
+				if !volumeNames[d.Volume] {
+					errs.Add("image %s: layer %s data references volume %q which is not declared by any layer in the image", imgName, layerName, d.Volume)
+				}
+			}
+		}
+
+		// Data image specific validations
+		if img.DataImage {
+			if img.Base != "" {
+				errs.Add("image %s: data_image cannot specify base (always FROM scratch)", imgName)
+			}
+			if !hasData {
+				errs.Add("image %s: data_image has no layers with data declarations", imgName)
+			}
+			// Check for incompatible features
+			for _, layerName := range resolved {
+				layer, ok := layers[layerName]
+				if !ok {
+					continue
+				}
+				if layer.serviceConf != "" {
+					errs.Add("image %s: data_image includes layer %s which has a service declaration", imgName, layerName)
+				}
+				if layer.HasPorts {
+					errs.Add("image %s: data_image includes layer %s which has port declarations", imgName, layerName)
+				}
+				if len(layer.PortRelayPorts) > 0 {
+					errs.Add("image %s: data_image includes layer %s which has port_relay declarations", imgName, layerName)
+				}
+				if len(layer.systemServices) > 0 {
+					errs.Add("image %s: data_image includes layer %s which has system_services declarations", imgName, layerName)
+				}
+			}
+		}
+	}
 }

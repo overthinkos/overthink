@@ -39,7 +39,7 @@ Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
 - **Build mode:** Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`.
-- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov config`/`start`/`stop`/`status`/`logs`/`update`/`remove`/`seed` all work standalone with just the container image.
+- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov config`/`start`/`stop`/`status`/`logs`/`update`/`remove` all work standalone with just the container image. `ov config` is the single entry point for deployment setup (quadlet + secrets + encrypted volumes + data provisioning).
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
@@ -72,9 +72,9 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Configurable base: `ov settings set volumes_path /mnt/nas/ov-volumes` (env: `OV_VOLUMES_PATH`)
 - Deploy.yml persists volume config: `volumes: [{name: data, type: bind, host: ~/data}]`. For encrypted type, `host:` stores the per-volume storage directory
 - Encrypted volumes (default, no host): gocryptfs at `<encrypted_storage_path>/ov-<image>-<name>/{cipher,plain}`. With explicit host path: `<host>/{cipher,plain}`
-- `ov seed` copies image data into empty bind-backed volume directories
+- **Data provisioning:** `ov config` automatically provisions data from data layers into bind-backed volumes (`--seed` default true). `ov update` merges new data non-destructively (`cp -an`). `--force-seed` overwrites. `--data-from <image>` seeds from a separate data image. Deploy.yml tracks `data_seeded` (bool) and `data_source` (image:tag) per volume
 - There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
-- Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
+- Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/data.go` (`provisionData`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
 
 **Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers:
 - SSH: host `$SSH_AUTH_SOCK` → container `/run/host-ssh-auth.sock` + `SSH_AUTH_SOCK` env var
@@ -210,7 +210,11 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - `build:` field defines package formats: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Inherited through base chain. Default: `[rpm]`
 - Images with layers that trigger an init system (via `service:`, `port_relay:`, `system_services:`, or `*.service` files) must include the init system's `depends_layer` in their dependency chain. `ov validate` enforces this as a hard error (e.g., supervisord layers need the `supervisord` layer). Detection rules and dependencies are defined in `init.yml`, not hardcoded
 
-For layer-specific rules (install files, packages, port_relay, secrets, cache mounts): `/ov:layer`
+- Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
+- Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
+- `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
+
+For layer-specific rules (install files, packages, port_relay, secrets, data, cache mounts): `/ov:layer`
 
 **Credential security:** Config files (`settings.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov settings migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
 
@@ -230,13 +234,23 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 
 | Commands | Skill |
 |----------|-------|
-| `generate`, `validate`, `inspect`, `list`, `new layer` | `/ov:validate` (rules), `/ov:layer` (authoring), `/ov:image` (images) |
-| `build`, `merge` | `/ov:build` |
-| `cmd <image> <command>` | Single command execution in running container (with D-Bus notification) |
+| `generate` | `/ov:generate` |
+| `validate` | `/ov:validate` |
+| `inspect` | `/ov:inspect` |
+| `list` (images, layers, targets, services, routes, volumes, aliases) | `/ov:list` |
+| `new layer` | `/ov:new` |
+| `build` | `/ov:build` |
+| `merge` | `/ov:merge` |
+| `cmd <image> <command>` | `/ov:cmd` |
 | `shell` | `/ov:shell` |
-| `dbus` (notify, call, list, introspect) | D-Bus interaction inside containers via native Go `godbus/dbus/v5` |
-| `config <image>` (setup: quadlet + secrets + encrypted volumes), `config remove <image>`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` (encrypted volumes) |
-| `start` (`--enable/--enable=false`), `stop`, `status` (`--all`, `--json`), `logs`, `update`, `remove`, `seed` | `/ov:service` |
+| `dbus` (notify, call, list, introspect) | `/ov:dbus` |
+| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning), `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
+| `start` | `/ov:start` (requires `ov config` first in quadlet mode) |
+| `stop` | `/ov:stop` |
+| `status` (`--all`, `--json`) | `/ov:status` |
+| `logs` | `/ov:logs` |
+| `update` (`--seed`, `--force-seed`, `--data-from`) | `/ov:update` |
+| `remove` (`--purge`, `--keep-deploy`) | `/ov:remove` |
 | `deploy show/export/import/reset/status/path` | `/ov:deploy` |
 | `service start/stop/restart/status` | `/ov:service` |
 | `cdp`, `cdp spa` (click, type, key, key-combo, mouse, status) | `/ov:cdp` |
@@ -247,7 +261,8 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `vnc` | `/ov:vnc` |
 | `wl` | `/ov:wl` |
 | `alias` | `/ov:alias` |
-| `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:config` |
+| `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:settings` |
+| `version` | `/ov:version` |
 | `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
 | `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
 | `udev status/generate/install/remove` | `/ov:service` |
@@ -266,8 +281,8 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes from image labels + deploy.yml. `--password auto` generates all secrets; `--password manual` prompts. `ov start <image>` auto-configures on first start (`--enable`, default true; suppress with `--enable=false`). No `images.yml` needed for deployment.
-Skills: `/ov:deploy` -> `/ov:service` (lifecycle)
+**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes + provisions data from data layers into bind-backed volumes. `--password auto` generates all secrets; `--password manual` prompts. `--seed` (default true) provisions data layers; `--force-seed` re-provisions; `--data-from <image>` seeds from a separate data image. `ov start <image>` requires `ov config` first in quadlet mode. No `images.yml` needed for deployment.
+Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml) -> `/ov:start` -> `/ov:update` (data sync) -> `/ov:service` (lifecycle)
 
 **Record a session:**
 `ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` (interact) -> `ov record stop <image> -o output`

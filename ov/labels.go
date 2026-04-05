@@ -47,6 +47,8 @@ const (
 	LabelBuild          = "org.overthinkos.build"
 	LabelBuilders       = "org.overthinkos.builders"
 	LabelBuilds         = "org.overthinkos.builds"
+	LabelDataEntries    = "org.overthinkos.data"
+	LabelDataImage      = "org.overthinkos.data_image"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -62,6 +64,14 @@ type LabelVolume struct {
 type LabelRoute struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+}
+
+// LabelDataEntry represents a data mapping stored in the org.overthinkos.data label.
+type LabelDataEntry struct {
+	Volume  string `json:"volume"`          // target volume name
+	Staging string `json:"staging"`         // path inside image (/data/<volume>/[dest/])
+	Layer   string `json:"layer"`           // source layer name
+	Dest    string `json:"dest,omitempty"`  // optional subdirectory within volume
 }
 
 // ImageMetadata is the runtime-relevant config extracted from image labels.
@@ -103,6 +113,8 @@ type ImageMetadata struct {
 	BuildFormats   []string          // build format list (rpm, pac, etc.)
 	Builders       map[string]string // build type → builder image
 	Builds         []string          // what this builder can build
+	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
+	DataImage      bool              // true if this is a data-only image (FROM scratch)
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -362,6 +374,18 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		if err := json.Unmarshal([]byte(v), &meta.Builds); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelBuilds, err)
 		}
+	}
+
+	// Data entries (staging paths for deploy-time provisioning)
+	if v := labels[LabelDataEntries]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.DataEntries); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelDataEntries, err)
+		}
+	}
+
+	// Data image flag
+	if labels[LabelDataImage] == "true" {
+		meta.DataImage = true
 	}
 
 	return meta, nil

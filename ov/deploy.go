@@ -38,10 +38,12 @@ type DeployImageConfig struct {
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.
 type DeployVolumeConfig struct {
-	Name string `yaml:"name"`                    // matches layer volume name
-	Type string `yaml:"type,omitempty"`           // "volume" (default), "bind", "encrypted"
-	Host string `yaml:"host,omitempty"`           // explicit host path (bind type only, optional)
-	Path string `yaml:"path,omitempty"`           // container path (only for deploy-only volumes not in any layer)
+	Name       string `yaml:"name"`                    // matches layer volume name
+	Type       string `yaml:"type,omitempty"`           // "volume" (default), "bind", "encrypted"
+	Host       string `yaml:"host,omitempty"`           // explicit host path (bind type only, optional)
+	Path       string `yaml:"path,omitempty"`           // container path (only for deploy-only volumes not in any layer)
+	DataSeeded bool   `yaml:"data_seeded,omitempty"`    // tracks if data was provisioned from image
+	DataSource string `yaml:"data_source,omitempty"`    // image:tag that provided the data
 }
 
 // DeploySecretConfig overrides or provides a secret for deployment.

@@ -277,6 +277,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		return err
 	}
 
+	// Data images: minimal FROM scratch with only data staging + labels
+	if img.DataImage {
+		return g.generateDataImageContainerfile(imageName, img, layerOrder, imageDir)
+	}
+
 	// ARG for base image must come first (before any FROM)
 	resolvedBase := g.resolveBaseImage(img)
 	b.WriteString(fmt.Sprintf("ARG BASE_IMAGE=%s\n\n", resolvedBase))
@@ -512,6 +517,9 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString("\n")
 	}
 
+	// Stage data files from data layers into /data/ for deploy-time provisioning
+	g.writeDataStaging(&b, layerOrder, img)
+
 	// Process each layer
 	// Post-layer steps (init assembly, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
@@ -593,6 +601,99 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	containerfile := filepath.Join(imageDir, "Containerfile")
 	return os.WriteFile(containerfile, []byte(content), 0644)
+}
+
+// generateDataImageContainerfile produces a minimal FROM scratch Containerfile
+// with only data staging COPY instructions and OCI labels. No runtime, no init,
+// no packages, no builder stages.
+func (g *Generator) generateDataImageContainerfile(imageName string, img *ResolvedImage, layerOrder []string, imageDir string) error {
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("# .build/%s/Containerfile (generated -- do not edit)\n\n", imageName))
+	b.WriteString("FROM scratch\n\n")
+
+	// Scratch stages for layers that have data
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData {
+			continue
+		}
+		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", layer.Name))
+		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
+	}
+
+	// Main image: just data staging + labels
+	b.WriteString("FROM scratch\n\n")
+
+	// Data staging COPY instructions
+	g.writeDataStaging(&b, layerOrder, img)
+
+	// Minimal labels (no init, no services, no ports)
+	b.WriteString("# Image metadata\n")
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, LabelSchemaVersion))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
+	if img.Registry != "" {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
+	}
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataImage, "true"))
+
+	// Data entries label
+	var dataEntries []LabelDataEntry
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData {
+			continue
+		}
+		for _, d := range layer.Data() {
+			staging := "/data/" + d.Volume + "/"
+			if d.Dest != "" {
+				staging += d.Dest
+				if !strings.HasSuffix(staging, "/") {
+					staging += "/"
+				}
+			}
+			dataEntries = append(dataEntries, LabelDataEntry{
+				Volume:  d.Volume,
+				Staging: staging,
+				Layer:   layerName,
+				Dest:    d.Dest,
+			})
+		}
+	}
+	if len(dataEntries) > 0 {
+		writeJSONLabel(&b, LabelDataEntries, dataEntries)
+	}
+
+	// Volume labels (so ov config knows what volumes data targets)
+	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
+	if len(volumes) > 0 {
+		var labelVols []LabelVolume
+		for _, v := range volumes {
+			shortName := strings.TrimPrefix(v.VolumeName, "ov-"+imageName+"-")
+			labelVols = append(labelVols, LabelVolume{Name: shortName, Path: v.ContainerPath})
+		}
+		writeJSONLabel(&b, LabelVolumes, labelVols)
+	}
+
+	// Layer versions
+	layerVersions := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.Version != "" {
+			layerVersions[layerName] = layer.Version
+		}
+	}
+	writeJSONLabel(&b, LabelLayerVersions, layerVersions)
+
+	b.WriteString("\n")
+
+	// Write to disk
+	if err := os.MkdirAll(imageDir, 0755); err != nil {
+		return err
+	}
+	content := b.String()
+	g.Containerfiles[imageName] = content
+	return os.WriteFile(filepath.Join(imageDir, "Containerfile"), []byte(content), 0644)
 }
 
 // resolveBaseImage returns the full base image reference.
@@ -758,6 +859,45 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 		b.WriteString(fmt.Sprintf("EXPOSE %s\n", port))
 	}
 	b.WriteString("\n")
+}
+
+// writeDataStaging emits COPY instructions for data layers into /data/<volume>/[dest/].
+// Data files are staged in the image for deploy-time provisioning by ov config / ov update.
+func (g *Generator) writeDataStaging(b *strings.Builder, layerOrder []string, img *ResolvedImage) {
+	hasData := false
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData {
+			continue
+		}
+		if !hasData {
+			b.WriteString("# Data staging (for deploy-time provisioning into bind-backed volumes)\n")
+			hasData = true
+		}
+		for _, d := range layer.Data() {
+			// Source: layer scratch stage has the layer dir contents at /
+			// so data/notebooks/ in the layer dir becomes /data/notebooks/ in the scratch stage
+			srcPath := "/" + d.Src
+			if !strings.HasSuffix(srcPath, "/") {
+				srcPath += "/"
+			}
+
+			// Destination: /data/<volume>/[dest/]
+			dstPath := "/data/" + d.Volume + "/"
+			if d.Dest != "" {
+				dstPath += d.Dest
+				if !strings.HasSuffix(dstPath, "/") {
+					dstPath += "/"
+				}
+			}
+
+			b.WriteString(fmt.Sprintf("COPY --from=%s --chown=%d:%d %s %s\n",
+				layerName, img.UID, img.GID, srcPath, dstPath))
+		}
+	}
+	if hasData {
+		b.WriteString("\n")
+	}
 }
 
 // generateTraefikRoutes generates a traefik dynamic config YAML for route layers
@@ -1360,6 +1500,39 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		}
 	}
 	writeJSONLabel(b, LabelLayerVersions, layerVersions)
+
+	// Data entries: staging paths for deploy-time provisioning
+	var dataEntries []LabelDataEntry
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if !layer.HasData {
+			continue
+		}
+		for _, d := range layer.Data() {
+			staging := "/data/" + d.Volume + "/"
+			if d.Dest != "" {
+				staging += d.Dest
+				if !strings.HasSuffix(staging, "/") {
+					staging += "/"
+				}
+			}
+			dataEntries = append(dataEntries, LabelDataEntry{
+				Volume:  d.Volume,
+				Staging: staging,
+				Layer:   layerName,
+				Dest:    d.Dest,
+			})
+		}
+	}
+	if len(dataEntries) > 0 {
+		writeJSONLabel(b, LabelDataEntries, dataEntries)
+	}
+
+	// Data image flag
+	imgConfig := g.Config.Images[imageName]
+	if imgConfig.DataImage {
+		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataImage, "true"))
+	}
 
 	b.WriteString("\n")
 }

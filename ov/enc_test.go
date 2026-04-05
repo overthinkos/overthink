@@ -159,7 +159,7 @@ func TestQuadletWithBindMounts(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Workspace:   "/home/user/project",
+		Home:   "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp", Encrypted: false},
@@ -181,7 +181,7 @@ func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Workspace:   "/home/user/project",
+		Home:   "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
@@ -214,7 +214,7 @@ func TestQuadletWithEncryptedBindMountsKdbx(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Workspace:   "/home/user/project",
+		Home:   "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
@@ -244,7 +244,7 @@ func TestQuadletWithoutEncryptedMounts(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Workspace:   "/home/user/project",
+		Home:   "/home/user/project",
 		BindAddress: "127.0.0.1",
 	}
 
@@ -269,7 +269,7 @@ func TestBuildShellArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp"},
 	}
-	args := buildShellArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{})
+	args := buildShellArgs("docker", "myapp:latest", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
 
 	found := false
 	for i, arg := range args {
@@ -294,7 +294,7 @@ func TestBuildShellArgsWithBindMountsPodman(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp"},
 	}
-	args := buildShellArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{})
+	args := buildShellArgs("podman", "myapp:latest", 1000, 1000, nil, nil, bindMounts, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
 
 	found := false
 	for _, arg := range args {
@@ -312,7 +312,7 @@ func TestBuildStartArgsWithBindMounts(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("docker", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"})
+	args := buildStartArgs("docker", "myapp:latest", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
 
 	found := false
 	for i, arg := range args {
@@ -336,7 +336,7 @@ func TestBuildStartArgsWithBindMountsPodman(t *testing.T) {
 	bindMounts := []ResolvedBindMount{
 		{Name: "secrets", HostPath: "/enc/plain", ContPath: "/home/user/.secrets", Encrypted: true},
 	}
-	args := buildStartArgs("podman", "myapp:latest", "/workspace", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"})
+	args := buildStartArgs("podman", "myapp:latest", 1000, 1000, nil, "ov-myapp", nil, bindMounts, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
 
 	found := false
 	for _, arg := range args {

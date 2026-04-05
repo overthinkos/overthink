@@ -10,14 +10,15 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (direct mode only)"`
-	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
-	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env       []string `short:"e" long:"env" help:"Set container env var (direct mode only)"`
-	EnvFile   string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
-	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Port      []string `short:"p" help:"Remap host port (direct mode only)"`
+	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag        string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env        []string `short:"e" long:"env" help:"Set container env var (direct mode only)"`
+	EnvFile    string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
+	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Port       []string `short:"p" help:"Remap host port (direct mode only)"`
+	VolumeFlag []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
+	Bind       []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -41,18 +42,6 @@ func (c *StartCmd) Run() error {
 }
 
 func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
-	}
-
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -104,7 +93,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 			return err
 		}
 		security = CollectSecurity(cfg, layers, c.Image)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, deployVolumes, resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, mergeVolumeConfigs(deployVolumes, cliVolumes), resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
 		gid = resolved.GID
@@ -141,7 +131,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		entrypoint = resolveEntrypointFromMeta(meta)
 
 		// Resolve volume backing from labels + deploy config
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
@@ -176,7 +167,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		deployEnv = img.Env
 		deployEnvFile = img.EnvFile
 	}
-	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -226,7 +217,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	envVars = append(envVars, agentFwd.Env...)
 
 	name := containerNameInstance(c.Image, c.Instance)
-	args := buildStartArgs(engine, imageRef, absWorkspace, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, resolvedNetwork)
+	workDir := resolveWorkingDir(volumes, bindMounts, home)
+	args := buildStartArgs(engine, imageRef, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, workDir, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -278,18 +270,6 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 }
 
 func (c *StartCmd) runRemote(ref string) error {
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
-	}
-
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -307,7 +287,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	}
 
 	if rt.RunMode == "quadlet" {
-		return c.runRemoteQuadlet(rt, ctx, absWorkspace, detected)
+		return c.runRemoteQuadlet(rt, ctx, detected)
 	}
 
 	// Pull or build
@@ -330,14 +310,15 @@ func (c *StartCmd) runRemote(ref string) error {
 	if err != nil {
 		return err
 	}
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, nil, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
 		return err
 	}
 
 	// Resolve env vars
-	envVars, err := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	envVars, err := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -373,9 +354,10 @@ func (c *StartCmd) runRemote(ref string) error {
 	envVars = append(envVars, remoteAgentFwd.Env...)
 
 	name := containerNameInstance(ctx.ImageName, c.Instance)
-	args := buildStartArgs(engine, ctx.ImageRef, absWorkspace,
+	workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
+	args := buildStartArgs(engine, ctx.ImageRef,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteEntrypoint, resolvedNetwork)
+		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteEntrypoint, workDir, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -392,13 +374,14 @@ func (c *StartCmd) runRemote(ref string) error {
 	return nil
 }
 
-func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, absWorkspace string, detected DetectedDevices) error {
+func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, detected DetectedDevices) error {
 	// For quadlet with remote refs: resolve and generate quadlet file
 	allVolumes, err := ctx.CollectVolumes()
 	if err != nil {
 		return err
 	}
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, nil, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	// Ensure image is in podman
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
@@ -407,7 +390,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	}
 
 	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -447,7 +430,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	qcfg := QuadletConfig{
 		ImageName:      ctx.ImageName,
 		ImageRef:       ctx.ImageRef,
-		Workspace:      absWorkspace,
+		Home:           ctx.Resolved.Home,
 		Ports:          ports,
 		Volumes:        volumes,
 		BindMounts:     bindMounts,
@@ -644,13 +627,12 @@ func stopTunnelForImage(imageName string) {
 // buildStartArgs constructs the container run argument list for a detached service.
 // entrypoint is the init system command (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
 // or the fallback (e.g., ["sleep", "infinity"]).
-func buildStartArgs(engine, imageRef, workspace string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, entrypoint []string, network ...string) []string {
+func buildStartArgs(engine, imageRef string, uid, gid int, ports []string, name string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, bindAddr string, envVars []string, security SecurityConfig, entrypoint []string, workingDir string, network ...string) []string {
 	binary := EngineBinary(engine)
 	args := []string{
 		binary, "run", "-d", "--rm",
 		"--name", name,
-		"-v", fmt.Sprintf("%s:/workspace", workspace),
-		"-w", "/workspace",
+		"-w", workingDir,
 	}
 	if len(network) > 0 && network[0] != "" {
 		args = append(args, "--network", network[0])

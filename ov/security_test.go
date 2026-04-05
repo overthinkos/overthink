@@ -112,7 +112,7 @@ func TestParseShmBytes(t *testing.T) {
 
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
-	args := buildStartArgs("docker", "myimage:latest", "/workspace", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"})
+	args := buildStartArgs("docker", "myimage:latest", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
 	found := false
 	for _, arg := range args {
 		if arg == "--privileged" {
@@ -131,7 +131,7 @@ func TestBuildShellArgsWithCapAdd(t *testing.T) {
 		CapAdd:  []string{"SYS_ADMIN"},
 		Devices: []string{"/dev/fuse"},
 	}
-	args := buildShellArgs("docker", "myimage:latest", "/workspace", 0, 0, nil, nil, nil, false, "", "127.0.0.1", nil, sec)
+	args := buildShellArgs("docker", "myimage:latest", 0, 0, nil, nil, nil, false, "", "127.0.0.1", nil, sec, "/home/user/workspace")
 	foundCap := false
 	foundDev := false
 	for i, arg := range args {
@@ -154,7 +154,7 @@ func TestGenerateQuadletWithPrivileged(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName: "runner",
 		ImageRef:  "ghcr.io/test/runner:latest",
-		Workspace: "/workspace",
+		Home: "/workspace",
 		Security:  SecurityConfig{Privileged: true},
 	}
 	content := generateQuadlet(cfg)
@@ -170,7 +170,7 @@ func TestGenerateQuadletWithCapAdd(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName: "builder",
 		ImageRef:  "ghcr.io/test/builder:latest",
-		Workspace: "/workspace",
+		Home: "/workspace",
 		Security: SecurityConfig{
 			CapAdd:      []string{"SYS_ADMIN"},
 			Devices:     []string{"/dev/fuse"},

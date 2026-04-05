@@ -937,3 +937,178 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 		}
 	}
 }
+
+func TestPixiBoundLayers(t *testing.T) {
+	layers := map[string]*Layer{
+		"llama-cpp": {Name: "llama-cpp", HasUserYml: true},
+		"unsloth":   {Name: "unsloth", HasUserYml: true},
+		"jupyter-colab-ml": {
+			Name: "jupyter-colab-ml", HasPixiToml: true, HasUserYml: true,
+			IncludedLayers: []string{"llama-cpp", "unsloth"},
+			Depends: []string{"cuda", "supervisord"},
+		},
+		"unsloth-studio": {
+			Name: "unsloth-studio", HasPixiToml: true,
+			IncludedLayers: []string{"llama-cpp", "unsloth"},
+			Depends: []string{"cuda", "supervisord"},
+		},
+		"cuda":        {Name: "cuda", HasRootYml: true},
+		"supervisord": {Name: "supervisord", HasRootYml: true},
+	}
+
+	bound := pixiBoundLayers(layers)
+
+	// unsloth has user.yml, no pixi.toml, included by pixi-owning layers → pixi-bound
+	if !bound["unsloth"] {
+		t.Error("unsloth should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
+	}
+
+	// llama-cpp has user.yml, no pixi.toml, included by pixi-owning layers → pixi-bound
+	if !bound["llama-cpp"] {
+		t.Error("llama-cpp should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
+	}
+
+	// jupyter-colab-ml has pixi.toml → NOT pixi-bound (it owns its env)
+	if bound["jupyter-colab-ml"] {
+		t.Error("jupyter-colab-ml should NOT be pixi-bound (has pixi.toml)")
+	}
+
+	// cuda has root.yml but is NOT included by any pixi-owning layer → NOT pixi-bound
+	if bound["cuda"] {
+		t.Error("cuda should NOT be pixi-bound (not included by pixi-owning layer)")
+	}
+}
+
+func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
+	// Mirror the actual jupyter-colab-ml / unsloth-studio scenario.
+	// Both share nvidia base and include llama-cpp + unsloth via layers:.
+	// The intermediate generator must NOT extract unsloth into an intermediate
+	// because it needs the pixi environment from the final image.
+	layers := map[string]*Layer{
+		"dbus":       {Name: "dbus", HasRootYml: true},
+		"ov":         {Name: "ov", HasRootYml: true},
+		"llama-cpp":  {Name: "llama-cpp", HasUserYml: true},
+		"unsloth":    {Name: "unsloth", HasUserYml: true, HasEnv: true, HasVolumes: true},
+		"notebook-templates": {Name: "notebook-templates", HasData: true},
+		"finetuning-notebooks": {Name: "finetuning-notebooks", HasData: true},
+		"jupyter-colab-ml": {
+			Name: "jupyter-colab-ml", HasPixiToml: true, HasUserYml: true,
+			IncludedLayers: []string{"llama-cpp", "unsloth"},
+			Depends: []string{"cuda", "supervisord"},
+			HasPorts: true,
+		},
+		"unsloth-studio": {
+			Name: "unsloth-studio", HasPixiToml: true,
+			IncludedLayers: []string{"llama-cpp", "unsloth"},
+			Depends: []string{"cuda", "supervisord"},
+			HasPorts: true,
+		},
+		"agent-forwarding": {Name: "agent-forwarding", HasRootYml: true},
+		"cuda":        {Name: "cuda", HasRootYml: true},
+		"pixi":        {Name: "pixi", HasRootYml: true},
+		"python":      {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
+	}
+
+	images := map[string]*ResolvedImage{
+		"builder": {
+			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
+			Layers: []string{"pixi"}, Tag: "v1", Registry: "r",
+			FullTag: "r/builder:v1", Pkg: "rpm",
+		},
+		"fedora": {
+			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
+			Layers: []string{}, Tag: "v1", Registry: "r",
+			FullTag: "r/fedora:v1", Pkg: "rpm",
+			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+		},
+		"nvidia": {
+			Name: "nvidia", Base: "fedora", IsExternalBase: false,
+			Layers: []string{"cuda"}, Tag: "v1", Registry: "r",
+			FullTag: "r/nvidia:v1", Pkg: "rpm",
+			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+		},
+		"jupyter-colab-ml": {
+			Name: "jupyter-colab-ml", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml:v1", Pkg: "rpm",
+			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+		},
+		"jupyter-colab-ml-finetuning": {
+			Name: "jupyter-colab-ml-finetuning", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "finetuning-notebooks", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml-finetuning:v1", Pkg: "rpm",
+			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+		},
+		"unsloth-studio": {
+			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "unsloth-studio", "finetuning-notebooks", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
+			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+		},
+	}
+
+	cfg := &Config{
+		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"}},
+		Images: map[string]ImageConfig{
+			"builder": {Layers: []string{"pixi"}},
+			"fedora":  {Layers: []string{}},
+			"nvidia":  {Base: "fedora", Layers: []string{"cuda"}},
+			"jupyter-colab-ml":            {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "dbus", "ov"}},
+			"jupyter-colab-ml-finetuning": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "finetuning-notebooks", "dbus", "ov"}},
+			"unsloth-studio":              {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "finetuning-notebooks", "dbus", "ov"}},
+		},
+	}
+
+	result, err := ComputeIntermediates(images, layers, cfg, "v1")
+	if err != nil {
+		t.Fatalf("ComputeIntermediates() error = %v", err)
+	}
+
+	t.Log("Resulting images:")
+	for _, name := range func() []string {
+		var names []string
+		for n := range result {
+			names = append(names, n)
+		}
+		sortStrings(names)
+		return names
+	}() {
+		img := result[name]
+		autoStr := ""
+		if img.Auto {
+			autoStr = " [auto]"
+		}
+		t.Logf("  %s%s: base=%s layers=%v", name, autoStr, img.Base, img.Layers)
+	}
+
+	// CRITICAL: No auto-intermediate should contain unsloth or llama-cpp
+	// These are pixi-bound layers that must stay in the final image
+	for name, img := range result {
+		if !img.Auto {
+			continue
+		}
+		for _, l := range img.Layers {
+			if l == "unsloth" {
+				t.Errorf("auto-intermediate %q contains pixi-bound layer 'unsloth' — will fail at build time (no pixi env)", name)
+			}
+			if l == "llama-cpp" {
+				t.Errorf("auto-intermediate %q contains pixi-bound layer 'llama-cpp' — will fail at build time (no pixi env)", name)
+			}
+		}
+	}
+
+	// All original images should still exist
+	for name := range images {
+		if _, ok := result[name]; !ok {
+			t.Errorf("original image %q missing from result", name)
+		}
+	}
+
+	// Build order should have no cycles
+	order, err := ResolveImageOrder(result, layers)
+	if err != nil {
+		t.Fatalf("ResolveImageOrder after intermediates: %v", err)
+	}
+	t.Logf("Build order: %v", order)
+}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 )
 
@@ -89,6 +90,114 @@ func InstanceVolumes(mounts []VolumeMount, imageName, instance string) []VolumeM
 		result[i] = VolumeMount{
 			VolumeName:    strings.Replace(m.VolumeName, prefix, newPrefix, 1),
 			ContainerPath: m.ContainerPath,
+		}
+	}
+	return result
+}
+
+// resolveWorkingDir returns the container working directory.
+// Prefers the "workspace" volume's container path if declared, else home.
+func resolveWorkingDir(volumes []VolumeMount, bindMounts []ResolvedBindMount, home string) string {
+	for _, v := range volumes {
+		// Extract bare volume name from "ov-<image>-<name>"
+		bare := v.VolumeName
+		if strings.HasPrefix(bare, "ov-") {
+			// ov-<image>-<name>: find the last hyphen-separated segment
+			parts := strings.SplitN(bare, "-", 3)
+			if len(parts) == 3 {
+				bare = parts[2]
+			}
+		}
+		if bare == "workspace" {
+			return v.ContainerPath
+		}
+	}
+	for _, bm := range bindMounts {
+		if bm.Name == "workspace" {
+			return bm.ContPath
+		}
+	}
+	return home
+}
+
+// workspaceBindHost returns the host path of the "workspace" bind mount, or "".
+func workspaceBindHost(bindMounts []ResolvedBindMount) string {
+	for _, bm := range bindMounts {
+		if bm.Name == "workspace" {
+			return bm.HostPath
+		}
+	}
+	return ""
+}
+
+// parseVolumeFlagsStandalone converts --volume and --bind CLI flags into DeployVolumeConfig.
+// Extracted from ImageConfigSetupCmd.parseVolumeFlags for reuse in shell/start.
+func parseVolumeFlagsStandalone(volumeFlags, bindFlags []string) []DeployVolumeConfig {
+	var configs []DeployVolumeConfig
+	seen := make(map[string]bool)
+
+	for _, v := range volumeFlags {
+		parts := strings.SplitN(v, ":", 3)
+		dv := DeployVolumeConfig{Name: parts[0]}
+		if len(parts) >= 2 {
+			dv.Type = parts[1]
+		}
+		if len(parts) >= 3 {
+			dv.Host = parts[2]
+		}
+		if dv.Type == "" {
+			dv.Type = "volume"
+		}
+		if dv.Type == "encrypt" {
+			dv.Type = "encrypted"
+		}
+		if !seen[dv.Name] {
+			configs = append(configs, dv)
+			seen[dv.Name] = true
+		}
+	}
+
+	for _, b := range bindFlags {
+		if seen[b] || seen[strings.SplitN(b, "=", 2)[0]] {
+			continue
+		}
+		if idx := strings.IndexByte(b, '='); idx >= 0 {
+			name := b[:idx]
+			host := b[idx+1:]
+			// Resolve "." to absolute path
+			if host == "." {
+				if abs, err := filepath.Abs(host); err == nil {
+					host = abs
+				}
+			}
+			configs = append(configs, DeployVolumeConfig{Name: name, Type: "bind", Host: host})
+			seen[name] = true
+		} else {
+			configs = append(configs, DeployVolumeConfig{Name: b, Type: "bind"})
+			seen[b] = true
+		}
+	}
+
+	return configs
+}
+
+// mergeVolumeConfigs merges CLI overrides onto deploy.yml volume configs.
+// CLI overrides win by name.
+func mergeVolumeConfigs(base, overrides []DeployVolumeConfig) []DeployVolumeConfig {
+	if len(overrides) == 0 {
+		return base
+	}
+	var result []DeployVolumeConfig
+	seen := make(map[string]bool)
+	// Overrides first (highest priority)
+	for _, o := range overrides {
+		result = append(result, o)
+		seen[o.Name] = true
+	}
+	// Base configs that weren't overridden
+	for _, b := range base {
+		if !seen[b.Name] {
+			result = append(result, b)
 		}
 	}
 	return result

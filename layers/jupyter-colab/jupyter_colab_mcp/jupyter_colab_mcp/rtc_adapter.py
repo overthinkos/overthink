@@ -98,16 +98,24 @@ class RTCAdapter:
         if asyncio.iscoroutine(model):
             model = await model
         notebooks = []
-        self._collect_notebooks(model, notebooks)
+        await self._collect_notebooks(model, notebooks)
         return notebooks
 
-    def _collect_notebooks(self, model: dict, result: list[dict]) -> None:
+    async def _collect_notebooks(self, model: dict, result: list[dict]) -> None:
         """Recursively collect notebooks from a directory model."""
         if model["type"] == "notebook":
             result.append({"path": model["path"], "name": model["name"]})
-        elif model["type"] == "directory" and "content" in model:
-            for item in model["content"]:
-                self._collect_notebooks(item, result)
+        elif model["type"] == "directory":
+            content = model.get("content")
+            if content is None:
+                # Subdirectory not yet fetched — fetch it recursively
+                sub = self.contents_manager.get(model["path"], content=True, type="directory")
+                if asyncio.iscoroutine(sub):
+                    sub = await sub
+                content = sub.get("content") if sub else None
+            if content:
+                for item in content:
+                    await self._collect_notebooks(item, result)
 
     async def get_notebook(self, path: str) -> dict[str, Any] | None:
         """Get full notebook content. Uses CRDT document if room exists, else file."""

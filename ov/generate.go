@@ -1501,27 +1501,47 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 	writeJSONLabel(b, LabelLayerVersions, layerVersions)
 
-	// Data entries: staging paths for deploy-time provisioning
+	// Data entries: staging paths for deploy-time provisioning.
+	// Walk the full image chain (like CollectImageVolumes) to include data
+	// entries from layers in parent/intermediate images.
 	var dataEntries []LabelDataEntry
-	for _, layerName := range layerOrder {
-		layer := g.Layers[layerName]
-		if !layer.HasData {
-			continue
+	seenDataLayers := make(map[string]bool)
+	current := imageName
+	for {
+		imgDef, ok := g.Config.Images[current]
+		if !ok {
+			break
 		}
-		for _, d := range layer.Data() {
-			staging := "/data/" + d.Volume + "/"
-			if d.Dest != "" {
-				staging += d.Dest
-				if !strings.HasSuffix(staging, "/") {
-					staging += "/"
-				}
+		resolved, _ := ResolveLayerOrder(imgDef.Layers, g.Layers, nil)
+		for _, layerName := range resolved {
+			if seenDataLayers[layerName] {
+				continue
 			}
-			dataEntries = append(dataEntries, LabelDataEntry{
-				Volume:  d.Volume,
-				Staging: staging,
-				Layer:   layerName,
-				Dest:    d.Dest,
-			})
+			seenDataLayers[layerName] = true
+			layer, ok := g.Layers[layerName]
+			if !ok || !layer.HasData {
+				continue
+			}
+			for _, d := range layer.Data() {
+				staging := "/data/" + d.Volume + "/"
+				if d.Dest != "" {
+					staging += d.Dest
+					if !strings.HasSuffix(staging, "/") {
+						staging += "/"
+					}
+				}
+				dataEntries = append(dataEntries, LabelDataEntry{
+					Volume:  d.Volume,
+					Staging: staging,
+					Layer:   layerName,
+					Dest:    d.Dest,
+				})
+			}
+		}
+		if baseImg, isInternal := g.Config.Images[imgDef.Base]; isInternal && baseImg.IsEnabled() {
+			current = imgDef.Base
+		} else {
+			break
 		}
 	}
 	if len(dataEntries) > 0 {

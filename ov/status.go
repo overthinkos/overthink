@@ -32,7 +32,6 @@ type ContainerStatus struct {
 	Devices   []string     `json:"devices,omitempty"`   // device paths / CDI devices
 	Tools     []ToolStatus `json:"tools,omitempty"`     // live tool probe results
 	Volumes   []string     `json:"volumes,omitempty"`   // volume summaries
-	Workspace string       `json:"workspace,omitempty"` // workspace mount path
 	Network   string       `json:"network,omitempty"`   // network mode
 	Tunnel    string       `json:"tunnel,omitempty"`    // tunnel summary
 	RunMode   string       `json:"run_mode"`            // "quadlet" or "direct"
@@ -666,7 +665,6 @@ func (c *StatusCmd) statusSingle(rt *ResolvedRuntime) error {
 	if dc != nil {
 		if dcImg, ok := dc.Images[imageName]; ok {
 			status.Ports = dcImg.Ports
-			status.Workspace = dcImg.Workspace
 			if dcImg.Network != "" {
 				status.Network = dcImg.Network
 			}
@@ -730,9 +728,6 @@ func printStatusDetail(s ContainerStatus) error {
 				fmt.Printf("           %s\n", v)
 			}
 		}
-	}
-	if s.Workspace != "" {
-		fmt.Printf("Workspace: %s\n", s.Workspace)
 	}
 	if s.Network != "" {
 		fmt.Printf("Network:   %s\n", s.Network)

@@ -2,4 +2,4 @@ info: "Starter notebook templates for jupyter-colab"
 
 data:
   - src: data/notebooks
-    volume: notebooks
+    volume: workspace

@@ -1,4 +1,4 @@
-info: "Unsloth fine-tuning notebook collection for unsloth-studio"
+info: "Unsloth fine-tuning notebook collection"
 
 data:
   - src: data/finetuning

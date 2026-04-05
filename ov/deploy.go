@@ -17,7 +17,6 @@ type DeployConfig struct {
 
 // DeployImageConfig holds deployment-specific overrides for a single image.
 type DeployImageConfig struct {
-	Workspace  string               `yaml:"workspace,omitempty"`
 	Version    string               `yaml:"version,omitempty"`
 	Status     string               `yaml:"status,omitempty"`
 	Info       string               `yaml:"info,omitempty"`
@@ -101,7 +100,6 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 			continue // silently ignore unknown images
 		}
 
-		// Note: Workspace is deploy-only, not merged into ImageConfig (build-time).
 		if overlay.Version != "" {
 			img.Version = overlay.Version
 		}
@@ -351,9 +349,6 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 		}
 		for name, overlay := range dc.Images {
 			existing := result.Images[name]
-			if overlay.Workspace != "" {
-				existing.Workspace = overlay.Workspace
-			}
 			if overlay.Tunnel != nil {
 				existing.Tunnel = overlay.Tunnel
 			}
@@ -421,7 +416,6 @@ func cleanDeployEntry(imageName string) {
 
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {
-	Workspace string
 	Ports     []string
 	Env       []string
 	EnvFile   string
@@ -438,7 +432,6 @@ func saveDeployState(imageName string, input SaveDeployStateInput) {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 	}
 	entry := dc.Images[imageName] // preserve existing fields (tunnel, volumes, etc.)
-	entry.Workspace = input.Workspace
 	if input.Volumes != nil {
 		entry.Volumes = input.Volumes
 	}

@@ -23,7 +23,6 @@ type ImageConfigCmd struct {
 // initializes and mounts encrypted volumes.
 type ImageConfigSetupCmd struct {
 	Image       string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace   string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
 	Tag         string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	Env         []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
@@ -61,31 +60,6 @@ func (c *ImageConfigSetupCmd) Run() error {
 }
 
 func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-
-	// Check deploy.yml for previously saved workspace when using default
-	if c.Workspace == "." {
-		if dc, _ := LoadDeployConfig(); dc != nil {
-			if entry, ok := dc.Images[c.Image]; ok && entry.Workspace != "" {
-				if wInfo, wErr := os.Stat(entry.Workspace); wErr == nil && wInfo.IsDir() {
-					absWorkspace = entry.Workspace
-					fmt.Fprintf(os.Stderr, "Using workspace from deploy.yml: %s\n", absWorkspace)
-				}
-			}
-		}
-	}
-
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
-	}
-
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -143,7 +117,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
 	// Resolve env vars from labels + deploy.yml + CLI
-	envVars, envErr := ResolveEnvVars(meta.Env, "", absWorkspace, c.EnvFile, c.Env)
+	envVars, envErr := ResolveEnvVars(meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -161,9 +135,11 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Also check workspace .env for quadlet EnvironmentFile
 	if quadletEnvFile == "" {
-		wsEnvPath := filepath.Join(absWorkspace, ".env")
-		if _, statErr := os.Stat(wsEnvPath); statErr == nil {
-			quadletEnvFile = wsEnvPath
+		if wsHost := workspaceBindHost(bindMounts); wsHost != "" {
+			wsEnvPath := filepath.Join(wsHost, ".env")
+			if _, statErr := os.Stat(wsEnvPath); statErr == nil {
+				quadletEnvFile = wsEnvPath
+			}
 		}
 	}
 
@@ -221,7 +197,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	qcfg := QuadletConfig{
 		ImageName:       c.Image,
 		ImageRef:        imageRef,
-		Workspace:       absWorkspace,
+		Home:            meta.Home,
 		Ports:           ports,
 		Volumes:         volumes,
 		BindMounts:      bindMounts,
@@ -255,7 +231,6 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Persist deployment state to deploy.yml (source of truth)
 	saveDeployState(c.Image, SaveDeployStateInput{
-		Workspace: absWorkspace,
 		Ports:     ports,
 		Env:       c.Env,
 		EnvFile:   quadletEnvFile,
@@ -443,18 +418,6 @@ skipDataProvision:
 }
 
 func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) error {
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
-	}
-
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -485,7 +448,7 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	}
 
 	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -520,7 +483,7 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	qcfg := QuadletConfig{
 		ImageName:       ctx.ImageName,
 		ImageRef:        ctx.ImageRef,
-		Workspace:       absWorkspace,
+		Home:            ctx.Resolved.Home,
 		Ports:           ctx.Resolved.Ports,
 		Volumes:         volumes,
 		BindMounts:      bindMounts,

@@ -6,6 +6,38 @@ import (
 	"strings"
 )
 
+
+// pixiBoundLayers identifies layers that have install files (user.yml/root.yml)
+// but depend on a pixi environment from their including parent meta-layer.
+// These layers must NOT be extracted into auto-intermediates because the
+// intermediate won't have the pixi environment they need.
+//
+// A layer is pixi-bound if:
+// 1. It has install files (user.yml or root.yml)
+// 2. It does NOT have its own pixi manifest (pixi.toml/pyproject.toml/environment.yml)
+// 3. It is included via layers: by another layer that DOES have a pixi manifest
+func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
+	bound := make(map[string]bool)
+	for _, layer := range layers {
+		if layer.PixiManifest() == "" {
+			continue
+		}
+		// This layer owns a pixi env. Check its IncludedLayers.
+		for _, included := range layer.IncludedLayers {
+			child, ok := layers[included]
+			if !ok {
+				continue
+			}
+			// If the included layer has install files but no pixi manifest,
+			// it depends on this parent's pixi env and must not be extracted.
+			if child.HasInstallFiles() && child.PixiManifest() == "" {
+				bound[included] = true
+			}
+		}
+	}
+	return bound
+}
+
 // trieNode represents a node in the layer prefix trie.
 type trieNode struct {
 	layer    string                // layer at this position ("" for root)
@@ -197,6 +229,9 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 		result[name] = &cp
 	}
 
+	// Compute pixi-bound layers: these must not be extracted into intermediates
+	pixiBound := pixiBoundLayers(layers)
+
 	// Collect all builder image names to exclude from intermediate generation
 	builderNames := make(map[string]bool)
 	for _, builder := range cfg.Defaults.Builders {
@@ -228,7 +263,7 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 			continue
 		}
 		processed[parentName] = true
-		if err := processSiblingGroup(parentName, children, result, images, layers, cfg, tag, globalOrder); err != nil {
+		if err := processSiblingGroup(parentName, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 			return nil, err
 		}
 	}
@@ -238,7 +273,7 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 		if processed[parentBase] || len(children) < 2 {
 			continue
 		}
-		if err := processSiblingGroup(parentBase, children, result, images, layers, cfg, tag, globalOrder); err != nil {
+		if err := processSiblingGroup(parentBase, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 			return nil, err
 		}
 	}
@@ -248,7 +283,7 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 
 // processSiblingGroup builds a prefix trie from the relative layer sequences
 // of children sharing the same parent, and creates intermediates at branch points.
-func processSiblingGroup(parentName string, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string) error {
+func processSiblingGroup(parentName string, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	sortStrings(children)
 
 	// Get layers provided by parent
@@ -263,7 +298,7 @@ func processSiblingGroup(parentName string, children []string, result, origImage
 	// Build trie from relative layer sequences
 	root := newTrieNode("")
 	for _, childName := range children {
-		seq := relativeLayerSequence(childName, parentProvided, result, layers, globalOrder)
+		seq := relativeLayerSequence(childName, parentProvided, result, layers, globalOrder, pixiBound)
 		node := root
 		for _, layer := range seq {
 			child, ok := node.children[layer]
@@ -276,12 +311,12 @@ func processSiblingGroup(parentName string, children []string, result, origImage
 		node.images = append(node.images, childName)
 	}
 
-	return walkTrieScoped(root, parentName, result, origImages, layers, cfg, tag, globalOrder)
+	return walkTrieScoped(root, parentName, result, origImages, layers, cfg, tag, globalOrder, pixiBound)
 }
 
 // relativeLayerSequence returns an image's layers minus what the parent provides,
 // ordered according to the global layer order.
-func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) []string {
+func relativeLayerSequence(imageName string, parentProvided map[string]bool, images map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	allLayers := collectAllImageLayers(imageName, images, layers)
 	layerSet := make(map[string]bool, len(allLayers))
 	for _, l := range allLayers {
@@ -290,7 +325,7 @@ func relativeLayerSequence(imageName string, parentProvided map[string]bool, ima
 
 	var seq []string
 	for _, l := range globalOrder {
-		if layerSet[l] && !parentProvided[l] {
+		if layerSet[l] && !parentProvided[l] && !pixiBound[l] {
 			seq = append(seq, l)
 		}
 	}
@@ -299,7 +334,7 @@ func relativeLayerSequence(imageName string, parentProvided map[string]bool, ima
 
 // walkTrieScoped walks the trie creating intermediates at branch points.
 // User-defined images at branch points are reused as intermediates without rebasing.
-func walkTrieScoped(node *trieNode, parentName string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string) error {
+func walkTrieScoped(node *trieNode, parentName string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	for _, childLayerName := range sortedKeys(node.children) {
 		child := node.children[childLayerName]
 
@@ -331,18 +366,18 @@ func walkTrieScoped(node *trieNode, parentName string, result map[string]*Resolv
 			if len(userImages) == 1 && len(current.images) == 1 {
 				// Single user image at branch: use it as intermediate, preserve its Base
 				intermediateName := userImages[0]
-				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder); err != nil {
+				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			} else {
 				// 0 or 2+ user images: create auto-intermediate
 				intermediateName := pickAutoName(pathLayers, parentName, result, origImages)
-				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder)
+				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
 				// Rebase all terminal images to this intermediate
 				for _, imgName := range current.images {
 					updateImageBase(imgName, intermediateName, result)
 				}
-				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder); err != nil {
+				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			}
@@ -386,8 +421,8 @@ func pickAutoName(pathLayers []string, parentName string, result, origImages map
 }
 
 // createIntermediate creates an auto-generated intermediate image in the result map.
-func createIntermediate(name, parentName string, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string) {
-	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder)
+func createIntermediate(name, parentName string, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
+	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
 	if _, ok := result[parentName]; !ok {
@@ -451,7 +486,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 
 // computeOwnLayers determines which layers an intermediate needs to install
 // (pathLayers minus what the parent already provides).
-func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string) []string {
+func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
 		provided, err := LayersProvidedByImage(parentName, result, layers)
@@ -474,10 +509,10 @@ func computeOwnLayers(parentName string, pathLayers []string, result map[string]
 		addTransitiveDeps(l, layers, needed, parentProvided)
 	}
 
-	// Return in global order
+	// Return in global order, excluding pixi-bound layers
 	var ordered []string
 	for _, l := range globalOrder {
-		if needed[l] && !parentProvided[l] {
+		if needed[l] && !parentProvided[l] && !pixiBound[l] {
 			ordered = append(ordered, l)
 		}
 	}

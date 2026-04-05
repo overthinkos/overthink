@@ -235,6 +235,20 @@ images:
     platforms:
       - linux/amd64
 
+  jupyter-colab-ml-finetuning:
+    base: nvidia
+    layers:
+      - agent-forwarding
+      - jupyter-colab-ml
+      - notebook-templates
+      - finetuning-notebooks
+      - dbus
+      - ov
+    ports:
+      - "8888:8888"
+    platforms:
+      - linux/amd64
+
   ollama:
     base: nvidia
     layers:

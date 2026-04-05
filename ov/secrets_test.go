@@ -55,7 +55,7 @@ func TestQuadletSecretDirectives(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName: "test-img",
 		ImageRef:  "ghcr.io/test/test-img:latest",
-		Workspace: "/tmp/workspace",
+		Home: "/tmp",
 		Secrets: []CollectedSecret{
 			{Name: "ov-test-img-api-key", Target: "/run/secrets/api_key"},
 			{Name: "ov-test-img-db-pass", Target: "/run/secrets/db_pass"},

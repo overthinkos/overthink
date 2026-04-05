@@ -52,15 +52,16 @@ var forceTTY bool
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
-	Image     string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Workspace string   `short:"w" long:"workspace" default:"." help:"Host path to mount at /workspace (default: current directory)"`
-	Tag       string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag        string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Command   string   `short:"c" help:"Command to execute instead of interactive shell"`
-	Build     bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	TTY       bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
-	Env       []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
-	EnvFile   string   `long:"env-file" help:"Load env vars from file"`
-	Instance  string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	TTY        bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
+	Env        []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
+	EnvFile    string   `long:"env-file" help:"Load env vars from file"`
+	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	VolumeFlag []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
+	Bind       []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -72,19 +73,6 @@ func (c *ShellCmd) Run() error {
 	ref := StripURLScheme(c.Image)
 	if IsRemoteImageRef(ref) {
 		return c.runRemote(ref)
-	}
-
-	// Resolve workspace to absolute path (needed regardless of config source)
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
 	}
 
 	var detected DetectedDevices
@@ -143,7 +131,8 @@ func (c *ShellCmd) Run() error {
 			return err
 		}
 		security = CollectSecurity(cfg, layers, c.Image)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, deployVolumes, resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, mergeVolumeConfigs(deployVolumes, cliVolumes), resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
 		uid = resolved.UID
 		gid = resolved.GID
@@ -180,7 +169,8 @@ func (c *ShellCmd) Run() error {
 		deployEnv = meta.Env
 
 		// Resolve volume backing from labels + deploy config
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
@@ -189,7 +179,7 @@ func (c *ShellCmd) Run() error {
 
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
-	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, absWorkspace, c.EnvFile, c.Env)
+	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -208,7 +198,8 @@ func (c *ShellCmd) Run() error {
 	if containerRunning(engine, name) {
 		// Exec path: inject env vars only (can't add volumes to running container)
 		execEnv := append(envVars, agentFwd.Env...)
-		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv)
+		workDir := resolveWorkingDir(volumes, bindMounts, home)
+		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv, workDir)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -253,7 +244,8 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	args := buildShellArgs(engine, imageRef, absWorkspace, uid, gid, ports, volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, resolvedNetwork)
+	workDir := resolveWorkingDir(volumes, bindMounts, home)
+	args := buildShellArgs(engine, imageRef, uid, gid, ports, volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, workDir, resolvedNetwork)
 
 	// Find engine binary
 	enginePath, err := findExecutable(EngineBinary(engine))
@@ -266,18 +258,6 @@ func (c *ShellCmd) Run() error {
 }
 
 func (c *ShellCmd) runRemote(ref string) error {
-	absWorkspace, err := filepath.Abs(c.Workspace)
-	if err != nil {
-		return fmt.Errorf("resolving workspace path: %w", err)
-	}
-	info, err := os.Stat(absWorkspace)
-	if err != nil {
-		return fmt.Errorf("workspace path %q: %w", absWorkspace, err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("workspace path %q is not a directory", absWorkspace)
-	}
-
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
 		detected = DetectHostDevices()
@@ -300,8 +280,15 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return err
 	}
 
+	allVolumes, err := ctx.CollectVolumes()
+	if err != nil {
+		return err
+	}
+	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+
 	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", absWorkspace, c.EnvFile, c.Env)
+	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -313,7 +300,8 @@ func (c *ShellCmd) runRemote(ref string) error {
 	name := containerNameInstance(ctx.ImageName, c.Instance)
 	if containerRunning(engine, name) {
 		execEnv := append(envVars, remoteAgentFwd.Env...)
-		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, execEnv)
+		workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
+		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, execEnv, workDir)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
 			return err
@@ -330,12 +318,6 @@ func (c *ShellCmd) runRemote(ref string) error {
 	if ctx.Resolved != nil && ctx.Resolved.Engine != "" {
 		engine = ctx.Resolved.Engine
 	}
-
-	allVolumes, err := ctx.CollectVolumes()
-	if err != nil {
-		return err
-	}
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, nil, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
 		return err
@@ -363,9 +345,10 @@ func (c *ShellCmd) runRemote(ref string) error {
 		return netErr
 	}
 
-	args := buildShellArgs(engine, ctx.ImageRef, absWorkspace,
+	workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
+	args := buildShellArgs(engine, ctx.ImageRef,
 		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, resolvedNetwork)
+		volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, workDir, resolvedNetwork)
 
 	enginePath, err := findExecutable(EngineBinary(engine))
 	if err != nil {
@@ -383,7 +366,7 @@ func resolveShellImageRef(registry, name, tag string) string {
 }
 
 // buildShellArgs constructs the container run argument list.
-func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig, network ...string) []string {
+func buildShellArgs(engine, imageRef string, uid, gid int, ports []string, volumes []VolumeMount, bindMounts []ResolvedBindMount, gpu bool, command string, bindAddr string, envVars []string, security SecurityConfig, workingDir string, network ...string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if forceTTY || isTerminal() {
@@ -391,8 +374,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 	}
 	args := []string{
 		binary, "run", "--rm", interactive,
-		"-v", fmt.Sprintf("%s:/workspace", workspace),
-		"-w", "/workspace",
+		"-w", workingDir,
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
 	}
 	if len(network) > 0 && network[0] != "" {
@@ -433,7 +415,7 @@ func buildShellArgs(engine, imageRef, workspace string, uid, gid int, ports []st
 }
 
 // buildExecArgs constructs the container exec argument list for attaching to a running container.
-func buildExecArgs(engine, name string, uid, gid int, command string, envVars []string) []string {
+func buildExecArgs(engine, name string, uid, gid int, command string, envVars []string, workingDir string) []string {
 	binary := EngineBinary(engine)
 	interactive := "-i"
 	if forceTTY || isTerminal() {
@@ -442,7 +424,7 @@ func buildExecArgs(engine, name string, uid, gid int, command string, envVars []
 	args := []string{
 		binary, "exec", interactive,
 		"--user", fmt.Sprintf("%d:%d", uid, gid),
-		"-w", "/workspace",
+		"-w", workingDir,
 	}
 	for _, e := range envVars {
 		args = append(args, "-e", e)

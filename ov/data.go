@@ -66,16 +66,22 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 
 		fmt.Fprintf(os.Stderr, "  %s: provisioning from %s ...\n", entry.Volume, entry.Staging)
 
+		// Resolve target directory: preserve dest subdirectory within volume
+		targetPath := bm.HostPath
+		if entry.Dest != "" {
+			targetPath = targetPath + "/" + entry.Dest
+		}
+
 		// Ensure host directory exists
-		if err := os.MkdirAll(bm.HostPath, 0755); err != nil {
-			return seeded, fmt.Errorf("creating directory %s: %w", bm.HostPath, err)
+		if err := os.MkdirAll(targetPath, 0755); err != nil {
+			return seeded, fmt.Errorf("creating directory %s: %w", targetPath, err)
 		}
 
 		var err error
 		if meta.DataImage {
-			err = provisionFromScratchImage(engine, imageRef, entry, bm.HostPath)
+			err = provisionFromScratchImage(engine, imageRef, entry, targetPath)
 		} else {
-			err = provisionFromRunnableImage(engine, imageRef, meta, entry, bm.HostPath, mode)
+			err = provisionFromRunnableImage(engine, imageRef, meta, entry, targetPath, mode)
 		}
 		if err != nil {
 			return seeded, fmt.Errorf("provisioning %s: %w", entry.Volume, err)

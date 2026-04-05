@@ -82,7 +82,7 @@ func TestDetectedDevicesInQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "test",
 		ImageRef:    "test:latest",
-		Workspace:   "/workspace",
+		Home:   "/workspace",
 		GPU:         true,
 		BindAddress: "127.0.0.1",
 		Security: SecurityConfig{
@@ -208,7 +208,7 @@ func TestAMDGPUGroupsInQuadlet(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "test-amd",
 		ImageRef:    "test-amd:latest",
-		Workspace:   "/workspace",
+		Home:   "/workspace",
 		GPU:         false,
 		BindAddress: "127.0.0.1",
 		Security: SecurityConfig{

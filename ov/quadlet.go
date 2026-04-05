@@ -11,7 +11,7 @@ import (
 type QuadletConfig struct {
 	ImageName   string              // image name from images.yml (e.g. "fedora-test")
 	ImageRef    string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
-	Workspace   string              // absolute host path to mount at /workspace
+	Home        string              // container home directory (for WorkingDir resolution)
 	Ports       []string            // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
 	Volumes     []VolumeMount       // named volumes from layer.yml declarations
 	BindMounts  []ResolvedBindMount // bind-backed volumes from deploy config
@@ -66,8 +66,8 @@ func generateQuadlet(cfg QuadletConfig) string {
 	b.WriteString("\n[Container]\n")
 	b.WriteString(fmt.Sprintf("Image=%s\n", cfg.ImageRef))
 	b.WriteString(fmt.Sprintf("ContainerName=%s\n", name))
-	b.WriteString(fmt.Sprintf("Volume=%s:/workspace\n", cfg.Workspace))
-	b.WriteString("WorkingDir=/workspace\n")
+	workDir := resolveWorkingDir(cfg.Volumes, cfg.BindMounts, cfg.Home)
+	b.WriteString(fmt.Sprintf("WorkingDir=%s\n", workDir))
 	if cfg.Network != "" {
 		b.WriteString(fmt.Sprintf("Network=%s\n", cfg.Network))
 	}

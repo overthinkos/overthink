@@ -121,7 +121,7 @@ func LoadWorkspaceEnv(workspace string) ([]string, error) {
 
 // ResolveEnvVars merges env vars from multiple sources.
 // Priority (last wins for duplicate keys): deploy config < workspace .env < CLI --env-file < CLI -e flags.
-func ResolveEnvVars(deployEnv []string, deployEnvFile string, workspace string, cliEnvFile string, cliEnv []string) ([]string, error) {
+func ResolveEnvVars(deployEnv []string, deployEnvFile string, envDir string, cliEnvFile string, cliEnv []string) ([]string, error) {
 	var all []string
 
 	// 1. Deploy config env vars (lowest priority)
@@ -138,8 +138,8 @@ func ResolveEnvVars(deployEnv []string, deployEnvFile string, workspace string, 
 	}
 
 	// 3. Workspace .env file
-	if workspace != "" {
-		vars, err := LoadWorkspaceEnv(workspace)
+	if envDir != "" {
+		vars, err := LoadWorkspaceEnv(envDir)
 		if err != nil {
 			return nil, err
 		}

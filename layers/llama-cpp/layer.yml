@@ -1,0 +1,7 @@
+description: "llama.cpp prebuilt binaries and GGUF conversion tools"
+
+env:
+  LLAMA_CPP_PATH: "~/llama.cpp"
+
+path_append:
+  - "~/llama.cpp"

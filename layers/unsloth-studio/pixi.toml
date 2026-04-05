@@ -16,7 +16,7 @@ torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu130" 
 torchaudio = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 xformers = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 
-# === vLLM runtime dependencies (wheel installed --no-deps in user.yml) ===
+# === vLLM runtime dependencies (wheel installed --no-deps in vllm layer) ===
 blake3 = "*"
 cbor2 = "*"
 compressed-tensors = "==0.13.0"

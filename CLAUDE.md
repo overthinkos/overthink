@@ -133,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (147 layers)
++-- layers/<name>/            # Layer directories (150 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -163,8 +163,8 @@ plugins/
 +-- ov/                               # Operations (21 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (147 skills)
-+-- ov-images/                        # Image reference (36 skills)
++-- ov-layers/                        # Layer reference (150 skills)
++-- ov-images/                        # Image reference (37 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -213,6 +213,24 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
+
+### Two-Tier Layer Architecture for ML/Python Layers
+
+ML layers follow a two-tier pattern that separates environment ownership from post-install steps:
+
+**Tier 1 — Post-install layers** (no pixi.toml): Install binaries or pip packages into whatever pixi env exists. Reusable across images.
+- `llama-cpp`: downloads prebuilt binaries + GGUF tools. Sets `LLAMA_CPP_PATH` env and PATH
+- `unsloth`: pip installs vLLM wheel + unsloth + unsloth-zoo + vLLM compat patch. Sets `HF_HOME`, `UNSLOTH_SKIP_LLAMA_CPP_INSTALL`
+
+**Tier 2 — Environment-owner layers** (have pixi.toml): Define the complete Python environment. Compose Tier 1 layers via `layers:` field.
+- `python-ml`: core ML env (PyTorch, vLLM runtime deps, HF core). `layers: [llama-cpp]`
+- `jupyter-colab-ml`: full ML + Jupyter + CRDT MCP. `layers: [llama-cpp, unsloth]`
+- `unsloth-studio`: fine-tuning env with studio UI. `layers: [llama-cpp, unsloth]`
+
+**Key constraint:** The generator creates intermediate images for shared layers. Tier 1 layers with pip installs (like `unsloth`) must NOT be extracted into intermediates — they need the pixi env from Tier 2. The generator handles this correctly as long as pip-install layers don't have standalone pixi.toml. Only Tier 2 layers own pixi.toml; Tier 1 user.yml runs after pixi COPY in the final image build.
+
+- Meta-layers CAN have both `depends:` and `layers:` (e.g., `unsloth-studio` has `depends: [cuda, supervisord]` + `layers: [llama-cpp, unsloth]`)
+- Meta-layers CAN own pixi.toml (environment-owner pattern — exactly one pixi.toml per image)
 
 For layer-specific rules (install files, packages, port_relay, secrets, data, cache mounts): `/ov:layer`
 
@@ -338,8 +356,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 21 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 147 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 36 | Image reference | "What does image X look like?" |
+| `ov-layers` | 150 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 37 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -367,8 +385,8 @@ Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://loc
 **Client-side interaction (browser-based RD):** The Selkies SPA uses a transparent `input#overlayInput` (z-index 3) on top of `canvas#videoCanvas` (z-index 2, pointer-events: none) to capture mouse/keyboard events. Events pass through the SPA's JavaScript → WebSocket → labwc. Keyboard passthrough works via VNC type, wtype, or CDP Input.dispatchKeyEvent — the SPA's onkeydown handler captures with stopImmediatePropagation. **Limitation:** Super key consumed by the client's compositor, Ctrl+T/W consumed by the client's Chrome — browser-based RD cannot forward compositor or browser shortcuts. Mouse coordinates have ~0.82x scaling between input and remote cursor position. Session state (all windows, typed text) survives client disconnection. See `/ov-images:selkies-desktop` for full DOM structure and coordinate mapping.
 
 **Programmatic notebook access (MCP):**
-`/ov-layers:jupyter-colab` (MCP tools, CRDT architecture) -> `/ov-images:jupyter-colab` (deployment, Claude Code config) -> `/ov:service` (lifecycle)
-Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT.
+`/ov-layers:jupyter-colab` (lightweight, no GPU) or `/ov-layers:jupyter-colab-ml` (full CUDA ML stack) -> `/ov-images:jupyter-colab` or `/ov-images:jupyter-colab-ml` (deployment) -> `/ov:service` (lifecycle)
+Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT. Use `jupyter-colab-ml` when GPU/ML is needed; `jupyter-colab` for lightweight multi-arch environments.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -404,7 +422,7 @@ Rule of thumb:
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
 Examples where multiple skills cover one topic:
-- **Jupyter:** `/ov-layers:jupyter` (GPU/ML layer) vs `/ov-layers:jupyter-colab` (lightweight + collaboration + MCP server with 13 tools) vs `/ov-images:jupyter` (GPU image) vs `/ov-images:jupyter-colab` (lightweight image + MCP deployment). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
+- **Jupyter:** `/ov-layers:jupyter` (legacy GPU/ML monolithic layer) vs `/ov-layers:jupyter-colab` (lightweight, no GPU + collaboration + MCP server with 13 tools) vs `/ov-layers:jupyter-colab-ml` (full CUDA ML + collaboration + MCP, meta-layer composing llama-cpp + unsloth) vs `/ov-images:jupyter` (legacy GPU image) vs `/ov-images:jupyter-colab` (lightweight image) vs `/ov-images:jupyter-colab-ml` (GPU image with full ML stack + MCP). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
 - **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)

@@ -1,0 +1,32 @@
+# llama.cpp prebuilt binaries + GGUF conversion tools
+version: '3'
+
+tasks:
+  all:
+    cmds:
+      # Download llama.cpp prebuilt binaries
+      - |
+        LLAMA_CPP_DIR=~/llama.cpp
+        mkdir -p "$LLAMA_CPP_DIR"
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        curl -fsSL -o /tmp/llama-bin.tar.gz \
+          "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_RELEASE}/llama-${LLAMA_RELEASE}-bin-ubuntu-x64.tar.gz"
+        mkdir -p /tmp/llama_extract
+        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-bin.tar.gz -C /tmp/llama_extract
+        EXTRACT_DIR="/tmp/llama_extract/llama-${LLAMA_RELEASE}"
+        cp "$EXTRACT_DIR/llama-quantize" "$EXTRACT_DIR/llama-cli" "$LLAMA_CPP_DIR/"
+        chmod +x "$LLAMA_CPP_DIR/llama-quantize" "$LLAMA_CPP_DIR/llama-cli"
+        cp "$EXTRACT_DIR"/lib*.so* "$EXTRACT_DIR/LICENSE" "$LLAMA_CPP_DIR/"
+        rm -rf /tmp/llama_extract /tmp/llama-bin.tar.gz
+      # Download llama.cpp source for convert_hf_to_gguf.py + gguf-py
+      - |
+        LLAMA_CPP_DIR=~/llama.cpp
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        curl -fsSL -o /tmp/llama-src.tar.gz \
+          "https://github.com/ggerganov/llama.cpp/archive/refs/tags/${LLAMA_RELEASE}.tar.gz"
+        mkdir -p /tmp/llama_src
+        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-src.tar.gz -C /tmp/llama_src
+        SRC_DIR="/tmp/llama_src/llama.cpp-${LLAMA_RELEASE}"
+        cp "$SRC_DIR/convert_hf_to_gguf.py" "$LLAMA_CPP_DIR/"
+        cp -r "$SRC_DIR/gguf-py" "$LLAMA_CPP_DIR/"
+        rm -rf /tmp/llama_src /tmp/llama-src.tar.gz

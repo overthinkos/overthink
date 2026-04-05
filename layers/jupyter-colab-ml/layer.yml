@@ -1,0 +1,33 @@
+depends:
+  - cuda
+  - supervisord
+
+layers:
+  - llama-cpp
+  - unsloth
+
+env:
+  NVIDIA_PYTHON_PROJECT: "~/.pixi"
+  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+
+rpm:
+  packages:
+    - git
+
+ports:
+  - 8888
+
+volumes:
+  - name: notebooks
+    path: ~/notebooks
+
+service: |
+  [program:jupyter-colab-ml]
+  command=bash -c 'if [ -n "${JUPYTER_TOKEN_FILE:-}" ] && [ -f "${JUPYTER_TOKEN_FILE}" ]; then TOKEN=$(cat "${JUPYTER_TOKEN_FILE}"); exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token="$TOKEN" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; else exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token="" --ServerApp.password="" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; fi'
+  directory=%(ENV_HOME)s
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

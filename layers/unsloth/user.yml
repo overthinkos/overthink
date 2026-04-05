@@ -1,39 +1,61 @@
-# llama.cpp tools + vLLM wheel + unsloth (--no-deps)
+# vLLM wheel + unsloth + unsloth-zoo (--no-deps) + vLLM 0.14 compatibility patch
 version: '3'
 
 tasks:
   all:
     cmds:
-      # Download llama.cpp prebuilt binaries
-      - |
-        LLAMA_CPP_DIR=~/llama.cpp
-        mkdir -p "$LLAMA_CPP_DIR"
-        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
-        curl -fsSL -o /tmp/llama-bin.tar.gz \
-          "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_RELEASE}/llama-${LLAMA_RELEASE}-bin-ubuntu-x64.tar.gz"
-        mkdir -p /tmp/llama_extract
-        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-bin.tar.gz -C /tmp/llama_extract
-        EXTRACT_DIR="/tmp/llama_extract/llama-${LLAMA_RELEASE}"
-        cp "$EXTRACT_DIR/llama-quantize" "$EXTRACT_DIR/llama-cli" "$LLAMA_CPP_DIR/"
-        chmod +x "$LLAMA_CPP_DIR/llama-quantize" "$LLAMA_CPP_DIR/llama-cli"
-        cp "$EXTRACT_DIR"/lib*.so* "$EXTRACT_DIR/LICENSE" "$LLAMA_CPP_DIR/"
-        rm -rf /tmp/llama_extract /tmp/llama-bin.tar.gz
-      # Download llama.cpp source for convert_hf_to_gguf.py + gguf-py
-      - |
-        LLAMA_CPP_DIR=~/llama.cpp
-        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
-        curl -fsSL -o /tmp/llama-src.tar.gz \
-          "https://github.com/ggerganov/llama.cpp/archive/refs/tags/${LLAMA_RELEASE}.tar.gz"
-        mkdir -p /tmp/llama_src
-        tar --no-same-owner --no-same-permissions -xzf /tmp/llama-src.tar.gz -C /tmp/llama_src
-        SRC_DIR="/tmp/llama_src/llama.cpp-${LLAMA_RELEASE}"
-        cp "$SRC_DIR/convert_hf_to_gguf.py" "$LLAMA_CPP_DIR/"
-        cp -r "$SRC_DIR/gguf-py" "$LLAMA_CPP_DIR/"
-        rm -rf /tmp/llama_src /tmp/llama-src.tar.gz
-      # Install vLLM cu130 nightly wheel (--no-deps: deps are in pixi.toml)
+      # Install vLLM cu130 nightly wheel (--no-deps: runtime deps in pixi-owning layer's pixi.toml)
       - |
         ~/.pixi/envs/default/bin/python -m pip install --no-deps \
           'https://wheels.vllm.ai/adcf682fc7d1835d037da331922751e880c8bc25/vllm-0.14.0rc1.dev201%2Bgadcf682fc.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
       # Install unsloth + unsloth-zoo (--no-deps: incompatible with transformers 5.x in pixi solve)
       - |
         ~/.pixi/envs/default/bin/python -m pip install --no-deps unsloth unsloth-zoo
+      # Patch unsloth_zoo for vLLM 0.14 compatibility (create_lora_manager signature)
+      - |
+        SITE_PACKAGES=~/.pixi/envs/default/lib/python3.13/site-packages
+        VLLM_LORA_FILE="${SITE_PACKAGES}/unsloth_zoo/vllm_lora_worker_manager.py"
+        if [ ! -f "$VLLM_LORA_FILE" ]; then
+          echo "unsloth_zoo vllm_lora_worker_manager.py not found, skipping patch"
+          exit 0
+        fi
+        if grep -q 'vllm_config: Any = None' "$VLLM_LORA_FILE"; then
+          echo "Already patched"
+          exit 0
+        fi
+        ~/.pixi/envs/default/bin/python << 'PYTHON_PATCH'
+        import re, sys
+        import os
+        home = os.path.expanduser("~")
+        file_path = f"{home}/.pixi/envs/default/lib/python3.13/site-packages/unsloth_zoo/vllm_lora_worker_manager.py"
+        with open(file_path, "r") as f:
+            lines = f.readlines()
+        patched_sig = 0
+        i = 0
+        new_lines = []
+        while i < len(lines):
+            if "def create_lora_manager(" in lines[i] and "vllm_config: Any = None" not in lines[i]:
+                if i + 3 < len(lines):
+                    combined = lines[i] + lines[i+1] + lines[i+2] + lines[i+3]
+                    if ("self," in combined and
+                        "model: torch.nn.Module" in combined and
+                        ") -> Any:" in combined):
+                        indent = len(lines[i]) - len(lines[i].lstrip())
+                        indent_str = " " * indent
+                        new_lines.append(f"{indent_str}def create_lora_manager(self, model: torch.nn.Module, vllm_config: Any = None) -> Any:\n")
+                        i += 4
+                        patched_sig += 1
+                        continue
+            new_lines.append(lines[i])
+            i += 1
+        content = "".join(new_lines)
+        old_pattern1 = r"(lora_manager = create_lora_manager\(\s*model,\s*max_num_seqs=self\.max_num_seqs,\s*max_num_batched_tokens=self\.max_num_batched_tokens,\s*vocab_size=self\.vocab_size,\s*lora_config=self\.lora_config,\s*device=self\.device,\s*lora_manager_cls=self\._manager_cls,)(\s*\))"
+        new_pattern1 = r"\1\n            vllm_config=vllm_config,\2"
+        old_pattern2 = r"(lora_manager = create_lora_manager\(\s*model,\s*lora_manager_cls=self\._manager_cls,\s*max_num_seqs=self\.max_num_seqs,\s*vocab_size=self\.vocab_size,\s*lora_config=self\.lora_config,\s*device=self\.device,\s*max_num_batched_tokens=self\.max_num_batched_tokens,)(\s*\))"
+        new_pattern2 = r"\1\n            vllm_config=vllm_config,\2"
+        if "vllm_config=vllm_config," not in content:
+            content, n1 = re.subn(old_pattern1, new_pattern1, content, flags=re.MULTILINE)
+            content, n2 = re.subn(old_pattern2, new_pattern2, content, flags=re.MULTILINE)
+        with open(file_path, "w") as f:
+            f.write(content)
+        PYTHON_PATCH

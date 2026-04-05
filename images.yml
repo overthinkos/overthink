@@ -222,6 +222,19 @@ images:
     ports:
       - "8888:8888"
 
+  jupyter-colab-ml:
+    base: nvidia
+    layers:
+      - agent-forwarding
+      - jupyter-colab-ml
+      - notebook-templates
+      - dbus
+      - ov
+    ports:
+      - "8888:8888"
+    platforms:
+      - linux/amd64
+
   ollama:
     base: nvidia
     layers:

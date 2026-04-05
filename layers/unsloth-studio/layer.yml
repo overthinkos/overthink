@@ -1,8 +1,14 @@
 depends:
+  - cuda
   - supervisord
 
 layers:
+  - llama-cpp
   - unsloth
+
+env:
+  NVIDIA_PYTHON_PROJECT: "~/.pixi"
+  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
 
 ports:
   - 8888

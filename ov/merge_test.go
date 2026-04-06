@@ -283,3 +283,147 @@ func TestHistoryAlignment(t *testing.T) {
 		t.Errorf("expected 1 layer after merge, got %d", len(newLayers))
 	}
 }
+
+// TestMergeLayers_WhiteoutSuppressesOriginal verifies that when a later layer whiteouts
+// a file from an earlier layer, the original file is suppressed from the merged output.
+// This prevents "file exists" errors during overlay unpack when both the file and its
+// whiteout would otherwise coexist in the same merged layer.
+func TestMergeLayers_WhiteoutSuppressesOriginal(t *testing.T) {
+	// Layer 1: contains a file that will be deleted
+	layer1, err := makeTarLayer(map[string]string{
+		"usr/share/dbus-1/services/swaync.service": "service content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Layer 2: whiteouts the file from layer 1
+	layer2, err := makeTarLayer(map[string]string{
+		"usr/share/dbus-1/services/.wh.swaync.service": "", // whiteout
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	merged, err := mergeLayers([]v1.Layer{layer1, layer2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := readTarEntries(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The whiteout must be present
+	if _, ok := entries["usr/share/dbus-1/services/.wh.swaync.service"]; !ok {
+		t.Error("whiteout .wh.swaync.service must be present in merged output")
+	}
+
+	// The original file MUST be suppressed — it cannot coexist with its whiteout
+	// in the same layer or overlay unpack will fail with "file exists"
+	if _, ok := entries["usr/share/dbus-1/services/swaync.service"]; ok {
+		t.Error("original swaync.service must be suppressed by whiteout — coexistence causes overlay unpack failure")
+	}
+}
+
+// TestMergeLayers_OpaqueWhiteout verifies that an opaque whiteout suppresses all
+// non-whiteout entries under the directory from earlier layers.
+func TestMergeLayers_OpaqueWhiteout(t *testing.T) {
+	// Layer 1: populates a directory
+	layer1, err := makeTarLayer(map[string]string{
+		"etc/conf.d/old.conf":   "old config",
+		"etc/conf.d/other.conf": "other config",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Layer 2: opaque whiteout + new content (replaces entire directory)
+	layer2, err := makeTarLayer(map[string]string{
+		"etc/conf.d/.wh..wh..opq": "", // opaque whiteout
+		"etc/conf.d/new.conf":     "new config",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	merged, err := mergeLayers([]v1.Layer{layer1, layer2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := readTarEntries(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Old entries must be suppressed
+	if _, ok := entries["etc/conf.d/old.conf"]; ok {
+		t.Error("old.conf must be suppressed by opaque whiteout")
+	}
+	if _, ok := entries["etc/conf.d/other.conf"]; ok {
+		t.Error("other.conf must be suppressed by opaque whiteout")
+	}
+
+	// New entry and opaque whiteout must be present
+	if _, ok := entries["etc/conf.d/.wh..wh..opq"]; !ok {
+		t.Error("opaque whiteout must be present in merged output")
+	}
+	if _, ok := entries["etc/conf.d/new.conf"]; !ok {
+		t.Error("new.conf must be present in merged output")
+	}
+}
+
+// TestMergeLayers_WhiteoutSupersededByReintroduction verifies that when a file is
+// re-introduced after its whiteout within the same merge group, the whiteout is
+// suppressed (not the file). This prevents "file exists" EEXIST errors during overlay
+// unpack when both the re-introduced file and its now-moot whiteout would otherwise
+// coexist in the same merged layer.
+func TestMergeLayers_WhiteoutSupersededByReintroduction(t *testing.T) {
+	// Layer 0: file installed
+	layer0, err := makeTarLayer(map[string]string{
+		"usr/lib/app/config.conf": "original content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Layer 1: file whiteout-ed (deleted)
+	layer1, err := makeTarLayer(map[string]string{
+		"usr/lib/app/.wh.config.conf": "",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Layer 2: file re-introduced (new version)
+	layer2, err := makeTarLayer(map[string]string{
+		"usr/lib/app/config.conf": "new content",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	merged, err := mergeLayers([]v1.Layer{layer0, layer1, layer2})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := readTarEntries(merged)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The re-introduced file must be present with its new content
+	if content, ok := entries["usr/lib/app/config.conf"]; !ok {
+		t.Error("re-introduced config.conf must be present in merged output")
+	} else if string(content) != "new content" {
+		t.Errorf("config.conf content = %q, want %q", string(content), "new content")
+	}
+
+	// The superseded whiteout must be suppressed — coexistence causes EEXIST during overlay unpack
+	if _, ok := entries["usr/lib/app/.wh.config.conf"]; ok {
+		t.Error("superseded .wh.config.conf must be suppressed — coexistence with re-introduced file causes EEXIST")
+	}
+}

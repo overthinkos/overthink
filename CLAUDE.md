@@ -158,7 +158,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (154 layers)
++-- layers/<name>/            # Layer directories (157 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -188,8 +188,8 @@ plugins/
 +-- ov/                               # Operations (36 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (154 skills)
-+-- ov-images/                        # Image reference (38 skills)
++-- ov-layers/                        # Layer reference (157 skills)
++-- ov-images/                        # Image reference (42 skills)
 ```
 
 Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
@@ -237,6 +237,8 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 
 - Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
+- Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images
+- `ov merge` handles OCI whiteout semantics: regular whiteouts (`.wh.<name>`), opaque whiteouts (`.wh..wh..opq`), and reintroduction-supersedes-whiteout cases. This prevents EEXIST errors when merging layers that contain file deletions. Source: `ov/merge.go` (`whiteoutTarget`, `mergeLayers`)
 - `env_provides:` in `layer.yml` declares env vars injected into OTHER containers at deploy time. Template syntax: `{{.ContainerName}}` (only supported variable). `env:` and `env_provides:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `env_provides:` is injected into consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
 - `env_requires:` in `layer.yml` declares env vars the layer MUST have from the environment (e.g., `OPENROUTER_API_KEY`). At `ov config` time, missing required vars produce warnings. Structure: list of `{name, description, default?}`
 - `env_accepts:` in `layer.yml` declares env vars the layer CAN optionally use (e.g., `TELEGRAM_BOT_TOKEN`). No warnings if missing — for documentation only. Same structure as `env_requires`
@@ -399,8 +401,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 156 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 40 | Image reference | "What does image X look like?" |
+| `ov-layers` | 157 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 42 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -440,6 +442,10 @@ Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`
 **Deploy Hermes Agent:**
 `/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup) -> `/ov:start` -> `/ov:service` (lifecycle)
 For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global.
+
+**Deploy Hermes with Selkies desktop:**
+`/ov-images:selkies-desktop-hermes` (image config) -> `/ov:config` -> `/ov:start` -> access `https://localhost:3000`
+Combines Selkies remote desktop with Hermes AI agent + Claude Code + Codex + Gemini. `/ov-images:selkies-desktop-hermes-jupyter` adds Jupyter at `:8888` with MCP notebook access.
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
@@ -483,7 +489,7 @@ Examples where multiple skills cover one topic:
 - **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
-- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation)
+- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation) vs `/ov-images:selkies-desktop-hermes` (Selkies desktop + hermes + claude-code + codex + gemini) vs `/ov-images:selkies-desktop-hermes-jupyter` (+ jupyter-colab at `:8888`)
 
 ### Desktop Automation Hierarchy
 

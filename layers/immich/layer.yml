@@ -3,6 +3,7 @@ depends:
   - nodejs24
   - postgresql
   - redis
+  - ffmpeg
 
 env:
   IMMICH_VERSION: "v2.6.3"
@@ -22,14 +23,9 @@ env:
   NODE_ENV: "production"
 
 rpm:
-  repos:
-    - name: fedora-multimedia
-      url: "https://negativo17.org/repos/fedora-multimedia.repo"
-      gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   packages:
     - vips
     - vips-devel
-    - ffmpeg
     - perl-Image-ExifTool
     - libheif
     - LibRaw

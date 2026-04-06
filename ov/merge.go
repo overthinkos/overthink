@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"runtime"
 	"strings"
 
@@ -255,13 +256,40 @@ type tarEntry struct {
 	Content []byte
 }
 
+// whiteoutPrefix is the OCI/Docker layer whiteout file prefix.
+const whiteoutPrefix = ".wh."
+
+// whiteoutOpaque is the opaque whiteout marker: a layer with this file replaces
+// the entire directory contents from lower layers.
+const whiteoutOpaque = ".wh..wh..opq"
+
+// whiteoutTarget returns the path that the whiteout suppresses.
+// Returns ("", false) for opaque whiteouts.
+func whiteoutTarget(name string) (string, bool) {
+	base := path.Base(name)
+	if base == whiteoutOpaque {
+		return "", false
+	}
+	if !strings.HasPrefix(base, whiteoutPrefix) {
+		return "", false
+	}
+	target := strings.TrimPrefix(base, whiteoutPrefix)
+	return path.Join(path.Dir(name), target), true
+}
+
 // mergeLayers combines multiple layers into one, deduplicating paths (last writer wins).
+// Whiteout semantics are respected: when a later layer deletes a file via a whiteout
+// entry (.wh.<name>), the original <name> is suppressed from the merged output so that
+// both the original file and its whiteout do not coexist in the same layer (which would
+// cause "file exists" errors during overlay unpack).
 func mergeLayers(layers []v1.Layer) (v1.Layer, error) {
 	// Collect all entries, tracking insertion order and deduplicating by path.
+	// layerIdx tracks which layer last wrote each entry (for opaque whiteout handling).
 	entries := make(map[string]*tarEntry)
+	entryLayer := make(map[string]int) // path -> index of layer that last wrote it
 	var order []string
 
-	for _, layer := range layers {
+	for li, layer := range layers {
 		rc, err := layer.Uncompressed()
 		if err != nil {
 			return nil, fmt.Errorf("reading uncompressed layer: %w", err)
@@ -291,14 +319,75 @@ func mergeLayers(layers []v1.Layer) (v1.Layer, error) {
 				order = append(order, hdr.Name)
 			}
 			entries[hdr.Name] = &tarEntry{Header: hdr, Content: content}
+			entryLayer[hdr.Name] = li
 		}
 		rc.Close()
 	}
 
-	// Write deduplicated entries in order.
+	// Build a suppression set from whiteout entries.
+	// For each .wh.<name> whiteout introduced by layer L, suppress <name> if it
+	// was introduced by an earlier layer (< L). This ensures the original file and
+	// its whiteout do not coexist in the merged layer, which would cause "file exists"
+	// errors during overlay unpack.
+	//
+	// For opaque whiteouts (.wh..wh..opq) in directory D/ introduced by layer L,
+	// suppress all non-whiteout entries under D/ that came from earlier layers (< L).
+	suppressed := make(map[string]bool)
+	for _, name := range order {
+		base := path.Base(name)
+		if !strings.HasPrefix(base, whiteoutPrefix) {
+			continue
+		}
+		whLayer := entryLayer[name]
+		if base == whiteoutOpaque {
+			// Opaque whiteout: suppress non-whiteout entries under this directory
+			// that came from earlier layers.
+			dir := path.Dir(name)
+			prefix := dir + "/"
+			if dir == "." {
+				prefix = ""
+			}
+			for _, candidate := range order {
+				if candidate == name {
+					continue
+				}
+				if entryLayer[candidate] >= whLayer {
+					continue // only suppress entries from earlier layers
+				}
+				candBase := path.Base(candidate)
+				if strings.HasPrefix(candBase, whiteoutPrefix) {
+					continue // keep whiteout entries
+				}
+				if prefix == "" || strings.HasPrefix(candidate, prefix) {
+					suppressed[candidate] = true
+				}
+			}
+		} else {
+			// Regular whiteout: one of the pair must be suppressed.
+			// If the target came from an earlier layer: whiteout wins, suppress the file.
+			// If the target came from a later layer (re-introduced after whiteout): the
+			// re-introduction wins and the whiteout is semantically moot — suppress it.
+			// Both cases prevent the file and its whiteout from coexisting in the same
+			// merged layer, which causes "file exists" EEXIST errors during overlay unpack.
+			if target, ok := whiteoutTarget(name); ok {
+				if targetLayer, exists := entryLayer[target]; exists {
+					if targetLayer < whLayer {
+						suppressed[target] = true // whiteout wins over earlier file
+					} else {
+						suppressed[name] = true // re-introduction wins, whiteout is moot
+					}
+				}
+			}
+		}
+	}
+
+	// Write deduplicated entries in order, skipping suppressed ones.
 	var buf bytes.Buffer
 	tw := tar.NewWriter(&buf)
 	for _, name := range order {
+		if suppressed[name] {
+			continue
+		}
 		entry := entries[name]
 		if err := tw.WriteHeader(entry.Header); err != nil {
 			return nil, fmt.Errorf("writing tar header for %s: %w", name, err)

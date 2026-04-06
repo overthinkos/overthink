@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-156 layers. 40 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+157 layers. 42 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -197,11 +197,11 @@ Layers compose. Pick what you need, and dependencies resolve automatically.
 
 ### Applications
 
-**openclaw** — AI gateway on `:18789`. **hermes** — Self-improving AI agent by Nous Research with voice, messaging (Telegram, Discord, Slack, WhatsApp, Email), tool-calling, and skill learning. Headless (no browser) or with Playwright Chromium (`hermes-playwright`). **claude-code** — Claude Code CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
+**openclaw** — AI gateway on `:18789`. **hermes** — Self-improving AI agent by Nous Research with voice, messaging (Telegram, Discord, Slack, WhatsApp, Email), tool-calling, and skill learning. Headless (no browser) or with Playwright Chromium (`hermes-playwright`). **selkies-desktop-hermes** — Selkies remote desktop with Hermes agent, Claude Code, Codex, and Gemini on `:3000`. **selkies-desktop-hermes-jupyter** — selkies-desktop-hermes plus JupyterLab with MCP on `:8888`. **claude-code** — Claude Code CLI. **codex** — OpenAI Codex CLI. **gemini** — Google Gemini CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop.
 
 ### Utilities
 
-**agent-forwarding** = gnupg + direnv + ssh-client — SSH/GPG agent socket forwarding into containers (included in all application images). **gnupg** — GnuPG encryption and signing tools. **direnv** — Automatic environment variable loading from `.envrc` files. **ssh-client** — OpenSSH client tools (lighter than sshd). **fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
+**ffmpeg** — FFmpeg multimedia framework (negativo17 nonfree build with H.264/AAC). Single authoritative install point for nonfree codecs — layers needing ffmpeg depend on this rather than adding repos directly. **agent-forwarding** = gnupg + direnv + ssh-client — SSH/GPG agent socket forwarding into containers (included in all application images). **gnupg** — GnuPG encryption and signing tools. **direnv** — Automatic environment variable loading from `.envrc` files. **ssh-client** — OpenSSH client tools (lighter than sshd). **fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
 
 ### OS / Bootc
 
@@ -267,7 +267,7 @@ ov build --no-cache [image...]         # Clean build
 ov build --jobs N [image...]           # Max concurrent builds (default: 4)
 ov generate [--tag TAG]                # Write Containerfiles to .build/
 ov validate                            # Check everything
-ov merge <image> [--dry-run] [--max-total-mb N]  # Merge small layers in built images
+ov merge <image> [--dry-run] [--max-total-mb N]  # Merge small layers (whiteout-aware)
 ```
 
 ### Run & Manage
@@ -476,7 +476,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 232 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 237 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
 The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` or `jupyter-colab-ml` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter-colab` is the lightweight multi-arch variant (no GPU); `jupyter-colab-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-colab-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-layers:jupyter-colab`, `/ov-layers:jupyter-colab-ml`, and their image counterparts for details.
 

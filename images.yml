@@ -242,6 +242,7 @@ images:
       - jupyter-colab-ml
       - notebook-templates
       - finetuning-notebooks
+      - ollama-notebooks
       - dbus
       - ov
     ports:

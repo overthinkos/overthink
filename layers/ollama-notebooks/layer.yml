@@ -1,0 +1,6 @@
+info: "Ollama integration notebook collection"
+
+data:
+  - src: data/ollama
+    volume: workspace
+    dest: ollama

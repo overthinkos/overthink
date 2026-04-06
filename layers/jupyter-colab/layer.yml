@@ -1,6 +1,9 @@
 depends:
   - supervisord
 
+layers:
+  - jupyter-colab-mcp
+
 rpm:
   packages:
     - git

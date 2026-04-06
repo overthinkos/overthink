@@ -5,6 +5,7 @@ depends:
 layers:
   - llama-cpp
   - unsloth
+  - jupyter-colab-mcp
 
 env:
   NVIDIA_PYTHON_PROJECT: "~/.pixi"
@@ -13,6 +14,8 @@ env:
 rpm:
   packages:
     - git
+    - gcc      # Required by triton 3.6+ for JIT kernel compilation during training
+    - gcc-c++  # Required for C++ extensions (flash-attn, custom CUDA kernels)
 
 ports:
   - 8888

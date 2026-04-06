@@ -1,4 +1,4 @@
-# jupyter-colab-mcp extension install (CRDT notebook access via MCP)
+# JupyterLab CRDT MCP server extension (pip-only, requires pixi env from parent layer)
 version: '3'
 
 tasks:

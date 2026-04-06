@@ -444,6 +444,11 @@ class RTCAdapter:
         )
 
         await server.start_room(room)
+        # Initialize the room — loads notebook content from disk into the
+        # CRDT document. Without this, the YNotebook is empty (0 cells).
+        # This mirrors YDocWebSocketHandler.open() which calls
+        # room.initialize() after start_room().
+        await room.initialize()
         server.add_room(room_id, room)
         log.info("Created CRDT room on demand: %s", room_id)
 

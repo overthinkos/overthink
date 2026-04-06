@@ -27,7 +27,7 @@ builders:
       pyproject.toml: "pixi install --manifest-path pyproject.toml"
       environment.yml: "pixi project import environment.yml && pixi install"
     manylinux_fix: |
-      RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.34" }\n' >> {{.Manifest}}
+      RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
     stage_template: |
       FROM {{.BuilderRef}} AS {{.StageName}}
       USER {{.UID}}

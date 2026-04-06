@@ -30,10 +30,10 @@ tasks:
         cp "$SRC_DIR/convert_hf_to_gguf.py" "$LLAMA_CPP_DIR/"
         cp -r "$SRC_DIR/gguf-py" "$LLAMA_CPP_DIR/"
         rm -rf /tmp/llama_src /tmp/llama-src.tar.gz
-      # Install vLLM 0.14.0 cu130 nightly wheel (--no-deps: deps are in pixi.toml)
+      # Install vLLM cu130 nightly wheel (--no-deps: deps are in pixi.toml)
       - |
         ~/.pixi/envs/default/bin/python -m pip install --no-deps \
-          'https://wheels.vllm.ai/adcf682fc7d1835d037da331922751e880c8bc25/vllm-0.14.0rc1.dev201%2Bgadcf682fc.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
+          'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
       # Install unsloth + unsloth-zoo (--no-deps: incompatible with transformers 5.x in pixi solve)
       - |
         ~/.pixi/envs/default/bin/python -m pip install --no-deps unsloth unsloth-zoo

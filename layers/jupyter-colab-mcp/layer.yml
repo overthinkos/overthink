@@ -1,0 +1,1 @@
+description: "JupyterLab CRDT MCP server extension (pip-only, requires pixi env from parent layer)"

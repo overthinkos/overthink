@@ -113,7 +113,7 @@ Generation is idempotent. `.build/` is disposable and gitignored.
 - Tags union (`org.overthinkos.tags`) = `["all"]` + distro + build formats — used for task matching
 - Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/format_config.go` (YAML config loading), `ov/format_template.go` (template rendering), `ov/init_config.go` (init system config), `distro.yml` + `builder.yml` + `init.yml` (format definitions at project root, referenced via `format_config:` in `images.yml`)
 
-**Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.34" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
+**Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.39" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
 
 **Pixi build scripts:** The pixi builder supports an optional `build_script: build.sh` field in `builder.yml`. If a layer with `pixi.toml` also has a `build.sh`, the script runs in the pixi builder stage after `pixi install` completes. The script is bind-mounted from the layer context (same pattern as the cargo builder's `--mount=type=bind,from=<layer>-ctx`). This allows layers to run build-time logic (compiling C extensions, npm builds, binary patching) without installing build dependencies in the final image. Example: the `selkies` layer uses `build.sh` to pip-install selkies (C extensions need gcc) and build the web UI (needs nodejs/npm) — all in the builder image. Source: `builder.yml` `build_script` field, `ov/generate.go` `buildStageContext()`, `ov/format_template.go` `BuildStageContext.HasBuildScript`.
 
@@ -133,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (151 layers)
++-- layers/<name>/            # Layer directories (152 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -163,7 +163,7 @@ plugins/
 +-- ov/                               # Operations (36 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (151 skills)
++-- ov-layers/                        # Layer reference (152 skills)
 +-- ov-images/                        # Image reference (38 skills)
 ```
 
@@ -220,14 +220,21 @@ ML layers follow a two-tier pattern that separates environment ownership from po
 
 **Tier 1 — Post-install layers** (no pixi.toml): Install binaries or pip packages into whatever pixi env exists. Reusable across images.
 - `llama-cpp`: downloads prebuilt binaries + GGUF tools. Sets `LLAMA_CPP_PATH` env and PATH
-- `unsloth`: pip installs vLLM wheel + unsloth + unsloth-zoo + vLLM compat patch. Sets `HF_HOME`, `UNSLOTH_SKIP_LLAMA_CPP_INSTALL`
+- `unsloth`: pip installs vLLM wheel + unsloth + unsloth-zoo + vLLM torch.compile patch (`patch_vllm_size_nodes.py`) for `_decompose_size_nodes` bug (upstream: vllm-project/vllm#38360). vLLM 0.19 runtime deps (opentelemetry-*) installed via pip --no-deps after wheel (pixi conda/PyPI resolver conflict). Sets `HF_HOME`, `UNSLOTH_SKIP_LLAMA_CPP_INSTALL`
+- `jupyter-colab-mcp`: CRDT MCP server extension (fastmcp + jupyter_colab_mcp). Installs into parent pixi env
 
 **Tier 2 — Environment-owner layers** (have pixi.toml): Define the complete Python environment. Compose Tier 1 layers via `layers:` field.
 - `python-ml`: core ML env (PyTorch, vLLM runtime deps, HF core). `layers: [llama-cpp]`
-- `jupyter-colab-ml`: full ML + Jupyter + CRDT MCP. `layers: [llama-cpp, unsloth]`
+- `jupyter-colab`: lightweight Jupyter + CRDT collaboration. `layers: [jupyter-colab-mcp]`
+- `jupyter-colab-ml`: full ML + Jupyter + CRDT MCP. Includes gcc/gcc-c++ for triton 3.6+ JIT compilation. `layers: [llama-cpp, unsloth, jupyter-colab-mcp]`
 - `unsloth-studio`: fine-tuning env with studio UI. `layers: [llama-cpp, unsloth]`
 
 **Key constraint:** The generator creates intermediate images for shared layers. Tier 1 layers with pip installs (like `unsloth`) must NOT be extracted into intermediates — they need the pixi env from Tier 2. The generator handles this correctly as long as pip-install layers don't have standalone pixi.toml. Only Tier 2 layers own pixi.toml; Tier 1 user.yml runs after pixi COPY in the final image build.
+
+**ML training gotchas:**
+- Ministral/Pixtral models require `UNSLOTH_ENABLE_FLEX_ATTENTION=0` due to nested torch.compile bug between unsloth + transformers 5.5 masking_utils
+- Pixtral-12B requires `max_memory={0: "14GB"}` in `from_pretrained()` because accelerate's device_map uses uncompressed BF16 sizes
+- TRL 1.0 requires `packing=True` in SFTConfig when unsloth auto-enables `padding_free=True`
 
 - Meta-layers CAN have both `depends:` and `layers:` (e.g., `unsloth-studio` has `depends: [cuda, supervisord]` + `layers: [llama-cpp, unsloth]`)
 - Meta-layers CAN own pixi.toml (environment-owner pattern — exactly one pixi.toml per image)
@@ -356,7 +363,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 151 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 152 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 38 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains

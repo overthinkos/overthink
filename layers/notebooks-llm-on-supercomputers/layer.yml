@@ -1,0 +1,6 @@
+info: "LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)"
+
+data:
+  - src: data/llms_on_supercomputers
+    volume: workspace
+    dest: llms_on_supercomputers

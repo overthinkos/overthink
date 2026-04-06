@@ -133,7 +133,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (153 layers)
++-- layers/<name>/            # Layer directories (154 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -163,7 +163,7 @@ plugins/
 +-- ov/                               # Operations (36 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (153 skills)
++-- ov-layers/                        # Layer reference (154 skills)
 +-- ov-images/                        # Image reference (38 skills)
 ```
 
@@ -363,7 +363,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 153 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 154 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 38 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
@@ -392,8 +392,8 @@ Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://loc
 **Client-side interaction (browser-based RD):** The Selkies SPA uses a transparent `input#overlayInput` (z-index 3) on top of `canvas#videoCanvas` (z-index 2, pointer-events: none) to capture mouse/keyboard events. Events pass through the SPA's JavaScript → WebSocket → labwc. Keyboard passthrough works via VNC type, wtype, or CDP Input.dispatchKeyEvent — the SPA's onkeydown handler captures with stopImmediatePropagation. **Limitation:** Super key consumed by the client's compositor, Ctrl+T/W consumed by the client's Chrome — browser-based RD cannot forward compositor or browser shortcuts. Mouse coordinates have ~0.82x scaling between input and remote cursor position. Session state (all windows, typed text) survives client disconnection. See `/ov-images:selkies-desktop` for full DOM structure and coordinate mapping.
 
 **Programmatic notebook access (MCP):**
-`/ov-layers:jupyter-colab` (lightweight, no GPU) or `/ov-layers:jupyter-colab-ml` (full CUDA ML stack) or `/ov-layers:jupyter-colab-ml` + `/ov-layers:finetuning-notebooks` + `/ov-layers:ollama-notebooks` (ML + fine-tuning + Ollama notebooks) -> `/ov-images:jupyter-colab` or `/ov-images:jupyter-colab-ml` or `/ov-images:jupyter-colab-ml-finetuning` (deployment) -> `/ov:service` (lifecycle)
-Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT. Use `jupyter-colab-ml-finetuning` for GPU/ML with fine-tuning and Ollama notebooks; `jupyter-colab-ml` for GPU/ML without; `jupyter-colab` for lightweight multi-arch environments.
+`/ov-layers:jupyter-colab` (lightweight, no GPU) or `/ov-layers:jupyter-colab-ml` (full CUDA ML stack) or `/ov-layers:jupyter-colab-ml` + `/ov-layers:finetuning-notebooks` + `/ov-layers:ollama-notebooks` + `/ov-layers:notebooks-llm-on-supercomputers` (ML + fine-tuning + Ollama + LLM course notebooks) -> `/ov-images:jupyter-colab` or `/ov-images:jupyter-colab-ml` or `/ov-images:jupyter-colab-ml-finetuning` (deployment) -> `/ov:service` (lifecycle)
+Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT. Use `jupyter-colab-ml-finetuning` for GPU/ML with fine-tuning, Ollama, and LLM course notebooks; `jupyter-colab-ml` for GPU/ML without; `jupyter-colab` for lightweight multi-arch environments.
 
 **Fix a bug in ov:**
 `/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
@@ -429,7 +429,7 @@ Rule of thumb:
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
 Examples where multiple skills cover one topic:
-- **Jupyter:** `/ov-layers:jupyter` (legacy GPU/ML monolithic layer) vs `/ov-layers:jupyter-colab` (lightweight, no GPU + collaboration + MCP server with 13 tools) vs `/ov-layers:jupyter-colab-ml` (full CUDA ML + collaboration + MCP, meta-layer composing llama-cpp + unsloth) vs `/ov-images:jupyter` (legacy GPU image) vs `/ov-images:jupyter-colab` (lightweight image) vs `/ov-images:jupyter-colab-ml` (GPU image with full ML stack + MCP) vs `/ov-images:jupyter-colab-ml-finetuning` (GPU image + 37 Unsloth fine-tuning notebooks + 6 Ollama integration notebooks). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
+- **Jupyter:** `/ov-layers:jupyter` (legacy GPU/ML monolithic layer) vs `/ov-layers:jupyter-colab` (lightweight, no GPU + collaboration + MCP server with 13 tools) vs `/ov-layers:jupyter-colab-ml` (full CUDA ML + collaboration + MCP, meta-layer composing llama-cpp + unsloth) vs `/ov-images:jupyter` (legacy GPU image) vs `/ov-images:jupyter-colab` (lightweight image) vs `/ov-images:jupyter-colab-ml` (GPU image with full ML stack + MCP) vs `/ov-images:jupyter-colab-ml-finetuning` (GPU image + 37 Unsloth fine-tuning notebooks + 6 Ollama integration notebooks + 15 LLM course notebooks). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
 - **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
 - **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)

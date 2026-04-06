@@ -243,6 +243,7 @@ images:
       - notebook-templates
       - finetuning-notebooks
       - ollama-notebooks
+      - notebooks-llm-on-supercomputers
       - dbus
       - ov
     ports:

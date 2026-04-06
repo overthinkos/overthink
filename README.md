@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-153 layers. 38 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+154 layers. 38 image definitions. Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -214,7 +214,7 @@ Some layers are pure composition — they pull in a curated set of other layers:
 **openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
 **python-ml** = cuda + llama-cpp. Core ML Python environment (meta-layer with pixi.toml).
 **jupyter-colab-ml** = cuda + llama-cpp + unsloth + jupyter-colab-mcp. Full ML + JupyterLab with CRDT MCP (meta-layer with pixi.toml).
-**jupyter-colab-ml-finetuning** = jupyter-colab-ml + notebook-templates + finetuning-notebooks + ollama-notebooks. ML Jupyter with fine-tuning and Ollama integration notebook collections.
+**jupyter-colab-ml-finetuning** = jupyter-colab-ml + notebook-templates + finetuning-notebooks + ollama-notebooks + notebooks-llm-on-supercomputers. ML Jupyter with fine-tuning, Ollama integration, and LLM course notebook collections.
 **unsloth-studio** = cuda + llama-cpp + unsloth. Fine-tuning studio with vLLM (meta-layer with pixi.toml).
 
 ### Data Layers
@@ -464,9 +464,9 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 227 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 228 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
-The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` or `jupyter-colab-ml` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter-colab` is the lightweight multi-arch variant (no GPU); `jupyter-colab-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-colab-ml-finetuning` adds 37 Unsloth fine-tuning notebooks and 6 Ollama integration notebooks. See `/ov-layers:jupyter-colab`, `/ov-layers:jupyter-colab-ml`, and their image counterparts for details.
+The `ov-jupyter` plugin also registers a **Jupyter MCP server** at `http://localhost:8888/mcp` (when the `jupyter-colab` or `jupyter-colab-ml` container is running). Claude Code can then use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter-colab` is the lightweight multi-arch variant (no GPU); `jupyter-colab-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-colab-ml-finetuning` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-layers:jupyter-colab`, `/ov-layers:jupyter-colab-ml`, and their image counterparts for details.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

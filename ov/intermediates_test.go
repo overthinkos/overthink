@@ -990,7 +990,7 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"llama-cpp":  {Name: "llama-cpp", HasUserYml: true},
 		"unsloth":    {Name: "unsloth", HasUserYml: true, HasEnv: true, HasVolumes: true},
 		"notebook-templates": {Name: "notebook-templates", HasData: true},
-		"finetuning-notebooks": {Name: "finetuning-notebooks", HasData: true},
+		"notebook-finetuning": {Name: "notebook-finetuning", HasData: true},
 		"jupyter-colab-ml": {
 			Name: "jupyter-colab-ml", HasPixiToml: true, HasUserYml: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
@@ -1034,15 +1034,15 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
-		"jupyter-colab-ml-finetuning": {
-			Name: "jupyter-colab-ml-finetuning", Base: "nvidia", IsExternalBase: false,
-			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "finetuning-notebooks", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml-finetuning:v1", Pkg: "rpm",
+		"jupyter-colab-ml-notebook": {
+			Name: "jupyter-colab-ml-notebook", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml-notebook:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
-			Layers: []string{"agent-forwarding", "unsloth-studio", "finetuning-notebooks", "dbus", "ov"},
+			Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"},
 			Tag: "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
@@ -1055,8 +1055,8 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 			"fedora":  {Layers: []string{}},
 			"nvidia":  {Base: "fedora", Layers: []string{"cuda"}},
 			"jupyter-colab-ml":            {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "dbus", "ov"}},
-			"jupyter-colab-ml-finetuning": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "finetuning-notebooks", "dbus", "ov"}},
-			"unsloth-studio":              {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "finetuning-notebooks", "dbus", "ov"}},
+			"jupyter-colab-ml-notebook": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"}},
+			"unsloth-studio":           {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"}},
 		},
 	}
 

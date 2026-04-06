@@ -1433,18 +1433,46 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelSecrets, labelSecrets)
 	}
 
-	// Service env: env vars provided to other containers (service discovery)
-	serviceEnv := make(map[string]string)
+	// Env provides: env vars provided to other containers (service discovery)
+	envProvides := make(map[string]string)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		if layer.HasServiceEnv {
-			for k, v := range layer.ServiceEnv() {
-				serviceEnv[k] = v
+		if layer.HasEnvProvides {
+			for k, v := range layer.EnvProvides() {
+				envProvides[k] = v
 			}
 		}
 	}
-	if len(serviceEnv) > 0 {
-		writeJSONLabel(b, LabelServiceEnv, serviceEnv)
+	if len(envProvides) > 0 {
+		writeJSONLabel(b, LabelEnvProvides, envProvides)
+	}
+
+	// Env requires: env vars image must have from the environment
+	envRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnvRequires {
+			for _, dep := range layer.EnvRequires() {
+				envRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(envRequiresMap) > 0 {
+		writeJSONLabel(b, LabelEnvRequires, sortedEnvDeps(envRequiresMap))
+	}
+
+	// Env accepts: env vars image can optionally use
+	envAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasEnvAccepts {
+			for _, dep := range layer.EnvAccepts() {
+				envAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(envAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelEnvAccepts, sortedEnvDeps(envAcceptsMap))
 	}
 
 	// Routes: collected from layers

@@ -13,7 +13,7 @@ import (
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 type DeployConfig struct {
 	Env               []string                    `yaml:"env,omitempty"`                // global env vars injected into all containers
-	ServiceEnvSources map[string]string           `yaml:"service_env_sources,omitempty"` // tracks which image injected each global env var (key -> image name)
+	EnvProvidesSources map[string]string           `yaml:"env_provides_sources,omitempty"` // tracks which image injected each global env var (key -> image name)
 	Images            map[string]DeployImageConfig `yaml:"images"`
 }
 
@@ -411,21 +411,21 @@ func cleanDeployEntry(imageName string) {
 
 	// Remove global service env vars injected by this image
 	removedEnv := false
-	if dc.ServiceEnvSources != nil {
+	if dc.EnvProvidesSources != nil {
 		var keysToRemove []string
-		for key, source := range dc.ServiceEnvSources {
+		for key, source := range dc.EnvProvidesSources {
 			if source == imageName {
 				keysToRemove = append(keysToRemove, key)
 			}
 		}
 		for _, key := range keysToRemove {
 			dc.Env = removeEnvByKey(dc.Env, key)
-			delete(dc.ServiceEnvSources, key)
+			delete(dc.EnvProvidesSources, key)
 			removedEnv = true
 			fmt.Fprintf(os.Stderr, "Removed service env: %s\n", key)
 		}
-		if len(dc.ServiceEnvSources) == 0 {
-			dc.ServiceEnvSources = nil
+		if len(dc.EnvProvidesSources) == 0 {
+			dc.EnvProvidesSources = nil
 		}
 	}
 
@@ -476,8 +476,8 @@ func envKey(entry string) string {
 	return entry
 }
 
-// filterOwnServiceEnv returns global env vars excluding those injected by imageName.
-func filterOwnServiceEnv(globalEnv []string, sources map[string]string, imageName string) []string {
+// filterOwnEnvProvides returns global env vars excluding those injected by imageName.
+func filterOwnEnvProvides(globalEnv []string, sources map[string]string, imageName string) []string {
 	if len(sources) == 0 || imageName == "" {
 		return globalEnv
 	}

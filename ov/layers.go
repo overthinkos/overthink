@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -80,6 +81,27 @@ type DataYAML struct {
 	Dest   string `yaml:"dest,omitempty"`   // optional subdirectory within the volume path
 }
 
+// EnvDependency declares an env var that a layer needs or can use.
+type EnvDependency struct {
+	Name        string `yaml:"name" json:"name"`
+	Description string `yaml:"description" json:"description"`
+	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
+}
+
+// sortedEnvDeps returns a deterministic slice from a name-keyed map, sorted by Name.
+func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	out := make([]EnvDependency, 0, len(m))
+	for _, k := range keys {
+		out = append(out, m[k])
+	}
+	return out
+}
+
 // LayerYAML represents the parsed layer.yml file.
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
@@ -105,7 +127,9 @@ type LayerYAML struct {
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 	Data           []DataYAML        `yaml:"data,omitempty"`
-	ServiceEnv     map[string]string `yaml:"service_env,omitempty"` // env vars provided to OTHER containers when this service is deployed
+	EnvProvides    map[string]string `yaml:"env_provides,omitempty"` // env vars provided to OTHER containers when this service is deployed
+	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"` // env vars this layer MUST have from the environment
+	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`  // env vars this layer CAN optionally use
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -121,7 +145,8 @@ var layerYAMLKnownFields = map[string]bool{
 	"path_append": true, "ports": true, "route": true, "service": true,
 	"volumes": true, "aliases": true, "extract": true, "security": true,
 	"system_services": true, "libvirt": true, "hooks": true,
-	"port_relay": true, "secrets": true, "data": true, "service_env": true,
+	"port_relay": true, "secrets": true, "data": true,
+	"env_provides": true, "env_requires": true, "env_accepts": true,
 }
 
 // layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
@@ -250,7 +275,9 @@ type Layer struct {
 	HasPixiLock       bool
 	HasExtract        bool
 	HasData           bool
-	HasServiceEnv     bool
+	HasEnvProvides    bool
+	HasEnvRequires    bool
+	HasEnvAccepts     bool
 	HasLibvirt         bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 
@@ -287,7 +314,9 @@ type Layer struct {
 	libvirt        []string
 	hooks          *HooksConfig
 	secrets        []SecretYAML
-	serviceEnv     map[string]string // env vars provided to other containers (service discovery)
+	envProvides    map[string]string // env vars provided to other containers (service discovery)
+	envRequires    []EnvDependency  // env vars this layer must have
+	envAccepts     []EnvDependency  // env vars this layer can optionally use
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 }
 
@@ -476,10 +505,20 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate secrets
 		layer.secrets = ly.SecretsYAML
 
-		// Pre-populate service env (env vars for other containers)
-		if len(ly.ServiceEnv) > 0 {
-			layer.HasServiceEnv = true
-			layer.serviceEnv = ly.ServiceEnv
+		// Pre-populate env_provides (env vars for other containers)
+		if len(ly.EnvProvides) > 0 {
+			layer.HasEnvProvides = true
+			layer.envProvides = ly.EnvProvides
+		}
+
+		// Pre-populate env_requires and env_accepts
+		if len(ly.EnvRequires) > 0 {
+			layer.HasEnvRequires = true
+			layer.envRequires = ly.EnvRequires
+		}
+		if len(ly.EnvAccepts) > 0 {
+			layer.HasEnvAccepts = true
+			layer.envAccepts = ly.EnvAccepts
 		}
 
 		// Pre-populate engine requirement
@@ -694,9 +733,19 @@ func (l *Layer) Secrets() []SecretYAML {
 	return l.secrets
 }
 
-// ServiceEnv returns env vars this layer provides to other containers (pre-populated from layer.yml)
-func (l *Layer) ServiceEnv() map[string]string {
-	return l.serviceEnv
+// EnvProvides returns env vars this layer provides to other containers (pre-populated from layer.yml)
+func (l *Layer) EnvProvides() map[string]string {
+	return l.envProvides
+}
+
+// EnvRequires returns env vars this layer must have from the environment (pre-populated from layer.yml)
+func (l *Layer) EnvRequires() []EnvDependency {
+	return l.envRequires
+}
+
+// EnvAccepts returns env vars this layer can optionally use (pre-populated from layer.yml)
+func (l *Layer) EnvAccepts() []EnvDependency {
+	return l.envAccepts
 }
 
 // Engine returns the required run engine (pre-populated from layer.yml, "" if not set)

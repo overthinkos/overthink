@@ -169,7 +169,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 	var startGlobalEnv []string
 	if dc != nil {
-		startGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+		startGlobalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, c.Image)
 	}
 	envVars, err := ResolveEnvVars(startGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
@@ -325,7 +325,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	remoteDC, _ := LoadDeployConfig()
 	var remoteStartGlobalEnv []string
 	if remoteDC != nil {
-		remoteStartGlobalEnv = filterOwnServiceEnv(remoteDC.Env, remoteDC.ServiceEnvSources, ctx.ImageName)
+		remoteStartGlobalEnv = filterOwnEnvProvides(remoteDC.Env, remoteDC.EnvProvidesSources, ctx.ImageName)
 	}
 	envVars, err := ResolveEnvVars(remoteStartGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
@@ -402,7 +402,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	remoteQDC, _ := LoadDeployConfig()
 	var remoteQGlobalEnv []string
 	if remoteQDC != nil {
-		remoteQGlobalEnv = filterOwnServiceEnv(remoteQDC.Env, remoteQDC.ServiceEnvSources, ctx.ImageName)
+		remoteQGlobalEnv = filterOwnEnvProvides(remoteQDC.Env, remoteQDC.EnvProvidesSources, ctx.ImageName)
 	}
 	envVars, envErr := ResolveEnvVars(remoteQGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {

@@ -267,7 +267,7 @@ func TestRemoveEnvByKey(t *testing.T) {
 	}
 }
 
-func TestFilterOwnServiceEnv(t *testing.T) {
+func TestFilterOwnEnvProvides(t *testing.T) {
 	globalEnv := []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql", "CUSTOM=val"}
 	sources := map[string]string{
 		"OLLAMA_HOST": "ollama",
@@ -275,23 +275,23 @@ func TestFilterOwnServiceEnv(t *testing.T) {
 	}
 
 	// Filter out ollama's own vars
-	got := filterOwnServiceEnv(globalEnv, sources, "ollama")
+	got := filterOwnEnvProvides(globalEnv, sources, "ollama")
 	want := []string{"PGHOST=ov-postgresql", "CUSTOM=val"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("filterOwnServiceEnv(ollama) = %v, want %v", got, want)
+		t.Errorf("filterOwnEnvProvides(ollama) = %v, want %v", got, want)
 	}
 
 	// Filter out postgresql's own vars
-	got = filterOwnServiceEnv(globalEnv, sources, "postgresql")
+	got = filterOwnEnvProvides(globalEnv, sources, "postgresql")
 	want = []string{"OLLAMA_HOST=http://ov-ollama:11434", "CUSTOM=val"}
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("filterOwnServiceEnv(postgresql) = %v, want %v", got, want)
+		t.Errorf("filterOwnEnvProvides(postgresql) = %v, want %v", got, want)
 	}
 
 	// No sources — return all
-	got = filterOwnServiceEnv(globalEnv, nil, "ollama")
+	got = filterOwnEnvProvides(globalEnv, nil, "ollama")
 	if !reflect.DeepEqual(got, globalEnv) {
-		t.Errorf("filterOwnServiceEnv(nil sources) = %v, want %v", got, globalEnv)
+		t.Errorf("filterOwnEnvProvides(nil sources) = %v, want %v", got, globalEnv)
 	}
 }
 
@@ -305,7 +305,7 @@ func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
 
 	dc := &DeployConfig{
 		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
-		ServiceEnvSources: map[string]string{
+		EnvProvidesSources: map[string]string{
 			"OLLAMA_HOST": "ollama",
 			"PGHOST":      "postgresql",
 		},
@@ -326,12 +326,12 @@ func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(loaded.Env, dc.Env) {
 		t.Errorf("Env = %v, want %v", loaded.Env, dc.Env)
 	}
-	if !reflect.DeepEqual(loaded.ServiceEnvSources, dc.ServiceEnvSources) {
-		t.Errorf("ServiceEnvSources = %v, want %v", loaded.ServiceEnvSources, dc.ServiceEnvSources)
+	if !reflect.DeepEqual(loaded.EnvProvidesSources, dc.EnvProvidesSources) {
+		t.Errorf("EnvProvidesSources = %v, want %v", loaded.EnvProvidesSources, dc.EnvProvidesSources)
 	}
 }
 
-func TestCleanDeployEntryRemovesServiceEnv(t *testing.T) {
+func TestCleanDeployEntryRemovesEnvProvides(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.yml")
 
@@ -341,7 +341,7 @@ func TestCleanDeployEntryRemovesServiceEnv(t *testing.T) {
 
 	dc := &DeployConfig{
 		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
-		ServiceEnvSources: map[string]string{
+		EnvProvidesSources: map[string]string{
 			"OLLAMA_HOST": "ollama",
 			"PGHOST":      "postgresql",
 		},
@@ -366,10 +366,10 @@ func TestCleanDeployEntryRemovesServiceEnv(t *testing.T) {
 	if !reflect.DeepEqual(loaded.Env, []string{"PGHOST=ov-postgresql"}) {
 		t.Errorf("Env after cleanup = %v, want [PGHOST=ov-postgresql]", loaded.Env)
 	}
-	if _, ok := loaded.ServiceEnvSources["OLLAMA_HOST"]; ok {
-		t.Error("OLLAMA_HOST should be removed from ServiceEnvSources")
+	if _, ok := loaded.EnvProvidesSources["OLLAMA_HOST"]; ok {
+		t.Error("OLLAMA_HOST should be removed from EnvProvidesSources")
 	}
-	if loaded.ServiceEnvSources["PGHOST"] != "postgresql" {
+	if loaded.EnvProvidesSources["PGHOST"] != "postgresql" {
 		t.Error("PGHOST source should remain")
 	}
 	if _, ok := loaded.Images["ollama"]; ok {

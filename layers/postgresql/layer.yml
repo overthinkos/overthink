@@ -10,7 +10,7 @@ env:
   PGDATA: "~/.postgresql/data"
   POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
 
-service_env:
+env_provides:
   PGHOST: "{{.ContainerName}}"
   PGPORT: "5432"
 

@@ -38,7 +38,7 @@ type ImageConfigSetupCmd struct {
 	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
-	UpdateAll   bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up service env changes"`
+	UpdateAll   bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -121,7 +121,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve env vars from global env + labels + deploy.yml + CLI
 	var globalEnv []string
 	if dc != nil {
-		globalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+		globalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, c.Image)
 	}
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
@@ -420,16 +420,21 @@ skipDataProvision:
 		}
 	}
 
-	// Inject service env vars into global deploy.yml for other containers
-	if meta != nil && len(meta.ServiceEnv) > 0 {
-		changed, injErr := injectServiceEnv(c.Image, c.Instance, meta.ServiceEnv)
+	// Inject env_provides vars into global deploy.yml for other containers
+	if meta != nil && len(meta.EnvProvides) > 0 {
+		changed, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides)
 		if injErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not inject service env: %v\n", injErr)
+			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
 		} else if changed && c.UpdateAll {
 			if err := updateAllDeployedQuadlets(rt, c.Image); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
 			}
 		}
+	}
+
+	// Warn about missing env_requires vars
+	if meta != nil && len(meta.EnvRequires) > 0 {
+		warnMissingEnvRequires(c.Image, meta.EnvRequires, envVars)
 	}
 
 	return nil
@@ -469,7 +474,7 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	dc, _ := LoadDeployConfig()
 	var remoteGlobalEnv []string
 	if dc != nil {
-		remoteGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, ctx.ImageName)
+		remoteGlobalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, ctx.ImageName)
 	}
 	envVars, envErr := ResolveEnvVars(remoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
@@ -705,10 +710,10 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 	return configs
 }
 
-// injectServiceEnv resolves service_env templates and adds them to the global env in deploy.yml.
+// injectEnvProvides resolves env_provides templates and adds them to the global env in deploy.yml.
 // Returns true if any env vars were added or changed.
-func injectServiceEnv(imageName, instance string, serviceEnv map[string]string) (bool, error) {
-	if len(serviceEnv) == 0 {
+func injectEnvProvides(imageName, instance string, envProvides map[string]string) (bool, error) {
+	if len(envProvides) == 0 {
 		return false, nil
 	}
 
@@ -716,17 +721,17 @@ func injectServiceEnv(imageName, instance string, serviceEnv map[string]string) 
 	if dc == nil {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 	}
-	if dc.ServiceEnvSources == nil {
-		dc.ServiceEnvSources = make(map[string]string)
+	if dc.EnvProvidesSources == nil {
+		dc.EnvProvidesSources = make(map[string]string)
 	}
 
 	ctrName := containerNameInstance(imageName, instance)
 	changed := false
 
 	// Sort keys for deterministic output
-	keys := sortedStringMapKeys(serviceEnv)
+	keys := sortedStringMapKeys(envProvides)
 	for _, key := range keys {
-		tmpl := serviceEnv[key]
+		tmpl := envProvides[key]
 		value := strings.ReplaceAll(tmpl, "{{.ContainerName}}", ctrName)
 		entry := key + "=" + value
 
@@ -738,14 +743,14 @@ func injectServiceEnv(imageName, instance string, serviceEnv map[string]string) 
 				break
 			}
 		}
-		if existing == entry && dc.ServiceEnvSources[key] == imageName {
+		if existing == entry && dc.EnvProvidesSources[key] == imageName {
 			continue
 		}
 
 		dc.Env = appendOrReplaceEnv(dc.Env, entry)
-		dc.ServiceEnvSources[key] = imageName
+		dc.EnvProvidesSources[key] = imageName
 		changed = true
-		fmt.Fprintf(os.Stderr, "Service env injected: %s\n", entry)
+		fmt.Fprintf(os.Stderr, "Env provides injected: %s\n", entry)
 	}
 
 	if changed {
@@ -754,6 +759,28 @@ func injectServiceEnv(imageName, instance string, serviceEnv map[string]string) 
 		}
 	}
 	return changed, nil
+}
+
+// warnMissingEnvRequires checks resolved env vars against required env dependencies
+// and prints warnings for any that are missing.
+func warnMissingEnvRequires(imageName string, requires []EnvDependency, resolvedEnv []string) {
+	// Build set of resolved env var names
+	resolved := make(map[string]bool, len(resolvedEnv))
+	for _, e := range resolvedEnv {
+		if k := envKey(e); k != "" {
+			resolved[k] = true
+		}
+	}
+
+	for _, dep := range requires {
+		if !resolved[dep.Name] {
+			desc := dep.Description
+			if desc != "" {
+				desc = " (" + desc + ")"
+			}
+			fmt.Fprintf(os.Stderr, "Warning: %s requires %s%s — not set\n", imageName, dep.Name, desc)
+		}
+	}
 }
 
 // updateAllDeployedQuadlets regenerates quadlets for all other deployed images
@@ -793,7 +820,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		MergeDeployOntoMetadata(meta, dc)
 
 		// Resolve env vars with updated global env
-		globalEnv := filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, imageName)
+		globalEnv := filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, imageName)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", imageName, err)

@@ -181,7 +181,7 @@ func (c *ShellCmd) Run() error {
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 	var shellGlobalEnv []string
 	if dc != nil {
-		shellGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+		shellGlobalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, c.Image)
 	}
 	envVars, err := ResolveEnvVars(shellGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
@@ -295,7 +295,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 	shellRemoteDC, _ := LoadDeployConfig()
 	var shellRemoteGlobalEnv []string
 	if shellRemoteDC != nil {
-		shellRemoteGlobalEnv = filterOwnServiceEnv(shellRemoteDC.Env, shellRemoteDC.ServiceEnvSources, ctx.ImageName)
+		shellRemoteGlobalEnv = filterOwnEnvProvides(shellRemoteDC.Env, shellRemoteDC.EnvProvidesSources, ctx.ImageName)
 	}
 	envVars, envErr := ResolveEnvVars(shellRemoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {

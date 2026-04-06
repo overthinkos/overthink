@@ -131,8 +131,11 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
-	// Validate service_env declarations
-	validateServiceEnv(layers, errs)
+	// Validate env_provides declarations
+	validateEnvProvides(layers, errs)
+
+	// Validate env_requires and env_accepts declarations
+	validateEnvDeps(layers, errs)
 
 	// Validate data layers and data images
 	validateDataLayers(cfg, layers, errs)
@@ -1564,29 +1567,89 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 	}
 }
 
-// validateServiceEnv checks service_env declarations in layers.
-func validateServiceEnv(layers map[string]*Layer, errs *ValidationError) {
+// validateEnvProvides checks env_provides declarations in layers.
+func validateEnvProvides(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !layer.HasServiceEnv {
+		if !layer.HasEnvProvides {
 			continue
 		}
-		for key, tmpl := range layer.ServiceEnv() {
-			// Validate env var key format
+		for key, tmpl := range layer.EnvProvides() {
 			if key == "" {
-				errs.Add("layer %s: service_env has empty key", name)
+				errs.Add("layer %s: env_provides has empty key", name)
 				continue
 			}
 
 			// Check for valid template variables (only {{.ContainerName}} is allowed)
-			// Strip valid template vars, then check for remaining {{ }}
 			stripped := strings.ReplaceAll(tmpl, "{{.ContainerName}}", "")
 			if strings.Contains(stripped, "{{") || strings.Contains(stripped, "}}") {
-				errs.Add("layer %s: service_env[%s] contains unknown template variable (only {{.ContainerName}} is supported): %s", name, key, tmpl)
+				errs.Add("layer %s: env_provides[%s] contains unknown template variable (only {{.ContainerName}} is supported): %s", name, key, tmpl)
 			}
 
-			// Note: service_env key may intentionally overlap with env key in the same layer.
+			// Note: env_provides key may intentionally overlap with env key in the same layer.
 			// env is baked into the service's own image (e.g., OLLAMA_HOST="0.0.0.0" for binding).
-			// service_env is injected into OTHER containers (e.g., OLLAMA_HOST="http://ov-ollama:11434").
+			// env_provides is injected into OTHER containers (e.g., OLLAMA_HOST="http://ov-ollama:11434").
 		}
 	}
+}
+
+// validateEnvDeps checks env_requires and env_accepts declarations in layers.
+func validateEnvDeps(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		seen := make(map[string]string) // name -> "requires" or "accepts"
+
+		for _, dep := range layer.EnvRequires() {
+			if dep.Name == "" {
+				errs.Add("layer %s: env_requires has entry with empty name", name)
+				continue
+			}
+			if !isValidEnvVarName(dep.Name) {
+				errs.Add("layer %s: env_requires[%s] is not a valid environment variable name", name, dep.Name)
+			}
+			if dep.Description == "" {
+				errs.Add("layer %s: env_requires[%s] has no description", name, dep.Name)
+			}
+			if prev, ok := seen[dep.Name]; ok {
+				errs.Add("layer %s: env var %s appears in both env_%s and env_requires", name, dep.Name, prev)
+			}
+			seen[dep.Name] = "requires"
+		}
+
+		for _, dep := range layer.EnvAccepts() {
+			if dep.Name == "" {
+				errs.Add("layer %s: env_accepts has entry with empty name", name)
+				continue
+			}
+			if !isValidEnvVarName(dep.Name) {
+				errs.Add("layer %s: env_accepts[%s] is not a valid environment variable name", name, dep.Name)
+			}
+			if dep.Description == "" {
+				errs.Add("layer %s: env_accepts[%s] has no description", name, dep.Name)
+			}
+			if prev, ok := seen[dep.Name]; ok {
+				errs.Add("layer %s: env var %s appears in both env_%s and env_accepts", name, dep.Name, prev)
+			}
+			seen[dep.Name] = "accepts"
+		}
+	}
+}
+
+// isValidEnvVarName checks if s is a valid environment variable name (uppercase alphanumeric + underscore, not starting with digit).
+func isValidEnvVarName(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for i, c := range s {
+		if c >= 'A' && c <= 'Z' || c == '_' {
+			continue
+		}
+		if c >= '0' && c <= '9' && i > 0 {
+			continue
+		}
+		// Allow lowercase too — some env vars use mixed case
+		if c >= 'a' && c <= 'z' {
+			continue
+		}
+		return false
+	}
+	return true
 }

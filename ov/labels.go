@@ -49,7 +49,9 @@ const (
 	LabelBuilds         = "org.overthinkos.builds"
 	LabelDataEntries    = "org.overthinkos.data"
 	LabelDataImage      = "org.overthinkos.data_image"
-	LabelServiceEnv     = "org.overthinkos.service_env"
+	LabelEnvProvides    = "org.overthinkos.env_provides"
+	LabelEnvRequires    = "org.overthinkos.env_requires"
+	LabelEnvAccepts     = "org.overthinkos.env_accepts"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -116,7 +118,9 @@ type ImageMetadata struct {
 	Builds         []string          // what this builder can build
 	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
 	DataImage      bool              // true if this is a data-only image (FROM scratch)
-	ServiceEnv     map[string]string // env vars provided to other containers (service discovery templates)
+	EnvProvides    map[string]string // env vars provided to other containers (service discovery templates)
+	EnvRequires    []EnvDependency  // env vars image must have from the environment
+	EnvAccepts     []EnvDependency  // env vars image can optionally use
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -390,10 +394,24 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		meta.DataImage = true
 	}
 
-	// Service env (env vars for other containers, templates with {{.ContainerName}})
-	if v := labels[LabelServiceEnv]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.ServiceEnv); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelServiceEnv, err)
+	// Env provides (env vars for other containers, templates with {{.ContainerName}})
+	if v := labels[LabelEnvProvides]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvProvides); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvProvides, err)
+		}
+	}
+
+	// Env requires (env vars this image must have)
+	if v := labels[LabelEnvRequires]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvRequires); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvRequires, err)
+		}
+	}
+
+	// Env accepts (env vars this image can optionally use)
+	if v := labels[LabelEnvAccepts]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.EnvAccepts); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelEnvAccepts, err)
 		}
 	}
 

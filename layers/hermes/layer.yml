@@ -11,6 +11,16 @@ env:
   HERMES_HOME: "/opt/data"
   TERMINAL_ENV: "local"
 
+env_accepts:
+  - name: OPENROUTER_API_KEY
+    description: "API key for OpenRouter LLM inference"
+  - name: TELEGRAM_BOT_TOKEN
+    description: "Telegram bot token for messaging"
+  - name: SLACK_BOT_TOKEN
+    description: "Slack bot token"
+  - name: DISCORD_BOT_TOKEN
+    description: "Discord bot token"
+
 rpm:
   packages:
     - alsa-lib

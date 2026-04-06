@@ -163,18 +163,22 @@ func generateQuadlet(cfg QuadletConfig) string {
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" && len(cfg.Tunnel.Ports) > 0 {
 		for _, tp := range cfg.Tunnel.Ports {
 			port := fmt.Sprintf("%d", tp.Port)
-			backend := fmt.Sprintf("%d", tp.backend())
 			if tp.Protocol == "udp" {
 				b.WriteString(fmt.Sprintf("# Port %s: UDP — not tunneled (tailscale serve does not support UDP; accessible directly between tailnet nodes)\n", port))
 			} else if tp.Public {
+				flag := tailscaleFlag(tp.Protocol)
+				target := schemeTarget(tp.Protocol, tp.backend())
 				b.WriteString(fmt.Sprintf("# Port %s: public (internet-accessible)\n", port))
-				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg --https=%s http://127.0.0.1:%s\n", port, backend))
-			} else if tp.Protocol == "tcp" {
-				b.WriteString(fmt.Sprintf("# Port %s: private (tailnet-only, tcp)\n", port))
-				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --tcp=%s tcp://127.0.0.1:%s\n", port, backend))
+				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale funnel --bg %s=%s %s\n", flag, port, target))
 			} else {
-				b.WriteString(fmt.Sprintf("# Port %s: private (tailnet-only)\n", port))
-				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg --https=%s http://127.0.0.1:%s\n", port, backend))
+				flag := tailscaleFlag(tp.Protocol)
+				target := schemeTarget(tp.Protocol, tp.backend())
+				proto := "https"
+				if isTCPFamily(tp.Protocol) {
+					proto = "tcp"
+				}
+				b.WriteString(fmt.Sprintf("# Port %s: private (tailnet-only, %s)\n", port, proto))
+				b.WriteString(fmt.Sprintf("ExecStartPost=tailscale serve --bg %s=%s %s\n", flag, port, target))
 			}
 		}
 		for _, tp := range cfg.Tunnel.Ports {
@@ -182,12 +186,11 @@ func generateQuadlet(cfg QuadletConfig) string {
 				continue // UDP ports have no tunnel commands to stop
 			}
 			port := fmt.Sprintf("%d", tp.Port)
+			flag := tailscaleFlag(tp.Protocol)
 			if tp.Public {
-				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s off\n", port))
-			} else if tp.Protocol == "tcp" {
-				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --tcp=%s off\n", port))
+				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale funnel %s=%s off\n", flag, port))
 			} else {
-				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve --https=%s off\n", port))
+				b.WriteString(fmt.Sprintf("ExecStopPost=-tailscale serve %s=%s off\n", flag, port))
 			}
 		}
 	}

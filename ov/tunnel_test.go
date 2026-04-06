@@ -966,3 +966,122 @@ func TestCollectPortProtos(t *testing.T) {
 		t.Errorf("protos[5900] = %q, want tcp", protos[5900])
 	}
 }
+
+// --- Backend scheme helpers ---
+
+func TestSchemeTarget(t *testing.T) {
+	tests := []struct {
+		scheme string
+		port   int
+		want   string
+	}{
+		{"http", 3000, "http://127.0.0.1:3000"},
+		{"https", 8443, "https://127.0.0.1:8443"},
+		{"https+insecure", 3000, "https+insecure://127.0.0.1:3000"},
+		{"tcp", 5900, "tcp://127.0.0.1:5900"},
+		{"tls-terminated-tcp", 22, "tcp://127.0.0.1:22"},
+		{"ssh", 22, "ssh://127.0.0.1:22"},
+		{"rdp", 3389, "rdp://127.0.0.1:3389"},
+	}
+	for _, tt := range tests {
+		got := schemeTarget(tt.scheme, tt.port)
+		if got != tt.want {
+			t.Errorf("schemeTarget(%q, %d) = %q, want %q", tt.scheme, tt.port, got, tt.want)
+		}
+	}
+}
+
+func TestTailscaleFlag(t *testing.T) {
+	tests := []struct {
+		scheme string
+		want   string
+	}{
+		{"http", "--https"},
+		{"https", "--https"},
+		{"https+insecure", "--https"},
+		{"tcp", "--tcp"},
+		{"tls-terminated-tcp", "--tls-terminated-tcp"},
+	}
+	for _, tt := range tests {
+		got := tailscaleFlag(tt.scheme)
+		if got != tt.want {
+			t.Errorf("tailscaleFlag(%q) = %q, want %q", tt.scheme, got, tt.want)
+		}
+	}
+}
+
+func TestIsTCPFamily(t *testing.T) {
+	if !isTCPFamily("tcp") {
+		t.Error("tcp should be TCP family")
+	}
+	if !isTCPFamily("tls-terminated-tcp") {
+		t.Error("tls-terminated-tcp should be TCP family")
+	}
+	if isTCPFamily("http") {
+		t.Error("http should not be TCP family")
+	}
+	if isTCPFamily("https") {
+		t.Error("https should not be TCP family")
+	}
+	if isTCPFamily("https+insecure") {
+		t.Error("https+insecure should not be TCP family")
+	}
+	if isTCPFamily("ssh") {
+		t.Error("ssh should not be TCP family")
+	}
+}
+
+func TestResolveTunnelConfigWithHTTPSInsecure(t *testing.T) {
+	tunnel := &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}
+	portProtos := map[int]string{3000: "https+insecure"}
+	imagePorts := []string{"3000:3000", "8888:8888"}
+
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, portProtos, imagePorts)
+
+	if len(cfg.Ports) != 2 {
+		t.Fatalf("got %d ports, want 2", len(cfg.Ports))
+	}
+	if cfg.Ports[0].Protocol != "https+insecure" {
+		t.Errorf("Port 3000 protocol = %q, want https+insecure", cfg.Ports[0].Protocol)
+	}
+	if cfg.Ports[1].Protocol != "http" {
+		t.Errorf("Port 8888 protocol = %q, want http", cfg.Ports[1].Protocol)
+	}
+}
+
+func TestResolveTunnelConfigWithTLSTerminatedTCP(t *testing.T) {
+	tunnel := &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}
+	portProtos := map[int]string{22: "tls-terminated-tcp"}
+	imagePorts := []string{"22:22"}
+
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, portProtos, imagePorts)
+
+	if len(cfg.Ports) != 1 {
+		t.Fatalf("got %d ports, want 1", len(cfg.Ports))
+	}
+	if cfg.Ports[0].Protocol != "tls-terminated-tcp" {
+		t.Errorf("Port 22 protocol = %q, want tls-terminated-tcp", cfg.Ports[0].Protocol)
+	}
+}
+
+func TestResolveTunnelConfigCloudflareSchemes(t *testing.T) {
+	tunnel := &TunnelYAML{
+		Provider: "cloudflare",
+		Tunnel:   "test-tunnel",
+		Public:   PortScope{PortMap: map[int]string{443: "app.example.com", 22: "ssh.example.com"}},
+	}
+	portProtos := map[int]string{22: "ssh"}
+	imagePorts := []string{"443:443", "22:22"}
+
+	cfg := ResolveTunnelConfig(tunnel, "myapp", "", nil, nil, portProtos, imagePorts)
+
+	if len(cfg.Ports) != 2 {
+		t.Fatalf("got %d ports, want 2", len(cfg.Ports))
+	}
+	if cfg.Ports[0].Protocol != "http" {
+		t.Errorf("Port 443 protocol = %q, want http", cfg.Ports[0].Protocol)
+	}
+	if cfg.Ports[1].Protocol != "ssh" {
+		t.Errorf("Port 22 protocol = %q, want ssh", cfg.Ports[1].Protocol)
+	}
+}

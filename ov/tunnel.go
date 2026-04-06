@@ -144,7 +144,7 @@ func (t *TunnelYAML) UnmarshalYAML(value *yaml.Node) error {
 type TunnelPort struct {
 	Port        int    // Tailscale HTTPS listen port (must be valid serve port)
 	BackendPort int    // Localhost backend port (0 means same as Port)
-	Protocol    string // "http" or "tcp"
+	Protocol    string // backend scheme: "http", "https", "https+insecure", "tcp", "tls-terminated-tcp", "ssh", "rdp", "smb"
 	Public      bool   // true = internet-accessible, false = private (tailnet-only)
 	Hostname    string // cloudflare: per-port hostname (from map form)
 }
@@ -192,6 +192,51 @@ func collectPortProtos(layers map[string]*Layer, layerNames []string) map[int]st
 		return nil
 	}
 	return protos
+}
+
+// validTailscaleSchemes lists backend schemes supported by tailscale serve/funnel.
+var validTailscaleSchemes = map[string]bool{
+	"http": true, "https": true, "https+insecure": true,
+	"tcp": true, "tls-terminated-tcp": true,
+}
+
+// validCloudflareSchemes lists origin service schemes supported by cloudflared.
+var validCloudflareSchemes = map[string]bool{
+	"http": true, "https": true,
+	"tcp": true, "ssh": true, "rdp": true, "smb": true,
+}
+
+// schemeTarget returns the backend URL for a given scheme and port.
+func schemeTarget(scheme string, port int) string {
+	switch scheme {
+	case "tcp", "tls-terminated-tcp":
+		return fmt.Sprintf("tcp://127.0.0.1:%d", port)
+	default:
+		return fmt.Sprintf("%s://127.0.0.1:%d", scheme, port)
+	}
+}
+
+// tailscaleFlag returns the tailscale serve/funnel flag for a scheme.
+// Returns "--https", "--tcp", or "--tls-terminated-tcp".
+func tailscaleFlag(scheme string) string {
+	switch scheme {
+	case "tcp":
+		return "--tcp"
+	case "tls-terminated-tcp":
+		return "--tls-terminated-tcp"
+	default:
+		return "--https"
+	}
+}
+
+// isTCPFamily returns true for schemes that use TCP-style forwarding (not HTTP proxy).
+func isTCPFamily(scheme string) bool {
+	switch scheme {
+	case "tcp", "tls-terminated-tcp":
+		return true
+	default:
+		return false
+	}
 }
 
 // ValidPublicPorts are the allowed external ports for Tailscale public access.
@@ -256,8 +301,9 @@ func tailscalePublicOneStart(tp TunnelPort) error {
 		return nil
 	}
 	port := strconv.Itoa(tp.Port)
-	target := fmt.Sprintf("http://127.0.0.1:%d", tp.backend())
-	cmd := exec.Command("tailscale", "funnel", "--bg", "--https="+port, target)
+	target := schemeTarget(tp.Protocol, tp.backend())
+	flag := tailscaleFlag(tp.Protocol)
+	cmd := exec.Command("tailscale", "funnel", "--bg", flag+"="+port, target)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -272,7 +318,8 @@ func tailscalePublicOneStop(tp TunnelPort) error {
 		return nil // UDP ports are not tunneled
 	}
 	port := strconv.Itoa(tp.Port)
-	cmd := exec.Command("tailscale", "funnel", port, "off")
+	flag := tailscaleFlag(tp.Protocol)
+	cmd := exec.Command("tailscale", "funnel", flag+"="+port, "off")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -305,22 +352,16 @@ func tailscalePrivateOneStart(tp TunnelPort) error {
 		return nil
 	}
 	port := strconv.Itoa(tp.Port)
-	backend := tp.backend()
-	var cmd *exec.Cmd
-	if tp.Protocol == "tcp" {
-		target := fmt.Sprintf("tcp://127.0.0.1:%d", backend)
-		cmd = exec.Command("tailscale", "serve", "--bg", "--tcp="+port, target)
-	} else {
-		target := fmt.Sprintf("http://127.0.0.1:%d", backend)
-		cmd = exec.Command("tailscale", "serve", "--bg", "--https="+port, target)
-	}
+	target := schemeTarget(tp.Protocol, tp.backend())
+	flag := tailscaleFlag(tp.Protocol)
+	cmd := exec.Command("tailscale", "serve", "--bg", flag+"="+port, target)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("private tunnel on port %s failed: %w", port, err)
 	}
 	proto := "https"
-	if tp.Protocol == "tcp" {
+	if isTCPFamily(tp.Protocol) {
 		proto = "tcp"
 	}
 	fmt.Fprintf(os.Stderr, "Port %s: private (tailnet-only, %s)\n", port, proto)
@@ -332,19 +373,15 @@ func tailscalePrivateOneStop(tp TunnelPort) error {
 		return nil // UDP ports are not tunneled
 	}
 	port := strconv.Itoa(tp.Port)
-	var cmd *exec.Cmd
-	if tp.Protocol == "tcp" {
-		cmd = exec.Command("tailscale", "serve", "--tcp="+port, "off")
-	} else {
-		cmd = exec.Command("tailscale", "serve", "--https="+port, "off")
-	}
+	flag := tailscaleFlag(tp.Protocol)
+	cmd := exec.Command("tailscale", "serve", flag+"="+port, "off")
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("private tunnel stop on port %s failed: %w", port, err)
 	}
 	proto := "https"
-	if tp.Protocol == "tcp" {
+	if isTCPFamily(tp.Protocol) {
 		proto = "tcp"
 	}
 	fmt.Fprintf(os.Stderr, "Port %s: private tunnel disabled (%s)\n", port, proto)
@@ -440,7 +477,7 @@ func cloudflareTunnelSetup(cfg TunnelConfig) (tunnelName, configPath string, err
 		if hostname == "" {
 			hostname = cfg.Hostname // fallback to image dns
 		}
-		ingress.WriteString(fmt.Sprintf("  - hostname: %s\n    service: http://localhost:%d\n", hostname, tp.Port))
+		ingress.WriteString(fmt.Sprintf("  - hostname: %s\n    service: %s://localhost:%d\n", hostname, tp.Protocol, tp.Port))
 	}
 	ingress.WriteString("  - service: http_status:404\n")
 
@@ -634,7 +671,7 @@ func buildPortMapping(imagePorts []string) map[int]int {
 	return m
 }
 
-// resolveProto returns the protocol for a container port, defaulting to "http".
+// resolveProto returns the backend scheme for a container port, defaulting to "http".
 func resolveProto(containerPort int, portProtos map[int]string) string {
 	if portProtos != nil {
 		if pp, ok := portProtos[containerPort]; ok {

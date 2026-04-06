@@ -15,7 +15,7 @@ import (
 // Supports both plain integer (defaults to "http") and "tcp:5900" string forms.
 type PortSpec struct {
 	Port     int
-	Protocol string // "http" (default) or "tcp"
+	Protocol string // backend scheme: "http" (default), "https", "https+insecure", "tcp", "tls-terminated-tcp", "ssh", "rdp", "smb"
 }
 
 // UnmarshalYAML handles both integer and string forms for port specs.

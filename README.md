@@ -81,7 +81,7 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Quadlets: Containers as System Services
 
-With Docker, you'd use `docker compose` or a restart policy to keep a container running. Podman quadlets are different: they describe a container as a native systemd service — the same system that manages SSH, networking, and everything else on your Linux box. `ov config <image>` generates the quadlet file, provisions secrets, and mounts encrypted volumes — all in one command. After that, `systemctl start/stop/status` just work — your container starts on boot, restarts on failure, and shows up in `journalctl` logs like any other service.
+With Docker, you'd use `docker compose` or a restart policy to keep a container running. Podman quadlets are different: they describe a container as a native systemd service — the same system that manages SSH, networking, and everything else on your Linux box. `ov config <image>` generates the quadlet file, provisions secrets, and mounts encrypted volumes — all in one command. After that, `systemctl start/stop/status` just work — your container starts on boot, restarts on failure, and shows up in `journalctl` logs like any other service. Services can be exposed via Tailscale (tailnet-private) or Cloudflare (public internet) tunnels with full backend scheme support — HTTP, HTTPS, HTTPS with self-signed certs, TCP, TLS-terminated TCP, SSH, RDP, and SMB.
 
 ### Bootc: The Container *Is* the OS
 

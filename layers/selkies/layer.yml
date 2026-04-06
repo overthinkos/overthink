@@ -10,7 +10,7 @@ env:
   PULSE_SERVER: "unix:/tmp/pulse/native"
 
 ports:
-  - 3000
+  - "https+insecure:3000"
 
 security:
   shm_size: "1g"

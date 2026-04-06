@@ -276,7 +276,7 @@ func TestGenerateQuadletWithTailscalePublic(t *testing.T) {
 	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=443 http://127.0.0.1:443") {
 		t.Errorf("expected ExecStartPost for public port, got:\n%s", got)
 	}
-	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 443 off") {
+	if !strings.Contains(got, "ExecStopPost=-tailscale funnel --https=443 off") {
 		t.Errorf("expected ExecStopPost for public port, got:\n%s", got)
 	}
 }
@@ -300,7 +300,7 @@ func TestGenerateQuadletWithTailscalePublicCustomPort(t *testing.T) {
 	if !strings.Contains(got, "ExecStartPost=tailscale funnel --bg --https=8443 http://127.0.0.1:8443") {
 		t.Errorf("expected ExecStartPost with port 8443, got:\n%s", got)
 	}
-	if !strings.Contains(got, "ExecStopPost=-tailscale funnel 8443 off") {
+	if !strings.Contains(got, "ExecStopPost=-tailscale funnel --https=8443 off") {
 		t.Errorf("expected ExecStopPost with port 8443, got:\n%s", got)
 	}
 }
@@ -355,6 +355,58 @@ func TestGenerateQuadletWithTailscaleExplicitRemap(t *testing.T) {
 	}
 	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=443 off") {
 		t.Errorf("expected ExecStopPost with listen port 443, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithHTTPSInsecureBackend(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "selkies-app",
+		ImageRef:    "ghcr.io/test/selkies:latest",
+		Home:        "/home/user",
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Ports: []TunnelPort{
+				{Port: 3000, Protocol: "https+insecure"},
+				{Port: 8888, Protocol: "http"},
+			},
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=3000 https+insecure://127.0.0.1:3000") {
+		t.Errorf("expected https+insecure serve command for port 3000, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --https=8888 http://127.0.0.1:8888") {
+		t.Errorf("expected http serve command for port 8888, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale serve --https=3000 off") {
+		t.Errorf("expected ExecStopPost for port 3000, got:\n%s", got)
+	}
+}
+
+func TestGenerateQuadletWithTLSTerminatedTCP(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName:   "ssh-server",
+		ImageRef:    "ghcr.io/test/ssh:latest",
+		Home:        "/home/user",
+		BindAddress: "127.0.0.1",
+		Tunnel: &TunnelConfig{
+			Provider: "tailscale",
+			Ports: []TunnelPort{
+				{Port: 22, Protocol: "tls-terminated-tcp"},
+			},
+		},
+	}
+
+	got := generateQuadlet(cfg)
+
+	if !strings.Contains(got, "ExecStartPost=tailscale serve --bg --tls-terminated-tcp=22 tcp://127.0.0.1:22") {
+		t.Errorf("expected tls-terminated-tcp serve command, got:\n%s", got)
+	}
+	if !strings.Contains(got, "ExecStopPost=-tailscale serve --tls-terminated-tcp=22 off") {
+		t.Errorf("expected tls-terminated-tcp stop command, got:\n%s", got)
 	}
 }
 

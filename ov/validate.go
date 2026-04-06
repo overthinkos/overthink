@@ -930,13 +930,13 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 				if !ValidPublicPorts[p] {
 					errs.Add("%s: tailscale public port %d must be 443, 8443, or 10000", name, p)
 				}
-				// TCP ports can't be public
+				// TCP-family ports can't be public
 				if portProtos != nil {
 					cp := p
 					if c, ok := hostToContainer[p]; ok {
 						cp = c
 					}
-					if portProtos[cp] == "tcp" {
+					if isTCPFamily(resolveProto(cp, portProtos)) {
 						errs.Add("%s: TCP port %d cannot be public (only HTTP ports can be internet-accessible)", name, p)
 					}
 				}
@@ -955,8 +955,8 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 							proto = pp
 						}
 					}
-					if proto == "tcp" {
-						continue // TCP ports are skipped in public: all
+					if isTCPFamily(proto) {
+						continue // TCP-family ports are skipped in public: all
 					}
 					if !ValidPublicPorts[hp] {
 						errs.Add("%s: tailscale public: all includes port %d which is not a valid public port (443, 8443, 10000)", name, hp)
@@ -1007,6 +1007,27 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 			// Cloudflare tunnel name validation
 			if t.Tunnel != "" && !tunnelNameRe.MatchString(t.Tunnel) {
 				errs.Add("%s: tunnel name must match [a-zA-Z0-9][a-zA-Z0-9-]*, got %q", name, t.Tunnel)
+			}
+		}
+
+		// Validate port schemes against provider capabilities
+		if portProtos != nil {
+			hostToContainer := buildPortMapping(imagePorts)
+			for _, hp := range parseHostPorts(imagePorts) {
+				cp := hp
+				if c, ok := hostToContainer[hp]; ok {
+					cp = c
+				}
+				proto := resolveProto(cp, portProtos)
+				if proto == "http" {
+					continue // default scheme, always valid
+				}
+				if t.Provider == "tailscale" && !validTailscaleSchemes[proto] {
+					errs.Add("%s: port %d has scheme %q which is not supported by tailscale (supported: http, https, https+insecure, tcp, tls-terminated-tcp)", name, hp, proto)
+				}
+				if t.Provider == "cloudflare" && !validCloudflareSchemes[proto] {
+					errs.Add("%s: port %d has scheme %q which is not supported by cloudflare (supported: http, https, tcp, ssh, rdp, smb)", name, hp, proto)
+				}
 			}
 		}
 	}

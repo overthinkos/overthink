@@ -101,6 +101,18 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - `env_requires` and `env_accepts` are distinct from `env:` (baked into image), `env_provides:` (injected into other containers), and `secrets:` (provisioned from credential store)
 - Source: `ov/layers.go` (`EnvDependency`, `LayerYAML.EnvRequires/EnvAccepts`), `ov/validate.go` (`validateEnvDeps`), `ov/config_image.go` (`warnMissingEnvRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelEnvRequires`, `LabelEnvAccepts`, `ImageMetadata.EnvRequires/EnvAccepts`)
 
+**Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior:
+- Layers declare port protocols in `layer.yml`: `ports: ["https+insecure:3000", "tcp:5900", 8888]`
+- Protocol determines the backend URL scheme for `tailscale serve/funnel` and `cloudflared` ingress
+- Stored in OCI label `org.overthinkos.port_protos` (JSON map, only non-http entries)
+- Tailscale schemes: `http` (default), `https`, `https+insecure`, `tcp`, `tls-terminated-tcp`
+- Cloudflare schemes: `http` (default), `https`, `tcp`, `ssh`, `rdp`, `smb`
+- `udp` ports are never tunneled (warning printed); accessible directly between tailnet nodes
+- Scheme → Tailscale flag: `http/https/https+insecure` → `--https`, `tcp` → `--tcp`, `tls-terminated-tcp` → `--tls-terminated-tcp`
+- Scheme → target URL: `schemeTarget(scheme, port)` builds `scheme://127.0.0.1:port` (TCP-family uses `tcp://`)
+- Validation: `ov validate` checks port schemes against provider capabilities (e.g., `ssh` valid for cloudflare but not tailscale)
+- Source: `ov/tunnel.go` (`schemeTarget`, `tailscaleFlag`, `isTCPFamily`, `validTailscaleSchemes`, `validCloudflareSchemes`), `ov/quadlet.go`, `ov/validate.go`
+
 **Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers:
 - SSH: host `$SSH_AUTH_SOCK` → container `/run/host-ssh-auth.sock` + `SSH_AUTH_SOCK` env var
 - GPG: host `S.gpg-agent` (detected via `gpgconf --list-dirs agent-socket`) → container `$HOME/.gnupg/S.gpg-agent` (home from `org.overthinkos.home` image label)
@@ -243,6 +255,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - `env_requires:` in `layer.yml` declares env vars the layer MUST have from the environment (e.g., `OPENROUTER_API_KEY`). At `ov config` time, missing required vars produce warnings. Structure: list of `{name, description, default?}`
 - `env_accepts:` in `layer.yml` declares env vars the layer CAN optionally use (e.g., `TELEGRAM_BOT_TOKEN`). No warnings if missing — for documentation only. Same structure as `env_requires`
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
+- Port protocol annotations control tunnel backend schemes: `"https+insecure:3000"` tells Tailscale to use `https+insecure://` when proxying. Default is `http`. Supported: `http`, `https`, `https+insecure`, `tcp`, `tls-terminated-tcp` (Tailscale); `http`, `https`, `tcp`, `ssh`, `rdp`, `smb` (Cloudflare). Ports with HTTPS backends (like Traefik self-signed) MUST use `https+insecure` to avoid 404 errors from plain HTTP proxying
 
 ### Two-Tier Layer Architecture for ML/Python Layers
 
@@ -490,6 +503,7 @@ Examples where multiple skills cover one topic:
 - **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 - **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation) vs `/ov-images:selkies-desktop-hermes` (Selkies desktop + hermes + claude-code + codex + gemini) vs `/ov-images:selkies-desktop-hermes-jupyter` (+ jupyter-colab at `:8888`)
+- **Tunnels:** `/ov:deploy` (tunnel providers, backend schemes, quadlet integration, deploy.yml) vs `/ov:layer` (port protocol annotations, `ports:` field syntax) vs `/ov:config` (tunnel setup at deploy time)
 
 ### Desktop Automation Hierarchy
 

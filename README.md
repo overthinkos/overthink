@@ -142,6 +142,11 @@ ov secrets gpg set API_KEY sk-test-abc                    # Add/update a key
 ov secrets gpg edit                                       # Edit in $EDITOR
 ov secrets gpg unset OLD_KEY                              # Remove a key
 ov secrets gpg recipients                                 # List who can decrypt
+ov secrets gpg import-key <path>                          # Import key from file/dir
+ov secrets gpg import-key --from-keystore                 # Restore key from KeePassXC
+ov secrets gpg export-key <dir> --to-keystore             # Backup key to dir + KeePassXC
+ov secrets gpg setup -p                                   # Configure gpg-agent + KeePassXC
+ov secrets gpg doctor                                     # Verify GPG health
 ```
 
 ## Quick Taste
@@ -416,6 +421,10 @@ ov secrets gpg env [-f FILE]                   # Decrypt .secrets for shell eval
 ov secrets gpg show/edit/encrypt/decrypt       # Manage GPG-encrypted .secrets files
 ov secrets gpg set/unset KEY [VALUE]           # Add/remove keys in .secrets
 ov secrets gpg add-recipient/recipients        # Manage GPG recipients
+ov secrets gpg import-key [PATH|--from-keystore]  # Import/restore GPG keys
+ov secrets gpg export-key [DIR] [--to-keystore]   # Export/backup GPG keys
+ov secrets gpg setup [-p] [--import PATH]         # Configure gpg-agent + KeePassXC
+ov secrets gpg doctor [-f FILE]                   # GPG health check
 ov udev status                                 # Show GPU device access status
 ov udev generate                               # Print udev rules to stdout
 ov udev install                                # Install udev rules (requires sudo)

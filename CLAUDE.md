@@ -55,11 +55,13 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Project-level env vars (e.g., `GMAIL_USER`, `GMAIL_PASSWORD`) are stored in `.secrets` — a GPG-encrypted file containing `KEY=VALUE` lines (same format as `.env`)
 - `.envrc` calls `eval "$(ov secrets gpg env)"` which decrypts `.secrets` in memory via gpg-agent — no plaintext on disk. No external `direnvrc` dependency needed
 - Prerequisites: gpg-agent running with passphrase cached (locally via KeePassXC/pinentry, or remotely via SSH agent forwarding)
-- Managed via `ov secrets gpg` subcommands: `show`, `env`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`. All shell out to `gpg`. Example: `eval "$(ov secrets gpg env)"` to load secrets, `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
+- Managed via `ov secrets gpg` subcommands: `show`, `env`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`, `import-key`, `export-key`, `setup`, `doctor`. All shell out to `gpg`. Example: `eval "$(ov secrets gpg env)"` to load secrets, `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
 - `ov secrets gpg env` silently exits 0 if `.secrets` doesn't exist (safe for `.envrc`). Outputs `export KEY='value'` lines parsed via `ParseEnvBytes` (skips comments/blanks, strips quotes)
+- **GPG key management:** `ov secrets gpg import-key <path>` imports from file/directory, `--from-keystore` restores from KeePassXC Secret Service. `ov secrets gpg export-key <dir>` exports to filesystem, `--to-keystore` backs up to KeePassXC. `ov secrets gpg setup` configures gpg-agent (pinentry-qt + 8h cache), enables systemd sockets, imports/generates key, stores passphrase in Secret Service for all keygrips (primary + subkeys). `ov secrets gpg doctor` validates the full chain. `--prompt-passphrase` / `-p` flag on setup for secure interactive entry
+- **KeePassXC/Secret Service integration:** pinentry-qt (linked against libsecret) queries `org.freedesktop.secrets` (KeePassXC) for passphrase lookup using schema `org.gnupg.Passphrase` with `keygrip` attribute. `presetPassphrasesFromSS()` injects passphrases from Secret Service into gpg-agent cache via `gpg-preset-passphrase`, bypassing pinentry for non-interactive contexts (doctor, setup verification, CI). Key backups stored with schema `org.gnupg.Key` and `keyid` attribute. On decryption failure, `diagnoseGPGDecryptionFailure()` prints actionable diagnostics: recipient key ID, keyring status, Secret Service availability, and specific `ov secrets gpg` fix commands
 - `.secrets` is gitignored (`.gitignore`). `.env` is also gitignored and Syncthing-ignored
 - **Distinction:** `.secrets`/direnv handles project-level shell env vars loaded before any command. ov's credential store (`ov secrets`, keyring, kdbx) handles container-level secrets (VNC passwords, service credentials) provisioned at `ov config` time
-- Source: `ov/secrets_gpg.go` (`SecretsGpgEnvCmd`, GPG subcommands), `ov/envfile.go` (`ParseEnvBytes`)
+- Source: `ov/secrets_gpg.go` (`SecretsGpgEnvCmd`, `SecretsGpgSetupCmd`, `SecretsGpgDoctorCmd`, `SecretsGpgImportKeyCmd`, `SecretsGpgExportKeyCmd`, `diagnoseGPGDecryptionFailure`, `presetPassphrasesFromSS`), `ov/envfile.go` (`ParseEnvBytes`)
 
 **Volume Management** -- Unified deploy-time volume backing:
 - Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
@@ -302,7 +304,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:settings` |
 | `version` | `/ov:version` |
 | `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
-| `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients) | `/ov:secrets` |
+| `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients, import-key, export-key, setup, doctor) | `/ov:secrets` |
 | `udev status/generate/install/remove` | `/ov:udev` |
 | `vm` | `/ov:vm` |
 | `doctor` | `/ov:doctor` |

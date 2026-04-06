@@ -1,0 +1,8 @@
+version: '3'
+
+tasks:
+  all:
+    cmds:
+      - mkdir -p ~/.local/bin
+      - cp /ctx/hermes-entrypoint ~/.local/bin/hermes-entrypoint
+      - chmod +x ~/.local/bin/hermes-entrypoint

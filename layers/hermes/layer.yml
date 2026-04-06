@@ -1,0 +1,48 @@
+description: Hermes self-improving AI agent by Nous Research
+
+depends:
+  - nodejs
+  - supervisord
+  - ripgrep
+  - ffmpeg
+  - pipewire
+
+env:
+  HERMES_HOME: "/opt/data"
+  TERMINAL_ENV: "local"
+
+rpm:
+  packages:
+    - alsa-lib
+    - portaudio
+
+volumes:
+  - name: data
+    path: "/opt/data"
+
+aliases:
+  - name: hermes
+    command: hermes
+  - name: hermes-agent
+    command: hermes-agent
+
+service: |
+  [program:hermes]
+  command=%(ENV_HOME)s/.local/bin/hermes-entrypoint
+  directory=%(ENV_HOME)s
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0
+
+  [program:hermes-whatsapp]
+  command=node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js
+  directory=%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge
+  autostart=false
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

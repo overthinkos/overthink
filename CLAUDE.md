@@ -254,6 +254,14 @@ ML layers follow a two-tier pattern that separates environment ownership from po
 - Meta-layers CAN have both `depends:` and `layers:` (e.g., `unsloth-studio` has `depends: [cuda, supervisord]` + `layers: [llama-cpp, unsloth]`)
 - Meta-layers CAN own pixi.toml (environment-owner pattern — exactly one pixi.toml per image)
 
+**Hermes Agent layer** (`hermes`) follows the Tier 2 pattern with `build.sh` (same as selkies): pixi.toml defines the Python env, build.sh clones the hermes-agent repo, pip installs it, and sets up npm deps. The `hermes-playwright` layer is a Tier 1 add-on for Playwright + Chromium.
+
+**Build.sh and npm gotchas** (discovered during hermes testing):
+- Playwright `npx playwright install --with-deps` does NOT support Fedora — falls back to Ubuntu's `apt-get`. Workaround: install Chromium system deps via rpm packages in `layer.yml`, browser binary via `npx playwright install chromium` (without `--with-deps`) in `root.yml`
+- npm packages installed globally (via the npm builder's `package.json`) are in `~/.npm-global/lib/node_modules/` and need `NODE_PATH` to be `require()`d. For project-local deps (like agent-browser), install in `build.sh` instead of `package.json`
+- `sounddevice` Python library needs `portaudio` rpm at runtime (not just build time)
+- When `root.yml` installs Playwright browsers with `HOME=/tmp`, set `PLAYWRIGHT_BROWSERS_PATH=/tmp/.cache/ms-playwright` in `layer.yml` env so the runtime user finds them
+
 For layer-specific rules (install files, packages, port_relay, secrets, data, service_env, cache mounts): `/ov:layer`
 
 **Credential security:** Config files (`settings.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov settings migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
@@ -378,8 +386,8 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 154 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 38 | Image reference | "What does image X look like?" |
+| `ov-layers` | 156 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 40 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
@@ -415,6 +423,10 @@ Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`
 
 **Modify a metalayer:**
 `/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
+
+**Deploy Hermes Agent:**
+`/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup) -> `/ov:start` -> `/ov:service` (lifecycle)
+For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global.
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
@@ -458,6 +470,7 @@ Examples where multiple skills cover one topic:
 - **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
+- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation)
 
 ### Desktop Automation Hierarchy
 

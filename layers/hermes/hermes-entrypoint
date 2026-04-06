@@ -1,0 +1,22 @@
+#!/bin/bash
+# Hermes Agent entrypoint — initializes data volume and starts the agent.
+# Based on upstream docker/entrypoint.sh.
+set -e
+
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+HERMES_SRC="$HOME/hermes-agent"
+
+# Create data directory structure
+mkdir -p "$HERMES_HOME"/{cron,sessions,logs,hooks,memories,skills}
+
+# Bootstrap config files if not present
+[ -f "$HERMES_HOME/.env" ] || cp "$HERMES_SRC/.env.example" "$HERMES_HOME/.env"
+[ -f "$HERMES_HOME/config.yaml" ] || cp "$HERMES_SRC/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
+[ -f "$HERMES_HOME/SOUL.md" ] || cp "$HERMES_SRC/docker/SOUL.md" "$HERMES_HOME/SOUL.md"
+
+# Sync bundled skills
+if [ -d "$HERMES_SRC/skills" ]; then
+    python "$HERMES_SRC/tools/skills_sync.py" 2>/dev/null || true
+fi
+
+exec hermes "$@"

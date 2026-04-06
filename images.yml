@@ -495,3 +495,20 @@ images:
       - "2283:2283"
     platforms:
       - linux/amd64
+
+  hermes:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - hermes
+      - dbus
+      - ov
+
+  hermes-playwright:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - hermes
+      - hermes-playwright
+      - dbus
+      - ov

@@ -152,6 +152,8 @@ langchain-openai = "*"
 langchain-community = "*"
 langchain-classic = "*"
 langchain-anthropic = "*"
+langchain-huggingface = "*"
+langchain-ollama = "*"
 chromadb = "*"
 faiss-cpu = "*"
 

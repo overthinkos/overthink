@@ -167,7 +167,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		deployEnv = img.Env
 		deployEnvFile = img.EnvFile
 	}
-	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	var startGlobalEnv []string
+	if dc != nil {
+		startGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+	}
+	envVars, err := ResolveEnvVars(startGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -317,8 +321,13 @@ func (c *StartCmd) runRemote(ref string) error {
 		return err
 	}
 
-	// Resolve env vars
-	envVars, err := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	// Resolve env vars with global env
+	remoteDC, _ := LoadDeployConfig()
+	var remoteStartGlobalEnv []string
+	if remoteDC != nil {
+		remoteStartGlobalEnv = filterOwnServiceEnv(remoteDC.Env, remoteDC.ServiceEnvSources, ctx.ImageName)
+	}
+	envVars, err := ResolveEnvVars(remoteStartGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -389,8 +398,13 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 		return err
 	}
 
-	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	// Resolve env vars with global env
+	remoteQDC, _ := LoadDeployConfig()
+	var remoteQGlobalEnv []string
+	if remoteQDC != nil {
+		remoteQGlobalEnv = filterOwnServiceEnv(remoteQDC.Env, remoteQDC.ServiceEnvSources, ctx.ImageName)
+	}
+	envVars, envErr := ResolveEnvVars(remoteQGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}

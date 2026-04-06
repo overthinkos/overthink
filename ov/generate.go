@@ -1433,6 +1433,20 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelSecrets, labelSecrets)
 	}
 
+	// Service env: env vars provided to other containers (service discovery)
+	serviceEnv := make(map[string]string)
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasServiceEnv {
+			for k, v := range layer.ServiceEnv() {
+				serviceEnv[k] = v
+			}
+		}
+	}
+	if len(serviceEnv) > 0 {
+		writeJSONLabel(b, LabelServiceEnv, serviceEnv)
+	}
+
 	// Routes: collected from layers
 	var routes []LabelRoute
 	for _, layerName := range layerOrder {

@@ -12,7 +12,9 @@ import (
 // DeployConfig represents per-machine deployment overrides (~/.config/ov/deploy.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 type DeployConfig struct {
-	Images map[string]DeployImageConfig `yaml:"images"`
+	Env               []string                    `yaml:"env,omitempty"`                // global env vars injected into all containers
+	ServiceEnvSources map[string]string           `yaml:"service_env_sources,omitempty"` // tracks which image injected each global env var (key -> image name)
+	Images            map[string]DeployImageConfig `yaml:"images"`
 }
 
 // DeployImageConfig holds deployment-specific overrides for a single image.
@@ -393,17 +395,45 @@ func RemoveImageDeploy(dc *DeployConfig, imageName string) {
 }
 
 // cleanDeployEntry removes an image's entry from deploy.yml (best-effort).
+// Also removes global service env vars that were injected by this image.
 // If deploy.yml becomes empty after removal, the file is deleted.
 func cleanDeployEntry(imageName string) {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return
 	}
-	if _, ok := dc.Images[imageName]; !ok {
+
+	hasImage := false
+	if _, ok := dc.Images[imageName]; ok {
+		hasImage = true
+		RemoveImageDeploy(dc, imageName)
+	}
+
+	// Remove global service env vars injected by this image
+	removedEnv := false
+	if dc.ServiceEnvSources != nil {
+		var keysToRemove []string
+		for key, source := range dc.ServiceEnvSources {
+			if source == imageName {
+				keysToRemove = append(keysToRemove, key)
+			}
+		}
+		for _, key := range keysToRemove {
+			dc.Env = removeEnvByKey(dc.Env, key)
+			delete(dc.ServiceEnvSources, key)
+			removedEnv = true
+			fmt.Fprintf(os.Stderr, "Removed service env: %s\n", key)
+		}
+		if len(dc.ServiceEnvSources) == 0 {
+			dc.ServiceEnvSources = nil
+		}
+	}
+
+	if !hasImage && !removedEnv {
 		return
 	}
-	RemoveImageDeploy(dc, imageName)
-	if len(dc.Images) == 0 {
+
+	if len(dc.Images) == 0 && len(dc.Env) == 0 {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
 			os.Remove(path)
 		}
@@ -412,6 +442,52 @@ func cleanDeployEntry(imageName string) {
 		return
 	}
 	fmt.Fprintf(os.Stderr, "Cleaned deploy.yml entry for %s\n", imageName)
+}
+
+// appendOrReplaceEnv adds or replaces an env var entry (KEY=VALUE) in a slice.
+// If the key already exists, the value is replaced in-place.
+func appendOrReplaceEnv(envs []string, entry string) []string {
+	key := envKey(entry)
+	for i, e := range envs {
+		if envKey(e) == key {
+			envs[i] = entry
+			return envs
+		}
+	}
+	return append(envs, entry)
+}
+
+// removeEnvByKey removes all env vars with the given key from a slice.
+func removeEnvByKey(envs []string, key string) []string {
+	var result []string
+	for _, e := range envs {
+		if envKey(e) != key {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// envKey extracts the KEY part from a KEY=VALUE string.
+func envKey(entry string) string {
+	if idx := strings.IndexByte(entry, '='); idx >= 0 {
+		return entry[:idx]
+	}
+	return entry
+}
+
+// filterOwnServiceEnv returns global env vars excluding those injected by imageName.
+func filterOwnServiceEnv(globalEnv []string, sources map[string]string, imageName string) []string {
+	if len(sources) == 0 || imageName == "" {
+		return globalEnv
+	}
+	var result []string
+	for _, e := range globalEnv {
+		if sources[envKey(e)] != imageName {
+			result = append(result, e)
+		}
+	}
+	return result
 }
 
 // SaveDeployStateInput holds the deployment parameters to persist.

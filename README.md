@@ -26,11 +26,13 @@ One of Overthink's design goals is running sandboxed [OpenClaw](https://github.c
 
 A layer is a reusable building block — packages, config, services. An image is layers stacked on a base. The key insight: **you can combine multiple services into a single container image** just by listing layers. Need PostgreSQL, Redis, a Python API, and a reverse proxy in one container? Add those four layers to your image. `ov` resolves dependencies, generates an optimized Containerfile, and wires up the init system (supervisord for containers, systemd for bootc VMs) to run all services together when the container starts.
 
+When services run as separate containers, **service discovery happens automatically**. A layer can declare `service_env` — environment variables (with `{{.ContainerName}}` templates) that get injected into all other deployed containers at `ov config` time. For example, deploying `ollama` automatically provides `OLLAMA_HOST=http://ov-ollama:11434` to every other container — no manual environment setup needed.
+
 ### Building Layers: Package Managers & Config Files
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
-- **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
+- **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, service environment discovery (`service_env`), ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
 - **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user)
 - **`package.json`** — npm packages for Node.js (multi-stage build, runs as user)
 - **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user)
@@ -243,7 +245,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov config <image>` is the single entry point for deployment. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login (the quadlet waits for the keyring to unlock), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. No project source needed — just the image.
+**Deploy** — `ov config <image>` is the single entry point for deployment. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login (the quadlet waits for the keyring to unlock), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. When a service declares `service_env`, `ov config` also injects those environment variables into `deploy.yml` for cross-container discovery (use `--update-all` to propagate to already-deployed services). No project source needed — just the image.
 
 **Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
@@ -277,6 +279,7 @@ ov config <image> --encrypt name       # Configure volume as encrypted (gocryptf
 ov config <image> -v name:type[:path]  # Per-volume backing (volume|bind|encrypted)
 ov config <image> --force-seed         # Re-provision data into bind-backed volumes
 ov config <image> --data-from <img>    # Seed data from a separate data image
+ov config <image> --update-all         # Propagate service env to all deployed quadlets
 ov config remove <image>               # Remove quadlet + deploy.yml entry
 ov config mount/unmount <image>        # Mount/unmount encrypted volumes
 ov config status <image>               # Encrypted volume status

@@ -105,6 +105,7 @@ type LayerYAML struct {
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 	Data           []DataYAML        `yaml:"data,omitempty"`
+	ServiceEnv     map[string]string `yaml:"service_env,omitempty"` // env vars provided to OTHER containers when this service is deployed
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -120,7 +121,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"path_append": true, "ports": true, "route": true, "service": true,
 	"volumes": true, "aliases": true, "extract": true, "security": true,
 	"system_services": true, "libvirt": true, "hooks": true,
-	"port_relay": true, "secrets": true, "data": true,
+	"port_relay": true, "secrets": true, "data": true, "service_env": true,
 }
 
 // layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
@@ -249,6 +250,7 @@ type Layer struct {
 	HasPixiLock       bool
 	HasExtract        bool
 	HasData           bool
+	HasServiceEnv     bool
 	HasLibvirt         bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 
@@ -285,7 +287,8 @@ type Layer struct {
 	libvirt        []string
 	hooks          *HooksConfig
 	secrets        []SecretYAML
-	engine         string // required run engine from layer.yml ("docker", "podman", or "")
+	serviceEnv     map[string]string // env vars provided to other containers (service discovery)
+	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -472,6 +475,12 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate secrets
 		layer.secrets = ly.SecretsYAML
+
+		// Pre-populate service env (env vars for other containers)
+		if len(ly.ServiceEnv) > 0 {
+			layer.HasServiceEnv = true
+			layer.serviceEnv = ly.ServiceEnv
+		}
 
 		// Pre-populate engine requirement
 		layer.engine = ly.Engine
@@ -683,6 +692,11 @@ func (l *Layer) Hooks() *HooksConfig {
 // Secrets returns the secret declarations (pre-populated from layer.yml)
 func (l *Layer) Secrets() []SecretYAML {
 	return l.secrets
+}
+
+// ServiceEnv returns env vars this layer provides to other containers (pre-populated from layer.yml)
+func (l *Layer) ServiceEnv() map[string]string {
+	return l.serviceEnv
 }
 
 // Engine returns the required run engine (pre-populated from layer.yml, "" if not set)

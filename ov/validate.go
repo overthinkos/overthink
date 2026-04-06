@@ -131,6 +131,9 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate version fields
 	validateVersionFields(cfg, layers, errs)
 
+	// Validate service_env declarations
+	validateServiceEnv(layers, errs)
+
 	// Validate data layers and data images
 	validateDataLayers(cfg, layers, errs)
 
@@ -1557,6 +1560,33 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 					errs.Add("image %s: data_image includes layer %s which has system_services declarations", imgName, layerName)
 				}
 			}
+		}
+	}
+}
+
+// validateServiceEnv checks service_env declarations in layers.
+func validateServiceEnv(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasServiceEnv {
+			continue
+		}
+		for key, tmpl := range layer.ServiceEnv() {
+			// Validate env var key format
+			if key == "" {
+				errs.Add("layer %s: service_env has empty key", name)
+				continue
+			}
+
+			// Check for valid template variables (only {{.ContainerName}} is allowed)
+			// Strip valid template vars, then check for remaining {{ }}
+			stripped := strings.ReplaceAll(tmpl, "{{.ContainerName}}", "")
+			if strings.Contains(stripped, "{{") || strings.Contains(stripped, "}}") {
+				errs.Add("layer %s: service_env[%s] contains unknown template variable (only {{.ContainerName}} is supported): %s", name, key, tmpl)
+			}
+
+			// Note: service_env key may intentionally overlap with env key in the same layer.
+			// env is baked into the service's own image (e.g., OLLAMA_HOST="0.0.0.0" for binding).
+			// service_env is injected into OTHER containers (e.g., OLLAMA_HOST="http://ov-ollama:11434").
 		}
 	}
 }

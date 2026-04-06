@@ -120,11 +120,14 @@ func LoadWorkspaceEnv(workspace string) ([]string, error) {
 }
 
 // ResolveEnvVars merges env vars from multiple sources.
-// Priority (last wins for duplicate keys): deploy config < workspace .env < CLI --env-file < CLI -e flags.
-func ResolveEnvVars(deployEnv []string, deployEnvFile string, envDir string, cliEnvFile string, cliEnv []string) ([]string, error) {
+// Priority (last wins for duplicate keys): global env < deploy config < workspace .env < CLI --env-file < CLI -e flags.
+func ResolveEnvVars(globalEnv []string, deployEnv []string, deployEnvFile string, envDir string, cliEnvFile string, cliEnv []string) ([]string, error) {
 	var all []string
 
-	// 1. Deploy config env vars (lowest priority)
+	// 0. Global env vars from deploy.yml (lowest priority — service discovery)
+	all = append(all, globalEnv...)
+
+	// 1. Per-image deploy config env vars
 	all = append(all, deployEnv...)
 
 	// 2. Deploy config env file

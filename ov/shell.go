@@ -179,7 +179,11 @@ func (c *ShellCmd) Run() error {
 
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
-	envVars, err := ResolveEnvVars(deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	var shellGlobalEnv []string
+	if dc != nil {
+		shellGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+	}
+	envVars, err := ResolveEnvVars(shellGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
 	}
@@ -287,8 +291,13 @@ func (c *ShellCmd) runRemote(ref string) error {
 	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
 	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
-	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	// Resolve env vars with global env
+	shellRemoteDC, _ := LoadDeployConfig()
+	var shellRemoteGlobalEnv []string
+	if shellRemoteDC != nil {
+		shellRemoteGlobalEnv = filterOwnServiceEnv(shellRemoteDC.Env, shellRemoteDC.ServiceEnvSources, ctx.ImageName)
+	}
+	envVars, envErr := ResolveEnvVars(shellRemoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}

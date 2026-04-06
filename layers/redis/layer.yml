@@ -7,6 +7,9 @@ rpm:
 env:
   REDIS_URL: "redis://127.0.0.1:6379"
 
+service_env:
+  REDIS_URL: "redis://{{.ContainerName}}:6379"
+
 ports:
   - 6379
 

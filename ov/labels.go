@@ -49,6 +49,7 @@ const (
 	LabelBuilds         = "org.overthinkos.builds"
 	LabelDataEntries    = "org.overthinkos.data"
 	LabelDataImage      = "org.overthinkos.data_image"
+	LabelServiceEnv     = "org.overthinkos.service_env"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -115,6 +116,7 @@ type ImageMetadata struct {
 	Builds         []string          // what this builder can build
 	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
 	DataImage      bool              // true if this is a data-only image (FROM scratch)
+	ServiceEnv     map[string]string // env vars provided to other containers (service discovery templates)
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -386,6 +388,13 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	// Data image flag
 	if labels[LabelDataImage] == "true" {
 		meta.DataImage = true
+	}
+
+	// Service env (env vars for other containers, templates with {{.ContainerName}})
+	if v := labels[LabelServiceEnv]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.ServiceEnv); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelServiceEnv, err)
+		}
 	}
 
 	return meta, nil

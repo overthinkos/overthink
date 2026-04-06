@@ -237,6 +237,146 @@ func TestResolveVolumeBackingEncrypted(t *testing.T) {
 	}
 }
 
+func TestAppendOrReplaceEnv(t *testing.T) {
+	envs := []string{"A=1", "B=2"}
+
+	// Append new key
+	envs = appendOrReplaceEnv(envs, "C=3")
+	if !reflect.DeepEqual(envs, []string{"A=1", "B=2", "C=3"}) {
+		t.Errorf("got %v, want [A=1 B=2 C=3]", envs)
+	}
+
+	// Replace existing key
+	envs = appendOrReplaceEnv(envs, "B=new")
+	if !reflect.DeepEqual(envs, []string{"A=1", "B=new", "C=3"}) {
+		t.Errorf("got %v, want [A=1 B=new C=3]", envs)
+	}
+}
+
+func TestRemoveEnvByKey(t *testing.T) {
+	envs := []string{"A=1", "B=2", "C=3"}
+	result := removeEnvByKey(envs, "B")
+	if !reflect.DeepEqual(result, []string{"A=1", "C=3"}) {
+		t.Errorf("got %v, want [A=1 C=3]", result)
+	}
+
+	// Remove nonexistent key — no change
+	result = removeEnvByKey(envs, "Z")
+	if !reflect.DeepEqual(result, []string{"A=1", "B=2", "C=3"}) {
+		t.Errorf("got %v, want [A=1 B=2 C=3]", result)
+	}
+}
+
+func TestFilterOwnServiceEnv(t *testing.T) {
+	globalEnv := []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql", "CUSTOM=val"}
+	sources := map[string]string{
+		"OLLAMA_HOST": "ollama",
+		"PGHOST":      "postgresql",
+	}
+
+	// Filter out ollama's own vars
+	got := filterOwnServiceEnv(globalEnv, sources, "ollama")
+	want := []string{"PGHOST=ov-postgresql", "CUSTOM=val"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("filterOwnServiceEnv(ollama) = %v, want %v", got, want)
+	}
+
+	// Filter out postgresql's own vars
+	got = filterOwnServiceEnv(globalEnv, sources, "postgresql")
+	want = []string{"OLLAMA_HOST=http://ov-ollama:11434", "CUSTOM=val"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("filterOwnServiceEnv(postgresql) = %v, want %v", got, want)
+	}
+
+	// No sources — return all
+	got = filterOwnServiceEnv(globalEnv, nil, "ollama")
+	if !reflect.DeepEqual(got, globalEnv) {
+		t.Errorf("filterOwnServiceEnv(nil sources) = %v, want %v", got, globalEnv)
+	}
+}
+
+func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deploy.yml")
+
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) { return path, nil }
+	defer func() { DeployConfigPath = orig }()
+
+	dc := &DeployConfig{
+		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
+		ServiceEnvSources: map[string]string{
+			"OLLAMA_HOST": "ollama",
+			"PGHOST":      "postgresql",
+		},
+		Images: map[string]DeployImageConfig{
+			"ollama": {Ports: []string{"11434:11434"}},
+		},
+	}
+
+	if err := SaveDeployConfig(dc); err != nil {
+		t.Fatalf("SaveDeployConfig: %v", err)
+	}
+
+	loaded, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	if !reflect.DeepEqual(loaded.Env, dc.Env) {
+		t.Errorf("Env = %v, want %v", loaded.Env, dc.Env)
+	}
+	if !reflect.DeepEqual(loaded.ServiceEnvSources, dc.ServiceEnvSources) {
+		t.Errorf("ServiceEnvSources = %v, want %v", loaded.ServiceEnvSources, dc.ServiceEnvSources)
+	}
+}
+
+func TestCleanDeployEntryRemovesServiceEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deploy.yml")
+
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) { return path, nil }
+	defer func() { DeployConfigPath = orig }()
+
+	dc := &DeployConfig{
+		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
+		ServiceEnvSources: map[string]string{
+			"OLLAMA_HOST": "ollama",
+			"PGHOST":      "postgresql",
+		},
+		Images: map[string]DeployImageConfig{
+			"ollama":     {Ports: []string{"11434:11434"}},
+			"postgresql": {Ports: []string{"5432:5432"}},
+		},
+	}
+	if err := SaveDeployConfig(dc); err != nil {
+		t.Fatalf("SaveDeployConfig: %v", err)
+	}
+
+	// Remove ollama — should clean up OLLAMA_HOST from global env
+	cleanDeployEntry("ollama")
+
+	loaded, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	// OLLAMA_HOST should be gone, PGHOST should remain
+	if !reflect.DeepEqual(loaded.Env, []string{"PGHOST=ov-postgresql"}) {
+		t.Errorf("Env after cleanup = %v, want [PGHOST=ov-postgresql]", loaded.Env)
+	}
+	if _, ok := loaded.ServiceEnvSources["OLLAMA_HOST"]; ok {
+		t.Error("OLLAMA_HOST should be removed from ServiceEnvSources")
+	}
+	if loaded.ServiceEnvSources["PGHOST"] != "postgresql" {
+		t.Error("PGHOST source should remain")
+	}
+	if _, ok := loaded.Images["ollama"]; ok {
+		t.Error("ollama image should be removed")
+	}
+}
+
 func TestResolveVolumeBackingEncryptedWithHost(t *testing.T) {
 	labelVolumes := []VolumeMount{
 		{VolumeName: "ov-myapp-library", ContainerPath: "/home/user/.immich/library"},

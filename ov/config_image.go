@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -37,6 +38,7 @@ type ImageConfigSetupCmd struct {
 	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
+	UpdateAll   bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up service env changes"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -116,8 +118,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
-	// Resolve env vars from labels + deploy.yml + CLI
-	envVars, envErr := ResolveEnvVars(meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	// Resolve env vars from global env + labels + deploy.yml + CLI
+	var globalEnv []string
+	if dc != nil {
+		globalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, c.Image)
+	}
+	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -414,6 +420,18 @@ skipDataProvision:
 		}
 	}
 
+	// Inject service env vars into global deploy.yml for other containers
+	if meta != nil && len(meta.ServiceEnv) > 0 {
+		changed, injErr := injectServiceEnv(c.Image, c.Instance, meta.ServiceEnv)
+		if injErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not inject service env: %v\n", injErr)
+		} else if changed && c.UpdateAll {
+			if err := updateAllDeployedQuadlets(rt, c.Image); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -447,8 +465,13 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 		return err
 	}
 
-	// Resolve env vars
-	envVars, envErr := ResolveEnvVars(nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
+	// Resolve env vars with global env
+	dc, _ := LoadDeployConfig()
+	var remoteGlobalEnv []string
+	if dc != nil {
+		remoteGlobalEnv = filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, ctx.ImageName)
+	}
+	envVars, envErr := ResolveEnvVars(remoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
 	}
@@ -680,4 +703,213 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 		configs = append(configs, dv)
 	}
 	return configs
+}
+
+// injectServiceEnv resolves service_env templates and adds them to the global env in deploy.yml.
+// Returns true if any env vars were added or changed.
+func injectServiceEnv(imageName, instance string, serviceEnv map[string]string) (bool, error) {
+	if len(serviceEnv) == 0 {
+		return false, nil
+	}
+
+	dc, _ := LoadDeployConfig()
+	if dc == nil {
+		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	}
+	if dc.ServiceEnvSources == nil {
+		dc.ServiceEnvSources = make(map[string]string)
+	}
+
+	ctrName := containerNameInstance(imageName, instance)
+	changed := false
+
+	// Sort keys for deterministic output
+	keys := sortedStringMapKeys(serviceEnv)
+	for _, key := range keys {
+		tmpl := serviceEnv[key]
+		value := strings.ReplaceAll(tmpl, "{{.ContainerName}}", ctrName)
+		entry := key + "=" + value
+
+		// Check if already set to same value
+		existing := ""
+		for _, e := range dc.Env {
+			if envKey(e) == key {
+				existing = e
+				break
+			}
+		}
+		if existing == entry && dc.ServiceEnvSources[key] == imageName {
+			continue
+		}
+
+		dc.Env = appendOrReplaceEnv(dc.Env, entry)
+		dc.ServiceEnvSources[key] = imageName
+		changed = true
+		fmt.Fprintf(os.Stderr, "Service env injected: %s\n", entry)
+	}
+
+	if changed {
+		if err := SaveDeployConfig(dc); err != nil {
+			return false, fmt.Errorf("saving deploy config: %w", err)
+		}
+	}
+	return changed, nil
+}
+
+// updateAllDeployedQuadlets regenerates quadlets for all other deployed images
+// to pick up global env changes. Lightweight: only regenerates the quadlet file,
+// does NOT re-provision secrets, encrypted volumes, or data.
+func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
+	dc, err := LoadDeployConfig()
+	if err != nil || dc == nil {
+		return nil
+	}
+
+	var updated []string
+	for imageName := range dc.Images {
+		if imageName == skipImage {
+			continue
+		}
+
+		// Check if quadlet file exists (only update deployed images)
+		qdir, err := quadletDir()
+		if err != nil {
+			continue
+		}
+		qpath := filepath.Join(qdir, quadletFilename(imageName))
+		if _, err := os.Stat(qpath); os.IsNotExist(err) {
+			continue
+		}
+
+		// Extract metadata from image
+		imageRef := resolveShellImageRef("", imageName, "latest")
+		meta, err := ExtractMetadata("podman", imageRef)
+		if err != nil || meta == nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not read metadata for %s, skipping quadlet update\n", imageName)
+			continue
+		}
+
+		// Apply deploy.yml overrides
+		MergeDeployOntoMetadata(meta, dc)
+
+		// Resolve env vars with updated global env
+		globalEnv := filterOwnServiceEnv(dc.Env, dc.ServiceEnvSources, imageName)
+		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", imageName, err)
+			continue
+		}
+
+		// Resolve network
+		resolvedNetwork, _ := ResolveNetwork(meta.Network, rt.RunEngine)
+
+		// Detect devices for GPU config
+		detected := DetectHostDevices()
+
+		// Build volumes from metadata
+		var deployVolumes []DeployVolumeConfig
+		if overlay, ok := dc.Images[imageName]; ok {
+			deployVolumes = overlay.Volumes
+		}
+		volumes, bindMounts := ResolveVolumeBacking(imageName, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+
+		// Resolve env file
+		var quadletEnvFile string
+		if overlay, ok := dc.Images[imageName]; ok && overlay.EnvFile != "" {
+			quadletEnvFile = expandHostHome(overlay.EnvFile)
+		}
+		if quadletEnvFile == "" {
+			if wsHost := workspaceBindHost(bindMounts); wsHost != "" {
+				wsEnvPath := filepath.Join(wsHost, ".env")
+				if _, statErr := os.Stat(wsEnvPath); statErr == nil {
+					quadletEnvFile = wsEnvPath
+				}
+			}
+		}
+
+		// Merge security
+		security := meta.Security
+		if !security.Privileged {
+			security.Devices = appendUnique(security.Devices, detected.Devices...)
+			if detected.AMDGPU {
+				security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
+			}
+		}
+		if detected.AMDGPU && detected.AMDGFXVersion != "" {
+			envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+		}
+
+		// Collect secrets from labels (for quadlet Secret= directives)
+		provisioned := CollectSecretsFromLabels(imageName, meta.Secrets)
+
+		ovBin, _ := os.Executable()
+		backend := resolveSecretBackend()
+		isKeyring := backend == "keyring" || backend == "auto" || backend == ""
+
+		if meta.Registry != "" {
+			imageRef = resolveShellImageRef(meta.Registry, imageName, "latest")
+		}
+
+		qcfg := QuadletConfig{
+			ImageName:       imageName,
+			ImageRef:        imageRef,
+			Home:            meta.Home,
+			Ports:           meta.Ports,
+			Volumes:         volumes,
+			BindMounts:      bindMounts,
+			GPU:             detected.GPU,
+			BindAddress:     rt.BindAddress,
+			UID:             meta.UID,
+			GID:             meta.GID,
+			Env:             envVars,
+			EnvFile:         quadletEnvFile,
+			Security:        security,
+			Network:         resolvedNetwork,
+			Status:          meta.Status,
+			Info:            meta.Info,
+			Entrypoint:      resolveEntrypointFromMeta(meta),
+			Secrets:         provisioned,
+			OvBin:           ovBin,
+			EncryptedMounts: hasEncryptedBindMounts(bindMounts),
+			KeyringBackend:  isKeyring,
+		}
+
+		// Suppress file-sourced env vars if using EnvFile
+		if quadletEnvFile != "" {
+			qcfg.Env = nil
+			if detected.AMDGPU && detected.AMDGFXVersion != "" {
+				qcfg.Env = []string{"HSA_OVERRIDE_GFX_VERSION=" + detected.AMDGFXVersion}
+			}
+		}
+
+		content := generateQuadlet(qcfg)
+		if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not update quadlet for %s: %v\n", imageName, err)
+			continue
+		}
+
+		updated = append(updated, imageName)
+		fmt.Fprintf(os.Stderr, "Updated quadlet for %s\n", imageName)
+	}
+
+	if len(updated) > 0 {
+		reloadCmd := exec.Command("systemctl", "--user", "daemon-reload")
+		if output, err := reloadCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("systemctl daemon-reload failed: %w\n%s", err, strings.TrimSpace(string(output)))
+		}
+		fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
+		fmt.Fprintf(os.Stderr, "Restart affected services to pick up changes\n")
+	}
+
+	return nil
+}
+
+// sortedStringMapKeys returns the keys of a string map in sorted order.
+func sortedStringMapKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

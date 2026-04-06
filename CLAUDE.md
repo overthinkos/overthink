@@ -76,6 +76,18 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
 - Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/data.go` (`provisionData`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
 
+**Service Environment Discovery (`service_env`)** -- Cross-container environment injection:
+- Layers declare `service_env:` in `layer.yml` — a `map[string]string` of env vars to inject into OTHER containers when this service is deployed. Distinct from `env:` which is baked into the service's own image
+- Templates support `{{.ContainerName}}` which resolves to the actual container name (e.g., `ov-ollama`, or `ov-ollama-staging` with `--instance staging`)
+- At `ov config` time, `injectServiceEnv()` resolves templates and writes vars into the global `env:` list in `deploy.yml` (top-level, shared across all images)
+- `service_env_sources:` in `deploy.yml` tracks which image injected each key (for cleanup and self-exclusion)
+- `filterOwnServiceEnv()` excludes an image's own injected vars from its own env (e.g., ollama's `env: OLLAMA_HOST=0.0.0.0` is its server bind, not the client URL)
+- `--update-all` flag on `ov config` regenerates quadlets for all other deployed images to pick up new global env vars
+- On `ov config remove` / `ov remove`, `cleanDeployEntry()` removes global env vars injected by the removed image
+- Env var priority (last wins): global env (service_env) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags
+- OCI label `org.overthinkos.service_env` stores the templates in the image for deploy-only scenarios (no `images.yml` needed)
+- Source: `ov/config_image.go` (`injectServiceEnv`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`filterOwnServiceEnv`, `appendOrReplaceEnv`, `removeEnvByKey`, `cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateServiceEnv`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelServiceEnv`, `ImageMetadata.ServiceEnv`)
+
 **Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers:
 - SSH: host `$SSH_AUTH_SOCK` → container `/run/host-ssh-auth.sock` + `SSH_AUTH_SOCK` env var
 - GPG: host `S.gpg-agent` (detected via `gpgconf --list-dirs agent-socket`) → container `$HOME/.gnupg/S.gpg-agent` (home from `org.overthinkos.home` image label)
@@ -212,6 +224,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 
 - Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
+- `service_env:` in `layer.yml` declares env vars injected into OTHER containers at deploy time. Template syntax: `{{.ContainerName}}` (only supported variable). `env:` and `service_env:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `service_env:` is injected into consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
 
 ### Two-Tier Layer Architecture for ML/Python Layers
@@ -239,7 +252,7 @@ ML layers follow a two-tier pattern that separates environment ownership from po
 - Meta-layers CAN have both `depends:` and `layers:` (e.g., `unsloth-studio` has `depends: [cuda, supervisord]` + `layers: [llama-cpp, unsloth]`)
 - Meta-layers CAN own pixi.toml (environment-owner pattern — exactly one pixi.toml per image)
 
-For layer-specific rules (install files, packages, port_relay, secrets, data, cache mounts): `/ov:layer`
+For layer-specific rules (install files, packages, port_relay, secrets, data, service_env, cache mounts): `/ov:layer`
 
 **Credential security:** Config files (`settings.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov settings migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
 
@@ -269,7 +282,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `cmd <image> <command>` | `/ov:cmd` |
 | `shell` | `/ov:shell` |
 | `dbus` (notify, call, list, introspect) | `/ov:dbus` |
-| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning), `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
+| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning + service_env injection), `config --update-all`, `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
 | `start` | `/ov:start` (requires `ov config` first in quadlet mode) |
 | `stop` | `/ov:stop` |
 | `status` (`--all`, `--json`) | `/ov:status` |
@@ -306,7 +319,7 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes + provisions data from data layers into bind-backed volumes. `--password auto` generates all secrets; `--password manual` prompts. `--seed` (default true) provisions data layers; `--force-seed` re-provisions; `--data-from <image>` seeds from a separate data image. `ov start <image>` requires `ov config` first in quadlet mode. No `images.yml` needed for deployment.
+**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes + provisions data from data layers into bind-backed volumes + injects `service_env` vars into global deploy.yml env for cross-container discovery. `--password auto` generates all secrets; `--password manual` prompts. `--seed` (default true) provisions data layers; `--force-seed` re-provisions; `--data-from <image>` seeds from a separate data image. `--update-all` regenerates quadlets for all other deployed images to pick up service_env changes. `ov start <image>` requires `ov config` first in quadlet mode. No `images.yml` needed for deployment.
 Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml) -> `/ov:start` -> `/ov:update` (data sync) -> `/ov:service` (lifecycle)
 
 **Record a session:**

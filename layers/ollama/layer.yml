@@ -6,6 +6,9 @@ env:
   OLLAMA_HOST: "0.0.0.0"
   OLLAMA_MODELS: "~/.ollama/models"
 
+service_env:
+  OLLAMA_HOST: "http://{{.ContainerName}}:11434"
+
 ports:
   - 11434
 

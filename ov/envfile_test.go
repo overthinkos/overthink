@@ -187,6 +187,7 @@ func TestResolveEnvVars(t *testing.T) {
 	os.WriteFile(cliEnvPath, []byte("CLI_FILE=yes\nSHARED=cli-file\n"), 0644)
 
 	got, err := ResolveEnvVars(
+		nil, // no global env
 		[]string{"DEPLOY=yes", "SHARED=deploy"},
 		"",
 		dir,
@@ -202,6 +203,30 @@ func TestResolveEnvVars(t *testing.T) {
 		"SHARED=cli-flag", // CLI flag wins
 		"WS=workspace",
 		"CLI_FILE=yes",
+		"CLI=flag",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ResolveEnvVars() =\n  %v\nwant\n  %v", got, want)
+	}
+}
+
+func TestResolveEnvVarsWithGlobalEnv(t *testing.T) {
+	got, err := ResolveEnvVars(
+		[]string{"GLOBAL=yes", "SHARED=global"},   // global env (lowest priority)
+		[]string{"DEPLOY=yes", "SHARED=deploy"},     // per-image deploy env
+		"",
+		"",
+		"",
+		[]string{"CLI=flag"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveEnvVars() error: %v", err)
+	}
+
+	want := []string{
+		"GLOBAL=yes",
+		"SHARED=deploy", // per-image deploy overrides global
+		"DEPLOY=yes",
 		"CLI=flag",
 	}
 	if !reflect.DeepEqual(got, want) {

@@ -25,7 +25,7 @@ WIN_UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, lik
 WIN_EXT="$HOME/.local/share/chrome-windows"
 
 exec $CHROME_BIN $CHROME_FLAGS \
-    --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 \
+    --remote-debugging-port=9223 --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins='*' \
     --user-data-dir="$HOME/.chrome-debug" \
     --user-agent="$WIN_UA" \

@@ -505,6 +505,13 @@ images:
       - dbus
       - ov
 
+  hermes-full:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - hermes-full
+      - dbus
+
   hermes-playwright:
     base: fedora
     layers:
@@ -514,30 +521,3 @@ images:
       - dbus
       - ov
 
-  selkies-desktop-hermes:
-    base: fedora-nonfree
-    layers:
-      - agent-forwarding
-      - selkies-desktop
-      - hermes
-      - claude-code
-      - codex
-      - gemini
-      - dbus
-      - ov
-    ports:
-      - "3000:3000"
-      - "9222:9222"
-    platforms:
-      - linux/amd64
-
-  selkies-desktop-hermes-jupyter:
-    base: selkies-desktop-hermes
-    layers:
-      - jupyter-colab
-    ports:
-      - "3000:3000"
-      - "8888:8888"
-      - "9222:9222"
-    platforms:
-      - linux/amd64

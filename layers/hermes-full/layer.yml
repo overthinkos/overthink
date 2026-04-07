@@ -1,0 +1,10 @@
+description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
+
+layers:
+  - hermes
+  - claude-code
+  - codex
+  - gemini
+  - dev-tools
+  - devops-tools
+  - ov

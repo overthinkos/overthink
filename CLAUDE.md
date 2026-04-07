@@ -106,7 +106,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Each entry: `{name, url, transport}`. URL supports `{{.ContainerName}}` template. Transport defaults to `"http"` (streamable HTTP)
 - At `ov config` time, `injectMCPProvides()` resolves templates and stores entries in `deploy.yml` under `provides.mcp:` with source tracking
 - Consumer containers receive `OV_MCP_SERVERS` JSON env var with all resolved MCP server entries
-- **Pod-aware**: When consumer and provider are in the same container (e.g., `selkies-desktop-hermes-jupyter`), `podAwareMCPProvides()` resolves own entries to `localhost` instead of container hostname. If both local and remote entries share a name, local wins
+- **Pod-aware**: When consumer and provider are in the same container, `podAwareMCPProvides()` resolves own entries to `localhost` instead of container hostname. If both local and remote entries share a name, local wins
 - **Pod-aware** (same as env_provides): same-image entries resolve to `localhost`, cross-image entries keep their container hostname. No self-exclusion — MCP servers are always included for same-container consumers
 - On `ov config remove` / `ov remove`, MCP entries are automatically cleaned from deploy.yml
 - OCI labels: `org.overthinkos.mcp_provides`, `org.overthinkos.mcp_requires`, `org.overthinkos.mcp_accepts`
@@ -499,10 +499,14 @@ Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`
 `/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup + provider env vars) -> `/ov:start` -> `/ov:service` (lifecycle)
 For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global. LLM provider auto-configured from `OLLAMA_HOST` / `OLLAMA_API_KEY` / `OPENROUTER_API_KEY` env vars passed via `ov config -e`.
 
-**Deploy Hermes with Selkies desktop:**
-`/ov-images:selkies-desktop-hermes` (image config) -> `/ov:config -e OLLAMA_API_KEY=...` -> `/ov:start` -> access `https://localhost:3000`
-Combines Selkies remote desktop with Hermes AI agent + Claude Code + Codex + Gemini. `/ov-images:selkies-desktop-hermes-jupyter` adds Jupyter at `:8888` with MCP notebook access. All three LLM providers (Ollama Cloud, OpenRouter, Local Ollama) auto-configured from env vars.
-**Shared browser:** Chrome layer declares `env_provides: BROWSER_CDP_URL` — hermes auto-receives `http://localhost:9222` (same-container, pod-aware) or `http://ov-<chrome-image>:9222` (cross-container). Hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The only browser binary in the image is Google Chrome — no separate headless Chromium.
+**Deploy Hermes with Selkies desktop (separate pods):**
+Deploy three separate containers communicating via `env_provides`/`mcp_provides`:
+```
+ov config selkies-desktop && ov start selkies-desktop          # provides BROWSER_CDP_URL
+ov config jupyter-colab --update-all && ov start jupyter-colab  # provides jupyter-colab MCP
+ov config hermes-full -e OLLAMA_API_KEY=... --update-all && ov start hermes-full  # consumes both
+```
+The `--update-all` flag propagates provides to all deployed quadlets. Hermes auto-receives `BROWSER_CDP_URL=http://ov-selkies-desktop:9222` and `OV_MCP_SERVERS` with `http://ov-jupyter-colab:8888/mcp`. Browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The `cdp-proxy` in the chrome layer rewrites Host headers and response URLs for Chrome 146+ cross-container compatibility (two-port architecture: Chrome on internal 9223, proxy on external 9222).
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
@@ -546,7 +550,7 @@ Examples where multiple skills cover one topic:
 - **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested Wayland compositor for selkies, waits for pixelflux socket) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
-- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes, auto-provider-config) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation) vs `/ov-images:selkies-desktop-hermes` (Selkies desktop + hermes + claude-code + codex + gemini) vs `/ov-images:selkies-desktop-hermes-jupyter` (+ jupyter-colab at `:8888`). Auto-provider-config: set `OLLAMA_HOST`, `OLLAMA_API_KEY`, or `OPENROUTER_API_KEY` → hermes auto-configures on first start
+- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes, auto-provider-config) vs `/ov-layers:hermes-full` (metalayer: hermes + claude-code + codex + gemini + dev-tools + devops-tools + ov) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (minimal headless) vs `/ov-images:hermes-full` (full-featured standalone) vs `/ov-images:hermes-playwright` (with local browser). Deploy separately alongside `selkies-desktop` (provides `BROWSER_CDP_URL`) and `jupyter-colab` (provides MCP). Auto-provider-config: set `OLLAMA_HOST`, `OLLAMA_API_KEY`, or `OPENROUTER_API_KEY` → hermes auto-configures on first start
 - **Tunnels:** `/ov:deploy` (tunnel providers, backend schemes, quadlet integration, deploy.yml) vs `/ov:layer` (port protocol annotations, `ports:` field syntax) vs `/ov:config` (tunnel setup at deploy time)
 
 ### Desktop Automation Hierarchy

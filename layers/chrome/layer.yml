@@ -1,5 +1,5 @@
 depends:
-  - socat
+  - supervisord
 
 path_append:
   - "~/.local/bin"
@@ -32,8 +32,15 @@ env_provides:
 ports:
   - 9222
 
-port_relay:
-  - 9222
+service: |
+  [program:cdp-proxy]
+  command=%(ENV_HOME)s/.local/bin/cdp-proxy
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0
 
 volumes:
   - name: chrome-data

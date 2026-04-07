@@ -6,3 +6,4 @@ rpm:
     - bind-utils
     - jq
     - rsync
+    - unzip

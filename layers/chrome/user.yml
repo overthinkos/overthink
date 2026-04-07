@@ -12,6 +12,8 @@ tasks:
       - ln -sf chrome-wrapper ~/.local/bin/google-chrome-stable
       - cp /ctx/browser-open ~/.local/bin/browser-open
       - chmod +x ~/.local/bin/browser-open
+      - cp /ctx/cdp-proxy ~/.local/bin/cdp-proxy
+      - chmod +x ~/.local/bin/cdp-proxy
       - mkdir -p ~/.local/share/chrome-windows
       - cp /ctx/chrome-windows/manifest.json ~/.local/share/chrome-windows/
       - cp /ctx/chrome-windows/rules.json ~/.local/share/chrome-windows/

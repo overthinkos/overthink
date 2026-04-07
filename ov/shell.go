@@ -179,10 +179,8 @@ func (c *ShellCmd) Run() error {
 
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
-	var shellGlobalEnv []string
-	if dc != nil {
-		shellGlobalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, c.Image)
-	}
+	shellCtrName := containerNameInstance(c.Image, c.Instance)
+	shellGlobalEnv := dc.GlobalEnvForImage(c.Image, shellCtrName)
 	envVars, err := ResolveEnvVars(shellGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
@@ -293,10 +291,8 @@ func (c *ShellCmd) runRemote(ref string) error {
 
 	// Resolve env vars with global env
 	shellRemoteDC, _ := LoadDeployConfig()
-	var shellRemoteGlobalEnv []string
-	if shellRemoteDC != nil {
-		shellRemoteGlobalEnv = filterOwnEnvProvides(shellRemoteDC.Env, shellRemoteDC.EnvProvidesSources, ctx.ImageName)
-	}
+	shellRemoteCtrName := containerNameInstance(ctx.ImageName, "")
+	shellRemoteGlobalEnv := shellRemoteDC.GlobalEnvForImage(ctx.ImageName, shellRemoteCtrName)
 	envVars, envErr := ResolveEnvVars(shellRemoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr

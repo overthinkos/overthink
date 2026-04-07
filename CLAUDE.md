@@ -81,14 +81,13 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 **Environment Provides (`env_provides`)** -- Cross-container environment injection:
 - Layers declare `env_provides:` in `layer.yml` — a `map[string]string` of env vars to inject into OTHER containers when this service is deployed. Distinct from `env:` which is baked into the service's own image
 - Templates support `{{.ContainerName}}` which resolves to the actual container name (e.g., `ov-ollama`, or `ov-ollama-staging` with `--instance staging`)
-- At `ov config` time, `injectEnvProvides()` resolves templates and writes vars into the global `env:` list in `deploy.yml` (top-level, shared across all images)
-- `env_provides_sources:` in `deploy.yml` tracks which image injected each key (for cleanup and self-exclusion)
-- `filterOwnEnvProvides()` excludes an image's own injected vars from its own env (e.g., ollama's `env: OLLAMA_HOST=0.0.0.0` is its server bind, not the client URL)
-- `--update-all` flag on `ov config` regenerates quadlets for all other deployed images to pick up new global env vars
-- On `ov config remove` / `ov remove`, `cleanDeployEntry()` removes global env vars injected by the removed image
-- Env var priority (last wins): global env (env_provides) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags
+- At `ov config` time, `injectEnvProvides()` resolves templates and stores entries in `deploy.yml` under `provides.env:` (list of `{name, value, source}`)
+- `GlobalEnvForImage()` in `provides.go` resolves both env and MCP provides for a given consumer image. Env provides use self-exclusion (prevents own `env_provides` from overriding `env:` bind addresses)
+- `--update-all` flag on `ov config` regenerates quadlets for all other deployed images to pick up new provides entries
+- On `ov config remove` / `ov remove`, `cleanDeployEntry()` removes provides entries injected by the removed image (both env and MCP)
+- Env var priority (last wins): provides.env (global) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags
 - OCI label `org.overthinkos.env_provides` stores the templates in the image for deploy-only scenarios (no `images.yml` needed)
-- Source: `ov/config_image.go` (`injectEnvProvides`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`filterOwnEnvProvides`, `appendOrReplaceEnv`, `removeEnvByKey`, `cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateEnvProvides`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelEnvProvides`, `ImageMetadata.EnvProvides`)
+- Source: `ov/provides.go` (`GlobalEnvForImage`, `filterOwnProvides`, `EnvProvidesEntry`, `ProvidesConfig`), `ov/config_image.go` (`injectEnvProvides`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateEnvProvides`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelEnvProvides`, `ImageMetadata.EnvProvides`)
 
 **Environment Requires & Accepts (`env_requires`, `env_accepts`)** -- Declared env var dependencies:
 - Layers declare `env_requires:` and `env_accepts:` in `layer.yml` — lists of `EnvDependency` structs (name, description, optional default)
@@ -100,6 +99,29 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Validation: name must be valid env var format, no duplicates within same layer, same var cannot appear in both requires and accepts
 - `env_requires` and `env_accepts` are distinct from `env:` (baked into image), `env_provides:` (injected into other containers), and `secrets:` (provisioned from credential store)
 - Source: `ov/layers.go` (`EnvDependency`, `LayerYAML.EnvRequires/EnvAccepts`), `ov/validate.go` (`validateEnvDeps`), `ov/config_image.go` (`warnMissingEnvRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelEnvRequires`, `LabelEnvAccepts`, `ImageMetadata.EnvRequires/EnvAccepts`)
+
+**MCP Provides (`mcp_provides`)** -- Cross-container MCP server discovery:
+- Layers declare `mcp_provides:` in `layer.yml` — a list of MCP server declarations injected into OTHER containers when this service is deployed. Follows the same pattern as `env_provides`
+- Each entry: `{name, url, transport}`. URL supports `{{.ContainerName}}` template. Transport defaults to `"http"` (streamable HTTP)
+- At `ov config` time, `injectMCPProvides()` resolves templates and stores entries in `deploy.yml` under `provides.mcp:` with source tracking
+- Consumer containers receive `OV_MCP_SERVERS` JSON env var with all resolved MCP server entries
+- **Pod-aware**: When consumer and provider are in the same container (e.g., `selkies-desktop-hermes-jupyter`), `podAwareMCPProvides()` resolves own entries to `localhost` instead of container hostname. If both local and remote entries share a name, local wins
+- **No self-exclusion** (unlike env_provides): MCP servers are always included for same-container consumers
+- On `ov config remove` / `ov remove`, MCP entries are automatically cleaned from deploy.yml
+- OCI labels: `org.overthinkos.mcp_provides`, `org.overthinkos.mcp_requires`, `org.overthinkos.mcp_accepts`
+- `mcp_requires:` and `mcp_accepts:` follow the same pattern as `env_requires`/`env_accepts` (same `EnvDependency` struct). `mcp_requires` produces warnings at `ov config` time for missing servers
+- Validation: name must not be empty, no duplicates, URL must not be empty, only `{{.ContainerName}}` template allowed, transport must be `http` or `sse`
+- Source: `ov/provides.go` (shared types and generics), `ov/layers.go` (`MCPServerYAML`, `LayerYAML.MCPProvides/Requires/Accepts`), `ov/validate.go` (`validateMCPProvides`, `validateMCPDeps`), `ov/config_image.go` (`injectMCPProvides`, `podAwareMCPProvides`, `warnMissingMCPRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelMCPProvides/Requires/Accepts`)
+
+**Hermes auto-configuration** — Single-phase, first-start-only configuration of LLM providers and MCP servers:
+- One Python script configures both LLM providers (from `OLLAMA_HOST`/`OLLAMA_API_KEY`/`OPENROUTER_API_KEY`) and MCP servers (from `OV_MCP_SERVERS`) in a single pass
+- Guarded by `# ov:auto-configured` sentinel — runs only once, never overwrites existing auto-generated config
+- Generated `config.yaml` has header comment: "auto-generated by ov hermes-entrypoint"
+- To reconfigure: delete `config.yaml` and restart the service
+- API keys synced to `.env` on every start (handles rotation without touching config.yaml)
+- MCP servers written to `config.yaml` `mcp_servers:` section (hermes native format: YAML map with `url:` per server)
+- Hermes auto-registers MCP tools with prefix `mcp_<server_name>_<tool_name>`. Reload at runtime: `/reload-mcp`
+- Source: `layers/hermes/hermes-entrypoint`
 
 **Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior:
 - Layers declare port protocols in `layer.yml`: `ports: ["https+insecure:3000", "tcp:5900", 8888]`
@@ -254,6 +276,8 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - `env_provides:` in `layer.yml` declares env vars injected into OTHER containers at deploy time. Template syntax: `{{.ContainerName}}` (only supported variable). `env:` and `env_provides:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `env_provides:` is injected into consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
 - `env_requires:` in `layer.yml` declares env vars the layer MUST have from the environment (e.g., `OPENROUTER_API_KEY`). At `ov config` time, missing required vars produce warnings. Structure: list of `{name, description, default?}`
 - `env_accepts:` in `layer.yml` declares env vars the layer CAN optionally use (e.g., `TELEGRAM_BOT_TOKEN`). No warnings if missing — for documentation only. Same structure as `env_requires`
+- `mcp_provides:` in `layer.yml` declares MCP servers injected into OTHER containers at deploy time. List of `{name, url, transport}`. Template: `{{.ContainerName}}`. Pod-aware: same-container entries resolve to `localhost`. Cleanup automatic on remove. `--update-all` propagates
+- `mcp_requires:` / `mcp_accepts:` mirror `env_requires` / `env_accepts` but for MCP server dependencies. Same `{name, description}` struct. `mcp_requires` warns at `ov config` time
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
 - Port protocol annotations control tunnel backend schemes: `"https+insecure:3000"` tells Tailscale to use `https+insecure://` when proxying. Default is `http`. Supported: `http`, `https`, `https+insecure`, `tcp`, `tls-terminated-tcp` (Tailscale); `http`, `https`, `tcp`, `ssh`, `rdp`, `smb` (Cloudflare). Ports with HTTPS backends (like Traefik self-signed) MUST use `https+insecure` to avoid 404 errors from plain HTTP proxying
 
@@ -292,7 +316,7 @@ ML layers follow a two-tier pattern that separates environment ownership from po
 | 2 | `OLLAMA_API_KEY` | Ollama Cloud (`custom`) | `kimi-k2.5:cloud` | `https://ollama.com/v1` |
 | 3 | `OPENROUTER_API_KEY` | OpenRouter (built-in) | `qwen/qwen3.6-plus:free` | *(managed by hermes)* |
 
-Two-phase configuration: Phase A (first start, guarded by `# ov:provider-configured` sentinel) registers providers and sets the default. Phase B (every start) refreshes API keys for rotation. Override model with `HERMES_MODEL` env var. Switch providers mid-session: `hermes chat --provider openrouter` or `/model custom:ollama-cloud:kimi-k2.5:cloud`. To force full reconfigure: remove the sentinel from `/opt/data/config.yaml` and restart.
+Single-phase configuration: on first start (guarded by `# ov:auto-configured` sentinel), registers ALL available LLM providers and MCP servers, sets the default model. API keys synced to `.env` on every start for rotation. Override model with `HERMES_MODEL` env var. Switch providers mid-session: `hermes chat --provider openrouter` or `/model custom:ollama-cloud:kimi-k2.5:cloud`. To reconfigure: delete `/opt/data/config.yaml` and restart.
 
 **Provider-specific notes:**
 - **Ollama Cloud** uses Bearer token auth (`OLLAMA_API_KEY`) at `https://ollama.com/v1`. `kimi-k2.5:cloud` is a thinking/reasoning model — responses include a `reasoning` field before `content`

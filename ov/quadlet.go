@@ -132,7 +132,18 @@ func generateQuadlet(cfg QuadletConfig) string {
 		b.WriteString(fmt.Sprintf("UserNS=keep-id:uid=%d,gid=%d\n", cfg.UID, cfg.GID))
 	}
 	for _, e := range cfg.Env {
-		b.WriteString(fmt.Sprintf("Environment=%s\n", e))
+		// Quote the value if it contains characters that systemd would interpret
+		if idx := strings.IndexByte(e, '='); idx >= 0 {
+			key := e[:idx]
+			val := e[idx+1:]
+			if strings.ContainsAny(val, `"{}[] `) {
+				b.WriteString(fmt.Sprintf("Environment=%s=%q\n", key, val))
+			} else {
+				b.WriteString(fmt.Sprintf("Environment=%s\n", e))
+			}
+		} else {
+			b.WriteString(fmt.Sprintf("Environment=%s\n", e))
+		}
 	}
 	if cfg.EnvFile != "" {
 		b.WriteString(fmt.Sprintf("EnvironmentFile=%s\n", cfg.EnvFile))

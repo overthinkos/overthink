@@ -137,6 +137,12 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate env_requires and env_accepts declarations
 	validateEnvDeps(layers, errs)
 
+	// Validate mcp_provides declarations
+	validateMCPProvides(layers, errs)
+
+	// Validate mcp_requires and mcp_accepts declarations
+	validateMCPDeps(layers, errs)
+
 	// Validate data layers and data images
 	validateDataLayers(cfg, layers, errs)
 
@@ -1648,6 +1654,76 @@ func validateEnvDeps(layers map[string]*Layer, errs *ValidationError) {
 			}
 			if prev, ok := seen[dep.Name]; ok {
 				errs.Add("layer %s: env var %s appears in both env_%s and env_accepts", name, dep.Name, prev)
+			}
+			seen[dep.Name] = "accepts"
+		}
+	}
+}
+
+// validateMCPProvides checks mcp_provides declarations in layers.
+func validateMCPProvides(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasMCPProvides {
+			continue
+		}
+		seen := make(map[string]bool)
+		for _, mcp := range layer.MCPProvides() {
+			if mcp.Name == "" {
+				errs.Add("layer %s: mcp_provides has entry with empty name", name)
+				continue
+			}
+			if seen[mcp.Name] {
+				errs.Add("layer %s: mcp_provides has duplicate name %q", name, mcp.Name)
+			}
+			seen[mcp.Name] = true
+
+			if mcp.URL == "" {
+				errs.Add("layer %s: mcp_provides[%s] has empty url", name, mcp.Name)
+				continue
+			}
+
+			// Check for valid template variables (only {{.ContainerName}} is allowed)
+			if !validateProvidesTemplate(mcp.URL) {
+				errs.Add("layer %s: mcp_provides[%s] url contains unknown template variable (only {{.ContainerName}} is supported): %s", name, mcp.Name, mcp.URL)
+			}
+
+			// Validate transport if specified
+			if mcp.Transport != "" && mcp.Transport != "http" && mcp.Transport != "sse" {
+				errs.Add("layer %s: mcp_provides[%s] has invalid transport %q (must be http, sse, or empty)", name, mcp.Name, mcp.Transport)
+			}
+		}
+	}
+}
+
+// validateMCPDeps checks mcp_requires and mcp_accepts declarations in layers.
+func validateMCPDeps(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		seen := make(map[string]string) // name -> "requires" or "accepts"
+
+		for _, dep := range layer.MCPRequires() {
+			if dep.Name == "" {
+				errs.Add("layer %s: mcp_requires has entry with empty name", name)
+				continue
+			}
+			if dep.Description == "" {
+				errs.Add("layer %s: mcp_requires[%s] has no description", name, dep.Name)
+			}
+			if prev, ok := seen[dep.Name]; ok {
+				errs.Add("layer %s: MCP server %s appears in both mcp_%s and mcp_requires", name, dep.Name, prev)
+			}
+			seen[dep.Name] = "requires"
+		}
+
+		for _, dep := range layer.MCPAccepts() {
+			if dep.Name == "" {
+				errs.Add("layer %s: mcp_accepts has entry with empty name", name)
+				continue
+			}
+			if dep.Description == "" {
+				errs.Add("layer %s: mcp_accepts[%s] has no description", name, dep.Name)
+			}
+			if prev, ok := seen[dep.Name]; ok {
+				errs.Add("layer %s: MCP server %s appears in both mcp_%s and mcp_accepts", name, dep.Name, prev)
 			}
 			seen[dep.Name] = "accepts"
 		}

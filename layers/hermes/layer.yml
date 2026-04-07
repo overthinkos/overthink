@@ -26,6 +26,12 @@ env_accepts:
     description: "Slack bot token"
   - name: DISCORD_BOT_TOKEN
     description: "Discord bot token"
+  - name: OV_MCP_SERVERS
+    description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+
+mcp_accepts:
+  - name: jupyter-colab
+    description: "JupyterLab CRDT MCP server for notebook manipulation"
 
 rpm:
   packages:

@@ -52,6 +52,9 @@ const (
 	LabelEnvProvides    = "org.overthinkos.env_provides"
 	LabelEnvRequires    = "org.overthinkos.env_requires"
 	LabelEnvAccepts     = "org.overthinkos.env_accepts"
+	LabelMCPProvides    = "org.overthinkos.mcp_provides"
+	LabelMCPRequires    = "org.overthinkos.mcp_requires"
+	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -121,6 +124,9 @@ type ImageMetadata struct {
 	EnvProvides    map[string]string // env vars provided to other containers (service discovery templates)
 	EnvRequires    []EnvDependency  // env vars image must have from the environment
 	EnvAccepts     []EnvDependency  // env vars image can optionally use
+	MCPProvides    []MCPServerYAML  // MCP servers provided to other containers (service discovery templates)
+	MCPRequires    []EnvDependency  // MCP servers image must have from the environment
+	MCPAccepts     []EnvDependency  // MCP servers image can optionally use
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -412,6 +418,27 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelEnvAccepts]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.EnvAccepts); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelEnvAccepts, err)
+		}
+	}
+
+	// MCP provides (MCP servers for other containers, templates with {{.ContainerName}})
+	if v := labels[LabelMCPProvides]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPProvides); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPProvides, err)
+		}
+	}
+
+	// MCP requires (MCP servers this image must have)
+	if v := labels[LabelMCPRequires]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPRequires); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPRequires, err)
+		}
+	}
+
+	// MCP accepts (MCP servers this image can optionally use)
+	if v := labels[LabelMCPAccepts]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.MCPAccepts); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelMCPAccepts, err)
 		}
 	}
 

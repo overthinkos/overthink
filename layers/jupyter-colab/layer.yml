@@ -11,6 +11,11 @@ rpm:
 ports:
   - 8888
 
+mcp_provides:
+  - name: jupyter-colab
+    url: "http://{{.ContainerName}}:8888/mcp"
+    transport: http
+
 volumes:
   - name: workspace
     path: ~/workspace

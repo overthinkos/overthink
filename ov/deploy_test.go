@@ -253,49 +253,54 @@ func TestAppendOrReplaceEnv(t *testing.T) {
 	}
 }
 
-func TestRemoveEnvByKey(t *testing.T) {
-	envs := []string{"A=1", "B=2", "C=3"}
-	result := removeEnvByKey(envs, "B")
-	if !reflect.DeepEqual(result, []string{"A=1", "C=3"}) {
-		t.Errorf("got %v, want [A=1 C=3]", result)
+func TestGlobalEnvForImage(t *testing.T) {
+	dc := &DeployConfig{
+		Provides: &ProvidesConfig{
+			Env: []EnvProvidesEntry{
+				{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama"},
+				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
+			},
+			MCP: []MCPProvidesEntry{
+				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+			},
+		},
 	}
 
-	// Remove nonexistent key — no change
-	result = removeEnvByKey(envs, "Z")
-	if !reflect.DeepEqual(result, []string{"A=1", "B=2", "C=3"}) {
-		t.Errorf("got %v, want [A=1 B=2 C=3]", result)
+	// Filter out ollama's own env vars
+	got := dc.GlobalEnvForImage("ollama", "ov-ollama")
+	// Should have PGHOST but NOT OLLAMA_HOST (self-excluded)
+	foundPG := false
+	foundOllama := false
+	foundMCP := false
+	for _, e := range got {
+		if envKey(e) == "PGHOST" {
+			foundPG = true
+		}
+		if envKey(e) == "OLLAMA_HOST" {
+			foundOllama = true
+		}
+		if envKey(e) == "OV_MCP_SERVERS" {
+			foundMCP = true
+		}
+	}
+	if !foundPG {
+		t.Error("PGHOST should be in globalEnv for ollama")
+	}
+	if foundOllama {
+		t.Error("OLLAMA_HOST should be self-excluded for ollama")
+	}
+	if !foundMCP {
+		t.Error("OV_MCP_SERVERS should be injected for ollama")
+	}
+
+	// Nil DeployConfig returns nil
+	var nilDC *DeployConfig
+	if got := nilDC.GlobalEnvForImage("test", "ov-test"); got != nil {
+		t.Errorf("nil DC should return nil, got %v", got)
 	}
 }
 
-func TestFilterOwnEnvProvides(t *testing.T) {
-	globalEnv := []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql", "CUSTOM=val"}
-	sources := map[string]string{
-		"OLLAMA_HOST": "ollama",
-		"PGHOST":      "postgresql",
-	}
-
-	// Filter out ollama's own vars
-	got := filterOwnEnvProvides(globalEnv, sources, "ollama")
-	want := []string{"PGHOST=ov-postgresql", "CUSTOM=val"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("filterOwnEnvProvides(ollama) = %v, want %v", got, want)
-	}
-
-	// Filter out postgresql's own vars
-	got = filterOwnEnvProvides(globalEnv, sources, "postgresql")
-	want = []string{"OLLAMA_HOST=http://ov-ollama:11434", "CUSTOM=val"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("filterOwnEnvProvides(postgresql) = %v, want %v", got, want)
-	}
-
-	// No sources — return all
-	got = filterOwnEnvProvides(globalEnv, nil, "ollama")
-	if !reflect.DeepEqual(got, globalEnv) {
-		t.Errorf("filterOwnEnvProvides(nil sources) = %v, want %v", got, globalEnv)
-	}
-}
-
-func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
+func TestDeployConfigProvidesRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.yml")
 
@@ -304,10 +309,14 @@ func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
 	defer func() { DeployConfigPath = orig }()
 
 	dc := &DeployConfig{
-		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
-		EnvProvidesSources: map[string]string{
-			"OLLAMA_HOST": "ollama",
-			"PGHOST":      "postgresql",
+		Provides: &ProvidesConfig{
+			Env: []EnvProvidesEntry{
+				{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama"},
+				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
+			},
+			MCP: []MCPProvidesEntry{
+				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+			},
 		},
 		Images: map[string]DeployImageConfig{
 			"ollama": {Ports: []string{"11434:11434"}},
@@ -323,15 +332,15 @@ func TestDeployConfigGlobalEnvRoundTrip(t *testing.T) {
 		t.Fatalf("LoadDeployConfig: %v", err)
 	}
 
-	if !reflect.DeepEqual(loaded.Env, dc.Env) {
-		t.Errorf("Env = %v, want %v", loaded.Env, dc.Env)
+	if len(loaded.Provides.Env) != 2 {
+		t.Errorf("Provides.Env = %v, want 2 entries", loaded.Provides.Env)
 	}
-	if !reflect.DeepEqual(loaded.EnvProvidesSources, dc.EnvProvidesSources) {
-		t.Errorf("EnvProvidesSources = %v, want %v", loaded.EnvProvidesSources, dc.EnvProvidesSources)
+	if len(loaded.Provides.MCP) != 1 {
+		t.Errorf("Provides.MCP = %v, want 1 entry", loaded.Provides.MCP)
 	}
 }
 
-func TestCleanDeployEntryRemovesEnvProvides(t *testing.T) {
+func TestCleanDeployEntryRemovesProvides(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.yml")
 
@@ -340,21 +349,26 @@ func TestCleanDeployEntryRemovesEnvProvides(t *testing.T) {
 	defer func() { DeployConfigPath = orig }()
 
 	dc := &DeployConfig{
-		Env: []string{"OLLAMA_HOST=http://ov-ollama:11434", "PGHOST=ov-postgresql"},
-		EnvProvidesSources: map[string]string{
-			"OLLAMA_HOST": "ollama",
-			"PGHOST":      "postgresql",
+		Provides: &ProvidesConfig{
+			Env: []EnvProvidesEntry{
+				{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama"},
+				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
+			},
+			MCP: []MCPProvidesEntry{
+				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+			},
 		},
 		Images: map[string]DeployImageConfig{
 			"ollama":     {Ports: []string{"11434:11434"}},
 			"postgresql": {Ports: []string{"5432:5432"}},
+			"jupyter":    {Ports: []string{"8888:8888"}},
 		},
 	}
 	if err := SaveDeployConfig(dc); err != nil {
 		t.Fatalf("SaveDeployConfig: %v", err)
 	}
 
-	// Remove ollama — should clean up OLLAMA_HOST from global env
+	// Remove ollama — should clean up OLLAMA_HOST from provides.env
 	cleanDeployEntry("ollama")
 
 	loaded, err := LoadDeployConfig()
@@ -363,17 +377,26 @@ func TestCleanDeployEntryRemovesEnvProvides(t *testing.T) {
 	}
 
 	// OLLAMA_HOST should be gone, PGHOST should remain
-	if !reflect.DeepEqual(loaded.Env, []string{"PGHOST=ov-postgresql"}) {
-		t.Errorf("Env after cleanup = %v, want [PGHOST=ov-postgresql]", loaded.Env)
+	if len(loaded.Provides.Env) != 1 || loaded.Provides.Env[0].Name != "PGHOST" {
+		t.Errorf("Provides.Env after cleanup = %v, want only PGHOST", loaded.Provides.Env)
 	}
-	if _, ok := loaded.EnvProvidesSources["OLLAMA_HOST"]; ok {
-		t.Error("OLLAMA_HOST should be removed from EnvProvidesSources")
-	}
-	if loaded.EnvProvidesSources["PGHOST"] != "postgresql" {
-		t.Error("PGHOST source should remain")
+	// MCP should be untouched
+	if len(loaded.Provides.MCP) != 1 {
+		t.Errorf("Provides.MCP should be untouched, got %v", loaded.Provides.MCP)
 	}
 	if _, ok := loaded.Images["ollama"]; ok {
 		t.Error("ollama image should be removed")
+	}
+
+	// Remove jupyter — should clean up MCP entry
+	cleanDeployEntry("jupyter")
+
+	loaded2, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+	if loaded2.Provides != nil && len(loaded2.Provides.MCP) > 0 {
+		t.Errorf("Provides.MCP after jupyter cleanup should be empty, got %v", loaded2.Provides.MCP)
 	}
 }
 

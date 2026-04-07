@@ -12,9 +12,8 @@ import (
 // DeployConfig represents per-machine deployment overrides (~/.config/ov/deploy.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 type DeployConfig struct {
-	Env               []string                    `yaml:"env,omitempty"`                // global env vars injected into all containers
-	EnvProvidesSources map[string]string           `yaml:"env_provides_sources,omitempty"` // tracks which image injected each global env var (key -> image name)
-	Images            map[string]DeployImageConfig `yaml:"images"`
+	Provides *ProvidesConfig              `yaml:"provides,omitempty"`
+	Images   map[string]DeployImageConfig `yaml:"images"`
 }
 
 // DeployImageConfig holds deployment-specific overrides for a single image.
@@ -409,31 +408,39 @@ func cleanDeployEntry(imageName string) {
 		RemoveImageDeploy(dc, imageName)
 	}
 
-	// Remove global service env vars injected by this image
-	removedEnv := false
-	if dc.EnvProvidesSources != nil {
-		var keysToRemove []string
-		for key, source := range dc.EnvProvidesSources {
-			if source == imageName {
-				keysToRemove = append(keysToRemove, key)
+	// Remove provides entries injected by this image
+	removedProvides := false
+	if dc.Provides != nil {
+		if len(dc.Provides.Env) > 0 {
+			var cleaned []EnvProvidesEntry
+			var removed bool
+			cleaned, removed = removeBySource(dc.Provides.Env, imageName)
+			if removed {
+				dc.Provides.Env = cleaned
+				removedProvides = true
+				fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", imageName)
 			}
 		}
-		for _, key := range keysToRemove {
-			dc.Env = removeEnvByKey(dc.Env, key)
-			delete(dc.EnvProvidesSources, key)
-			removedEnv = true
-			fmt.Fprintf(os.Stderr, "Removed service env: %s\n", key)
+		if len(dc.Provides.MCP) > 0 {
+			var cleaned []MCPProvidesEntry
+			var removed bool
+			cleaned, removed = removeBySource(dc.Provides.MCP, imageName)
+			if removed {
+				dc.Provides.MCP = cleaned
+				removedProvides = true
+				fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", imageName)
+			}
 		}
-		if len(dc.EnvProvidesSources) == 0 {
-			dc.EnvProvidesSources = nil
+		if len(dc.Provides.MCP) == 0 && len(dc.Provides.Env) == 0 {
+			dc.Provides = nil
 		}
 	}
 
-	if !hasImage && !removedEnv {
+	if !hasImage && !removedProvides {
 		return
 	}
 
-	if len(dc.Images) == 0 && len(dc.Env) == 0 {
+	if len(dc.Images) == 0 && dc.Provides == nil {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
 			os.Remove(path)
 		}
@@ -457,17 +464,6 @@ func appendOrReplaceEnv(envs []string, entry string) []string {
 	return append(envs, entry)
 }
 
-// removeEnvByKey removes all env vars with the given key from a slice.
-func removeEnvByKey(envs []string, key string) []string {
-	var result []string
-	for _, e := range envs {
-		if envKey(e) != key {
-			result = append(result, e)
-		}
-	}
-	return result
-}
-
 // envKey extracts the KEY part from a KEY=VALUE string.
 func envKey(entry string) string {
 	if idx := strings.IndexByte(entry, '='); idx >= 0 {
@@ -476,19 +472,6 @@ func envKey(entry string) string {
 	return entry
 }
 
-// filterOwnEnvProvides returns global env vars excluding those injected by imageName.
-func filterOwnEnvProvides(globalEnv []string, sources map[string]string, imageName string) []string {
-	if len(sources) == 0 || imageName == "" {
-		return globalEnv
-	}
-	var result []string
-	for _, e := range globalEnv {
-		if sources[envKey(e)] != imageName {
-			result = append(result, e)
-		}
-	}
-	return result
-}
 
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {

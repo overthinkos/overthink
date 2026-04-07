@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -1473,6 +1474,58 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 	if len(envAcceptsMap) > 0 {
 		writeJSONLabel(b, LabelEnvAccepts, sortedEnvDeps(envAcceptsMap))
+	}
+
+	// MCP provides: MCP servers provided to other containers
+	mcpProvidesMap := make(map[string]MCPServerYAML) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPProvides {
+			for _, mcp := range layer.MCPProvides() {
+				mcpProvidesMap[mcp.Name] = mcp
+			}
+		}
+	}
+	if len(mcpProvidesMap) > 0 {
+		// Sort by name for deterministic output
+		names := make([]string, 0, len(mcpProvidesMap))
+		for name := range mcpProvidesMap {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		mcpProvides := make([]MCPServerYAML, 0, len(names))
+		for _, name := range names {
+			mcpProvides = append(mcpProvides, mcpProvidesMap[name])
+		}
+		writeJSONLabel(b, LabelMCPProvides, mcpProvides)
+	}
+
+	// MCP requires: MCP servers image must have from the environment
+	mcpRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPRequires {
+			for _, dep := range layer.MCPRequires() {
+				mcpRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(mcpRequiresMap) > 0 {
+		writeJSONLabel(b, LabelMCPRequires, sortedEnvDeps(mcpRequiresMap))
+	}
+
+	// MCP accepts: MCP servers image can optionally use
+	mcpAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasMCPAccepts {
+			for _, dep := range layer.MCPAccepts() {
+				mcpAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(mcpAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelMCPAccepts, sortedEnvDeps(mcpAcceptsMap))
 	}
 
 	// Routes: collected from layers

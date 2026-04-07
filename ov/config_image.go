@@ -118,11 +118,24 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Apply instance-specific volume naming
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
-	// Resolve env vars from global env + labels + deploy.yml + CLI
-	var globalEnv []string
-	if dc != nil {
-		globalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, c.Image)
+	// Inject provides BEFORE env resolution so this image's own provides
+	// (pod case) and other images' provides are available in the quadlet.
+	if meta != nil && len(meta.EnvProvides) > 0 {
+		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides); injErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
+		}
 	}
+	if meta != nil && len(meta.MCPProvides) > 0 {
+		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvides); injErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not inject mcp_provides: %v\n", injErr)
+		}
+	}
+	// Reload deploy config after injection to pick up newly injected provides
+	dc, _ = LoadDeployConfig()
+
+	// Resolve env vars from global provides + labels + deploy.yml + CLI
+	ctrName := containerNameInstance(c.Image, c.Instance)
+	globalEnv := dc.GlobalEnvForImage(c.Image, ctrName)
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
@@ -420,21 +433,26 @@ skipDataProvision:
 		}
 	}
 
-	// Inject env_provides vars into global deploy.yml for other containers
-	if meta != nil && len(meta.EnvProvides) > 0 {
-		changed, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides)
-		if injErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
-		} else if changed && c.UpdateAll {
-			if err := updateAllDeployedQuadlets(rt, c.Image); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
-			}
+	// Regenerate quadlets for all other deployed images if --update-all
+	if c.UpdateAll {
+		if err := updateAllDeployedQuadlets(rt, c.Image); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
 		}
 	}
 
 	// Warn about missing env_requires vars
 	if meta != nil && len(meta.EnvRequires) > 0 {
 		warnMissingEnvRequires(c.Image, meta.EnvRequires, envVars)
+	}
+
+	// Warn about missing mcp_requires servers
+	if meta != nil && len(meta.MCPRequires) > 0 {
+		dc, _ := LoadDeployConfig()
+		var mcpServers []MCPProvidesEntry
+		if dc != nil && dc.Provides != nil {
+			mcpServers = podAwareMCPProvides(dc.Provides.MCP, c.Image, containerNameInstance(c.Image, c.Instance))
+		}
+		warnMissingMCPRequires(c.Image, meta.MCPRequires, mcpServers)
 	}
 
 	return nil
@@ -472,10 +490,8 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 
 	// Resolve env vars with global env
 	dc, _ := LoadDeployConfig()
-	var remoteGlobalEnv []string
-	if dc != nil {
-		remoteGlobalEnv = filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, ctx.ImageName)
-	}
+	remoteCtrName := containerNameInstance(ctx.ImageName, "")
+	remoteGlobalEnv := dc.GlobalEnvForImage(ctx.ImageName, remoteCtrName)
 	envVars, envErr := ResolveEnvVars(remoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
@@ -710,7 +726,7 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 	return configs
 }
 
-// injectEnvProvides resolves env_provides templates and adds them to the global env in deploy.yml.
+// injectEnvProvides resolves env_provides templates and stores them in deploy.yml provides.env.
 // Returns true if any env vars were added or changed.
 func injectEnvProvides(imageName, instance string, envProvides map[string]string) (bool, error) {
 	if len(envProvides) == 0 {
@@ -721,8 +737,8 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 	if dc == nil {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 	}
-	if dc.EnvProvidesSources == nil {
-		dc.EnvProvidesSources = make(map[string]string)
+	if dc.Provides == nil {
+		dc.Provides = &ProvidesConfig{}
 	}
 
 	ctrName := containerNameInstance(imageName, instance)
@@ -732,25 +748,34 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 	keys := sortedStringMapKeys(envProvides)
 	for _, key := range keys {
 		tmpl := envProvides[key]
-		value := strings.ReplaceAll(tmpl, "{{.ContainerName}}", ctrName)
-		entry := key + "=" + value
+		value := resolveTemplate(tmpl, ctrName)
+		resolved := EnvProvidesEntry{
+			Name:   key,
+			Value:  value,
+			Source: imageName,
+		}
 
-		// Check if already set to same value
-		existing := ""
-		for _, e := range dc.Env {
-			if envKey(e) == key {
-				existing = e
+		// Check if already set to same value (dedup by name+source)
+		found := false
+		for i, existing := range dc.Provides.Env {
+			if existing.Name == key && existing.Source == imageName {
+				if existing.Value == value {
+					found = true
+					break
+				}
+				dc.Provides.Env[i] = resolved
+				found = true
+				changed = true
 				break
 			}
 		}
-		if existing == entry && dc.EnvProvidesSources[key] == imageName {
-			continue
+		if !found {
+			dc.Provides.Env = append(dc.Provides.Env, resolved)
+			changed = true
 		}
-
-		dc.Env = appendOrReplaceEnv(dc.Env, entry)
-		dc.EnvProvidesSources[key] = imageName
-		changed = true
-		fmt.Fprintf(os.Stderr, "Env provides injected: %s\n", entry)
+		if changed {
+			fmt.Fprintf(os.Stderr, "Env provides injected: %s=%s\n", key, value)
+		}
 	}
 
 	if changed {
@@ -759,6 +784,86 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 		}
 	}
 	return changed, nil
+}
+
+// injectMCPProvides resolves mcp_provides templates and adds them to deploy.yml.
+// Returns true if any servers were added or changed.
+func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) (bool, error) {
+	if len(mcpProvides) == 0 {
+		return false, nil
+	}
+
+	dc, _ := LoadDeployConfig()
+	if dc == nil {
+		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	}
+	if dc.Provides == nil {
+		dc.Provides = &ProvidesConfig{}
+	}
+
+	ctrName := containerNameInstance(imageName, instance)
+	changed := false
+
+	for _, mcp := range mcpProvides {
+		url := resolveTemplate(mcp.URL, ctrName)
+		transport := mcp.Transport
+		if transport == "" {
+			transport = "http"
+		}
+		resolved := MCPProvidesEntry{
+			Name:      mcp.Name,
+			URL:       url,
+			Transport: transport,
+			Source:    imageName,
+		}
+
+		// Check if already set to same value
+		found := false
+		for i, existing := range dc.Provides.MCP {
+			if existing.Name == mcp.Name && existing.Source == imageName {
+				if existing.URL == resolved.URL && existing.Transport == resolved.Transport {
+					found = true
+					break
+				}
+				dc.Provides.MCP[i] = resolved
+				found = true
+				changed = true
+				break
+			}
+		}
+		if !found {
+			dc.Provides.MCP = append(dc.Provides.MCP, resolved)
+			changed = true
+		}
+		if changed {
+			fmt.Fprintf(os.Stderr, "MCP provides injected: %s → %s\n", mcp.Name, url)
+		}
+	}
+
+	if changed {
+		if err := SaveDeployConfig(dc); err != nil {
+			return false, fmt.Errorf("saving deploy config: %w", err)
+		}
+	}
+	return changed, nil
+}
+
+// warnMissingMCPRequires checks resolved MCP servers against required MCP dependencies
+// and prints warnings for any that are missing.
+func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServers []MCPProvidesEntry) {
+	resolved := make(map[string]bool, len(mcpServers))
+	for _, s := range mcpServers {
+		resolved[s.Name] = true
+	}
+	for _, dep := range requires {
+		if !resolved[dep.Name] {
+			desc := dep.Description
+			if desc != "" {
+				desc = " (" + desc + ")"
+			}
+			fmt.Fprintf(os.Stderr, "Warning: %s requires MCP server %s%s — not available\n", imageName, dep.Name, desc)
+		}
+	}
 }
 
 // warnMissingEnvRequires checks resolved env vars against required env dependencies
@@ -820,7 +925,8 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		MergeDeployOntoMetadata(meta, dc)
 
 		// Resolve env vars with updated global env
-		globalEnv := filterOwnEnvProvides(dc.Env, dc.EnvProvidesSources, imageName)
+		updateCtrName := containerNameInstance(imageName, "")
+		globalEnv := dc.GlobalEnvForImage(imageName, updateCtrName)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", imageName, err)

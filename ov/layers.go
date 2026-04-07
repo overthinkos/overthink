@@ -81,11 +81,19 @@ type DataYAML struct {
 	Dest   string `yaml:"dest,omitempty"`   // optional subdirectory within the volume path
 }
 
-// EnvDependency declares an env var that a layer needs or can use.
+// EnvDependency declares an env var or MCP server that a layer needs or can use.
+// Reused for env_requires, env_accepts, mcp_requires, and mcp_accepts.
 type EnvDependency struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
+}
+
+// MCPServerYAML represents an MCP server declaration in layer.yml.
+type MCPServerYAML struct {
+	Name      string `yaml:"name" json:"name"`
+	URL       string `yaml:"url" json:"url"`
+	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // "http" (default), "sse"
 }
 
 // sortedEnvDeps returns a deterministic slice from a name-keyed map, sorted by Name.
@@ -130,6 +138,9 @@ type LayerYAML struct {
 	EnvProvides    map[string]string `yaml:"env_provides,omitempty"` // env vars provided to OTHER containers when this service is deployed
 	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"` // env vars this layer MUST have from the environment
 	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`  // env vars this layer CAN optionally use
+	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"` // MCP servers provided to OTHER containers when this service is deployed
+	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"` // MCP servers this layer MUST have from the environment
+	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`  // MCP servers this layer CAN optionally use
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -147,6 +158,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"system_services": true, "libvirt": true, "hooks": true,
 	"port_relay": true, "secrets": true, "data": true,
 	"env_provides": true, "env_requires": true, "env_accepts": true,
+	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
 }
 
 // layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
@@ -278,6 +290,9 @@ type Layer struct {
 	HasEnvProvides    bool
 	HasEnvRequires    bool
 	HasEnvAccepts     bool
+	HasMCPProvides    bool
+	HasMCPRequires    bool
+	HasMCPAccepts     bool
 	HasLibvirt         bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 
@@ -317,6 +332,9 @@ type Layer struct {
 	envProvides    map[string]string // env vars provided to other containers (service discovery)
 	envRequires    []EnvDependency  // env vars this layer must have
 	envAccepts     []EnvDependency  // env vars this layer can optionally use
+	mcpProvides    []MCPServerYAML  // MCP servers provided to other containers
+	mcpRequires    []EnvDependency  // MCP servers this layer must have
+	mcpAccepts     []EnvDependency  // MCP servers this layer can optionally use
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 }
 
@@ -519,6 +537,22 @@ func scanLayer(path string, name string) (*Layer, error) {
 		if len(ly.EnvAccepts) > 0 {
 			layer.HasEnvAccepts = true
 			layer.envAccepts = ly.EnvAccepts
+		}
+
+		// Pre-populate mcp_provides (MCP servers for other containers)
+		if len(ly.MCPProvides) > 0 {
+			layer.HasMCPProvides = true
+			layer.mcpProvides = ly.MCPProvides
+		}
+
+		// Pre-populate mcp_requires and mcp_accepts
+		if len(ly.MCPRequires) > 0 {
+			layer.HasMCPRequires = true
+			layer.mcpRequires = ly.MCPRequires
+		}
+		if len(ly.MCPAccepts) > 0 {
+			layer.HasMCPAccepts = true
+			layer.mcpAccepts = ly.MCPAccepts
 		}
 
 		// Pre-populate engine requirement
@@ -746,6 +780,21 @@ func (l *Layer) EnvRequires() []EnvDependency {
 // EnvAccepts returns env vars this layer can optionally use (pre-populated from layer.yml)
 func (l *Layer) EnvAccepts() []EnvDependency {
 	return l.envAccepts
+}
+
+// MCPProvides returns MCP servers this layer provides to other containers (pre-populated from layer.yml)
+func (l *Layer) MCPProvides() []MCPServerYAML {
+	return l.mcpProvides
+}
+
+// MCPRequires returns MCP servers this layer must have from the environment (pre-populated from layer.yml)
+func (l *Layer) MCPRequires() []EnvDependency {
+	return l.mcpRequires
+}
+
+// MCPAccepts returns MCP servers this layer can optionally use (pre-populated from layer.yml)
+func (l *Layer) MCPAccepts() []EnvDependency {
+	return l.mcpAccepts
 }
 
 // Engine returns the required run engine (pre-populated from layer.yml, "" if not set)

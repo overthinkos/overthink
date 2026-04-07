@@ -38,6 +38,8 @@ func (e MCPProvidesEntry) GetName() string   { return e.Name }
 func (e MCPProvidesEntry) GetSource() string { return e.Source }
 
 // filterOwnProvides removes entries injected by the given image (self-exclusion).
+// NOTE: No longer used in GlobalEnvForImage (replaced by podAwareEnvProvides).
+// Kept for removeBySource and other callers that need strict exclusion.
 func filterOwnProvides[T Named](entries []T, imageName string) []T {
 	if imageName == "" {
 		return entries
@@ -45,6 +47,31 @@ func filterOwnProvides[T Named](entries []T, imageName string) []T {
 	var result []T
 	for _, e := range entries {
 		if e.GetSource() != imageName {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// podAwareEnvProvides resolves env entries for a specific consumer image.
+// Same-image entries get container hostname rewritten to localhost (pod: co-located services).
+// Cross-image entries keep their container hostname URLs.
+// If both local and remote share a name, local wins.
+func podAwareEnvProvides(entries []EnvProvidesEntry, imageName, ctrName string) []EnvProvidesEntry {
+	var result []EnvProvidesEntry
+	seen := map[string]bool{} // name → true if local entry added
+	// First pass: add same-image entries with localhost
+	for _, e := range entries {
+		if e.Source == imageName {
+			local := e
+			local.Value = strings.ReplaceAll(e.Value, ctrName, "localhost")
+			result = append(result, local)
+			seen[e.Name] = true
+		}
+	}
+	// Second pass: add cross-image entries (skip if local exists with same name)
+	for _, e := range entries {
+		if e.Source != imageName && !seen[e.Name] {
 			result = append(result, e)
 		}
 	}
@@ -92,8 +119,8 @@ func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) 
 }
 
 // GlobalEnvForImage returns the global env vars from provides for a specific consumer image.
-// Env provides: self-excluded (prevents own env_provides from overriding bind addresses).
-// MCP provides: pod-aware (same-image entries resolve to localhost, no self-exclusion).
+// Both env and MCP provides are pod-aware: same-image entries resolve to localhost,
+// cross-image entries keep their container hostname. If both share a name, local wins.
 // Returns flat env var slice ready for ResolveEnvVars.
 func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string) []string {
 	if dc == nil || dc.Provides == nil {
@@ -101,12 +128,12 @@ func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string) []string {
 	}
 	var result []string
 
-	// Env provides: self-exclude (prevents own env_provides from overriding bind addresses)
-	for _, entry := range filterOwnProvides(dc.Provides.Env, imageName) {
+	// Env provides: pod-aware (same-image entries resolve to localhost)
+	for _, entry := range podAwareEnvProvides(dc.Provides.Env, imageName, ctrName) {
 		result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
 	}
 
-	// MCP provides: pod-aware (no self-exclusion, localhost for same-image)
+	// MCP provides: pod-aware (same-image entries resolve to localhost)
 	if len(dc.Provides.MCP) > 0 {
 		mcpEntries := podAwareMCPProvides(dc.Provides.MCP, imageName, ctrName)
 		if len(mcpEntries) > 0 {

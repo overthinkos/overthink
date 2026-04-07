@@ -28,6 +28,8 @@ env_accepts:
     description: "Discord bot token"
   - name: OV_MCP_SERVERS
     description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+  - name: BROWSER_CDP_URL
+    description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
 
 mcp_accepts:
   - name: jupyter-colab

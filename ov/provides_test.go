@@ -103,6 +103,58 @@ func TestValidateProvidesTemplate(t *testing.T) {
 	}
 }
 
+func TestPodAwareEnvProvides(t *testing.T) {
+	entries := []EnvProvidesEntry{
+		{Name: "OLLAMA_HOST", Value: "http://ov-combined:11434", Source: "combined-image"},
+		{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql-image"},
+	}
+
+	// Pod case: consumer IS the combined-image — own entries resolve to localhost
+	got := podAwareEnvProvides(entries, "combined-image", "ov-combined")
+	if len(got) != 2 {
+		t.Fatalf("podAwareEnvProvides should return 2 entries, got %d", len(got))
+	}
+	// Local entry should use localhost
+	if got[0].Name != "OLLAMA_HOST" || got[0].Value != "http://localhost:11434" {
+		t.Errorf("pod-local entry: got %+v, want localhost URL", got[0])
+	}
+	// Remote entry should keep hostname
+	if got[1].Name != "PGHOST" || got[1].Value != "ov-postgresql" {
+		t.Errorf("cross-container entry: got %+v, want original value", got[1])
+	}
+}
+
+func TestPodAwareEnvProvidesLocalPrecedence(t *testing.T) {
+	// Both local and remote provide the same env var name
+	entries := []EnvProvidesEntry{
+		{Name: "OLLAMA_HOST", Value: "http://ov-combined:11434", Source: "combined-image"},
+		{Name: "OLLAMA_HOST", Value: "http://ov-standalone:11434", Source: "standalone"},
+	}
+
+	got := podAwareEnvProvides(entries, "combined-image", "ov-combined")
+	if len(got) != 1 {
+		t.Fatalf("podAwareEnvProvides with name conflict: got %d entries, want 1 (local wins)", len(got))
+	}
+	if got[0].Value != "http://localhost:11434" {
+		t.Errorf("local should win: got Value %q, want localhost", got[0].Value)
+	}
+}
+
+func TestPodAwareEnvProvidesCrossContainer(t *testing.T) {
+	// Consumer is a different image — all entries are remote
+	entries := []EnvProvidesEntry{
+		{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama-image"},
+	}
+
+	got := podAwareEnvProvides(entries, "hermes-image", "ov-hermes")
+	if len(got) != 1 {
+		t.Fatalf("cross-container: got %d entries, want 1", len(got))
+	}
+	if got[0].Value != "http://ov-ollama:11434" {
+		t.Errorf("cross-container should keep original value: got %q", got[0].Value)
+	}
+}
+
 func TestPodAwareMCPProvides(t *testing.T) {
 	entries := []MCPProvidesEntry{
 		{Name: "jupyter-colab", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},

@@ -78,16 +78,17 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
 - Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/data.go` (`provisionData`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
 
-**Environment Provides (`env_provides`)** -- Cross-container environment injection:
+**Environment Provides (`env_provides`)** -- Pod-aware cross-container environment injection:
 - Layers declare `env_provides:` in `layer.yml` — a `map[string]string` of env vars to inject into OTHER containers when this service is deployed. Distinct from `env:` which is baked into the service's own image
 - Templates support `{{.ContainerName}}` which resolves to the actual container name (e.g., `ov-ollama`, or `ov-ollama-staging` with `--instance staging`)
 - At `ov config` time, `injectEnvProvides()` resolves templates and stores entries in `deploy.yml` under `provides.env:` (list of `{name, value, source}`)
-- `GlobalEnvForImage()` in `provides.go` resolves both env and MCP provides for a given consumer image. Env provides use self-exclusion (prevents own `env_provides` from overriding `env:` bind addresses)
+- `GlobalEnvForImage()` in `provides.go` resolves both env and MCP provides for a given consumer image. Both use **pod-aware resolution**: same-image entries get container hostname rewritten to `localhost` (co-located services); cross-image entries keep their container hostname. If both local and remote entries share a name, local wins
 - `--update-all` flag on `ov config` regenerates quadlets for all other deployed images to pick up new provides entries
 - On `ov config remove` / `ov remove`, `cleanDeployEntry()` removes provides entries injected by the removed image (both env and MCP)
-- Env var priority (last wins): provides.env (global) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags
+- Env var priority (last wins): provides.env (global) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags. For same-container, the baked-in `env:` (per-image deploy env) has higher priority than pod-aware provides — server bind addresses like `OLLAMA_HOST=0.0.0.0` are never overridden by the provides value
 - OCI label `org.overthinkos.env_provides` stores the templates in the image for deploy-only scenarios (no `images.yml` needed)
-- Source: `ov/provides.go` (`GlobalEnvForImage`, `filterOwnProvides`, `EnvProvidesEntry`, `ProvidesConfig`), `ov/config_image.go` (`injectEnvProvides`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateEnvProvides`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelEnvProvides`, `ImageMetadata.EnvProvides`)
+- **Quadlet EnvironmentFile handling:** When a quadlet uses `EnvironmentFile=` (from workspace `.env`, deploy.yml `env_file`, or CLI `--env-file`), provides env vars are preserved as inline `Environment=` entries because they're resolved from deploy.yml at `ov config` time and are NOT in the env file. Only file-sourced vars are suppressed to avoid duplication
+- Source: `ov/provides.go` (`GlobalEnvForImage`, `podAwareEnvProvides`, `EnvProvidesEntry`, `ProvidesConfig`), `ov/config_image.go` (`injectEnvProvides`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateEnvProvides`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelEnvProvides`, `ImageMetadata.EnvProvides`)
 
 **Environment Requires & Accepts (`env_requires`, `env_accepts`)** -- Declared env var dependencies:
 - Layers declare `env_requires:` and `env_accepts:` in `layer.yml` — lists of `EnvDependency` structs (name, description, optional default)
@@ -106,21 +107,22 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - At `ov config` time, `injectMCPProvides()` resolves templates and stores entries in `deploy.yml` under `provides.mcp:` with source tracking
 - Consumer containers receive `OV_MCP_SERVERS` JSON env var with all resolved MCP server entries
 - **Pod-aware**: When consumer and provider are in the same container (e.g., `selkies-desktop-hermes-jupyter`), `podAwareMCPProvides()` resolves own entries to `localhost` instead of container hostname. If both local and remote entries share a name, local wins
-- **No self-exclusion** (unlike env_provides): MCP servers are always included for same-container consumers
+- **Pod-aware** (same as env_provides): same-image entries resolve to `localhost`, cross-image entries keep their container hostname. No self-exclusion — MCP servers are always included for same-container consumers
 - On `ov config remove` / `ov remove`, MCP entries are automatically cleaned from deploy.yml
 - OCI labels: `org.overthinkos.mcp_provides`, `org.overthinkos.mcp_requires`, `org.overthinkos.mcp_accepts`
 - `mcp_requires:` and `mcp_accepts:` follow the same pattern as `env_requires`/`env_accepts` (same `EnvDependency` struct). `mcp_requires` produces warnings at `ov config` time for missing servers
 - Validation: name must not be empty, no duplicates, URL must not be empty, only `{{.ContainerName}}` template allowed, transport must be `http` or `sse`
-- Source: `ov/provides.go` (shared types and generics), `ov/layers.go` (`MCPServerYAML`, `LayerYAML.MCPProvides/Requires/Accepts`), `ov/validate.go` (`validateMCPProvides`, `validateMCPDeps`), `ov/config_image.go` (`injectMCPProvides`, `podAwareMCPProvides`, `warnMissingMCPRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelMCPProvides/Requires/Accepts`)
+- Source: `ov/provides.go` (`podAwareEnvProvides`, `podAwareMCPProvides`, shared types and generics), `ov/layers.go` (`MCPServerYAML`, `LayerYAML.MCPProvides/Requires/Accepts`), `ov/validate.go` (`validateMCPProvides`, `validateMCPDeps`), `ov/config_image.go` (`injectMCPProvides`, `warnMissingMCPRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelMCPProvides/Requires/Accepts`)
 
-**Hermes auto-configuration** — Single-phase, first-start-only configuration of LLM providers and MCP servers:
-- One Python script configures both LLM providers (from `OLLAMA_HOST`/`OLLAMA_API_KEY`/`OPENROUTER_API_KEY`) and MCP servers (from `OV_MCP_SERVERS`) in a single pass
+**Hermes auto-configuration** — Single-phase, first-start-only configuration of LLM providers, MCP servers, and browser:
+- One Python script configures LLM providers (from `OLLAMA_HOST`/`OLLAMA_API_KEY`/`OPENROUTER_API_KEY`), MCP servers (from `OV_MCP_SERVERS`), and browser (from `BROWSER_CDP_URL`) in a single pass
 - Guarded by `# ov:auto-configured` sentinel — runs only once, never overwrites existing auto-generated config
 - Generated `config.yaml` has header comment: "auto-generated by ov hermes-entrypoint"
 - To reconfigure: delete `config.yaml` and restart the service
 - API keys synced to `.env` on every start (handles rotation without touching config.yaml)
 - MCP servers written to `config.yaml` `mcp_servers:` section (hermes native format: YAML map with `url:` per server)
 - Hermes auto-registers MCP tools with prefix `mcp_<server_name>_<tool_name>`. Reload at runtime: `/reload-mcp`
+- Browser: when `BROWSER_CDP_URL` is set (auto-provided by chrome layer via `env_provides`), writes `browser.inactivity_timeout: 0` to prevent disconnecting from the shared desktop Chrome. Hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) then use `agent-browser --cdp` to control the shared Chrome instead of launching a separate headless Chromium
 - Source: `layers/hermes/hermes-entrypoint`
 
 **Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior:
@@ -273,7 +275,7 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
 - Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images
 - `ov merge` handles OCI whiteout semantics: regular whiteouts (`.wh.<name>`), opaque whiteouts (`.wh..wh..opq`), and reintroduction-supersedes-whiteout cases. This prevents EEXIST errors when merging layers that contain file deletions. Source: `ov/merge.go` (`whiteoutTarget`, `mergeLayers`)
-- `env_provides:` in `layer.yml` declares env vars injected into OTHER containers at deploy time. Template syntax: `{{.ContainerName}}` (only supported variable). `env:` and `env_provides:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `env_provides:` is injected into consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
+- `env_provides:` in `layer.yml` declares env vars for consumers via pod-aware resolution. Template syntax: `{{.ContainerName}}` (only supported variable). Same-container: hostname rewritten to `localhost`. Cross-container: hostname kept as-is. `env:` and `env_provides:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `env_provides:` is for consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). For same-container, `env:` has higher priority and overrides provides. Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
 - `env_requires:` in `layer.yml` declares env vars the layer MUST have from the environment (e.g., `OPENROUTER_API_KEY`). At `ov config` time, missing required vars produce warnings. Structure: list of `{name, description, default?}`
 - `env_accepts:` in `layer.yml` declares env vars the layer CAN optionally use (e.g., `TELEGRAM_BOT_TOKEN`). No warnings if missing — for documentation only. Same structure as `env_requires`
 - `mcp_provides:` in `layer.yml` declares MCP servers injected into OTHER containers at deploy time. List of `{name, url, transport}`. Template: `{{.ContainerName}}`. Pod-aware: same-container entries resolve to `localhost`. Cleanup automatic on remove. `--update-all` propagates
@@ -500,6 +502,7 @@ For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm d
 **Deploy Hermes with Selkies desktop:**
 `/ov-images:selkies-desktop-hermes` (image config) -> `/ov:config -e OLLAMA_API_KEY=...` -> `/ov:start` -> access `https://localhost:3000`
 Combines Selkies remote desktop with Hermes AI agent + Claude Code + Codex + Gemini. `/ov-images:selkies-desktop-hermes-jupyter` adds Jupyter at `:8888` with MCP notebook access. All three LLM providers (Ollama Cloud, OpenRouter, Local Ollama) auto-configured from env vars.
+**Shared browser:** Chrome layer declares `env_provides: BROWSER_CDP_URL` — hermes auto-receives `http://localhost:9222` (same-container, pod-aware) or `http://ov-<chrome-image>:9222` (cross-container). Hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The only browser binary in the image is Google Chrome — no separate headless Chromium.
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)

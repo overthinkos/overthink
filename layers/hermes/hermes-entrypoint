@@ -23,7 +23,8 @@ if ! grep -q "$MARKER" "$HERMES_HOME/config.yaml" 2>/dev/null; then
         "${OPENROUTER_API_KEY:-}" \
         "${OLLAMA_HOST:-}" \
         "${HERMES_MODEL:-}" \
-        "${OV_MCP_SERVERS:-}" <<'PYEOF'
+        "${OV_MCP_SERVERS:-}" \
+        "${BROWSER_CDP_URL:-}" <<'PYEOF'
 import sys, json, yaml, os
 
 config_path = sys.argv[1]
@@ -32,6 +33,7 @@ openrouter_key = sys.argv[3] or None
 ollama_host = sys.argv[4] or None
 model_override = sys.argv[5] or None
 mcp_json = sys.argv[6] or None
+cdp_url = sys.argv[7] or None
 
 with open(config_path) as f:
     config = yaml.safe_load(f) or {}
@@ -112,6 +114,13 @@ if mcp_json:
     except json.JSONDecodeError:
         print(f"hermes-entrypoint: warning: could not parse OV_MCP_SERVERS", file=sys.stderr)
 
+# --- Browser (shared desktop Chrome via CDP) ---
+
+if cdp_url:
+    browser = config.setdefault('browser', {})
+    browser['inactivity_timeout'] = 0  # Don't disconnect from shared browser
+    configured.append('browser-cdp')
+
 # --- Write config ---
 
 with open(config_path, 'w') as f:
@@ -132,6 +141,11 @@ PYEOF
     fi
 else
     echo "hermes-entrypoint: config.yaml already configured (skipping)"
+fi
+
+# Log browser CDP connection (every start, not guarded by sentinel)
+if [ -n "${BROWSER_CDP_URL:-}" ]; then
+    echo "hermes-entrypoint: browser-cdp=$BROWSER_CDP_URL"
 fi
 
 # Sync API keys to hermes .env (every start — handles key rotation)

@@ -39,6 +39,8 @@ ov config hermes && ov start hermes
 
 All providers whose keys are present get registered simultaneously — the priority order (`OLLAMA_HOST` > `OLLAMA_API_KEY` > `OPENROUTER_API_KEY`) only determines the default. Switch mid-session with `hermes chat --provider openrouter`. MCP servers from co-deployed services are auto-discovered too: `ov config selkies-desktop-hermes-jupyter -e OLLAMA_API_KEY=...` gives you a full Wayland desktop + Hermes + JupyterLab at `:8888`, and hermes automatically connects to the jupyter-colab MCP server (13 tools for notebook manipulation) — no manual MCP configuration needed.
 
+In desktop images (`selkies-desktop-hermes*`), hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome — the same Chrome the user sees via the Selkies stream at `:3000`. The chrome layer's `env_provides: BROWSER_CDP_URL` is pod-aware resolved to `http://localhost:9222`, so hermes connects automatically. No separate headless browser is installed; the user watches hermes browse in real-time.
+
 ## Key Concepts
 
 ### Layers, Images, and Multi-Service Containers

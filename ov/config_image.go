@@ -240,9 +240,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
-	// Keep CLI -e flags + auto-detected env vars as inline env.
+	// Keep CLI -e flags + provides env vars + auto-detected env vars as inline env.
+	// Provides vars (from env_provides) are NOT in the env file — they're resolved
+	// at ov config time from deploy.yml and must remain as inline Environment= entries.
 	if quadletEnvFile != "" {
-		qcfg.Env = c.Env
+		qcfg.Env = append([]string{}, globalEnv...)
+		qcfg.Env = append(qcfg.Env, c.Env...)
 		if detected.AMDGPU && detected.AMDGFXVersion != "" {
 			qcfg.Env = appendEnvUnique(qcfg.Env, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 		}
@@ -1007,11 +1010,12 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			KeyringBackend:  isKeyring,
 		}
 
-		// Suppress file-sourced env vars if using EnvFile
+		// Suppress file-sourced env vars if using EnvFile.
+		// Keep provides env vars — they're not in the env file.
 		if quadletEnvFile != "" {
-			qcfg.Env = nil
+			qcfg.Env = append([]string{}, globalEnv...)
 			if detected.AMDGPU && detected.AMDGFXVersion != "" {
-				qcfg.Env = []string{"HSA_OVERRIDE_GFX_VERSION=" + detected.AMDGFXVersion}
+				qcfg.Env = appendEnvUnique(qcfg.Env, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
 			}
 		}
 

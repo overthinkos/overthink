@@ -266,11 +266,12 @@ func TestGlobalEnvForImage(t *testing.T) {
 		},
 	}
 
-	// Filter out ollama's own env vars
+	// Pod-aware: ollama's own env_provides are included with localhost rewrite
 	got := dc.GlobalEnvForImage("ollama", "ov-ollama")
-	// Should have PGHOST but NOT OLLAMA_HOST (self-excluded)
+	// Should have PGHOST, OLLAMA_HOST (rewritten to localhost), and MCP
 	foundPG := false
 	foundOllama := false
+	ollamaValue := ""
 	foundMCP := false
 	for _, e := range got {
 		if envKey(e) == "PGHOST" {
@@ -278,6 +279,7 @@ func TestGlobalEnvForImage(t *testing.T) {
 		}
 		if envKey(e) == "OLLAMA_HOST" {
 			foundOllama = true
+			ollamaValue = e[len("OLLAMA_HOST="):]
 		}
 		if envKey(e) == "OV_MCP_SERVERS" {
 			foundMCP = true
@@ -286,8 +288,11 @@ func TestGlobalEnvForImage(t *testing.T) {
 	if !foundPG {
 		t.Error("PGHOST should be in globalEnv for ollama")
 	}
-	if foundOllama {
-		t.Error("OLLAMA_HOST should be self-excluded for ollama")
+	if !foundOllama {
+		t.Error("OLLAMA_HOST should be pod-aware (included with localhost) for ollama")
+	}
+	if ollamaValue != "http://localhost:11434" {
+		t.Errorf("OLLAMA_HOST should be rewritten to localhost, got %q", ollamaValue)
 	}
 	if !foundMCP {
 		t.Error("OV_MCP_SERVERS should be injected for ollama")

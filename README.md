@@ -20,6 +20,25 @@ Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layer
 
 One of Overthink's design goals is running sandboxed [OpenClaw](https://github.com/overthinkos/openclaw) systems. The approach flips the usual AI sandboxing model: instead of restricting what the AI agent can do, Overthink gives it full access to a complete desktop environment — Chrome, a Wayland compositor, development tools, network services — and sandboxes the entire desktop inside a container managed by `ov`. The AI agent operates freely within its environment while the host stays fully isolated. This is how images like `openclaw-sway-browser` and `openclaw-ollama-sway-browser` work: a full AI workstation with no host compromise.
 
+### AI Agent Integration
+
+Overthink includes the [Hermes Agent](https://github.com/NousResearch/hermes-agent) — a self-improving AI agent with voice, messaging, and tool-calling. Deploy it with a single command and it auto-configures its LLM provider from environment variables:
+
+```bash
+# Ollama Cloud (no local GPU needed)
+ov config hermes -e OLLAMA_API_KEY=your-key
+ov start hermes
+
+# Or OpenRouter
+ov config hermes -e OPENROUTER_API_KEY=sk-or-xxx
+
+# Or local Ollama sidecar (auto-discovered via env_provides)
+ov config ollama --update-all && ov start ollama
+ov config hermes && ov start hermes
+```
+
+All providers whose keys are present get registered simultaneously — the priority order (`OLLAMA_HOST` > `OLLAMA_API_KEY` > `OPENROUTER_API_KEY`) only determines the default. Switch mid-session with `hermes chat --provider openrouter`. Add a Selkies desktop for a browser-accessible AI workstation: `ov config selkies-desktop-hermes-jupyter -e OLLAMA_API_KEY=...` gives you a full Wayland desktop + Hermes + JupyterLab at `:8888`.
+
 ## Key Concepts
 
 ### Layers, Images, and Multi-Service Containers

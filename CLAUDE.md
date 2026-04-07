@@ -284,6 +284,23 @@ ML layers follow a two-tier pattern that separates environment ownership from po
 
 **Hermes Agent layer** (`hermes`) follows the Tier 2 pattern with `build.sh` (same as selkies): pixi.toml defines the Python env, build.sh clones the hermes-agent repo, pip installs it, and sets up npm deps. The `hermes-playwright` layer is a Tier 1 add-on for Playwright + Chromium.
 
+**Hermes automatic LLM provider configuration** — The `hermes-entrypoint` auto-detects and configures LLM providers on first start based on environment variables. ALL providers whose env vars are set get registered as `custom_providers` in `config.yaml`; priority only determines the default model:
+
+| Priority | Env var | Provider | Default model | Base URL |
+|----------|---------|----------|---------------|----------|
+| 1 | `OLLAMA_HOST` | Local Ollama (`custom`) | `qwen2.5-coder:32b` | `${OLLAMA_HOST}/v1` |
+| 2 | `OLLAMA_API_KEY` | Ollama Cloud (`custom`) | `kimi-k2.5:cloud` | `https://ollama.com/v1` |
+| 3 | `OPENROUTER_API_KEY` | OpenRouter (built-in) | `qwen/qwen3.6-plus:free` | *(managed by hermes)* |
+
+Two-phase configuration: Phase A (first start, guarded by `# ov:provider-configured` sentinel) registers providers and sets the default. Phase B (every start) refreshes API keys for rotation. Override model with `HERMES_MODEL` env var. Switch providers mid-session: `hermes chat --provider openrouter` or `/model custom:ollama-cloud:kimi-k2.5:cloud`. To force full reconfigure: remove the sentinel from `/opt/data/config.yaml` and restart.
+
+**Provider-specific notes:**
+- **Ollama Cloud** uses Bearer token auth (`OLLAMA_API_KEY`) at `https://ollama.com/v1`. `kimi-k2.5:cloud` is a thinking/reasoning model — responses include a `reasoning` field before `content`
+- **OpenRouter** is a built-in hermes provider — no `custom_providers` entry needed, just `OPENROUTER_API_KEY` in `.env`
+- **Local Ollama** requires `api_key: 'ollama'` in `custom_providers` — the OpenAI SDK requires a non-empty value but Ollama ignores it
+- Auxiliary tasks (`compression`, `web_extract`, `vision`) are routed through the default provider
+- Source: `layers/hermes/hermes-entrypoint` (auto-config logic), `layers/hermes/layer.yml` (`env_accepts`)
+
 **Build.sh and npm gotchas** (discovered during hermes testing):
 - Playwright `npx playwright install --with-deps` does NOT support Fedora — falls back to Ubuntu's `apt-get`. Workaround: install Chromium system deps via rpm packages in `layer.yml`, browser binary via `npx playwright install chromium` (without `--with-deps`) in `root.yml`
 - npm packages installed globally (via the npm builder's `package.json`) are in `~/.npm-global/lib/node_modules/` and need `NODE_PATH` to be `require()`d. For project-local deps (like agent-browser), install in `build.sh` instead of `package.json`
@@ -453,12 +470,12 @@ Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`
 `/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
 
 **Deploy Hermes Agent:**
-`/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup) -> `/ov:start` -> `/ov:service` (lifecycle)
-For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global.
+`/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup + provider env vars) -> `/ov:start` -> `/ov:service` (lifecycle)
+For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global. LLM provider auto-configured from `OLLAMA_HOST` / `OLLAMA_API_KEY` / `OPENROUTER_API_KEY` env vars passed via `ov config -e`.
 
 **Deploy Hermes with Selkies desktop:**
-`/ov-images:selkies-desktop-hermes` (image config) -> `/ov:config` -> `/ov:start` -> access `https://localhost:3000`
-Combines Selkies remote desktop with Hermes AI agent + Claude Code + Codex + Gemini. `/ov-images:selkies-desktop-hermes-jupyter` adds Jupyter at `:8888` with MCP notebook access.
+`/ov-images:selkies-desktop-hermes` (image config) -> `/ov:config -e OLLAMA_API_KEY=...` -> `/ov:start` -> access `https://localhost:3000`
+Combines Selkies remote desktop with Hermes AI agent + Claude Code + Codex + Gemini. `/ov-images:selkies-desktop-hermes-jupyter` adds Jupyter at `:8888` with MCP notebook access. All three LLM providers (Ollama Cloud, OpenRouter, Local Ollama) auto-configured from env vars.
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
@@ -501,8 +518,8 @@ Examples where multiple skills cover one topic:
 - **Command Execution:** `ov cmd` (single command with notification) vs `ov shell -c` (full container setup) vs `ov tmux cmd` (send to tmux session) vs `ov record cmd` (send to recording session)
 - **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
 - **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
-- **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested compositor) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
-- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation) vs `/ov-images:selkies-desktop-hermes` (Selkies desktop + hermes + claude-code + codex + gemini) vs `/ov-images:selkies-desktop-hermes-jupyter` (+ jupyter-colab at `:8888`)
+- **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested Wayland compositor for selkies, waits for pixelflux socket) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
+- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes, auto-provider-config) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (headless agent) vs `/ov-images:hermes-playwright` (with browser automation) vs `/ov-images:selkies-desktop-hermes` (Selkies desktop + hermes + claude-code + codex + gemini) vs `/ov-images:selkies-desktop-hermes-jupyter` (+ jupyter-colab at `:8888`). Auto-provider-config: set `OLLAMA_HOST`, `OLLAMA_API_KEY`, or `OPENROUTER_API_KEY` → hermes auto-configures on first start
 - **Tunnels:** `/ov:deploy` (tunnel providers, backend schemes, quadlet integration, deploy.yml) vs `/ov:layer` (port protocol annotations, `ports:` field syntax) vs `/ov:config` (tunnel setup at deploy time)
 
 ### Desktop Automation Hierarchy

@@ -14,6 +14,156 @@ mkdir -p "$HERMES_HOME"/{cron,sessions,logs,hooks,memories,skills}
 [ -f "$HERMES_HOME/config.yaml" ] || cp "$HERMES_SRC/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
 [ -f "$HERMES_HOME/SOUL.md" ] || cp "$HERMES_SRC/docker/SOUL.md" "$HERMES_HOME/SOUL.md"
 
+# Auto-configure LLM provider from environment
+# Priority: OLLAMA_HOST > OLLAMA_API_KEY > OPENROUTER_API_KEY
+MARKER="# ov:provider-configured"
+if [ -n "$OLLAMA_HOST" ] || [ -n "$OLLAMA_API_KEY" ] || [ -n "$OPENROUTER_API_KEY" ]; then
+
+    # Phase A: One-time provider structure setup
+    # Registers ALL providers whose env vars are set. Priority only determines the default.
+    if ! grep -q "$MARKER" "$HERMES_HOME/config.yaml" 2>/dev/null; then
+        python - "$HERMES_HOME/config.yaml" \
+            "${OLLAMA_API_KEY:-}" \
+            "${OPENROUTER_API_KEY:-}" \
+            "${OLLAMA_HOST:-}" \
+            "${HERMES_MODEL:-}" <<'PYEOF'
+import sys, yaml
+
+config_path = sys.argv[1]
+ollama_key = sys.argv[2] or None
+openrouter_key = sys.argv[3] or None
+ollama_host = sys.argv[4] or None
+model_override = sys.argv[5] or None
+
+with open(config_path) as f:
+    config = yaml.safe_load(f) or {}
+
+config.setdefault('model', {})
+aux = config.setdefault('auxiliary', {})
+providers = config.setdefault('custom_providers', [])
+configured = []
+
+# --- Register all available providers ---
+
+if ollama_key:
+    providers[:] = [p for p in providers if p.get('name') != 'ollama-cloud']
+    providers.append({
+        'name': 'ollama-cloud',
+        'base_url': 'https://ollama.com/v1',
+        'api_key': ollama_key,
+    })
+    configured.append('ollama-cloud')
+
+if openrouter_key:
+    # OpenRouter is built-in — just needs OPENROUTER_API_KEY in .env (synced below)
+    configured.append('openrouter')
+
+if ollama_host:
+    base_url = ollama_host.rstrip('/') + '/v1'
+    providers[:] = [p for p in providers if p.get('name') != 'ollama-local']
+    providers.append({
+        'name': 'ollama-local',
+        'base_url': base_url,
+        'api_key': 'ollama',  # required by OpenAI SDK, ignored by Ollama
+    })
+    configured.append('ollama-local')
+
+# --- Set default model based on priority: OLLAMA_HOST > OLLAMA_API_KEY > OPENROUTER_API_KEY ---
+
+if ollama_host:
+    base_url = ollama_host.rstrip('/') + '/v1'
+    config['model']['default'] = model_override or 'qwen2.5-coder:32b'
+    config['model']['provider'] = 'custom'
+    config['model']['base_url'] = base_url
+    config['model']['context_length'] = 32768
+    for task in ('compression', 'web_extract', 'vision'):
+        aux.setdefault(task, {})
+        aux[task]['provider'] = 'custom'
+        aux[task]['base_url'] = base_url
+        aux[task]['api_key'] = 'ollama'
+elif ollama_key:
+    config['model']['default'] = model_override or 'kimi-k2.5:cloud'
+    config['model']['provider'] = 'custom'
+    config['model']['base_url'] = 'https://ollama.com/v1'
+    config['model']['context_length'] = 131072
+    for task in ('compression', 'web_extract', 'vision'):
+        aux.setdefault(task, {})
+        aux[task]['provider'] = 'custom'
+        aux[task]['base_url'] = 'https://ollama.com/v1'
+        aux[task]['api_key'] = ollama_key
+elif openrouter_key:
+    config['model']['default'] = model_override or 'qwen/qwen3.6-plus:free'
+    config['model']['provider'] = 'openrouter'
+    config['model'].pop('base_url', None)
+    config['model'].pop('context_length', None)
+    for task in ('compression', 'web_extract', 'vision'):
+        aux.setdefault(task, {})
+        aux[task]['provider'] = 'openrouter'
+        aux[task].pop('base_url', None)
+        aux[task].pop('api_key', None)
+
+with open(config_path, 'w') as f:
+    yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    f.write('# ov:provider-configured\n')
+
+print('providers: ' + ', '.join(configured))
+PYEOF
+        if [ -n "$OLLAMA_HOST" ]; then
+            echo "hermes-entrypoint: default=local Ollama at $OLLAMA_HOST (model=${HERMES_MODEL:-qwen2.5-coder:32b})"
+        elif [ -n "$OLLAMA_API_KEY" ]; then
+            echo "hermes-entrypoint: default=Ollama Cloud (model=${HERMES_MODEL:-kimi-k2.5:cloud})"
+        else
+            echo "hermes-entrypoint: default=OpenRouter (model=${HERMES_MODEL:-qwen/qwen3.6-plus:free})"
+        fi
+    fi
+
+    # Phase B: Refresh API keys on every start (handles rotation)
+    if grep -q "$MARKER" "$HERMES_HOME/config.yaml" 2>/dev/null; then
+        python - "$HERMES_HOME/config.yaml" \
+            "${OLLAMA_API_KEY:-}" \
+            "${OPENROUTER_API_KEY:-}" <<'PYEOF'
+import sys, yaml
+
+config_path = sys.argv[1]
+ollama_key = sys.argv[2] or None
+openrouter_key = sys.argv[3] or None
+
+with open(config_path) as f:
+    config = yaml.safe_load(f) or {}
+
+changed = False
+
+# Refresh Ollama Cloud API key in custom_providers and auxiliary tasks
+if ollama_key:
+    for p in config.get('custom_providers', []):
+        if p.get('name') == 'ollama-cloud' and p.get('api_key') != ollama_key:
+            p['api_key'] = ollama_key
+            changed = True
+    for task in ('compression', 'web_extract', 'vision'):
+        t = config.get('auxiliary', {}).get(task, {})
+        if t.get('base_url', '').startswith('https://ollama.com') and t.get('api_key') != ollama_key:
+            t['api_key'] = ollama_key
+            changed = True
+
+if changed:
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        f.write('# ov:provider-configured\n')
+PYEOF
+    fi
+
+    # Sync API keys to hermes .env (fallback for hermes internals)
+    for VAR in OLLAMA_API_KEY OPENROUTER_API_KEY; do
+        VAL=$(eval echo "\${$VAR:-}")
+        [ -z "$VAL" ] && continue
+        if ! grep -q "^${VAR}=" "$HERMES_HOME/.env" 2>/dev/null; then
+            echo "${VAR}=${VAL}" >> "$HERMES_HOME/.env"
+        else
+            sed -i "s|^${VAR}=.*|${VAR}=${VAL}|" "$HERMES_HOME/.env"
+        fi
+    done
+fi
+
 # Sync bundled skills
 if [ -d "$HERMES_SRC/skills" ]; then
     python "$HERMES_SRC/tools/skills_sync.py" 2>/dev/null || true

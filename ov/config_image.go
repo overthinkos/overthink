@@ -23,7 +23,7 @@ type ImageConfigCmd struct {
 // ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
 // initializes and mounts encrypted volumes.
 type ImageConfigSetupCmd struct {
-	Image       string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Image       string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Tag         string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	Env         []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
@@ -38,11 +38,30 @@ type ImageConfigSetupCmd struct {
 	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
-	UpdateAll   bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
+	UpdateAll    bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
+	Sidecar      []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
+	ListSidecars bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
 	AutoDetectFlags `embed:""`
 }
 
 func (c *ImageConfigSetupCmd) Run() error {
+	if c.ListSidecars {
+		cfg, err := LoadEmbeddedSidecarConfig()
+		if err != nil {
+			return err
+		}
+		names := make([]string, 0, len(cfg.Sidecars))
+		for name := range cfg.Sidecars {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			sc := cfg.Sidecars[name]
+			fmt.Printf("%-20s %s\n", name, sc.Description)
+		}
+		return nil
+	}
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -50,6 +69,10 @@ func (c *ImageConfigSetupCmd) Run() error {
 
 	if rt.RunMode != "quadlet" {
 		return fmt.Errorf("ov config requires run_mode=quadlet (current: %s)", rt.RunMode)
+	}
+
+	if c.Image == "" {
+		return fmt.Errorf("image name is required")
 	}
 
 	// Handle remote image refs
@@ -213,6 +236,97 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	backend := resolveSecretBackend()
 	isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
+	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
+	var deploySidecars map[string]SidecarDef
+	if dc != nil {
+		if overlay, ok := dc.Images[c.Image]; ok {
+			deploySidecars = overlay.Sidecars
+		}
+	}
+	// Merge --sidecar flags into deploy sidecars
+	for _, scName := range c.Sidecar {
+		if deploySidecars == nil {
+			deploySidecars = make(map[string]SidecarDef)
+		}
+		if _, ok := deploySidecars[scName]; !ok {
+			deploySidecars[scName] = SidecarDef{} // empty override, inherits from template
+		}
+	}
+
+	var resolvedSidecars []ResolvedSidecar
+	var mergedSidecarDefs map[string]SidecarDef
+	if len(deploySidecars) > 0 {
+		// Route CLI -e flags: sidecar-related env vars go to the sidecar, not the app
+		sidecarEnvKeys := SidecarEnvKeys(deploySidecars)
+		var appEnv, sidecarEnvOverrides []string
+		for _, e := range c.Env {
+			key := e
+			if idx := strings.IndexByte(e, '='); idx >= 0 {
+				key = e[:idx]
+			}
+			if scName, ok := sidecarEnvKeys[key]; ok {
+				// Route to sidecar
+				if deploySidecars[scName].Env == nil {
+					def := deploySidecars[scName]
+					def.Env = make(map[string]string)
+					deploySidecars[scName] = def
+				}
+				def := deploySidecars[scName]
+				if idx := strings.IndexByte(e, '='); idx >= 0 {
+					def.Env[key] = e[idx+1:]
+				}
+				deploySidecars[scName] = def
+				sidecarEnvOverrides = append(sidecarEnvOverrides, e)
+			} else {
+				appEnv = append(appEnv, e)
+			}
+		}
+		// Replace c.Env with app-only env vars (sidecar vars saved to deploy.yml)
+		c.Env = appEnv
+
+		// Resolve: embedded templates + deploy.yml overrides
+		var resolveErr error
+		mergedSidecarDefs, resolveErr = ResolveSidecarsForConfig(deploySidecars)
+		if resolveErr != nil {
+			return fmt.Errorf("resolving sidecars: %w", resolveErr)
+		}
+		if len(mergedSidecarDefs) > 0 {
+			resolvedSidecars = ResolveSidecars(mergedSidecarDefs, c.Image, c.Instance)
+		}
+
+		// Log routed env vars
+		if len(sidecarEnvOverrides) > 0 {
+			for _, e := range sidecarEnvOverrides {
+				key := e
+				if idx := strings.IndexByte(e, '='); idx >= 0 {
+					key = e[:idx]
+				}
+				scName := sidecarEnvKeys[key]
+				fmt.Fprintf(os.Stderr, "Routed %s to sidecar %s\n", key, scName)
+			}
+		}
+	}
+
+	// Provision sidecar secrets as podman secrets
+	for i, sc := range resolvedSidecars {
+		if len(sc.Secrets) > 0 {
+			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, sc.Secrets, autoGen)
+			if scErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
+			}
+			resolvedSidecars[i].Secrets = scProvisioned
+			for _, kv := range scFallback {
+				envVars = appendEnvUnique(envVars, kv)
+			}
+		}
+	}
+
+	// When sidecars are present, set PodName to enable pod mode
+	podName := ""
+	if len(resolvedSidecars) > 0 {
+		podName = PodNameInstance(c.Image, c.Instance)
+	}
+
 	qcfg := QuadletConfig{
 		ImageName:       c.Image,
 		ImageRef:        imageRef,
@@ -237,6 +351,8 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		OvBin:           ovBin,
 		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 		KeyringBackend:  isKeyring,
+		PodName:         podName,
+		Sidecars:        resolvedSidecars,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -259,6 +375,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Network:   resolvedNetwork,
 		Security:  &security,
 		Volumes:   deployVolumes,
+		Sidecars:  deploySidecars,
 	})
 
 	content := generateQuadlet(qcfg)
@@ -277,6 +394,27 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)
+
+	// Write pod and sidecar files when sidecars are configured
+	if len(resolvedSidecars) > 0 {
+		// Generate and write .pod file
+		podContent := generatePodQuadlet(qcfg)
+		podPath := filepath.Join(qdir, podQuadletFilenameInstance(c.Image, c.Instance))
+		if err := os.WriteFile(podPath, []byte(podContent), 0600); err != nil {
+			return fmt.Errorf("writing pod file: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s\n", podPath)
+
+		// Generate and write sidecar .container files
+		for _, sc := range resolvedSidecars {
+			scContent := generateSidecarQuadlet(sc, podName)
+			scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(c.Image, c.Instance, sc.Name))
+			if err := os.WriteFile(scPath, []byte(scContent), 0600); err != nil {
+				return fmt.Errorf("writing sidecar file for %s: %w", sc.Name, err)
+			}
+			fmt.Fprintf(os.Stderr, "Wrote %s\n", scPath)
+		}
+	}
 
 	// Write companion tunnel service if cloudflare tunnel is configured
 	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
@@ -636,6 +774,26 @@ func (c *ImageConfigRemoveCmd) Run() error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	_ = cmd.Run()
+
+	// Also disable pod and sidecar services (best-effort)
+	podSvc := PodNameInstance(imageName, c.Instance) + "-pod.service"
+	disablePod := exec.Command("systemctl", "--user", "disable", "--now", podSvc)
+	_ = disablePod.Run()
+
+	// Disable sidecar services by scanning quadlet directory
+	if qdir, qErr := quadletDir(); qErr == nil {
+		podPrefix := PodNameInstance(imageName, c.Instance) + "-"
+		if entries, dErr := os.ReadDir(qdir); dErr == nil {
+			for _, entry := range entries {
+				name := entry.Name()
+				if strings.HasPrefix(name, podPrefix) && strings.HasSuffix(name, ".container") {
+					scSvc := strings.TrimSuffix(name, ".container") + ".service"
+					disableSc := exec.Command("systemctl", "--user", "disable", "--now", scSvc)
+					_ = disableSc.Run()
+				}
+			}
+		}
+	}
 
 	fmt.Fprintf(os.Stderr, "Disabled %s\n", svc)
 	return nil

@@ -33,6 +33,8 @@ type QuadletConfig struct {
 	OvBin          string              // absolute path to ov binary (for ExecStartPre)
 	EncryptedMounts bool               // true when any bind mount is encrypted
 	KeyringBackend  bool               // true when credential store is Secret Service (keyring)
+	PodName        string              // non-empty when this container belongs to a pod (sidecar mode)
+	Sidecars       []ResolvedSidecar   // sidecar definitions (used to detect tailscale sidecar for tunnel)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.
@@ -64,15 +66,21 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 
 	b.WriteString("\n[Container]\n")
+	if cfg.PodName != "" {
+		b.WriteString(fmt.Sprintf("Pod=%s.pod\n", cfg.PodName))
+	}
 	b.WriteString(fmt.Sprintf("Image=%s\n", cfg.ImageRef))
 	b.WriteString(fmt.Sprintf("ContainerName=%s\n", name))
 	workDir := resolveWorkingDir(cfg.Volumes, cfg.BindMounts, cfg.Home)
 	b.WriteString(fmt.Sprintf("WorkingDir=%s\n", workDir))
-	if cfg.Network != "" {
-		b.WriteString(fmt.Sprintf("Network=%s\n", cfg.Network))
-	}
-	for _, port := range cfg.Ports {
-		b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port, cfg.BindAddress)))
+	// When in a pod, network and ports are owned by the pod (shared namespace)
+	if cfg.PodName == "" {
+		if cfg.Network != "" {
+			b.WriteString(fmt.Sprintf("Network=%s\n", cfg.Network))
+		}
+		for _, port := range cfg.Ports {
+			b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port, cfg.BindAddress)))
+		}
 	}
 	for _, vol := range cfg.Volumes {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
@@ -125,7 +133,8 @@ func generateQuadlet(cfg QuadletConfig) string {
 	for _, group := range cfg.Security.GroupAdd {
 		b.WriteString(fmt.Sprintf("GroupAdd=%s\n", group))
 	}
-	if cfg.Security.ShmSize != "" {
+	if cfg.Security.ShmSize != "" && cfg.PodName == "" {
+		// In pod mode, ShmSize is set on the pod (infra container owns /dev/shm)
 		b.WriteString(fmt.Sprintf("ShmSize=%s\n", cfg.Security.ShmSize))
 	}
 	if len(cfg.BindMounts) > 0 {
@@ -171,6 +180,9 @@ func generateQuadlet(cfg QuadletConfig) string {
 	} else {
 		b.WriteString("TimeoutStartSec=900\n")
 	}
+	// Host-based tailscale serve/funnel: always generated when tunnel: tailscale is configured.
+	// Independent of sidecars — the host tunnel serves ports on the host's tailnet,
+	// while the sidecar handles exit node routing on a potentially different tailnet.
 	if cfg.Tunnel != nil && cfg.Tunnel.Provider == "tailscale" && len(cfg.Tunnel.Ports) > 0 {
 		for _, tp := range cfg.Tunnel.Ports {
 			port := fmt.Sprintf("%d", tp.Port)

@@ -122,6 +122,13 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		// Apply deploy.yml overrides
 		MergeDeployOntoMetadata(meta, dc)
 
+		// Sidecars require quadlet mode (pod networking is only available via quadlet)
+		if dc != nil {
+			if overlay, ok := dc.Images[c.Image]; ok && len(overlay.Sidecars) > 0 {
+				return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
+			}
+		}
+
 		uid = meta.UID
 		gid = meta.GID
 		home = meta.Home

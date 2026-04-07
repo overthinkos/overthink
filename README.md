@@ -407,6 +407,20 @@ ov deploy reset [image]                # Remove deploy.yml overrides
 ov deploy path                         # Print deploy.yml file path
 ```
 
+### Sidecar Containers
+
+Attach sidecar containers to any image at deploy time. Sidecars run alongside the app in a shared Podman pod (shared network namespace). Templates are built into the `ov` binary.
+
+```
+ov config --list-sidecars              # List available sidecar templates
+ov config <image> --sidecar tailscale  # Attach Tailscale sidecar
+ov config <image> --sidecar tailscale \
+  -e TS_HOSTNAME=my-app \
+  -e "TS_EXTRA_ARGS=--exit-node=100.80.254.4 --exit-node-allow-lan-access"
+```
+
+The Tailscale sidecar routes outbound internet traffic through a Tailscale exit node while keeping the pod on the "ov" bridge for container-to-container connectivity (dual networking). Sidecar-related `-e` flags (e.g., `TS_*`) are automatically routed to the sidecar instead of the app container. Assignments are saved to `deploy.yml` and persist across `ov config` calls.
+
 ### Virtual Machines
 
 ```

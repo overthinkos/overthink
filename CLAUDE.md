@@ -125,26 +125,26 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 - Browser: when `BROWSER_CDP_URL` is set (auto-provided by chrome layer via `env_provides`), writes `browser.inactivity_timeout: 0` to prevent disconnecting from the shared desktop Chrome. Hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) then use `agent-browser --cdp` to control the shared Chrome instead of launching a separate headless Chromium
 - Source: `layers/hermes/hermes-entrypoint`
 
-**Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior:
-- Layers declare port protocols in `layer.yml`: `ports: ["https+insecure:3000", "tcp:5900", 8888]`
-- Protocol determines the backend URL scheme for `tailscale serve/funnel` and `cloudflared` ingress
-- Stored in OCI label `org.overthinkos.port_protos` (JSON map, only non-http entries)
-- Tailscale schemes: `http` (default), `https`, `https+insecure`, `tcp`, `tls-terminated-tcp`
-- Cloudflare schemes: `http` (default), `https`, `tcp`, `ssh`, `rdp`, `smb`
-- `udp` ports are never tunneled (warning printed); accessible directly between tailnet nodes
-- Scheme → Tailscale flag: `http/https/https+insecure` → `--https`, `tcp` → `--tcp`, `tls-terminated-tcp` → `--tls-terminated-tcp`
-- Scheme → target URL: `schemeTarget(scheme, port)` builds `scheme://127.0.0.1:port` (TCP-family uses `tcp://`)
-- Validation: `ov validate` checks port schemes against provider capabilities (e.g., `ssh` valid for cloudflare but not tailscale)
-- Source: `ov/tunnel.go` (`schemeTarget`, `tailscaleFlag`, `isTCPFamily`, `validTailscaleSchemes`, `validCloudflareSchemes`), `ov/quadlet.go`, `ov/validate.go`
+**Sidecar Containers** -- Deploy-time pod composition for networking and routing:
+- Templates embedded in `ov` binary via `go:embed` (`ov/sidecar.yml`). List with `ov config --list-sidecars`
+- `ov config <image> --sidecar tailscale` attaches at deploy time, saved in `deploy.yml`
+- Generates pod + sidecar + app container quadlets (shared network namespace)
+- Dual networking: pod on "ov" bridge (`Network=ov`) + Tailscale `tailscale0` tun interface for exit node routing
+- `--exit-node-allow-lan-access` exempts bridge subnets (container-to-container stays on bridge)
+- `TS_DEBUG_FIREWALL_MODE=nftables` required (iptables-legacy fails in rootless podman)
+- ShmSize propagated to pod via `PodmanArgs=--shm-size` (per-container ShmSize ignored in pod mode)
+- CLI `-e TS_*` env vars auto-route to the sidecar, not the app container
+- Host `tunnel: tailscale` (ExecStartPost) and sidecar are independent: host serves ports on host tailnet, sidecar routes outbound traffic
+- For details: `/ov:sidecar`. Source: `ov/sidecar.go`, `ov/quadlet_pod.go`
 
-**Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers:
-- SSH: host `$SSH_AUTH_SOCK` → container `/run/host-ssh-auth.sock` + `SSH_AUTH_SOCK` env var
-- GPG: host `S.gpg-agent` (detected via `gpgconf --list-dirs agent-socket`) → container `$HOME/.gnupg/S.gpg-agent` (home from `org.overthinkos.home` image label)
-- Settings: `forward_gpg_agent` and `forward_ssh_agent` (default: `true`). Env: `OV_FORWARD_GPG_AGENT`, `OV_FORWARD_SSH_AGENT`
-- Per-image override: `deploy.yml` `forward_gpg_agent` / `forward_ssh_agent` boolean fields on `DeployImageConfig`
-- Applied in: `ov shell` (new container: volumes + env; exec into running: env only), `ov start` (direct mode only), `ov cmd` (env only)
-- **NOT applied in quadlet mode** — socket paths are session-bound (change between SSH sessions, reboots); quadlets are static systemd units
-- Container has its own keyring — public keys must be imported separately (`gpg --export --armor KEY_ID | ov shell <image> -c 'gpg --import'`)
+**Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior. See `/ov:deploy` for details.
+- Tailscale schemes: `http`, `https`, `https+insecure`, `tcp`, `tls-terminated-tcp`
+- Cloudflare schemes: `http`, `https`, `tcp`, `ssh`, `rdp`, `smb`
+- Source: `ov/tunnel.go`, `ov/quadlet.go`, `ov/validate.go`
+
+**Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers. See `/ov:shell` for details.
+- SSH: host `$SSH_AUTH_SOCK` → container. GPG: host `S.gpg-agent` → container
+- Settings: `forward_gpg_agent`, `forward_ssh_agent` (default: `true`). Not applied in quadlet mode (session-bound paths)
 - The `agent-forwarding` metalayer (`gnupg` + `direnv` + `ssh-client`) provides the container-side binaries. Included in all application images
 - Source: `ov/agent_forward.go` (socket detection, mount resolution), `ov/runtime_config.go` (settings)
 
@@ -363,7 +363,7 @@ Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usa
 | `cmd <image> <command>` | `/ov:cmd` |
 | `shell` | `/ov:shell` |
 | `dbus` (notify, call, list, introspect) | `/ov:dbus` |
-| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning + env_provides injection + env_requires validation), `config --update-all`, `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:enc` |
+| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning + env_provides + sidecars), `config --sidecar`, `config --list-sidecars`, `config --update-all`, `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc` |
 | `start` | `/ov:start` (requires `ov config` first in quadlet mode) |
 | `stop` | `/ov:stop` |
 | `status` (`--all`, `--json`) | `/ov:status` |
@@ -407,6 +407,10 @@ Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml) -> `/ov:start` -> `/ov
 `ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` (interact) -> `ov record stop <image> -o output`
 Skills: `/ov:record` -> `/ov-layers:wl-record-pixelflux` or `/ov-layers:wf-recorder` (desktop) or `/ov-layers:asciinema` (terminal)
 Use `/ov:wl-overlay` for in-recording overlays (title cards, lower-thirds, countdowns, fade transitions) — composited by the compositor, appear natively in recordings without post-production.
+
+**Deploy with Tailscale exit node:**
+`ov secrets gpg set TS_AUTHKEY <key>` -> `ov config <image> --sidecar tailscale -e TS_HOSTNAME=<name> -e "TS_EXTRA_ARGS=--exit-node=<ip> --exit-node-allow-lan-access"` -> `ov start <image>` -> `podman exec ov-<image>-tailscale tailscale set --exit-node=<ip> --exit-node-allow-lan-access` (first time only)
+Skills: `/ov:sidecar` (templates, pod architecture) + `/ov:secrets` (auth key) -> `/ov:config` (--sidecar flag) -> `/ov-images:<name>` (verification)
 
 **Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov settings set engine.build podman`.
 
@@ -552,6 +556,7 @@ Examples where multiple skills cover one topic:
 - **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested Wayland compositor for selkies, waits for pixelflux socket) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
 - **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes, auto-provider-config) vs `/ov-layers:hermes-full` (metalayer: hermes + claude-code + codex + gemini + dev-tools + devops-tools + ov) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (minimal headless) vs `/ov-images:hermes-full` (full-featured standalone) vs `/ov-images:hermes-playwright` (with local browser). Deploy separately alongside `selkies-desktop` (provides `BROWSER_CDP_URL`) and `jupyter-colab` (provides MCP). Auto-provider-config: set `OLLAMA_HOST`, `OLLAMA_API_KEY`, or `OPENROUTER_API_KEY` → hermes auto-configures on first start
 - **Tunnels:** `/ov:deploy` (tunnel providers, backend schemes, quadlet integration, deploy.yml) vs `/ov:layer` (port protocol annotations, `ports:` field syntax) vs `/ov:config` (tunnel setup at deploy time)
+- **Sidecars/Tailscale:** `/ov:sidecar` (sidecar config, pod networking, exit node routing) vs `/ov:deploy` (tunnel: tailscale host-based serve, deploy.yml sidecars field) vs `/ov-images:selkies-desktop` (full Tailscale deployment example)
 
 ### Desktop Automation Hierarchy
 

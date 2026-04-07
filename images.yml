@@ -463,6 +463,9 @@ images:
       - "9222:9222"
     platforms:
       - linux/amd64
+    tunnel:
+      provider: tailscale
+      private: all
 
   selkies-desktop-nvidia:
     base: nvidia

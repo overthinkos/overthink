@@ -296,6 +296,41 @@ func (c *RemoveCmd) Run() error {
 		}
 		fmt.Fprintf(os.Stderr, "Removed %s\n", qpath)
 
+		// Remove pod file if it exists (sidecar mode)
+		podPath := filepath.Join(qdir, podQuadletFilenameInstance(imageName, c.Instance))
+		if err := os.Remove(podPath); err == nil {
+			fmt.Fprintf(os.Stderr, "Removed %s\n", podPath)
+		}
+
+		// Remove sidecar .container files (glob for ov-<image>-*.container in quadlet dir)
+		podPrefix := PodNameInstance(imageName, c.Instance) + "-"
+		if entries, err := os.ReadDir(qdir); err == nil {
+			for _, entry := range entries {
+				name := entry.Name()
+				if strings.HasPrefix(name, podPrefix) && strings.HasSuffix(name, ".container") {
+					scPath := filepath.Join(qdir, name)
+					if err := os.Remove(scPath); err == nil {
+						fmt.Fprintf(os.Stderr, "Removed %s\n", scPath)
+					}
+				}
+			}
+		}
+
+		// Remove sidecar config files (e.g., tailscale serve config)
+		if scDir, scErr := sidecarConfigDir(); scErr == nil {
+			scPrefix := PodNameInstance(imageName, c.Instance) + "-"
+			if entries, err := os.ReadDir(scDir); err == nil {
+				for _, entry := range entries {
+					if strings.HasPrefix(entry.Name(), scPrefix) {
+						scfPath := filepath.Join(scDir, entry.Name())
+						if err := os.Remove(scfPath); err == nil {
+							fmt.Fprintf(os.Stderr, "Removed %s\n", scfPath)
+						}
+					}
+				}
+			}
+		}
+
 		// Stop companion services before removing (best-effort)
 		stopTunnel := exec.Command("systemctl", "--user", "stop", tunnelServiceFilename(imageName))
 		_ = stopTunnel.Run()

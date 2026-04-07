@@ -1,0 +1,53 @@
+# sidecar.yml — Sidecar container definitions
+#
+# Each sidecar defines a reusable container template for pod composition.
+# Images reference sidecars by name in their sidecars: field and can override any field.
+# Deploy.yml can further override per machine.
+#
+# Three-tier cascade: sidecar.yml template -> images.yml per-image -> deploy.yml per-machine
+#
+# When any sidecar is configured for an image, ov config generates:
+#   - <image>.pod           — Podman pod (shared network namespace, port mappings, bridge network)
+#   - <image>-<sidecar>.container — One per sidecar (runs in the pod)
+#   - <image>.container     — App container (modified: Pod= directive, no ports/network)
+#
+# Dual networking: the pod stays on the "ov" bridge (reachable by other ov containers)
+# while the Tailscale sidecar creates a tun interface for exit node routing.
+# --exit-node-allow-lan-access exempts bridge subnets so container-to-container
+# traffic stays on the bridge; only internet-bound traffic goes through the exit node.
+
+sidecars:
+  tailscale:
+    description: Tailscale VPN sidecar for exit node routing with dual networking
+    image: ghcr.io/tailscale/tailscale:latest
+    env:
+      # State persistence — survives restarts, avoids re-authentication
+      TS_STATE_DIR: /var/lib/tailscale
+      # Only authenticate if not already logged in (persistent state)
+      TS_AUTH_ONCE: "true"
+      # Kernel mode — REQUIRED for exit node routing (routes ALL pod traffic).
+      # Userspace mode (TS_USERSPACE=true) only tunnels Tailscale-process traffic.
+      TS_USERSPACE: "false"
+      # Force nftables firewall mode. The official tailscale image defaults to
+      # iptables-legacy which fails in rootless podman ("Permission denied").
+      # Tailscale's Go nftables library works without the nft userspace binary.
+      TS_DEBUG_FIREWALL_MODE: nftables
+      # Accept tailnet MagicDNS. Uses split DNS: .ts.net handled by Tailscale,
+      # everything else (including bridge hostnames) falls back to upstream DNS.
+      TS_ACCEPT_DNS: "true"
+      # Health check endpoint at TS_LOCAL_ADDR_PORT/healthz
+      TS_ENABLE_HEALTH_CHECK: "true"
+      TS_LOCAL_ADDR_PORT: "[::]:9002"
+    volumes:
+      - name: state
+        path: /var/lib/tailscale
+    security:
+      # NET_ADMIN: iptables/nftables rules, IP forwarding, tun device management
+      # SYS_MODULE: kernel module loading for tun/tap device
+      cap_add: [NET_ADMIN, SYS_MODULE]
+      # TUN/TAP virtual network device (kernel mode only)
+      devices: ["/dev/net/tun:/dev/net/tun"]
+    secrets:
+      - name: ts-authkey
+        env: TS_AUTHKEY
+        description: Tailscale auth key or OAuth client secret

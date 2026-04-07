@@ -34,6 +34,7 @@ type DeployImageConfig struct {
 	Secrets         []DeploySecretConfig `yaml:"secrets,omitempty"`
 	ForwardGpgAgent *bool                `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
 	ForwardSshAgent *bool                `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
+	Sidecars        map[string]SidecarDef `yaml:"sidecars,omitempty"`          // Sidecar container overrides
 }
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.
@@ -137,7 +138,6 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Engine != "" {
 			img.Engine = overlay.Engine
 		}
-
 		cfg.Images[name] = img
 	}
 }
@@ -481,6 +481,7 @@ type SaveDeployStateInput struct {
 	Network   string
 	Security  *SecurityConfig
 	Volumes   []DeployVolumeConfig
+	Sidecars  map[string]SidecarDef
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
@@ -508,6 +509,9 @@ func saveDeployState(imageName string, input SaveDeployStateInput) {
 	}
 	if input.Security != nil {
 		entry.Security = input.Security
+	}
+	if len(input.Sidecars) > 0 {
+		entry.Sidecars = input.Sidecars
 	}
 	dc.Images[imageName] = entry
 	if err := SaveDeployConfig(dc); err != nil {

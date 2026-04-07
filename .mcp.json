@@ -3,6 +3,10 @@
     "jupyter-colab": {
       "type": "http",
       "url": "http://localhost:8888/mcp"
+    },
+    "chrome-devtools": {
+      "type": "http",
+      "url": "http://localhost:9224/mcp"
     }
   }
 }

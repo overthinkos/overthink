@@ -1,6 +1,9 @@
 depends:
   - supervisord
 
+layers:
+  - chrome-devtools-mcp
+
 path_append:
   - "~/.local/bin"
 

@@ -38,141 +38,28 @@ You have all the time in the world and taking the time to get things properly do
 Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
-- **Build mode:** Parses `images.yml`, scans `layers/`, resolves dependency graphs, validates, generates Containerfiles, builds images via `<engine> build`.
-- **Deploy mode:** Reads OCI image labels + `~/.config/ov/deploy.yml` (no `images.yml` needed). `ov config`/`start`/`stop`/`status`/`logs`/`update`/`remove` all work standalone with just the container image. `ov config` is the single entry point for deployment setup (quadlet + secrets + encrypted volumes + data provisioning).
+- **Build mode:** Parses `images.yml`, resolves layers, generates Containerfiles, builds images. See `/ov:build`, `/ov:generate`.
+- **Deploy mode:** Reads OCI labels + `deploy.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). See `/ov:config`, `/ov:deploy`.
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
-**Credential & Secret Management** -- Abstracted via `CredentialStore` interface:
-- **Host-side credentials** (VNC passwords) stored in system keyring (GNOME Keyring, KDE Wallet, KeePassXC) or plaintext config fallback. Backend auto-detected; override with `secret_backend` config key.
-- **KeePass .kdbx backend** for systems without Secret Service (headless servers, SSH sessions). `ov secrets init` creates a database; auto-detected when keyring is unavailable and `secrets.kdbx_path` is configured. Override with `ov --kdbx <path>` global flag. `ov secrets` commands manage entries directly.
-- **KeePass password caching** via Linux kernel keyring (`KEY_SPEC_USER_KEYRING`). The kdbx master password is cached for 1 hour by default after the first interactive prompt, so subsequent `ov` commands reuse it automatically. Resolution chain: `OV_KDBX_PASSWORD` env var > kernel keyring lookup (key: `ov-kdbx-password`) > interactive prompt (systemd-ask-password or terminal) > auto-store in kernel keyring with configured TTL. Config keys: `secrets.kdbx_cache` (env: `OV_KDBX_CACHE`, default: `true`), `secrets.kdbx_cache_timeout` (env: `OV_KDBX_CACHE_TIMEOUT`, default: `3600`). Uses `golang.org/x/sys/unix` keyctl syscalls. Source: `ov/keyctl.go`, `ov/credential_kdbx.go`.
-- **Container secrets** declared in `layer.yml` `secrets` field. Metadata stored in OCI image labels (`org.overthinkos.secrets`). At configure time, `ov config <image>` provisions Podman secrets and generates `Secret=` quadlet directives. **Secret provisioning is idempotent** — existing Podman secrets are never overwritten. This prevents overwriting passwords that stateful services (e.g., PostgreSQL) have already been initialized with. To force re-provisioning: `podman secret rm <name> && ov config setup <image>`. `--password auto` generates all secrets automatically; `--password manual` prompts for each. Docker falls back to env var injection. Encrypted volumes are mounted via `ExecStartPre=ov config mount` in the quadlet. Each gocryptfs mount runs inside a `systemd-run --scope --user --unit=ov-enc-<image>-<volume>` scope unit, decoupling its lifecycle from the container service. Scope units survive container stop/restart, keeping mounts accessible to the host user. The `-allow_other` flag is required for rootless podman with `--userns=keep-id` (crun's mount setup runs as inner uid 0 → host subuid, not the mount owner). `ov config unmount` stops scope units after fusermount. With Secret Service backend: auto-starts after login (waits for keyring unlock, `TimeoutStartSec=0`). The keyring wait and quadlet `KeyringBackend` flag both check the *configured* `secret_backend` setting via `resolveSecretBackend()` (not the runtime probe result), so the quadlet is correct even when generated with a locked keyring. Resets the cached credential store + keyring state on each retry so the keyring is detected once D-Bus becomes available at boot. With KeePass or no backend: requires `ov start` (prompts for password). Per-volume explicit paths supported via `--volume name:encrypt:/path`.
-- **Resolution chain:** env var > keyring > config file > default. Migration: `ov settings migrate-secrets`.
-- Source: `ov/credential_store.go` (interface), `ov/credential_keyring.go`, `ov/credential_config.go`, `ov/credential_kdbx.go`, `ov/secrets.go`
+**Key subsystems** (refer to skills for full details):
 
-**Project-Level Environment Secrets (direnv + GPG)** -- Separate from ov's credential store:
-- Project-level env vars (e.g., `GMAIL_USER`, `GMAIL_PASSWORD`) are stored in `.secrets` — a GPG-encrypted file containing `KEY=VALUE` lines (same format as `.env`)
-- `.envrc` calls `eval "$(ov secrets gpg env)"` which decrypts `.secrets` in memory via gpg-agent — no plaintext on disk. No external `direnvrc` dependency needed
-- Prerequisites: gpg-agent running with passphrase cached (locally via KeePassXC/pinentry, or remotely via SSH agent forwarding)
-- Managed via `ov secrets gpg` subcommands: `show`, `env`, `edit`, `encrypt`, `decrypt`, `set`, `unset`, `add-recipient`, `recipients`, `import-key`, `export-key`, `setup`, `doctor`. All shell out to `gpg`. Example: `eval "$(ov secrets gpg env)"` to load secrets, `ov secrets gpg set API_KEY sk-xxx`, `ov secrets gpg show`, `ov secrets gpg edit`
-- `ov secrets gpg env` silently exits 0 if `.secrets` doesn't exist (safe for `.envrc`). Outputs `export KEY='value'` lines parsed via `ParseEnvBytes` (skips comments/blanks, strips quotes)
-- **GPG key management:** `ov secrets gpg import-key <path>` imports from file/directory, `--from-keystore` restores from KeePassXC Secret Service. `ov secrets gpg export-key <dir>` exports to filesystem, `--to-keystore` backs up to KeePassXC. `ov secrets gpg setup` configures gpg-agent (pinentry-qt + 8h cache), enables systemd sockets, imports/generates key, stores passphrase in Secret Service for all keygrips (primary + subkeys). `ov secrets gpg doctor` validates the full chain. `--prompt-passphrase` / `-p` flag on setup for secure interactive entry
-- **KeePassXC/Secret Service integration:** pinentry-qt (linked against libsecret) queries `org.freedesktop.secrets` (KeePassXC) for passphrase lookup using schema `org.gnupg.Passphrase` with `keygrip` attribute. `presetPassphrasesFromSS()` injects passphrases from Secret Service into gpg-agent cache via `gpg-preset-passphrase`, bypassing pinentry for non-interactive contexts (doctor, setup verification, CI). Key backups stored with schema `org.gnupg.Key` and `keyid` attribute. On decryption failure, `diagnoseGPGDecryptionFailure()` prints actionable diagnostics: recipient key ID, keyring status, Secret Service availability, and specific `ov secrets gpg` fix commands
-- `.secrets` is gitignored (`.gitignore`). `.env` is also gitignored and Syncthing-ignored
-- **Distinction:** `.secrets`/direnv handles project-level shell env vars loaded before any command. ov's credential store (`ov secrets`, keyring, kdbx) handles container-level secrets (VNC passwords, service credentials) provisioned at `ov config` time
-- Source: `ov/secrets_gpg.go` (`SecretsGpgEnvCmd`, `SecretsGpgSetupCmd`, `SecretsGpgDoctorCmd`, `SecretsGpgImportKeyCmd`, `SecretsGpgExportKeyCmd`, `diagnoseGPGDecryptionFailure`, `presetPassphrasesFromSS`), `ov/envfile.go` (`ParseEnvBytes`)
-
-**Volume Management** -- Unified deploy-time volume backing:
-- Layers declare `volumes:` in `layer.yml` (name + container path) -- what persistent storage is needed
-- All volumes default to Docker/Podman named volumes (`ov-<image>-<name>`)
-- At `ov config` time, any volume's backing can be changed per-volume: named volume (default), host bind mount, or encrypted (gocryptfs)
-- Flags: `--volume name:type[:path]` (canonical), `--bind name[=path]` (shorthand), `--encrypt name` (shorthand). Type accepts both `encrypted` and `encrypt` (normalized)
-- Per-volume encrypted path: `--volume name:encrypt:/path` stores `cipher/` and `plain/` directly inside the specified path (no `ov-<image>-<name>` prefix). Without explicit path, uses global `encrypted_storage_path` with prefix (backward compat)
-- Env var automation: `OV_VOLUMES_<IMAGE>` (e.g., `OV_VOLUMES_IMMICH="library:bind:/mnt/nas,import:bind"`)
-- Auto-path for bind mounts without explicit host path: `<volumes_path>/<image>/<name>` (default: `~/.local/share/ov/volumes/`)
-- Configurable base: `ov settings set volumes_path /mnt/nas/ov-volumes` (env: `OV_VOLUMES_PATH`)
-- Deploy.yml persists volume config: `volumes: [{name: data, type: bind, host: ~/data}]`. For encrypted type, `host:` stores the per-volume storage directory
-- Encrypted volumes (default, no host): gocryptfs at `<encrypted_storage_path>/ov-<image>-<name>/{cipher,plain}`. With explicit host path: `<host>/{cipher,plain}`
-- **Data provisioning:** `ov config` automatically provisions data from data layers into bind-backed volumes (`--seed` default true). `ov update` merges new data non-destructively (`cp -an`). `--force-seed` overwrites. `--data-from <image>` seeds from a separate data image. Deploy.yml tracks `data_seeded` (bool) and `data_source` (image:tag) per volume
-- There is NO `bind_mounts` field in `images.yml` or OCI labels -- volume backing is purely a deploy-time decision
-- Source: `ov/deploy.go` (`DeployVolumeConfig`, `ResolveVolumeBacking`), `ov/data.go` (`provisionData`), `ov/enc.go` (`ResolvedBindMount`), `ov/runtime_config.go` (`VolumesPath`)
-
-**Environment Provides (`env_provides`)** -- Pod-aware cross-container environment injection:
-- Layers declare `env_provides:` in `layer.yml` — a `map[string]string` of env vars to inject into OTHER containers when this service is deployed. Distinct from `env:` which is baked into the service's own image
-- Templates support `{{.ContainerName}}` which resolves to the actual container name (e.g., `ov-ollama`, or `ov-ollama-staging` with `--instance staging`)
-- At `ov config` time, `injectEnvProvides()` resolves templates and stores entries in `deploy.yml` under `provides.env:` (list of `{name, value, source}`)
-- `GlobalEnvForImage()` in `provides.go` resolves both env and MCP provides for a given consumer image. Both use **pod-aware resolution**: same-image entries get container hostname rewritten to `localhost` (co-located services); cross-image entries keep their container hostname. If both local and remote entries share a name, local wins
-- `--update-all` flag on `ov config` regenerates quadlets for all other deployed images to pick up new provides entries
-- On `ov config remove` / `ov remove`, `cleanDeployEntry()` removes provides entries injected by the removed image (both env and MCP)
-- Env var priority (last wins): provides.env (global) < per-image deploy env < deploy env_file < workspace .env < CLI --env-file < CLI -e flags. For same-container, the baked-in `env:` (per-image deploy env) has higher priority than pod-aware provides — server bind addresses like `OLLAMA_HOST=0.0.0.0` are never overridden by the provides value
-- OCI label `org.overthinkos.env_provides` stores the templates in the image for deploy-only scenarios (no `images.yml` needed)
-- **Quadlet EnvironmentFile handling:** When a quadlet uses `EnvironmentFile=` (from workspace `.env`, deploy.yml `env_file`, or CLI `--env-file`), provides env vars are preserved as inline `Environment=` entries because they're resolved from deploy.yml at `ov config` time and are NOT in the env file. Only file-sourced vars are suppressed to avoid duplication
-- Source: `ov/provides.go` (`GlobalEnvForImage`, `podAwareEnvProvides`, `EnvProvidesEntry`, `ProvidesConfig`), `ov/config_image.go` (`injectEnvProvides`, `updateAllDeployedQuadlets`), `ov/deploy.go` (`cleanDeployEntry`), `ov/envfile.go` (`ResolveEnvVars`), `ov/validate.go` (`validateEnvProvides`), `ov/generate.go` (emits label), `ov/labels.go` (`LabelEnvProvides`, `ImageMetadata.EnvProvides`)
-
-**Environment Requires & Accepts (`env_requires`, `env_accepts`)** -- Declared env var dependencies:
-- Layers declare `env_requires:` and `env_accepts:` in `layer.yml` — lists of `EnvDependency` structs (name, description, optional default)
-- `env_requires:` — env vars the layer MUST have from the environment to function (e.g., API keys). At `ov config` time, `warnMissingEnvRequires()` prints warnings for missing required vars
-- `env_accepts:` — env vars the layer CAN optionally use (e.g., optional messaging tokens). No warnings if missing — purely for documentation and discoverability
-- Both fields use the same struct: `EnvDependency{Name, Description, Default}`
-- Multiple layers in an image merge their declarations; deduplicated by name (last wins, sorted for deterministic output)
-- OCI labels: `org.overthinkos.env_requires` and `org.overthinkos.env_accepts` (JSON arrays)
-- Validation: name must be valid env var format, no duplicates within same layer, same var cannot appear in both requires and accepts
-- `env_requires` and `env_accepts` are distinct from `env:` (baked into image), `env_provides:` (injected into other containers), and `secrets:` (provisioned from credential store)
-- Source: `ov/layers.go` (`EnvDependency`, `LayerYAML.EnvRequires/EnvAccepts`), `ov/validate.go` (`validateEnvDeps`), `ov/config_image.go` (`warnMissingEnvRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelEnvRequires`, `LabelEnvAccepts`, `ImageMetadata.EnvRequires/EnvAccepts`)
-
-**MCP Provides (`mcp_provides`)** -- Cross-container MCP server discovery:
-- Layers declare `mcp_provides:` in `layer.yml` — a list of MCP server declarations injected into OTHER containers when this service is deployed. Follows the same pattern as `env_provides`
-- Each entry: `{name, url, transport}`. URL supports `{{.ContainerName}}` template. Transport defaults to `"http"` (streamable HTTP)
-- At `ov config` time, `injectMCPProvides()` resolves templates and stores entries in `deploy.yml` under `provides.mcp:` with source tracking
-- Consumer containers receive `OV_MCP_SERVERS` JSON env var with all resolved MCP server entries
-- **Pod-aware**: When consumer and provider are in the same container, `podAwareMCPProvides()` resolves own entries to `localhost` instead of container hostname. If both local and remote entries share a name, local wins
-- **Pod-aware** (same as env_provides): same-image entries resolve to `localhost`, cross-image entries keep their container hostname. No self-exclusion — MCP servers are always included for same-container consumers
-- On `ov config remove` / `ov remove`, MCP entries are automatically cleaned from deploy.yml
-- OCI labels: `org.overthinkos.mcp_provides`, `org.overthinkos.mcp_requires`, `org.overthinkos.mcp_accepts`
-- `mcp_requires:` and `mcp_accepts:` follow the same pattern as `env_requires`/`env_accepts` (same `EnvDependency` struct). `mcp_requires` produces warnings at `ov config` time for missing servers
-- Validation: name must not be empty, no duplicates, URL must not be empty, only `{{.ContainerName}}` template allowed, transport must be `http` or `sse`
-- Source: `ov/provides.go` (`podAwareEnvProvides`, `podAwareMCPProvides`, shared types and generics), `ov/layers.go` (`MCPServerYAML`, `LayerYAML.MCPProvides/Requires/Accepts`), `ov/validate.go` (`validateMCPProvides`, `validateMCPDeps`), `ov/config_image.go` (`injectMCPProvides`, `warnMissingMCPRequires`), `ov/generate.go` (emits labels), `ov/labels.go` (`LabelMCPProvides/Requires/Accepts`)
-
-**Hermes auto-configuration** — Single-phase, first-start-only configuration of LLM providers, MCP servers, and browser:
-- One Python script configures LLM providers (from `OLLAMA_HOST`/`OLLAMA_API_KEY`/`OPENROUTER_API_KEY`), MCP servers (from `OV_MCP_SERVERS`), and browser (from `BROWSER_CDP_URL`) in a single pass
-- Guarded by `# ov:auto-configured` sentinel — runs only once, never overwrites existing auto-generated config
-- Generated `config.yaml` has header comment: "auto-generated by ov hermes-entrypoint"
-- To reconfigure: delete `config.yaml` and restart the service
-- API keys synced to `.env` on every start (handles rotation without touching config.yaml)
-- MCP servers written to `config.yaml` `mcp_servers:` section (hermes native format: YAML map with `url:` per server)
-- Hermes auto-registers MCP tools with prefix `mcp_<server_name>_<tool_name>`. Reload at runtime: `/reload-mcp`
-- Browser: when `BROWSER_CDP_URL` is set (auto-provided by chrome layer via `env_provides`), writes `browser.inactivity_timeout: 0` to prevent disconnecting from the shared desktop Chrome. Hermes browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) then use `agent-browser --cdp` to control the shared Chrome instead of launching a separate headless Chromium
-- Source: `layers/hermes/hermes-entrypoint`
-
-**Sidecar Containers** -- Deploy-time pod composition for networking and routing:
-- Templates embedded in `ov` binary via `go:embed` (`ov/sidecar.yml`). List with `ov config --list-sidecars`
-- `ov config <image> --sidecar tailscale` attaches at deploy time, saved in `deploy.yml`
-- Generates pod + sidecar + app container quadlets (shared network namespace)
-- Dual networking: pod on "ov" bridge (`Network=ov`) + Tailscale `tailscale0` tun interface for exit node routing
-- `--exit-node-allow-lan-access` exempts bridge subnets (container-to-container stays on bridge)
-- `TS_DEBUG_FIREWALL_MODE=nftables` required (iptables-legacy fails in rootless podman)
-- ShmSize propagated to pod via `PodmanArgs=--shm-size` (per-container ShmSize ignored in pod mode)
-- CLI `-e TS_*` env vars auto-route to the sidecar, not the app container
-- Host `tunnel: tailscale` (ExecStartPost) and sidecar are independent: host serves ports on host tailnet, sidecar routes outbound traffic
-- For details: `/ov:sidecar`. Source: `ov/sidecar.go`, `ov/quadlet_pod.go`
-
-**Tunnel Backend Schemes** -- Port protocol annotations control tunnel behavior. See `/ov:deploy` for details.
-- Tailscale schemes: `http`, `https`, `https+insecure`, `tcp`, `tls-terminated-tcp`
-- Cloudflare schemes: `http`, `https`, `tcp`, `ssh`, `rdp`, `smb`
-- Source: `ov/tunnel.go`, `ov/quadlet.go`, `ov/validate.go`
-
-**Agent Forwarding (SSH & GPG)** -- Runtime socket forwarding into containers. See `/ov:shell` for details.
-- SSH: host `$SSH_AUTH_SOCK` → container. GPG: host `S.gpg-agent` → container
-- Settings: `forward_gpg_agent`, `forward_ssh_agent` (default: `true`). Not applied in quadlet mode (session-bound paths)
-- The `agent-forwarding` metalayer (`gnupg` + `direnv` + `ssh-client`) provides the container-side binaries. Included in all application images
-- Source: `ov/agent_forward.go` (socket detection, mount resolution), `ov/runtime_config.go` (settings)
+| Subsystem | Summary | Skill |
+|-----------|---------|-------|
+| Credentials & Secrets | Keyring, KeePass `.kdbx`, GPG-encrypted `.secrets`, kernel keyring caching | `/ov:secrets`, `/ov:config` |
+| Volumes | Named, bind, or encrypted (gocryptfs) — deploy-time choice per volume | `/ov:deploy`, `/ov:config` |
+| env_provides / requires / accepts | Cross-container env injection with pod-aware resolution, `--update-all` propagation | `/ov:config`, `/ov:layer` |
+| mcp_provides / requires / accepts | Cross-container MCP server discovery, consumers receive `OV_MCP_SERVERS` JSON | `/ov:config`, `/ov:layer` |
+| Hermes auto-configuration | First-start LLM + MCP + browser config, sentinel-guarded. Delete `config.yaml` to reconfigure | `/ov-layers:hermes` |
+| Sidecars | Deploy-time pod composition (`--sidecar tailscale`), dual networking | `/ov:sidecar` |
+| Tunnels | Tailscale/Cloudflare with backend schemes (`http`, `https+insecure`, `tcp`, etc.) | `/ov:deploy` |
+| Agent Forwarding | SSH/GPG socket forwarding into containers | `/ov:shell` |
+| Init Systems | supervisord/systemd, fully defined in `init.yml` — no Go code changes to add new ones | `/ov:generate`, `/ov:layer` |
+| Multi-distro | `distro:` identity tags + `build:` package formats, tag-based dispatch in layer files | `/ov:build`, `/ov:layer` |
+| Generation | Containerfiles, service configs, traefik routes in `.build/` (disposable, gitignored) | `/ov:generate` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
-
-**What gets generated** (`ov generate`):
-- `.build/<image>/Containerfile` -- one per image, unconditional `RUN` steps only
-- `.build/<image>/traefik-routes.yml` -- traefik dynamic config (only for images with `route` layers)
-- `.build/<image>/<fragment_dir>/*.conf` -- init system service configs (driven by `init.yml`, e.g., `supervisor/` for supervisord, `systemd/` for systemd)
-- `.build/_layers/<name>` -- symlinks to remote layer directories (only when remote layers used)
-
-Generation is idempotent. `.build/` is disposable and gitignored.
-
-**Generic init system support via `init.yml`:**
-- Init systems (supervisord, systemd, s6, etc.) are fully defined in `init.yml` at project root
-- Each init system declares: detection rules (`layer_fields`, `layer_files`), build model (`fragment_assembly` or `file_copy`), Go templates for fragment generation, Containerfile stage emission, config assembly, entrypoint, runtime service management commands, and OCI labels
-- Adding a new init system requires only editing `init.yml` -- no Go code changes
-- `service:` field in layer.yml maps to supervisord (via `layer_fields: [service]`), `*.service` files and `system_services:` map to systemd (via `layer_files` and `layer_fields`)
-- Images use `org.overthinkos.init` OCI label to identify their init system at runtime
-- Per-init service list stored in `org.overthinkos.services.<init>` label
-- Source: `init.yml` (definitions), `ov/init_config.go` (Go structs + loading + template rendering)
-
-**Multi-distro support via `distro:` and `build:` fields:**
-- `distro:` — Distro identity tags in priority order: `distro: ["fedora:43", fedora]`. For packages: first matching section wins (override). For tasks: all matching run (additive).
-- `build:` — Package formats tied to builders: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Replaces old `pkg:` field.
-- `builds:` — Builder capabilities on builder images (unchanged): `builds: [pixi, npm, cargo]`
-- Tags union (`org.overthinkos.tags`) = `["all"]` + distro + build formats — used for task matching
-- Source: `ov/config.go` (`ResolvedImage.Distro`, `ResolvedImage.BuildFormats`, `MatchingTasks`), `ov/format_config.go` (YAML config loading), `ov/format_template.go` (template rendering), `ov/init_config.go` (init system config), `distro.yml` + `builder.yml` + `init.yml` (format definitions at project root, referenced via `format_config:` in `images.yml`)
 
 **Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.39" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
 
@@ -194,7 +81,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (157 layers)
++-- layers/<name>/            # Layer directories (159 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -224,7 +111,7 @@ plugins/
 +-- ov/                               # Operations (36 skills)
 +-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
 +-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (157 skills)
++-- ov-layers/                        # Layer reference (159 skills)
 +-- ov-images/                        # Image reference (42 skills)
 ```
 
@@ -461,7 +348,7 @@ The skills system contains curated, structured knowledge for every component. Ra
 | `ov` | 36 | Operations | "How do I use X?" |
 | `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 157 | Layer reference | "What does layer X contain?" |
+| `ov-layers` | 159 | Layer reference | "What does layer X contain?" |
 | `ov-images` | 42 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
@@ -510,7 +397,7 @@ ov config selkies-desktop && ov start selkies-desktop          # provides BROWSE
 ov config jupyter-colab --update-all && ov start jupyter-colab  # provides jupyter-colab MCP
 ov config hermes-full -e OLLAMA_API_KEY=... --update-all && ov start hermes-full  # consumes both
 ```
-The `--update-all` flag propagates provides to all deployed quadlets. Hermes auto-receives `BROWSER_CDP_URL=http://ov-selkies-desktop:9222` and `OV_MCP_SERVERS` with `http://ov-jupyter-colab:8888/mcp`. Browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The `cdp-proxy` in the chrome layer rewrites Host headers and response URLs for Chrome 146+ cross-container compatibility (two-port architecture: Chrome on internal 9223, proxy on external 9222).
+The `--update-all` flag propagates provides to all deployed quadlets. Hermes auto-receives `BROWSER_CDP_URL=http://ov-selkies-desktop:9222` and `OV_MCP_SERVERS` with `http://ov-jupyter-colab:8888/mcp` and `http://ov-selkies-desktop:9224/mcp` (chrome-devtools, 29 browser automation tools). Browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The `cdp-proxy` in the chrome layer rewrites Host headers and response URLs for Chrome 146+ cross-container compatibility (two-port architecture: Chrome on internal 9223, proxy on external 9222).
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
@@ -542,7 +429,7 @@ Rule of thumb:
 Examples where multiple skills cover one topic:
 - **Jupyter:** `/ov-layers:jupyter` (legacy GPU/ML monolithic layer) vs `/ov-layers:jupyter-colab` (lightweight, no GPU + collaboration + MCP server with 13 tools) vs `/ov-layers:jupyter-colab-ml` (full CUDA ML + collaboration + MCP, meta-layer composing llama-cpp + unsloth) vs `/ov-images:jupyter` (legacy GPU image) vs `/ov-images:jupyter-colab` (lightweight image) vs `/ov-images:jupyter-colab-ml` (GPU image with full ML stack + MCP) vs `/ov-images:jupyter-colab-ml-notebook` (GPU image + 37 Unsloth fine-tuning notebooks + 6 Ollama integration notebooks + 15 LLM course notebooks). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
 - **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
-- **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size) vs `/ov-layers:chrome-sway` (sway integration)
+- **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size, chrome-devtools-mcp sub-layer) vs `/ov-layers:chrome-devtools-mcp` (MCP server on 9224, 29 tools via mcp-proxy) vs `/ov-layers:chrome-sway` (sway integration)
 - **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
 - **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
 - **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer)

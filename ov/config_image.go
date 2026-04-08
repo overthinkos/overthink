@@ -1125,10 +1125,15 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Build volumes from metadata
 		var deployVolumes []DeployVolumeConfig
+		var deploySidecars map[string]SidecarDef
 		if overlay, ok := dc.Images[key]; ok {
 			deployVolumes = overlay.Volumes
+			deploySidecars = overlay.Sidecars
 		}
 		volumes, bindMounts := ResolveVolumeBacking(imageName, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+
+		// Apply instance-specific volume naming
+		volumes = InstanceVolumes(volumes, imageName, instance)
 
 		// Resolve env file
 		var quadletEnvFile string
@@ -1167,8 +1172,26 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			imageRef = resolveShellImageRef(meta.Registry, imageName, "latest")
 		}
 
+		// Resolve tunnel config from metadata (includes deploy.yml overrides)
+		var tunnelCfg *TunnelConfig
+		if meta.Tunnel != nil {
+			tunnelCfg = TunnelConfigFromMetadata(meta)
+		}
+
+		// Resolve sidecars from deploy.yml for pod mode
+		var resolvedSidecars []ResolvedSidecar
+		podName := ""
+		if len(deploySidecars) > 0 {
+			mergedDefs, resolveErr := ResolveSidecarsForConfig(deploySidecars)
+			if resolveErr == nil && len(mergedDefs) > 0 {
+				resolvedSidecars = ResolveSidecars(mergedDefs, imageName, instance)
+				podName = PodNameInstance(imageName, instance)
+			}
+		}
+
 		qcfg := QuadletConfig{
 			ImageName:       imageName,
+			Instance:        instance,
 			ImageRef:        imageRef,
 			Home:            meta.Home,
 			Ports:           meta.Ports,
@@ -1176,6 +1199,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			BindMounts:      bindMounts,
 			GPU:             detected.GPU,
 			BindAddress:     rt.BindAddress,
+			Tunnel:          tunnelCfg,
 			UID:             meta.UID,
 			GID:             meta.GID,
 			Env:             envVars,
@@ -1189,6 +1213,8 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			OvBin:           ovBin,
 			EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 			KeyringBackend:  isKeyring,
+			PodName:         podName,
+			Sidecars:        resolvedSidecars,
 		}
 
 		// Suppress file-sourced env vars if using EnvFile.
@@ -1204,6 +1230,22 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not update quadlet for %s: %v\n", key, err)
 			continue
+		}
+
+		// Regenerate pod and sidecar files when sidecars are configured
+		if len(resolvedSidecars) > 0 {
+			podContent := generatePodQuadlet(qcfg)
+			podPath := filepath.Join(qdir, podQuadletFilenameInstance(imageName, instance))
+			if err := os.WriteFile(podPath, []byte(podContent), 0600); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not update pod file for %s: %v\n", key, err)
+			}
+			for _, sc := range resolvedSidecars {
+				scContent := generateSidecarQuadlet(sc, podName)
+				scPath := filepath.Join(qdir, sidecarQuadletFilenameInstance(imageName, instance, sc.Name))
+				if err := os.WriteFile(scPath, []byte(scContent), 0600); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: could not update sidecar file for %s/%s: %v\n", key, sc.Name, err)
+				}
+			}
 		}
 
 		updated = append(updated, key)

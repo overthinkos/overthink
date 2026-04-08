@@ -99,45 +99,7 @@ Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local
 
 ### Plugins Submodule
 
-Skills, agents, and MCP servers live in a separate git submodule at `plugins/`.
-
-**Repository:** `git@github.com:overthinkos/overthink-plugins.git`
-
-```
-plugins/
-+-- .claude-plugin/marketplace.json   # Central plugin registry
-+-- ov/                               # Operations (36 skills)
-+-- ov-dev/                           # Development (2 skills, 3 agents, GitHub MCP)
-+-- ov-jupyter/                       # Jupyter MCP server (notebook collaboration via Streamable HTTP)
-+-- ov-layers/                        # Layer reference (159 skills)
-+-- ov-images/                        # Image reference (42 skills)
-```
-
-Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/<plugin>/skills/<name>/SKILL.md`.
-
-**Enabled via** `.claude/settings.json` (committed):
-
-```json
-{
-  "enabledPlugins": {
-    "ov@ov-plugins": true,
-    "ov-dev@ov-plugins": true,
-    "ov-jupyter@ov-plugins": true,
-    "ov-layers@ov-plugins": true,
-    "ov-images@ov-plugins": true
-  },
-  "extraKnownMarketplaces": {
-    "ov-plugins": {
-      "source": { "source": "directory", "path": "./plugins" }
-    }
-  }
-}
-```
-
-**Submodule operations:**
-- Clone with plugins: `git clone --recurse-submodules`
-- Update plugins: `git submodule update --remote plugins`
-- After pulling main repo: `git submodule update --init`
+Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (159 layer skills), `ov-images` (41 image skills). Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
 
 ---
 
@@ -192,67 +154,7 @@ For layer-specific rules (install files, packages, port_relay, secrets, data, en
 
 ## Command Map
 
-Use `ov --help` and `ov <cmd> --help` for quick flag reference. For detailed usage, load the skill.
-
-| Commands | Skill |
-|----------|-------|
-| `generate` | `/ov:generate` |
-| `validate` | `/ov:validate` |
-| `inspect` | `/ov:inspect` |
-| `list` (images, layers, targets, services, routes, volumes, aliases) | `/ov:list` |
-| `new layer` | `/ov:new` |
-| `build` | `/ov:build` |
-| `merge` | `/ov:merge` |
-| `cmd <image> <command>` | `/ov:cmd` |
-| `shell` | `/ov:shell` |
-| `dbus` (notify, call, list, introspect) | `/ov:dbus` |
-| `config <image>` (setup: quadlet + secrets + encrypted volumes + data provisioning + env_provides + sidecars), `config --sidecar`, `config --list-sidecars`, `config --update-all`, `config remove`, `config status/mount/unmount/passwd` | `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc` |
-| `start` | `/ov:start` (requires `ov config` first in quadlet mode) |
-| `stop` | `/ov:stop` |
-| `status` (`--all`, `--json`) | `/ov:status` |
-| `logs` | `/ov:logs` |
-| `update` (`--seed`, `--force-seed`, `--data-from`) | `/ov:update` |
-| `remove` (`--purge`, `--keep-deploy`) | `/ov:remove` |
-| `deploy show/export/import/reset/status/path` | `/ov:deploy` |
-| `service start/stop/restart/status` | `/ov:service` |
-| `cdp`, `cdp spa` (click, type, key, key-combo, mouse, status) | `/ov:cdp` |
-| `wl sway` | `/ov:wl` (sway subgroup) |
-| `wl overlay show/hide/list/status` | `/ov:wl-overlay` |
-| `record start/stop/list/cmd` | `/ov:record` |
-| `tmux shell/cmd/run/attach/list/capture/send/kill` | `/ov:tmux` |
-| `vnc` | `/ov:vnc` |
-| `wl` | `/ov:wl` |
-| `alias` | `/ov:alias` |
-| `settings` (get, set, list, reset, path, migrate-secrets) | `/ov:settings` |
-| `version` | `/ov:version` |
-| `secrets` (init, list, get, set, delete, import, export, path) | `/ov:secrets` |
-| `secrets gpg` (show, env, edit, encrypt, decrypt, set, unset, add-recipient, recipients, import-key, export-key, setup, doctor) | `/ov:secrets` |
-| `udev status/generate/install/remove` | `/ov:udev` |
-| `vm` | `/ov:vm` |
-| `doctor` | `/ov:doctor` |
-
----
-
-## Workflows
-
-**Add a layer:** `ov new layer <name>` -> edit `layer.yml` -> add install files -> add to image in `images.yml` -> `ov build <image>`
-Skills: `/ov:layer` -> `/ov-layers:<similar>` (pattern reference) -> `/ov:image` -> `/ov:build`
-
-**Add an image:** add entry to `images.yml` -> `ov build <image>`
-Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
-
-**Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
-
-**Deploy a service:** `ov config <image>` -> `ov start <image>`. Config generates quadlet, provisions secrets/volumes/data, injects `env_provides`/`mcp_provides`. Use `-i <instance>` for multiple containers of the same image.
-Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml, instances, tunnels) -> `/ov:start` -> `/ov:service` (lifecycle)
-
-**Record a session:** `ov record start <image> --mode terminal|desktop` -> `ov record cmd` -> `ov record stop <image> -o output`
-Skills: `/ov:record` -> `/ov:wl-overlay` (recording overlays)
-
-**Deploy with Tailscale exit node:** See `/ov:sidecar` for pod architecture + `/ov:secrets` for auth key management.
-Skills: `/ov:sidecar` + `/ov:secrets` -> `/ov:config` (--sidecar flag)
-
-**Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov settings set engine.build podman`.
+Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/ov:<cmd>` skill with full documentation. Invoke the skill before reading source code. Key skill groupings: `/ov:config` + `/ov:deploy` + `/ov:sidecar` + `/ov:enc` (deployment), `/ov:cdp` + `/ov:wl` + `/ov:vnc` + `/ov:wl-overlay` (desktop automation), `/ov:build` + `/ov:generate` + `/ov:validate` (build pipeline).
 
 ---
 
@@ -298,73 +200,30 @@ The skills system contains curated, structured knowledge for every component. Ra
 
 | Plugin | Skills | Role | Question it answers |
 |--------|--------|------|---------------------|
-| `ov` | 36 | Operations | "How do I use X?" |
-| `ov-dev` | 2 + 3 agents | Contributing | "How does the code work?" |
+| `ov` | 37 | Operations | "How do I use X?" |
+| `ov-dev` | 3 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
 | `ov-layers` | 159 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 42 | Image reference | "What does image X look like?" |
+| `ov-images` | 41 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 
-Real tasks chain through skills in predictable patterns:
+| Task | Skill chain |
+|------|-------------|
+| Author a layer | `/ov:layer` -> `/ov-layers:<similar>` -> `/ov:image` -> `/ov:build` |
+| Debug runtime | `/ov:<operation>` -> `/ov-layers:<layer>` -> `/ov:service` |
+| Desktop automation | `/ov:cdp` -> `/ov:wl` -> `/ov:wl` sway -> `/ov:wl-overlay` |
+| Deploy a service | `/ov:config` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
+| Selkies streaming | `/ov-layers:selkies` -> `/ov-layers:labwc` -> `/ov-images:selkies-desktop` |
+| Jupyter MCP | `/ov-layers:jupyter-colab` -> `/ov-images:jupyter-colab` -> `/ov:service` |
+| Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` -> `/ov:validate` |
+| Deploy Hermes | `/ov-images:hermes-full` -> `/ov:config` -> `/ov:service` |
+| Hermes + Selkies | `ov config selkies-desktop` -> `ov config jupyter-colab --update-all` -> `ov config hermes-full --update-all` |
+| Full lifecycle | `/ov:build` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
 
-**Author a new layer:**
-`/ov:layer` (format, rules) -> `/ov-layers:<similar>` (existing pattern) -> `/ov:image` (add to image) -> `/ov:build`
+For desktop automation: use CDP first, `--wl` for selkies-desktop (no VNC). See `/ov:cdp`, `/ov:wl`, `/ov-images:selkies-desktop` for detailed usage patterns.
 
-**Debug a runtime issue:**
-`/ov:<operation>` (how it works) -> `/ov-layers:<layer>` (config, deps, ports) -> `/ov:settings` or `/ov:service` (state)
-
-**Desktop automation:**
-`/ov:cdp` (DOM: click, type, eval) -> `/ov:wl` (compositor-agnostic: screenshots, input, window mgmt, clipboard, AT-SPI2) -> `/ov:wl` sway subgroup (sway-only: tree, layout, move, resize) -> `/ov:wl-overlay` (recording overlays: title cards, lower-thirds, countdowns, highlights, fades)
-Use CDP first. Use `ov cdp click --wl` for selkies-desktop (no VNC). Use `ov wl` for screenshots, input, window management (`toplevel`, `close`, `fullscreen`), clipboard, and AT-SPI2 accessibility (`ov wl atspi find/click`). Use `ov wl sway` for sway-specific IPC features (tree, workspaces, layout, move, resize).
-On NVIDIA headless: Both `ov vnc screenshot` and `ov wl screenshot` work correctly. VNC images use pixman (software renderer) via `sway-desktop-vnc`, with a DPMS workaround for wayvnc 0.9.1's headless power event bug.
-For selkies-desktop (labwc): `ov wl` provides full automation. `ov wl sway` commands are sway-specific and won't work on labwc.
-
-**Deploy a service:**
-`/ov:deploy` (quadlet, tunnels) + `/ov:config` (setup: secrets, encrypted volumes) -> `/ov-images:<name>` (image config) -> `/ov:service` (lifecycle)
-
-**Set up Selkies streaming (browser-accessible — working):**
-`/ov-layers:selkies` (streaming engine) -> `/ov-layers:labwc` (compositor) -> `/ov-layers:waybar-labwc` (panel) -> `/ov-images:selkies-desktop` (image)
-Uses labwc nested inside pixelflux's Wayland compositor. Access via `https://localhost:3000` (HTTPS with self-signed Traefik cert — required for WebCodecs secure context). NVENC detected but fails with driver 590.48 (pixelflux compat issue); CPU x264enc-striped at 60fps works well. Image: `selkies-desktop`.
-**Host-side automation:** `ov wl` provides full compositor-agnostic control: screenshots (pixelflux-screenshot via capture bridge), input (wtype, wlrctl), window management (wlrctl toplevel), clipboard (wl-copy/paste), resolution (wlr-randr), AT-SPI2 introspection (atspi). Use `ov cdp click --wl` for selector-based clicks via Wayland pointer (no VNC needed). Screenshots work with or without a browser connected (capture bridge auto-switches between controller/viewer modes). Includes `wl-tools` + `a11y-tools` layers.
-**Client-side interaction (browser-based RD):** The Selkies SPA uses a transparent `input#overlayInput` (z-index 3) on top of `canvas#videoCanvas` (z-index 2, pointer-events: none) to capture mouse/keyboard events. Events pass through the SPA's JavaScript → WebSocket → labwc. Keyboard passthrough works via VNC type, wtype, or CDP Input.dispatchKeyEvent — the SPA's onkeydown handler captures with stopImmediatePropagation. **Limitation:** Super key consumed by the client's compositor, Ctrl+T/W consumed by the client's Chrome — browser-based RD cannot forward compositor or browser shortcuts. Mouse coordinates have ~0.82x scaling between input and remote cursor position. Session state (all windows, typed text) survives client disconnection. See `/ov-images:selkies-desktop` for full DOM structure and coordinate mapping.
-
-**Programmatic notebook access (MCP):**
-`/ov-layers:jupyter-colab` (lightweight, no GPU) or `/ov-layers:jupyter-colab-ml` (full CUDA ML stack) or `/ov-layers:jupyter-colab-ml` + `/ov-layers:notebook-finetuning` + `/ov-layers:notebook-ollama` + `/ov-layers:notebook-llm-on-supercomputers` (ML + fine-tuning + Ollama + LLM course notebooks) -> `/ov-images:jupyter-colab` or `/ov-images:jupyter-colab-ml` or `/ov-images:jupyter-colab-ml-notebook` (deployment) -> `/ov:service` (lifecycle)
-Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`, `insert_cell`, `execute_cell`, `watch_notebook`) for AI-driven notebook editing with real-time collaboration. Multiple MCP clients can edit the same notebook simultaneously — changes sync via CRDT. Use `jupyter-colab-ml-notebook` for GPU/ML with fine-tuning, Ollama, and LLM course notebooks; `jupyter-colab-ml` for GPU/ML without; `jupyter-colab` for lightweight multi-arch environments.
-
-**Fix a bug in ov:**
-`/ov-dev:go` (source map, tests) + `/ov:<relevant>` (expected behavior) -> `/ov:validate` (verify)
-
-**Modify a metalayer:**
-`/ov:layer` (metalayer patterns) -> `/ov-layers:<metalayer>` (current composition) + `/ov-layers:<addition>` (what to add)
-
-**Deploy Hermes Agent:**
-`/ov-layers:hermes` (layer properties) -> `/ov-images:hermes` (image config) -> `/ov:config` (setup + provider env vars) -> `/ov:start` -> `/ov:service` (lifecycle)
-For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global. LLM provider auto-configured from `OLLAMA_HOST` / `OLLAMA_API_KEY` / `OPENROUTER_API_KEY` env vars passed via `ov config -e`.
-
-**Deploy Hermes with Selkies desktop (separate pods):**
-`ov config selkies-desktop` -> `ov config jupyter-colab --update-all` -> `ov config hermes-full -e OLLAMA_API_KEY=... --update-all`. Uses `env_provides`/`mcp_provides` for cross-container discovery. See `/ov-images:hermes-full`, `/ov:config`.
-
-**Full image lifecycle (build -> deploy -> test):**
-`/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)
-
-### Continuous Improvement: Feeding Insights Back Into Skills
-
-Skills are living documents. When real-world usage reveals gaps, update them:
-
-**What triggers a skill update:**
-- A deployment step fails or requires undocumented workarounds
-- A verification check is missing from an image skill
-- A skill's recommended order or defaults are wrong (e.g., direct vs quadlet)
-- A gotcha or prerequisite is discovered during actual usage
-
-**How to feed back:**
-1. During the session, update the relevant skill file at `plugins/<plugin>/skills/<skill-name>/SKILL.md`
-2. If the insight affects cross-skill behavior, update CLAUDE.md too
-3. After any non-trivial deployment session, ask: "Did we learn anything that future sessions should know?"
-
-**When NOT to update skills:** ephemeral issues, user-specific config (use memory), bug fixes in ov code (use git)
+For skill maintenance guidelines (when/how to update skills): see `/ov-dev:skills`.
 
 ### Disambiguating Overlapping Skills
 
@@ -373,24 +232,7 @@ Rule of thumb:
 - `/ov-layers:X` = "what does layer X CONTAIN?" (deps, ports, volumes, env, packages)
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
-Examples where multiple skills cover one topic:
-- **Jupyter:** `/ov-layers:jupyter` (legacy GPU/ML monolithic layer) vs `/ov-layers:jupyter-colab` (lightweight, no GPU + collaboration + MCP server with 13 tools) vs `/ov-layers:jupyter-colab-ml` (full CUDA ML + collaboration + MCP, meta-layer composing llama-cpp + unsloth) vs `/ov-images:jupyter` (legacy GPU image) vs `/ov-images:jupyter-colab` (lightweight image) vs `/ov-images:jupyter-colab-ml` (GPU image with full ML stack + MCP) vs `/ov-images:jupyter-colab-ml-notebook` (GPU image + 37 Unsloth fine-tuning notebooks + 6 Ollama integration notebooks + 15 LLM course notebooks). The `ov-jupyter` plugin provides the Streamable HTTP MCP server at `/mcp` for programmatic notebook access
-- **OpenClaw:** `/ov:openclaw` (gateway config) vs `/ov-layers:openclaw` (layer properties) vs `/ov-images:openclaw` (image definition)
-- **Chrome/CDP:** `/ov:cdp` (CDP commands) vs `/ov-layers:chrome` (ports, relay, shm_size, chrome-devtools-mcp sub-layer) vs `/ov-layers:chrome-devtools-mcp` (MCP server on 9224, 29 tools via mcp-proxy) vs `/ov-layers:chrome-sway` (sway integration)
-- **Sway:** `/ov:wl` sway subgroup (`ov wl sway <cmd>`, compositor commands) vs `/ov-layers:sway` (layer properties) vs `/ov-layers:sway-desktop` (desktop metalayer)
-- **VNC:** `/ov:vnc` (VNC commands, auth) vs `/ov-layers:wayvnc` (VNC server layer properties)
-- **Niri:** `/ov-layers:niri` (compositor, built from source) vs `/ov-layers:niri-desktop` (desktop metalayer)
-- **KWin:** `/ov-layers:kwin` (compositor, virtual backend) vs `/ov-layers:kwin-desktop` (desktop metalayer)
-- **Mutter:** `/ov-layers:mutter` (compositor, headless) vs `/ov-layers:mutter-desktop` (desktop metalayer)
-- **X11 Desktop:** `/ov-layers:xorg-headless` (display server) vs `/ov-layers:openbox` (window manager) vs `/ov-layers:x11-desktop` (desktop metalayer)
-- **D-Bus/Notifications:** `ov dbus` (native Go D-Bus commands) vs `/ov-layers:dbus` (session bus layer) vs `/ov-layers:swaync` (notification daemon) vs `/ov-layers:libnotify` (`notify-send` CLI)
-- **Command Execution:** `ov cmd` (single command with notification) vs `ov shell -c` (full container setup) vs `ov tmux cmd` (send to tmux session) vs `ov record cmd` (send to recording session)
-- **Recording:** `/ov:record` (recording commands, lifecycle) vs `/ov-layers:asciinema` (terminal recording layer) vs `/ov-layers:wf-recorder` (sway desktop recording) vs `/ov-layers:wl-record-pixelflux` (selkies desktop recording)
-- **Overlays:** `/ov:wl-overlay` (overlay commands, types, recording workflow) vs `/ov-layers:wl-overlay` (layer properties, gtk4-layer-shell deps)
-- **Selkies:** `/ov-layers:selkies` (streaming engine, pixelflux/pcmflux) vs `/ov-layers:labwc` (nested Wayland compositor for selkies, waits for pixelflux socket) vs `/ov-layers:waybar-labwc` (panel for labwc) vs `/ov-layers:selkies-desktop` (desktop metalayer) vs `/ov-images:selkies-desktop` (image)
-- **Hermes:** `/ov-layers:hermes` (agent layer: pixi env, build.sh, service, volumes, auto-provider-config) vs `/ov-layers:hermes-full` (metalayer: hermes + claude-code + codex + gemini + dev-tools + devops-tools + ov) vs `/ov-layers:hermes-playwright` (Playwright + Chromium system deps) vs `/ov-images:hermes` (minimal headless) vs `/ov-images:hermes-full` (full-featured standalone) vs `/ov-images:hermes-playwright` (with local browser). Deploy separately alongside `selkies-desktop` (provides `BROWSER_CDP_URL`) and `jupyter-colab` (provides MCP). Auto-provider-config: set `OLLAMA_HOST`, `OLLAMA_API_KEY`, or `OPENROUTER_API_KEY` → hermes auto-configures on first start
-- **Tunnels:** `/ov:deploy` (tunnel providers, backend schemes, quadlet integration, deploy.yml) vs `/ov:layer` (port protocol annotations, `ports:` field syntax) vs `/ov:config` (tunnel setup at deploy time)
-- **Sidecars/Tailscale:** `/ov:sidecar` (sidecar config, pod networking, exit node routing) vs `/ov:deploy` (tunnel: tailscale host-based serve, deploy.yml sidecars field) vs `/ov-images:selkies-desktop` (full Tailscale deployment example)
+When multiple skills cover one topic, start with the `/ov:X` skill for usage, then drill into `/ov-layers:X` or `/ov-images:X` for configuration details. Each skill's cross-references section lists related skills. Key overlapping areas: Jupyter (6 layer/image variants + MCP), Chrome/CDP (commands vs layer vs MCP sub-layer), Selkies (streaming + compositor + desktop + image), Hermes (agent + metalayer + 3 image variants), Tunnels (`/ov:deploy` vs `/ov:config` vs `/ov:sidecar`), Desktop compositors (sway/niri/kwin/mutter each have compositor + desktop metalayer skills).
 
 ### Desktop Automation Hierarchy
 

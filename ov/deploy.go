@@ -433,37 +433,56 @@ func cleanDeployEntry(imageName, instance string) {
 		RemoveImageDeploy(dc, key)
 	}
 
-	// Only remove provides if no other entries for the same base image remain deployed
-	hasOtherEntries := false
-	for k := range dc.Images {
-		base, _ := parseDeployKey(k)
-		if base == imageName {
-			hasOtherEntries = true
-			break
-		}
-	}
-
-	// Remove provides entries injected by this image/instance
+	// Remove provides entries injected by this image/instance.
+	// For instances: always clean entries sourced from the specific instance (exact match).
+	// For base images: only clean ALL provides if no other instances remain deployed.
 	removedProvides := false
-	if dc.Provides != nil && !hasOtherEntries {
-		if len(dc.Provides.Env) > 0 {
-			var cleaned []EnvProvidesEntry
-			var removed bool
-			cleaned, removed = removeBySource(dc.Provides.Env, imageName)
-			if removed {
-				dc.Provides.Env = cleaned
-				removedProvides = true
-				fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", imageName)
+	if dc.Provides != nil {
+		if instance != "" {
+			// Instance removal: remove only this instance's provides (exact source match)
+			if len(dc.Provides.Env) > 0 {
+				cleaned, removed := removeByExactSource(dc.Provides.Env, key)
+				if removed {
+					dc.Provides.Env = cleaned
+					removedProvides = true
+					fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", key)
+				}
 			}
-		}
-		if len(dc.Provides.MCP) > 0 {
-			var cleaned []MCPProvidesEntry
-			var removed bool
-			cleaned, removed = removeBySource(dc.Provides.MCP, imageName)
-			if removed {
-				dc.Provides.MCP = cleaned
-				removedProvides = true
-				fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", imageName)
+			if len(dc.Provides.MCP) > 0 {
+				cleaned, removed := removeByExactSource(dc.Provides.MCP, key)
+				if removed {
+					dc.Provides.MCP = cleaned
+					removedProvides = true
+					fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", key)
+				}
+			}
+		} else {
+			// Base image removal: only remove if no other entries for the same base image remain
+			hasOtherEntries := false
+			for k := range dc.Images {
+				base, _ := parseDeployKey(k)
+				if base == imageName {
+					hasOtherEntries = true
+					break
+				}
+			}
+			if !hasOtherEntries {
+				if len(dc.Provides.Env) > 0 {
+					cleaned, removed := removeBySource(dc.Provides.Env, imageName)
+					if removed {
+						dc.Provides.Env = cleaned
+						removedProvides = true
+						fmt.Fprintf(os.Stderr, "Removed env provides from %s\n", imageName)
+					}
+				}
+				if len(dc.Provides.MCP) > 0 {
+					cleaned, removed := removeBySource(dc.Provides.MCP, imageName)
+					if removed {
+						dc.Provides.MCP = cleaned
+						removedProvides = true
+						fmt.Fprintf(os.Stderr, "Removed MCP provides from %s\n", imageName)
+					}
+				}
 			}
 		}
 		if len(dc.Provides.MCP) == 0 && len(dc.Provides.Env) == 0 {

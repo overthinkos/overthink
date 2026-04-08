@@ -93,6 +93,21 @@ func removeBySource[T Named](entries []T, imageName string) ([]T, bool) {
 	return result, removed
 }
 
+// removeByExactSource removes entries whose source matches the exact deploy key.
+// Unlike removeBySource, this does not match other instances of the same base image.
+func removeByExactSource[T Named](entries []T, source string) ([]T, bool) {
+	var result []T
+	removed := false
+	for _, e := range entries {
+		if e.GetSource() == source {
+			removed = true
+		} else {
+			result = append(result, e)
+		}
+	}
+	return result, removed
+}
+
 // podAwareMCPProvides resolves MCP entries for a specific consumer image.
 // Same-image entries get localhost URLs (pod: co-located services).
 // Cross-image entries keep their container hostname URLs.

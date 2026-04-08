@@ -11,6 +11,14 @@ env:
   CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
   BROWSER: "browser-open"
 
+env_accepts:
+  - name: HTTP_PROXY
+    description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
+  - name: HTTPS_PROXY
+    description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
+  - name: NO_PROXY
+    description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
+
 security:
   shm_size: "1g"
 

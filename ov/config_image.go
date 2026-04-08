@@ -107,7 +107,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Apply deploy.yml overrides onto label metadata
 	dc, _ := LoadDeployConfig()
-	MergeDeployOntoMetadata(meta, dc)
+	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
 	ports := meta.Ports
@@ -120,7 +120,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		deployVolumes = parseVolumeEnv(c.Image)
 	}
 	if len(deployVolumes) == 0 && dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -171,7 +171,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Check deploy.yml env_file
 	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 	}
@@ -239,7 +239,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deploySidecars = overlay.Sidecars
 		}
 	}
@@ -368,7 +368,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Persist deployment state to deploy.yml (source of truth)
-	saveDeployState(c.Image, SaveDeployStateInput{
+	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
 		Ports:     ports,
 		Env:       c.Env,
 		EnvFile:   quadletEnvFile,
@@ -464,12 +464,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Initialize and mount encrypted volumes
 	if hasEncryptedBindMounts(bindMounts) {
-		if err := ensureEncryptedMounts(c.Image, autoGen); err != nil {
+		if err := ensureEncryptedMounts(c.Image, c.Instance, autoGen); err != nil {
 			return fmt.Errorf("setting up encrypted volumes: %w", err)
 		}
 		// Unmount after setup unless --keep-mounted
 		if !c.KeepMounted {
-			if err := encUnmount(c.Image, ""); err != nil {
+			if err := encUnmount(c.Image, c.Instance, ""); err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not unmount encrypted volumes: %v\n", err)
 			}
 		}
@@ -482,7 +482,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if c.Seed && len(bindMounts) > 0 {
 		dataMeta := meta
 		dataRef := imageRef
-		dataEngine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
+		dataEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
 
 		// Use external data image if --data-from specified
 		if c.DataFrom != "" {
@@ -533,7 +533,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				if dc == nil {
 					dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 				}
-				imgDeploy := dc.Images[c.Image]
+				imgDeploy := dc.Images[deployKey(c.Image, c.Instance)]
 				for i := range imgDeploy.Volumes {
 					for _, entry := range dataMeta.DataEntries {
 						if imgDeploy.Volumes[i].Name == entry.Volume {
@@ -542,7 +542,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 						}
 					}
 				}
-				dc.Images[c.Image] = imgDeploy
+				dc.Images[deployKey(c.Image, c.Instance)] = imgDeploy
 				if err := SaveDeployConfig(dc); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
 				}
@@ -576,7 +576,7 @@ skipDataProvision:
 
 	// Regenerate quadlets for all other deployed images if --update-all
 	if c.UpdateAll {
-		if err := updateAllDeployedQuadlets(rt, c.Image); err != nil {
+		if err := updateAllDeployedQuadlets(rt, deployKey(c.Image, c.Instance)); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not update all quadlets: %v\n", err)
 		}
 	}
@@ -716,40 +716,44 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 
 // ImageConfigStatusCmd shows encrypted volume status.
 type ImageConfigStatusCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Image    string `arg:"" help:"Image name"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ImageConfigStatusCmd) Run() error {
-	return encStatus(c.Image)
+	return encStatus(c.Image, c.Instance)
 }
 
 // ImageConfigMountCmd mounts encrypted volumes.
 type ImageConfigMountCmd struct {
-	Image  string `arg:"" help:"Image name"`
-	Volume string `long:"volume" help:"Only mount this volume (by name)"`
+	Image    string `arg:"" help:"Image name"`
+	Volume   string `long:"volume" help:"Only mount this volume (by name)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ImageConfigMountCmd) Run() error {
-	return encMount(c.Image, c.Volume)
+	return encMount(c.Image, c.Instance, c.Volume)
 }
 
 // ImageConfigUnmountCmd unmounts encrypted volumes.
 type ImageConfigUnmountCmd struct {
-	Image  string `arg:"" help:"Image name"`
-	Volume string `long:"volume" help:"Only unmount this volume (by name)"`
+	Image    string `arg:"" help:"Image name"`
+	Volume   string `long:"volume" help:"Only unmount this volume (by name)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ImageConfigUnmountCmd) Run() error {
-	return encUnmount(c.Image, c.Volume)
+	return encUnmount(c.Image, c.Instance, c.Volume)
 }
 
 // ImageConfigPasswdCmd changes the gocryptfs password.
 type ImageConfigPasswdCmd struct {
-	Image string `arg:"" help:"Image name"`
+	Image    string `arg:"" help:"Image name"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *ImageConfigPasswdCmd) Run() error {
-	return encPasswd(c.Image)
+	return encPasswd(c.Image, c.Instance)
 }
 
 // ImageConfigRemoveCmd removes a quadlet service (replaces ov disable).
@@ -910,16 +914,17 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 	for _, key := range keys {
 		tmpl := envProvides[key]
 		value := resolveTemplate(tmpl, ctrName)
+		source := deployKey(imageName, instance)
 		resolved := EnvProvidesEntry{
 			Name:   key,
 			Value:  value,
-			Source: imageName,
+			Source: source,
 		}
 
 		// Check if already set to same value (dedup by name+source)
 		found := false
 		for i, existing := range dc.Provides.Env {
-			if existing.Name == key && existing.Source == imageName {
+			if existing.Name == key && existing.Source == source {
 				if existing.Value == value {
 					found = true
 					break
@@ -963,7 +968,19 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 	}
 
 	ctrName := containerNameInstance(imageName, instance)
+	source := deployKey(imageName, instance)
 	changed := false
+
+	// Remove stale entries from this source (handles name changes on re-config)
+	var cleaned []MCPProvidesEntry
+	for _, e := range dc.Provides.MCP {
+		if e.Source != source {
+			cleaned = append(cleaned, e)
+		}
+	}
+	if len(cleaned) != len(dc.Provides.MCP) {
+		dc.Provides.MCP = cleaned
+	}
 
 	for _, mcp := range mcpProvides {
 		url := resolveTemplate(mcp.URL, ctrName)
@@ -971,17 +988,22 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 		if transport == "" {
 			transport = "http"
 		}
+		// Disambiguate MCP name for instances so consumers see unique servers
+		mcpName := mcp.Name
+		if instance != "" {
+			mcpName = mcp.Name + "-" + instance
+		}
 		resolved := MCPProvidesEntry{
-			Name:      mcp.Name,
+			Name:      mcpName,
 			URL:       url,
 			Transport: transport,
-			Source:    imageName,
+			Source:    source,
 		}
 
 		// Check if already set to same value
 		found := false
 		for i, existing := range dc.Provides.MCP {
-			if existing.Name == mcp.Name && existing.Source == imageName {
+			if existing.Name == mcpName && existing.Source == source {
 				if existing.URL == resolved.URL && existing.Transport == resolved.Transport {
 					found = true
 					break
@@ -997,7 +1019,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 			changed = true
 		}
 		if changed {
-			fmt.Fprintf(os.Stderr, "MCP provides injected: %s → %s\n", mcp.Name, url)
+			fmt.Fprintf(os.Stderr, "MCP provides injected: %s → %s\n", mcpName, url)
 		}
 	}
 
@@ -1059,38 +1081,39 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 	}
 
 	var updated []string
-	for imageName := range dc.Images {
-		if imageName == skipImage {
+	for key := range dc.Images {
+		if key == skipImage {
 			continue
 		}
+		imageName, instance := parseDeployKey(key)
 
 		// Check if quadlet file exists (only update deployed images)
 		qdir, err := quadletDir()
 		if err != nil {
 			continue
 		}
-		qpath := filepath.Join(qdir, quadletFilename(imageName))
+		qpath := filepath.Join(qdir, quadletFilenameInstance(imageName, instance))
 		if _, err := os.Stat(qpath); os.IsNotExist(err) {
 			continue
 		}
 
-		// Extract metadata from image
+		// Extract metadata from base image (not the deploy key)
 		imageRef := resolveShellImageRef("", imageName, "latest")
 		meta, err := ExtractMetadata("podman", imageRef)
 		if err != nil || meta == nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not read metadata for %s, skipping quadlet update\n", imageName)
+			fmt.Fprintf(os.Stderr, "Warning: could not read metadata for %s, skipping quadlet update\n", key)
 			continue
 		}
 
-		// Apply deploy.yml overrides
-		MergeDeployOntoMetadata(meta, dc)
+		// Apply deploy.yml overrides (instance-aware)
+		MergeDeployOntoMetadata(meta, dc, instance)
 
 		// Resolve env vars with updated global env
-		updateCtrName := containerNameInstance(imageName, "")
+		updateCtrName := containerNameInstance(imageName, instance)
 		globalEnv := dc.GlobalEnvForImage(imageName, updateCtrName)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", imageName, err)
+			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", key, err)
 			continue
 		}
 
@@ -1102,14 +1125,14 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Build volumes from metadata
 		var deployVolumes []DeployVolumeConfig
-		if overlay, ok := dc.Images[imageName]; ok {
+		if overlay, ok := dc.Images[key]; ok {
 			deployVolumes = overlay.Volumes
 		}
 		volumes, bindMounts := ResolveVolumeBacking(imageName, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		// Resolve env file
 		var quadletEnvFile string
-		if overlay, ok := dc.Images[imageName]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Images[key]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 		if quadletEnvFile == "" {
@@ -1179,12 +1202,12 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		content := generateQuadlet(qcfg)
 		if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not update quadlet for %s: %v\n", imageName, err)
+			fmt.Fprintf(os.Stderr, "Warning: could not update quadlet for %s: %v\n", key, err)
 			continue
 		}
 
-		updated = append(updated, imageName)
-		fmt.Fprintf(os.Stderr, "Updated quadlet for %s\n", imageName)
+		updated = append(updated, key)
+		fmt.Fprintf(os.Stderr, "Updated quadlet for %s\n", key)
 	}
 
 	if len(updated) > 0 {

@@ -69,7 +69,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -120,11 +120,11 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		// Resolve per-image engine from labels
 		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 		// Apply deploy.yml overrides
-		MergeDeployOntoMetadata(meta, dc)
+		MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 		// Sidecars require quadlet mode (pod networking is only available via quadlet)
 		if dc != nil {
-			if overlay, ok := dc.Images[c.Image]; ok && len(overlay.Sidecars) > 0 {
+			if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
 				return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
 			}
 		}
@@ -157,7 +157,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
 
 	// Auto-initialize and mount encrypted volumes if needed
-	if err := ensureEncryptedMounts(c.Image, false); err != nil {
+	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {
 		return err
 	}
 
@@ -204,7 +204,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
-		saveDeployState(c.Image, SaveDeployStateInput{Ports: ports})
+		saveDeployState(c.Image, c.Instance, SaveDeployStateInput{Ports: ports})
 	}
 
 	// Pre-flight port conflict check
@@ -215,7 +215,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// Inject agent forwarding mounts and env (direct mode only)
 	var deployImage *DeployImageConfig
 	if dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay
 		}
 	}
@@ -265,7 +265,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		meta, metaErr := ExtractMetadata(engine, imageRef)
 		if metaErr == nil && meta != nil && meta.Tunnel != nil {
 			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc)
+			MergeDeployOntoMetadata(meta, dc, c.Instance)
 			tc := TunnelConfigFromMetadata(meta)
 			if tc != nil {
 				if err := TunnelStart(*tc); err != nil {
@@ -514,7 +514,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	}
 
 	// Mount encrypted volumes if needed (runtime concern, not config)
-	if err := ensureEncryptedMounts(c.Image, false); err != nil {
+	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {
 		return err
 	}
 
@@ -546,7 +546,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	// Stop tunnel before stopping container (best-effort)
-	stopTunnelForImage(imageName)
+	stopTunnelForImage(imageName, c.Instance)
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -569,7 +569,7 @@ func (c *StopCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
 
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
@@ -596,7 +596,7 @@ func (c *StopCmd) Run() error {
 }
 
 // stopTunnelForImage attempts to stop any tunnel for the given image (best-effort).
-func stopTunnelForImage(imageName string) {
+func stopTunnelForImage(imageName, instance string) {
 	var tc *TunnelConfig
 
 	// Try images.yml
@@ -620,13 +620,13 @@ func stopTunnelForImage(imageName string) {
 
 	// Fall back to image labels
 	if tc == nil {
-		containerName := containerNameInstance(imageName, "")
-		imageRef := containerImage("podman", containerName)
+		ctrName := containerNameInstance(imageName, instance)
+		imageRef := containerImage("podman", ctrName)
 		if imageRef != "" {
 			meta, metaErr := ExtractMetadata("podman", imageRef)
 			if metaErr == nil && meta != nil && meta.Tunnel != nil {
 				dc, _ := LoadDeployConfig()
-				MergeDeployOntoMetadata(meta, dc)
+				MergeDeployOntoMetadata(meta, dc, instance)
 				tc = TunnelConfigFromMetadata(meta)
 			}
 		}

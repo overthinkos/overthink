@@ -53,6 +53,30 @@ type DeploySecretConfig struct {
 	Source string `yaml:"source,omitempty"`   // "keyring" (default), "env:VAR", "file:/path"
 }
 
+// deployKey returns the deploy.yml map key for an image, optionally qualified by instance.
+// Base images use just the image name; instances use "image/instance".
+func deployKey(imageName, instance string) string {
+	if instance == "" {
+		return imageName
+	}
+	return imageName + "/" + instance
+}
+
+// parseDeployKey splits a deploy.yml map key back into image name and instance.
+// "selkies-desktop" → ("selkies-desktop", "")
+// "selkies-desktop/foo" → ("selkies-desktop", "foo")
+func parseDeployKey(key string) (imageName, instance string) {
+	if idx := strings.IndexByte(key, '/'); idx >= 0 {
+		return key[:idx], key[idx+1:]
+	}
+	return key, ""
+}
+
+// isSameBaseImage returns true if source is the same base image (with or without instance).
+func isSameBaseImage(source, imageName string) bool {
+	return source == imageName || strings.HasPrefix(source, imageName+"/")
+}
+
 // DeployConfigPath returns the path to the deploy overlay file.
 // Package-level var for testability (same pattern as RuntimeConfigPath).
 var DeployConfigPath = defaultDeployConfigPath
@@ -144,12 +168,12 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 
 // MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
 // Same field-level replace semantics as MergeDeployOverlay.
-func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig) {
+func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance string) {
 	if dc == nil || dc.Images == nil || meta == nil {
 		return
 	}
 
-	overlay, ok := dc.Images[meta.Image]
+	overlay, ok := dc.Images[deployKey(meta.Image, instance)]
 	if !ok {
 		return
 	}
@@ -396,21 +420,32 @@ func RemoveImageDeploy(dc *DeployConfig, imageName string) {
 // cleanDeployEntry removes an image's entry from deploy.yml (best-effort).
 // Also removes global service env vars that were injected by this image.
 // If deploy.yml becomes empty after removal, the file is deleted.
-func cleanDeployEntry(imageName string) {
+func cleanDeployEntry(imageName, instance string) {
 	dc, err := LoadDeployConfig()
 	if err != nil || dc == nil {
 		return
 	}
 
+	key := deployKey(imageName, instance)
 	hasImage := false
-	if _, ok := dc.Images[imageName]; ok {
+	if _, ok := dc.Images[key]; ok {
 		hasImage = true
-		RemoveImageDeploy(dc, imageName)
+		RemoveImageDeploy(dc, key)
 	}
 
-	// Remove provides entries injected by this image
+	// Only remove provides if no other entries for the same base image remain deployed
+	hasOtherEntries := false
+	for k := range dc.Images {
+		base, _ := parseDeployKey(k)
+		if base == imageName {
+			hasOtherEntries = true
+			break
+		}
+	}
+
+	// Remove provides entries injected by this image/instance
 	removedProvides := false
-	if dc.Provides != nil {
+	if dc.Provides != nil && !hasOtherEntries {
 		if len(dc.Provides.Env) > 0 {
 			var cleaned []EnvProvidesEntry
 			var removed bool
@@ -448,7 +483,7 @@ func cleanDeployEntry(imageName string) {
 		fmt.Fprintf(os.Stderr, "Warning: could not clean deploy.yml: %v\n", err)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "Cleaned deploy.yml entry for %s\n", imageName)
+	fmt.Fprintf(os.Stderr, "Cleaned deploy.yml entry for %s\n", key)
 }
 
 // appendOrReplaceEnv adds or replaces an env var entry (KEY=VALUE) in a slice.
@@ -486,12 +521,13 @@ type SaveDeployStateInput struct {
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
 // Merges onto any existing entry to preserve fields from ov deploy import.
-func saveDeployState(imageName string, input SaveDeployStateInput) {
+func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
 		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
 	}
-	entry := dc.Images[imageName] // preserve existing fields (tunnel, volumes, etc.)
+	key := deployKey(imageName, instance)
+	entry := dc.Images[key] // preserve existing fields (tunnel, volumes, etc.)
 	if input.Volumes != nil {
 		entry.Volumes = input.Volumes
 	}
@@ -513,7 +549,7 @@ func saveDeployState(imageName string, input SaveDeployStateInput) {
 	if len(input.Sidecars) > 0 {
 		entry.Sidecars = input.Sidecars
 	}
-	dc.Images[imageName] = entry
+	dc.Images[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}

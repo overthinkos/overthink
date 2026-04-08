@@ -178,8 +178,8 @@ func resolveEncPassphraseForMount(imageName string) (string, error) {
 
 // encInit initializes gocryptfs cipher directories for an image.
 // If volume is non-empty, only that volume is initialized.
-func encInit(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func encInit(imageName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -229,8 +229,8 @@ func encInit(imageName, volume string) error {
 // encMount mounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is mounted.
 // Uses resolveEncPassphraseForMount which waits for keyring unlock under systemd.
-func encMount(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func encMount(imageName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -292,8 +292,8 @@ func encMount(imageName, volume string) error {
 
 // encUnmount unmounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is unmounted.
-func encUnmount(imageName, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func encUnmount(imageName, instance, volume string) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -326,8 +326,8 @@ func encUnmount(imageName, volume string) error {
 }
 
 // encStatus prints the status of encrypted bind mounts for an image.
-func encStatus(imageName string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func encStatus(imageName, instance string) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -357,8 +357,8 @@ func encStatus(imageName string) error {
 }
 
 // encPasswd changes the gocryptfs password for all encrypted volumes of an image.
-func encPasswd(imageName string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func encPasswd(imageName, instance string) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -434,8 +434,8 @@ func encPasswd(imageName string) error {
 // Called by ov start to transparently handle encrypted volume setup without
 // requiring the user to run ov config init/mount manually first.
 // Resolves the enc passphrase once (kdbx → keyring → interactive prompt).
-func ensureEncryptedMounts(imageName string, autoGenerate bool) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName)
+func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error {
+	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil || len(mounts) == 0 {
 		return nil // no encrypted mounts configured
 	}
@@ -533,7 +533,7 @@ func defaultAskPassword(id, prompt string) (string, error) {
 
 // loadEncryptedVolumes loads encrypted volume configs from deploy.yml for an image.
 // Returns the deploy volume configs with type=encrypted and the encrypted storage path.
-func loadEncryptedVolumes(imageName string) ([]DeployVolumeConfig, string, error) {
+func loadEncryptedVolumes(imageName, instance string) ([]DeployVolumeConfig, string, error) {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return nil, "", err
@@ -544,7 +544,7 @@ func loadEncryptedVolumes(imageName string) ([]DeployVolumeConfig, string, error
 		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	overlay, ok := dc.Images[imageName]
+	overlay, ok := dc.Images[deployKey(imageName, instance)]
 	if !ok {
 		return nil, rt.EncryptedStoragePath, nil
 	}

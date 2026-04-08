@@ -8,3 +8,4 @@ layers:
   - dev-tools
   - devops-tools
   - ov
+  - tmux

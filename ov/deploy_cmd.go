@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -19,7 +20,8 @@ type DeployCmd struct {
 
 // DeployShowCmd displays the current deploy.yml content.
 type DeployShowCmd struct {
-	Image string `arg:"" optional:"" help:"Show overrides for a specific image"`
+	Image    string `arg:"" optional:"" help:"Show overrides for a specific image"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DeployShowCmd) Run() error {
@@ -33,13 +35,14 @@ func (c *DeployShowCmd) Run() error {
 	}
 
 	if c.Image != "" {
-		entry, ok := dc.Images[c.Image]
+		key := deployKey(c.Image, c.Instance)
+		entry, ok := dc.Images[key]
 		if !ok {
-			fmt.Printf("No overrides for image %q\n", c.Image)
+			fmt.Printf("No overrides for image %q\n", key)
 			return nil
 		}
 		// Print just this image's config
-		out := &DeployConfig{Images: map[string]DeployImageConfig{c.Image: entry}}
+		out := &DeployConfig{Images: map[string]DeployImageConfig{key: entry}}
 		return marshalToStdout(out)
 	}
 
@@ -168,7 +171,8 @@ func (c *DeployImportCmd) Run() error {
 
 // DeployResetCmd removes deploy.yml overrides.
 type DeployResetCmd struct {
-	Image string `arg:"" optional:"" help:"Image to reset (omit to clear all)"`
+	Image    string `arg:"" optional:"" help:"Image to reset (omit to clear all)"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *DeployResetCmd) Run() error {
@@ -198,25 +202,26 @@ func (c *DeployResetCmd) Run() error {
 		return nil
 	}
 
-	if _, ok := dc.Images[c.Image]; !ok {
-		fmt.Printf("No overrides for image %q\n", c.Image)
+	key := deployKey(c.Image, c.Instance)
+	if _, ok := dc.Images[key]; !ok {
+		fmt.Printf("No overrides for image %q\n", key)
 		return nil
 	}
 
-	RemoveImageDeploy(dc, c.Image)
+	RemoveImageDeploy(dc, key)
 
 	if len(dc.Images) == 0 {
 		// No images left — remove the file
 		path, _ := DeployConfigPath()
 		os.Remove(path)
-		fmt.Printf("Removed overrides for %q (deploy.yml now empty, removed)\n", c.Image)
+		fmt.Printf("Removed overrides for %q (deploy.yml now empty, removed)\n", key)
 		return nil
 	}
 
 	if err := SaveDeployConfig(dc); err != nil {
 		return err
 	}
-	fmt.Printf("Removed overrides for %q\n", c.Image)
+	fmt.Printf("Removed overrides for %q\n", key)
 	return nil
 }
 
@@ -257,30 +262,36 @@ func (c *DeployStatusCmd) Run() error {
 		}
 	}
 
-	deployImages := make(map[string]bool)
+	// Map deploy keys to quadlet stems for cross-referencing
+	// e.g., "selkies-desktop/foo" → quadlet stem "selkies-desktop-foo"
+	deployToStem := make(map[string]string) // deploy key → quadlet stem
+	stemToDeploy := make(map[string]string) // quadlet stem → deploy key
 	if dc != nil {
-		for name := range dc.Images {
-			deployImages[name] = true
+		for key := range dc.Images {
+			img, inst := parseDeployKey(key)
+			stem := strings.TrimPrefix(containerNameInstance(img, inst), "ov-")
+			deployToStem[key] = stem
+			stemToDeploy[stem] = key
 		}
 	}
 
-	if len(deployImages) == 0 && len(quadletImages) == 0 {
+	if len(deployToStem) == 0 && len(quadletImages) == 0 {
 		fmt.Println("No deploy.yml entries and no quadlet files found")
 		return nil
 	}
 
 	// Stale deploy.yml entries (no quadlet)
-	for name := range deployImages {
-		if !quadletImages[name] {
-			fmt.Printf("%-40s deploy.yml: yes  quadlet: no   (stale config)\n", name)
+	for key, stem := range deployToStem {
+		if !quadletImages[stem] {
+			fmt.Printf("%-40s deploy.yml: yes  quadlet: no   (stale config)\n", key)
 		}
 	}
-	// Both exist
-	for name := range quadletImages {
-		if deployImages[name] {
-			fmt.Printf("%-40s deploy.yml: yes  quadlet: yes  (ok)\n", name)
+	// Both exist or quadlet only
+	for stem := range quadletImages {
+		if key, ok := stemToDeploy[stem]; ok {
+			fmt.Printf("%-40s deploy.yml: yes  quadlet: yes  (ok)\n", key)
 		} else {
-			fmt.Printf("%-40s deploy.yml: no   quadlet: yes  (no overrides)\n", name)
+			fmt.Printf("%-40s deploy.yml: no   quadlet: yes  (no overrides)\n", stem)
 		}
 	}
 

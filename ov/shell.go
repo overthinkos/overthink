@@ -107,7 +107,7 @@ func (c *ShellCmd) Run() error {
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -158,7 +158,7 @@ func (c *ShellCmd) Run() error {
 		// Resolve per-image engine from labels
 		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
 		// Apply deploy.yml overrides
-		MergeDeployOntoMetadata(meta, dc)
+		MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 		uid = meta.UID
 		gid = meta.GID
@@ -189,7 +189,7 @@ func (c *ShellCmd) Run() error {
 	// Resolve agent forwarding (SSH/GPG socket mounts)
 	var deployImage *DeployImageConfig
 	if dc != nil {
-		if overlay, ok := dc.Images[c.Image]; ok {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay
 		}
 	}

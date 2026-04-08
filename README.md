@@ -306,6 +306,7 @@ ov config <image> -v name:type[:path]  # Per-volume backing (volume|bind|encrypt
 ov config <image> --force-seed         # Re-provision data into bind-backed volumes
 ov config <image> --data-from <img>    # Seed data from a separate data image
 ov config <image> --update-all         # Propagate service env to all deployed quadlets
+ov config <image> -i <instance>         # Deploy named instance (separate config)
 ov config remove <image>               # Remove quadlet + deploy.yml entry
 ov config mount/unmount <image>        # Mount/unmount encrypted volumes
 ov config status <image>               # Encrypted volume status
@@ -317,6 +318,19 @@ ov remove <image> [--purge]            # Remove service + deploy.yml entry (--pu
 ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
 ov service status/start/stop/restart   # Manage services inside container
 ```
+
+### Multiple Instances
+
+Run multiple containers of the same image with `-i <instance>`:
+
+```bash
+ov config selkies-desktop -i work -e TS_HOSTNAME=work -p 3001:3000
+ov config selkies-desktop -i personal -p 3002:3000
+ov start selkies-desktop -i work
+ov start selkies-desktop -i personal
+```
+
+Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
 
 ### Desktop Automation
 

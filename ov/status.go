@@ -509,7 +509,7 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 			status = state
 		}
 
-		runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+		runEngine := ResolveImageEngineForDeploy(imageName, "", rt.RunEngine)
 		engineBin := EngineBinary(runEngine)
 
 		cs := ContainerStatus{
@@ -520,11 +520,20 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 			RunMode:   rt.RunMode,
 		}
 
-		// Get ports from deploy.yml first
+		// Get ports from deploy.yml first (try direct match, then scan for instance keys)
 		dc, _ := LoadDeployConfig()
 		if dc != nil {
 			if dcImg, ok := dc.Images[imageName]; ok {
 				cs.Ports = dcImg.Ports
+			} else {
+				// Try to match instance deploy keys (e.g., "selkies-desktop/foo" for stem "selkies-desktop-foo")
+				for key, entry := range dc.Images {
+					img, inst := parseDeployKey(key)
+					if inst != "" && strings.TrimPrefix(containerNameInstance(img, inst), "ov-") == imageName {
+						cs.Ports = entry.Ports
+						break
+					}
+				}
 			}
 		}
 		// Fall back to image labels
@@ -602,7 +611,7 @@ func printStatusTable(statuses []ContainerStatus) error {
 
 func (c *StatusCmd) statusSingle(rt *ResolvedRuntime) error {
 	imageName := resolveImageName(c.Image)
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 
@@ -663,7 +672,7 @@ func (c *StatusCmd) statusSingle(rt *ResolvedRuntime) error {
 	// Enrich from deploy.yml
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if dcImg, ok := dc.Images[imageName]; ok {
+		if dcImg, ok := dc.Images[deployKey(imageName, c.Instance)]; ok {
 			status.Ports = dcImg.Ports
 			if dcImg.Network != "" {
 				status.Network = dcImg.Network

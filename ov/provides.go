@@ -62,7 +62,7 @@ func podAwareEnvProvides(entries []EnvProvidesEntry, imageName, ctrName string) 
 	seen := map[string]bool{} // name → true if local entry added
 	// First pass: add same-image entries with localhost
 	for _, e := range entries {
-		if e.Source == imageName {
+		if isSameBaseImage(e.Source, imageName) {
 			local := e
 			local.Value = strings.ReplaceAll(e.Value, ctrName, "localhost")
 			result = append(result, local)
@@ -84,7 +84,7 @@ func removeBySource[T Named](entries []T, imageName string) ([]T, bool) {
 	var result []T
 	removed := false
 	for _, e := range entries {
-		if e.GetSource() == imageName {
+		if isSameBaseImage(e.GetSource(), imageName) {
 			removed = true
 		} else {
 			result = append(result, e)
@@ -102,7 +102,7 @@ func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) 
 	seen := map[string]bool{} // name → true if local entry added
 	// First pass: add same-image entries with localhost
 	for _, e := range entries {
-		if e.Source == imageName {
+		if isSameBaseImage(e.Source, imageName) {
 			local := e
 			local.URL = strings.ReplaceAll(e.URL, ctrName, "localhost")
 			result = append(result, local)

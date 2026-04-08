@@ -51,6 +51,25 @@ elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then
     export __GLX_VENDOR_LIBRARY_NAME=nvidia
 fi
 
+# Translate standard proxy env vars to Chrome CLI flags.
+# Chrome does NOT respect HTTP_PROXY/HTTPS_PROXY natively.
+PROXY_FLAGS=""
+_http_proxy="${HTTP_PROXY:-${http_proxy:-}}"
+_https_proxy="${HTTPS_PROXY:-${https_proxy:-}}"
+_no_proxy="${NO_PROXY:-${no_proxy:-}}"
+
+if [ -n "$_http_proxy" ] && [ -n "$_https_proxy" ]; then
+    PROXY_FLAGS="--proxy-server=http=${_http_proxy};https=${_https_proxy}"
+elif [ -n "$_https_proxy" ]; then
+    PROXY_FLAGS="--proxy-server=${_https_proxy}"
+elif [ -n "$_http_proxy" ]; then
+    PROXY_FLAGS="--proxy-server=${_http_proxy}"
+fi
+
+if [ -n "$PROXY_FLAGS" ] && [ -n "$_no_proxy" ]; then
+    PROXY_FLAGS="$PROXY_FLAGS --proxy-bypass-list=${_no_proxy}"
+fi
+
 # Resolve the real Chrome binary — avoids recursion when google-chrome-stable
 # in ~/.local/bin is a symlink back to this wrapper.
 CHROME_BIN=/opt/google/chrome/chrome
@@ -63,6 +82,7 @@ WIN_EXT="$HOME/.local/share/chrome-windows"
 
 exec $CHROME_BIN $CHROME_FLAGS \
     $VAAPI_FLAGS \
+    $PROXY_FLAGS \
     --remote-debugging-port=9223 --remote-debugging-address=127.0.0.1 \
     --remote-allow-origins='*' \
     --user-data-dir="$HOME/.chrome-debug" \

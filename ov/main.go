@@ -108,8 +108,9 @@ func (c *ValidateCmd) Run() error {
 
 // InspectCmd prints resolved config for an image
 type InspectCmd struct {
-	Image  string `arg:"" help:"Image name"`
-	Format string `long:"format" help:"Output a single field instead of full JSON"`
+	Image    string `arg:"" help:"Image name"`
+	Format   string `long:"format" help:"Output a single field instead of full JSON"`
+	Instance string `short:"i" long:"instance" help:"Instance name"`
 }
 
 func (c *InspectCmd) Run() error {
@@ -227,7 +228,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Images[c.Image]; ok {
+				if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 					for _, dv := range overlay.Volumes {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}
@@ -271,7 +272,7 @@ func (c *InspectCmd) runFromLabels() error {
 
 	// Apply deploy.yml overrides
 	dc, _ := LoadDeployConfig()
-	MergeDeployOntoMetadata(meta, dc)
+	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 	if c.Format != "" {
 		switch c.Format {
@@ -317,7 +318,7 @@ func (c *InspectCmd) runFromLabels() error {
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Images[c.Image]; ok {
+				if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 					for _, dv := range overlay.Volumes {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}

@@ -61,9 +61,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
 
-**Pixi manylinux fix:** `ov generate` injects `[system-requirements] libc = { family = "glibc", version = "2.39" }` into every pixi.toml during build if not already present. This fixes pixi 0.66.0's resolver which incorrectly detects the platform as `manylinux_2_28` on glibc 2.42, rejecting `manylinux_2_34` wheels (e.g., pixelflux 1.5.9). Source: `builder.yml` `manylinux_fix` template, rendered by `ov/generate.go`.
-
-**Pixi build scripts:** The pixi builder supports an optional `build_script: build.sh` field in `builder.yml`. If a layer with `pixi.toml` also has a `build.sh`, the script runs in the pixi builder stage after `pixi install` completes. The script is bind-mounted from the layer context (same pattern as the cargo builder's `--mount=type=bind,from=<layer>-ctx`). This allows layers to run build-time logic (compiling C extensions, npm builds, binary patching) without installing build dependencies in the final image. Example: the `selkies` layer uses `build.sh` to pip-install selkies (C extensions need gcc) and build the web UI (needs nodejs/npm) — all in the builder image. Source: `builder.yml` `build_script` field, `ov/generate.go` `buildStageContext()`, `ov/format_template.go` `BuildStageContext.HasBuildScript`.
+**Builder internals** (pixi manylinux fix, pixi build scripts, build.sh pattern): See `/ov:build`, `/ov:generate`.
 
 ---
 
@@ -162,75 +160,33 @@ Each plugin has a `.claude-plugin/plugin.json` manifest. Skills are at `plugins/
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
 - Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images
 - `ov merge` handles OCI whiteout semantics: regular whiteouts (`.wh.<name>`), opaque whiteouts (`.wh..wh..opq`), and reintroduction-supersedes-whiteout cases. This prevents EEXIST errors when merging layers that contain file deletions. Source: `ov/merge.go` (`whiteoutTarget`, `mergeLayers`)
-- `env_provides:` in `layer.yml` declares env vars for consumers via pod-aware resolution. Template syntax: `{{.ContainerName}}` (only supported variable). Same-container: hostname rewritten to `localhost`. Cross-container: hostname kept as-is. `env:` and `env_provides:` may declare the same key — `env:` is baked into the service's own image (e.g., `OLLAMA_HOST=0.0.0.0`), `env_provides:` is for consumers (e.g., `OLLAMA_HOST=http://ov-ollama:11434`). For same-container, `env:` has higher priority and overrides provides. Cleanup is automatic on `ov config remove` / `ov remove`. `--update-all` on `ov config` propagates to all deployed quadlets
-- `env_requires:` in `layer.yml` declares env vars the layer MUST have from the environment (e.g., `OPENROUTER_API_KEY`). At `ov config` time, missing required vars produce warnings. Structure: list of `{name, description, default?}`
-- `env_accepts:` in `layer.yml` declares env vars the layer CAN optionally use (e.g., `TELEGRAM_BOT_TOKEN`). No warnings if missing — for documentation only. Same structure as `env_requires`
-- `mcp_provides:` in `layer.yml` declares MCP servers injected into OTHER containers at deploy time. List of `{name, url, transport}`. Template: `{{.ContainerName}}`. Pod-aware: same-container entries resolve to `localhost`. Cleanup automatic on remove. `--update-all` propagates
-- `mcp_requires:` / `mcp_accepts:` mirror `env_requires` / `env_accepts` but for MCP server dependencies. Same `{name, description}` struct. `mcp_requires` warns at `ov config` time
+- Cross-container service discovery (`env_provides`/`env_requires`/`env_accepts`, `mcp_provides`/`mcp_requires`/`mcp_accepts`): See `/ov:layer` for declaration syntax, `/ov:config` for resolution behavior (pod-aware, `--update-all` propagation, cleanup on remove)
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
-- Port protocol annotations control tunnel backend schemes: `"https+insecure:3000"` tells Tailscale to use `https+insecure://` when proxying. Default is `http`. Supported: `http`, `https`, `https+insecure`, `tcp`, `tls-terminated-tcp` (Tailscale); `http`, `https`, `tcp`, `ssh`, `rdp`, `smb` (Cloudflare). Ports with HTTPS backends (like Traefik self-signed) MUST use `https+insecure` to avoid 404 errors from plain HTTP proxying
+- Port protocol annotations control tunnel backend schemes: `"https+insecure:3000"` tells Tailscale to use `https+insecure://` when proxying. Ports with HTTPS backends (like Traefik self-signed) MUST use `https+insecure`. See `/ov:deploy` for supported schemes
 
-### Two-Tier Layer Architecture for ML/Python Layers
+### Instance Support
 
-ML layers follow a two-tier pattern that separates environment ownership from post-install steps:
+Multiple containers of the same image via `-i <instance>`:
+- Container name: `ov-<image>-<instance>`, deploy key: `image/instance` in deploy.yml
+- All commands accept `-i`: `ov config`, `ov start/stop/status/logs/remove`, `ov deploy show/reset`, `ov shell`, `ov cdp`, etc.
+- MCP name disambiguation: `mcp_provides` names get `-<instance>` appended (e.g., `chrome-devtools-31.58.9.4`) so consumers see unique servers. Stale entries cleaned on re-config
+- Source: `deployKey()`/`parseDeployKey()` in `ov/deploy.go`. See `/ov:deploy` for deploy.yml structure, `/ov:config` for MCP disambiguation
 
-**Tier 1 — Post-install layers** (no pixi.toml): Install binaries or pip packages into whatever pixi env exists. Reusable across images.
-- `llama-cpp`: downloads prebuilt binaries + GGUF tools. Sets `LLAMA_CPP_PATH` env and PATH
-- `unsloth`: pip installs vLLM wheel + unsloth + unsloth-zoo + vLLM torch.compile patch (`patch_vllm_size_nodes.py`) for `_decompose_size_nodes` bug (upstream: vllm-project/vllm#38360). vLLM 0.19 runtime deps (opentelemetry-*) installed via pip --no-deps after wheel (pixi conda/PyPI resolver conflict). Sets `HF_HOME`, `UNSLOTH_SKIP_LLAMA_CPP_INSTALL`
-- `jupyter-colab-mcp`: CRDT MCP server extension (fastmcp + jupyter_colab_mcp). Installs into parent pixi env
+### Chrome HTTP Proxy
 
-**Tier 2 — Environment-owner layers** (have pixi.toml): Define the complete Python environment. Compose Tier 1 layers via `layers:` field.
-- `python-ml`: core ML env (PyTorch, vLLM runtime deps, HF core). `layers: [llama-cpp]`
-- `jupyter-colab`: lightweight Jupyter + CRDT collaboration. `layers: [jupyter-colab-mcp]`
-- `jupyter-colab-ml`: full ML + Jupyter + CRDT MCP. Includes gcc/gcc-c++ for triton 3.6+ JIT compilation. `layers: [llama-cpp, unsloth, jupyter-colab-mcp]`
-- `unsloth-studio`: fine-tuning env with studio UI. `layers: [llama-cpp, unsloth]`
+Chrome layers accept optional `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` env vars (via `env_accepts`). The `chrome-wrapper` translates these to Chrome's `--proxy-server` and `--proxy-bypass-list` flags. `chrome-x11-wrapper` has identical logic. Deploy with: `ov config <image> -e HTTP_PROXY=http://proxy:8080`. See `/ov-layers:chrome` for details
 
-**Key constraint:** The generator creates intermediate images for shared layers. Tier 1 layers with pip installs (like `unsloth`) must NOT be extracted into intermediates — they need the pixi env from Tier 2. The generator handles this correctly as long as pip-install layers don't have standalone pixi.toml. Only Tier 2 layers own pixi.toml; Tier 1 user.yml runs after pixi COPY in the final image build.
+### ML/Python Layer Architecture
 
-**ML training gotchas:**
-- Ministral/Pixtral models require `UNSLOTH_ENABLE_FLEX_ATTENTION=0` due to nested torch.compile bug between unsloth + transformers 5.5 masking_utils
-- Pixtral-12B requires `max_memory={0: "14GB"}` in `from_pretrained()` because accelerate's device_map uses uncompressed BF16 sizes
-- TRL 1.0 requires `packing=True` in SFTConfig when unsloth auto-enables `padding_free=True`
-
-- Meta-layers CAN have both `depends:` and `layers:` (e.g., `unsloth-studio` has `depends: [cuda, supervisord]` + `layers: [llama-cpp, unsloth]`)
-- Meta-layers CAN own pixi.toml (environment-owner pattern — exactly one pixi.toml per image)
-
-**Hermes Agent layer** (`hermes`) follows the Tier 2 pattern with `build.sh` (same as selkies): pixi.toml defines the Python env, build.sh clones the hermes-agent repo, pip installs it, and sets up npm deps. The `hermes-playwright` layer is a Tier 1 add-on for Playwright + Chromium.
-
-**Hermes automatic LLM provider configuration** — The `hermes-entrypoint` auto-detects and configures LLM providers on first start based on environment variables. ALL providers whose env vars are set get registered as `custom_providers` in `config.yaml`; priority only determines the default model:
-
-| Priority | Env var | Provider | Default model | Base URL |
-|----------|---------|----------|---------------|----------|
-| 1 | `OLLAMA_HOST` | Local Ollama (`custom`) | `qwen2.5-coder:32b` | `${OLLAMA_HOST}/v1` |
-| 2 | `OLLAMA_API_KEY` | Ollama Cloud (`custom`) | `kimi-k2.5:cloud` | `https://ollama.com/v1` |
-| 3 | `OPENROUTER_API_KEY` | OpenRouter (built-in) | `qwen/qwen3.6-plus:free` | *(managed by hermes)* |
-
-Single-phase configuration: on first start (guarded by `# ov:auto-configured` sentinel), registers ALL available LLM providers and MCP servers, sets the default model. API keys synced to `.env` on every start for rotation. Override model with `HERMES_MODEL` env var. Switch providers mid-session: `hermes chat --provider openrouter` or `/model custom:ollama-cloud:kimi-k2.5:cloud`. To reconfigure: delete `/opt/data/config.yaml` and restart.
-
-**Provider-specific notes:**
-- **Ollama Cloud** uses Bearer token auth (`OLLAMA_API_KEY`) at `https://ollama.com/v1`. `kimi-k2.5:cloud` is a thinking/reasoning model — responses include a `reasoning` field before `content`
-- **OpenRouter** is a built-in hermes provider — no `custom_providers` entry needed, just `OPENROUTER_API_KEY` in `.env`
-- **Local Ollama** requires `api_key: 'ollama'` in `custom_providers` — the OpenAI SDK requires a non-empty value but Ollama ignores it
-- Auxiliary tasks (`compression`, `web_extract`, `vision`) are routed through the default provider
-- Source: `layers/hermes/hermes-entrypoint` (auto-config logic), `layers/hermes/layer.yml` (`env_accepts`)
-
-**Build.sh and npm gotchas** (discovered during hermes testing):
-- Playwright `npx playwright install --with-deps` does NOT support Fedora — falls back to Ubuntu's `apt-get`. Workaround: install Chromium system deps via rpm packages in `layer.yml`, browser binary via `npx playwright install chromium` (without `--with-deps`) in `root.yml`
-- npm packages installed globally (via the npm builder's `package.json`) are in `~/.npm-global/lib/node_modules/` and need `NODE_PATH` to be `require()`d. For project-local deps (like agent-browser), install in `build.sh` instead of `package.json`
-- `sounddevice` Python library needs `portaudio` rpm at runtime (not just build time)
-- When `root.yml` installs Playwright browsers with `HOME=/tmp`, set `PLAYWRIGHT_BROWSERS_PATH=/tmp/.cache/ms-playwright` in `layer.yml` env so the runtime user finds them
+ML layers follow a two-tier pattern: Tier 1 (post-install, no pixi.toml) installs into existing environments; Tier 2 (environment-owner, has pixi.toml) defines the Python environment. Key constraint: only Tier 2 layers own pixi.toml (one per image). Meta-layers CAN have both `depends:` and `layers:`. See `/ov-layers:python-ml`, `/ov-layers:unsloth`, `/ov-layers:jupyter-colab-ml` for details. For Hermes agent auto-provider-config, build.sh patterns, and ML training gotchas: see `/ov-layers:hermes`
 
 For layer-specific rules (install files, packages, port_relay, secrets, data, env_provides, env_requires, env_accepts, cache mounts): `/ov:layer`
 
-**Credential security:** Config files (`settings.yml`, `deploy.yml`) are written with `0600` permissions for new files. `ov` warns if existing files have overly permissive permissions but does not change them — the user must `chmod 600` themselves. Credentials are stored in system keyring when available; plaintext config file is the fallback. `ov settings migrate-secrets` migrates existing plaintext credentials to keyring. `ov doctor` reports credential storage health.
+**Credential security:** See `/ov:config` for keyring, KeePass, and config file backends. `ov doctor` reports credential storage health.
 
-**GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime:
-- **NVIDIA:** CUDA images get `--gpus all` / CDI device injection automatically
-- **AMD ROCm:** Auto-detects `/dev/kfd` and `/dev/dri/renderD*`, injects `HSA_OVERRIDE_GFX_VERSION`, adds `video`/`render` groups. `ov udev` manages KFD device rules. `ov doctor` reports AMD GPU info
-- Source: `ov/devices.go` (`DetectNvidiaGPU`, `DetectAMDGPU`)
+**GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime. See `/ov:doctor` for detection details, `/ov-layers:nvidia` for NVIDIA, `/ov-layers:rocm` for AMD
 
-**Security mounts:** `security.mounts` in `layer.yml` declares host bind mounts or tmpfs needed for device access. Stored in image labels, applied by `ov config`/`ov start`. Format: `host:container:options` (bind mount) or `tmpfs:path:options` (tmpfs). Generates `Volume=` or `Tmpfs=` in quadlets.
-- Source: `ov/config.go` (`SecurityConfig.Mounts`), `ov/quadlet.go`, `ov/start.go`
+**Security mounts:** `security.mounts` in `layer.yml` — host bind mounts or tmpfs for device access. See `/ov:layer`
 
 ---
 
@@ -287,17 +243,14 @@ Skills: `/ov:image` -> `/ov-images:<similar>` (pattern reference) -> `/ov:build`
 
 **Layer images:** set `base` to another image name in `images.yml`. The generator handles dependency ordering and tag resolution.
 
-**Deploy a service:** `ov config <image> -w ~/project` -> saves all deployment state to `~/.config/ov/deploy.yml` -> generates quadlet + provisions secrets + mounts encrypted volumes + provisions data from data layers into bind-backed volumes + injects `env_provides` vars into global deploy.yml env for cross-container discovery + warns about missing `env_requires` vars. `--password auto` generates all secrets; `--password manual` prompts. `--seed` (default true) provisions data layers; `--force-seed` re-provisions; `--data-from <image>` seeds from a separate data image. `--update-all` regenerates quadlets for all other deployed images to pick up env_provides changes. `ov start <image>` requires `ov config` first in quadlet mode. No `images.yml` needed for deployment.
-Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml) -> `/ov:start` -> `/ov:update` (data sync) -> `/ov:service` (lifecycle)
+**Deploy a service:** `ov config <image>` -> `ov start <image>`. Config generates quadlet, provisions secrets/volumes/data, injects `env_provides`/`mcp_provides`. Use `-i <instance>` for multiple containers of the same image.
+Skills: `/ov:config` (setup) -> `/ov:deploy` (deploy.yml, instances, tunnels) -> `/ov:start` -> `/ov:service` (lifecycle)
 
-**Record a session:**
-`ov record start <image> --mode terminal` (asciinema) or `--mode desktop` (pixelflux/wf-recorder) -> `ov record cmd` (interact) -> `ov record stop <image> -o output`
-Skills: `/ov:record` -> `/ov-layers:wl-record-pixelflux` or `/ov-layers:wf-recorder` (desktop) or `/ov-layers:asciinema` (terminal)
-Use `/ov:wl-overlay` for in-recording overlays (title cards, lower-thirds, countdowns, fade transitions) — composited by the compositor, appear natively in recordings without post-production.
+**Record a session:** `ov record start <image> --mode terminal|desktop` -> `ov record cmd` -> `ov record stop <image> -o output`
+Skills: `/ov:record` -> `/ov:wl-overlay` (recording overlays)
 
-**Deploy with Tailscale exit node:**
-`ov secrets gpg set TS_AUTHKEY <key>` -> `ov config <image> --sidecar tailscale -e TS_HOSTNAME=<name> -e "TS_EXTRA_ARGS=--exit-node=<ip> --exit-node-allow-lan-access"` -> `ov start <image>` -> `podman exec ov-<image>-tailscale tailscale set --exit-node=<ip> --exit-node-allow-lan-access` (first time only)
-Skills: `/ov:sidecar` (templates, pod architecture) + `/ov:secrets` (auth key) -> `/ov:config` (--sidecar flag) -> `/ov-images:<name>` (verification)
+**Deploy with Tailscale exit node:** See `/ov:sidecar` for pod architecture + `/ov:secrets` for auth key management.
+Skills: `/ov:sidecar` + `/ov:secrets` -> `/ov:config` (--sidecar flag)
 
 **Host bootstrap (first time):** requires `go`, `docker` (or `podman`). Run `bash setup.sh` to download `task`, build `ov`, then `ov build` to build all images. To use podman: `ov settings set engine.build podman`.
 
@@ -391,13 +344,7 @@ Start the service, then use MCP tools (`list_notebooks`, `open_notebook_session`
 For browser automation, use `/ov-images:hermes-playwright` instead. Hermes npm deps (agent-browser, camoufox-browser) are project-local (in `~/hermes-agent/node_modules/`), not global. LLM provider auto-configured from `OLLAMA_HOST` / `OLLAMA_API_KEY` / `OPENROUTER_API_KEY` env vars passed via `ov config -e`.
 
 **Deploy Hermes with Selkies desktop (separate pods):**
-Deploy three separate containers communicating via `env_provides`/`mcp_provides`:
-```
-ov config selkies-desktop && ov start selkies-desktop          # provides BROWSER_CDP_URL
-ov config jupyter-colab --update-all && ov start jupyter-colab  # provides jupyter-colab MCP
-ov config hermes-full -e OLLAMA_API_KEY=... --update-all && ov start hermes-full  # consumes both
-```
-The `--update-all` flag propagates provides to all deployed quadlets. Hermes auto-receives `BROWSER_CDP_URL=http://ov-selkies-desktop:9222` and `OV_MCP_SERVERS` with `http://ov-jupyter-colab:8888/mcp` and `http://ov-selkies-desktop:9224/mcp` (chrome-devtools, 29 browser automation tools). Browser tools (`browser_navigate`, `browser_click`, `browser_snapshot`) control the desktop Chrome visible at `:3000`. The `cdp-proxy` in the chrome layer rewrites Host headers and response URLs for Chrome 146+ cross-container compatibility (two-port architecture: Chrome on internal 9223, proxy on external 9222).
+`ov config selkies-desktop` -> `ov config jupyter-colab --update-all` -> `ov config hermes-full -e OLLAMA_API_KEY=... --update-all`. Uses `env_provides`/`mcp_provides` for cross-container discovery. See `/ov-images:hermes-full`, `/ov:config`.
 
 **Full image lifecycle (build -> deploy -> test):**
 `/ov:build` (build image) -> `/ov:deploy` (quadlet, tunnels, volume backing) -> `/ov:service` (config, start, status, logs) -> `/ov-images:<name>` (ports, verification)

@@ -374,7 +374,7 @@ func TestCleanDeployEntryRemovesProvides(t *testing.T) {
 	}
 
 	// Remove ollama — should clean up OLLAMA_HOST from provides.env
-	cleanDeployEntry("ollama")
+	cleanDeployEntry("ollama", "")
 
 	loaded, err := LoadDeployConfig()
 	if err != nil {
@@ -394,7 +394,7 @@ func TestCleanDeployEntryRemovesProvides(t *testing.T) {
 	}
 
 	// Remove jupyter — should clean up MCP entry
-	cleanDeployEntry("jupyter")
+	cleanDeployEntry("jupyter", "")
 
 	loaded2, err := LoadDeployConfig()
 	if err != nil {
@@ -424,5 +424,153 @@ func TestResolveVolumeBackingEncryptedWithHost(t *testing.T) {
 	// Explicit Host path is used directly (no ov-image-name prefix)
 	if binds[0].HostPath != "/data/immich/library/plain" {
 		t.Errorf("HostPath = %q, want /data/immich/library/plain", binds[0].HostPath)
+	}
+}
+
+func TestDeployKey(t *testing.T) {
+	tests := []struct {
+		image, instance string
+		want            string
+	}{
+		{"selkies-desktop", "", "selkies-desktop"},
+		{"selkies-desktop", "31.58.9.4", "selkies-desktop/31.58.9.4"},
+		{"my-app", "foo", "my-app/foo"},
+	}
+	for _, tt := range tests {
+		got := deployKey(tt.image, tt.instance)
+		if got != tt.want {
+			t.Errorf("deployKey(%q, %q) = %q, want %q", tt.image, tt.instance, got, tt.want)
+		}
+	}
+}
+
+func TestParseDeployKey(t *testing.T) {
+	tests := []struct {
+		key          string
+		wantImage    string
+		wantInstance string
+	}{
+		{"selkies-desktop", "selkies-desktop", ""},
+		{"selkies-desktop/31.58.9.4", "selkies-desktop", "31.58.9.4"},
+		{"my-app/foo", "my-app", "foo"},
+	}
+	for _, tt := range tests {
+		img, inst := parseDeployKey(tt.key)
+		if img != tt.wantImage || inst != tt.wantInstance {
+			t.Errorf("parseDeployKey(%q) = (%q, %q), want (%q, %q)", tt.key, img, inst, tt.wantImage, tt.wantInstance)
+		}
+	}
+}
+
+func TestDeployKeyRoundTrip(t *testing.T) {
+	pairs := [][2]string{
+		{"selkies-desktop", ""},
+		{"selkies-desktop", "31.58.9.4"},
+		{"my-app", "test"},
+	}
+	for _, p := range pairs {
+		key := deployKey(p[0], p[1])
+		img, inst := parseDeployKey(key)
+		if img != p[0] || inst != p[1] {
+			t.Errorf("round-trip failed: deployKey(%q, %q) = %q → parseDeployKey → (%q, %q)", p[0], p[1], key, img, inst)
+		}
+	}
+}
+
+func TestIsSameBaseImage(t *testing.T) {
+	tests := []struct {
+		source, imageName string
+		want              bool
+	}{
+		{"selkies-desktop", "selkies-desktop", true},
+		{"selkies-desktop/foo", "selkies-desktop", true},
+		{"selkies-desktop", "other-image", false},
+		{"selkies-desktop/foo", "other-image", false},
+	}
+	for _, tt := range tests {
+		got := isSameBaseImage(tt.source, tt.imageName)
+		if got != tt.want {
+			t.Errorf("isSameBaseImage(%q, %q) = %v, want %v", tt.source, tt.imageName, got, tt.want)
+		}
+	}
+}
+
+func TestSaveDeployStateInstance(t *testing.T) {
+	tmp := t.TempDir()
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) {
+		return filepath.Join(tmp, "deploy.yml"), nil
+	}
+	defer func() { DeployConfigPath = orig }()
+
+	// Save base
+	saveDeployState("selkies-desktop", "", SaveDeployStateInput{
+		Ports: []string{"3000:3000"},
+	})
+	// Save instance
+	saveDeployState("selkies-desktop", "31.58.9.4", SaveDeployStateInput{
+		Ports: []string{"3001:3000"},
+		Env:   []string{"HTTP_PROXY=http://31.58.9.4:6077"},
+	})
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	// Verify base entry
+	base, ok := dc.Images["selkies-desktop"]
+	if !ok {
+		t.Fatal("base entry missing")
+	}
+	if len(base.Ports) != 1 || base.Ports[0] != "3000:3000" {
+		t.Errorf("base.Ports = %v, want [3000:3000]", base.Ports)
+	}
+
+	// Verify instance entry
+	inst, ok := dc.Images["selkies-desktop/31.58.9.4"]
+	if !ok {
+		t.Fatal("instance entry missing")
+	}
+	if len(inst.Ports) != 1 || inst.Ports[0] != "3001:3000" {
+		t.Errorf("inst.Ports = %v, want [3001:3000]", inst.Ports)
+	}
+	if len(inst.Env) != 1 || inst.Env[0] != "HTTP_PROXY=http://31.58.9.4:6077" {
+		t.Errorf("inst.Env = %v, want [HTTP_PROXY=http://31.58.9.4:6077]", inst.Env)
+	}
+}
+
+func TestCleanDeployEntryInstance(t *testing.T) {
+	tmp := t.TempDir()
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) {
+		return filepath.Join(tmp, "deploy.yml"), nil
+	}
+	defer func() { DeployConfigPath = orig }()
+
+	// Set up both base and instance
+	dc := &DeployConfig{
+		Images: map[string]DeployImageConfig{
+			"selkies-desktop":           {Ports: []string{"3000:3000"}},
+			"selkies-desktop/31.58.9.4": {Ports: []string{"3001:3000"}, Env: []string{"HTTP_PROXY=x"}},
+		},
+	}
+	if err := SaveDeployConfig(dc); err != nil {
+		t.Fatalf("SaveDeployConfig: %v", err)
+	}
+
+	// Remove instance — base should survive
+	cleanDeployEntry("selkies-desktop", "31.58.9.4")
+
+	loaded, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	if _, ok := loaded.Images["selkies-desktop/31.58.9.4"]; ok {
+		t.Error("instance entry should be removed")
+	}
+	if _, ok := loaded.Images["selkies-desktop"]; !ok {
+		t.Error("base entry should survive")
 	}
 }

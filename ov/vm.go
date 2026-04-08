@@ -159,7 +159,7 @@ func (c *VmCreateCmd) Run() error {
 		meta, metaErr := ExtractMetadata(engine, ref)
 		if metaErr == nil && meta != nil {
 			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc)
+			MergeDeployOntoMetadata(meta, dc, c.Instance)
 			if meta.Vm != nil {
 				ram = meta.Vm.Ram
 				cpus = meta.Vm.Cpus

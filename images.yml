@@ -10,7 +10,7 @@ defaults:
     npm: fedora-builder
     cargo: fedora-builder
   merge:
-    auto: true
+    auto: false
     max_mb: 128
     max_total_mb: 0    # 0 = no limit; set to e.g. 2048 on CI runners with limited RAM
   format_config:

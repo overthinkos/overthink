@@ -90,7 +90,7 @@ func resolveServiceInit(image, instance string) (engine, containerName string, i
 		return "", "", nil, err
 	}
 	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
 	engine = EngineBinary(runEngine)
 	containerName = containerNameInstance(imageName, instance)
 	if !containerRunning(engine, containerName) {

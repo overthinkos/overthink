@@ -41,7 +41,7 @@ func (c *LogsCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	name := containerNameInstance(imageName, c.Instance)
 	args := []string{"logs"}
@@ -82,7 +82,7 @@ func (c *UpdateCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(c.Image, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
 
 	// Resolve image ref from labels (no images.yml dependency)
 	imageRef := fmt.Sprintf("%s:%s", c.Image, c.Tag)
@@ -169,7 +169,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	if dc == nil {
 		return
 	}
-	imgDeploy, ok := dc.Images[c.Image]
+	imgDeploy, ok := dc.Images[deployKey(c.Image, c.Instance)]
 	if !ok {
 		return
 	}
@@ -202,7 +202,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 				}
 			}
 		}
-		dc.Images[c.Image] = imgDeploy
+		dc.Images[deployKey(c.Image, c.Instance)] = imgDeploy
 		if err := SaveDeployConfig(dc); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
 		}
@@ -265,7 +265,7 @@ func (c *RemoveCmd) Run() error {
 	imageName := resolveImageName(c.Image)
 
 	// Stop tunnel before removing container (best-effort)
-	stopTunnelForImage(imageName)
+	stopTunnelForImage(imageName, c.Instance)
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -273,7 +273,7 @@ func (c *RemoveCmd) Run() error {
 	}
 
 	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
 	engine := EngineBinary(runEngine)
 	containerName := containerNameInstance(imageName, c.Instance)
 
@@ -369,8 +369,8 @@ func (c *RemoveCmd) Run() error {
 		if c.Purge {
 			removeVolumes(engine, imageName, c.Instance)
 		}
-		if !c.KeepDeploy && c.Instance == "" {
-			cleanDeployEntry(imageName)
+		if !c.KeepDeploy {
+			cleanDeployEntry(imageName, c.Instance)
 		}
 		return nil
 	}
@@ -389,8 +389,8 @@ func (c *RemoveCmd) Run() error {
 	if c.Purge {
 		removeVolumes(engine, imageName, c.Instance)
 	}
-	if !c.KeepDeploy && c.Instance == "" {
-		cleanDeployEntry(imageName)
+	if !c.KeepDeploy {
+		cleanDeployEntry(imageName, c.Instance)
 	}
 	return nil
 }

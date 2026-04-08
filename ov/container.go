@@ -17,7 +17,7 @@ func resolveContainer(image, instance string) (engine, name string, err error) {
 		return "", "", err
 	}
 	imageName := resolveImageName(image)
-	runEngine := ResolveImageEngineForDeploy(imageName, rt.RunEngine)
+	runEngine := ResolveImageEngineForDeploy(imageName, instance, rt.RunEngine)
 	engine = EngineBinary(runEngine)
 	name = containerNameInstance(imageName, instance)
 	if !containerRunning(engine, name) {

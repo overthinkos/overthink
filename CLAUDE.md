@@ -49,7 +49,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 |-----------|---------|-------|
 | Credentials & Secrets | Keyring, KeePass `.kdbx`, GPG-encrypted `.secrets`, kernel keyring caching | `/ov:secrets`, `/ov:config` |
 | Volumes | Named, bind, or encrypted (gocryptfs) — deploy-time choice per volume | `/ov:deploy`, `/ov:config` |
-| env_provides / requires / accepts | Cross-container env injection with pod-aware resolution, `--update-all` propagation | `/ov:config`, `/ov:layer` |
+| env_provides / requires / accepts | Cross-container env injection: filtered by consumer `env_accepts`/`env_requires`, pod-aware resolution, `--update-all` propagation. `env_requires` is a hard error | `/ov:config`, `/ov:layer` |
 | mcp_provides / requires / accepts | Cross-container MCP server discovery, consumers receive `OV_MCP_SERVERS` JSON | `/ov:config`, `/ov:layer` |
 | Hermes auto-configuration | First-start LLM + MCP + browser config, sentinel-guarded. Delete `config.yaml` to reconfigure | `/ov-layers:hermes` |
 | Sidecars | Deploy-time pod composition (`--sidecar tailscale`), dual networking | `/ov:sidecar` |
@@ -123,6 +123,9 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 - Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images. **However**, any layer that installs its own packages from `fedora-multimedia` (e.g., `cuda` installing CUDA dev packages) MUST still declare `repos:` in its own `layer.yml` — the Containerfile generator only adds `--enable-repo` for repos in the layer's own section, not from dependencies
 - `ov merge` handles OCI whiteout semantics: regular whiteouts (`.wh.<name>`), opaque whiteouts (`.wh..wh..opq`), and reintroduction-supersedes-whiteout cases. This prevents EEXIST errors when merging layers that contain file deletions. Source: `ov/merge.go` (`whiteoutTarget`, `mergeLayers`)
 - Cross-container service discovery (`env_provides`/`env_requires`/`env_accepts`, `mcp_provides`/`mcp_requires`/`mcp_accepts`): See `/ov:layer` for declaration syntax, `/ov:config` for resolution behavior (pod-aware, `--update-all` propagation, cleanup on remove)
+- `env_provides` filtering: cross-image env injection only injects vars the consumer declared in `env_accepts` or `env_requires`. Self-provides (same image) always pass for pod-local resolution. Internal services (redis, postgresql) that bind to loopback MUST NOT declare `env_provides` — they're unreachable from other containers
+- `env_requires` is a hard error: `ov config` aborts before writing the quadlet if any `env_requires` var is missing, with clear instructions showing exactly what to provide and how
+- Sidecar DNS: Tailscale sidecars use `TS_ACCEPT_DNS=false` to prevent DNS takeover. Pod quadlets include `--dns=10.89.0.1 --dns=100.100.100.100 --dns-search=dns.podman` for container DNS + MagicDNS + external DNS. See `/ov:sidecar`
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
 - Port protocol annotations control tunnel backend schemes: `"https+insecure:3000"` tells Tailscale to use `https+insecure://` when proxying. Ports with HTTPS backends (like Traefik self-signed) MUST use `https+insecure`. See `/ov:deploy` for supported schemes
 

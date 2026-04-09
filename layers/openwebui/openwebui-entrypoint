@@ -28,10 +28,10 @@ fi
 # Ollama Cloud (additive — both can be active simultaneously)
 if [ -n "${OLLAMA_API_KEY:-}" ]; then
     if [ -n "$URLS" ]; then
-        URLS="$URLS;https://api.ollama.com/v1"
+        URLS="$URLS;https://ollama.com/v1"
         KEYS="$KEYS;$OLLAMA_API_KEY"
     else
-        URLS="https://api.ollama.com/v1"
+        URLS="https://ollama.com/v1"
         KEYS="$OLLAMA_API_KEY"
     fi
     echo "openwebui-entrypoint: Ollama Cloud configured"

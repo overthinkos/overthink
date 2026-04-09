@@ -203,18 +203,6 @@ images:
       - linux/amd64
 
   jupyter:
-    base: nvidia
-    layers:
-      - agent-forwarding
-      - jupyter
-      - dbus
-      - ov
-    ports:
-      - "8888:8888"
-    platforms:
-      - linux/amd64
-
-  jupyter-colab:
     base: fedora
     layers:
       - agent-forwarding
@@ -510,14 +498,6 @@ images:
       - linux/amd64
 
   hermes:
-    base: fedora
-    layers:
-      - agent-forwarding
-      - hermes
-      - dbus
-      - ov
-
-  hermes-full:
     base: fedora
     layers:
       - agent-forwarding

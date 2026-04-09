@@ -261,7 +261,7 @@ func TestGlobalEnvForImage(t *testing.T) {
 				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
 			},
 			MCP: []MCPProvidesEntry{
-				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+				{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 			},
 		},
 	}
@@ -320,7 +320,7 @@ func TestDeployConfigProvidesRoundTrip(t *testing.T) {
 				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
 			},
 			MCP: []MCPProvidesEntry{
-				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+				{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 			},
 		},
 		Images: map[string]DeployImageConfig{
@@ -360,7 +360,7 @@ func TestCleanDeployEntryRemovesProvides(t *testing.T) {
 				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
 			},
 			MCP: []MCPProvidesEntry{
-				{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
+				{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 			},
 		},
 		Images: map[string]DeployImageConfig{

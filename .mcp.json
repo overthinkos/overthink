@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "jupyter-colab": {
+    "jupyter": {
       "type": "http",
       "url": "http://localhost:8888/mcp"
     },

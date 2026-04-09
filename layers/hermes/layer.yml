@@ -32,7 +32,7 @@ env_accepts:
     description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
 
 mcp_accepts:
-  - name: jupyter-colab
+  - name: jupyter
     description: "JupyterLab CRDT MCP server for notebook manipulation"
   - name: chrome-devtools
     description: "Chrome DevTools MCP server for browser automation and inspection"

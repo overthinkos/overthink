@@ -24,13 +24,13 @@ func TestFilterOwnProvidesEnv(t *testing.T) {
 
 func TestFilterOwnProvidesMCP(t *testing.T) {
 	entries := []MCPProvidesEntry{
-		{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter-colab"},
+		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Transport: "http", Source: "search"},
 	}
 
-	got := filterOwnProvides(entries, "jupyter-colab")
+	got := filterOwnProvides(entries, "jupyter")
 	if len(got) != 1 || got[0].Name != "code-search" {
-		t.Errorf("filterOwnProvides(mcp, jupyter-colab) = %v, want only code-search", got)
+		t.Errorf("filterOwnProvides(mcp, jupyter) = %v, want only code-search", got)
 	}
 }
 
@@ -46,11 +46,11 @@ func TestFilterOwnProvidesEmpty(t *testing.T) {
 
 func TestRemoveBySource(t *testing.T) {
 	entries := []MCPProvidesEntry{
-		{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Source: "jupyter-colab"},
+		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Source: "jupyter"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Source: "search"},
 	}
 
-	got, removed := removeBySource(entries, "jupyter-colab")
+	got, removed := removeBySource(entries, "jupyter")
 	if !removed {
 		t.Error("removeBySource should report removal")
 	}
@@ -157,7 +157,7 @@ func TestPodAwareEnvProvidesCrossContainer(t *testing.T) {
 
 func TestPodAwareMCPProvides(t *testing.T) {
 	entries := []MCPProvidesEntry{
-		{Name: "jupyter-colab", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
+		{Name: "jupyter", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
 		{Name: "code-search", URL: "http://ov-search:3100/mcp", Transport: "http", Source: "search-image"},
 	}
 
@@ -167,7 +167,7 @@ func TestPodAwareMCPProvides(t *testing.T) {
 		t.Fatalf("podAwareMCPProvides should return 2 entries, got %d", len(got))
 	}
 	// Local entry should use localhost
-	if got[0].Name != "jupyter-colab" || got[0].URL != "http://localhost:8888/mcp" {
+	if got[0].Name != "jupyter" || got[0].URL != "http://localhost:8888/mcp" {
 		t.Errorf("pod-local entry: got %+v, want localhost URL", got[0])
 	}
 	// Remote entry should keep hostname
@@ -179,8 +179,8 @@ func TestPodAwareMCPProvides(t *testing.T) {
 func TestPodAwareMCPProvidesLocalPrecedence(t *testing.T) {
 	// Both local and remote provide the same MCP server name
 	entries := []MCPProvidesEntry{
-		{Name: "jupyter-colab", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
-		{Name: "jupyter-colab", URL: "http://ov-standalone:8888/mcp", Transport: "http", Source: "standalone"},
+		{Name: "jupyter", URL: "http://ov-combined:8888/mcp", Transport: "http", Source: "combined-image"},
+		{Name: "jupyter", URL: "http://ov-standalone:8888/mcp", Transport: "http", Source: "standalone"},
 	}
 
 	got := podAwareMCPProvides(entries, "combined-image", "ov-combined")
@@ -195,7 +195,7 @@ func TestPodAwareMCPProvidesLocalPrecedence(t *testing.T) {
 func TestPodAwareMCPProvidesCrossContainer(t *testing.T) {
 	// Consumer is a different image — all entries are remote
 	entries := []MCPProvidesEntry{
-		{Name: "jupyter-colab", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter-image"},
+		{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter-image"},
 	}
 
 	got := podAwareMCPProvides(entries, "hermes-image", "ov-hermes")

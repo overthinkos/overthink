@@ -205,10 +205,10 @@ The skills system contains curated, structured knowledge for every component. Ra
 | Desktop automation | `/ov:cdp` -> `/ov:wl` -> `/ov:wl` sway -> `/ov:wl-overlay` |
 | Deploy a service | `/ov:config` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
 | Selkies streaming | `/ov-layers:selkies` -> `/ov-layers:labwc` -> `/ov-images:selkies-desktop` |
-| Jupyter MCP | `/ov-layers:jupyter-colab` -> `/ov-images:jupyter-colab` -> `/ov:service` |
+| Jupyter MCP | `/ov-layers:jupyter-colab` -> `/ov-images:jupyter` -> `/ov:service` |
 | Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` -> `/ov:validate` |
-| Deploy Hermes | `/ov-images:hermes-full` -> `/ov:config` -> `/ov:service` |
-| Hermes + Selkies | `ov config selkies-desktop` -> `ov config jupyter-colab --update-all` -> `ov config hermes-full --update-all` |
+| Deploy Hermes | `/ov-images:hermes` -> `/ov:config` -> `/ov:service` |
+| Hermes + Selkies | `ov config selkies-desktop` -> `ov config jupyter --update-all` -> `ov config hermes --update-all` |
 | Full lifecycle | `/ov:build` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
 
 For desktop automation: use CDP first, `--wl` for selkies-desktop (no VNC). See `/ov:cdp`, `/ov:wl`, `/ov-images:selkies-desktop` for detailed usage patterns.

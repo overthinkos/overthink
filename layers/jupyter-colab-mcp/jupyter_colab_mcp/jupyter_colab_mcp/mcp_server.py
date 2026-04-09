@@ -8,6 +8,7 @@ Tools are organized into three groups:
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from fastmcp import FastMCP
@@ -18,7 +19,7 @@ from .rtc_adapter import RTCAdapter
 def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
     """Create and configure the FastMCP server with all tools."""
     mcp = FastMCP(
-        "jupyter-colab",
+        os.environ.get("MCP_SERVER_NAME", "jupyter"),
         instructions=(
             "JupyterLab MCP server with real-time collaboration. "
             "Cell operations mutate the live CRDT document — changes appear "

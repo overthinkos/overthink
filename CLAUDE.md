@@ -6,27 +6,13 @@ Built on a generic init system framework (`init.yml`) and `ov` (Go CLI). Designe
 ---
 
 
-## Always follow the Five Cornerstones of AI Scut Testing
+## Five Cornerstones of AI Scut Testing
 
-### Your Assumptions Are the Enemy
-
-- The thing you didn't think to test is the thing that will break.
-
-### Small Bugs Have Big Friends
-
-- Every issue you dismissed as nonessential is tomorrow's catastrophe.
-
-### It's Broken Until It Runs Live
-
-- Localhost and mocks are deceptive liars.
-
-### Check Every Damn Thing
-
-- Methodically. Tediously. No shortcuts.
-
-### Then Check It Again
-
-Because you missed something. You always do.
+1. **Your Assumptions Are the Enemy** — The thing you didn't think to test is the thing that will break.
+2. **Small Bugs Have Big Friends** — Every issue you dismissed as nonessential is tomorrow's catastrophe.
+3. **It's Broken Until It Runs Live** — Localhost and mocks are deceptive liars.
+4. **Check Every Damn Thing** — Methodically. Tediously. No shortcuts.
+5. **Then Check It Again** — Because you missed something. You always do.
 
 ## Prioritize Clean Architecture Above All Else
 
@@ -43,25 +29,22 @@ Two components with a clean split:
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
-**Key subsystems** (refer to skills for full details):
+**Key subsystems** — invoke the skill for full details:
 
-| Subsystem | Summary | Skill |
-|-----------|---------|-------|
-| Credentials & Secrets | Keyring, KeePass `.kdbx`, GPG-encrypted `.secrets`, kernel keyring caching | `/ov:secrets`, `/ov:config` |
-| Volumes | Named, bind, or encrypted (gocryptfs) — deploy-time choice per volume | `/ov:deploy`, `/ov:config` |
-| env_provides / requires / accepts | Cross-container env injection: filtered by consumer `env_accepts`/`env_requires`, pod-aware resolution, `--update-all` propagation. `env_requires` is a hard error | `/ov:config`, `/ov:layer` |
-| mcp_provides / requires / accepts | Cross-container MCP server discovery, consumers receive `OV_MCP_SERVERS` JSON | `/ov:config`, `/ov:layer` |
-| Hermes auto-configuration | First-start LLM + MCP + browser config, sentinel-guarded. Delete `config.yaml` to reconfigure | `/ov-layers:hermes` |
-| Sidecars | Deploy-time pod composition (`--sidecar tailscale`), dual networking | `/ov:sidecar` |
-| Tunnels | Tailscale/Cloudflare with backend schemes (`http`, `https+insecure`, `tcp`, etc.) | `/ov:deploy` |
-| Agent Forwarding | SSH/GPG socket forwarding into containers | `/ov:shell` |
-| Init Systems | supervisord/systemd, fully defined in `init.yml` — no Go code changes to add new ones | `/ov:generate`, `/ov:layer` |
-| Multi-distro | `distro:` identity tags + `build:` package formats, tag-based dispatch in layer files | `/ov:build`, `/ov:layer` |
-| Generation | Containerfiles, service configs, traefik routes in `.build/` (disposable, gitignored) | `/ov:generate` |
+| Subsystem | Skill |
+|-----------|-------|
+| Credentials & Secrets | `/ov:secrets`, `/ov:config` |
+| Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
+| env/mcp provides/requires/accepts | `/ov:config`, `/ov:layer` |
+| Sidecars & Tunnels | `/ov:sidecar`, `/ov:deploy` |
+| Init Systems | `/ov:generate`, `/ov:layer` |
+| Multi-distro | `/ov:build`, `/ov:layer` |
+| Desktop Automation | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:wl-overlay` |
+| GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
 
-**`task` (Taskfile)** -- bootstrap only: builds `ov` from source and creates the buildx builder. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`. All other operations use `ov` directly.
+**`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 
-**Builder internals** (pixi manylinux fix, pixi build scripts, build.sh pattern): See `/ov:build`, `/ov:generate`.
+**Builder internals**: See `/ov:build`, `/ov:generate`.
 
 ---
 
@@ -79,7 +62,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (153 layers)
++-- layers/<name>/            # Layer directories (160 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -105,40 +88,22 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 ## Key Rules
 
+**Project-wide:**
 - Lowercase-hyphenated names for layers and images
 - Taskfiles for bootstrap only (building ov), Go for all other logic
 - Never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is the only Python package manager
 - `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
 - All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
-- Always recommend quadlet mode for deployment. Direct mode is only a fallback for platforms without quadlet support
-- MUST invoke skills before exploring the codebase. Skills are the primary knowledge source, not the code itself
-- `root.yml`/`user.yml` use `all:` task for common logic, with optional tag-specific tasks (`rpm:`, `pac:`, `fedora:`, etc.). Never use `install:` as a task name
-- `distro:` field defines identity tags: `distro: ["fedora:43", fedora]`. First matching section overrides packages. Inherited through base chain
-- `build:` field defines package formats: `build: [rpm]` or `build: [pac, aur]`. ALL formats installed in order. Inherited through base chain. Default: `[rpm]`
-- Images with layers that trigger an init system (via `service:`, `port_relay:`, `system_services:`, or `*.service` files) must include the init system's `depends_layer` in their dependency chain. `ov validate` enforces this as a hard error (e.g., supervisord layers need the `supervisord` layer). Detection rules and dependencies are defined in `init.yml`, not hardcoded
+- MUST invoke skills before exploring the codebase. Skills are the primary knowledge source
 
-- Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
-- Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
-- Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images. **However**, any layer that installs its own packages from `fedora-multimedia` (e.g., `cuda` installing CUDA dev packages) MUST still declare `repos:` in its own `layer.yml` — the Containerfile generator only adds `--enable-repo` for repos in the layer's own section, not from dependencies
-- Cross-container service discovery (`env_provides`/`env_requires`/`env_accepts`, `mcp_provides`/`mcp_requires`/`mcp_accepts`): See `/ov:layer` for declaration syntax, `/ov:config` for resolution behavior (pod-aware, `--update-all` propagation, cleanup on remove, filtering rules, hard errors)
-- Sidecar DNS and tunnel configuration: See `/ov:sidecar` for `TS_ACCEPT_DNS`, DNS flags, and dual networking
-- `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
-- Port protocol annotations and tunnel backend schemes: See `/ov:deploy` for supported schemes and `/ov:layer` for port annotation syntax
+**Layer/image authoring** (details in `/ov:layer`, `/ov:build`):
+- `root.yml`/`user.yml`: `all:` task for common logic, tag-specific tasks (`rpm:`, `pac:`, `fedora:`). Never `install:`
+- `distro:` = identity tags (first match wins). `build:` = package formats (all installed in order). Default: `[rpm]`
+- Subsystem-specific rules: init dependencies, data layers, ffmpeg codecs, env/mcp provides — see skills
 
-### Instance Support
-
-Multiple containers of the same image via `-i <instance>`:
-- Container name: `ov-<image>-<instance>`, deploy key: `image/instance` in deploy.yml
-- All commands accept `-i`. See `/ov:config` (MCP disambiguation, provides cleanup), `/ov:deploy` (deploy.yml structure)
-
-For layer-specific rules (install files, packages, port_relay, secrets, data, env_provides, env_requires, env_accepts, cache mounts): `/ov:layer`
-
-**Credential security:** See `/ov:config` for keyring, KeePass, and config file backends. `ov doctor` reports credential storage health.
-
-**GPU auto-detection:** `ov` detects host GPU hardware and injects appropriate config at runtime — including `DRINODE`/`DRI_NODE` (first `/dev/dri/renderD*`), `HSA_OVERRIDE_GFX_VERSION` (AMD KFD topology), and device passthrough. See `/ov:doctor` for detection details, `/ov:shell` for auto-detected env vars, `/ov-layers:nvidia` for NVIDIA, `/ov-layers:rocm` for AMD
-
-**Security mounts:** `security.mounts` in `layer.yml` — host bind mounts or tmpfs for device access. See `/ov:layer`
+**Deployment** (details in `/ov:config`, `/ov:deploy`, `/ov:sidecar`):
+- Quadlet mode is default. `ov config` before `ov start`. Instance support via `-i <instance>`
 
 ---
 
@@ -161,24 +126,11 @@ Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/
 
 ### MANDATORY: Skills Before Exploration
 
-**CRITICAL: You MUST invoke matching skills BEFORE reading source files, launching Explore agents, or using Grep/Glob to search the codebase.** This is a BLOCKING REQUIREMENT -- not a suggestion.
+**BLOCKING REQUIREMENT:** Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort).
 
-The skills system contains curated, structured knowledge for every component. Raw codebase exploration is slower, noisier, and misses context that skills provide.
-
-**Required order:**
-1. **Invoke skills** -- ALWAYS first. Match the task to skills using the tables below.
-2. **Read CLAUDE.md** -- project rules already in context
-3. **Read memory** -- prior learnings and user preferences
-4. **Explore codebase** -- ONLY after confirming no skill covers the topic
-
-**Hard rules:**
-- If a skill exists for the topic, you MUST invoke it. No exceptions.
-- For development tasks: invoke BOTH `/ov-dev:go` (code structure) AND the relevant `/ov:*` skill (expected behavior) before touching any `.go` file.
-- For multi-step workflows: invoke ALL skills in the chain (e.g., build -> deploy -> service -> image).
-- Explore agents are a LAST RESORT, not a first step. Justify why no skill covers the topic before launching one.
-
-**Self-check before any codebase exploration:**
-> "Is there a skill that covers this topic? If yes, invoke it first."
+- If a skill exists, invoke it. No exceptions.
+- Dev tasks: invoke `/ov-dev:go` AND the relevant `/ov:*` skill before touching `.go` files.
+- Multi-step workflows: invoke ALL skills in the chain.
 
 ### First Branch: Using vs Developing
 
@@ -224,7 +176,7 @@ Rule of thumb:
 - `/ov-layers:X` = "what does layer X CONTAIN?" (deps, ports, volumes, env, packages)
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
-When multiple skills cover one topic, start with the `/ov:X` skill for usage, then drill into `/ov-layers:X` or `/ov-images:X` for configuration details. Each skill's cross-references section lists related skills. Key overlapping areas: Jupyter (6 layer/image variants + MCP), Chrome/CDP (commands vs layer vs MCP sub-layer), Selkies (streaming + compositor + desktop + image), Hermes (agent + metalayer + 2 image variants), Open WebUI (web UI + auto-config, alternative to Hermes for LLM interaction), Tunnels (`/ov:deploy` vs `/ov:config` vs `/ov:sidecar`), Desktop compositors (sway/niri/kwin/mutter each have compositor + desktop metalayer skills).
+Start with `/ov:X` for usage, drill into `/ov-layers:X` or `/ov-images:X` for configuration. Each skill's cross-references section lists related skills.
 
 ### Desktop Automation Hierarchy
 
@@ -250,72 +202,19 @@ The `ov-dev` plugin includes 3 blocking enforcement agents (layer-validator, roo
 
 ## AI Attribution (Fedora Policy Compliant)
 
-Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council/policy/ai-contribution-policy/), Claude **MUST** include the `Assisted-by: Claude` trailer with a **confidence statement** in all commits:
+Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council/policy/ai-contribution-policy/), ALL commits MUST include `Assisted-by: Claude (<confidence>)` trailer. ALL GitHub issues/PRs MUST include `*Assisted-by: Claude (<confidence>)*` at the end.
 
-```
-<commit message>
-
-Assisted-by: Claude (fully tested and validated)
-```
-
-## Confidence Statements (Required)
-
-All AI-assisted contributions **MUST** include a confidence statement indicating verification level:
-
-| Statement | When to Use | Evidence |
-|-----------|-------------|----------|
-| `fully tested and validated` | Overlay testing + all 9 testing standards met | Complete LOCAL system verification |
-| `analysed on a live system` | Observed live system behavior, logs checked | Partial testing, live analysis |
-| `syntax check only` | Pre-commit hooks passed, no functional testing | ShellCheck, yamllint, etc. passed |
-| `theoretical suggestion` | No validation performed | AVOID - indicates unverified code |
-
-**Choosing the Right Level:**
-
-1. **Used overlay testing + verified all functionality?** → `fully tested and validated`
-2. **Observed live system behavior, checked logs?** → `analysed on a live system`
-3. **Only ran pre-commit hooks?** → `syntax check only`
-4. **No validation at all?** → `theoretical suggestion` (avoid when possible)
-
-**Examples:**
+| Confidence | When to Use |
+|-----------|-------------|
+| `fully tested and validated` | Overlay testing + all 9 testing standards met |
+| `analysed on a live system` | Observed live system behavior, logs checked |
+| `syntax check only` | Pre-commit hooks passed, no functional testing |
+| `theoretical suggestion` | No validation performed — AVOID |
 
 ```
 Fix: Add fuse-overlayfs for container startup
 
 Tested via overlay session on LOCAL system.
-All 9 testing standards verified.
 
 Assisted-by: Claude (fully tested and validated)
-```
-
-```
-Refactor: Simplify build cache logic
-
-Reviewed logic and checked logs on live system.
-
-Assisted-by: Claude (analysed on a live system)
-```
-
-```
-Feat: Add initial WinBoat support structure
-
-Skeleton implementation, pre-commit validation passed.
-Requires testing on Windows environment.
-
-Assisted-by: Claude (syntax check only)
-```
-
-**MANDATORY for Claude:**
-
-- **ALWAYS** include confidence statement - this is non-negotiable
-- Trailer goes after commit body, separated by blank line
-- Required for ALL Claude-assisted commits (code, docs, configs)
-- Only exception: trivial grammar/spelling corrections
-
-**GitHub Issues and PRs:**
-
-When creating issues or PR descriptions, include at the end:
-
-```markdown
----
-*Assisted-by: Claude (fully tested and validated)*
 ```

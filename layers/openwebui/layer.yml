@@ -1,0 +1,68 @@
+description: Open WebUI with auto-configured LLM providers, MCP servers, and Jupyter
+
+depends:
+  - python
+  - supervisord
+
+env:
+  DATA_DIR: "/opt/data"
+  PORT: "8080"
+  DOCKER: "true"
+  ENABLE_DIRECT_CONNECTIONS: "true"
+  ENABLE_CODE_EXECUTION: "true"
+  ENABLE_PERSISTENT_CONFIG: "false"
+  ENABLE_VERSION_UPDATE_CHECK: "false"
+
+env_requires:
+  - name: WEBUI_ADMIN_EMAIL
+    description: "Admin email — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
+  - name: WEBUI_ADMIN_PASSWORD
+    description: "Admin password — pass via: ov config openwebui -e WEBUI_ADMIN_PASSWORD=... (or --env-file .secrets)"
+
+env_accepts:
+  - name: OPENROUTER_API_KEY
+    description: "API key for OpenRouter (sets OPENAI_API_KEY with OpenRouter base URL)"
+  - name: OLLAMA_API_KEY
+    description: "API key for Ollama Cloud inference"
+  - name: OLLAMA_HOST
+    description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
+  - name: OPENAI_API_KEY
+    description: "Direct OpenAI API key"
+  - name: OPENAI_API_BASE_URL
+    description: "OpenAI-compatible API base URL"
+  - name: WEBUI_AUTH
+    description: "Enable authentication (default: true)"
+  - name: OV_MCP_SERVERS
+    description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+
+mcp_accepts:
+  - name: jupyter
+    description: "JupyterLab CRDT MCP server for notebook manipulation"
+  - name: chrome-devtools
+    description: "Chrome DevTools MCP server for browser automation"
+
+ports:
+  - 8080
+
+volumes:
+  - name: data
+    path: "/opt/data"
+
+aliases:
+  - name: open-webui
+    command: open-webui
+
+secrets:
+  - name: webui-secret-key
+    env: WEBUI_SECRET_KEY
+
+service: |
+  [program:openwebui]
+  command=%(ENV_HOME)s/.local/bin/openwebui-entrypoint
+  directory=%(ENV_HOME)s
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

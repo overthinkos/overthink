@@ -99,7 +99,7 @@ Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local
 
 ### Plugins Submodule
 
-Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (159 layer skills), `ov-images` (41 image skills). Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
+Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (160 layer skills), `ov-images` (40 image skills). Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
 
 ---
 
@@ -208,7 +208,9 @@ The skills system contains curated, structured knowledge for every component. Ra
 | Jupyter MCP | `/ov-layers:jupyter-colab` -> `/ov-images:jupyter` -> `/ov:service` |
 | Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` -> `/ov:validate` |
 | Deploy Hermes | `/ov-images:hermes` -> `/ov:config` -> `/ov:service` |
+| Deploy Open WebUI | `/ov-images:openwebui` -> `/ov:config` -> `/ov:secrets` -> `/ov:service` |
 | Hermes + Selkies | `ov config selkies-desktop` -> `ov config jupyter --update-all` -> `ov config hermes --update-all` |
+| Open WebUI + Ollama + Jupyter | `ov config ollama` -> `ov config jupyter --update-all` -> `ov config openwebui --update-all` |
 | Full lifecycle | `/ov:build` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
 
 For desktop automation: use CDP first, `--wl` for selkies-desktop (no VNC). See `/ov:cdp`, `/ov:wl`, `/ov-images:selkies-desktop` for detailed usage patterns.
@@ -222,7 +224,7 @@ Rule of thumb:
 - `/ov-layers:X` = "what does layer X CONTAIN?" (deps, ports, volumes, env, packages)
 - `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
 
-When multiple skills cover one topic, start with the `/ov:X` skill for usage, then drill into `/ov-layers:X` or `/ov-images:X` for configuration details. Each skill's cross-references section lists related skills. Key overlapping areas: Jupyter (6 layer/image variants + MCP), Chrome/CDP (commands vs layer vs MCP sub-layer), Selkies (streaming + compositor + desktop + image), Hermes (agent + metalayer + 3 image variants), Tunnels (`/ov:deploy` vs `/ov:config` vs `/ov:sidecar`), Desktop compositors (sway/niri/kwin/mutter each have compositor + desktop metalayer skills).
+When multiple skills cover one topic, start with the `/ov:X` skill for usage, then drill into `/ov-layers:X` or `/ov-images:X` for configuration details. Each skill's cross-references section lists related skills. Key overlapping areas: Jupyter (6 layer/image variants + MCP), Chrome/CDP (commands vs layer vs MCP sub-layer), Selkies (streaming + compositor + desktop + image), Hermes (agent + metalayer + 2 image variants), Open WebUI (web UI + auto-config, alternative to Hermes for LLM interaction), Tunnels (`/ov:deploy` vs `/ov:config` vs `/ov:sidecar`), Desktop compositors (sway/niri/kwin/mutter each have compositor + desktop metalayer skills).
 
 ### Desktop Automation Hierarchy
 

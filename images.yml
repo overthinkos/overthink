@@ -497,6 +497,16 @@ images:
     platforms:
       - linux/amd64
 
+  openwebui:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - openwebui
+      - dbus
+      - ov
+    ports:
+      - "8080:8080"
+
   hermes:
     base: fedora
     layers:

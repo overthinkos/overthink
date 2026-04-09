@@ -64,6 +64,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var security SecurityConfig
 	var network string
 	var entrypoint []string
+	var envAccepts, envRequires []EnvDependency
 
 	// Load deploy.yml for volume backing config
 	dc, _ := LoadDeployConfig()
@@ -141,6 +142,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
 		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
+		envAccepts = meta.EnvAccepts
+		envRequires = meta.EnvRequires
 		if meta.Registry != "" {
 			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 		}
@@ -175,7 +178,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		deployEnvFile = img.EnvFile
 	}
 	startCtrName := containerNameInstance(c.Image, c.Instance)
-	startGlobalEnv := dc.GlobalEnvForImage(c.Image, startCtrName)
+	startAccepted := AcceptedEnvSet(envAccepts, envRequires)
+	startGlobalEnv := dc.GlobalEnvForImage(c.Image, startCtrName, startAccepted)
 	envVars, err := ResolveEnvVars(startGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
@@ -329,7 +333,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	// Resolve env vars with global env
 	remoteDC, _ := LoadDeployConfig()
 	remoteStartCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteStartGlobalEnv := remoteDC.GlobalEnvForImage(ctx.ImageName, remoteStartCtrName)
+	remoteStartGlobalEnv := remoteDC.GlobalEnvForImage(ctx.ImageName, remoteStartCtrName, nil)
 	envVars, err := ResolveEnvVars(remoteStartGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
@@ -404,7 +408,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	// Resolve env vars with global env
 	remoteQDC, _ := LoadDeployConfig()
 	remoteQCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteQGlobalEnv := remoteQDC.GlobalEnvForImage(ctx.ImageName, remoteQCtrName)
+	remoteQGlobalEnv := remoteQDC.GlobalEnvForImage(ctx.ImageName, remoteQCtrName, nil)
 	envVars, envErr := ResolveEnvVars(remoteQGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr

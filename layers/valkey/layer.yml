@@ -13,9 +13,6 @@ rpm:
 env:
   VALKEY_URL: "redis://127.0.0.1:6379"
 
-env_provides:
-  REDIS_URL: "redis://{{.ContainerName}}:6379"
-
 ports:
   - 6379
 

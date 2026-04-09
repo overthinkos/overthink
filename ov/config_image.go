@@ -158,10 +158,18 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Resolve env vars from global provides + labels + deploy.yml + CLI
 	ctrName := containerNameInstance(c.Image, c.Instance)
-	globalEnv := dc.GlobalEnvForImage(c.Image, ctrName)
+	acceptedEnv := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
+	globalEnv := dc.GlobalEnvForImage(c.Image, ctrName, acceptedEnv)
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
+	}
+
+	// Enforce env_requires — hard error before writing anything
+	if meta != nil && len(meta.EnvRequires) > 0 {
+		if err := checkMissingEnvRequires(c.Image, meta.EnvRequires, envVars); err != nil {
+			return err
+		}
 	}
 
 	// For quadlet, resolve env file to absolute path for EnvironmentFile=
@@ -581,11 +589,6 @@ skipDataProvision:
 		}
 	}
 
-	// Warn about missing env_requires vars
-	if meta != nil && len(meta.EnvRequires) > 0 {
-		warnMissingEnvRequires(c.Image, meta.EnvRequires, envVars)
-	}
-
 	// Warn about missing mcp_requires servers
 	if meta != nil && len(meta.MCPRequires) > 0 {
 		dc, _ := LoadDeployConfig()
@@ -632,7 +635,7 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	// Resolve env vars with global env
 	dc, _ := LoadDeployConfig()
 	remoteCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteGlobalEnv := dc.GlobalEnvForImage(ctx.ImageName, remoteCtrName)
+	remoteGlobalEnv := dc.GlobalEnvForImage(ctx.ImageName, remoteCtrName, nil)
 	envVars, envErr := ResolveEnvVars(remoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
@@ -1049,9 +1052,9 @@ func warnMissingMCPRequires(imageName string, requires []EnvDependency, mcpServe
 	}
 }
 
-// warnMissingEnvRequires checks resolved env vars against required env dependencies
-// and prints warnings for any that are missing.
-func warnMissingEnvRequires(imageName string, requires []EnvDependency, resolvedEnv []string) {
+// checkMissingEnvRequires checks resolved env vars against required env dependencies.
+// Returns an error if any required vars are missing — ov config will abort.
+func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolvedEnv []string) error {
 	// Build set of resolved env var names
 	resolved := make(map[string]bool, len(resolvedEnv))
 	for _, e := range resolvedEnv {
@@ -1060,15 +1063,32 @@ func warnMissingEnvRequires(imageName string, requires []EnvDependency, resolved
 		}
 	}
 
+	var missing []EnvDependency
 	for _, dep := range requires {
 		if !resolved[dep.Name] {
-			desc := dep.Description
-			if desc != "" {
-				desc = " (" + desc + ")"
-			}
-			fmt.Fprintf(os.Stderr, "Warning: %s requires %s%s — not set\n", imageName, dep.Name, desc)
+			missing = append(missing, dep)
 		}
 	}
+
+	if len(missing) == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "\nError: %s requires the following environment variable(s):\n\n", imageName)
+	for _, dep := range missing {
+		desc := ""
+		if dep.Description != "" {
+			desc = " — " + dep.Description
+		}
+		fmt.Fprintf(os.Stderr, "  %s%s\n", dep.Name, desc)
+	}
+	fmt.Fprintf(os.Stderr, "\nSet them with -e flags, --env-file, or deploy.yml env:\n\n")
+	fmt.Fprintf(os.Stderr, "  ov config %s", imageName)
+	for _, dep := range missing {
+		fmt.Fprintf(os.Stderr, " -e %s=...", dep.Name)
+	}
+	fmt.Fprintf(os.Stderr, "\n\n")
+	return fmt.Errorf("missing required environment variable(s) for %s", imageName)
 }
 
 // updateAllDeployedQuadlets regenerates quadlets for all other deployed images
@@ -1110,7 +1130,8 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Resolve env vars with updated global env
 		updateCtrName := containerNameInstance(imageName, instance)
-		globalEnv := dc.GlobalEnvForImage(imageName, updateCtrName)
+		updateAccepted := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
+		globalEnv := dc.GlobalEnvForImage(imageName, updateCtrName, updateAccepted)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", key, err)

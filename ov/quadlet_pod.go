@@ -29,6 +29,17 @@ func generatePodQuadlet(cfg QuadletConfig) string {
 		b.WriteString(fmt.Sprintf("Network=%s\n", cfg.Network))
 	}
 
+	// DNS: when Tailscale sidecar is present, configure dual DNS.
+	// TS_ACCEPT_DNS=false prevents Tailscale from rewriting /etc/resolv.conf.
+	// Pod-level --dns flags provide both resolvers:
+	//   10.89.0.1       — aardvark-dns (container DNS + external forwarding)
+	//   100.100.100.100 — Tailscale MagicDNS (.ts.net names)
+	if hasTailscaleSidecar(cfg.Sidecars) {
+		b.WriteString("PodmanArgs=--dns=10.89.0.1\n")
+		b.WriteString("PodmanArgs=--dns=100.100.100.100\n")
+		b.WriteString("PodmanArgs=--dns-search=dns.podman\n")
+	}
+
 	// Shared memory size: must be set on the pod (per-container ShmSize is ignored in pod mode)
 	if cfg.Security.ShmSize != "" {
 		b.WriteString(fmt.Sprintf("PodmanArgs=--shm-size=%s\n", cfg.Security.ShmSize))
@@ -47,6 +58,16 @@ func generatePodQuadlet(cfg QuadletConfig) string {
 	}
 
 	return b.String()
+}
+
+// hasTailscaleSidecar checks if any resolved sidecar is a Tailscale sidecar.
+func hasTailscaleSidecar(sidecars []ResolvedSidecar) bool {
+	for _, sc := range sidecars {
+		if sc.Name == "tailscale" {
+			return true
+		}
+	}
+	return false
 }
 
 // generateSidecarQuadlet produces the contents of a sidecar .container file.

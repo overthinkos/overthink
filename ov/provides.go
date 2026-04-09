@@ -137,18 +137,32 @@ func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) 
 // Both env and MCP provides are pod-aware: same-image entries resolve to localhost,
 // cross-image entries keep their container hostname. If both share a name, local wins.
 // Returns flat env var slice ready for ResolveEnvVars.
-func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string) []string {
+// GlobalEnvForImage builds env vars for a consumer from global provides.
+// acceptedEnv controls which env_provides vars are injected:
+//   - Self-provides (same image) are always injected for pod-local resolution
+//   - Cross-image provides are only injected if acceptedEnv contains the var name
+//   - MCP provides (OV_MCP_SERVERS) are always injected (standard discovery)
+func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string, acceptedEnv map[string]bool) []string {
 	if dc == nil || dc.Provides == nil {
 		return nil
 	}
 	var result []string
 
-	// Env provides: pod-aware (same-image entries resolve to localhost)
+	// Env provides: pod-aware, filtered by consumer declarations
 	for _, entry := range podAwareEnvProvides(dc.Provides.Env, imageName, ctrName) {
-		result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
+		// Self-provides always pass (pod-local resolution)
+		if isSameBaseImage(entry.Source, imageName) {
+			result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
+			continue
+		}
+		// Cross-image: only inject if consumer declared env_accepts/env_requires.
+		// nil acceptedEnv = no filtering (backward compat for remote images without labels).
+		if acceptedEnv == nil || acceptedEnv[entry.Name] {
+			result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
+		}
 	}
 
-	// MCP provides: pod-aware (same-image entries resolve to localhost)
+	// MCP provides: pod-aware (always injected — standard discovery mechanism)
 	if len(dc.Provides.MCP) > 0 {
 		mcpEntries := podAwareMCPProvides(dc.Provides.MCP, imageName, ctrName)
 		if len(mcpEntries) > 0 {
@@ -158,6 +172,19 @@ func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string) []string {
 	}
 
 	return result
+}
+
+// AcceptedEnvSet builds a set of env var names from env_accepts and env_requires declarations.
+// Used to filter which env_provides vars get injected into a consumer.
+func AcceptedEnvSet(accepts, requires []EnvDependency) map[string]bool {
+	m := make(map[string]bool, len(accepts)+len(requires))
+	for _, dep := range accepts {
+		m[dep.Name] = true
+	}
+	for _, dep := range requires {
+		m[dep.Name] = true
+	}
+	return m
 }
 
 // resolveTemplate replaces {{.ContainerName}} in a string.

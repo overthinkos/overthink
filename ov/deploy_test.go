@@ -267,7 +267,7 @@ func TestGlobalEnvForImage(t *testing.T) {
 	}
 
 	// Pod-aware: ollama's own env_provides are included with localhost rewrite
-	got := dc.GlobalEnvForImage("ollama", "ov-ollama")
+	got := dc.GlobalEnvForImage("ollama", "ov-ollama", nil)
 	// Should have PGHOST, OLLAMA_HOST (rewritten to localhost), and MCP
 	foundPG := false
 	foundOllama := false
@@ -300,7 +300,7 @@ func TestGlobalEnvForImage(t *testing.T) {
 
 	// Nil DeployConfig returns nil
 	var nilDC *DeployConfig
-	if got := nilDC.GlobalEnvForImage("test", "ov-test"); got != nil {
+	if got := nilDC.GlobalEnvForImage("test", "ov-test", nil); got != nil {
 		t.Errorf("nil DC should return nil, got %v", got)
 	}
 }

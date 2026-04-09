@@ -32,9 +32,11 @@ sidecars:
       # iptables-legacy which fails in rootless podman ("Permission denied").
       # Tailscale's Go nftables library works without the nft userspace binary.
       TS_DEBUG_FIREWALL_MODE: nftables
-      # Accept tailnet MagicDNS. Uses split DNS: .ts.net handled by Tailscale,
-      # everything else (including bridge hostnames) falls back to upstream DNS.
-      TS_ACCEPT_DNS: "true"
+      # Disable Tailscale DNS takeover. TS_ACCEPT_DNS=true rewrites /etc/resolv.conf
+      # replacing aardvark-dns (10.89.0.1) with MagicDNS (100.100.100.100), which
+      # breaks container DNS and external DNS. Instead, pod-level --dns flags
+      # configure both aardvark-dns (primary) and MagicDNS (secondary).
+      TS_ACCEPT_DNS: "false"
       # Health check endpoint at TS_LOCAL_ADDR_PORT/healthz
       TS_ENABLE_HEALTH_CHECK: "true"
       TS_LOCAL_ADDR_PORT: "[::]:9002"

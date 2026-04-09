@@ -6,7 +6,7 @@ depends:
   - ffmpeg
 
 env:
-  IMMICH_VERSION: "v2.6.3"
+  IMMICH_VERSION: "v2.7.2"
   IMMICH_HOST: "0.0.0.0"
   IMMICH_PORT: "2283"
   IMMICH_MEDIA_LOCATION: "~/.immich/library"

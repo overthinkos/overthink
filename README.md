@@ -330,7 +330,7 @@ ov start selkies-desktop -i work
 ov start selkies-desktop -i personal
 ```
 
-Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`). For multi-instance proxy deployments, each instance can use the image's `tunnel: tailscale` for host-level Tailscale serve access on its unique host ports — no per-instance sidecar needed.
+Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`). Semicolons in `NO_PROXY` values are auto-converted to commas by `ov`. For multi-instance proxy deployments, each instance can use the image's `tunnel: tailscale` for host-level Tailscale serve access on its unique host ports — no per-instance sidecar needed.
 
 ### Desktop Automation
 

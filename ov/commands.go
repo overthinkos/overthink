@@ -258,7 +258,7 @@ type RemoveCmd struct {
 	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Purge       bool     `long:"purge" help:"Also remove named volumes"`
 	KeepDeploy  bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
-	Env         []string `short:"e" long:"env" help:"Set env var for hooks (KEY=VALUE)"`
+	Env         []string `short:"e" long:"env" sep:"none" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
 func (c *RemoveCmd) Run() error {

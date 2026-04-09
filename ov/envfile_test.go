@@ -210,6 +210,42 @@ func TestResolveEnvVars(t *testing.T) {
 	}
 }
 
+func TestNormalizeNoProxy(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []string
+		want  []string
+	}{
+		{"semicolons to commas", []string{"NO_PROXY=localhost;127.0.0.1;.internal"}, []string{"NO_PROXY=localhost,127.0.0.1,.internal"}},
+		{"already commas", []string{"NO_PROXY=localhost,127.0.0.1"}, []string{"NO_PROXY=localhost,127.0.0.1"}},
+		{"lowercase", []string{"no_proxy=localhost;127.0.0.1"}, []string{"no_proxy=localhost,127.0.0.1"}},
+		{"other vars untouched", []string{"HTTP_PROXY=http://p:8080", "NO_PROXY=localhost;127.0.0.1"}, []string{"HTTP_PROXY=http://p:8080", "NO_PROXY=localhost,127.0.0.1"}},
+		{"empty value", []string{"NO_PROXY="}, []string{"NO_PROXY="}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeNoProxy(tt.input)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("normalizeNoProxy() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolveEnvVarsNoProxyNormalized(t *testing.T) {
+	got, err := ResolveEnvVars(
+		nil, nil, "", "", "",
+		[]string{"NO_PROXY=localhost;127.0.0.1"},
+	)
+	if err != nil {
+		t.Fatalf("ResolveEnvVars() error: %v", err)
+	}
+	want := []string{"NO_PROXY=localhost,127.0.0.1"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ResolveEnvVars() = %v, want %v", got, want)
+	}
+}
+
 func TestResolveEnvVarsWithGlobalEnv(t *testing.T) {
 	got, err := ResolveEnvVars(
 		[]string{"GLOBAL=yes", "SHARED=global"},   // global env (lowest priority)

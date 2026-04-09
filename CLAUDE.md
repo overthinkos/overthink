@@ -120,7 +120,7 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 - Data layers use `data:` field in layer.yml to map source directories to volume targets. Data is staged at `/data/<volume>/` in the image at build time. Provisioned into bind-backed volumes by `ov config` (initial seed) and `ov update` (non-destructive merge). Data layers are valid with only `data:` and `volumes:` — no packages or install files needed
 - Data images use `data_image: true` in images.yml — always FROM scratch, no base OS, no runtime, no init system. Only data staging + labels. Used as seed sources via `--data-from`. `ov validate` enforces: no base, no services, no ports
-- Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images
+- Layers needing ffmpeg codecs MUST depend on the `ffmpeg` layer (`depends: [ffmpeg]`) rather than independently adding the negativo17 fedora-multimedia repo. The `ffmpeg` layer is the single authoritative install point for nonfree codecs. This avoids repo duplication and ensures consistent codec builds across all images. **However**, any layer that installs its own packages from `fedora-multimedia` (e.g., `cuda` installing CUDA dev packages) MUST still declare `repos:` in its own `layer.yml` — the Containerfile generator only adds `--enable-repo` for repos in the layer's own section, not from dependencies
 - `ov merge` handles OCI whiteout semantics: regular whiteouts (`.wh.<name>`), opaque whiteouts (`.wh..wh..opq`), and reintroduction-supersedes-whiteout cases. This prevents EEXIST errors when merging layers that contain file deletions. Source: `ov/merge.go` (`whiteoutTarget`, `mergeLayers`)
 - Cross-container service discovery (`env_provides`/`env_requires`/`env_accepts`, `mcp_provides`/`mcp_requires`/`mcp_accepts`): See `/ov:layer` for declaration syntax, `/ov:config` for resolution behavior (pod-aware, `--update-all` propagation, cleanup on remove)
 - `ov start` in quadlet mode requires `ov config` first — no auto-configuration. Direct mode still supports inline flags
@@ -130,17 +130,7 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 Multiple containers of the same image via `-i <instance>`:
 - Container name: `ov-<image>-<instance>`, deploy key: `image/instance` in deploy.yml
-- All commands accept `-i`: `ov config`, `ov start/stop/status/logs/remove`, `ov deploy show/reset`, `ov shell`, `ov cdp`, etc.
-- MCP name disambiguation: `mcp_provides` names get `-<instance>` appended (e.g., `chrome-devtools-31.58.9.4`) so consumers see unique servers. Stale entries cleaned on re-config
-- Source: `deployKey()`/`parseDeployKey()` in `ov/deploy.go`. See `/ov:deploy` for deploy.yml structure, `/ov:config` for MCP disambiguation
-
-### Chrome HTTP Proxy
-
-Chrome layers accept optional `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` env vars (via `env_accepts`). The `chrome-wrapper` translates these to Chrome's `--proxy-server` and `--proxy-bypass-list` flags. `chrome-x11-wrapper` has identical logic. Deploy with: `ov config <image> -e HTTP_PROXY=http://proxy:8080`. See `/ov-layers:chrome` for details
-
-### ML/Python Layer Architecture
-
-ML layers follow a two-tier pattern: Tier 1 (post-install, no pixi.toml) installs into existing environments; Tier 2 (environment-owner, has pixi.toml) defines the Python environment. Key constraint: only Tier 2 layers own pixi.toml (one per image). Meta-layers CAN have both `depends:` and `layers:`. See `/ov-layers:python-ml`, `/ov-layers:unsloth`, `/ov-layers:jupyter-colab-ml` for details. For Hermes agent auto-provider-config, build.sh patterns, and ML training gotchas: see `/ov-layers:hermes`
+- All commands accept `-i`. See `/ov:config` (MCP disambiguation, provides cleanup), `/ov:deploy` (deploy.yml structure)
 
 For layer-specific rules (install files, packages, port_relay, secrets, data, env_provides, env_requires, env_accepts, cache mounts): `/ov:layer`
 
@@ -249,18 +239,11 @@ Seven abstraction levels for interacting with container desktops:
 | Window | `ov wl sway` | Sway IPC (swaymsg) | Sway-only: tree, layout, move, resize, workspaces |
 | Overlay | `/ov:wl-overlay` | gtk4-layer-shell | Recording overlays -- title cards, lower-thirds, countdowns, fades |
 
-**CDP → SPA bridge:** Use `ov cdp spa key-combo <image> <tab> super+e` to send modifier combos (Super, Ctrl+T, Alt+F4) through the SPA to the remote desktop. CDP Input events bypass the local compositor and Chrome shortcut handlers -- this is the only way to send these combos to the remote desktop. Use `ov cdp spa click --scale 0.824,0.836` for coordinate-corrected mouse clicks on the SPA canvas.
-**CDP → WL bridge:** Use `ov cdp click <image> <tab> <selector> --wl` to find elements by CSS selector and click via wlrctl. Critical for selkies-desktop (no VNC server). Same pattern as `--vnc` but uses Wayland pointer.
+See `/ov:cdp` for SPA/WL bridge patterns and coordinate mapping.
 
 ### ov-dev Agents
 
-The `ov-dev` plugin includes 3 blocking enforcement agents (automatic, not invoked manually):
-
-| Agent | Trigger | Purpose |
-|-------|---------|---------|
-| layer-validator | Before editing `layer.yml` | Validates structure and field types |
-| root-cause-analyzer | Any error in output | Deep 8-step root cause analysis |
-| testing-validator | Claiming something "works" | Verifies actual local test results |
+The `ov-dev` plugin includes 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator). See `/ov-dev:go` for details.
 
 
 ## AI Attribution (Fedora Policy Compliant)

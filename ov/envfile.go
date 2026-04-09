@@ -161,8 +161,26 @@ func ResolveEnvVars(globalEnv []string, deployEnv []string, deployEnvFile string
 	// 5. CLI -e flags (highest priority)
 	all = append(all, cliEnv...)
 
-	// Deduplicate: last value for each key wins
-	return deduplicateEnv(all), nil
+	// Deduplicate: last value for each key wins, then normalize NO_PROXY
+	return normalizeNoProxy(deduplicateEnv(all)), nil
+}
+
+// normalizeNoProxy converts semicolons to commas in NO_PROXY/no_proxy values.
+// Semicolons were a workaround for Kong's comma-splitting of []string flags.
+// Standard HTTP clients (Python, curl, Go) require comma-separated NO_PROXY.
+func normalizeNoProxy(envs []string) []string {
+	for i, e := range envs {
+		idx := strings.IndexByte(e, '=')
+		if idx < 0 {
+			continue
+		}
+		key := e[:idx]
+		if key == "NO_PROXY" || key == "no_proxy" {
+			val := e[idx+1:]
+			envs[i] = key + "=" + strings.ReplaceAll(val, ";", ",")
+		}
+	}
+	return envs
 }
 
 // deduplicateEnv deduplicates env vars, keeping the last value for each key.

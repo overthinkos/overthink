@@ -13,7 +13,7 @@ type StartCmd struct {
 	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Tag        string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env        []string `short:"e" long:"env" help:"Set container env var (direct mode only)"`
+	Env        []string `short:"e" long:"env" sep:"none" help:"Set container env var (direct mode only)"`
 	EnvFile    string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
 	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Port       []string `short:"p" help:"Remap host port (direct mode only)"`

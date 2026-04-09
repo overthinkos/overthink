@@ -26,7 +26,7 @@ type ImageConfigSetupCmd struct {
 	Image       string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Tag         string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env         []string `short:"e" long:"env" help:"Set container env var (KEY=VALUE)"`
+	Env         []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
 	EnvFile     string   `long:"env-file" help:"Load env vars from file"`
 	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Port        []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`

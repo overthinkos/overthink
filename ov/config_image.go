@@ -200,9 +200,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 		}
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Resolve network (default to shared "ov" network)
 	resolvedNetwork, netErr := ResolveNetwork(network, rt.RunEngine)
@@ -370,9 +368,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if quadletEnvFile != "" {
 		qcfg.Env = append([]string{}, globalEnv...)
 		qcfg.Env = append(qcfg.Env, c.Env...)
-		if detected.AMDGPU && detected.AMDGFXVersion != "" {
-			qcfg.Env = appendEnvUnique(qcfg.Env, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-		}
+		qcfg.Env = appendAutoDetectedEnv(qcfg.Env, detected)
 	}
 
 	// Persist deployment state to deploy.yml (source of truth)
@@ -647,9 +643,7 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	if detected.AMDGPU {
 		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
@@ -1178,9 +1172,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 				security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 			}
 		}
-		if detected.AMDGPU && detected.AMDGFXVersion != "" {
-			envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-		}
+		envVars = appendAutoDetectedEnv(envVars, detected)
 
 		// Collect secrets from labels (for quadlet Secret= directives)
 		provisioned := CollectSecretsFromLabels(imageName, meta.Secrets)
@@ -1242,9 +1234,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Keep provides env vars — they're not in the env file.
 		if quadletEnvFile != "" {
 			qcfg.Env = append([]string{}, globalEnv...)
-			if detected.AMDGPU && detected.AMDGFXVersion != "" {
-				qcfg.Env = appendEnvUnique(qcfg.Env, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-			}
+			qcfg.Env = appendAutoDetectedEnv(qcfg.Env, detected)
 		}
 
 		content := generateQuadlet(qcfg)

@@ -21,6 +21,7 @@ type DetectedDevices struct {
 	GPU            bool     // NVIDIA GPU detected (use CDI/--gpus)
 	AMDGPU         bool     // AMD GPU detected (/dev/kfd + video/render groups)
 	AMDGFXVersion  string   // AMD GFX version for HSA_OVERRIDE_GFX_VERSION (e.g. "10.3.0")
+	RenderNode     string   // First /dev/dri/renderD* path for DRINODE/DRI_NODE
 	Devices        []string // Other device paths to pass via --device
 }
 
@@ -122,6 +123,13 @@ func defaultDetectHostDevices() DetectedDevices {
 		matches, _ := filepath.Glob(pattern)
 		result.Devices = append(result.Devices, matches...)
 	}
+	// Find the first render node for DRINODE/DRI_NODE auto-injection
+	for _, d := range result.Devices {
+		if strings.HasPrefix(filepath.Base(d), "renderD") {
+			result.RenderNode = d
+			break
+		}
+	}
 	return result
 }
 
@@ -138,7 +146,13 @@ func LogDetectedDevices(detected DetectedDevices) {
 		}
 		parts = append(parts, label)
 	}
-	parts = append(parts, detected.Devices...)
+	for _, d := range detected.Devices {
+		label := d
+		if d == detected.RenderNode {
+			label = d + " (DRINODE)"
+		}
+		parts = append(parts, label)
+	}
 	if len(parts) > 0 {
 		fmt.Fprintf(os.Stderr, "Auto-detected devices: %s\n", strings.Join(parts, ", "))
 	}
@@ -179,6 +193,19 @@ func appendGroupsForAMDGPU(groups []string) []string {
 		}
 	}
 	return appendUnique(groups, "keep-groups")
+}
+
+// appendAutoDetectedEnv injects GPU-related env vars from auto-detection results.
+// Uses appendEnvUnique so user-supplied env vars always take priority.
+func appendAutoDetectedEnv(envVars []string, detected DetectedDevices) []string {
+	if detected.AMDGPU && detected.AMDGFXVersion != "" {
+		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
+	}
+	if detected.RenderNode != "" {
+		envVars = appendEnvUnique(envVars, "DRINODE="+detected.RenderNode)
+		envVars = appendEnvUnique(envVars, "DRI_NODE="+detected.RenderNode)
+	}
+	return envVars
 }
 
 // appendEnvUnique appends an env var (KEY=VALUE) to a slice only if the key

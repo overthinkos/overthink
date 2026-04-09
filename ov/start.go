@@ -192,9 +192,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 		}
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Resolve network (default to shared "ov" network)
 	resolvedNetwork, netErr := ResolveNetwork(network, engine)
@@ -345,9 +343,7 @@ func (c *StartCmd) runRemote(ref string) error {
 	if detected.AMDGPU {
 		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", engine)
@@ -420,9 +416,7 @@ func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext
 	if detected.AMDGPU {
 		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Resolve network
 	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)

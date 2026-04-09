@@ -234,9 +234,7 @@ func (c *ShellCmd) Run() error {
 			security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 		}
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Inject agent forwarding mounts and env (new container path)
 	for _, v := range agentFwd.Volumes {
@@ -338,9 +336,7 @@ func (c *ShellCmd) runRemote(ref string) error {
 	if detected.AMDGPU {
 		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
 	}
-	if detected.AMDGPU && detected.AMDGFXVersion != "" {
-		envVars = appendEnvUnique(envVars, "HSA_OVERRIDE_GFX_VERSION="+detected.AMDGFXVersion)
-	}
+	envVars = appendAutoDetectedEnv(envVars, detected)
 
 	// Inject agent forwarding mounts and env
 	for _, v := range remoteAgentFwd.Volumes {

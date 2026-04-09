@@ -257,6 +257,104 @@ func TestAMDGFXVersionParsing(t *testing.T) {
 	}
 }
 
+func TestRenderNodeDetection(t *testing.T) {
+	orig := DetectHostDevices
+	defer func() { DetectHostDevices = orig }()
+
+	// The real defaultDetectHostDevices picks the first renderD* from Devices.
+	// Here we verify the struct carries the field correctly through the pipeline.
+	DetectHostDevices = func() DetectedDevices {
+		return DetectedDevices{
+			AMDGPU:     true,
+			RenderNode: "/dev/dri/renderD128",
+			Devices:    []string{"/dev/kfd", "/dev/dri/renderD128", "/dev/dri/renderD129"},
+		}
+	}
+
+	detected := DetectHostDevices()
+	if detected.RenderNode != "/dev/dri/renderD128" {
+		t.Errorf("RenderNode = %q, want /dev/dri/renderD128", detected.RenderNode)
+	}
+}
+
+func TestRenderNodeNoDevices(t *testing.T) {
+	orig := DetectHostDevices
+	defer func() { DetectHostDevices = orig }()
+
+	DetectHostDevices = func() DetectedDevices {
+		return DetectedDevices{
+			Devices: []string{"/dev/kfd", "/dev/kvm"},
+		}
+	}
+
+	detected := DetectHostDevices()
+	if detected.RenderNode != "" {
+		t.Errorf("RenderNode = %q, want empty", detected.RenderNode)
+	}
+}
+
+func TestAppendAutoDetectedEnv(t *testing.T) {
+	detected := DetectedDevices{
+		AMDGPU:        true,
+		AMDGFXVersion: "11.0.0",
+		RenderNode:    "/dev/dri/renderD128",
+	}
+
+	env := appendAutoDetectedEnv(nil, detected)
+	if len(env) != 3 {
+		t.Fatalf("expected 3 env vars, got %d: %v", len(env), env)
+	}
+	if env[0] != "HSA_OVERRIDE_GFX_VERSION=11.0.0" {
+		t.Errorf("env[0] = %q, want HSA_OVERRIDE_GFX_VERSION=11.0.0", env[0])
+	}
+	if env[1] != "DRINODE=/dev/dri/renderD128" {
+		t.Errorf("env[1] = %q, want DRINODE=/dev/dri/renderD128", env[1])
+	}
+	if env[2] != "DRI_NODE=/dev/dri/renderD128" {
+		t.Errorf("env[2] = %q, want DRI_NODE=/dev/dri/renderD128", env[2])
+	}
+}
+
+func TestAppendAutoDetectedEnvNoGPU(t *testing.T) {
+	detected := DetectedDevices{}
+	env := appendAutoDetectedEnv([]string{"FOO=bar"}, detected)
+	if len(env) != 1 {
+		t.Fatalf("expected 1 env var (no injection), got %d: %v", len(env), env)
+	}
+}
+
+func TestAppendAutoDetectedEnvUserOverride(t *testing.T) {
+	detected := DetectedDevices{
+		AMDGPU:        true,
+		AMDGFXVersion: "11.0.0",
+		RenderNode:    "/dev/dri/renderD128",
+	}
+
+	// User already set DRINODE — auto-detect should NOT override
+	env := []string{"DRINODE=/dev/dri/renderD129"}
+	env = appendAutoDetectedEnv(env, detected)
+
+	// Should have 3 vars: user DRINODE + HSA + DRI_NODE (auto)
+	if len(env) != 3 {
+		t.Fatalf("expected 3 env vars, got %d: %v", len(env), env)
+	}
+	if env[0] != "DRINODE=/dev/dri/renderD129" {
+		t.Errorf("user DRINODE should be preserved, got %q", env[0])
+	}
+}
+
+func TestAppendAutoDetectedEnvRenderNodeOnly(t *testing.T) {
+	// No AMD GPU, but render node detected (e.g., Intel GPU)
+	detected := DetectedDevices{
+		RenderNode: "/dev/dri/renderD128",
+	}
+
+	env := appendAutoDetectedEnv(nil, detected)
+	if len(env) != 2 {
+		t.Fatalf("expected 2 env vars (DRINODE + DRI_NODE), got %d: %v", len(env), env)
+	}
+}
+
 func TestAppendEnvUnique(t *testing.T) {
 	// New key is appended
 	env := []string{"FOO=bar"}

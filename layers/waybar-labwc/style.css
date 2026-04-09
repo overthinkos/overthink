@@ -9,7 +9,7 @@
 window#waybar {
     background-color: rgba(30, 30, 46, 0.9);
     color: #cdd6f4;
-    border-bottom: 2px solid rgba(137, 180, 250, 0.3);
+    border-top: 2px solid rgba(137, 180, 250, 0.3);
 }
 
 tooltip {
@@ -24,16 +24,8 @@ tooltip label {
 
 /* === Module defaults === */
 
-#workspaces,
-#mode,
+#custom-chrome,
 #taskbar,
-#clock,
-#cpu,
-#memory,
-#disk,
-#network,
-#pulseaudio,
-#tray,
 #custom-notification {
     padding: 0 10px;
     margin: 3px 2px;
@@ -41,39 +33,18 @@ tooltip label {
     background-color: rgba(49, 50, 68, 0.6);
 }
 
-/* === Workspaces (Sway only, hidden on labwc) === */
+/* === Chrome restart button === */
 
-#workspaces button {
-    padding: 0 6px;
-    color: #a6adc8;
-    background: transparent;
-    border: none;
-    border-radius: 4px;
+#custom-chrome {
+    color: #a6e3a1;
+    font-size: 14px;
 }
 
-#workspaces button:hover {
-    background: rgba(137, 180, 250, 0.2);
-    color: #cdd6f4;
+#custom-chrome:hover {
+    background-color: rgba(166, 227, 161, 0.2);
 }
 
-#workspaces button.focused,
-#workspaces button.active {
-    background: rgba(137, 180, 250, 0.3);
-    color: #89b4fa;
-}
-
-#workspaces button.urgent {
-    background: rgba(243, 139, 168, 0.4);
-    color: #f38ba8;
-}
-
-#mode {
-    background-color: rgba(250, 179, 135, 0.3);
-    color: #fab387;
-    font-weight: bold;
-}
-
-/* === Taskbar (labwc + Sway) === */
+/* === Taskbar === */
 
 #taskbar button {
     padding: 0 4px;
@@ -91,63 +62,12 @@ tooltip label {
     background: rgba(137, 180, 250, 0.3);
 }
 
-/* === Clock === */
-
-#clock {
-    color: #89b4fa;
-    font-weight: bold;
-}
-
-/* === System monitors === */
-
-#cpu {
-    color: #a6e3a1;
-}
-
-#memory {
-    color: #cba6f7;
-}
-
-#disk {
-    color: #f9e2af;
-}
-
-/* === Network === */
-
-#network {
-    color: #94e2d5;
-}
-
-#network.disconnected {
-    color: #f38ba8;
-}
-
-/* === Audio === */
-
-#pulseaudio {
-    color: #f9e2af;
-}
-
-#pulseaudio.muted {
-    color: #6c7086;
-}
-
-/* === Tray === */
-
-#tray {
-    padding: 0 6px;
-}
-
-#tray > .passive {
-    -gtk-icon-effect: dim;
-}
-
-#tray > .needs-attention {
-    -gtk-icon-effect: highlight;
-}
-
 /* === Notifications (swaync) === */
 
 #custom-notification {
     color: #89b4fa;
+}
+
+#custom-notification:hover {
+    background-color: rgba(137, 180, 250, 0.2);
 }

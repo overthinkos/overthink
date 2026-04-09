@@ -1,6 +1,6 @@
 [
   {
-    "position": "top",
+    "position": "bottom",
     "height": 30,
     "spacing": 4,
     "layer": "top",
@@ -8,41 +8,21 @@
     "reload_style_on_change": true,
 
     "modules-left": [
-      "sway/workspaces",
-      "sway/mode",
-      "wlr/taskbar"
+      "custom/chrome"
     ],
     "modules-center": [
-      "clock"
+      "wlr/taskbar"
     ],
     "modules-right": [
-      "cpu",
-      "memory",
-      "disk",
-      "network",
-      "pulseaudio",
-      "tray",
       "custom/notification"
     ],
 
-    "sway/workspaces": {
-      "disable-scroll": false,
-      "all-outputs": false,
-      "format": "{icon}",
-      "format-icons": {
-        "1": "1",
-        "2": "2",
-        "3": "3",
-        "4": "4",
-        "5": "5",
-        "urgent": "",
-        "default": ""
-      }
-    },
-
-    "sway/mode": {
-      "format": " {}",
-      "max-length": 50
+    "custom/chrome": {
+      "format": " Chrome",
+      "tooltip": true,
+      "tooltip-format": "Restart Chrome with proxy & CDP",
+      "interval": "once",
+      "on-click": "chrome-restart"
     },
 
     "wlr/taskbar": {
@@ -52,66 +32,6 @@
       "on-click": "activate",
       "on-click-middle": "close",
       "on-click-right": "minimize"
-    },
-
-    "clock": {
-      "timezone": "Europe/Vienna",
-      "format": "{:%H:%M}",
-      "format-alt": "{:%A, %d %B %Y  %H:%M}",
-      "tooltip-format": "<tt><small>{calendar}</small></tt>",
-      "calendar": {
-        "mode": "month",
-        "weeks-pos": "right",
-        "format": {
-          "months": "<span color='#ffead3'><b>{}</b></span>",
-          "days": "<span color='#ecc6d9'>{}</span>",
-          "weeks": "<span color='#99ffdd'><b>W{}</b></span>",
-          "weekdays": "<span color='#ffcc66'><b>{}</b></span>",
-          "today": "<span color='#ff6699'><b><u>{}</u></b></span>"
-        }
-      }
-    },
-
-    "cpu": {
-      "format": " {usage}%",
-      "tooltip-format": "{avg_frequency}GHz  {load}",
-      "interval": 3
-    },
-
-    "memory": {
-      "format": " {percentage}%",
-      "tooltip-format": "{used:0.1f}G / {total:0.1f}G used\nSwap: {swapUsed:0.1f}G / {swapTotal:0.1f}G",
-      "interval": 5
-    },
-
-    "disk": {
-      "format": " {percentage_used}%",
-      "tooltip-format": "{path}: {used} / {total}",
-      "path": "/",
-      "interval": 30
-    },
-
-    "network": {
-      "format-ethernet": " {ipaddr}",
-      "format-disconnected": "⚠ No network",
-      "tooltip-format": "{ifname}: {ipaddr}/{cidr}\n {bandwidthUpBits}  {bandwidthDownBits}",
-      "interval": 5
-    },
-
-    "pulseaudio": {
-      "format": "{icon} {volume}%",
-      "format-muted": " muted",
-      "format-icons": {
-        "default": ["", "", ""]
-      },
-      "on-click": "pavucontrol",
-      "on-click-right": "pactl set-sink-mute @DEFAULT_SINK@ toggle",
-      "scroll-step": 5
-    },
-
-    "tray": {
-      "icon-size": 16,
-      "spacing": 6
     },
 
     "custom/notification": {

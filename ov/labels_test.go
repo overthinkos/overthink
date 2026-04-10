@@ -26,7 +26,6 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelAliases:  `[{"name":"openclaw","command":"openclaw"}]`,
 			LabelSecurity: `{"privileged":true,"cap_add":["NET_ADMIN"]}`,
 			LabelNetwork:  "host",
-			LabelTunnel:   `{"provider":"tailscale","public":[18789]}`,
 			LabelDNS:     "openclaw.example.com",
 			LabelAcmeEmail: "admin@example.com",
 			LabelEnv:       `["API_KEY=secret"]`,
@@ -109,15 +108,9 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 		t.Errorf("Security.CapAdd = %v, want %v", meta.Security.CapAdd, wantCapAdd)
 	}
 
-	// Tunnel
-	if meta.Tunnel == nil {
-		t.Fatal("Tunnel = nil, want non-nil")
-	}
-	if meta.Tunnel.Provider != "tailscale" {
-		t.Errorf("Tunnel.Provider = %q, want %q", meta.Tunnel.Provider, "tailscale")
-	}
-	if len(meta.Tunnel.Public.Ports) != 1 || meta.Tunnel.Public.Ports[0] != 18789 {
-		t.Errorf("Tunnel.Public.Ports = %v, want [18789]", meta.Tunnel.Public.Ports)
+	// Tunnel — no longer extracted from labels (deploy.yml only)
+	if meta.Tunnel != nil {
+		t.Errorf("Tunnel = %v, want nil (tunnel is deploy-time only)", meta.Tunnel)
 	}
 
 	// Env
@@ -357,14 +350,12 @@ func TestWriteLabelsPortRelay(t *testing.T) {
 }
 
 func TestWriteLabelsEmitsLabels(t *testing.T) {
-	tunnel := &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{8080}}}
 	g := &Generator{
 		Config: &Config{
 			Images: map[string]ImageConfig{
 				"myapp": {
 					Layers:     []string{"svc"},
 					Ports:      []string{"8080:8080"},
-					Tunnel:     tunnel,
 					Env:        []string{"KEY=val"},
 				},
 			},
@@ -453,7 +444,6 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelPorts, `["8080:8080"]`},
 		{LabelVolumes, `[{"name":"data","path":"/home/user/.myapp"}]`},
 		{LabelAliases, `[{"name":"myapp-cli","command":"myapp"}]`},
-		{LabelTunnel, `"provider":"tailscale"`},
 		{LabelEnv, `["KEY=val"]`},
 		{LabelRoutes, `[{"host":"myapp.localhost","port":8080}]`},
 		{LabelVm, `"ram":"4G"`},
@@ -518,7 +508,6 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 }
 
 func TestLabelRoundTrip(t *testing.T) {
-	tunnel := &TunnelYAML{Provider: "cloudflare", Tunnel: "my-tunnel", Public: PortScope{Ports: []int{9090}}}
 	g := &Generator{
 		Config: &Config{
 			Images: map[string]ImageConfig{
@@ -526,7 +515,6 @@ func TestLabelRoundTrip(t *testing.T) {
 					Layers:  []string{"svc"},
 					Ports:   []string{"9090:9090", "8080"},
 					Aliases: []AliasConfig{{Name: "extra", Command: "extra-cmd"}},
-					Tunnel:  tunnel,
 					Env:     []string{"FOO=bar", "BAZ=qux"},
 				},
 			},
@@ -655,15 +643,9 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Errorf("Security.CapAdd = %v, want [SYS_PTRACE]", meta.Security.CapAdd)
 	}
 
-	// Tunnel
-	if meta.Tunnel == nil {
-		t.Fatal("Tunnel = nil, want non-nil")
-	}
-	if meta.Tunnel.Provider != "cloudflare" {
-		t.Errorf("Tunnel.Provider = %q, want %q", meta.Tunnel.Provider, "cloudflare")
-	}
-	if len(meta.Tunnel.Public.Ports) != 1 || meta.Tunnel.Public.Ports[0] != 9090 {
-		t.Errorf("Tunnel.Public.Ports = %v, want [9090]", meta.Tunnel.Public.Ports)
+	// Tunnel — no longer round-tripped through labels (deploy.yml only)
+	if meta.Tunnel != nil {
+		t.Errorf("Tunnel = %v, want nil (tunnel is deploy-time only)", meta.Tunnel)
 	}
 
 	// Env

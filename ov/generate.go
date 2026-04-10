@@ -1355,13 +1355,11 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelSecurity, security)
 	}
 
-	// Tunnel config
-	imgCfg := g.Config.Images[imageName]
-	if imgCfg.Tunnel != nil {
-		writeJSONLabel(b, LabelTunnel, imgCfg.Tunnel)
-	}
+	// Tunnel config is a deploy-time concern — not written to image labels.
+	// Managed via deploy.yml only (ov config setup).
 
 	// Image-level env vars
+	imgCfg := g.Config.Images[imageName]
 	writeJSONLabel(b, LabelEnv, imgCfg.Env)
 
 	// Hooks: collected from layers

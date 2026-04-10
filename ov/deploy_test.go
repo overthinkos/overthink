@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -572,5 +573,178 @@ func TestCleanDeployEntryInstance(t *testing.T) {
 	}
 	if _, ok := loaded.Images["selkies-desktop"]; !ok {
 		t.Error("base entry should survive")
+	}
+}
+
+func TestMergeEnvVars(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		newVars  []string
+		want     []string
+	}{
+		{
+			name:     "add new key",
+			existing: []string{"SSH_KEY=abc"},
+			newVars:  []string{"HTTP_PROXY=http://1.2.3.4:8080"},
+			want:     []string{"SSH_KEY=abc", "HTTP_PROXY=http://1.2.3.4:8080"},
+		},
+		{
+			name:     "override existing key",
+			existing: []string{"HTTP_PROXY=http://old:1234", "SSH_KEY=abc"},
+			newVars:  []string{"HTTP_PROXY=http://new:5678"},
+			want:     []string{"HTTP_PROXY=http://new:5678", "SSH_KEY=abc"},
+		},
+		{
+			name:     "mixed add and override",
+			existing: []string{"SSH_KEY=abc", "FOO=bar"},
+			newVars:  []string{"FOO=baz", "HTTP_PROXY=http://1.2.3.4:8080"},
+			want:     []string{"SSH_KEY=abc", "FOO=baz", "HTTP_PROXY=http://1.2.3.4:8080"},
+		},
+		{
+			name:     "empty existing",
+			existing: nil,
+			newVars:  []string{"HTTP_PROXY=http://1.2.3.4:8080"},
+			want:     []string{"HTTP_PROXY=http://1.2.3.4:8080"},
+		},
+		{
+			name:     "empty new preserves existing",
+			existing: []string{"SSH_KEY=abc"},
+			newVars:  nil,
+			want:     []string{"SSH_KEY=abc"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeEnvVars(tt.existing, tt.newVars)
+			if len(got) != len(tt.want) {
+				t.Fatalf("mergeEnvVars() = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Errorf("mergeEnvVars()[%d] = %q, want %q", i, got[i], tt.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSaveDeployStateEnvMerge(t *testing.T) {
+	tmp := t.TempDir()
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) {
+		return filepath.Join(tmp, "deploy.yml"), nil
+	}
+	defer func() { DeployConfigPath = orig }()
+
+	// Initial config with SSH key
+	saveDeployState("test-image", "inst1", SaveDeployStateInput{
+		Env: []string{"SSH_AUTHORIZED_KEYS=ssh-ed25519 AAAA", "EXISTING=keep"},
+	})
+
+	// Add proxy vars — should merge, not replace
+	saveDeployState("test-image", "inst1", SaveDeployStateInput{
+		Env: []string{"HTTP_PROXY=http://1.2.3.4:8080", "HTTPS_PROXY=http://1.2.3.4:8080"},
+	})
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	entry := dc.Images["test-image/inst1"]
+	// SSH key and EXISTING should be preserved
+	envMap := make(map[string]string)
+	for _, kv := range entry.Env {
+		parts := strings.SplitN(kv, "=", 2)
+		envMap[parts[0]] = parts[1]
+	}
+
+	if v, ok := envMap["SSH_AUTHORIZED_KEYS"]; !ok || v != "ssh-ed25519 AAAA" {
+		t.Errorf("SSH_AUTHORIZED_KEYS lost after merge: env = %v", entry.Env)
+	}
+	if v, ok := envMap["EXISTING"]; !ok || v != "keep" {
+		t.Errorf("EXISTING lost after merge: env = %v", entry.Env)
+	}
+	if v, ok := envMap["HTTP_PROXY"]; !ok || v != "http://1.2.3.4:8080" {
+		t.Errorf("HTTP_PROXY not added: env = %v", entry.Env)
+	}
+	if v, ok := envMap["HTTPS_PROXY"]; !ok || v != "http://1.2.3.4:8080" {
+		t.Errorf("HTTPS_PROXY not added: env = %v", entry.Env)
+	}
+}
+
+func TestSaveDeployStateEnvClean(t *testing.T) {
+	tmp := t.TempDir()
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) {
+		return filepath.Join(tmp, "deploy.yml"), nil
+	}
+	defer func() { DeployConfigPath = orig }()
+
+	// Initial config with SSH key
+	saveDeployState("test-image", "inst1", SaveDeployStateInput{
+		Env: []string{"SSH_AUTHORIZED_KEYS=ssh-ed25519 AAAA", "OLD_VAR=remove-me"},
+	})
+
+	// Clean replace — should drop everything not in the new list
+	saveDeployState("test-image", "inst1", SaveDeployStateInput{
+		Env:      []string{"HTTP_PROXY=http://1.2.3.4:8080"},
+		CleanEnv: true,
+	})
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	entry := dc.Images["test-image/inst1"]
+	if len(entry.Env) != 1 || entry.Env[0] != "HTTP_PROXY=http://1.2.3.4:8080" {
+		t.Errorf("CleanEnv should replace env list: got %v", entry.Env)
+	}
+}
+
+func TestSaveDeployStateTunnel(t *testing.T) {
+	tmp := t.TempDir()
+	orig := DeployConfigPath
+	DeployConfigPath = func() (string, error) {
+		return filepath.Join(tmp, "deploy.yml"), nil
+	}
+	defer func() { DeployConfigPath = orig }()
+
+	tunnel := &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}
+	saveDeployState("selkies-desktop", "1.2.3.4", SaveDeployStateInput{
+		Ports:  []string{"3001:3000"},
+		Tunnel: tunnel,
+	})
+
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		t.Fatalf("LoadDeployConfig: %v", err)
+	}
+
+	entry := dc.Images["selkies-desktop/1.2.3.4"]
+	if entry.Tunnel == nil {
+		t.Fatal("Tunnel not persisted to deploy.yml")
+	}
+	if entry.Tunnel.Provider != "tailscale" {
+		t.Errorf("Tunnel.Provider = %q, want tailscale", entry.Tunnel.Provider)
+	}
+	if !entry.Tunnel.Private.All {
+		t.Error("Tunnel.Private.All = false, want true")
+	}
+
+	// Verify tunnel survives subsequent saves without tunnel field
+	saveDeployState("selkies-desktop", "1.2.3.4", SaveDeployStateInput{
+		Env: []string{"HTTP_PROXY=http://1.2.3.4:8080"},
+	})
+
+	dc2, _ := LoadDeployConfig()
+	entry2 := dc2.Images["selkies-desktop/1.2.3.4"]
+	if entry2.Tunnel == nil {
+		t.Fatal("Tunnel lost after save without tunnel field")
+	}
+	if entry2.Tunnel.Provider != "tailscale" {
+		t.Errorf("Tunnel.Provider = %q after re-save, want tailscale", entry2.Tunnel.Provider)
 	}
 }

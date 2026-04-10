@@ -497,12 +497,8 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.AcmeEmail = c.Defaults.AcmeEmail
 	}
 
-	// Resolve tunnel: image -> defaults -> nil
-	if img.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(img.Tunnel, name, resolved.DNS, nil, nil, nil, resolved.Ports)
-	} else if c.Defaults.Tunnel != nil {
-		resolved.Tunnel = ResolveTunnelConfig(c.Defaults.Tunnel, name, resolved.DNS, nil, nil, nil, resolved.Ports)
-	}
+	// Tunnel config is a deploy-time concern — resolved from deploy.yml only.
+	// images.yml tunnel: field is ignored (kept in struct for YAML compat).
 
 	// Resolve VM config: only for bootc images, and only when configured
 	if img.Bootc && (img.Vm != nil || c.Defaults.Vm != nil) {

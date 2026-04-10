@@ -127,6 +127,16 @@ images:
     ports:
       - "6379:6379"
 
+  filebrowser:
+    base: fedora
+    layers:
+      - agent-forwarding
+      - filebrowser
+      - dbus
+      - ov
+    ports:
+      - "8085:8080"
+
   openclaw:
     base: fedora
     layers:
@@ -457,11 +467,9 @@ images:
       - "3000:3000"
       - "9222:9222"
       - "9224:9224"
+      - "2222:2222"
     platforms:
       - linux/amd64
-    tunnel:
-      provider: tailscale
-      private: all
 
   selkies-desktop-nvidia:
     base: nvidia
@@ -474,6 +482,7 @@ images:
       - "3000:3000"
       - "9222:9222"
       - "9224:9224"
+      - "2222:2222"
     platforms:
       - linux/amd64
 

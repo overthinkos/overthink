@@ -400,8 +400,9 @@ func TestResolveTunnelConfigCloudflarePortMap(t *testing.T) {
 }
 
 // --- Config ResolveImage Tunnel ---
+// Tunnel is a deploy-time concern — no longer resolved from images.yml.
 
-func TestConfigResolveTunnel(t *testing.T) {
+func TestConfigResolveTunnelIgnored(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"rpm"}},
 		Images: map[string]ImageConfig{
@@ -419,18 +420,12 @@ func TestConfigResolveTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
-	if resolved.Tunnel == nil {
-		t.Fatal("expected Tunnel to be non-nil")
-	}
-	if resolved.Tunnel.Provider != "cloudflare" {
-		t.Errorf("Provider = %q, want cloudflare", resolved.Tunnel.Provider)
-	}
-	if len(resolved.Tunnel.Ports) != 1 || resolved.Tunnel.Ports[0].Port != 3001 {
-		t.Errorf("Ports = %+v, want [{Port:3001}]", resolved.Tunnel.Ports)
+	if resolved.Tunnel != nil {
+		t.Error("Tunnel should be nil — images.yml tunnel is ignored (deploy.yml only)")
 	}
 }
 
-func TestConfigResolveTunnelFromDefaults(t *testing.T) {
+func TestConfigResolveTunnelDefaultsIgnored(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build:  BuildFormats{"rpm"},
@@ -449,11 +444,8 @@ func TestConfigResolveTunnelFromDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
-	if resolved.Tunnel == nil {
-		t.Fatal("expected Tunnel to be inherited from defaults")
-	}
-	if resolved.Tunnel.Provider != "tailscale" {
-		t.Errorf("Provider = %q, want tailscale", resolved.Tunnel.Provider)
+	if resolved.Tunnel != nil {
+		t.Error("Tunnel should be nil — defaults tunnel is ignored (deploy.yml only)")
 	}
 }
 
@@ -479,7 +471,10 @@ func TestConfigResolveTunnelNil(t *testing.T) {
 
 // --- Validation ---
 
-func TestValidateTunnelInvalidProvider(t *testing.T) {
+// Tunnel validation tests removed — tunnel is a deploy-time concern (deploy.yml only).
+// images.yml tunnel: field is parsed but ignored by Validate().
+
+func TestValidateTunnelIgnoredInImagesYml(t *testing.T) {
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"myapp": {
@@ -491,183 +486,9 @@ func TestValidateTunnelInvalidProvider(t *testing.T) {
 	layers := map[string]*Layer{}
 
 	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for invalid provider")
-	}
-	if !strings.Contains(err.Error(), "tunnel provider must be") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelMustSpecifyScope(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "tailscale"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for tunnel with no public/private scope")
-	}
-	if !strings.Contains(err.Error(), "tunnel must specify public, private, or both") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelBothAllConflict(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{All: true}, Private: PortScope{All: true}},
-				Ports:  []string{"443:443"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for both public: all and private: all")
-	}
-	if !strings.Contains(err.Error(), "cannot have both public: all and private: all") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelCloudflarePrivateError(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				DNS:    "app.example.com",
-				Tunnel: &TunnelYAML{Provider: "cloudflare", Private: PortScope{All: true}},
-				Ports:  []string{"8080:8080"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for cloudflare with private ports")
-	}
-	if !strings.Contains(err.Error(), "cloudflare tunnels are always public") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelCloudflareMissingDNS(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "cloudflare", Public: PortScope{Ports: []int{8080}}},
-				Ports:  []string{"8080:8080"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for missing dns")
-	}
-	if !strings.Contains(err.Error(), "requires dns") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelCloudflareInvalidTunnelName(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				DNS:    "app.example.com",
-				Tunnel: &TunnelYAML{Provider: "cloudflare", Tunnel: "-bad-name", Public: PortScope{Ports: []int{8080}}},
-				Ports:  []string{"8080:8080"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for invalid tunnel name")
-	}
-	if !strings.Contains(err.Error(), "tunnel name must match") {
-		t.Errorf("unexpected error: %v", err)
-	}
-}
-
-func TestValidateTunnelValidTailscale(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{443}}, Private: PortScope{Ports: []int{8080}}},
-				Ports:  []string{"443:443", "8080:8080"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	// Should have no tunnel errors (there may be other validation errors like missing layers)
-	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "tunnel") {
-			t.Errorf("unexpected tunnel error: %v", err)
-		}
-	}
-}
-
-func TestValidateTunnelValidCloudflare(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				DNS:    "app.example.com",
-				Tunnel: &TunnelYAML{Provider: "cloudflare", Public: PortScope{Ports: []int{3001}}},
-				Ports:  []string{"3001:3001"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	// Should have no tunnel errors
-	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "tunnel") {
-			t.Errorf("unexpected tunnel error: %v", err)
-		}
-	}
-}
-
-func TestValidateTunnelTailscaleInvalidPublicPort(t *testing.T) {
-	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {
-				Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{8080}}},
-				Ports:  []string{"8080:8080"},
-				Layers: []string{},
-			},
-		},
-	}
-	layers := map[string]*Layer{}
-
-	err := Validate(cfg, layers, "")
-	if err == nil {
-		t.Fatal("expected error for invalid public port")
-	}
-	if !strings.Contains(err.Error(), "tailscale public port 8080 must be 443, 8443, or 10000") {
-		t.Errorf("unexpected error: %v", err)
+	// Should NOT produce tunnel errors — tunnel in images.yml is ignored
+	if err != nil && strings.Contains(err.Error(), "tunnel") {
+		t.Errorf("tunnel in images.yml should be ignored by Validate, got: %v", err)
 	}
 }
 
@@ -689,95 +510,7 @@ func TestIsValidServePort(t *testing.T) {
 	}
 }
 
-// --- Cross-Image Port Conflict ---
-
-func TestValidateTunnelPublicPortConflict(t *testing.T) {
-	tests := []struct {
-		name      string
-		cfg       *Config
-		wantErr   bool
-		errSubstr string
-	}{
-		{
-			name: "two tailscale images same public port",
-			cfg: &Config{
-				Images: map[string]ImageConfig{
-					"app-a": {
-						Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{443}}},
-						Ports:  []string{"443:443"},
-						Layers: []string{},
-					},
-					"app-b": {
-						Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{443}}},
-						Ports:  []string{"443:443"},
-						Layers: []string{},
-					},
-				},
-			},
-			wantErr:   true,
-			errSubstr: "tailscale public port 443 used by multiple images",
-		},
-		{
-			name: "two tailscale images different public ports",
-			cfg: &Config{
-				Images: map[string]ImageConfig{
-					"app-a": {
-						Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{443}}},
-						Ports:  []string{"443:443"},
-						Layers: []string{},
-					},
-					"app-b": {
-						Tunnel: &TunnelYAML{Provider: "tailscale", Public: PortScope{Ports: []int{8443}}},
-						Ports:  []string{"8443:8443"},
-						Layers: []string{},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "tailscale and cloudflare no conflict",
-			cfg: &Config{
-				Images: map[string]ImageConfig{
-					"app-a": {
-						Tunnel: &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}},
-						Ports:  []string{"8080:8080"},
-						Layers: []string{},
-					},
-					"app-b": {
-						DNS:    "app.example.com",
-						Tunnel: &TunnelYAML{Provider: "cloudflare", Public: PortScope{Ports: []int{3001}}},
-						Ports:  []string{"3001:3001"},
-						Layers: []string{},
-					},
-				},
-			},
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			layers := map[string]*Layer{}
-			err := Validate(tt.cfg, layers, "")
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected validation error")
-				}
-				if !strings.Contains(err.Error(), tt.errSubstr) {
-					t.Errorf("error %q should contain %q", err.Error(), tt.errSubstr)
-				}
-			} else {
-				if err != nil {
-					errStr := err.Error()
-					if strings.Contains(errStr, "tunnel") && strings.Contains(errStr, "conflict") {
-						t.Errorf("unexpected tunnel conflict error: %v", err)
-					}
-				}
-			}
-		})
-	}
-}
+// Cross-image tunnel port conflict tests removed — tunnel is deploy-time only.
 
 // --- PortSpec ---
 

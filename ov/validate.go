@@ -95,8 +95,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate DNS and ACME email
 	validateDNS(cfg, errs)
 
-	// Validate tunnel configuration
-	validateTunnel(cfg, layers, errs)
+	// Tunnel is a deploy-time concern (deploy.yml only) — not validated here.
 
 	// Validate layer composition (layers: field)
 	validateLayerIncludes(layers, errs)
@@ -186,9 +185,30 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 		}
 
 		// For each init system with a depends_layer, check if it's needed and present
+		isBootc := img.Bootc
 		for initName, def := range initCfg.Inits {
 			if def.DependsLayer == "" {
 				continue // no dependency requirement (e.g., systemd is provided by base OS)
+			}
+
+			// Skip init systems that don't apply to this image type.
+			// Mirrors the RequiresBootc filter in ResolveInitSystem/ActiveInits.
+			if def.RequiresBootc && !isBootc {
+				continue // e.g., systemd not applicable to non-bootc images
+			}
+			if !def.RequiresBootc && isBootc {
+				// For bootc images with dual-init layers (service: + system_services:),
+				// skip supervisord depends_layer check when systemd is also triggered.
+				hasSystemdLayer := false
+				for _, layerName := range resolved {
+					if layer, ok := layers[layerName]; ok && layer.HasInit("systemd") {
+						hasSystemdLayer = true
+						break
+					}
+				}
+				if hasSystemdLayer {
+					continue
+				}
 			}
 
 			// Check if any layer requires this init system
@@ -235,8 +255,31 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			}
 
 			if !hasDepLayer {
-				errs.Add("image %q has layers requiring %s (%s) but missing the %q layer in its dependency chain; add %q to the image's layers or a base image",
-					imgName, initName, strings.Join(needsInit, ", "), def.DependsLayer, def.DependsLayer)
+				// For dual-init layers (e.g., sshd with both service: and system_services:),
+				// skip the error if ALL triggering layers also support another init system.
+				// The layer is designed to use whichever init system the image provides.
+				allDualInit := true
+				for _, layerName := range resolved {
+					layer, ok := layers[layerName]
+					if !ok || !layer.HasInit(initName) {
+						continue
+					}
+					hasAlternativeInit := false
+					for altName := range initCfg.Inits {
+						if altName != initName && layer.HasInit(altName) {
+							hasAlternativeInit = true
+							break
+						}
+					}
+					if !hasAlternativeInit {
+						allDualInit = false
+						break
+					}
+				}
+				if !allDualInit {
+					errs.Add("image %q has layers requiring %s (%s) but missing the %q layer in its dependency chain; add %q to the image's layers or a base image",
+						imgName, initName, strings.Join(needsInit, ", "), def.DependsLayer, def.DependsLayer)
+				}
 			}
 		}
 	}

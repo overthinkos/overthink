@@ -26,7 +26,8 @@ type ImageConfigSetupCmd struct {
 	Image       string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
 	Tag         string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
 	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env         []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
+	Env         []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE), merged with existing vars"`
+	Clean       bool     `short:"c" long:"clean" help:"Replace all env vars instead of merging (clean slate)"`
 	EnvFile     string   `long:"env-file" help:"Load env vars from file"`
 	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Port        []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
@@ -39,6 +40,7 @@ type ImageConfigSetupCmd struct {
 	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
 	UpdateAll    bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
+	SshKey       string   `long:"ssh-key" help:"SSH public key: 'auto' (default ~/.ssh key), path to .pub file, 'generate', or 'none'"`
 	Sidecar      []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
 	ListSidecars bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
 	AutoDetectFlags `embed:""`
@@ -155,6 +157,22 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Reload deploy config after injection to pick up newly injected provides
 	dc, _ = LoadDeployConfig()
+
+	// Resolve SSH key if --ssh-key was provided
+	if c.SshKey != "" {
+		cName := containerNameInstance(c.Image, c.Instance)
+		sshDir, sshDirErr := containerSSHKeyDir(cName)
+		if sshDirErr != nil {
+			return sshDirErr
+		}
+		pubkey, sshErr := resolveSSHPubKey(c.SshKey, sshDir)
+		if sshErr != nil {
+			return fmt.Errorf("resolving SSH key: %w", sshErr)
+		}
+		if pubkey != "" {
+			c.Env = append(c.Env, "SSH_AUTHORIZED_KEYS="+pubkey)
+		}
+	}
 
 	// Resolve env vars from global provides + labels + deploy.yml + CLI
 	ctrName := containerNameInstance(c.Image, c.Instance)
@@ -375,11 +393,13 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
 		Ports:     ports,
 		Env:       c.Env,
+		CleanEnv:  c.Clean,
 		EnvFile:   quadletEnvFile,
 		Network:   resolvedNetwork,
 		Security:  &security,
 		Volumes:   deployVolumes,
 		Sidecars:  deploySidecars,
+		Tunnel:    meta.Tunnel,
 	})
 
 	content := generateQuadlet(qcfg)
@@ -626,6 +646,22 @@ func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) e
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := ctx.PullOrBuild(podmanRT, c.Tag, c.Build); err != nil {
 		return err
+	}
+
+	// Resolve SSH key if --ssh-key was provided
+	if c.SshKey != "" {
+		remoteCName := containerNameInstance(ctx.ImageName, c.Instance)
+		sshDir, sshDirErr := containerSSHKeyDir(remoteCName)
+		if sshDirErr != nil {
+			return sshDirErr
+		}
+		pubkey, sshErr := resolveSSHPubKey(c.SshKey, sshDir)
+		if sshErr != nil {
+			return fmt.Errorf("resolving SSH key: %w", sshErr)
+		}
+		if pubkey != "" {
+			c.Env = append(c.Env, "SSH_AUTHORIZED_KEYS="+pubkey)
+		}
 	}
 
 	// Resolve env vars with global env

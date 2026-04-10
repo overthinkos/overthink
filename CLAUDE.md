@@ -25,7 +25,7 @@ Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
 - **Build mode:** Parses `images.yml`, resolves layers, generates Containerfiles, builds images. See `/ov:build`, `/ov:generate`.
-- **Deploy mode:** Reads OCI labels + `deploy.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). See `/ov:config`, `/ov:deploy`.
+- **Deploy mode:** Reads OCI labels + `deploy.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). Tunnel config is deploy.yml-only (not in labels). See `/ov:config`, `/ov:deploy`.
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
@@ -36,7 +36,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
 | env/mcp provides/requires/accepts | `/ov:config`, `/ov:layer` |
-| Sidecars & Tunnels | `/ov:sidecar`, `/ov:deploy` |
+| Sidecars & Tunnels (deploy.yml-only) | `/ov:sidecar`, `/ov:deploy` |
 | Init Systems | `/ov:generate`, `/ov:layer` |
 | Multi-distro | `/ov:build`, `/ov:layer` |
 | Desktop Automation | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:wl-overlay` |
@@ -62,7 +62,7 @@ project/
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml
-+-- layers/<name>/            # Layer directories (160 layers)
++-- layers/<name>/            # Layer directories (161 layers)
 +-- plugins/                  # Git submodule (overthink-plugins)
 +-- templates/                # supervisord.header.conf (referenced by init.yml header_file)
 ```
@@ -82,7 +82,7 @@ Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local
 
 ### Plugins Submodule
 
-Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (160 layer skills), `ov-images` (40 image skills). Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
+Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (161 layer skills), `ov-images` (41 image skills). Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
 
 ---
 
@@ -97,13 +97,9 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 - All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
 - MUST invoke skills before exploring the codebase. Skills are the primary knowledge source
 
-**Layer/image authoring** (details in `/ov:layer`, `/ov:build`):
-- `root.yml`/`user.yml`: `all:` task for common logic, tag-specific tasks (`rpm:`, `pac:`, `fedora:`). Never `install:`
-- `distro:` = identity tags (first match wins). `build:` = package formats (all installed in order). Default: `[rpm]`
-- Subsystem-specific rules: init dependencies, data layers, ffmpeg codecs, env/mcp provides — see skills
+**Layer/image authoring:** See `/ov:layer` and `/ov:build` for all rules (task names, distro/build tags, init deps, env/mcp provides).
 
-**Deployment** (details in `/ov:config`, `/ov:deploy`, `/ov:sidecar`):
-- Quadlet mode is default. `ov config` before `ov start`. Instance support via `-i <instance>`
+**Deployment:** See `/ov:config`, `/ov:deploy`, `/ov:sidecar`. Quadlet mode is default. `ov config` before `ov start`. Tunnel config is deploy.yml-only. `-e` merges env vars (use `-c` for clean replace).
 
 ---
 
@@ -145,8 +141,8 @@ Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/
 | `ov` | 37 | Operations | "How do I use X?" |
 | `ov-dev` | 3 + 3 agents | Contributing | "How does the code work?" |
 | `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 160 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 40 | Image reference | "What does image X look like?" |
+| `ov-layers` | 161 | Layer reference | "What does layer X contain?" |
+| `ov-images` | 41 | Image reference | "What does image X look like?" |
 
 ### Common Skill Chains
 

@@ -531,11 +531,13 @@ func envKey(entry string) string {
 type SaveDeployStateInput struct {
 	Ports     []string
 	Env       []string
+	CleanEnv  bool // true = replace env list; false = merge (upsert by key)
 	EnvFile   string
 	Network   string
 	Security  *SecurityConfig
 	Volumes   []DeployVolumeConfig
 	Sidecars  map[string]SidecarDef
+	Tunnel    *TunnelYAML
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
@@ -554,7 +556,11 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 		entry.Ports = input.Ports
 	}
 	if len(input.Env) > 0 {
-		entry.Env = input.Env
+		if input.CleanEnv || len(entry.Env) == 0 {
+			entry.Env = input.Env
+		} else {
+			entry.Env = mergeEnvVars(entry.Env, input.Env)
+		}
 	}
 	if input.EnvFile != "" {
 		entry.EnvFile = input.EnvFile
@@ -568,10 +574,42 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if len(input.Sidecars) > 0 {
 		entry.Sidecars = input.Sidecars
 	}
+	if input.Tunnel != nil {
+		entry.Tunnel = input.Tunnel
+	}
 	dc.Images[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}
+}
+
+// mergeEnvVars merges new env vars into existing ones (upsert by key).
+// New vars override existing vars with the same key; existing vars with
+// unmatched keys are preserved in their original order.
+func mergeEnvVars(existing, newVars []string) []string {
+	newByKey := make(map[string]string, len(newVars))
+	for _, kv := range newVars {
+		key := strings.SplitN(kv, "=", 2)[0]
+		newByKey[key] = kv
+	}
+	result := make([]string, 0, len(existing)+len(newVars))
+	seen := make(map[string]bool)
+	for _, kv := range existing {
+		key := strings.SplitN(kv, "=", 2)[0]
+		if newKV, ok := newByKey[key]; ok {
+			result = append(result, newKV)
+			seen[key] = true
+		} else {
+			result = append(result, kv)
+		}
+	}
+	for _, kv := range newVars {
+		key := strings.SplitN(kv, "=", 2)[0]
+		if !seen[key] {
+			result = append(result, kv)
+		}
+	}
+	return result
 }
 
 // ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.

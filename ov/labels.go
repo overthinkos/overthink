@@ -235,14 +235,8 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Tunnel
-	if v := labels[LabelTunnel]; v != "" {
-		var tunnel TunnelYAML
-		if err := json.Unmarshal([]byte(v), &tunnel); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelTunnel, err)
-		}
-		meta.Tunnel = &tunnel
-	}
+	// Tunnel config is a deploy-time concern — read from deploy.yml only.
+	// Label is no longer written or read.
 
 	// Env
 	if v := labels[LabelEnv]; v != "" {

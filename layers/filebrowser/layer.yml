@@ -1,0 +1,29 @@
+depends:
+  - supervisord
+
+env:
+  FILEBROWSER_CONFIG: "/etc/filebrowser/config.yaml"
+
+ports:
+  - 8080
+
+volumes:
+  - name: data
+    path: "~/.filebrowser/data"
+  - name: files
+    path: "~/.filebrowser/files"
+
+aliases:
+  - name: filebrowser
+    command: filebrowser
+
+service: |
+  [program:filebrowser]
+  command=/usr/local/bin/filebrowser
+  environment=FILEBROWSER_CONFIG="/etc/filebrowser/config.yaml"
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0

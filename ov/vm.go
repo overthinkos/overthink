@@ -180,7 +180,11 @@ func (c *VmCreateCmd) Run() error {
 	name := vmName(c.Image, c.Instance)
 
 	// Resolve SSH public key for SMBIOS credential injection
-	sshPubKey, err := resolveSSHPubKey(c.SshKey, name)
+	sshKeyDir, err := vmSSHKeyDir(name)
+	if err != nil {
+		return err
+	}
+	sshPubKey, err := resolveSSHPubKey(c.SshKey, sshKeyDir)
 	if err != nil {
 		return err
 	}
@@ -707,7 +711,8 @@ func connectUnixConsole(socketPath string) error {
 
 // resolveSSHPubKey resolves the --ssh-key flag to a public key string.
 // Values: "auto" (default ~/.ssh key), "none", "generate", or a file path.
-func resolveSSHPubKey(flag, vmName string) (string, error) {
+// generateDir is the directory where generated keypairs are stored (only used for "generate").
+func resolveSSHPubKey(flag, generateDir string) (string, error) {
 	switch flag {
 	case "none":
 		return "", nil
@@ -726,19 +731,14 @@ func resolveSSHPubKey(flag, vmName string) (string, error) {
 		}
 		return "", fmt.Errorf("no SSH public key found in ~/.ssh/ — use --ssh-key <path> or --ssh-key generate")
 	case "generate":
-		dir, err := vmDir()
+		if err := os.MkdirAll(generateDir, 0755); err != nil {
+			return "", err
+		}
+		pubkey, err := generateSSHKeypair(generateDir)
 		if err != nil {
 			return "", err
 		}
-		stateDir := filepath.Join(dir, vmName)
-		if err := os.MkdirAll(stateDir, 0755); err != nil {
-			return "", err
-		}
-		pubkey, err := generateSSHKeypair(stateDir)
-		if err != nil {
-			return "", err
-		}
-		fmt.Fprintf(os.Stderr, "Generated SSH keypair in %s\n", stateDir)
+		fmt.Fprintf(os.Stderr, "Generated SSH keypair in %s\n", generateDir)
 		return pubkey, nil
 	default:
 		// Treat as file path
@@ -748,6 +748,24 @@ func resolveSSHPubKey(flag, vmName string) (string, error) {
 		}
 		return strings.TrimSpace(string(data)), nil
 	}
+}
+
+// vmSSHKeyDir returns the directory for storing VM SSH keypairs.
+func vmSSHKeyDir(name string) (string, error) {
+	dir, err := vmDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, name), nil
+}
+
+// containerSSHKeyDir returns the directory for storing container SSH keypairs.
+func containerSSHKeyDir(name string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "share", "ov", "ssh", name), nil
 }
 
 // generateSSHKeypair creates an ed25519 keypair in the given directory.

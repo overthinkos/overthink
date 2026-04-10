@@ -16,3 +16,4 @@ layers:
   - asciinema
   - fastfetch
   - selkies
+  - sshd

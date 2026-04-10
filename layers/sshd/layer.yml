@@ -1,14 +1,33 @@
+env_accepts:
+  - name: SSH_AUTHORIZED_KEYS
+    description: "SSH public key(s) for authorized access (one per line). Set via: ov config <image> --ssh-key auto"
+
 rpm:
   packages:
     - openssh-server
     - openssh-clients
+    - sudo
 
 pac:
   packages:
     - openssh
+    - sudo
 
 ports:
-  - 22
+  - tcp:2222
 
+# Supervisord service (containers)
+service: |
+  [program:sshd]
+  command=/usr/local/bin/sshd-wrapper
+  autostart=true
+  autorestart=true
+  priority=3
+  startsecs=1
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+# Systemd service (bootc images)
 system_services:
   - sshd

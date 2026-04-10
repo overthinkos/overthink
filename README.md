@@ -330,7 +330,7 @@ ov start selkies-desktop -i work
 ov start selkies-desktop -i personal
 ```
 
-Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`). Semicolons in `NO_PROXY` values are auto-converted to commas by `ov`. For multi-instance proxy deployments, each instance can use `deploy.yml`'s `tunnel: tailscale` for host-level Tailscale serve access on its unique host ports — no per-instance sidecar needed. The `-e` flag merges env vars (upsert by key), so adding proxy config doesn't drop existing vars like SSH keys. Use `-c` for a clean replace.
+Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`). Semicolons in `NO_PROXY` values are auto-converted to commas by `ov`. For multi-instance proxy deployments, each instance can use `deploy.yml`'s `tunnel: tailscale` for host-level Tailscale serve access on its unique host ports — no per-instance sidecar needed. The `-e` flag merges env vars (upsert by key), so adding proxy config doesn't drop existing vars like SSH keys. Use `-c` for a clean replace. **Note:** Tunnel config is NOT auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's deploy.yml entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands.
 
 ### Desktop Automation
 
@@ -525,7 +525,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 240 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 242 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
 
 The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server.
 

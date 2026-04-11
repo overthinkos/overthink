@@ -182,6 +182,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if envErr != nil {
 		return envErr
 	}
+	envVars = enrichNoProxy(envVars, dc.DeployedContainerNames())
 
 	// Enforce env_requires — hard error before writing anything
 	if meta != nil && len(meta.EnvRequires) > 0 {
@@ -1167,6 +1168,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", key, err)
 			continue
 		}
+		envVars = enrichNoProxy(envVars, dc.DeployedContainerNames())
 
 		// Resolve network
 		resolvedNetwork, _ := ResolveNetwork(meta.Network, rt.RunEngine)

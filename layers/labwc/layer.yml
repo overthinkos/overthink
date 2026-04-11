@@ -5,6 +5,16 @@ env:
   WAYLAND_DISPLAY: "wayland-0"
   XDG_RUNTIME_DIR: "/tmp"
 
+env_accepts:
+  - name: XKB_DEFAULT_LAYOUT
+    description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
+  - name: XKB_DEFAULT_VARIANT
+    description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
+  - name: XKB_DEFAULT_MODEL
+    description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
+  - name: XKB_DEFAULT_OPTIONS
+    description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
+
 rpm:
   packages:
     - labwc

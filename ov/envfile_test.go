@@ -269,3 +269,57 @@ func TestResolveEnvVarsWithGlobalEnv(t *testing.T) {
 		t.Errorf("ResolveEnvVars() =\n  %v\nwant\n  %v", got, want)
 	}
 }
+
+func TestEnrichNoProxy(t *testing.T) {
+	tests := []struct {
+		name           string
+		envs           []string
+		containerNames []string
+		want           []string
+	}{
+		{
+			"proxy with NO_PROXY appends container names",
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost,127.0.0.1,10.89.0.0/24"},
+			[]string{"ov-immich-ml", "ov-jupyter"},
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost,127.0.0.1,10.89.0.0/24,ov-immich-ml,ov-jupyter"},
+		},
+		{
+			"proxy without NO_PROXY creates it",
+			[]string{"HTTPS_PROXY=http://1.2.3.4:8080"},
+			[]string{"ov-immich-ml"},
+			[]string{"HTTPS_PROXY=http://1.2.3.4:8080", "NO_PROXY=ov-immich-ml"},
+		},
+		{
+			"no proxy leaves env unchanged",
+			[]string{"FOO=bar", "NO_PROXY=localhost"},
+			[]string{"ov-immich-ml"},
+			[]string{"FOO=bar", "NO_PROXY=localhost"},
+		},
+		{
+			"empty container names leaves env unchanged",
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost"},
+			nil,
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost"},
+		},
+		{
+			"duplicates not added",
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost,ov-immich-ml"},
+			[]string{"ov-immich-ml", "ov-jupyter"},
+			[]string{"HTTP_PROXY=http://1.2.3.4:8080", "NO_PROXY=localhost,ov-immich-ml,ov-jupyter"},
+		},
+		{
+			"preserves lowercase no_proxy",
+			[]string{"http_proxy=http://1.2.3.4:8080", "no_proxy=localhost"},
+			[]string{"ov-immich-ml"},
+			[]string{"http_proxy=http://1.2.3.4:8080", "no_proxy=localhost,ov-immich-ml"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := enrichNoProxy(tt.envs, tt.containerNames)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("enrichNoProxy() =\n  %v\nwant\n  %v", got, tt.want)
+			}
+		})
+	}
+}

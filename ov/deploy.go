@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -70,6 +71,27 @@ func parseDeployKey(key string) (imageName, instance string) {
 		return key[:idx], key[idx+1:]
 	}
 	return key, ""
+}
+
+// DeployedContainerNames returns hostnames for all deployed images.
+// Used to enrich NO_PROXY so Chrome (which doesn't support CIDR) can bypass
+// the proxy for container-to-container traffic.
+func (dc *DeployConfig) DeployedContainerNames() []string {
+	if dc == nil {
+		return nil
+	}
+	var names []string
+	seen := map[string]bool{}
+	for key := range dc.Images {
+		img, inst := parseDeployKey(key)
+		name := containerNameInstance(img, inst)
+		if !seen[name] {
+			names = append(names, name)
+			seen[name] = true
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // isSameBaseImage returns true if source is the same base image (with or without instance).

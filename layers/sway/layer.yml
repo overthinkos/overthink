@@ -8,6 +8,13 @@ env:
   XDG_RUNTIME_DIR: "/tmp"
   WAYLAND_DISPLAY: "wayland-0"
   EGL_LOG_LEVEL: "fatal"
+  XKB_DEFAULT_LAYOUT: "us"
+
+env_accepts:
+  - name: XKB_DEFAULT_LAYOUT
+    description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
+  - name: XKB_DEFAULT_VARIANT
+    description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
 
 rpm:
   packages:

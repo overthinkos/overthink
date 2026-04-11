@@ -183,6 +183,69 @@ func normalizeNoProxy(envs []string) []string {
 	return envs
 }
 
+// enrichNoProxy appends container hostnames to NO_PROXY when a proxy is configured.
+// Chrome does not support CIDR ranges in NO_PROXY — only exact hostnames and domain suffixes.
+// This ensures container-to-container traffic bypasses the proxy.
+func enrichNoProxy(envs []string, containerNames []string) []string {
+	if len(containerNames) == 0 {
+		return envs
+	}
+	hasProxy := false
+	noProxyIdx := -1
+	for i, e := range envs {
+		idx := strings.IndexByte(e, '=')
+		if idx < 0 {
+			continue
+		}
+		key := e[:idx]
+		if key == "HTTP_PROXY" || key == "HTTPS_PROXY" ||
+			key == "http_proxy" || key == "https_proxy" {
+			hasProxy = true
+		}
+		if key == "NO_PROXY" || key == "no_proxy" {
+			noProxyIdx = i
+		}
+	}
+	if !hasProxy {
+		return envs
+	}
+	// Build set of existing NO_PROXY entries
+	existing := map[string]bool{}
+	var key, val string
+	if noProxyIdx >= 0 {
+		idx := strings.IndexByte(envs[noProxyIdx], '=')
+		key = envs[noProxyIdx][:idx]
+		val = envs[noProxyIdx][idx+1:]
+		for _, entry := range strings.Split(val, ",") {
+			existing[strings.TrimSpace(entry)] = true
+		}
+	} else {
+		key = "NO_PROXY"
+	}
+	// Append missing container names
+	var additions []string
+	for _, name := range containerNames {
+		if !existing[name] {
+			additions = append(additions, name)
+		}
+	}
+	if len(additions) == 0 {
+		return envs
+	}
+	newVal := val
+	if newVal != "" {
+		newVal += ","
+	}
+	newVal += strings.Join(additions, ",")
+	entry := key + "=" + newVal
+	if noProxyIdx >= 0 {
+		envs[noProxyIdx] = entry
+	} else {
+		envs = append(envs, entry)
+	}
+	return envs
+}
+
 // deduplicateEnv deduplicates env vars, keeping the last value for each key.
 func deduplicateEnv(envs []string) []string {
 	seen := make(map[string]int) // key -> index in result

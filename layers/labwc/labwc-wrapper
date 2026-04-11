@@ -22,7 +22,10 @@ echo "labwc-wrapper: Socket found, starting labwc"
 export WAYLAND_DISPLAY=wayland-1
 export XCURSOR_THEME=breeze_cursors
 export XCURSOR_SIZE=24
-export XKB_DEFAULT_LAYOUT=us
+export XKB_DEFAULT_LAYOUT="${XKB_DEFAULT_LAYOUT:-us}"
+export XKB_DEFAULT_VARIANT="${XKB_DEFAULT_VARIANT:-}"
+export XKB_DEFAULT_MODEL="${XKB_DEFAULT_MODEL:-pc105}"
+export XKB_DEFAULT_OPTIONS="${XKB_DEFAULT_OPTIONS:-}"
 export XKB_DEFAULT_RULES=evdev
 
 exec labwc

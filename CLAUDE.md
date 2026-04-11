@@ -40,6 +40,8 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 | Init Systems | `/ov:generate`, `/ov:layer` |
 | Multi-distro | `/ov:build`, `/ov:layer` |
 | Desktop Automation | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:wl-overlay` |
+| Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
+| NO_PROXY Enrichment | `/ov:config` |
 | GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.

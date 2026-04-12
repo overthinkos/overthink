@@ -16,6 +16,8 @@ tasks:
       - chmod +x ~/.local/bin/browser-open
       - cp /ctx/cdp-proxy ~/.local/bin/cdp-proxy
       - chmod +x ~/.local/bin/cdp-proxy
+      - cp /ctx/chrome-crash-listener ~/.local/bin/chrome-crash-listener
+      - chmod +x ~/.local/bin/chrome-crash-listener
       - mkdir -p ~/.local/share/chrome-windows
       - cp /ctx/chrome-windows/manifest.json ~/.local/share/chrome-windows/
       - cp /ctx/chrome-windows/rules.json ~/.local/share/chrome-windows/

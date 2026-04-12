@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+# Supervisord eventlistener: terminates supervisord (PID 1) when Chrome
+# enters FATAL state. Chrome goes FATAL after exhausting startretries (3),
+# which means it crash-looped three times within startsecs. Killing PID 1
+# makes the container exit, and systemd's Restart=always rebuilds the
+# entire container — critically, the memory namespace — so any orphaned
+# memfd-backed shmem from dead Chrome processes gets released. `chrome-restart`
+# inside a live container can't do this because memfds are ref-counted and
+# survive individual process deaths.
+import os
+import sys
+
+
+def write_stdout(s: str) -> None:
+    sys.stdout.write(s)
+    sys.stdout.flush()
+
+
+def write_stderr(s: str) -> None:
+    sys.stderr.write(s)
+    sys.stderr.flush()
+
+
+def main() -> None:
+    while True:
+        write_stdout("READY\n")
+        line = sys.stdin.readline()
+        if not line:
+            return
+        headers = dict(x.split(":", 1) for x in line.split())
+        data_len = int(headers.get("len", "0"))
+        payload_raw = sys.stdin.read(data_len) if data_len else ""
+
+        ok = True
+        if headers.get("eventname") == "PROCESS_STATE_FATAL":
+            payload = dict(x.split(":", 1) for x in payload_raw.split() if ":" in x)
+            if payload.get("processname") == "chrome":
+                write_stderr(
+                    "chrome-crash-listener: chrome went FATAL after startretries — "
+                    "terminating supervisord so systemd rebuilds the container\n"
+                )
+                try:
+                    os.kill(1, 15)
+                except OSError as exc:
+                    write_stderr(f"chrome-crash-listener: kill(1, SIGTERM) failed: {exc}\n")
+                    ok = False
+        write_stdout("RESULT 2\n" + ("OK" if ok else "FAIL"))
+
+
+if __name__ == "__main__":
+    main()

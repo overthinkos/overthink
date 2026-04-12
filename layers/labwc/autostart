@@ -1,1 +1,7 @@
-chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
+# Hand Chrome off to supervisord so the chrome-crash circuit breaker can
+# rebuild the container after startretries is exhausted. `supervisorctl start`
+# fails silently on images that don't define a chrome program — in that case
+# fall back to launching chrome-wrapper directly (same behavior as before).
+if ! supervisorctl start chrome 2>/dev/null; then
+    chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
+fi

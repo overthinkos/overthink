@@ -21,6 +21,15 @@ env_accepts:
 
 security:
   shm_size: "1g"
+  # Chrome crash-loop containment. MemoryMax is the hard OOM line for the
+  # container's cgroup; MemoryHigh causes reclaim pressure well before OOM so
+  # Chrome gets a chance to shed caches. MemorySwapMax keeps a runaway tab
+  # from dragging the host into swap thrash (which is the actual failure
+  # mode this cap exists to prevent — see the shmem-leak RCA). Override
+  # per-instance with `ov config --memory-max=...`.
+  memory_max: "6g"
+  memory_high: "5g"
+  memory_swap_max: "2g"
 
 rpm:
   packages:
@@ -50,6 +59,34 @@ service: |
   autorestart=true
   stdout_logfile=/dev/stdout
   stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0
+
+  # Chrome under supervisord with a 3-strike circuit breaker. autostart=false
+  # because Chrome needs a Wayland compositor up first — the compositor's
+  # autostart calls `supervisorctl start chrome` once it's ready. If Chrome
+  # crashes 3 times within startsecs, supervisord gives up (FATAL) and the
+  # chrome-crash eventlistener terminates supervisord so systemd rebuilds the
+  # container — the only way to clear orphan memfd shmem from previous crashes.
+  [program:chrome]
+  command=%(ENV_HOME)s/.local/bin/chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized
+  autostart=false
+  autorestart=true
+  startretries=3
+  startsecs=5
+  exitcodes=0
+  stopsignal=TERM
+  stopwaitsecs=5
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0
+
+  [eventlistener:chrome-crash]
+  command=%(ENV_HOME)s/.local/bin/chrome-crash-listener
+  events=PROCESS_STATE_FATAL
+  autostart=true
+  autorestart=true
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
 

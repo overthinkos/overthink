@@ -36,6 +36,10 @@ type ImageConfigSetupCmd struct {
 	VolumeFlag  []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
 	Bind        []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
 	Encrypt     []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
+	MemoryMax     string `long:"memory-max" help:"Cgroup memory.max hard OOM limit (e.g. 6g, 500m). Persists to deploy.yml."`
+	MemoryHigh    string `long:"memory-high" help:"Cgroup memory.high soft limit — reclaim pressure before OOM. Persists to deploy.yml."`
+	MemorySwapMax string `long:"memory-swap-max" help:"Cgroup memory.swap.max ceiling. Persists to deploy.yml."`
+	Cpus          string `long:"cpus" help:"CPU quota in cores (e.g. 2.5 for 2.5 cores). Persists to deploy.yml."`
 	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
 	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
 	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
@@ -109,6 +113,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Apply deploy.yml overrides onto label metadata
 	dc, _ := LoadDeployConfig()
+	// Persist any --memory-max / --memory-high / --memory-swap-max / --cpus
+	// flags into deploy.yml so they survive across runs, and so that
+	// MergeDeployOntoMetadata picks them up below on this run.
+	if err := c.persistResourceCaps(&dc); err != nil {
+		return fmt.Errorf("persisting resource caps: %w", err)
+	}
 	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
@@ -890,6 +900,41 @@ func (c *ImageConfigSetupCmd) parseVolumeFlags() []DeployVolumeConfig {
 	}
 
 	return configs
+}
+
+// persistResourceCaps writes the --memory-max/--memory-high/--memory-swap-max/--cpus
+// flags (when provided) into deploy.yml under this image's Security block. On
+// subsequent runs MergeDeployOntoMetadata picks them up automatically — no other
+// code path needs to know about the flags.
+func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
+	if c.MemoryMax == "" && c.MemoryHigh == "" && c.MemorySwapMax == "" && c.Cpus == "" {
+		return nil
+	}
+	if *dc == nil {
+		*dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	}
+	if (*dc).Images == nil {
+		(*dc).Images = make(map[string]DeployImageConfig)
+	}
+	key := deployKey(c.Image, c.Instance)
+	entry := (*dc).Images[key]
+	if entry.Security == nil {
+		entry.Security = &SecurityConfig{}
+	}
+	if c.MemoryMax != "" {
+		entry.Security.MemoryMax = c.MemoryMax
+	}
+	if c.MemoryHigh != "" {
+		entry.Security.MemoryHigh = c.MemoryHigh
+	}
+	if c.MemorySwapMax != "" {
+		entry.Security.MemorySwapMax = c.MemorySwapMax
+	}
+	if c.Cpus != "" {
+		entry.Security.Cpus = c.Cpus
+	}
+	(*dc).Images[key] = entry
+	return SaveDeployConfig(*dc)
 }
 
 // parseVolumeEnv parses OV_VOLUMES_<IMAGE> env var into DeployVolumeConfig.

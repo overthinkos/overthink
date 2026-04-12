@@ -110,6 +110,210 @@ func TestParseShmBytes(t *testing.T) {
 	}
 }
 
+func TestMinCap(t *testing.T) {
+	// Smallest-wins: opposite of maxShmSize. Tighter cap is safer.
+	tests := []struct {
+		a, b, want string
+	}{
+		{"", "1g", "1g"},
+		{"1g", "", "1g"},
+		{"256m", "1g", "256m"},
+		{"2g", "1g", "1g"},
+		{"512m", "512m", "512m"},
+		{"1024m", "1g", "1024m"}, // equal sizes — first wins
+	}
+	for _, tt := range tests {
+		got := minCap(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("minCap(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestMinCpus(t *testing.T) {
+	tests := []struct {
+		a, b, want string
+	}{
+		{"", "2", "2"},
+		{"2", "", "2"},
+		{"1.5", "4", "1.5"},
+		{"8", "2.5", "2.5"},
+		{"2", "2", "2"},
+		{"bogus", "2", "2"}, // unparseable → other wins
+		{"2", "bogus", "2"},
+	}
+	for _, tt := range tests {
+		got := minCpus(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("minCpus(%q, %q) = %q, want %q", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestSecurityArgsMemoryCaps(t *testing.T) {
+	args := SecurityArgs(SecurityConfig{
+		MemoryMax:     "6g",
+		MemoryHigh:    "5g",
+		MemorySwapMax: "2g",
+		Cpus:          "4",
+	})
+	want := []string{
+		"--memory", "6g",
+		"--memory-reservation", "5g",
+		"--memory-swap", "2g",
+		"--cpus", "4",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("SecurityArgs(caps) = %v, want %v", args, want)
+	}
+}
+
+func TestSecurityArgsMemoryCapsWithPrivileged(t *testing.T) {
+	// Privileged containers still need resource caps — they can run anything
+	// kernel-level but don't get a free pass on memory/CPU.
+	args := SecurityArgs(SecurityConfig{
+		Privileged: true,
+		ShmSize:    "1g",
+		MemoryMax:  "6g",
+		Cpus:       "2.5",
+	})
+	want := []string{
+		"--privileged",
+		"--shm-size", "1g",
+		"--memory", "6g",
+		"--cpus", "2.5",
+	}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("SecurityArgs(privileged+caps) = %v, want %v", args, want)
+	}
+}
+
+func TestCollectSecurityMergesCapsSmallest(t *testing.T) {
+	// Two layers disagreeing on memory_max — tightest wins.
+	layers := map[string]*Layer{
+		"big": {
+			security: &SecurityConfig{MemoryMax: "8g", MemoryHigh: "7g", Cpus: "8"},
+		},
+		"small": {
+			security: &SecurityConfig{MemoryMax: "4g", MemoryHigh: "3g", Cpus: "2"},
+		},
+	}
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"test": {Layers: []string{"big", "small"}},
+		},
+	}
+	sec := CollectSecurity(cfg, layers, "test")
+	if sec.MemoryMax != "4g" {
+		t.Errorf("MemoryMax = %q, want 4g (smallest wins)", sec.MemoryMax)
+	}
+	if sec.MemoryHigh != "3g" {
+		t.Errorf("MemoryHigh = %q, want 3g", sec.MemoryHigh)
+	}
+	if sec.Cpus != "2" {
+		t.Errorf("Cpus = %q, want 2", sec.Cpus)
+	}
+}
+
+func TestCollectSecurityImageOverridesCaps(t *testing.T) {
+	// Image-level security.memory_max replaces whatever the layers decided,
+	// consistent with how ShmSize is handled.
+	layers := map[string]*Layer{
+		"chrome": {
+			security: &SecurityConfig{MemoryMax: "6g", ShmSize: "1g"},
+		},
+	}
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"heavy": {
+				Layers:   []string{"chrome"},
+				Security: &SecurityConfig{MemoryMax: "16g"},
+			},
+		},
+	}
+	sec := CollectSecurity(cfg, layers, "heavy")
+	if sec.MemoryMax != "16g" {
+		t.Errorf("MemoryMax = %q, want 16g (image override)", sec.MemoryMax)
+	}
+	if sec.ShmSize != "1g" {
+		t.Errorf("ShmSize = %q, want 1g (layer default preserved)", sec.ShmSize)
+	}
+}
+
+func TestGenerateQuadletWithMemoryCaps(t *testing.T) {
+	cfg := QuadletConfig{
+		ImageName: "selkies-desktop",
+		ImageRef:  "ghcr.io/test/selkies-desktop:latest",
+		Home:      "/home/user",
+		Security: SecurityConfig{
+			ShmSize:       "1g",
+			MemoryMax:     "6g",
+			MemoryHigh:    "5g",
+			MemorySwapMax: "2g",
+			Cpus:          "4",
+		},
+	}
+	content := generateQuadlet(cfg)
+	// systemd rejects lowercase size suffixes on MemoryMax/MemoryHigh/
+	// MemorySwapMax (silently falls back to infinity). ShmSize is podman's
+	// own flag and keeps its original lowercase form.
+	for _, want := range []string{
+		"ShmSize=1g",
+		"MemoryMax=6G",
+		"MemoryHigh=5G",
+		"MemorySwapMax=2G",
+		"CPUQuota=400%",
+	} {
+		if !containsLine(content, want) {
+			t.Errorf("expected %q in quadlet:\n%s", want, content)
+		}
+	}
+}
+
+func TestNormalizeCgroupSize(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"6g", "6G"},
+		{"512m", "512M"},
+		{"64k", "64K"},
+		{"1t", "1T"},
+		{"6G", "6G"},   // already uppercase
+		{"512M", "512M"},
+		{"1024", "1024"}, // raw bytes, no suffix
+		{"  2g  ", "2G"},
+	}
+	for _, tt := range tests {
+		got := normalizeCgroupSize(tt.in)
+		if got != tt.want {
+			t.Errorf("normalizeCgroupSize(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestFormatCPUQuota(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{"", ""},
+		{"0", ""},
+		{"-1", ""},
+		{"bogus", ""},
+		{"1", "100%"},
+		{"2.5", "250%"},
+		{"0.5", "50%"},
+		{"4", "400%"},
+		{"  2  ", "200%"},
+	}
+	for _, tt := range tests {
+		got := formatCPUQuota(tt.in)
+		if got != tt.want {
+			t.Errorf("formatCPUQuota(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
 	args := buildStartArgs("docker", "myimage:latest", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")

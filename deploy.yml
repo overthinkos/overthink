@@ -78,6 +78,13 @@ images:
   #   #   devices:
   #   #     - /dev/dri
   #   #   shm_size: "2g"
+  #   #   # Resource caps. Layer merging picks the smallest value (tightest
+  #   #   # cap wins), image/deploy overrides replace it. Set via CLI with
+  #   #   # `ov config <image> --memory-max=6g --memory-high=5g --cpus=4`.
+  #   #   memory_max: "6g"         # hard OOM line (cgroup memory.max)
+  #   #   memory_high: "5g"        # soft limit — reclaim pressure kicks in
+  #   #   memory_swap_max: "2g"    # swap ceiling
+  #   #   cpus: "4"                # CPU quota in cores
   #
   #   # Custom network
   #   # network: host

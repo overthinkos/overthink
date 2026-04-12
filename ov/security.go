@@ -9,7 +9,9 @@ import (
 // then applies image-level overrides. Returns a merged SecurityConfig.
 // If any layer sets privileged: true, the result is privileged.
 // cap_add, devices, and security_opt are unioned across all layers.
-// shm_size takes the largest value from any layer.
+// shm_size takes the largest value from any layer (biggest-wins — more shared
+// memory is safer). memory_max, memory_high, memory_swap_max, and cpus take
+// the smallest value (smallest-wins — a tighter cap is a smaller blast radius).
 // Image-level security (from images.yml) overrides layer-level settings.
 func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) SecurityConfig {
 	var merged SecurityConfig
@@ -46,6 +48,18 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		if sec.ShmSize != "" {
 			merged.ShmSize = maxShmSize(merged.ShmSize, sec.ShmSize)
 		}
+		if sec.MemoryMax != "" {
+			merged.MemoryMax = minCap(merged.MemoryMax, sec.MemoryMax)
+		}
+		if sec.MemoryHigh != "" {
+			merged.MemoryHigh = minCap(merged.MemoryHigh, sec.MemoryHigh)
+		}
+		if sec.MemorySwapMax != "" {
+			merged.MemorySwapMax = minCap(merged.MemorySwapMax, sec.MemorySwapMax)
+		}
+		if sec.Cpus != "" {
+			merged.Cpus = minCpus(merged.Cpus, sec.Cpus)
+		}
 	}
 
 	// Image-level overrides
@@ -68,6 +82,18 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		}
 		if len(img.Security.Mounts) > 0 {
 			merged.Mounts = appendUnique(merged.Mounts, img.Security.Mounts...)
+		}
+		if img.Security.MemoryMax != "" {
+			merged.MemoryMax = img.Security.MemoryMax
+		}
+		if img.Security.MemoryHigh != "" {
+			merged.MemoryHigh = img.Security.MemoryHigh
+		}
+		if img.Security.MemorySwapMax != "" {
+			merged.MemorySwapMax = img.Security.MemorySwapMax
+		}
+		if img.Security.Cpus != "" {
+			merged.Cpus = img.Security.Cpus
 		}
 	}
 
@@ -102,6 +128,7 @@ func SecurityArgs(sec SecurityConfig) []string {
 		if sec.ShmSize != "" {
 			args = append(args, "--shm-size", sec.ShmSize)
 		}
+		args = append(args, resourceCapArgs(sec)...)
 		return args
 	}
 	var args []string
@@ -119,6 +146,27 @@ func SecurityArgs(sec SecurityConfig) []string {
 	}
 	if sec.ShmSize != "" {
 		args = append(args, "--shm-size", sec.ShmSize)
+	}
+	args = append(args, resourceCapArgs(sec)...)
+	return args
+}
+
+// resourceCapArgs returns the podman run flags for memory and CPU caps.
+// Emitted identically in both the privileged and non-privileged branches
+// of SecurityArgs because privileged containers still need resource limits.
+func resourceCapArgs(sec SecurityConfig) []string {
+	var args []string
+	if sec.MemoryMax != "" {
+		args = append(args, "--memory", sec.MemoryMax)
+	}
+	if sec.MemoryHigh != "" {
+		args = append(args, "--memory-reservation", sec.MemoryHigh)
+	}
+	if sec.MemorySwapMax != "" {
+		args = append(args, "--memory-swap", sec.MemorySwapMax)
+	}
+	if sec.Cpus != "" {
+		args = append(args, "--cpus", sec.Cpus)
 	}
 	return args
 }
@@ -157,6 +205,45 @@ func maxShmSize(a, b string) string {
 		return a
 	}
 	if parseShmBytes(a) >= parseShmBytes(b) {
+		return a
+	}
+	return b
+}
+
+// minCap returns the smaller (tighter) of two size-cap strings for memory
+// limits — smallest wins because a tighter cap is a smaller blast radius.
+// This is the opposite of maxShmSize, which picks the larger shm_size.
+func minCap(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	if parseShmBytes(a) <= parseShmBytes(b) {
+		return a
+	}
+	return b
+}
+
+// minCpus returns the smaller (tighter) of two CPU-quota strings like "2.5".
+// Strings that fail to parse are treated as unlimited so the other side wins.
+func minCpus(a, b string) string {
+	if a == "" {
+		return b
+	}
+	if b == "" {
+		return a
+	}
+	av, aerr := strconv.ParseFloat(strings.TrimSpace(a), 64)
+	bv, berr := strconv.ParseFloat(strings.TrimSpace(b), 64)
+	if aerr != nil {
+		return b
+	}
+	if berr != nil {
+		return a
+	}
+	if av <= bv {
 		return a
 	}
 	return b

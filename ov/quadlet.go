@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -165,6 +166,24 @@ func generateQuadlet(cfg QuadletConfig) string {
 
 	b.WriteString("\n[Service]\n")
 	b.WriteString("Restart=always\n")
+	// Resource caps. Emitted as native systemd cgroup directives so they apply
+	// to the container's cgroup slice regardless of podman version. MemoryHigh
+	// acts as a soft limit (reclaim pressure), MemoryMax is the hard OOM line.
+	// Size values are normalized to uppercase suffixes (K/M/G/T) because systemd
+	// silently rejects lowercase and falls back to "infinity" — verified the hard
+	// way against a live systemctl show against this exact unit.
+	if v := normalizeCgroupSize(cfg.Security.MemoryMax); v != "" {
+		b.WriteString(fmt.Sprintf("MemoryMax=%s\n", v))
+	}
+	if v := normalizeCgroupSize(cfg.Security.MemoryHigh); v != "" {
+		b.WriteString(fmt.Sprintf("MemoryHigh=%s\n", v))
+	}
+	if v := normalizeCgroupSize(cfg.Security.MemorySwapMax); v != "" {
+		b.WriteString(fmt.Sprintf("MemorySwapMax=%s\n", v))
+	}
+	if q := formatCPUQuota(cfg.Security.Cpus); q != "" {
+		b.WriteString(fmt.Sprintf("CPUQuota=%s\n", q))
+	}
 	if cfg.EncryptedMounts && cfg.OvBin != "" {
 		imgArg := cfg.ImageName
 		if cfg.Instance != "" {
@@ -320,4 +339,45 @@ func quadletExistsInstance(imageName, instance string) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+// normalizeCgroupSize converts a podman-style size string ("6g", "512m") into
+// the form systemd's cgroup directives require: uppercase K/M/G/T suffixes.
+// Systemd silently rejects lowercase suffixes on MemoryMax/MemoryHigh/
+// MemorySwapMax and falls back to "infinity", which would mean the quadlet
+// file looks correct but the cap never takes effect. Returns an empty string
+// for empty/zero input so callers can skip emitting the directive.
+func normalizeCgroupSize(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	n := len(s)
+	last := s[n-1]
+	// Already uppercase suffix → pass through.
+	if last == 'K' || last == 'M' || last == 'G' || last == 'T' {
+		return s
+	}
+	// Lowercase suffix → uppercase.
+	if last == 'k' || last == 'm' || last == 'g' || last == 't' {
+		return s[:n-1] + strings.ToUpper(string(last))
+	}
+	// No suffix (pure digits) → pass through (systemd accepts raw bytes).
+	return s
+}
+
+// formatCPUQuota converts a podman-style --cpus value ("2.5") into the
+// percentage form systemd's CPUQuota= directive expects ("250%"). Returns an
+// empty string if the input is empty or unparseable, so callers can skip
+// emitting the directive entirely.
+func formatCPUQuota(cpus string) string {
+	cpus = strings.TrimSpace(cpus)
+	if cpus == "" {
+		return ""
+	}
+	f, err := strconv.ParseFloat(cpus, 64)
+	if err != nil || f <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d%%", int(f*100+0.5))
 }

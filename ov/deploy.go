@@ -222,7 +222,43 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 		meta.Env = overlay.Env
 	}
 	if overlay.Security != nil {
-		meta.Security = *overlay.Security
+		// Field-level merge: overlay fields override, unset fields fall
+		// through to the label-provided values. A full struct replace would
+		// wipe layer defaults like shm_size when a user sets just --memory-max
+		// via `ov config`.
+		if overlay.Security.Privileged {
+			meta.Security.Privileged = true
+		}
+		if len(overlay.Security.CapAdd) > 0 {
+			meta.Security.CapAdd = overlay.Security.CapAdd
+		}
+		if len(overlay.Security.Devices) > 0 {
+			meta.Security.Devices = overlay.Security.Devices
+		}
+		if len(overlay.Security.SecurityOpt) > 0 {
+			meta.Security.SecurityOpt = overlay.Security.SecurityOpt
+		}
+		if overlay.Security.ShmSize != "" {
+			meta.Security.ShmSize = overlay.Security.ShmSize
+		}
+		if len(overlay.Security.GroupAdd) > 0 {
+			meta.Security.GroupAdd = overlay.Security.GroupAdd
+		}
+		if len(overlay.Security.Mounts) > 0 {
+			meta.Security.Mounts = overlay.Security.Mounts
+		}
+		if overlay.Security.MemoryMax != "" {
+			meta.Security.MemoryMax = overlay.Security.MemoryMax
+		}
+		if overlay.Security.MemoryHigh != "" {
+			meta.Security.MemoryHigh = overlay.Security.MemoryHigh
+		}
+		if overlay.Security.MemorySwapMax != "" {
+			meta.Security.MemorySwapMax = overlay.Security.MemorySwapMax
+		}
+		if overlay.Security.Cpus != "" {
+			meta.Security.Cpus = overlay.Security.Cpus
+		}
 	}
 	if overlay.Network != "" {
 		meta.Network = overlay.Network

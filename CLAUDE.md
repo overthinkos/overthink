@@ -120,82 +120,29 @@ Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/
 
 ---
 
-## Skills: Decision Architecture
+## Skills First (Blocking)
 
-### MANDATORY: Skills Before Exploration
+Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort).
 
-**BLOCKING REQUIREMENT:** Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort).
-
-- If a skill exists, invoke it. No exceptions.
-- Dev tasks: invoke `/ov-dev:go` AND the relevant `/ov:*` skill before touching `.go` files.
+- `/ov:<cmd>` for operations, `/ov-layers:<name>` for layer internals, `/ov-images:<name>` for image composition, `/ov-dev:go` for Go code edits.
 - Multi-step workflows: invoke ALL skills in the chain.
-
-### First Branch: Using vs Developing
-
-- **Using ov** (building/running images): `ov` + `ov-layers` + `ov-images` plugins
-- **Developing ov** (Go CLI code): `ov-dev` plugin
-- Bug fixes in ov often need both: `ov-dev` (how code works) + `ov:*` (expected behavior)
-
-### Plugin Namespaces
-
-| Plugin | Skills | Role | Question it answers |
-|--------|--------|------|---------------------|
-| `ov` | 37 | Operations | "How do I use X?" |
-| `ov-dev` | 3 + 3 agents | Contributing | "How does the code work?" |
-| `ov-jupyter` | 1 MCP server | Notebook MCP | "How do I use the notebook MCP tools?" |
-| `ov-layers` | 161 | Layer reference | "What does layer X contain?" |
-| `ov-images` | 41 | Image reference | "What does image X look like?" |
+- For desktop automation routing (CDP / WL / VNC / SPA / AT-SPI hierarchy), see `/ov:cdp`.
+- For skill maintenance guidelines: see `/ov-dev:skills`.
 
 ### Common Skill Chains
 
-| Task | Skill chain |
-|------|-------------|
-| Author a layer | `/ov:layer` -> `/ov-layers:<similar>` -> `/ov:image` -> `/ov:build` |
-| Debug runtime | `/ov:<operation>` -> `/ov-layers:<layer>` -> `/ov:service` |
-| Desktop automation | `/ov:cdp` -> `/ov:wl` -> `/ov:wl` sway -> `/ov:wl-overlay` |
-| Deploy a service | `/ov:config` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
-| Selkies streaming | `/ov-layers:selkies` -> `/ov-layers:labwc` -> `/ov-images:selkies-desktop` |
-| Jupyter MCP | `/ov-layers:jupyter-colab` -> `/ov-images:jupyter` -> `/ov:service` |
-| Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` -> `/ov:validate` |
-| Deploy Hermes | `/ov-images:hermes` -> `/ov:config` -> `/ov:service` |
-| Deploy Open WebUI | `/ov-images:openwebui` -> `/ov:config` -> `/ov:secrets` -> `/ov:service` |
-| Hermes + Selkies | `ov config selkies-desktop` -> `ov config jupyter --update-all` -> `ov config hermes --update-all` |
-| Open WebUI + Ollama + Jupyter | `ov config ollama` -> `ov config jupyter --update-all` -> `ov config openwebui --update-all` |
-| Full lifecycle | `/ov:build` -> `/ov:deploy` -> `/ov:service` -> `/ov-images:<name>` |
+| Task | Chain |
+|------|-------|
+| Author a layer | `/ov:layer` → `/ov-layers:<similar>` → `/ov:image` → `/ov:build` |
+| Deploy a service | `/ov:config` → `/ov:deploy` → `/ov:service` → `/ov-images:<name>` |
+| Debug runtime | `/ov:status` → `/ov:logs` → `/ov-layers:<layer>` → `/ov:service` |
+| Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` → `/ov:validate` |
 
-For desktop automation: use CDP first, `--wl` for selkies-desktop (no VNC). See `/ov:cdp`, `/ov:wl`, `/ov-images:selkies-desktop` for detailed usage patterns.
-
-For skill maintenance guidelines (when/how to update skills): see `/ov-dev:skills`.
-
-### Disambiguating Overlapping Skills
-
-Rule of thumb:
-- `/ov:X` = "how do I USE X?" (operations, commands, flags)
-- `/ov-layers:X` = "what does layer X CONTAIN?" (deps, ports, volumes, env, packages)
-- `/ov-images:X` = "what does image X LOOK LIKE?" (base, layers, platforms, lifecycle)
-
-Start with `/ov:X` for usage, drill into `/ov-layers:X` or `/ov-images:X` for configuration. Each skill's cross-references section lists related skills.
-
-### Desktop Automation Hierarchy
-
-Seven abstraction levels for interacting with container desktops:
-
-| Level | Skill | Interface | When to use |
-|-------|-------|-----------|-------------|
-| SPA | `/ov:cdp` spa | CDP Input events via SPA overlay | Remote desktop through browser (selkies) -- bypasses local compositor/Chrome shortcuts |
-| Semantic | `/ov:wl` atspi | AT-SPI2 tree | Find elements by name/role -- most reliable for non-web UIs |
-| DOM | `/ov:cdp` | CSS selectors, JS eval | Chrome content -- structured, fast |
-| AX Tree | `/ov:cdp` axtree | CDP Accessibility | Chrome UI elements, menus, buttons via CDP |
-| Wayland | `/ov:wl` | grim, wtype, wlrctl | Screenshots, input, windows -- compositor-agnostic (sway + labwc) |
-| Pixel | `/ov:vnc` | VNC coordinates, framebuffer | Remote access -- when TCP connectivity needed |
-| Window | `ov wl sway` | Sway IPC (swaymsg) | Sway-only: tree, layout, move, resize, workspaces |
-| Overlay | `/ov:wl-overlay` | gtk4-layer-shell | Recording overlays -- title cards, lower-thirds, countdowns, fades |
-
-See `/ov:cdp` for SPA/WL bridge patterns and coordinate mapping.
+Each skill's `## Related Layers` / `## Related Commands` sections enumerate further chains.
 
 ### ov-dev Agents
 
-The `ov-dev` plugin includes 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator). See `/ov-dev:go` for details.
+`ov-dev` includes 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator). See `/ov-dev:go`.
 
 
 ## AI Attribution (Fedora Policy Compliant)

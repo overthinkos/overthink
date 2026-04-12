@@ -481,6 +481,21 @@ ov udev remove                                 # Remove installed udev rules
 ov doctor                                      # Check host dependencies
 ```
 
+## Troubleshooting
+
+Each entry points to the canonical skill — details belong there, not here.
+
+| Symptom | First step |
+|---------|-----------|
+| Service won't start | `ov status <image>` then `ov logs <image>` (`/ov:status`, `/ov:logs`) |
+| Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov:config`) |
+| Chrome stuck or crash-looping | `/ov-layers:chrome` Resource Caps & Circuit Breaker section |
+| Encrypted volume locked | `ov config status <image>` then `ov config mount` (`/ov:enc`) |
+| GPU not detected | `ov doctor` then `/ov:udev` |
+| Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov:config`) |
+| Build cache stale | `ov build --no-cache <image>` (`/ov:build`) |
+| Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
+
 ## Adding a Layer
 
 ```bash

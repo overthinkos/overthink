@@ -101,6 +101,52 @@ with open(f, 'w') as fh:
 print('Patched input_handler.py: env-based layout, level 2 AltGr scanning, modifier checks')
 "
 
+# Patch selkies.py to reuse a single pixelflux ScreenCapture() per display_id
+# across reconfigure_displays cycles.
+#
+# Root cause: pixelflux_wayland's WaylandBackend has no Drop impl and its
+# run_wayland_thread runs event_loop.run(None, ...) with no exit path — the
+# CalloopEvent::Closed handler is empty (lib.rs:928). Upstream selkies
+# creates a fresh ScreenCapture() on every _start_capture_for_display call,
+# so every user-triggered reconfigure (framerate/resolution/encoder change)
+# leaks an entire Wayland compositor AppState — Space, ShmState, GBM device,
+# GLES renderer, offscreen Dmabuf, frame_buffer Vec<u8> — into the container
+# cgroup, showing up as memfd-backed shmem that can only be reclaimed by
+# destroying the cgroup (container restart).
+#
+# Observed live: ~3.67 GB shmem accumulated over 48 minutes of active
+# streaming under CPU JPEG encoder backlog on a 3058x1604@60 session,
+# matching ~60 leaked compositor instances at ~50 MB each.
+#
+# Fix: cache ScreenCapture per display_id on self, so stop_capture/start_capture
+# cycles reuse the same Rust thread instead of leaking a new one each time.
+python3 -c "
+f = 'src/selkies/selkies.py'
+with open(f) as fh:
+    code = fh.read()
+
+needle = '            capture_module = ScreenCapture()\n'
+replacement = (
+    '            if not hasattr(self, \"_shared_screen_captures\"):\n'
+    '                self._shared_screen_captures = {}\n'
+    '            if display_id not in self._shared_screen_captures:\n'
+    '                self._shared_screen_captures[display_id] = ScreenCapture()\n'
+    '            capture_module = self._shared_screen_captures[display_id]\n'
+)
+
+if needle not in code:
+    raise SystemExit('FATAL: could not locate ScreenCapture() instantiation in selkies.py — upstream changed?')
+if code.count(needle) != 1:
+    raise SystemExit('FATAL: ScreenCapture() instantiation is not unique in selkies.py — patch ambiguity')
+
+code = code.replace(needle, replacement)
+
+with open(f, 'w') as fh:
+    fh.write(code)
+
+print('Patched selkies.py: _shared_screen_captures cache prevents pixelflux WaylandBackend leak on reconfigure')
+"
+
 "$HOME/.pixi/envs/default/bin/pip" install .
 
 # 2. Build web UI dashboard (needs nodejs/npm from builder image)

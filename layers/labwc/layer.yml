@@ -1,6 +1,7 @@
 depends:
   - dbus
 
+# autostart script has a wait-for-supervisord-socket guard (see autostart)
 env:
   WAYLAND_DISPLAY: "wayland-0"
   XDG_RUNTIME_DIR: "/tmp"

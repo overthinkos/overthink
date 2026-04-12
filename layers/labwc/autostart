@@ -1,7 +1,25 @@
 # Hand Chrome off to supervisord so the chrome-crash circuit breaker can
-# rebuild the container after startretries is exhausted. `supervisorctl start`
-# fails silently on images that don't define a chrome program — in that case
-# fall back to launching chrome-wrapper directly (same behavior as before).
-if ! supervisorctl start chrome 2>/dev/null; then
+# rebuild the container after startretries is exhausted.
+#
+# The previous version of this script had a TOCTOU race: if supervisord's
+# unix socket was not yet reachable when labwc's autostart ran, the
+# `supervisorctl start chrome` call failed (non-zero exit), and the fallback
+# launched `chrome-wrapper &` directly. Later, supervisord would also bring
+# chrome up via its [program:chrome] definition, leaving TWO chrome main
+# processes on the same --user-data-dir. chrome-wrapper deletes SingletonLock
+# before exec, defeating Chrome's own duplicate-detection. Observed in the
+# wild on ov-selkies-desktop-207.228.33.28.
+#
+# Fix: wait for the supervisord socket to appear (up to 10 s), then check
+# whether `chrome` is actually a defined program before starting it. Only
+# fall through to direct chrome-wrapper if the image has no [program:chrome]
+# at all (e.g. a minimal image variant without the chrome layer).
+for _ in $(seq 1 20); do
+    [ -S /tmp/supervisor.sock ] && break
+    sleep 0.5
+done
+if supervisorctl avail 2>/dev/null | grep -q '^chrome\b'; then
+    supervisorctl start chrome
+else
     chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &
 fi

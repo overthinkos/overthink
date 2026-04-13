@@ -197,57 +197,26 @@ ov vm start openclaw-browser-bootc
 
 ## The Layer Library
 
-Layers compose. Pick what you need, and dependencies resolve automatically.
+161 layers compose into images via `images.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
-### Foundations
+| Category | Representative layers | Purpose |
+|---|---|---|
+| **Foundations** | `pixi`, `python`, `nodejs`, `nodejs24`, `rust`, `golang`, `build-toolchain`, `yay` | Package managers and language runtimes |
+| **Services & Infrastructure** | `supervisord`, `traefik`, `postgresql`, `vectorchord`, `redis`, `valkey`, `docker-ce`, `kubernetes` | Init, reverse proxy, databases, container-in-container |
+| **GPU & ML** | `cuda`, `rocm`, `nvidia`, `llama-cpp`, `python-ml`, `jupyter-colab`, `jupyter-colab-ml`, `unsloth`, `unsloth-studio`, `ollama`, `comfyui` | NVIDIA/AMD runtimes and ML stacks |
+| **Desktop Compositors** | `sway`, `labwc`, `niri`, `mutter`, `kwin`, `wayvnc`, `pipewire`, `selkies` | Wayland/X11 servers, audio, browser-streamed desktops |
+| **Chrome variants** | `chrome`, `chrome-sway`, `chrome-niri`, `chrome-mutter`, `chrome-kwin`, `chrome-x11` | Chrome DevTools on `:9222` + DevTools MCP on `:9224` (29 tools) per compositor |
+| **AI & Agents** | `openclaw`, `hermes`, `hermes-full`, `hermes-playwright`, `openwebui`, `claude-code`, `codex`, `gemini` | AI gateways, agents, LLM UIs, and coding CLIs |
+| **Applications** | `immich`, `immich-ml`, `github-runner`, `steam`, `heroic`, `vscode`, `dev-tools`, `filebrowser`, `devops-tools` | End-user apps and workstation tooling |
+| **Desktop Utilities** | `ffmpeg`, `wf-recorder`, `wl-record-pixelflux`, `wl-screenshot-pixelflux`, `wl-overlay`, `asciinema`, `libnotify`, `fastfetch` | Multimedia, recording, overlays, notifications |
+| **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting` | Agent forwarding, encrypted storage, nesting |
+| **OS / Bootc** | `bootc-base`, `bootc-config`, `cloud-init`, `os-config`, `os-system-files`, `qemu-guest-agent`, `socat` | Bootable disk image and VM integration |
 
-**pixi** — The Pixi package manager, foundation for Python and conda environments.
-**python** — Python 3.13 via Pixi. **nodejs** / **nodejs24** — Node.js + npm. **rust** — Rust + Cargo. **golang** — Go compiler. **language-runtimes** — Go, PHP, .NET, and more. **build-toolchain** — gcc, cmake, autoconf, ninja, git, pkg-config. **yay** — AUR helper for Arch Linux images (base-devel + yay binary).
-
-### Services & Infrastructure
-
-**supervisord** — Default init system for managing multiple services in container images (via `service:` field in layer.yml). Configurable via `init.yml`. **traefik** — Reverse proxy with automatic route discovery (`:8000`/`:8080`). **postgresql** — Postgres on `:5432` with a persistent volume. **vectorchord** — VectorChord vector similarity extension for PostgreSQL (smart search). **redis** — Redis on `:6379`. **docker-ce** — Docker CE + buildx + compose inside containers. **kubernetes** — kubectl + Helm.
-
-### GPU & Machine Learning
-
-**cuda** — NVIDIA CUDA toolkit + cuDNN + ONNX Runtime. **rocm** — AMD ROCm runtime + OpenCL (auto-detects `/dev/kfd` and `HSA_OVERRIDE_GFX_VERSION`). **llama-cpp** — llama.cpp prebuilt binaries (llama-quantize, llama-cli) and GGUF conversion tools. Post-install layer — no pixi.toml, composable into any ML environment. **python-ml** — Core ML Python environment with PyTorch, vLLM runtime deps, and HuggingFace on top of CUDA. Meta-layer that composes `llama-cpp`. **jupyter** — Legacy CUDA Jupyter + ML libraries layer (no dedicated image; use `jupyter-colab-ml` for GPU Jupyter). **jupyter-colab** — Lightweight JupyterLab with real-time collaboration (jupyter-collaboration) on `:8888`, plus a built-in MCP server named `jupyter` at `/mcp` for programmatic notebook access (13 tools: create/read/edit/execute cells, watch for changes, manage collaboration rooms). AI agents and humans can edit the same notebook simultaneously via CRDT. No GPU required. Deploys as the `jupyter` image. **jupyter-colab-ml** — Full CUDA ML stack + JupyterLab with real-time collaboration and CRDT MCP server on `:8888`. Combines the collaboration and MCP features of jupyter-colab with the complete ML training stack (PyTorch, vLLM, Unsloth, LangChain, evaluation tools). Meta-layer that composes `llama-cpp` + `unsloth` + `jupyter-colab-mcp`. **jupyter-colab-ml-notebook** — jupyter-colab-ml plus 37 Unsloth fine-tuning notebooks (SFT, GRPO, DPO, RLOO, QLoRA) provisioned into `~/workspace/finetuning/` at deploy time. **unsloth** — Unsloth LLM fine-tuning library with vLLM integration. Post-install layer — requires pixi environment from a parent layer (python-ml, jupyter-colab-ml, or unsloth-studio). **unsloth-studio** — Unsloth Studio fine-tuning web UI on `:8888` + vLLM API on `:8000`. Environment-owner meta-layer that composes `llama-cpp` + `unsloth` and owns its pixi.toml. **ollama** — LLM inference server on `:11434` with model volume. **comfyui** — Image generation UI on `:8188`.
-
-### Desktop Environments
-
-**sway** — Wayland compositor (wlroots, full desktop). **labwc** — Lightweight Wayland compositor (wlroots, nested desktop for Selkies streaming). **niri** — Wayland compositor (Smithay, built from source with virtual output support for headless streaming). **mutter** — GNOME compositor (headless, portal-native screen capture via D-Bus ScreenCast). **wayvnc** — VNC server on `:5900`. **pipewire** — Audio/media server. **chrome** / **chrome-sway** / **chrome-niri** / **chrome-mutter** — Chrome with DevTools on `:9222` and Chrome DevTools MCP server on `:9224` (29 tools via mcp-proxy, auto-included by chrome). **selkies** — Browser-accessible desktop streaming via pixelflux (Wayland capture) and pcmflux (audio) on `:3000` (HTTPS via Traefik with self-signed cert — required for WebCodecs). Full mouse and keyboard passthrough via WebSocket. H.264 video at 60fps + Opus audio. Session state survives client disconnection.
-
-### Applications
-
-**openclaw** — AI gateway on `:18789`. **hermes** — Self-improving AI agent by Nous Research with voice, messaging (Telegram, Discord, Slack, WhatsApp, Email), tool-calling, skill learning, Claude Code, Codex, Gemini, dev-tools, devops-tools, and ov. Auto-discovers MCP servers from co-deployed services (e.g., jupyter's 13-tool MCP server) via `mcp_provides` and LLM providers from environment variables — all configured on first start. Deploy alongside `selkies-desktop` for shared Chrome browser and `jupyter` for MCP notebooks. **hermes-playwright** — Hermes with local Playwright Chromium (standalone headless). **openwebui** — Open WebUI on `:8080` with auto-configured LLM providers (Ollama, OpenRouter), MCP server discovery from co-deployed services, and Jupyter code execution. Secrets (JWT key, admin password) auto-managed via `ov secrets`. Deploy alongside `ollama` + `jupyter` for a full AI workstation with web UI. **claude-code** — Claude Code CLI. **codex** — OpenAI Codex CLI. **gemini** — Google Gemini CLI. **immich** / **immich-ml** — Self-hosted photo management with ML backend. **github-runner** — GitHub Actions runner as a service. **steam** — Steam client with gamescope. **heroic** — Heroic Games Launcher for Epic, GOG, and Amazon Prime Gaming with mangohud and gamemode. **vscode** — VS Code. **dev-tools** — bat, ripgrep, neovim, gh, direnv, fd-find, htop. **filebrowser** — Web file manager (FileBrowser Quantum) on `:8085` with persistent data and file volumes, accessible via Tailscale private tunnel.
-
-### Utilities
-
-**ffmpeg** — FFmpeg multimedia framework (negativo17 nonfree build with H.264/AAC). Single authoritative install point for nonfree codecs — layers needing ffmpeg depend on this rather than adding repos directly. **agent-forwarding** = gnupg + direnv + ssh-client — SSH/GPG agent socket forwarding into containers (included in all application images). **gnupg** — GnuPG encryption and signing tools. **direnv** — Automatic environment variable loading from `.envrc` files. **ssh-client** — OpenSSH client tools (lighter than sshd). **fastfetch** — Fast system information tool (neofetch successor). **asciinema** — Terminal session recording to `.cast` files. **wf-recorder** — Wayland screen recorder for wlroots compositors (sway-desktop). **wl-overlay** — Fullscreen Wayland overlays via gtk4-layer-shell for screen recordings (title cards, lower-thirds, watermarks, countdowns, highlights, fade transitions — rendered by the compositor with true RGBA transparency, no post-production needed). **libnotify** — `notify-send` CLI for desktop notifications (optional; `ov dbus notify` uses native Go D-Bus instead). **gocryptfs** — Encrypted filesystem for `ov config` encrypted volume operations. **socat** — Socket relay for VM console access. **container-nesting** — Container-in-container support: podman, buildah, fuse-overlayfs, rootless config, tailscale tunnels, nested `containers.conf`.
-
-### OS / Bootc
-
-**sshd** — SSH server. **cloud-init** — Cloud instance initialization. **bootc-config** — Bootc system configuration (autologin, graphical target). **qemu-guest-agent** — VM guest agent with libvirt channel.
-
-### Composing Layers
-
-Some layers are pure composition — they pull in a curated set of other layers:
-**sway-desktop** = pipewire + xdg-portal + wl-tools + wl-screenshot-grim + wl-overlay + wf-recorder + chrome-sway + xfce4-terminal + thunar + waybar + desktop-fonts + swaync + pavucontrol + tmux + asciinema + fastfetch. Base desktop — no display server.
-**sway-desktop-vnc** = sway-desktop + wayvnc. VNC remote access on port 5900.
-**niri-desktop** = pipewire + xdg-portal-niri + niri + chrome-niri + niri-apps. Smithay-based desktop — experimental alternative to sway-desktop.
-**x11-desktop** = pipewire + openbox + chrome-x11 + x11-apps. Xorg headless (dummy driver + libinput) + Openbox desktop — no Wayland compositor.
-**mutter-desktop** = pipewire + xdg-portal-gnome + chrome-mutter + mutter-apps. GNOME Mutter headless desktop.
-**selkies-desktop** = pipewire + chrome + labwc + waybar-labwc + desktop-fonts + swaync + pavucontrol + wl-tools + wl-screenshot-pixelflux + wl-overlay + wl-record-pixelflux + a11y-tools + xterm + tmux + asciinema + fastfetch + selkies. Browser-accessible Wayland desktop streamed via pixelflux WebSocket on port 3000 (HTTPS via Traefik with self-signed cert — required for WebCodecs). labwc runs nested inside pixelflux's Wayland compositor. Screenshots and video recording via a self-healing capture bridge that taps into the selkies WebSocket stream, auto-switching between controller mode (no browser) and viewer mode (browser active). Full `ov wl` automation and `ov record` support. No VNC needed — just a web browser.
-**bootc-base** = sshd + guest agent + bootc config.
-**openclaw-full** = openclaw + chrome + claude-code + 25 tool layers for maximal OpenClaw skill coverage.
-**openclaw-full-ml** = openclaw-full + whisper + sherpa-onnx for ML capabilities.
-**python-ml** = cuda + llama-cpp. Core ML Python environment (meta-layer with pixi.toml).
-**jupyter-colab-ml** = cuda + llama-cpp + unsloth + jupyter-colab-mcp. Full ML + JupyterLab with CRDT MCP (meta-layer with pixi.toml).
-**jupyter-colab-ml-notebook** = jupyter-colab-ml + notebook-templates + notebook-finetuning + notebook-ollama + notebook-llm-on-supercomputers. ML Jupyter with fine-tuning, Ollama integration, and LLM course notebook collections.
-**unsloth-studio** = cuda + llama-cpp + unsloth. Fine-tuning studio with vLLM (meta-layer with pixi.toml).
+**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `niri-desktop`, `x11-desktop`, `mutter-desktop`, `kwin-desktop`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-colab-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-layers:<name>` skill for the exact composition recipe.
 
 ### Data Layers
 
-Some layers provide **data** instead of packages or services. A data layer uses the `data:` field in `layer.yml` to map source directories to volume targets:
+Some layers provide **data** instead of packages or services via the `data:` field in `layer.yml`:
 
 ```yaml
 # layers/notebook-templates/layer.yml
@@ -259,9 +228,7 @@ data:
     volume: workspace
 ```
 
-At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories. `ov update` merges new data files non-destructively. Data layers need no packages, services, or install files — just data and a volume declaration.
-
-**Data images** (`data_image: true` in images.yml) take this further: scratch-based images containing only data files and OCI labels, used as portable data bundles via `ov config --data-from <data-image>`.
+At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories; `ov update` merges new data non-destructively. **Data images** (`data_image: true`) take this further: scratch-based images containing only data + OCI labels, consumed via `ov config --data-from <data-image>`. See `/ov:config` and `/ov-layers:notebook-templates` for examples.
 
 ## The Lifecycle
 
@@ -279,207 +246,58 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-### Build & Generate
+The `ov` CLI has 33 top-level commands. Each one has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
-```
-ov build [image...]                    # Build for local platform
-ov build --push [image...]             # Build + push (all platforms)
-ov build --no-cache [image...]         # Clean build
-ov build --jobs N [image...]           # Max concurrent builds (default: 4)
-ov generate [--tag TAG]                # Write Containerfiles to .build/
-ov validate                            # Check everything
-ov merge <image> [--dry-run] [--max-total-mb N]  # Merge small layers (whiteout-aware)
-```
+| Area | Commands | Skill |
+|---|---|---|
+| **Build pipeline** | `build`, `generate`, `validate`, `merge`, `new` | `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new` |
+| **Deployment** | `config`, `deploy`, `start`, `stop`, `update`, `remove` | `/ov:config`, `/ov:deploy`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
+| **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
+| **Desktop automation** | `cdp`, `wl`, `vnc`, `dbus`, `record` | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:dbus`, `/ov:record` |
+| **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
+| **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
+| **Inspection** | `list`, `inspect`, `version` | `/ov:list`, `/ov:inspect`, `/ov:version` |
 
-### Run & Manage
+A few sample invocations:
 
-```
-ov shell <image> [-c CMD] [--tty] [--bind name=path]  # Interactive shell
-ov start <image> [--build]             # Start service (ov config required first)
-ov stop <image>                        # Stop container
-ov config <image>                      # Unified setup: quadlet + secrets + volumes + data
-ov config <image> --password auto      # Auto-generate all secrets
-ov config <image> --password manual    # Prompt for each secret
-ov config <image> --bind name[=path]   # Configure volume as host bind mount
-ov config <image> --encrypt name       # Configure volume as encrypted (gocryptfs)
-ov config <image> -v name:type[:path]  # Per-volume backing (volume|bind|encrypted)
-ov config <image> --force-seed         # Re-provision data into bind-backed volumes
-ov config <image> --data-from <img>    # Seed data from a separate data image
-ov config <image> --update-all         # Propagate service env to all deployed quadlets
-ov config <image> -i <instance>         # Deploy named instance (separate config)
-ov config remove <image>               # Remove quadlet + deploy.yml entry
-ov config mount/unmount <image>        # Mount/unmount encrypted volumes
-ov config status <image>               # Encrypted volume status
-ov config passwd <image>               # Change encryption password
-ov status [<image>] [--all] [--json]   # Service status (table/detail/JSON)
-ov logs <image> [-f]                   # Service logs
-ov update <image> [--force-seed]       # Update image, sync data, restart
-ov remove <image> [--purge]            # Remove service + deploy.yml entry (--purge also removes volumes)
-ov remove <image> --keep-deploy        # Remove service, keep deploy.yml
-ov service status/start/stop/restart   # Manage services inside container
+```bash
+ov build jupyter                       # Build an image (see /ov:build for --push, --no-cache, --jobs)
+ov config jupyter                      # Unified deploy setup (see /ov:config for --bind, --encrypt, --sidecar, -i, --update-all)
+ov start jupyter                       # Launch as a systemd service
+ov shell jupyter                       # Interactive dev shell with volumes + GPU
+ov cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
+ov wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
+ov vm build openclaw-browser-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
 ```
 
 ### Multiple Instances
 
-Run multiple containers of the same image with `-i <instance>`:
+Run multiple containers of the same image with `-i <instance>`. Each instance gets its own container (`ov-<image>-<instance>`), quadlet file, and `deploy.yml` entry (keyed as `<image>/<instance>`). MCP server names are auto-disambiguated with an `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`.
 
 ```bash
 ov config selkies-desktop -i work -e TS_HOSTNAME=work -p 3001:3000
 ov config selkies-desktop -i personal -p 3002:3000
 ov start selkies-desktop -i work
-ov start selkies-desktop -i personal
 ```
 
-Each instance gets its own container (`ov-selkies-desktop-work`), quadlet file, and independent `deploy.yml` entry (keyed as `selkies-desktop/work`). MCP server names are auto-disambiguated with `-<instance>` suffix so consumers can distinguish them. All `ov` commands accept `-i`. Chrome layers support HTTP proxy via `env_accepts` (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`). Semicolons in `NO_PROXY` values are auto-converted to commas by `ov`. For multi-instance proxy deployments, each instance can use `deploy.yml`'s `tunnel: tailscale` for host-level Tailscale serve access on its unique host ports — no per-instance sidecar needed. The `-e` flag merges env vars (upsert by key), so adding proxy config doesn't drop existing vars like SSH keys. Use `-c` for a clean replace. **Note:** Tunnel config is NOT auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's deploy.yml entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands.
-
-### Desktop Automation
-
-```
-ov cdp open/list/close <image>         # Chrome tab management via DevTools
-ov cdp click <image> <tab> <selector>  # Click element (--vnc for VNC, --wl for Wayland)
-ov cdp axtree <image> <tab> [query]   # Chrome accessibility tree
-ov cdp type/eval/wait/screenshot       # Form filling, JS eval, element wait, capture
-ov cdp coords <image> <tab> <selector> # Show element position in viewport + desktop
-ov cdp status <image>                  # Check CDP availability and port
-ov cdp spa click <image> <tab> <x> <y> # Click at canvas coords (SPA scale correction)
-ov cdp spa type <image> <tab> <text>   # Type into remote desktop via SPA
-ov cdp spa key <image> <tab> <key>     # Send key press via SPA
-ov cdp spa key-combo <image> <tab> <combo> # Modifier combo (super+e, ctrl+t, alt+F4)
-ov cdp spa mouse/status                # Move pointer, show SPA state
-ov vnc screenshot/click/type/key       # VNC framebuffer interaction
-ov vnc mouse <image> <x> <y>           # Move cursor (verify position before clicking)
-ov vnc status <image>                  # Check VNC server, show resolution
-ov wl screenshot/click/type/key/mouse   # Compositor-agnostic desktop interaction
-ov wl key-combo <image> <keys>         # Key combinations (ctrl+c, alt+tab)
-ov wl double-click/scroll/drag         # Advanced input (scroll, drag, double-click)
-ov wl toplevel/windows <image>         # List windows (wlrctl toplevel, xdotool)
-ov wl focus/close/fullscreen/minimize  # Window management via wlrctl toplevel
-ov wl exec <image> <command>           # Launch application in container
-ov wl resolution <image> <WxH>         # Set output resolution (wlr-randr)
-ov wl clipboard <image> get/set/clear  # Read/write Wayland clipboard
-ov wl geometry/xprop <image>           # Window position and X11 properties
-ov wl atspi <image> tree/find/click    # Accessibility tree introspection (AT-SPI2)
-ov wl status <image>                   # Check all tool availability
-ov wl sway msg/tree/workspaces/outputs # Sway IPC commands (requires sway)
-ov wl sway focus/move/resize/kill      # Sway window management
-ov wl sway layout/workspace/floating   # Sway layout and workspace control
-ov wl sway reload                      # Reload sway configuration
-ov wl overlay show <image> --type text --text "Hello" --name intro  # Show overlay
-ov wl overlay show <image> --type lower-third --text "Name" --subtitle "Role"
-ov wl overlay show <image> --type countdown --seconds 3    # Auto-hiding countdown
-ov wl overlay show <image> --type highlight --region "X,Y,W,H"  # Highlight region
-ov wl overlay show <image> --type fade --color black       # Fade to black
-ov wl overlay show <image> --type watermark --text "DRAFT" # Corner watermark
-ov wl overlay hide <image> --name intro   # Remove specific overlay
-ov wl overlay hide <image> --all          # Remove all overlays
-ov wl overlay list <image>                # List active overlays (JSON)
-ov wl overlay status <image>              # Check overlay daemon health
-```
-
-### Command Execution
-
-```
-ov cmd <image> "command"               # Run command in running container (with notification)
-ov dbus notify <image> "title" "body"  # Send desktop notification via D-Bus
-ov dbus list <image>                   # List available D-Bus services
-ov dbus call <image> <dest> <path> <method> [args...]  # Generic D-Bus method call
-ov dbus introspect <image> <dest> <path>  # Introspect D-Bus service
-```
-
-### Recording
-
-```
-ov record start <image> [-n NAME]      # Start recording (auto-detects mode)
-ov record start <image> -m terminal    # Record terminal session (asciinema)
-ov record start <image> -m desktop     # Record desktop video (pixelflux/wf-recorder)
-ov record stop <image> [-n NAME] [-o F] # Stop recording, optionally copy to host
-ov record list <image>                 # List active recordings
-ov record cmd <image> "command"        # Send command to recording terminal
-```
-
-### Persistent Sessions
-
-```
-ov tmux shell <image>                  # Persistent shell (survives disconnects)
-ov tmux cmd <image> "cmd" -s <name>    # Send command to tmux session (with notification)
-ov tmux run <image> -s <name> "cmd"    # Start command in detached tmux session
-ov tmux attach <image> -s <name>       # Attach to session interactively
-ov tmux list <image>                   # List active sessions
-ov tmux capture <image> -s <name>      # Read output (for automation)
-ov tmux send <image> -s <name> "text"  # Send keystrokes
-ov tmux kill <image> -s <name>         # Kill session
-```
-
-### Deploy Configuration
-
-```
-ov deploy status                       # Audit deploy.yml vs quadlet sync
-ov deploy show [image]                 # Display deploy.yml contents
-ov deploy export [image] [-o FILE]     # Export effective config
-ov deploy import <files> [--replace]   # Import deploy.yml file(s)
-ov deploy reset [image]                # Remove deploy.yml overrides
-ov deploy path                         # Print deploy.yml file path
-```
+**Tunnel inheritance caveat:** tunnel config is **not** auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's `deploy.yml` entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands. Tunnel config is deploy.yml-only (read-skipped from OCI labels at `labels.go:238`). The `-e` flag merges env vars (upsert by key); `-c` replaces. See `/ov:deploy` for full inheritance semantics and `/ov:config` for the `--update-all` propagation model.
 
 ### Sidecar Containers
 
-Attach sidecar containers to any image at deploy time. Sidecars run alongside the app in a shared Podman pod (shared network namespace). Templates are built into the `ov` binary.
+Attach sidecar containers at deploy time. Sidecars run alongside the app in a shared Podman pod (shared network namespace). Templates are built into the `ov` binary.
 
-```
-ov config --list-sidecars              # List available sidecar templates
-ov config <image> --sidecar tailscale  # Attach Tailscale sidecar
+```bash
+ov config --list-sidecars                                                        # List available templates
 ov config <image> --sidecar tailscale \
   -e TS_HOSTNAME=my-app \
   -e "TS_EXTRA_ARGS=--exit-node=100.80.254.4 --exit-node-allow-lan-access"
 ```
 
-The Tailscale sidecar routes outbound internet traffic through a Tailscale exit node while keeping the pod on the "ov" bridge for container-to-container connectivity (dual networking). Sidecar-related `-e` flags (e.g., `TS_*`) are automatically routed to the sidecar instead of the app container. Assignments are saved to `deploy.yml` and persist across `ov config` calls.
+The Tailscale sidecar routes outbound traffic through a Tailscale exit node while keeping the pod on the `ov` bridge for container-to-container connectivity (**dual networking**). Sidecar-related `-e` flags (e.g., `TS_*`) are automatically routed to the sidecar instead of the app container. Assignments persist in `deploy.yml`. See `/ov:sidecar` for the full template list and routing model.
 
-### Virtual Machines
+### Wayland Overlays
 
-```
-ov vm build <image> [--type qcow2|raw] # Build disk image
-ov vm create <image> [--ram] [--cpus] [--ssh-key]
-ov vm start/stop/destroy <image>
-ov vm console/ssh <image>
-ov vm list [-a]
-```
-
-### Inspect & Discover
-
-```
-ov list images/layers/targets/services/routes/volumes/aliases
-ov inspect <image> [--format FIELD]
-ov version
-```
-
-### Layers & Tools
-
-```
-ov new layer <name>                            # Scaffold a new layer
-ov alias install/uninstall <image>             # Host command aliases
-ov --kdbx <path> <command>                     # Use specific kdbx database
-ov settings get/set/list/reset/path            # Runtime configuration
-ov settings set forward_gpg_agent false        # Disable GPG agent forwarding
-ov settings set forward_ssh_agent false        # Disable SSH agent forwarding
-ov settings migrate-secrets [--dry-run]        # Move plaintext creds to system keyring
-ov secrets init [path]                         # Create KeePass .kdbx database
-ov secrets list/get/set/delete                 # Manage kdbx entries directly
-ov secrets import [--dry-run]                  # Import creds into kdbx from config/keyring
-ov secrets gpg env [-f FILE]                   # Decrypt .secrets for shell eval / direnv
-ov secrets gpg show/edit/encrypt/decrypt       # Manage GPG-encrypted .secrets files
-ov secrets gpg set/unset KEY [VALUE]           # Add/remove keys in .secrets
-ov secrets gpg add-recipient/recipients        # Manage GPG recipients
-ov secrets gpg import-key [PATH|--from-keystore]  # Import/restore GPG keys
-ov secrets gpg export-key [DIR] [--to-keystore]   # Export/backup GPG keys
-ov secrets gpg setup [-p] [--import PATH]         # Configure gpg-agent + KeePassXC
-ov secrets gpg doctor [-f FILE]                   # GPG health check
-ov udev status                                 # Show GPU device access status
-ov udev generate                               # Print udev rules to stdout
-ov udev install                                # Install udev rules (requires sudo)
-ov udev remove                                 # Remove installed udev rules
-ov doctor                                      # Check host dependencies
-```
+`ov wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
 
 ## Troubleshooting
 

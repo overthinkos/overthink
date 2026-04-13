@@ -92,16 +92,13 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 **Project-wide:**
 - Lowercase-hyphenated names for layers and images
-- Taskfiles for bootstrap only (building ov), Go for all other logic
-- Never `pip install`, `conda install`, or `dnf install python3-*`. Pixi is the only Python package manager
+- Pixi is the only Python package manager — never `pip install`, `conda install`, or `dnf install python3-*`
 - `.build/` is disposable; all generated files start with `# <path> (generated -- do not edit)`
 - `USER <UID>` (numeric) not `USER <name>` in generated Containerfiles
-- All logic belongs in `ov`. Tasks are only for bootstrap. Every public task has `desc:`
-- MUST invoke skills before exploring the codebase. Skills are the primary knowledge source
+- All logic lives in `ov`; Taskfiles are bootstrap-only (building `ov`); every public task has `desc:`
+- MUST invoke skills before exploring the codebase — skills are the primary knowledge source
 
-**Layer/image authoring:** See `/ov:layer` and `/ov:build` for all rules (task names, distro/build tags, init deps, env/mcp provides).
-
-**Deployment:** See `/ov:config`, `/ov:deploy`, `/ov:sidecar`. Quadlet mode is default. `ov config` before `ov start`. Tunnel config is deploy.yml-only. `-e` merges env vars (use `-c` for clean replace).
+**Authoring + deployment rules live in skills:** `/ov:layer`, `/ov:image`, `/ov:build` (authoring); `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc` (deployment). Quadlet default; `ov config` before `ov start`; tunnel is deploy.yml-only; `-e` merges env vars, `-c` replaces.
 
 ---
 
@@ -127,22 +124,9 @@ Invoke matching skills BEFORE reading source, launching Explore agents, or grepp
 - `/ov:<cmd>` for operations, `/ov-layers:<name>` for layer internals, `/ov-images:<name>` for image composition, `/ov-dev:go` for Go code edits.
 - Multi-step workflows: invoke ALL skills in the chain.
 - For desktop automation routing (CDP / WL / VNC / SPA / AT-SPI hierarchy), see `/ov:cdp`.
-- For skill maintenance guidelines: see `/ov-dev:skills`.
+- For skill chains, workflow positions, maintenance guidelines, and the 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator): see `/ov-dev:skills` and `/ov-dev:go`.
 
-### Common Skill Chains
-
-| Task | Chain |
-|------|-------|
-| Author a layer | `/ov:layer` → `/ov-layers:<similar>` → `/ov:image` → `/ov:build` |
-| Deploy a service | `/ov:config` → `/ov:deploy` → `/ov:service` → `/ov-images:<name>` |
-| Debug runtime | `/ov:status` → `/ov:logs` → `/ov-layers:<layer>` → `/ov:service` |
-| Fix ov bug | `/ov-dev:go` + `/ov:<relevant>` → `/ov:validate` |
-
-Each skill's `## Related Layers` / `## Related Commands` sections enumerate further chains.
-
-### ov-dev Agents
-
-`ov-dev` includes 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator). See `/ov-dev:go`.
+Each skill's trailing `## Related …` and `Workflow position` sections enumerate chains — do not duplicate them here.
 
 
 ## AI Attribution (Fedora Policy Compliant)

@@ -7,24 +7,42 @@ rpm:
     - automake
     - binutils
     - bison
+    - cargo
     - ccache
+    - clang-devel          # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
     - cli11-devel
     - cmake
+    - ffmpeg-devel         # ffmpeg-sys-next (RPM Fusion free)
     - flex
     - gcc
     - gcc-c++
     - gdb
     - git
     - glibc-devel
+    - libdrm-devel         # gbm / drm transitive
+    - libinput-devel       # smithay backend_libinput
+    - libjpeg-turbo-devel  # turbojpeg-sys (system path)
+    - libseat-devel        # smithay session handling
     - libtool
+    - libudev-devel        # smithay backend_udev
+    - libva-devel          # libva-sys (VA-API)
+    - libxkbcommon-devel   # keyboard backend
     - make
+    - mesa-libgbm-devel    # smithay backend_gbm
+    - nasm                 # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
     - ninja-build
+    - patch                # for source patching in cargo/pip build stages
+    - pixman-devel         # smithay renderer_pixman feature
     - pkgconf
     - pkgconf-m4
     - pkgconf-pkg-config
     - redhat-rpm-config
     - rpm-build
     - rpm-sign
+    - rust                 # rustc + cargo for setuptools-rust (pixelflux_wayland)
+    - systemd-devel        # smithay backend_udev via libudev
+    - wayland-devel        # smithay wayland_frontend / backend_* features
+    - x264-devel           # x264-sys (RPM Fusion free)
 
 pac:
   packages:

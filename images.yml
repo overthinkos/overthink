@@ -34,6 +34,7 @@ images:
     base: fedora
     builds: [pixi, npm, cargo]
     layers:
+      - rpmfusion          # Enables x264-devel / ffmpeg-devel for cargo builds of pixelflux_wayland
       - pixi
       - nodejs
       - build-toolchain

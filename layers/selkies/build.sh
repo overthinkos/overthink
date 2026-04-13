@@ -147,6 +147,171 @@ with open(f, 'w') as fh:
 print('Patched selkies.py: _shared_screen_captures cache prevents pixelflux WaylandBackend leak on reconfigure')
 "
 
+# ---------------------------------------------------------------------------
+# Build patched pixelflux from source BEFORE selkies pip install.
+#
+# ROOT CAUSE: Smithay's GlesRenderer caches DMA-BUF imports in
+# HashMap<WeakDmabuf, GlesTexture> with no automatic eviction. The cache is
+# only cleaned when the compositor calls GlesRenderer::cleanup_texture_cache()
+# explicitly. Pixelflux never calls it. Every dmabuf Chrome commits (60fps
+# under active streaming) creates an EGL image via eglCreateImageKHR and
+# caches a GlesTexture + mmap region through /dev/dri/renderD128. Over 20 min
+# of real streaming on ov-selkies-desktop-82.23.94.69, /proc/<pid>/maps
+# showed 1528 cached DRM mappings = 9 GB virtual address space and ~1.5 GB
+# cgroup shmem, with only 19 MB file_mapped. 12 OOM kills logged on that
+# instance.
+#
+# FIX: call renderer.cleanup_texture_cache() at the start of each render
+# frame in run_wayland_thread. This runs the existing
+# dmabuf_cache.retain(|k,_| !k.is_gone()) pass, which evicts entries whose
+# server-side Dmabuf Arc has been dropped by Chrome's wl_buffer.destroy.
+# The eviction cascades: GlesTexture drop -> EGL image drop -> dmabuf fd
+# close -> amdgpu GEM BO release -> shmem pages freed.
+#
+# Build-time prerequisite: fedora-builder now includes rpmfusion + rust +
+# codec dev libs so cargo can compile pixelflux_wayland. The only patch we
+# MUST also make is removing nvenc-sys from Cargo.toml and stubbing
+# encoders/nvenc.rs — we do not have CUDA headers in the builder, and the
+# target container has an AMD iGPU anyway (no NVENC at runtime).
+# ---------------------------------------------------------------------------
+PFX_SHA=9cd4c9daaa4288f3d7abb261d5cf86aacafb679b
+cd /tmp
+curl -sL "https://github.com/linuxserver/pixelflux/archive/${PFX_SHA}.tar.gz" | tar xzf -
+cd "pixelflux-${PFX_SHA}"
+
+# Patch 2a: delete the [dependencies.nvenc-sys] block from Cargo.toml
+python3 -c "
+import pathlib
+p = pathlib.Path('pixelflux_wayland/Cargo.toml')
+code = p.read_text()
+old = '''[dependencies.nvenc-sys]
+git = \"https://github.com/legion-labs/nvenc-sys\"
+rev = \"996be4ceac8112e14ae127adcf8c699bcc1618f5\"
+features = [\"cuda\"]
+'''
+if old not in code:
+    raise SystemExit('FATAL: nvenc-sys block anchor not found in pixelflux Cargo.toml — upstream changed?')
+p.write_text(code.replace(old, ''))
+print('Patched pixelflux Cargo.toml: removed nvenc-sys dep (no CUDA headers in builder)')
+"
+
+# Patch 2b: replace encoders/nvenc.rs with a no-op stub.
+# NvencEncoder::new always returns Err, so the GpuEncoder::Nvenc variant is
+# never constructed at runtime. encode() and encode_raw() exist only to
+# satisfy the enum variant's type signature — they are unreachable dead code.
+cat > pixelflux_wayland/src/encoders/nvenc.rs << 'NVENC_STUB_EOF'
+// Stubbed NVENC encoder — the real implementation needs nvenc-sys (CUDA),
+// which this build does not include because fedora-builder does not ship
+// CUDA headers and the target containers use AMD VA-API / software encoding.
+// NvencEncoder::new() always returns Err so the GpuEncoder::Nvenc variant is
+// never constructed; encode()/encode_raw() exist only to satisfy the type
+// signatures referenced from lib.rs and are unreachable at runtime.
+
+use std::ffi::c_void;
+use smithay::backend::allocator::dmabuf::Dmabuf;
+
+use crate::RustCaptureSettings;
+
+pub struct NvencEncoder;
+
+impl NvencEncoder {
+    pub fn new(
+        _settings: &RustCaptureSettings,
+        _egl_display: *const c_void,
+    ) -> Result<Self, String> {
+        Err("NVENC encoder not available: nvenc-sys dep removed from pixelflux_wayland in this build".to_string())
+    }
+
+    pub fn encode(
+        &mut self,
+        _dmabuf: &Dmabuf,
+        _frame_number: u64,
+        _target_qp: u32,
+        _force_idr: bool,
+    ) -> Result<Vec<u8>, String> {
+        Err("NVENC stub: encode() unreachable".to_string())
+    }
+
+    pub fn encode_raw(
+        &mut self,
+        _raw_data: &[u8],
+        _frame_number: u64,
+        _target_qp: u32,
+        _force_idr: bool,
+    ) -> Result<Vec<u8>, String> {
+        Err("NVENC stub: encode_raw() unreachable".to_string())
+    }
+}
+NVENC_STUB_EOF
+echo "Stubbed pixelflux_wayland/src/encoders/nvenc.rs (NvencEncoder::new always Err)"
+
+# Patch 2b.5: disable the C++ X11 screen_capture_module build. pixelflux's
+# setup.py BuildCtypesExt.run() calls build_custom_cpp() which invokes g++
+# with -lX11 -lXext -lXfixes -ljpeg -lx264 -lyuv -lavcodec -lavutil against
+# /usr/include/X11/*. We don't have libX11-devel in the builder (this is a
+# Wayland-only image, Chrome runs under --ozone-platform=wayland) and
+# pixelflux/__init__.py handles a missing screen_capture_module.so
+# gracefully — _legacy_lib = None, everything falls through to the
+# _GLOBAL_WAYLAND_BACKEND Rust path. Stub the build step to be a no-op.
+python3 -c "
+import pathlib
+p = pathlib.Path('setup.py')
+code = p.read_text()
+old = '''    def run(self):
+        super().run()
+        self.build_custom_cpp()'''
+new = '''    def run(self):
+        super().run()
+        # C++ X11 module build disabled — Wayland-only image. See selkies layer build.sh.
+        pass'''
+if code.count(old) != 1:
+    raise SystemExit('FATAL: pixelflux setup.py build_custom_cpp anchor not unique (found %d)' % code.count(old))
+p.write_text(code.replace(old, new))
+print('Patched pixelflux setup.py: disabled C++ X11 screen_capture_module build')
+"
+
+# Patch 2c: call Renderer::cleanup_texture_cache() at the start of every
+# render frame in run_wayland_thread. Anchor is the 2-line snippet
+# starting each frame's closure:
+#     let loop_start_time = Instant::now();
+#     state.space.refresh();
+python3 -c "
+import pathlib
+p = pathlib.Path('pixelflux_wayland/src/lib.rs')
+code = p.read_text()
+old = '''            let loop_start_time = Instant::now();
+            state.space.refresh();
+'''
+new = '''            let loop_start_time = Instant::now();
+            state.space.refresh();
+            // Release EGL images / GL textures for Dmabufs whose server-side
+            // Arc has been dropped (typical: Chrome called wl_buffer.destroy
+            // after using the buffer in the previous frame). Without this,
+            // smithay's GlesRenderer.dmabuf_cache grows unbounded because it
+            // only evicts entries on explicit cleanup. Observed leak: 1528
+            // cached imports, ~1.5 GB cgroup shmem, under 20 min of
+            // 1604x3056@60 streaming on ov-selkies-desktop-82.23.94.69.
+            if let Some(renderer) = state.gles_renderer.as_mut() {
+                use smithay::backend::renderer::Renderer;
+                let _ = renderer.cleanup_texture_cache();
+            }
+'''
+if code.count(old) != 1:
+    raise SystemExit('FATAL: pixelflux lib.rs render loop anchor not unique (found %d)' % code.count(old))
+p.write_text(code.replace(old, new))
+print('Patched pixelflux_wayland/src/lib.rs: cleanup_texture_cache() call per frame')
+"
+
+# Install the patched pixelflux into the pixi env. The upstream selkies
+# pip install below will see pixelflux already satisfied.
+"$HOME/.pixi/envs/default/bin/pip" install .
+
+# Return to the selkies source directory (still lives at /tmp/selkies-<sha>/)
+# so the following pip install targets the patched upstream selkies.
+cd /tmp
+rm -rf "/tmp/pixelflux-${PFX_SHA}"
+cd selkies-*
+
 "$HOME/.pixi/envs/default/bin/pip" install .
 
 # 2. Build web UI dashboard (needs nodejs/npm from builder image)

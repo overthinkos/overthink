@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"reflect"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
 )
 
-var cpuJobs = strconv.Itoa(runtime.NumCPU())
+// cpuJobs is the --jobs value expected in assembled podman args. It uses the
+// same cap logic as the production code (resolvePodmanJobs with override=0)
+// so these tests stay correct regardless of the host's actual NCPU count
+// and regardless of any future tweaks to podmanJobsDefault.
+var cpuJobs = strconv.Itoa(resolvePodmanJobs(0))
 
 func TestBuildLocalArgs(t *testing.T) {
 	cmd := &BuildCmd{}

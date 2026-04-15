@@ -16,13 +16,14 @@ import (
 
 // BuildCmd builds container images
 type BuildCmd struct {
-	Images   []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
-	Push     bool     `long:"push" help:"Push to registry after building"`
-	Tag      string   `long:"tag" help:"Override tag (default: CalVer)"`
-	Platform string   `long:"platform" help:"Target platform (default: host platform)"`
-	Cache    string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
-	NoCache  bool     `long:"no-cache" help:"Disable build cache entirely"`
-	Jobs     int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
+	Images     []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
+	Push       bool     `long:"push" help:"Push to registry after building"`
+	Tag        string   `long:"tag" help:"Override tag (default: CalVer)"`
+	Platform   string   `long:"platform" help:"Target platform (default: host platform)"`
+	Cache      string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
+	NoCache    bool     `long:"no-cache" help:"Disable build cache entirely"`
+	Jobs       int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
+	PodmanJobs int      `long:"podman-jobs" help:"Override --jobs passed to podman build (0=auto, default min(NCPU,4)). Capped because podman-5.7.x races under high concurrency with --cache-from on multi-stage builds." env:"OV_PODMAN_JOBS"`
 }
 
 func (c *BuildCmd) Run() error {
@@ -255,6 +256,36 @@ func (c *BuildCmd) pushImage(dir string, tags []string) error {
 	return nil
 }
 
+// podmanJobsDefault is the maximum number of concurrent stage builds ov
+// asks podman to run inside a single `podman build` invocation. The cap
+// exists because podman-5.7.x's storage backend races under high concurrency
+// during multi-stage builds with --cache-from: when many goroutines call
+// into storageImageDestination.TryReusingBlobWithOptions and queueOrCommit
+// at the same time, the shared state gets corrupted and the process aborts
+// with SIGABRT. Observed reproducibly on selkies-desktop (29-stage DAG)
+// with --jobs runtime.NumCPU() (16 on a 16-core host) and --cache-from.
+// Four is chosen as a balance: still meaningful parallelism for typical
+// builds, narrow enough race window that the bug has not been observed
+// to fire in practice. Override via --podman-jobs or OV_PODMAN_JOBS.
+const podmanJobsDefault = 4
+
+// numCPU is a package-level alias for runtime.NumCPU so tests can inject
+// a fixed value via the init in build_jobs_test.go.
+var numCPU = runtime.NumCPU
+
+// resolvePodmanJobs returns the --jobs value to pass to `podman build`.
+// If override > 0, it wins. Otherwise returns min(numCPU(), podmanJobsDefault).
+func resolvePodmanJobs(override int) int {
+	if override > 0 {
+		return override
+	}
+	n := numCPU()
+	if n < podmanJobsDefault {
+		return n
+	}
+	return podmanJobsDefault
+}
+
 // buildLocalArgs constructs args for a local (single-platform, load into store) build.
 // Uses -f - to read the Containerfile from stdin.
 func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, registry string) []string {
@@ -266,7 +297,7 @@ func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, 
 		args = append(args, "--platform", platform)
 	}
 	if engine == "podman" {
-		args = append(args, "--jobs", strconv.Itoa(runtime.NumCPU()))
+		args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs)))
 	}
 	args = append(args, c.cacheArgs(name, registry, engine)...)
 	args = append(args, ".")
@@ -358,7 +389,7 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, 
 	if len(platforms) > 0 {
 		args = append(args, "--platform", strings.Join(platforms, ","))
 	}
-	args = append(args, "--jobs", strconv.Itoa(runtime.NumCPU()))
+	args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs)))
 	args = append(args, c.cacheArgs(name, registry, "podman")...)
 	args = append(args, ".")
 	return args

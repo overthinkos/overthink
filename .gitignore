@@ -32,9 +32,12 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# Claude Code local settings and memory (synced via Syncthing, not git)
+# Claude Code local settings, memory, and ephemeral session state
+# (synced via Syncthing, not git)
 .claude/settings.local.json
 .claude/memory/
+.claude/plans/
+.claude/scheduled_tasks.lock
 
 # Machine-specific deploy overrides
 deploy.local.yml

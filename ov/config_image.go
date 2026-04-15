@@ -513,8 +513,9 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Reload deploy config after saveDeployState wrote the volumes
 	dc, _ = LoadDeployConfig()
 
-	// Provision data from image staging (/data/) into bind-backed volumes
-	if c.Seed && len(bindMounts) > 0 {
+	// Provision data from image staging (/data/) into the image's volumes
+	// (both bind mounts and named volumes — provisionData dispatches on kind).
+	if c.Seed && (len(bindMounts) > 0 || len(volumes) > 0) {
 		dataMeta := meta
 		dataRef := imageRef
 		dataEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
@@ -557,8 +558,8 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 				}
 			}
 
-			fmt.Fprintln(os.Stderr, "Provisioning data into bind-backed volumes...")
-			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, mode)
+			fmt.Fprintln(os.Stderr, "Provisioning data into volumes...")
+			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, mode)
 			if err != nil {
 				return fmt.Errorf("data provisioning: %w", err)
 			}

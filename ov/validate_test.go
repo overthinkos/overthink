@@ -1238,3 +1238,85 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+// TestValidateDataEntryUnknownVolume guards the check at validate.go where a
+// layer's data: entry references a volume name that is not declared by any
+// layer in the composed image chain. Without this guard, a typo in a data
+// layer (e.g. `volume: workspae`) silently produces an image that never
+// seeds its workspace, and the error only surfaces at runtime as an empty
+// directory.
+func TestValidateDataEntryUnknownVolume(t *testing.T) {
+	cfg := &Config{
+		Images: map[string]ImageConfig{
+			"jupyter": {Layers: []string{"jupyter", "notebook-templates"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"jupyter": {
+			Name:       "jupyter",
+			HasRootYml: true,
+			HasVolumes: true,
+			volumes: []VolumeYAML{
+				{Name: "workspace", Path: "~/workspace"},
+			},
+		},
+		"notebook-templates": {
+			Name:    "notebook-templates",
+			HasData: true,
+			// Typo: "workspae" instead of "workspace" — must be caught.
+			data: []DataYAML{
+				{Src: "data/notebooks", Volume: "workspae"},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected error for data entry referencing unknown volume")
+	}
+	if !strings.Contains(err.Error(), "workspae") {
+		t.Errorf("expected error to mention unknown volume name, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "not declared by any layer") {
+		t.Errorf("expected 'not declared by any layer' phrasing, got: %v", err)
+	}
+}
+
+// TestValidateDataEntryKnownVolume is the happy path for the same check:
+// when the data entry's volume matches a declared volume anywhere in the
+// image's layer chain, Validate succeeds.
+func TestValidateDataEntryKnownVolume(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry:  "ghcr.io/test",
+			Build:     BuildFormats{"rpm"},
+			Platforms: []string{"linux/amd64"},
+		},
+		Images: map[string]ImageConfig{
+			"jupyter": {Layers: []string{"jupyter", "notebook-templates"}},
+		},
+	}
+	layers := map[string]*Layer{
+		"jupyter": {
+			Name:       "jupyter",
+			HasRootYml: true,
+			HasVolumes: true,
+			volumes: []VolumeYAML{
+				{Name: "workspace", Path: "~/workspace"},
+			},
+		},
+		"notebook-templates": {
+			Name:       "notebook-templates",
+			HasRootYml: true,
+			HasData:    true,
+			data: []DataYAML{
+				{Src: "data/notebooks", Volume: "workspace"},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers, "")
+	if err != nil && strings.Contains(err.Error(), "not declared by any layer") {
+		t.Errorf("unexpected 'unknown volume' error for valid data entry: %v", err)
+	}
+}

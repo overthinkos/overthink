@@ -196,9 +196,9 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 		return
 	}
 
-	_, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volumes,
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volumes,
 		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-	if len(bindMounts) == 0 {
+	if len(bindMounts) == 0 && len(volumes) == 0 {
 		return
 	}
 
@@ -208,7 +208,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	}
 
 	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
-	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, mode)
+	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
 		return

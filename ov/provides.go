@@ -133,30 +133,30 @@ func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) 
 	return result
 }
 
-// GlobalEnvForImage returns the global env vars from provides for a specific consumer image.
-// Both env and MCP provides are pod-aware: same-image entries resolve to localhost,
-// cross-image entries keep their container hostname. If both share a name, local wins.
-// Returns flat env var slice ready for ResolveEnvVars.
 // GlobalEnvForImage builds env vars for a consumer from global provides.
-// acceptedEnv controls which env_provides vars are injected:
-//   - Self-provides (same image) are always injected for pod-local resolution
-//   - Cross-image provides are only injected if acceptedEnv contains the var name
-//   - MCP provides (OV_MCP_SERVERS) are always injected (standard discovery)
+// Returns flat env var slice ready for ResolveEnvVars.
+//
+// acceptedEnv controls which env_provides vars are injected — the filter applies
+// uniformly to BOTH same-image and cross-image entries. A producer is NOT automatically
+// a self-consumer of its own env_provides; if it ever needs to consume its own URL
+// (e.g. a genuine same-image-pod scenario), it must explicitly opt in via env_accepts.
+// This ensures the producer's own `env:` declaration (e.g. OLLAMA_HOST=0.0.0.0 baked
+// into the image's Dockerfile ENV) is never clobbered by its own env_provides
+// service-discovery URL via the quadlet's Environment= directive.
+//
+//   - Entries are only injected if acceptedEnv[name] is true.
+//   - nil acceptedEnv = no filtering (backward compat for remote images without labels).
+//   - MCP provides (OV_MCP_SERVERS) are always injected (standard discovery mechanism).
 func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string, acceptedEnv map[string]bool) []string {
 	if dc == nil || dc.Provides == nil {
 		return nil
 	}
 	var result []string
 
-	// Env provides: pod-aware, filtered by consumer declarations
+	// Env provides: pod-aware values, filtered uniformly by consumer env_accepts/env_requires.
+	// No self-injection bypass — same-image entries must be explicitly accepted just like
+	// cross-image entries.
 	for _, entry := range podAwareEnvProvides(dc.Provides.Env, imageName, ctrName) {
-		// Self-provides always pass (pod-local resolution)
-		if isSameBaseImage(entry.Source, imageName) {
-			result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
-			continue
-		}
-		// Cross-image: only inject if consumer declared env_accepts/env_requires.
-		// nil acceptedEnv = no filtering (backward compat for remote images without labels).
 		if acceptedEnv == nil || acceptedEnv[entry.Name] {
 			result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
 		}

@@ -306,6 +306,67 @@ func TestGlobalEnvForImage(t *testing.T) {
 	}
 }
 
+// TestGlobalEnvForImageNoSelfInjectionWithoutAccepts pins the fixed semantic:
+// a producer does NOT automatically consume its own env_provides. Before this fix,
+// GlobalEnvForImage had an explicit bypass that unconditionally injected same-image
+// entries (source == consumer) into the producer's own quadlet, skipping the
+// env_accepts filter. That bypass clobbered the ollama layer's own
+// `env: OLLAMA_HOST=0.0.0.0` declaration with the rewritten self-provide
+// `OLLAMA_HOST=http://localhost:11434`, breaking rootlessport forwarding.
+//
+// After the fix: same-image entries are filtered by env_accepts uniformly with
+// cross-image entries. A producer that does not declare `env_accepts:` for a var
+// does NOT receive that var in its own env — its layer's own `env:` declaration
+// (baked as Dockerfile ENV) stays authoritative.
+func TestGlobalEnvForImageNoSelfInjectionWithoutAccepts(t *testing.T) {
+	dc := &DeployConfig{
+		Provides: &ProvidesConfig{
+			Env: []EnvProvidesEntry{
+				{Name: "OLLAMA_HOST", Value: "http://ov-ollama:11434", Source: "ollama"},
+				{Name: "PGHOST", Value: "ov-postgresql", Source: "postgresql"},
+			},
+		},
+	}
+
+	// Ollama deploys with NO env_accepts (correct producer-only layer config).
+	// Its own OLLAMA_HOST provides entry MUST NOT be injected into its own env.
+	empty := map[string]bool{}
+	got := dc.GlobalEnvForImage("ollama", "ov-ollama", empty)
+
+	for _, e := range got {
+		switch envKey(e) {
+		case "OLLAMA_HOST":
+			t.Errorf("ollama should NOT receive its own OLLAMA_HOST env_provides "+
+				"(producer is not a self-consumer without explicit env_accepts), got %q", e)
+		case "PGHOST":
+			t.Errorf("ollama should NOT receive PGHOST (not in env_accepts), got %q", e)
+		}
+	}
+
+	// Openwebui declares env_accepts: [OLLAMA_HOST] — should receive the cross-image
+	// URL with NO rewrite (openwebui is not the producer, so no localhost rewrite applies).
+	accepts := map[string]bool{"OLLAMA_HOST": true}
+	got = dc.GlobalEnvForImage("openwebui", "ov-openwebui", accepts)
+	want := "OLLAMA_HOST=http://ov-ollama:11434"
+	found := false
+	for _, e := range got {
+		if e == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("openwebui should receive %q, got %v", want, got)
+	}
+
+	// PGHOST should still NOT reach openwebui (not in its acceptedEnv set).
+	for _, e := range got {
+		if envKey(e) == "PGHOST" {
+			t.Errorf("openwebui should NOT receive PGHOST (not in env_accepts), got %q", e)
+		}
+	}
+}
+
 func TestDeployConfigProvidesRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deploy.yml")

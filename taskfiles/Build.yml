@@ -2,7 +2,7 @@ version: '3'
 
 tasks:
   ov:
-    desc: Build ov from source and install as Arch package
+    desc: Build ov from source and install (portable; auto-detects distro)
     dir: "{{.ROOT_DIR}}"
     cmds:
       - mkdir -p bin layers/ov/bin
@@ -11,9 +11,53 @@ tasks:
       - task: install
 
   install:
-    desc: Install ov as Arch package
+    desc: Install ov for the current host (auto-detects distro; portable by default)
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - |
+        set -e
+        if [ -r /etc/os-release ]; then
+          . /etc/os-release
+        else
+          ID=unknown
+          ID_LIKE=
+        fi
+        case " $ID $ID_LIKE " in
+          *" arch "*|*" manjaro "*|*" archarm "*|*" endeavouros "*)
+            if command -v makepkg >/dev/null 2>&1; then
+              cd pkg/arch
+              mkdir -p src/ov-git
+              cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
+              makepkg -efi --noconfirm
+              echo "Installed system-wide via pacman (makepkg)"
+              exit 0
+            fi
+            ;;
+        esac
+        # Non-Arch (Fedora, Bazzite, Ubuntu, Debian, ...) or Arch without makepkg:
+        # portable install to $HOME/.local/bin/ov.
+        install -D -m 0755 bin/ov "$HOME/.local/bin/ov"
+        echo "Installed portable binary to $HOME/.local/bin/ov"
+        case ":$PATH:" in
+          *":$HOME/.local/bin:"*) ;;
+          *)
+            echo "WARNING: $HOME/.local/bin is not in your PATH."
+            echo "         Add it to your shell profile, e.g.:"
+            echo "         echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.bashrc"
+            ;;
+        esac
+
+  install-arch:
+    desc: Force Arch package install via makepkg (overrides distro detection)
     dir: "{{.ROOT_DIR}}/pkg/arch"
     cmds:
       - mkdir -p src/ov-git
       - cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
       - makepkg -efi --noconfirm
+
+  install-portable:
+    desc: Force portable install to $HOME/.local/bin/ov (overrides distro detection)
+    dir: "{{.ROOT_DIR}}"
+    cmds:
+      - install -D -m 0755 bin/ov "$HOME/.local/bin/ov"
+      - echo "Installed to $HOME/.local/bin/ov"

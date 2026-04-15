@@ -30,8 +30,9 @@ type RuntimeConfig struct {
 	ForwardGpgAgent      *bool             `yaml:"forward_gpg_agent,omitempty"`     // Forward host GPG agent socket into containers (default: true)
 	ForwardSshAgent      *bool             `yaml:"forward_ssh_agent,omitempty"`     // Forward host SSH agent socket into containers (default: true)
 	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
-	VncPasswords         map[string]string `yaml:"vnc_passwords,omitempty"`      // VNC passwords keyed by image[-instance]
-	KeyringKeys          []string          `yaml:"keyring_keys,omitempty"`       // Shadow index: names of keys stored in keyring (no values)
+	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`             // VNC passwords keyed by image[-instance]
+	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`              // Shadow index: names of keys stored in keyring (no values)
+	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"`  // Preferred Secret Service collection label; empty means use default alias then iterate.
 }
 
 // RuntimeVmConfig holds user-level VM defaults
@@ -332,6 +333,8 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.VolumesPath, nil
 	case "secret_backend":
 		return cfg.SecretBackend, nil
+	case "keyring_collection_label":
+		return cfg.KeyringCollectionLabel, nil
 	case "secrets.kdbx_path":
 		return cfg.SecretsKdbxPath, nil
 	case "secrets.kdbx_key_file":
@@ -400,7 +403,7 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, keyring_collection_label, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -516,6 +519,8 @@ func SetConfigValue(key, value string) error {
 		cfg.SecretBackend = value
 		// Reset cached default store so the new backend takes effect
 		resetDefaultStore()
+	case "keyring_collection_label":
+		cfg.KeyringCollectionLabel = value
 	case "secrets.kdbx_path":
 		cfg.SecretsKdbxPath = value
 	case "secrets.kdbx_key_file":
@@ -591,6 +596,8 @@ func ResetConfigValue(key string) error {
 	case "secret_backend":
 		cfg.SecretBackend = ""
 		resetDefaultStore()
+	case "keyring_collection_label":
+		cfg.KeyringCollectionLabel = ""
 	case "secrets.kdbx_path":
 		cfg.SecretsKdbxPath = ""
 	case "secrets.kdbx_key_file":
@@ -774,6 +781,7 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("encrypted_storage_path", "OV_ENCRYPTED_STORAGE_PATH", cfg.EncryptedStoragePath, defaultStoragePath),
 		resolve("volumes_path", "OV_VOLUMES_PATH", cfg.VolumesPath, defaultVolumesPath),
 		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
+		resolve("keyring_collection_label", "OV_KEYRING_COLLECTION_LABEL", cfg.KeyringCollectionLabel, ""),
 		resolve("secrets.kdbx_path", "OV_KDBX_PATH", cfg.SecretsKdbxPath, ""),
 		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),
 		kdbxCacheEntry(cfg),

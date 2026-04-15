@@ -69,11 +69,33 @@ type UpdateCmd struct {
 	DataFrom  string `long:"data-from" help:"Sync data from this data image instead"`
 }
 
+// updateCmdBuildFn is the hook invoked when UpdateCmd.Run sees --build for a
+// local image. Default implementation runs BuildCmd; tests override this to
+// spy on invocations without actually building.
+var updateCmdBuildFn = func(image, tag string) error {
+	fmt.Fprintf(os.Stderr, "Building %s locally (--build requested)\n", image)
+	bc := &BuildCmd{
+		Images: []string{image},
+		Tag:    tag,
+	}
+	return bc.Run()
+}
+
 func (c *UpdateCmd) Run() error {
 	// Handle remote image refs
 	ref := StripURLScheme(c.Image)
 	if IsRemoteImageRef(ref) {
 		return c.runRemoteUpdate(ref)
+	}
+
+	// Defect E fix: honor --build for LOCAL images too. Previously this flag
+	// was only threaded through the runRemoteUpdate path; local images
+	// silently no-op'd because EnsureImage returned early when the image
+	// existed locally, regardless of staleness.
+	if c.Build {
+		if err := updateCmdBuildFn(c.Image, c.Tag); err != nil {
+			return fmt.Errorf("building %s: %w", c.Image, err)
+		}
 	}
 
 	rt, err := ResolveRuntime()

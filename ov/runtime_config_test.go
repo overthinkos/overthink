@@ -252,8 +252,8 @@ func TestListConfigValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConfigValues() error: %v", err)
 	}
-	if len(vals) != 22 {
-		t.Fatalf("expected 22 values, got %d", len(vals))
+	if len(vals) != 23 {
+		t.Fatalf("expected 23 values, got %d", len(vals))
 	}
 
 	// engine.build should come from config

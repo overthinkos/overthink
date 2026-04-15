@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -722,5 +723,129 @@ func secretStorageChecks() []CheckResult {
 		}
 	}
 
+	// Check 4: Secret Service collection health (defect G).
+	// Iterates the secret service provider's collections and flags any that
+	// fail on property reads. This catches the class of bug where
+	// KeePassXC's FdoSecrets plugin advertises a stub collection that routes
+	// I/O errors for every method call — the real credentials are in a
+	// sibling collection but the default alias points at the stub.
+	checks = append(checks, checkKeyringHealth()...)
+
+	// Check 5: Keyring shadow index consistency (defect G + H).
+	// Cross-checks the config.yml KeyringKeys shadow index against reality:
+	// every indexed key should actually be retrievable via the secret service.
+	// If not, the index is out of sync and should be pruned.
+	checks = append(checks, checkKeyringIndexConsistency()...)
+
 	return checks
+}
+
+// checkKeyringHealth probes each Secret Service collection and reports
+// healthy/broken counts. Returns one CheckResult per distinguishable state.
+// Skips silently (returns nil) if there's no session bus or no collections
+// — those cases are already handled by "Secret backend" above.
+func checkKeyringHealth() []CheckResult {
+	c, err := newSSClient()
+	if err != nil {
+		// No session bus — already covered by "Secret backend" check. Skip.
+		return nil
+	}
+	defer c.close()
+
+	paths, err := c.collections()
+	if err != nil {
+		return []CheckResult{{
+			Name:        "Secret Service collections",
+			Status:      CheckWarning,
+			Detail:      fmt.Sprintf("cannot list collections: %v", err),
+			InstallHint: "Check that your Secret Service provider (gnome-keyring, keepassxc) is running correctly",
+		}}
+	}
+	if len(paths) == 0 {
+		// Also already covered upstream. Skip.
+		return nil
+	}
+
+	var healthy, broken []string
+	for _, p := range paths {
+		if err := c.isCollectionHealthy(p); err != nil {
+			broken = append(broken, string(p))
+		} else {
+			label := c.collectionLabel(p)
+			if label != "" {
+				healthy = append(healthy, fmt.Sprintf("%q", label))
+			} else {
+				healthy = append(healthy, string(p))
+			}
+		}
+	}
+
+	if len(broken) == 0 {
+		return []CheckResult{{
+			Name:    "Secret Service collections",
+			Status:  CheckOK,
+			Version: fmt.Sprintf("%d healthy", len(healthy)),
+			Detail:  strings.Join(healthy, ", "),
+		}}
+	}
+	return []CheckResult{{
+		Name:   "Secret Service collections",
+		Status: CheckWarning,
+		Version: fmt.Sprintf("%d healthy + %d broken",
+			len(healthy), len(broken)),
+		Detail: fmt.Sprintf(
+			"ov will iterate and skip broken. Broken: %s. Healthy: %s",
+			strings.Join(broken, ", "),
+			strings.Join(healthy, ", ")),
+		InstallHint: "Consider cleaning stale entries in your Secret Service provider (e.g. KeePassXC → Tools → Settings → Secret Service Integration → Exposed Databases)",
+	}}
+}
+
+// checkKeyringIndexConsistency cross-checks the config.yml KeyringKeys
+// shadow index against what the secret service can actually return. Entries
+// in the index that are NOT present in any collection indicate that the
+// keyring has drifted — the user may need to re-store those credentials or
+// prune the stale index entries.
+func checkKeyringIndexConsistency() []CheckResult {
+	cfg, err := LoadRuntimeConfig()
+	if err != nil || len(cfg.KeyringKeys) == 0 {
+		return nil
+	}
+	c, err := newSSClient()
+	if err != nil {
+		// No session bus — can't check. Not a failure, just skip.
+		return nil
+	}
+	defer c.close()
+
+	var missing []string
+	for _, entry := range cfg.KeyringKeys {
+		// Index entries are stored as "<service>/<key>" where <service> may
+		// contain slashes (e.g. "ov/enc/immich-ml" = service:"ov/enc",
+		// key:"immich-ml"). Reuse the canonical split from credential_config.
+		service, key := parseCompositeKey(entry)
+		if service == "" || key == "" {
+			continue
+		}
+		_, _, ferr := c.findItemAnyCollection(service, key, cfg.KeyringCollectionLabel)
+		if ferr != nil && errors.Is(ferr, ErrSSNotFound) {
+			missing = append(missing, entry)
+		}
+	}
+	if len(missing) == 0 {
+		return []CheckResult{{
+			Name:    "Keyring index consistency",
+			Status:  CheckOK,
+			Version: fmt.Sprintf("%d/%d", len(cfg.KeyringKeys), len(cfg.KeyringKeys)),
+		}}
+	}
+	return []CheckResult{{
+		Name:    "Keyring index consistency",
+		Status:  CheckWarning,
+		Version: fmt.Sprintf("%d indexed, %d missing", len(cfg.KeyringKeys), len(missing)),
+		Detail: fmt.Sprintf(
+			"indexed but not found in any collection: %s",
+			strings.Join(missing, ", ")),
+		InstallHint: "Re-store with `ov secrets set <service> <key>` or prune stale index entries",
+	}}
 }

@@ -134,46 +134,105 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 	return askPassword("ov-"+imageName, "Passphrase for ov-"+imageName+":")
 }
 
-// resolveEncPassphraseForMount resolves the gocryptfs passphrase with backend-aware
-// waiting behavior. When running under systemd (INVOCATION_ID set) with a keyring-capable
-// backend ("auto" or "keyring"), it polls until the keyring becomes available and unlocked
-// (e.g., after D-Bus starts and PAM login unlocks it).
-// Explicit non-keyring backends ("kdbx", "config") fail immediately under systemd.
-// Interactive callers use the normal resolution chain.
+// encMountDeadline bounds how long resolveEncPassphraseForMount will retry
+// transient failures (keyring locked, store unavailable) before giving up.
+// Package-level var so tests can shrink it.
+var encMountDeadline = 2 * time.Minute
+
+// encMountPollPeriod is the interval between retry attempts within
+// encMountDeadline.
+var encMountPollPeriod = 5 * time.Second
+
+// resolveEncPassphraseForMount resolves the gocryptfs passphrase with
+// backend-aware and failure-aware retry behavior.
+//
+// Under systemd (INVOCATION_ID set) with a keyring-capable backend:
+//   - If the store is temporarily locked ("locked") or unreachable
+//     ("unavailable"), retry every encMountPollPeriod until encMountDeadline
+//     elapses, then fail with a clear diagnostic.
+//   - If the store answered and the credential is NOT stored ("default"),
+//     fail immediately with an actionable error — no amount of polling
+//     will conjure a credential that was never stored.
+//
+// Explicit non-keyring backends under systemd: try resolve once, fail fast
+// if not found. No polling.
+//
+// Interactive callers fall back to resolveEncPassphrase which can prompt.
+//
+// Defect D fix: the previous implementation polled forever on src=="default"
+// and had no deadline, so a misconfigured keyring + TimeoutStartSec=0 quadlet
+// was unrecoverable without manual intervention. The new behavior caps the
+// total wait at encMountDeadline and distinguishes the three failure modes.
 func resolveEncPassphraseForMount(imageName string) (string, error) {
-	if os.Getenv("INVOCATION_ID") != "" {
-		// Running under systemd (e.g., ExecStartPre in quadlet)
-		// Check the configured backend preference, not the runtime probe result.
-		// At early boot, the keyring may be temporarily unreachable (D-Bus not ready),
-		// causing DefaultCredentialStore() to fall back to ConfigFileStore even though
-		// the intended backend is keyring. We must wait in that case.
-		backend := resolveSecretBackend()
-		if backend == "auto" || backend == "keyring" || backend == "" {
-			// Keyring-capable backend: poll until keyring is available and passphrase resolves
-			for {
-				val, src := ResolveCredential("", "ov/enc", imageName, "")
-				if val != "" {
-					return val, nil
-				}
-				if src == "locked" || src == "default" {
-					fmt.Fprintf(os.Stderr, "Waiting for keyring unlock (ov-enc/%s)...\n", imageName)
-					time.Sleep(5 * time.Second)
-					// Reset cached store — keyring may become available on next attempt
-					resetDefaultCredentialStore()
-					continue
-				}
-				return "", fmt.Errorf("encryption passphrase not found for %s (source: %s)", imageName, src)
-			}
-		}
-		// Explicit non-keyring backend under systemd: try resolve, fail if not found
-		val, _ := ResolveCredential("", "ov/enc", imageName, "")
+	if os.Getenv("INVOCATION_ID") == "" {
+		// Interactive: normal resolution (keyring → kdbx → prompt)
+		return resolveEncPassphrase(imageName, false)
+	}
+	backend := resolveSecretBackend()
+	resolver := func() (string, string) {
+		return ResolveCredential("", "ov/enc", imageName, "")
+	}
+	return resolveEncPassphraseForMountWithResolver(imageName, backend, resolver, resetDefaultCredentialStore)
+}
+
+// resolveEncPassphraseForMountWithResolver is the testable core of
+// resolveEncPassphraseForMount. It accepts a resolver closure and a reset
+// closure so tests can supply mock implementations without touching global
+// state, environment variables, or DBus.
+func resolveEncPassphraseForMountWithResolver(
+	imageName, backend string,
+	resolver func() (value, source string),
+	reset func(),
+) (string, error) {
+	usesWaitingBackend := backend == "" || backend == "auto" || backend == "keyring"
+
+	if !usesWaitingBackend {
+		// Explicit non-keyring backend (config, kdbx with explicit opt-in):
+		// try once, fail fast. No polling.
+		val, src := resolver()
 		if val != "" {
 			return val, nil
 		}
-		return "", fmt.Errorf("encryption passphrase not found for %s; run 'ov start %s' interactively", imageName, imageName)
+		return "", fmt.Errorf(
+			"encryption passphrase not found for ov/enc/%s (backend=%s, source=%s); "+
+				"store with `ov secrets set ov/enc %s` or switch backend with `ov settings set secret_backend auto`",
+			imageName, backend, src, imageName)
 	}
-	// Interactive: normal resolution (keyring → kdbx → prompt)
-	return resolveEncPassphrase(imageName, false)
+
+	// Keyring-capable backend: bounded poll loop.
+	deadline := time.Now().Add(encMountDeadline)
+	attempt := 0
+	maxAttempts := int(encMountDeadline / encMountPollPeriod)
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	for {
+		attempt++
+		val, src := resolver()
+		if val != "" {
+			return val, nil
+		}
+		// Only "locked" and "unavailable" are retryable. "default" is
+		// terminal — the store worked and the credential is not stored.
+		retryable := src == "locked" || src == "unavailable"
+		if !retryable || !time.Now().Before(deadline) {
+			return "", fmt.Errorf(
+				"encryption passphrase not available for ov/enc/%s after %d attempt(s) "+
+					"(backend=%s, source=%s, waited up to %v). "+
+					"Remediation: run `ov doctor` to check keyring health, "+
+					"store with `ov secrets set ov/enc %s`, "+
+					"or switch backend with `ov settings set secret_backend config`",
+				imageName, attempt, backend, src, encMountDeadline, imageName)
+		}
+		fmt.Fprintf(os.Stderr,
+			"ov: waiting for credential store (ov-enc/%s, source=%s, attempt %d/%d)...\n",
+			imageName, src, attempt, maxAttempts)
+		time.Sleep(encMountPollPeriod)
+		// Reset cached store — keyring may become available on next attempt
+		if reset != nil {
+			reset()
+		}
+	}
 }
 
 // encInit initializes gocryptfs cipher directories for an image.
@@ -229,10 +288,36 @@ func encInit(imageName, instance, volume string) error {
 // encMount mounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is mounted.
 // Uses resolveEncPassphraseForMount which waits for keyring unlock under systemd.
+//
+// Fast path: if every requested volume is already mounted (scope units still
+// alive from a previous mount), return nil without querying the credential
+// store at all. This makes service restarts resilient to keyring breakage —
+// the most common operational case is "restart when everything is still
+// mounted", and it has no passphrase dependency.
 func encMount(imageName, instance, volume string) error {
 	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
 	if err != nil {
 		return err
+	}
+
+	// Fast path: count requested volumes and their mount state. If every
+	// requested volume is already mounted, skip the passphrase lookup.
+	requested := 0
+	mounted := 0
+	for _, m := range mounts {
+		if volume != "" && m.Name != volume {
+			continue
+		}
+		requested++
+		volDir := resolveEncVolumeDir(m, storagePath, imageName)
+		plainDir := filepath.Join(volDir, "plain")
+		if isEncryptedMounted(plainDir) {
+			mounted++
+		}
+	}
+	if requested > 0 && mounted == requested {
+		fmt.Fprintf(os.Stderr, "All encrypted volumes for %s already mounted (%d/%d)\n", imageName, mounted, requested)
+		return nil
 	}
 
 	passphrase, err := resolveEncPassphraseForMount(imageName)

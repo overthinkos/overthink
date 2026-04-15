@@ -26,9 +26,10 @@ const (
 )
 
 var (
-	defaultStoreOnce sync.Once
-	defaultStoreVal  CredentialStore
-	storeInfoOnce    sync.Once
+	defaultStoreOnce     sync.Once
+	defaultStoreVal      CredentialStore
+	defaultStoreProbeErr error // non-nil when the configured (keyring/kdbx) backend failed and we fell back
+	storeInfoOnce        sync.Once
 )
 
 // resetDefaultCredentialStore clears the cached credential store singleton,
@@ -37,12 +38,20 @@ var (
 func resetDefaultCredentialStore() {
 	defaultStoreOnce = sync.Once{}
 	defaultStoreVal = nil
+	defaultStoreProbeErr = nil
 	resetKeyringState()
 }
 
 // DefaultCredentialStore returns the active credential store based on the
 // secret_backend config key. It probes the keyring on first call when
 // backend is "auto" and caches the result.
+//
+// Side effect: when the preferred backend fails and we fall back to
+// ConfigFileStore, defaultStoreProbeErr is set to the probe error. This lets
+// ResolveCredential distinguish "store worked, nothing stored" (source
+// "default") from "store broken, couldn't query" (source "unavailable") —
+// the two conditions have identical visible state (empty value from
+// ConfigFileStore) but very different recovery semantics.
 func DefaultCredentialStore() CredentialStore {
 	defaultStoreOnce.Do(func() {
 		backend := resolveSecretBackend()
@@ -60,6 +69,7 @@ func DefaultCredentialStore() CredentialStore {
 					fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'keyring' but system keyring is not available: %v\n", err)
 					fmt.Fprintf(os.Stderr, "Falling back to config file. Fix the keyring or run: ov config set secret_backend config\n")
 					defaultStoreVal = &ConfigFileStore{}
+					defaultStoreProbeErr = err
 				}
 				return
 			}
@@ -70,6 +80,7 @@ func DefaultCredentialStore() CredentialStore {
 				fmt.Fprintf(os.Stderr, "ERROR: secret_backend is 'kdbx' but secrets.kdbx_path is not configured.\n")
 				fmt.Fprintf(os.Stderr, "Run: ov secrets init  (or: ov settings set secrets.kdbx_path /path/to/database.kdbx)\n")
 				defaultStoreVal = &ConfigFileStore{}
+				defaultStoreProbeErr = fmt.Errorf("kdbx backend selected but secrets.kdbx_path not configured")
 				return
 			}
 			storeInfoOnce.Do(func() { fmt.Fprintf(os.Stderr, "Using kdbx: %s\n", path) })
@@ -82,6 +93,10 @@ func DefaultCredentialStore() CredentialStore {
 			if err := store.Probe(); err == nil {
 				defaultStoreVal = store
 				return
+			} else {
+				// Capture the probe error so ResolveCredential can distinguish
+				// "not stored" from "store broken" later.
+				defaultStoreProbeErr = err
 			}
 			state := GetKeyringState()
 			if state == KeyringLocked {
@@ -94,10 +109,11 @@ func DefaultCredentialStore() CredentialStore {
 				if err := kdbx.Probe(); err == nil {
 					storeInfoOnce.Do(func() { fmt.Fprintf(os.Stderr, "Using kdbx: %s\n", path) })
 					defaultStoreVal = kdbx
+					defaultStoreProbeErr = nil // kdbx succeeded, clear keyring fallback error
 					return
 				}
 			}
-			// 3. Fall back to config file
+			// 3. Fall back to config file (defaultStoreProbeErr already set)
 			defaultStoreVal = &ConfigFileStore{}
 		}
 	})
@@ -134,8 +150,24 @@ func PrintStoreInfo() {
 }
 
 // ResolveCredential checks env var, then the credential store chain.
-// Returns the value and its source ("env", "keyring", "config", "locked", or "default").
+// Returns the value and its source, which is one of:
+//
+//   - "env"         — env var override took precedence
+//   - "keyring"     — found in the system keyring
+//   - "kdbx"        — found in the configured KeePass database
+//   - "config"      — found in config.yml (primary or fallback)
+//   - "locked"      — store is locked (retry after unlock)
+//   - "unavailable" — preferred backend failed to probe and we fell back
+//     to ConfigFileStore, but the credential isn't there either. Callers
+//     should NOT treat this as "not stored"; the real backend may come
+//     back later, or it may be permanently broken.
+//   - "default"     — store queried successfully, credential is not
+//     stored anywhere. Terminal condition — prompt or fail.
+//
 // When the keyring is locked, returns the default value with source "locked".
+// When the preferred backend is unreachable but some other store might still
+// have the credential, "unavailable" is returned so callers can distinguish
+// this from a clean miss.
 func ResolveCredential(envVar, service, key, defaultVal string) (value, source string) {
 	if envVar != "" {
 		if v := os.Getenv(envVar); v != "" {
@@ -165,6 +197,12 @@ func ResolveCredential(envVar, service, key, defaultVal string) (value, source s
 		}
 	}
 
+	// Distinguish "store worked, nothing stored" from "preferred store
+	// unavailable, fell back and still nothing stored". The two produce
+	// identical visible state (empty value), but they need different recovery.
+	if defaultStoreProbeErr != nil && storeName == "config" {
+		return defaultVal, "unavailable"
+	}
 	return defaultVal, "default"
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -66,41 +67,70 @@ const keyringProbeService = "ov/probe"
 const keyringProbeKey = "__ov_keyring_probe__"
 const keyringTimeout = 3 * time.Second
 
-// Probe tests whether the system keyring is usable and unlocked.
-// Uses a read-only check with a timeout to avoid hanging when the
-// Secret Service requires an unlock prompt or is unresponsive.
+// Probe tests whether the system keyring is usable.
+//
+// Unlike the old direct go-keyring probe (which used only the `default` alias
+// and failed hard when that alias pointed at a broken collection), this
+// implementation opens a direct Secret Service connection and considers the
+// keyring "available" as long as at least ONE collection can be reached and
+// responds to property reads. This makes ov resilient to Secret Service
+// providers like KeePassXC's FdoSecrets plugin that occasionally advertise
+// broken stub collections alongside working ones.
+//
+// Returns:
+//   - nil + KeyringAvailable: at least one healthy collection exists.
+//   - KeyringLockedError + KeyringLocked: the probe timed out (likely waiting
+//     on an unlock prompt).
+//   - plain error + KeyringUnavailable: no DBus session bus, no collections,
+//     or every collection is broken.
 func (k *KeyringStore) Probe() error {
-	ch := make(chan error, 1)
+	type result struct {
+		healthy int
+		broken  int
+		err     error
+	}
+	ch := make(chan result, 1)
 	go func() {
-		// Read-only probe: try to read a non-existent key.
-		// ErrNotFound → keyring is unlocked and working.
-		// Other error → keyring is broken/unavailable.
-		// Hang → keyring is locked, waiting for unlock prompt.
-		_, err := keyring.Get(keyringProbeService, keyringProbeKey)
-		if err != nil && isKeyringNotFound(err) {
-			ch <- nil
-			return
-		}
+		c, err := newSSClient()
 		if err != nil {
-			ch <- err
+			ch <- result{err: err}
 			return
 		}
-		// Key unexpectedly exists (leftover), clean up.
-		_ = keyring.Delete(keyringProbeService, keyringProbeKey)
-		ch <- nil
+		defer c.close()
+		paths, err := c.collections()
+		if err != nil {
+			ch <- result{err: err}
+			return
+		}
+		var r result
+		for _, p := range paths {
+			if herr := c.isCollectionHealthy(p); herr != nil {
+				r.broken++
+				continue
+			}
+			r.healthy++
+		}
+		if r.healthy == 0 {
+			if r.broken > 0 {
+				r.err = fmt.Errorf("%d collection(s) present, all broken", r.broken)
+			} else {
+				r.err = fmt.Errorf("no collections present")
+			}
+		}
+		ch <- r
 	}()
 
 	select {
-	case err := <-ch:
-		if err != nil {
+	case r := <-ch:
+		if r.err != nil {
 			setKeyringState(KeyringUnavailable)
-			return fmt.Errorf("keyring unavailable: %w", err)
+			return fmt.Errorf("keyring unavailable: %w", r.err)
 		}
 		setKeyringState(KeyringAvailable)
 		return nil
 	case <-time.After(keyringTimeout):
 		setKeyringState(KeyringLocked)
-		return fmt.Errorf("keyring is locked — unlock your keyring or run: ov config set secret_backend config")
+		return fmt.Errorf("keyring probe timed out — unlock your keyring or run: ov config set secret_backend config")
 	}
 }
 
@@ -114,13 +144,21 @@ func (k *KeyringStore) Get(service, key string) (string, error) {
 	}
 	ch := make(chan result, 1)
 	go func() {
-		v, e := keyring.Get(service, key)
+		v, e := keyringGetViaSSClient(service, key)
 		ch <- result{v, e}
 	}()
 	select {
 	case r := <-ch:
 		if r.err != nil {
 			if isKeyringNotFound(r.err) {
+				// Not found anywhere. Fix H: warn if the shadow index claims
+				// this key should exist — something has desynchronized.
+				if isIndexed, _ := isKeyringIndexed(service, key); isIndexed {
+					fmt.Fprintf(os.Stderr,
+						"ov: warning: %s/%s is listed in the keyring shadow index but not present in any Secret Service collection. "+
+							"Run `ov secrets prune` to reconcile (or store it again with `ov secrets set %s %s`).\n",
+						service, key, service, key)
+				}
 				return "", nil
 			}
 			return "", fmt.Errorf("keyring get %s/%s: %w", service, key, r.err)
@@ -130,6 +168,51 @@ func (k *KeyringStore) Get(service, key string) (string, error) {
 		setKeyringState(KeyringLocked)
 		return "", &KeyringLockedError{op: "get", service: service, key: key}
 	}
+}
+
+// keyringGetViaSSClient performs a credential read via the iteration-capable
+// ssClient instead of zalando/go-keyring's hardcoded-default-alias path. This
+// is the core of defect A's fix.
+//
+// Returns the secret value on success; ("", ErrSSNotFound) when the credential
+// is not stored in any reachable collection; or a wrapped DBus error.
+func keyringGetViaSSClient(service, key string) (string, error) {
+	c, err := newSSClient()
+	if err != nil {
+		return "", fmt.Errorf("opening secret service: %w", err)
+	}
+	defer c.close()
+
+	preferLabel := ""
+	if cfg, err := LoadRuntimeConfig(); err == nil {
+		preferLabel = cfg.KeyringCollectionLabel
+	}
+
+	item, _, err := c.findItemAnyCollection(service, key, preferLabel)
+	if err != nil {
+		return "", err
+	}
+	secret, err := c.getSecret(item)
+	if err != nil {
+		return "", fmt.Errorf("reading secret value: %w", err)
+	}
+	return string(secret), nil
+}
+
+// isKeyringIndexed reports whether a key is present in the shadow index
+// maintained in config.yml. Used by Get to warn about index/reality drift.
+func isKeyringIndexed(service, key string) (bool, error) {
+	cfg, err := LoadRuntimeConfig()
+	if err != nil {
+		return false, err
+	}
+	entry := service + "/" + key
+	for _, e := range cfg.KeyringKeys {
+		if e == entry {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (k *KeyringStore) Set(service, key, value string) error {
@@ -217,12 +300,23 @@ func IsKeyringLocked(err error) bool {
 }
 
 // isKeyringNotFound checks whether the error indicates the key was not found.
+// Accepts three forms of "not found":
+//   - ErrSSNotFound from our ssClient (authoritative miss across all
+//     reachable collections)
+//   - keyring.ErrNotFound from zalando/go-keyring (still used by Set/Delete)
+//   - any error whose message contains "secret not found" (legacy catchall
+//     for error strings from other layers)
 func isKeyringNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	// go-keyring returns keyring.ErrNotFound for missing entries
-	return err == keyring.ErrNotFound || strings.Contains(err.Error(), "secret not found")
+	if errors.Is(err, ErrSSNotFound) {
+		return true
+	}
+	if err == keyring.ErrNotFound {
+		return true
+	}
+	return strings.Contains(err.Error(), "secret not found")
 }
 
 // addKeyringIndex adds a service/key entry to the shadow index in config.yml.

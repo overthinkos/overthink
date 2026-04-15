@@ -942,8 +942,8 @@ func TestPixiBoundLayers(t *testing.T) {
 	layers := map[string]*Layer{
 		"llama-cpp": {Name: "llama-cpp", HasUserYml: true},
 		"unsloth":   {Name: "unsloth", HasUserYml: true},
-		"jupyter-colab-ml": {
-			Name: "jupyter-colab-ml", HasPixiToml: true, HasUserYml: true,
+		"jupyter-ml": {
+			Name: "jupyter-ml", HasPixiToml: true, HasUserYml: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
 			Depends: []string{"cuda", "supervisord"},
 		},
@@ -968,9 +968,9 @@ func TestPixiBoundLayers(t *testing.T) {
 		t.Error("llama-cpp should be pixi-bound (has user.yml, no pixi.toml, included by pixi-owning layer)")
 	}
 
-	// jupyter-colab-ml has pixi.toml → NOT pixi-bound (it owns its env)
-	if bound["jupyter-colab-ml"] {
-		t.Error("jupyter-colab-ml should NOT be pixi-bound (has pixi.toml)")
+	// jupyter-ml has pixi.toml → NOT pixi-bound (it owns its env)
+	if bound["jupyter-ml"] {
+		t.Error("jupyter-ml should NOT be pixi-bound (has pixi.toml)")
 	}
 
 	// cuda has root.yml but is NOT included by any pixi-owning layer → NOT pixi-bound
@@ -980,7 +980,7 @@ func TestPixiBoundLayers(t *testing.T) {
 }
 
 func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
-	// Mirror the actual jupyter-colab-ml / unsloth-studio scenario.
+	// Mirror the actual jupyter-ml / unsloth-studio scenario.
 	// Both share nvidia base and include llama-cpp + unsloth via layers:.
 	// The intermediate generator must NOT extract unsloth into an intermediate
 	// because it needs the pixi environment from the final image.
@@ -991,8 +991,8 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"unsloth":    {Name: "unsloth", HasUserYml: true, HasEnv: true, HasVolumes: true},
 		"notebook-templates": {Name: "notebook-templates", HasData: true},
 		"notebook-finetuning": {Name: "notebook-finetuning", HasData: true},
-		"jupyter-colab-ml": {
-			Name: "jupyter-colab-ml", HasPixiToml: true, HasUserYml: true,
+		"jupyter-ml": {
+			Name: "jupyter-ml", HasPixiToml: true, HasUserYml: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
 			Depends: []string{"cuda", "supervisord"},
 			HasPorts: true,
@@ -1028,16 +1028,16 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 			FullTag: "r/nvidia:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
-		"jupyter-colab-ml": {
-			Name: "jupyter-colab-ml", Base: "nvidia", IsExternalBase: false,
-			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml:v1", Pkg: "rpm",
+		"jupyter-ml": {
+			Name: "jupyter-ml", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
-		"jupyter-colab-ml-notebook": {
-			Name: "jupyter-colab-ml-notebook", Base: "nvidia", IsExternalBase: false,
-			Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/jupyter-colab-ml-notebook:v1", Pkg: "rpm",
+		"jupyter-ml-notebook": {
+			Name: "jupyter-ml-notebook", Base: "nvidia", IsExternalBase: false,
+			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
+			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
 			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
@@ -1054,8 +1054,8 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 			"builder": {Layers: []string{"pixi"}},
 			"fedora":  {Layers: []string{}},
 			"nvidia":  {Base: "fedora", Layers: []string{"cuda"}},
-			"jupyter-colab-ml":            {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "dbus", "ov"}},
-			"jupyter-colab-ml-notebook": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-colab-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"}},
+			"jupyter-ml":            {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"}},
+			"jupyter-ml-notebook": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"}},
 			"unsloth-studio":           {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"}},
 		},
 	}

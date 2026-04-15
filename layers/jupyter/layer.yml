@@ -1,22 +1,31 @@
 depends:
-  - cuda
   - supervisord
 
-env:
-  NVIDIA_PYTHON_PROJECT: "~/.pixi"
-  LLAMA_CPP_PATH: "~/llama.cpp"
-  UNSLOTH_SKIP_LLAMA_CPP_INSTALL: "1"
-  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+layers:
+  - jupyter-mcp
 
-path_append:
-  - "~/llama.cpp"
+env:
+  MCP_SERVER_NAME: "jupyter"
+
+rpm:
+  packages:
+    - git
 
 ports:
   - 8888
 
+mcp_provides:
+  - name: jupyter
+    url: "http://{{.ContainerName}}:8888/mcp"
+    transport: http
+
+volumes:
+  - name: workspace
+    path: ~/workspace
+
 service: |
   [program:jupyter]
-  command=pixi run start-jupyter
+  command=bash -c 'if [ -n "${JUPYTER_TOKEN_FILE:-}" ] && [ -f "${JUPYTER_TOKEN_FILE}" ]; then TOKEN=$(cat "${JUPYTER_TOKEN_FILE}"); exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token="$TOKEN" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; else exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token="" --ServerApp.password="" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; fi'
   directory=%(ENV_HOME)s
   autostart=true
   autorestart=true

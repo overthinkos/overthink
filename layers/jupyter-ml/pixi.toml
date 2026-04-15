@@ -1,5 +1,5 @@
 [workspace]
-name = "jupyter-colab-ml-environment"
+name = "jupyter-ml-environment"
 version = "0.1.0"
 description = "Full CUDA ML stack + JupyterLab with real-time collaboration and MCP"
 channels = ["conda-forge"]
@@ -167,7 +167,9 @@ bertviz = "*"
 
 # === JupyterLab PyPI Extensions ===
 jupyterlab-nvdashboard = "*"
-jupyterlab-tensorboard-pro = "*"
+# jupyterlab-tensorboard-pro removed: unmaintained, imports notebook.base which was
+# removed in Notebook 7.0, incompatible with JupyterLab 4.x. Use `tensorboard --logdir`
+# from a terminal instead (the `tensorboard` conda package is still installed above).
 
 # === Notebook tools ===
 nbparameterise = "*"
@@ -199,7 +201,7 @@ verify-pytorch = "python -c 'import torch; print(f\"CUDA available: {torch.cuda.
 verify-env = "python -c 'import sys; import torch; print(f\"Python: {sys.version}\"); print(f\"PyTorch: {torch.__version__}\"); print(f\"CUDA available: {torch.cuda.is_available()}\")'"
 verify-jupyter = "python -c 'import jupyterlab; print(f\"JupyterLab: {jupyterlab.__version__}\")'"
 verify-collaboration = "python -c 'import jupyter_collaboration; print(f\"jupyter-collaboration: {jupyter_collaboration.__version__}\")'"
-verify-mcp = "python -c 'import jupyter_colab_mcp; print(f\"MCP: {jupyter_colab_mcp.__version__}\")'"
+verify-mcp = "python -c 'import jupyter_mcp; print(f\"MCP: {jupyter_mcp.__version__}\")'"
 verify-mcp-endpoint = "curl -sf http://localhost:8888/mcp -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"0.1.0\"}}}' && echo ' MCP OK' || echo 'MCP endpoint not responding'"
 verify-vllm = "python -c 'import vllm; print(f\"vLLM: {vllm.__version__}\")'"
 verify-unsloth = "python -c 'from unsloth import FastLanguageModel; print(\"Unsloth OK\")'"

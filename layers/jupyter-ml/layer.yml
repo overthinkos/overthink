@@ -5,7 +5,7 @@ depends:
 layers:
   - llama-cpp
   - unsloth
-  - jupyter-colab-mcp
+  - jupyter-mcp
 
 env:
   NVIDIA_PYTHON_PROJECT: "~/.pixi"
@@ -25,7 +25,7 @@ volumes:
     path: ~/workspace
 
 service: |
-  [program:jupyter-colab-ml]
+  [program:jupyter-ml]
   command=bash -c 'if [ -n "${JUPYTER_TOKEN_FILE:-}" ] && [ -f "${JUPYTER_TOKEN_FILE}" ]; then TOKEN=$(cat "${JUPYTER_TOKEN_FILE}"); exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token="$TOKEN" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; else exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token="" --ServerApp.password="" --ServerApp.allow_origin="*" --ServerApp.base_url="/" --ServerApp.allow_root=True; fi'
   directory=%(ENV_HOME)s
   autostart=true

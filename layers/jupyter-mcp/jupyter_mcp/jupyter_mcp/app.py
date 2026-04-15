@@ -42,7 +42,7 @@ class MCPExtensionApp:
             (r"/mcp", TornadoASGIHandler, {"asgi_app": asgi_app}),
         ]
         server_app.web_app.add_handlers(".*$", handlers)
-        log.info("jupyter-colab-mcp: registered MCP endpoint at /mcp")
+        log.info("jupyter-mcp: registered MCP endpoint at /mcp")
 
     @staticmethod
     async def _start_asgi_lifespan(asgi_app):
@@ -63,11 +63,11 @@ class MCPExtensionApp:
         async def send(message):
             msg_type = message.get("type", "")
             if msg_type == "lifespan.startup.complete":
-                log.info("jupyter-colab-mcp: ASGI lifespan started")
+                log.info("jupyter-mcp: ASGI lifespan started")
                 startup_complete.set()
             elif msg_type == "lifespan.startup.failed":
                 log.error(
-                    "jupyter-colab-mcp: ASGI lifespan startup failed: %s",
+                    "jupyter-mcp: ASGI lifespan startup failed: %s",
                     message.get("message", ""),
                 )
                 startup_complete.set()
@@ -76,4 +76,4 @@ class MCPExtensionApp:
         try:
             await asgi_app(scope, receive, send)
         except Exception:
-            log.exception("jupyter-colab-mcp: ASGI lifespan error")
+            log.exception("jupyter-mcp: ASGI lifespan error")

@@ -51,11 +51,28 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 			continue // volume not configured as bind mount
 		}
 
+		// Resolve target directory up front so the emptiness check runs against
+		// the per-entry subdirectory, not the bind-mount root. Without this, the
+		// first data entry to populate a subdir causes every subsequent entry to
+		// see the root as "not empty" and skip. Note: entries with an empty Dest
+		// target the bind root itself — convention is to list root-targeted data
+		// layers first in the image's layers: list.
+		targetPath := bm.HostPath
+		if entry.Dest != "" {
+			targetPath = targetPath + "/" + entry.Dest
+		}
+
+		// Human-readable label for diagnostics (volume + dest when present)
+		displayName := entry.Volume
+		if entry.Dest != "" {
+			displayName = entry.Volume + "/" + entry.Dest
+		}
+
 		// Check whether to seed based on mode
 		switch mode {
 		case DataProvisionInitial:
-			if !isDirEmpty(bm.HostPath) {
-				fmt.Fprintf(os.Stderr, "  %s: skipping (not empty)\n", entry.Volume)
+			if !isDirEmpty(targetPath) {
+				fmt.Fprintf(os.Stderr, "  %s: skipping (not empty)\n", displayName)
 				continue
 			}
 		case DataProvisionMerge:
@@ -64,13 +81,7 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 			// Always copy (overwrites existing)
 		}
 
-		fmt.Fprintf(os.Stderr, "  %s: provisioning from %s ...\n", entry.Volume, entry.Staging)
-
-		// Resolve target directory: preserve dest subdirectory within volume
-		targetPath := bm.HostPath
-		if entry.Dest != "" {
-			targetPath = targetPath + "/" + entry.Dest
-		}
+		fmt.Fprintf(os.Stderr, "  %s: provisioning from %s ...\n", displayName, entry.Staging)
 
 		// Ensure host directory exists
 		if err := os.MkdirAll(targetPath, 0755); err != nil {
@@ -84,10 +95,10 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 			err = provisionFromRunnableImage(engine, imageRef, meta, entry, targetPath, mode)
 		}
 		if err != nil {
-			return seeded, fmt.Errorf("provisioning %s: %w", entry.Volume, err)
+			return seeded, fmt.Errorf("provisioning %s: %w", displayName, err)
 		}
 
-		fmt.Fprintf(os.Stderr, "  %s: done\n", entry.Volume)
+		fmt.Fprintf(os.Stderr, "  %s: done\n", displayName)
 		seeded++
 	}
 

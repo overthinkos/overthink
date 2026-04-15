@@ -7,11 +7,11 @@ tasks:
       # Install fastmcp via pip (not pixi — pixi's cross-platform resolver
       # conflicts with opentelemetry-api on aarch64)
       - ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"
-      # Install jupyter-colab-mcp extension from layer context (--no-deps: deps above)
-      - ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_colab_mcp
+      # Install jupyter-mcp extension from layer context (--no-deps: deps above)
+      - ~/.pixi/envs/default/bin/pip install --no-deps /ctx/jupyter_mcp
       # Enable the extension in Jupyter Server config
       - |
         JUPYTER_CONFIG_DIR=~/.pixi/envs/default/etc/jupyter/jupyter_server_config.d
         mkdir -p "$JUPYTER_CONFIG_DIR"
-        echo '{"ServerApp": {"jpserver_extensions": {"jupyter_colab_mcp": true}}}' > \
-          "$JUPYTER_CONFIG_DIR/jupyter_colab_mcp.json"
+        echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
+          "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"

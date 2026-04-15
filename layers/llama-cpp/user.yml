@@ -8,9 +8,9 @@ tasks:
       - |
         LLAMA_CPP_DIR=~/llama.cpp
         mkdir -p "$LLAMA_CPP_DIR"
-        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
         curl -fsSL -o /tmp/llama-bin.tar.gz \
-          "https://github.com/ggerganov/llama.cpp/releases/download/${LLAMA_RELEASE}/llama-${LLAMA_RELEASE}-bin-ubuntu-x64.tar.gz"
+          "https://github.com/ggml-org/llama.cpp/releases/download/${LLAMA_RELEASE}/llama-${LLAMA_RELEASE}-bin-ubuntu-x64.tar.gz"
         mkdir -p /tmp/llama_extract
         tar --no-same-owner --no-same-permissions -xzf /tmp/llama-bin.tar.gz -C /tmp/llama_extract
         EXTRACT_DIR="/tmp/llama_extract/llama-${LLAMA_RELEASE}"
@@ -21,9 +21,9 @@ tasks:
       # Download llama.cpp source for convert_hf_to_gguf.py + gguf-py
       - |
         LLAMA_CPP_DIR=~/llama.cpp
-        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggerganov/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+        LLAMA_RELEASE=$(curl -fsSL "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
         curl -fsSL -o /tmp/llama-src.tar.gz \
-          "https://github.com/ggerganov/llama.cpp/archive/refs/tags/${LLAMA_RELEASE}.tar.gz"
+          "https://github.com/ggml-org/llama.cpp/archive/refs/tags/${LLAMA_RELEASE}.tar.gz"
         mkdir -p /tmp/llama_src
         tar --no-same-owner --no-same-permissions -xzf /tmp/llama-src.tar.gz -C /tmp/llama_src
         SRC_DIR="/tmp/llama_src/llama.cpp-${LLAMA_RELEASE}"

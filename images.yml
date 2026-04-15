@@ -217,18 +217,18 @@ images:
     base: fedora
     layers:
       - agent-forwarding
-      - jupyter-colab
+      - jupyter
       - notebook-templates
       - dbus
       - ov
     ports:
       - "8888:8888"
 
-  jupyter-colab-ml:
+  jupyter-ml:
     base: nvidia
     layers:
       - agent-forwarding
-      - jupyter-colab-ml
+      - jupyter-ml
       - notebook-templates
       - dbus
       - ov
@@ -237,11 +237,11 @@ images:
     platforms:
       - linux/amd64
 
-  jupyter-colab-ml-notebook:
+  jupyter-ml-notebook:
     base: nvidia
     layers:
       - agent-forwarding
-      - jupyter-colab-ml
+      - jupyter-ml
       - notebook-templates
       - notebook-finetuning
       - notebook-ollama

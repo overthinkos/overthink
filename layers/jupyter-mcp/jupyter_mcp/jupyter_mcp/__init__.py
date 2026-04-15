@@ -1,4 +1,4 @@
-"""jupyter-colab-mcp: MCP server extension for JupyterLab with real-time collaboration."""
+"""jupyter-mcp: MCP server extension for JupyterLab with real-time collaboration."""
 
 __version__ = "0.1.0"
 

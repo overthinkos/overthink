@@ -1,4 +1,4 @@
-info: "Starter notebook templates for jupyter-colab"
+info: "Starter notebook templates for jupyter"
 
 data:
   - src: data/notebooks

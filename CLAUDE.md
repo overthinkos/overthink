@@ -110,8 +110,8 @@ Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/
 
 ## Task Commands (bootstrap only)
 
-- `task build:ov` -- Build ov from source into `bin/ov` and install as Arch package (auto-calls `build:install`)
-- `task build:install` -- Install ov as Arch package (uses pre-built binary from `bin/ov` via PKGBUILD, fast ~2s)
+- `task build:ov` -- Build ov from source into `bin/ov` and install (auto-detects distro, auto-calls `build:install`)
+- `task build:install` -- Install ov for the current host via distro dispatch. On Arch family (Arch/Manjaro/EndeavourOS) it runs `makepkg -efi --noconfirm` (pacman package to `/usr/bin/ov`). On all other distros (Fedora/Bazzite/Debian/Ubuntu/...) it uses `install -D -m 0755 bin/ov $HOME/.local/bin/ov` and warns if `~/.local/bin` is not on `$PATH`. Escape hatches: `task build:install-arch` forces makepkg, `task build:install-portable` forces the `install -D` path.
 - `task setup:builder` -- Create multi-platform buildx builder
 - `task setup:all` -- Full setup (build ov + create builder)
 

@@ -52,6 +52,8 @@ const (
 	LabelEnvProvides    = "org.overthinkos.env_provides"
 	LabelEnvRequires    = "org.overthinkos.env_requires"
 	LabelEnvAccepts     = "org.overthinkos.env_accepts"
+	LabelSecretAccepts  = "org.overthinkos.secret_accepts"  // credential-store-backed env vars this image can optionally use
+	LabelSecretRequires = "org.overthinkos.secret_requires" // credential-store-backed env vars this image must have
 	LabelMCPProvides    = "org.overthinkos.mcp_provides"
 	LabelMCPRequires    = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
@@ -122,11 +124,13 @@ type ImageMetadata struct {
 	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
 	DataImage      bool              // true if this is a data-only image (FROM scratch)
 	EnvProvides    map[string]string // env vars provided to other containers (service discovery templates)
-	EnvRequires    []EnvDependency  // env vars image must have from the environment
-	EnvAccepts     []EnvDependency  // env vars image can optionally use
-	MCPProvides    []MCPServerYAML  // MCP servers provided to other containers (service discovery templates)
-	MCPRequires    []EnvDependency  // MCP servers image must have from the environment
-	MCPAccepts     []EnvDependency  // MCP servers image can optionally use
+	EnvRequires    []EnvDependency   // env vars image must have from the environment
+	EnvAccepts     []EnvDependency   // env vars image can optionally use
+	SecretAccepts  []EnvDependency   // credential-store-backed env vars image can optionally use
+	SecretRequires []EnvDependency   // credential-store-backed env vars image must have
+	MCPProvides    []MCPServerYAML   // MCP servers provided to other containers (service discovery templates)
+	MCPRequires    []EnvDependency   // MCP servers image must have from the environment
+	MCPAccepts     []EnvDependency   // MCP servers image can optionally use
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -412,6 +416,20 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	if v := labels[LabelEnvAccepts]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.EnvAccepts); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelEnvAccepts, err)
+		}
+	}
+
+	// Secret requires (credential-store-backed env vars this image must have)
+	if v := labels[LabelSecretRequires]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.SecretRequires); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecretRequires, err)
+		}
+	}
+
+	// Secret accepts (credential-store-backed env vars this image can optionally use)
+	if v := labels[LabelSecretAccepts]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.SecretAccepts); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelSecretAccepts, err)
 		}
 	}
 

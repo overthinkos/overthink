@@ -34,6 +34,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 | Subsystem | Skill |
 |-----------|-------|
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
+| Credential-backed layer env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
 | Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
 | env/mcp provides/requires/accepts | `/ov:config`, `/ov:layer` |
 | Sidecars & Tunnels (deploy.yml-only) | `/ov:sidecar`, `/ov:deploy` |

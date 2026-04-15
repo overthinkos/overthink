@@ -133,8 +133,13 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate env_provides declarations
 	validateEnvProvides(layers, errs)
 
-	// Validate env_requires and env_accepts declarations
+	// Validate env_requires and env_accepts declarations (also enforces cross-section
+	// collisions with secret_requires / secret_accepts via a unified seen map)
 	validateEnvDeps(layers, errs)
+
+	// Validate secret_requires and secret_accepts declarations (slug form, Key format,
+	// collision with env_provides)
+	validateSecretDeps(layers, errs)
 
 	// Validate mcp_provides declarations
 	validateMCPProvides(layers, errs)
@@ -1662,44 +1667,104 @@ func validateEnvProvides(layers map[string]*Layer, errs *ValidationError) {
 	}
 }
 
-// validateEnvDeps checks env_requires and env_accepts declarations in layers.
+// validateEnvDeps checks env_requires, env_accepts, secret_requires, and
+// secret_accepts declarations in layers. A single `seen` map enforces the rule
+// that an env var name cannot appear in more than one of these four sections
+// within the same layer — each entry is either a plaintext-safe accept/require
+// or a credential-backed accept/require, never both.
 func validateEnvDeps(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		seen := make(map[string]string) // name -> "requires" or "accepts"
+		seen := make(map[string]string) // name -> originating section label
 
-		for _, dep := range layer.EnvRequires() {
-			if dep.Name == "" {
-				errs.Add("layer %s: env_requires has entry with empty name", name)
-				continue
-			}
-			if !isValidEnvVarName(dep.Name) {
-				errs.Add("layer %s: env_requires[%s] is not a valid environment variable name", name, dep.Name)
-			}
-			if dep.Description == "" {
-				errs.Add("layer %s: env_requires[%s] has no description", name, dep.Name)
-			}
-			if prev, ok := seen[dep.Name]; ok {
-				errs.Add("layer %s: env var %s appears in both env_%s and env_requires", name, dep.Name, prev)
-			}
-			seen[dep.Name] = "requires"
+		validateDepEntries(name, "env_requires", layer.EnvRequires(), seen, errs)
+		validateDepEntries(name, "env_accepts", layer.EnvAccepts(), seen, errs)
+		validateDepEntries(name, "secret_requires", layer.SecretRequires(), seen, errs)
+		validateDepEntries(name, "secret_accepts", layer.SecretAccepts(), seen, errs)
+	}
+}
+
+// validateDepEntries validates a single env/secret dependency list against the
+// shared `seen` map, reporting collisions with whichever section claimed the
+// name first. Used by validateEnvDeps for all four env/secret sections.
+func validateDepEntries(layerName, section string, entries []EnvDependency, seen map[string]string, errs *ValidationError) {
+	for _, dep := range entries {
+		if dep.Name == "" {
+			errs.Add("layer %s: %s has entry with empty name", layerName, section)
+			continue
+		}
+		if !isValidEnvVarName(dep.Name) {
+			errs.Add("layer %s: %s[%s] is not a valid environment variable name", layerName, section, dep.Name)
+		}
+		if dep.Description == "" {
+			errs.Add("layer %s: %s[%s] has no description", layerName, section, dep.Name)
+		}
+		if prev, ok := seen[dep.Name]; ok && prev != section {
+			errs.Add("layer %s: env var %s appears in both %s and %s — an env var belongs to exactly one section", layerName, dep.Name, prev, section)
+		}
+		seen[dep.Name] = section
+	}
+}
+
+// secretKeyPattern matches the optional Key field on secret_accepts /
+// secret_requires entries. Enforces <service>/<key> with an "ov/" prefix to
+// prevent layers from exfiltrating unrelated user credentials (e.g.,
+// "aws/access-key") into a podman secret. Plan §2.7 / §4.4 rule 5.
+var secretKeyPattern = regexp.MustCompile(`^ov/[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9_-]*$`)
+
+// podmanSecretSlugPattern matches the lowercase-kebab slug form used for
+// per-image podman secret names (ov-<image>-<slug>). Plan §4.4 rule 4.
+var podmanSecretSlugPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
+
+// envVarNameToPodmanSecretSlug converts an env var name to the slug used in
+// the podman secret name. Mirrors what CollectLayerSecretAccepts will do at
+// `ov config` time (to be added in Step 4). Lowercase + underscores → hyphens.
+func envVarNameToPodmanSecretSlug(envVarName string) string {
+	return strings.ReplaceAll(strings.ToLower(envVarName), "_", "-")
+}
+
+// validateSecretDeps enforces the secret-specific rules that validateEnvDeps
+// cannot express: credential store `key:` format, podman secret slug validity,
+// and the prohibition on credential-backed entries overlapping with the
+// plaintext `env_provides` map. Plan §4.4.
+func validateSecretDeps(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		if !layer.HasSecretAccepts && !layer.HasSecretRequires {
+			continue
 		}
 
-		for _, dep := range layer.EnvAccepts() {
-			if dep.Name == "" {
-				errs.Add("layer %s: env_accepts has entry with empty name", name)
-				continue
-			}
-			if !isValidEnvVarName(dep.Name) {
-				errs.Add("layer %s: env_accepts[%s] is not a valid environment variable name", name, dep.Name)
-			}
-			if dep.Description == "" {
-				errs.Add("layer %s: env_accepts[%s] has no description", name, dep.Name)
-			}
-			if prev, ok := seen[dep.Name]; ok {
-				errs.Add("layer %s: env var %s appears in both env_%s and env_accepts", name, dep.Name, prev)
-			}
-			seen[dep.Name] = "accepts"
+		// Build a set of env_provides keys for the collision check (rule 2).
+		// env_provides values use {{.ContainerName}} templating and land in
+		// deploy.yml plaintext — a credential-backed env var with the same
+		// name would be ambiguous and defeat the point of the split.
+		envProvidesKeys := map[string]bool{}
+		for key := range layer.EnvProvides() {
+			envProvidesKeys[key] = true
 		}
+
+		checkOne := func(section string, entries []EnvDependency) {
+			for _, dep := range entries {
+				if dep.Name == "" {
+					continue // already reported by validateEnvDeps
+				}
+				// Rule 2: cannot collide with env_provides.
+				if envProvidesKeys[dep.Name] {
+					errs.Add("layer %s: %s[%s] also appears in env_provides — credential-backed secrets and plaintext env_provides are mutually exclusive for the same variable", name, section, dep.Name)
+				}
+				// Rule 4: the podman secret slug must be valid.
+				slug := envVarNameToPodmanSecretSlug(dep.Name)
+				if !podmanSecretSlugPattern.MatchString(slug) {
+					errs.Add("layer %s: %s[%s] would produce invalid podman secret slug %q (must match %s)", name, section, dep.Name, slug, podmanSecretSlugPattern.String())
+				}
+				// Rule 5: optional Key override must match <service>/<key>
+				// with an ov/ prefix.
+				if dep.Key != "" && !secretKeyPattern.MatchString(dep.Key) {
+					errs.Add("layer %s: %s[%s] key %q must match %s — must start with \"ov/\" and be <service>/<key>", name, section, dep.Name, dep.Key, secretKeyPattern.String())
+				}
+			}
+		}
+
+		checkOne("secret_requires", layer.SecretRequires())
+		checkOne("secret_accepts", layer.SecretAccepts())
 	}
 }
 

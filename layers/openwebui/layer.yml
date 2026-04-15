@@ -15,25 +15,41 @@ env:
 
 env_requires:
   - name: WEBUI_ADMIN_EMAIL
-    description: "Admin email — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
-  - name: WEBUI_ADMIN_PASSWORD
-    description: "Admin password — pass via: ov config openwebui -e WEBUI_ADMIN_PASSWORD=... (or --env-file .secrets)"
+    description: "Admin account email (identifier, not a credential) — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
 
 env_accepts:
-  - name: OPENROUTER_API_KEY
-    description: "API key for OpenRouter (sets OPENAI_API_KEY with OpenRouter base URL)"
-  - name: OLLAMA_API_KEY
-    description: "API key for Ollama Cloud inference"
   - name: OLLAMA_HOST
     description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
-  - name: OPENAI_API_KEY
-    description: "Direct OpenAI API key"
   - name: OPENAI_API_BASE_URL
     description: "OpenAI-compatible API base URL"
   - name: WEBUI_AUTH
     description: "Enable authentication (default: true)"
   - name: OV_MCP_SERVERS
     description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+  - name: IMMICH_API_URL
+    description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
+
+# Credential-store-backed env vars. Values live in the user's credential
+# backend (keyring/kdbx/config) and are injected at runtime via podman
+# secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
+# or the quadlet file as plaintext. See /ov:secrets and /ov:layer.
+secret_requires:
+  - name: WEBUI_ADMIN_PASSWORD
+    description: "Initial admin account password for Open WebUI first-run setup"
+
+secret_accepts:
+  - name: OPENROUTER_API_KEY
+    description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"
+    key: ov/api-key/openrouter
+  - name: OLLAMA_API_KEY
+    description: "API key for Ollama Cloud inference"
+    key: ov/api-key/ollama
+  - name: OPENAI_API_KEY
+    description: "Direct OpenAI API key"
+    key: ov/api-key/openai
+  - name: IMMICH_API_KEY
+    description: "Immich API key for programmatic access to the running immich instance"
+    key: ov/api-key/immich
 
 mcp_accepts:
   - name: jupyter

@@ -36,11 +36,30 @@ type LabelSecret struct {
 }
 
 // CollectedSecret represents a fully resolved secret ready for provisioning.
+//
+// Service, Key, and RotateOnConfig are populated by CollectLayerSecretAccepts
+// (added in a later step) for credential-store-backed secrets derived from
+// secret_accepts / secret_requires layer.yml entries. They are zero for
+// layer-owned secrets (the existing CollectSecretsFromLabels path), preserving
+// the current behavior.
+//
+//   - Service / Key: optional override for the ResolveCredential lookup.
+//     Defaults: Service="ov/secret", Key=SecretName. When set, these are
+//     passed through resolveSecretValue to the credential store.
+//   - RotateOnConfig: if true, ProvisionPodmanSecrets bypasses the
+//     podmanSecretExists short-circuit and always rm+creates the podman
+//     secret, so rotation via `ov secrets set` + `ov config` takes effect
+//     on the next reconcile. Layer-owned secrets (like immich db-password)
+//     must keep this false — you cannot re-init a live postgres cluster
+//     with a rotated password.
 type CollectedSecret struct {
-	Name       string // podman secret name: "ov-<image>-<name>"
-	Target     string // container mount path
-	Env        string // fallback env var name
-	SecretName string // original secret name from layer.yml
+	Name           string // podman secret name: "ov-<image>-<name>"
+	Target         string // container mount path
+	Env            string // fallback env var name
+	SecretName     string // original secret name from layer.yml
+	Service        string // credential store service override (empty = use default lookup)
+	Key            string // credential store key override (empty = use default lookup)
+	RotateOnConfig bool   // if true, bypass podmanSecretExists short-circuit (rotate on every ov config)
 }
 
 // CollectSecretsFromLabels reconstructs secrets from image label metadata.
@@ -88,12 +107,18 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 	interactive := term.IsTerminal(int(os.Stdin.Fd()))
 
 	for _, s := range secrets {
-		// If a podman secret already exists, keep it unconditionally. ov config
-		// setup only CREATES missing secrets — it never overwrites existing ones.
-		// This prevents overwriting a password that a database (e.g., PostgreSQL)
-		// has already been initialized with. To force re-provisioning:
-		//   podman secret rm <name> && ov config setup <image>
-		if podmanSecretExists(engine, s.Name) {
+		// Short-circuit: if a podman secret already exists, keep it
+		// unconditionally — unless RotateOnConfig is true, in which case we
+		// always re-resolve and re-create so credential rotation via
+		// `ov secrets set <name> <new>` takes effect on the next ov config.
+		//
+		// The default (RotateOnConfig=false) is correct for layer-owned
+		// secrets like immich's db-password: overwriting would break a live
+		// postgres cluster. RotateOnConfig=true is set by
+		// CollectLayerSecretAccepts for secret_accepts/secret_requires
+		// entries, whose whole point is to reflect the current credential
+		// store value on every reconcile. See plan §2.3.
+		if !s.RotateOnConfig && podmanSecretExists(engine, s.Name) {
 			fmt.Fprintf(os.Stderr, "  %-40s → kept (already provisioned)\n", s.Name)
 			provisioned = append(provisioned, s)
 			continue
@@ -187,8 +212,27 @@ func SecretArgs(secrets []CollectedSecret) []string {
 }
 
 // resolveSecretValue looks up the value for a secret from the credential store.
+//
+// When CollectedSecret.Service and CollectedSecret.Key are both non-empty,
+// they take precedence over the default lookup chain: the credential store
+// is queried exactly at (Service, Key) with the Env var as the env override.
+// This is the path used by secret_accepts / secret_requires entries
+// synthesized by CollectLayerSecretAccepts, where the layer author may have
+// set `key: ov/api-key/openrouter` to point at a shared credential namespace.
+//
+// When Service/Key are unset, the default chain (used by layer-owned secrets)
+// applies: env var → ov/secret/<podman-name> → ov/secret/<bare-secret-name>.
 func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, source string) {
-	// If the secret has an associated env var, check it first
+	// Explicit override from CollectLayerSecretAccepts: query exactly once at
+	// (Service, Key), allowing the Env var to win via ResolveCredential's
+	// env-first chain.
+	if s.Service != "" && s.Key != "" {
+		val, src := ResolveCredential(s.Env, s.Service, s.Key, "")
+		return val, src
+	}
+
+	// Default chain for layer-owned secrets (pre-existing behavior).
+	// If the secret has an associated env var, check it first.
 	if s.Env != "" {
 		val, src := ResolveCredential(s.Env, credServiceForSecret(s.Env), credKeyForSecret(imageName, instance), "")
 		if val != "" {
@@ -202,6 +246,89 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 	// Fallback: try by bare secret name (e.g. "db-password")
 	val, src := ResolveCredential("", "ov/secret", s.SecretName, "")
 	return val, src
+}
+
+// SecretResolution records the result of resolving a single secret_accepts or
+// secret_requires entry against the credential store. Returned alongside the
+// []CollectedSecret list from CollectLayerSecretAccepts so downstream callers
+// (checkMissingSecretRequires in Step 5/6) can distinguish "required but
+// missing" from "optional and absent" with actionable remediation.
+type SecretResolution struct {
+	Name     string // env var name (e.g., "OPENROUTER_API_KEY")
+	Source   string // ResolveCredential source classification (env/keyring/kdbx/config/locked/unavailable/default)
+	Resolved bool   // true iff a non-empty value was obtained
+	Required bool   // true iff the entry came from secret_requires (not secret_accepts)
+}
+
+// CollectLayerSecretAccepts synthesizes CollectedSecret entries from an
+// image's secret_accepts and secret_requires label metadata, resolving each
+// against the credential store and returning:
+//
+//   - []CollectedSecret: one entry per secret whose value was successfully
+//     resolved (non-empty). Entries carry Service/Key overrides from the
+//     layer.yml `key:` field (default: ov/secret/<env-var-name>) and
+//     RotateOnConfig=true so every ov config reconciles them with the
+//     latest credential store value (see plan §2.3).
+//   - []SecretResolution: one entry per input spec, reporting the source
+//     classification and whether the resolution succeeded. Required entries
+//     with Resolved=false are later caught by checkMissingSecretRequires as
+//     a hard-fail condition.
+//
+// This function does NOT touch the podman secret store — that's the job of
+// ProvisionPodmanSecrets. It only reads from the credential store. No network
+// calls, no filesystem mutations, safe to run speculatively.
+func CollectLayerSecretAccepts(imageName, instance string, meta *ImageMetadata) (collected []CollectedSecret, resolutions []SecretResolution) {
+	if meta == nil {
+		return nil, nil
+	}
+
+	resolveOne := func(dep EnvDependency, required bool) {
+		// Parse the optional Key override (<service>/<key> form, validated
+		// at build time by validateSecretDeps). Default is ov/secret/<name>.
+		service := "ov/secret"
+		key := dep.Name
+		if dep.Key != "" {
+			// Key format is already validated (must match ^ov/.../...$).
+			// Split on the first '/' after the "ov/" prefix.
+			if idx := strings.Index(dep.Key[3:], "/"); idx >= 0 {
+				service = dep.Key[:3+idx]
+				key = dep.Key[3+idx+1:]
+			}
+		}
+
+		cs := CollectedSecret{
+			Name:           "ov-" + imageName + "-" + envVarNameToPodmanSecretSlug(dep.Name),
+			Target:         "", // type=env directive doesn't use Target
+			Env:            dep.Name,
+			SecretName:     dep.Name,
+			Service:        service,
+			Key:            key,
+			RotateOnConfig: true,
+		}
+
+		val, src := resolveSecretValue(cs, imageName, instance)
+
+		res := SecretResolution{
+			Name:     dep.Name,
+			Source:   src,
+			Resolved: val != "",
+			Required: required,
+		}
+		resolutions = append(resolutions, res)
+
+		if val != "" {
+			collected = append(collected, cs)
+		}
+	}
+
+	for _, dep := range meta.SecretRequires {
+		resolveOne(dep, true)
+	}
+	for _, dep := range meta.SecretAccepts {
+		resolveOne(dep, false)
+	}
+
+	return collected, resolutions
 }
 
 // credServiceForSecret maps well-known env vars to credential services.

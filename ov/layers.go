@@ -82,11 +82,19 @@ type DataYAML struct {
 }
 
 // EnvDependency declares an env var or MCP server that a layer needs or can use.
-// Reused for env_requires, env_accepts, mcp_requires, and mcp_accepts.
+// Reused for env_requires, env_accepts, mcp_requires, mcp_accepts,
+// secret_accepts, and secret_requires.
+//
+// The Key field is only meaningful for secret_accepts/secret_requires entries:
+// it optionally overrides the credential store lookup key. Default is
+// ("ov/secret", Name). When set, the format is "<service>/<key>" and must
+// start with "ov/" (enforced by validate.go to prevent exfiltration of
+// unrelated user credentials). See plan §2.7.
 type EnvDependency struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description" json:"description"`
 	Default     string `yaml:"default,omitempty" json:"default,omitempty"`
+	Key         string `yaml:"key,omitempty" json:"key,omitempty"` // credential store path override (secret_* only), format "<service>/<key>", must start with "ov/"
 }
 
 // MCPServerYAML represents an MCP server declaration in layer.yml.
@@ -135,12 +143,14 @@ type LayerYAML struct {
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 	Data           []DataYAML        `yaml:"data,omitempty"`
-	EnvProvides    map[string]string `yaml:"env_provides,omitempty"` // env vars provided to OTHER containers when this service is deployed
-	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"` // env vars this layer MUST have from the environment
-	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`  // env vars this layer CAN optionally use
-	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"` // MCP servers provided to OTHER containers when this service is deployed
-	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"` // MCP servers this layer MUST have from the environment
-	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`  // MCP servers this layer CAN optionally use
+	EnvProvides    map[string]string `yaml:"env_provides,omitempty"`   // env vars provided to OTHER containers when this service is deployed
+	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"`   // env vars this layer MUST have from the environment
+	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`    // env vars this layer CAN optionally use
+	SecretAccepts  []EnvDependency   `yaml:"secret_accepts,omitempty"` // credential-store-backed env vars this layer CAN optionally use
+	SecretRequires []EnvDependency   `yaml:"secret_requires,omitempty"` // credential-store-backed env vars this layer MUST have
+	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"`   // MCP servers provided to OTHER containers when this service is deployed
+	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`   // MCP servers this layer MUST have from the environment
+	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`    // MCP servers this layer CAN optionally use
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -158,6 +168,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"system_services": true, "libvirt": true, "hooks": true,
 	"port_relay": true, "secrets": true, "data": true,
 	"env_provides": true, "env_requires": true, "env_accepts": true,
+	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
 }
 
@@ -287,12 +298,14 @@ type Layer struct {
 	HasPixiLock       bool
 	HasExtract        bool
 	HasData           bool
-	HasEnvProvides    bool
-	HasEnvRequires    bool
-	HasEnvAccepts     bool
-	HasMCPProvides    bool
-	HasMCPRequires    bool
-	HasMCPAccepts     bool
+	HasEnvProvides     bool
+	HasEnvRequires     bool
+	HasEnvAccepts      bool
+	HasSecretAccepts   bool
+	HasSecretRequires  bool
+	HasMCPProvides     bool
+	HasMCPRequires     bool
+	HasMCPAccepts      bool
 	HasLibvirt         bool
 	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
 
@@ -330,11 +343,13 @@ type Layer struct {
 	hooks          *HooksConfig
 	secrets        []SecretYAML
 	envProvides    map[string]string // env vars provided to other containers (service discovery)
-	envRequires    []EnvDependency  // env vars this layer must have
-	envAccepts     []EnvDependency  // env vars this layer can optionally use
-	mcpProvides    []MCPServerYAML  // MCP servers provided to other containers
-	mcpRequires    []EnvDependency  // MCP servers this layer must have
-	mcpAccepts     []EnvDependency  // MCP servers this layer can optionally use
+	envRequires    []EnvDependency   // env vars this layer must have
+	envAccepts     []EnvDependency   // env vars this layer can optionally use
+	secretAccepts  []EnvDependency   // credential-store-backed env vars this layer can optionally use
+	secretRequires []EnvDependency   // credential-store-backed env vars this layer must have
+	mcpProvides    []MCPServerYAML   // MCP servers provided to other containers
+	mcpRequires    []EnvDependency   // MCP servers this layer must have
+	mcpAccepts     []EnvDependency   // MCP servers this layer can optionally use
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 }
 
@@ -537,6 +552,16 @@ func scanLayer(path string, name string) (*Layer, error) {
 		if len(ly.EnvAccepts) > 0 {
 			layer.HasEnvAccepts = true
 			layer.envAccepts = ly.EnvAccepts
+		}
+
+		// Pre-populate secret_accepts and secret_requires (credential-store-backed env vars)
+		if len(ly.SecretRequires) > 0 {
+			layer.HasSecretRequires = true
+			layer.secretRequires = ly.SecretRequires
+		}
+		if len(ly.SecretAccepts) > 0 {
+			layer.HasSecretAccepts = true
+			layer.secretAccepts = ly.SecretAccepts
 		}
 
 		// Pre-populate mcp_provides (MCP servers for other containers)
@@ -780,6 +805,21 @@ func (l *Layer) EnvRequires() []EnvDependency {
 // EnvAccepts returns env vars this layer can optionally use (pre-populated from layer.yml)
 func (l *Layer) EnvAccepts() []EnvDependency {
 	return l.envAccepts
+}
+
+// SecretAccepts returns credential-store-backed env vars this layer can optionally use.
+// These entries flow through the credential store → podman secret → Secret=type=env quadlet
+// directive pipeline, never touching plaintext deploy.yml or quadlet Environment= lines.
+// Pre-populated from layer.yml.
+func (l *Layer) SecretAccepts() []EnvDependency {
+	return l.secretAccepts
+}
+
+// SecretRequires returns credential-store-backed env vars this layer MUST have.
+// Missing entries cause ov config to hard-fail with actionable remediation.
+// Pre-populated from layer.yml.
+func (l *Layer) SecretRequires() []EnvDependency {
+	return l.secretRequires
 }
 
 // MCPProvides returns MCP servers this layer provides to other containers (pre-populated from layer.yml)

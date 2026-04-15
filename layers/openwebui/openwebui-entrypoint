@@ -130,15 +130,18 @@ if [ -n "$MISSING" ]; then
     echo "ERROR: Missing required environment variable(s): $MISSING" >&2
     echo "" >&2
     echo "Open WebUI needs admin credentials to create the first user account." >&2
-    echo "Set them when configuring the container:" >&2
+    echo "" >&2
+    echo "WEBUI_ADMIN_EMAIL is plaintext config (declared in env_requires)." >&2
+    echo "WEBUI_ADMIN_PASSWORD is a credential-backed secret (declared in secret_requires);" >&2
+    echo "store it once in the credential backend and it flows in via a podman secret:" >&2
+    echo "" >&2
+    echo "  ov secrets set ov/secret WEBUI_ADMIN_PASSWORD your-password" >&2
+    echo "  ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com --update-all" >&2
+    echo "" >&2
+    echo "Or pass both via -e on first run — the password is auto-imported into" >&2
+    echo "the credential backend and stripped from deploy.yml / the quadlet:" >&2
     echo "" >&2
     echo "  ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com -e WEBUI_ADMIN_PASSWORD=your-password" >&2
-    echo "" >&2
-    echo "Or use a GPG-encrypted secrets file:" >&2
-    echo "" >&2
-    echo "  ov secrets gpg set WEBUI_ADMIN_EMAIL you@example.com" >&2
-    echo "  ov secrets gpg set WEBUI_ADMIN_PASSWORD your-password" >&2
-    echo "  ov config openwebui --env-file .secrets" >&2
     echo "" >&2
     exit 1
 fi

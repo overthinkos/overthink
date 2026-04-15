@@ -12,24 +12,39 @@ env:
   TERMINAL_ENV: "local"
 
 env_accepts:
-  - name: OPENROUTER_API_KEY
-    description: "API key for OpenRouter LLM inference"
-  - name: OLLAMA_API_KEY
-    description: "API key for Ollama Cloud inference (https://ollama.com)"
   - name: OLLAMA_HOST
     description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
   - name: HERMES_MODEL
     description: "Override default Hermes model (default depends on detected provider)"
+  - name: OV_MCP_SERVERS
+    description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+  - name: BROWSER_CDP_URL
+    description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
+  - name: IMMICH_API_URL
+    description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
+
+# Credential-store-backed env vars. Values live in the user's credential
+# backend (keyring/kdbx/config) and are injected at runtime via podman
+# secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
+# or the quadlet file as plaintext. The ov/api-key/* keys are shared with
+# openwebui so one `ov secrets set` populates both consumers. See
+# /ov:secrets and /ov:layer.
+secret_accepts:
+  - name: OPENROUTER_API_KEY
+    description: "API key for OpenRouter LLM inference"
+    key: ov/api-key/openrouter
+  - name: OLLAMA_API_KEY
+    description: "API key for Ollama Cloud inference (https://ollama.com)"
+    key: ov/api-key/ollama
   - name: TELEGRAM_BOT_TOKEN
     description: "Telegram bot token for messaging"
   - name: SLACK_BOT_TOKEN
     description: "Slack bot token"
   - name: DISCORD_BOT_TOKEN
     description: "Discord bot token"
-  - name: OV_MCP_SERVERS
-    description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
-  - name: BROWSER_CDP_URL
-    description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
+  - name: IMMICH_API_KEY
+    description: "Immich API key for programmatic access to the running immich instance"
+    key: ov/api-key/immich
 
 mcp_accepts:
   - name: jupyter

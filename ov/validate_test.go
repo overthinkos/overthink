@@ -1320,3 +1320,294 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 		t.Errorf("unexpected 'unknown volume' error for valid data entry: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// secret_accepts / secret_requires validation tests (Step 3 of the
+// credential-backed secrets feature). Each test exercises one of the rules in
+// plan §4.4.
+// ---------------------------------------------------------------------------
+
+// secretDepsLayer builds a minimal layer with the given secret dependency
+// configuration, for reuse across tests.
+func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
+	l := &Layer{Name: name, HasRootYml: true}
+	if opts != nil {
+		opts(l)
+	}
+	return l
+}
+
+// TestValidateSecretAcceptsHappyPath — valid secret_accepts entry with an
+// explicit Key override that matches the ov/<service>/<key> format. No errors.
+func TestValidateSecretAcceptsHappyPath(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Key: "ov/api-key/openrouter"},
+			}
+		}),
+	}
+	if err := Validate(cfg, layers, ""); err != nil {
+		t.Errorf("Validate() unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretRequiresMissingDescription — secret_requires entry with
+// empty description must be rejected (consistency with env_requires).
+func TestValidateSecretRequiresMissingDescription(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretRequires = true
+			l.secretRequires = []EnvDependency{
+				{Name: "WEBUI_ADMIN_PASSWORD"}, // no Description
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected error for secret_requires entry with no description")
+	}
+	if !strings.Contains(err.Error(), "has no description") {
+		t.Errorf("expected 'has no description' error, got: %v", err)
+	}
+}
+
+// TestValidateSecretAcceptsInvalidName — name with invalid chars must be
+// rejected by the env-var-name check.
+func TestValidateSecretAcceptsInvalidName(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "OPENROUTER-API-KEY", Description: "hyphen not allowed"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected error for invalid env var name in secret_accepts")
+	}
+	if !strings.Contains(err.Error(), "not a valid environment variable name") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretAcceptsCollidesWithEnvAccepts — plan §4.4 rule 1: a name
+// cannot appear in both env_accepts and secret_accepts.
+func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasEnvAccepts = true
+			l.envAccepts = []EnvDependency{
+				{Name: "OPENROUTER_API_KEY", Description: "plaintext"},
+			}
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "OPENROUTER_API_KEY", Description: "credential-backed"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected collision error between env_accepts and secret_accepts")
+	}
+	if !strings.Contains(err.Error(), "appears in both env_accepts and secret_accepts") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretRequiresCollidesWithEnvRequires — same collision check for
+// requires variants.
+func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasEnvRequires = true
+			l.envRequires = []EnvDependency{
+				{Name: "WEBUI_ADMIN_PASSWORD", Description: "plaintext"},
+			}
+			l.HasSecretRequires = true
+			l.secretRequires = []EnvDependency{
+				{Name: "WEBUI_ADMIN_PASSWORD", Description: "credential-backed"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected collision error between env_requires and secret_requires")
+	}
+	if !strings.Contains(err.Error(), "appears in both env_requires and secret_requires") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretAcceptsCollidesWithSecretRequires — a name cannot appear
+// in both secret_accepts and secret_requires in the same layer.
+func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretRequires = true
+			l.secretRequires = []EnvDependency{
+				{Name: "API_TOKEN", Description: "required"},
+			}
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "API_TOKEN", Description: "optional"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected collision between secret_requires and secret_accepts")
+	}
+	if !strings.Contains(err.Error(), "appears in both secret_requires and secret_accepts") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretCollidesWithEnvProvides — plan §4.4 rule 2: a secret_*
+// entry name cannot also be in env_provides. env_provides is for plaintext
+// service discovery URLs; credentials must not be advertised that way.
+func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasEnvProvides = true
+			l.envProvides = map[string]string{
+				"API_TOKEN": "http://{{.ContainerName}}:8080/token", // would be plaintext
+			}
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "API_TOKEN", Description: "credential-backed"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected error when secret_accepts overlaps env_provides")
+	}
+	if !strings.Contains(err.Error(), "also appears in env_provides") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretAcceptsKeyMustStartWithOv — plan §4.4 rule 5: the
+// optional Key override must start with "ov/" to prevent layers from
+// exfiltrating unrelated user credentials.
+func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "AWS_ACCESS_KEY_ID", Description: "bad key", Key: "aws/access-key"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected error when secret_accepts Key does not start with ov/")
+	}
+	if !strings.Contains(err.Error(), "must start with") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateSecretAcceptsKeyValidFormats — a handful of Key values that
+// should parse cleanly as <ov/service/key>.
+func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
+	cases := []string{
+		"ov/api-key/openrouter",
+		"ov/secret/webui_admin_password",
+		"ov/api-key/openai",
+		"ov/secret/immich-api-key",
+	}
+	for _, k := range cases {
+		cfg := &Config{Images: map[string]ImageConfig{}}
+		layers := map[string]*Layer{
+			"svc": secretDepsLayer("svc", func(l *Layer) {
+				l.HasSecretAccepts = true
+				l.secretAccepts = []EnvDependency{
+					{Name: "SOME_API_KEY", Description: "ok", Key: k},
+				}
+			}),
+		}
+		if err := Validate(cfg, layers, ""); err != nil {
+			t.Errorf("Validate() unexpected error for Key=%q: %v", k, err)
+		}
+	}
+}
+
+// TestValidateSecretAcceptsKeyInvalidFormats — values that look plausible but
+// fail the secretKeyPattern check.
+func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
+	cases := []string{
+		"openrouter",           // not <service>/<key>
+		"ov/",                  // empty key segment
+		"ov/api-key",           // only one segment after ov
+		"ov/api-key/",          // empty key segment
+		"ov//openrouter",       // empty service segment
+		"ov/API-KEY/openrouter", // uppercase in service
+	}
+	for _, k := range cases {
+		cfg := &Config{Images: map[string]ImageConfig{}}
+		layers := map[string]*Layer{
+			"svc": secretDepsLayer("svc", func(l *Layer) {
+				l.HasSecretAccepts = true
+				l.secretAccepts = []EnvDependency{
+					{Name: "SOME_API_KEY", Description: "ok", Key: k},
+				}
+			}),
+		}
+		err := Validate(cfg, layers, "")
+		if err == nil {
+			t.Errorf("Validate() should have rejected Key=%q", k)
+		}
+	}
+}
+
+// TestValidateSecretAcceptsInvalidSlug — a name that would produce an invalid
+// podman-secret slug (e.g., leading underscore → leading hyphen after
+// lowercase-kebab) must be rejected.
+func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	layers := map[string]*Layer{
+		"svc": secretDepsLayer("svc", func(l *Layer) {
+			l.HasSecretAccepts = true
+			l.secretAccepts = []EnvDependency{
+				{Name: "_LEADING_UNDERSCORE", Description: "bad slug"},
+			}
+		}),
+	}
+	err := Validate(cfg, layers, "")
+	if err == nil {
+		t.Fatal("expected slug-validation error")
+	}
+	// The name itself is also invalid (starts with _ → isValidEnvVarName
+	// permits it, but slug check rejects the leading hyphen).
+	if !strings.Contains(err.Error(), "invalid podman secret slug") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestEnvVarNameToPodmanSecretSlug — unit test for the slug helper.
+func TestEnvVarNameToPodmanSecretSlug(t *testing.T) {
+	cases := map[string]string{
+		"OPENROUTER_API_KEY":   "openrouter-api-key",
+		"IMMICH_API_KEY":       "immich-api-key",
+		"WEBUI_ADMIN_PASSWORD": "webui-admin-password",
+		"TS_AUTHKEY":           "ts-authkey",
+		"X":                    "x",
+	}
+	for in, want := range cases {
+		if got := envVarNameToPodmanSecretSlug(in); got != want {
+			t.Errorf("envVarNameToPodmanSecretSlug(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

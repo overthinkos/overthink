@@ -753,3 +753,111 @@ func TestLabelRouteJSON(t *testing.T) {
 		t.Errorf("json.Marshal(LabelRoute) = %s, want %s", data, want)
 	}
 }
+
+// TestSecretAcceptsRequiresLabelRoundTrip verifies that secret_accepts /
+// secret_requires entries round-trip through the OCI label JSON serializer
+// with all fields preserved, including the optional Key field that is only
+// meaningful for credential-store-backed secrets. This is a Step 2 test in
+// the credential-backed-secrets feature — at this point nothing consumes
+// meta.SecretAccepts / meta.SecretRequires yet, but the fields must make it
+// from image build through `ov config` intact.
+func TestSecretAcceptsRequiresLabelRoundTrip(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			LabelVersion:        "1",
+			LabelImage:          "openwebui",
+			LabelSecretRequires: `[{"name":"WEBUI_ADMIN_PASSWORD","description":"Initial admin password"}]`,
+			LabelSecretAccepts:  `[{"name":"OPENROUTER_API_KEY","description":"OpenRouter key","key":"ov/api-key/openrouter"},{"name":"IMMICH_API_KEY","description":"Immich key"}]`,
+		}, nil
+	}
+
+	meta, err := ExtractMetadata("docker", "openwebui:latest")
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error = %v", err)
+	}
+	if meta == nil {
+		t.Fatal("ExtractMetadata() returned nil")
+	}
+
+	wantRequires := []EnvDependency{
+		{Name: "WEBUI_ADMIN_PASSWORD", Description: "Initial admin password"},
+	}
+	if !reflect.DeepEqual(meta.SecretRequires, wantRequires) {
+		t.Errorf("SecretRequires = %+v, want %+v", meta.SecretRequires, wantRequires)
+	}
+
+	wantAccepts := []EnvDependency{
+		{Name: "OPENROUTER_API_KEY", Description: "OpenRouter key", Key: "ov/api-key/openrouter"},
+		{Name: "IMMICH_API_KEY", Description: "Immich key"},
+	}
+	if !reflect.DeepEqual(meta.SecretAccepts, wantAccepts) {
+		t.Errorf("SecretAccepts = %+v, want %+v", meta.SecretAccepts, wantAccepts)
+	}
+}
+
+// TestSecretAcceptsRequiresEmptyLabels verifies that when the image has no
+// secret_accepts / secret_requires labels, meta.SecretAccepts and
+// meta.SecretRequires are nil (not an empty slice, not an error).
+func TestSecretAcceptsRequiresEmptyLabels(t *testing.T) {
+	orig := InspectLabels
+	defer func() { InspectLabels = orig }()
+
+	InspectLabels = func(engine, imageRef string) (map[string]string, error) {
+		return map[string]string{
+			LabelVersion: "1",
+			LabelImage:   "bareimage",
+		}, nil
+	}
+
+	meta, err := ExtractMetadata("docker", "bareimage:latest")
+	if err != nil {
+		t.Fatalf("ExtractMetadata() error = %v", err)
+	}
+	if meta.SecretAccepts != nil {
+		t.Errorf("SecretAccepts = %+v, want nil", meta.SecretAccepts)
+	}
+	if meta.SecretRequires != nil {
+		t.Errorf("SecretRequires = %+v, want nil", meta.SecretRequires)
+	}
+}
+
+// TestEnvDependencyKeyJSONOptional verifies that the new Key field on
+// EnvDependency is omitted from JSON when empty (matching Default behavior)
+// and included when set. Matters for the OCI label payload size and for
+// existing env_accepts / env_requires entries which must not grow a spurious
+// "key":"" field after this change.
+func TestEnvDependencyKeyJSONOptional(t *testing.T) {
+	plain := EnvDependency{Name: "OLLAMA_HOST", Description: "Local Ollama URL"}
+	data, err := json.Marshal(plain)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	if strings.Contains(string(data), `"key"`) {
+		t.Errorf("empty Key must be omitted from JSON; got %s", data)
+	}
+	if strings.Contains(string(data), `"default"`) {
+		t.Errorf("empty Default must be omitted from JSON; got %s", data)
+	}
+
+	withKey := EnvDependency{Name: "OPENROUTER_API_KEY", Description: "OpenRouter key", Key: "ov/api-key/openrouter"}
+	data, err = json.Marshal(withKey)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	want := `{"name":"OPENROUTER_API_KEY","description":"OpenRouter key","key":"ov/api-key/openrouter"}`
+	if string(data) != want {
+		t.Errorf("json.Marshal(withKey) = %s, want %s", data, want)
+	}
+
+	// Round-trip: the Key field must survive Unmarshal.
+	var back EnvDependency
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	if !reflect.DeepEqual(back, withKey) {
+		t.Errorf("round-trip EnvDependency = %+v, want %+v", back, withKey)
+	}
+}

@@ -113,6 +113,27 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Apply deploy.yml overrides onto label metadata
 	dc, _ := LoadDeployConfig()
+
+	// One-time migration: move any plaintext credentials that live in
+	// deploy.yml's env: list from the legacy -e flow into the credential
+	// store, and clean them out of deploy.yml on disk. Runs BEFORE
+	// MergeDeployOntoMetadata so the cleaned deploy state is what gets
+	// merged into meta. Idempotent no-op after the first successful run.
+	// Plan §2.4.
+	if _, err := MigratePlaintextEnvSecrets(dc, meta, c.Image, c.Instance); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not migrate plaintext env secrets: %v\n", err)
+	}
+
+	// Pre-scrub CLI -e flags: any -e NAME=VAL where NAME is declared as a
+	// secret_accepts/secret_requires entry is moved into the credential
+	// store and stripped from c.Env before it can reach saveDeployState or
+	// the quadlet writer. Plan §2.5.
+	if scrubbed, _, err := scrubSecretCLIEnv(c.Env, meta); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not scrub CLI secret env: %v\n", err)
+	} else {
+		c.Env = scrubbed
+	}
+
 	// Persist any --memory-max / --memory-high / --memory-swap-max / --cpus
 	// flags into deploy.yml so they survive across runs, and so that
 	// MergeDeployOntoMetadata picks them up below on this run.
@@ -250,8 +271,35 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		fmt.Fprintf(os.Stderr, "Warning: port conflicts detected:%s", FormatPortConflicts(conflicts, c.Image))
 	}
 
-	// Collect and provision secrets from image labels
-	collectedSecrets := CollectSecretsFromLabels(c.Image, meta.Secrets)
+	// Collect and provision secrets from image labels.
+	//
+	// Two sources feed the provisioning step:
+	//
+	//  1. Layer-owned secrets (existing, unchanged): declared in
+	//     layer.yml `secrets:`, provisioned per-image, never rotated on
+	//     config. Example: immich's db-password.
+	//  2. Credential-store-backed secrets (new in this release): declared
+	//     as secret_accepts/secret_requires on layer.yml, synthesized from
+	//     image labels + the credential store. Plan §2.1–2.3. RotateOnConfig
+	//     is true so every ov config reconciles them with the latest
+	//     credential store value.
+	//
+	// Both flow into the same ProvisionPodmanSecrets call — the existing
+	// Secret=<name>,type=env,target=<var> emission at quadlet.go:100-106
+	// handles them identically at runtime.
+	layerOwnedSecrets := CollectSecretsFromLabels(c.Image, meta.Secrets)
+	credBackedSecrets, secretResolutions := CollectLayerSecretAccepts(c.Image, c.Instance, meta)
+
+	// Enforce secret_requires — hard error before writing anything. Runs
+	// alongside checkMissingEnvRequires (handled later in env resolution).
+	// Plan §2.6 / §6.6.
+	if len(meta.SecretRequires) > 0 {
+		if err := checkMissingSecretRequires(c.Image, meta.SecretRequires, secretResolutions); err != nil {
+			return err
+		}
+	}
+
+	collectedSecrets := append(layerOwnedSecrets, credBackedSecrets...)
 	autoGen := c.Password == "auto"
 	provisioned, fallbackEnv, err := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, collectedSecrets, autoGen)
 	if err != nil {
@@ -400,17 +448,21 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		qcfg.Env = appendAutoDetectedEnv(qcfg.Env, detected)
 	}
 
-	// Persist deployment state to deploy.yml (source of truth)
+	// Persist deployment state to deploy.yml (source of truth).
+	// SecretNames is passed as the defense-in-depth list that
+	// saveDeployState uses to scrub any plaintext credential that slipped
+	// through the Run() pipeline — see deploy.go:saveDeployState docstring.
 	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
-		Ports:     ports,
-		Env:       c.Env,
-		CleanEnv:  c.Clean,
-		EnvFile:   quadletEnvFile,
-		Network:   resolvedNetwork,
-		Security:  &security,
-		Volumes:   deployVolumes,
-		Sidecars:  deploySidecars,
-		Tunnel:    meta.Tunnel,
+		Ports:       ports,
+		Env:         c.Env,
+		CleanEnv:    c.Clean,
+		EnvFile:     quadletEnvFile,
+		Network:     resolvedNetwork,
+		Security:    &security,
+		Volumes:     deployVolumes,
+		Sidecars:    deploySidecars,
+		Tunnel:      meta.Tunnel,
+		SecretNames: secretDepNames(meta),
 	})
 
 	content := generateQuadlet(qcfg)
@@ -1168,6 +1220,54 @@ func checkMissingEnvRequires(imageName string, requires []EnvDependency, resolve
 	return fmt.Errorf("missing required environment variable(s) for %s", imageName)
 }
 
+// checkMissingSecretRequires reports a hard-fail when any secret_requires
+// entry could not be resolved from the credential store. Parallel to
+// checkMissingEnvRequires, but operates on the SecretResolution list
+// produced by CollectLayerSecretAccepts (which already has source
+// classification) rather than a post-resolution env slice.
+//
+// The error message tells the user exactly which credential store path to
+// populate, following the `ov secrets set ov/<service>/<key> <value>` form.
+func checkMissingSecretRequires(imageName string, requires []EnvDependency, resolutions []SecretResolution) error {
+	resolvedByName := make(map[string]bool, len(resolutions))
+	for _, r := range resolutions {
+		if r.Resolved {
+			resolvedByName[r.Name] = true
+		}
+	}
+
+	var missing []EnvDependency
+	for _, dep := range requires {
+		if !resolvedByName[dep.Name] {
+			missing = append(missing, dep)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "\nError: %s requires the following credential-backed secret(s):\n\n", imageName)
+	for _, dep := range missing {
+		desc := ""
+		if dep.Description != "" {
+			desc = " — " + dep.Description
+		}
+		fmt.Fprintf(os.Stderr, "  %s%s\n", dep.Name, desc)
+	}
+	fmt.Fprintf(os.Stderr, "\nStore them in the credential backend. For each entry:\n\n")
+	for _, dep := range missing {
+		service, key := secretKeyForDep(dep)
+		fmt.Fprintf(os.Stderr, "  ov secrets set %s %s <value>\n", service, key)
+	}
+	fmt.Fprintf(os.Stderr, "\nAlternatively, pass the value once via -e; it will be auto-imported:\n\n")
+	fmt.Fprintf(os.Stderr, "  ov config %s", imageName)
+	for _, dep := range missing {
+		fmt.Fprintf(os.Stderr, " -e %s=...", dep.Name)
+	}
+	fmt.Fprintf(os.Stderr, "\n\n")
+	return fmt.Errorf("missing required credential-backed secret(s) for %s", imageName)
+}
+
 // updateAllDeployedQuadlets regenerates quadlets for all other deployed images
 // to pick up global env changes. Lightweight: only regenerates the quadlet file,
 // does NOT re-provision secrets, encrypted volumes, or data.
@@ -1258,8 +1358,42 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		}
 		envVars = appendAutoDetectedEnv(envVars, detected)
 
-		// Collect secrets from labels (for quadlet Secret= directives)
+		// Collect secrets from labels (for quadlet Secret= directives).
+		//
+		// Two sources: layer-owned secrets from meta.Secrets (existing, unchanged)
+		// and credential-backed secrets synthesized from meta.SecretAccepts /
+		// meta.SecretRequires (new in the credential-backed-secrets feature).
+		// Both flow through the same cfg.Secrets slice and the same Secret=
+		// emission at quadlet.go:100-106.
+		//
+		// This mirrors the Run() flow exactly. Without this merge, --update-all
+		// regenerations would drop credential-backed Secret= directives from
+		// consumer quadlets, causing `secret_requires` entrypoints to crashloop
+		// on missing env vars. Plan §2.3. See regression caught during the
+		// live-system testing session: ov-openwebui went FATAL after an
+		// `ov config immich-ml --update-all` wiped its credential Secret= lines.
 		provisioned := CollectSecretsFromLabels(imageName, meta.Secrets)
+		credBacked, credResolutions := CollectLayerSecretAccepts(imageName, instance, meta)
+		provisioned = append(provisioned, credBacked...)
+
+		// Mirror Run()'s checkMissingSecretRequires — but downgrade to a
+		// warning instead of a hard error, because --update-all should not
+		// abort the regeneration of unrelated quadlets just because one
+		// consumer is missing a required credential. The consumer will
+		// crashloop on restart if the value is truly missing, which is the
+		// user-visible signal. For secret_requires this is strictly
+		// informational.
+		if len(meta.SecretRequires) > 0 {
+			missing := 0
+			for _, r := range credResolutions {
+				if r.Required && !r.Resolved {
+					missing++
+				}
+			}
+			if missing > 0 {
+				fmt.Fprintf(os.Stderr, "Warning: %s has %d unresolved secret_requires entries (quadlet regenerated; image may crashloop on restart)\n", key, missing)
+			}
+		}
 
 		ovBin, _ := os.Executable()
 		backend := resolveSecretBackend()

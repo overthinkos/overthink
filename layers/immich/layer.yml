@@ -36,6 +36,31 @@ rpm:
 ports:
   - 2283
 
+# Expose the Immich HTTP API URL to every other container that opts in via
+# env_accepts: [IMMICH_API_URL]. Plan §4.3. The templated value resolves to
+# e.g. "http://ov-immich-ml:2283/api" at ov config time for the base instance,
+# and to the instance-scoped container name for instances (e.g.
+# "http://ov-immich-ml-test:2283/api" for immich-ml -i test). Consumers like
+# openwebui and hermes already declare this env var in their env_accepts.
+env_provides:
+  IMMICH_API_URL: "http://{{.ContainerName}}:2283/api"
+
+env_accepts:
+  - name: IMMICH_API_URL
+    description: "Self-accept so the immich container itself sees its own API URL (used by entrypoint/health scripts)"
+
+# Immich API key for programmatic access. Generated in the Immich web UI
+# after first-run setup, then stored once in the credential backend via:
+#
+#   ov secrets set ov/api-key/immich <key>
+#
+# openwebui and hermes declare the same secret_accepts entry with the same
+# key path, so one `ov secrets set` populates all three consumers.
+secret_accepts:
+  - name: IMMICH_API_KEY
+    description: "Immich API key for programmatic access (generated in the Immich admin UI after first-run)"
+    key: ov/api-key/immich
+
 volumes:
   - name: library
     path: "~/.immich/library"

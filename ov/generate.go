@@ -1474,6 +1474,34 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelEnvAccepts, sortedEnvDeps(envAcceptsMap))
 	}
 
+	// Secret requires: credential-store-backed env vars image must have
+	secretRequiresMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSecretRequires {
+			for _, dep := range layer.SecretRequires() {
+				secretRequiresMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(secretRequiresMap) > 0 {
+		writeJSONLabel(b, LabelSecretRequires, sortedEnvDeps(secretRequiresMap))
+	}
+
+	// Secret accepts: credential-store-backed env vars image can optionally use
+	secretAcceptsMap := make(map[string]EnvDependency) // deduplicate by name, last wins
+	for _, layerName := range layerOrder {
+		layer := g.Layers[layerName]
+		if layer.HasSecretAccepts {
+			for _, dep := range layer.SecretAccepts() {
+				secretAcceptsMap[dep.Name] = dep
+			}
+		}
+	}
+	if len(secretAcceptsMap) > 0 {
+		writeJSONLabel(b, LabelSecretAccepts, sortedEnvDeps(secretAcceptsMap))
+	}
+
 	// MCP provides: MCP servers provided to other containers
 	mcpProvidesMap := make(map[string]MCPServerYAML) // deduplicate by name, last wins
 	for _, layerName := range layerOrder {

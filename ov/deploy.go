@@ -587,19 +587,35 @@ func envKey(entry string) string {
 
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {
-	Ports     []string
-	Env       []string
-	CleanEnv  bool // true = replace env list; false = merge (upsert by key)
-	EnvFile   string
-	Network   string
-	Security  *SecurityConfig
-	Volumes   []DeployVolumeConfig
-	Sidecars  map[string]SidecarDef
-	Tunnel    *TunnelYAML
+	Ports    []string
+	Env      []string
+	CleanEnv bool // true = replace env list; false = merge (upsert by key)
+	EnvFile  string
+	Network  string
+	Security *SecurityConfig
+	Volumes  []DeployVolumeConfig
+	Sidecars map[string]SidecarDef
+	Tunnel   *TunnelYAML
+
+	// SecretNames lists env var names declared as secret_accepts /
+	// secret_requires on the image. saveDeployState uses this list to
+	// defensively strip any matching KEY=VAL entries from both the input
+	// Env and the existing persisted entry.Env before writing. Defense in
+	// depth for the §6 / Run() pipeline (MigratePlaintextEnvSecrets and
+	// scrubSecretCLIEnv are the primary gates). Populated by the Run()
+	// call site from meta.SecretAccepts/SecretRequires.
+	SecretNames []string
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
 // Merges onto any existing entry to preserve fields from ov deploy import.
+//
+// Defense-in-depth: any env entry whose key matches a name in input.SecretNames
+// is stripped from both input.Env and the existing persisted entry.Env before
+// writing. The primary gates against plaintext-credential leakage are
+// MigratePlaintextEnvSecrets and scrubSecretCLIEnv in config_image.go:Run();
+// this scrub catches anything that slipped through (e.g., a future refactor
+// that adds a new code path writing into dc.Env). Matches plan §6.7.
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
@@ -612,6 +628,12 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	}
 	if input.Ports != nil {
 		entry.Ports = input.Ports
+	}
+	// Defensive scrub: drop credential-backed env vars from both input and
+	// existing entry before they land in the persisted file.
+	if len(input.SecretNames) > 0 {
+		input.Env = stripSecretEnvNames(input.Env, input.SecretNames)
+		entry.Env = stripSecretEnvNames(entry.Env, input.SecretNames)
 	}
 	if len(input.Env) > 0 {
 		if input.CleanEnv || len(entry.Env) == 0 {
@@ -639,6 +661,32 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}
+}
+
+// stripSecretEnvNames removes any KEY=VAL entries from env whose KEY is in
+// the blocked list. The blocked list is expected to be short (one entry per
+// secret_* declaration on the image), so a linear contains check per entry
+// is fine. Preserves the order of surviving entries.
+func stripSecretEnvNames(env []string, blocked []string) []string {
+	if len(env) == 0 || len(blocked) == 0 {
+		return env
+	}
+	blockedSet := make(map[string]bool, len(blocked))
+	for _, name := range blocked {
+		blockedSet[name] = true
+	}
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		key := kv
+		if idx := strings.IndexByte(kv, '='); idx >= 0 {
+			key = kv[:idx]
+		}
+		if blockedSet[key] {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return out
 }
 
 // mergeEnvVars merges new env vars into existing ones (upsert by key).

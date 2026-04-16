@@ -2,7 +2,7 @@ version: '3'
 tasks:
   all:
     vars:
-      IMMICH_VERSION: v2.7.2
+      IMMICH_VERSION: v2.7.5
     cmds:
       # Install uv (Python package manager)
       - curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh

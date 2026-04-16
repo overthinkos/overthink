@@ -27,6 +27,13 @@ var ErrSSNotFound = errors.New("secret not found in any collection")
 // reads, not that the secret simply isn't stored.
 var ErrSSAllBroken = errors.New("all secret-service collections are unreachable")
 
+// ErrSSInteractiveUnlockRequired is returned when every candidate collection
+// is locked and unlocking requires an interactive prompt (which is not
+// available in non-interactive code paths like systemd ExecStartPre).
+// Distinct from ErrSSAllBroken: the collections are functional, the
+// credential likely exists, we just can't read it until the user unlocks.
+var ErrSSInteractiveUnlockRequired = errors.New("secret service collections require interactive unlock")
+
 // ssSecret mirrors the (oayays) dbus signature for org.freedesktop.Secret.Item.GetSecret.
 type ssSecret struct {
 	Session     dbus.ObjectPath
@@ -164,7 +171,7 @@ func (c *ssClient) unlock(path dbus.ObjectPath) error {
 		return fmt.Errorf("decoding Unlock(%s): %w", path, err)
 	}
 	if prompt != dbus.ObjectPath("/") {
-		return fmt.Errorf("unlock %s requires interactive prompt (not supported in this code path)", path)
+		return fmt.Errorf("%w: %s", ErrSSInteractiveUnlockRequired, path)
 	}
 	return nil
 }
@@ -298,14 +305,24 @@ func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (
 
 	// Try each candidate in priority order. Counts track whether we had at
 	// least one successful search (in which case "not found" is authoritative)
-	// vs every candidate erroring (ErrSSAllBroken).
+	// vs every candidate erroring (ErrSSAllBroken). Locked collections
+	// (interactive unlock required) are tracked separately — if every
+	// candidate is locked, we return ErrSSInteractiveUnlockRequired so the
+	// caller can wait for the user to unlock rather than hard-failing.
 	searchErrors := 0
+	lockedCount := 0
 	for _, p := range candidates {
 		label := c.collectionLabel(p)
 		if err := c.unlock(p); err != nil {
-			fmt.Fprintf(os.Stderr,
-				"ov: cannot unlock collection %q (%s): %v\n", label, p, err)
-			searchErrors++
+			if errors.Is(err, ErrSSInteractiveUnlockRequired) {
+				lockedCount++
+				fmt.Fprintf(os.Stderr,
+					"ov: collection %q (%s) is locked — interactive unlock required\n", label, p)
+			} else {
+				searchErrors++
+				fmt.Fprintf(os.Stderr,
+					"ov: cannot unlock collection %q (%s): %v\n", label, p, err)
+			}
 			continue
 		}
 		item, err := c.searchItem(p, service, username)
@@ -313,7 +330,6 @@ func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (
 			return item, label, nil
 		}
 		if errors.Is(err, ErrSSNotFound) {
-			// Clean miss on this collection; continue to next.
 			continue
 		}
 		fmt.Fprintf(os.Stderr,
@@ -321,8 +337,35 @@ func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (
 		searchErrors++
 	}
 
-	if searchErrors == len(candidates) {
+	if lockedCount > 0 && searchErrors == 0 {
+		return "", "", ErrSSInteractiveUnlockRequired
+	}
+	if searchErrors+lockedCount == len(candidates) {
 		return "", "", ErrSSAllBroken
 	}
 	return "", "", ErrSSNotFound
+}
+
+// isCollectionUnlockedSignal returns true when sig is a DBus
+// PropertiesChanged signal indicating a Secret Service collection's Locked
+// property transitioned to false (unlocked). Used by the event-driven
+// keyring-wait loop to wake only on relevant unlock events.
+func isCollectionUnlockedSignal(sig *dbus.Signal) bool {
+	if sig == nil || sig.Name != "org.freedesktop.DBus.Properties.PropertiesChanged" {
+		return false
+	}
+	if len(sig.Body) < 2 {
+		return false
+	}
+	iface, _ := sig.Body[0].(string)
+	if iface != ssCollectionInterface {
+		return false
+	}
+	changed, _ := sig.Body[1].(map[string]dbus.Variant)
+	v, ok := changed["Locked"]
+	if !ok {
+		return false
+	}
+	locked, ok := v.Value().(bool)
+	return ok && !locked
 }

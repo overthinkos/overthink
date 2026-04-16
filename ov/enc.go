@@ -2,12 +2,17 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+
+	dbus "github.com/godbus/dbus/v5"
 )
 
 // ResolvedBindMount is ready for -v flags.
@@ -135,13 +140,24 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 }
 
 // encMountDeadline bounds how long resolveEncPassphraseForMount will retry
-// transient failures (keyring locked, store unavailable) before giving up.
-// Package-level var so tests can shrink it.
+// transient failures (source="unavailable") before giving up.
+// source="locked" does NOT use this — it uses event-driven DBus signal
+// waiting with no deadline (see waitForKeyringUnlock).
 var encMountDeadline = 2 * time.Minute
 
-// encMountPollPeriod is the interval between retry attempts within
-// encMountDeadline.
+// encMountPollPeriod is the interval between retry attempts for
+// source="unavailable" only.
 var encMountPollPeriod = 5 * time.Second
+
+// encMountSignalBackstop is the safety-net poll interval for the
+// event-driven keyring wait (source="locked"). Between DBus signals, the
+// loop re-probes at this cadence to handle missed signals, subscribe races,
+// or Secret Service providers that don't reliably emit PropertiesChanged.
+var encMountSignalBackstop = 30 * time.Second
+
+// encMountProgressLogInterval throttles the periodic "still waiting" log
+// during the event-driven keyring wait.
+var encMountProgressLogInterval = 1 * time.Hour
 
 // resolveEncPassphraseForMount resolves the gocryptfs passphrase with
 // backend-aware and failure-aware retry behavior.
@@ -161,34 +177,38 @@ var encMountPollPeriod = 5 * time.Second
 //
 // Defect D fix: the previous implementation polled forever on src=="default"
 // and had no deadline, so a misconfigured keyring + TimeoutStartSec=0 quadlet
-// was unrecoverable without manual intervention. The new behavior caps the
-// total wait at encMountDeadline and distinguishes the three failure modes.
+// was unrecoverable without manual intervention. source="unavailable" is now
+// bounded at encMountDeadline; source="locked" waits indefinitely via DBus
+// signal subscription (zero CPU between events) until the user unlocks the
+// keyring; source="default" fails immediately.
 func resolveEncPassphraseForMount(imageName string) (string, error) {
 	if os.Getenv("INVOCATION_ID") == "" {
-		// Interactive: normal resolution (keyring → kdbx → prompt)
 		return resolveEncPassphrase(imageName, false)
 	}
 	backend := resolveSecretBackend()
 	resolver := func() (string, string) {
 		return ResolveCredential("", "ov/enc", imageName, "")
 	}
-	return resolveEncPassphraseForMountWithResolver(imageName, backend, resolver, resetDefaultCredentialStore)
+	return resolveEncPassphraseForMountWithResolver(imageName, backend, resolver, resetDefaultCredentialStore, waitForKeyringUnlock)
 }
 
 // resolveEncPassphraseForMountWithResolver is the testable core of
-// resolveEncPassphraseForMount. It accepts a resolver closure and a reset
-// closure so tests can supply mock implementations without touching global
-// state, environment variables, or DBus.
+// resolveEncPassphraseForMount. It accepts a resolver closure, a reset
+// closure, and a waiter closure so tests can supply mock implementations
+// without touching global state, environment variables, or DBus.
+//
+// The waiter is called when source="locked" under a keyring-capable backend.
+// In production it is waitForKeyringUnlock (event-driven via DBus signals);
+// in tests it is a fake that returns immediately.
 func resolveEncPassphraseForMountWithResolver(
 	imageName, backend string,
 	resolver func() (value, source string),
 	reset func(),
+	waiter func(ctx context.Context, imageName string, resolver func() (string, string), reset func()) (string, string, error),
 ) (string, error) {
 	usesWaitingBackend := backend == "" || backend == "auto" || backend == "keyring"
 
 	if !usesWaitingBackend {
-		// Explicit non-keyring backend (config, kdbx with explicit opt-in):
-		// try once, fail fast. No polling.
 		val, src := resolver()
 		if val != "" {
 			return val, nil
@@ -199,7 +219,55 @@ func resolveEncPassphraseForMountWithResolver(
 			imageName, backend, src, imageName)
 	}
 
-	// Keyring-capable backend: bounded poll loop.
+	// Initial probe.
+	val, src := resolver()
+	if val != "" {
+		return val, nil
+	}
+
+	// source="default" is terminal — credential is not stored anywhere.
+	if src == "default" {
+		return "", encNotStoredError(imageName, backend, src)
+	}
+
+	// source="locked" — keyring present but locked. Wait indefinitely via
+	// DBus signal subscription (zero CPU cost between events).
+	if src == "locked" && waiter != nil {
+		ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer cancel()
+		v, src2, err := waiter(ctx, imageName, resolver, reset)
+		if err != nil {
+			return "", fmt.Errorf("waiting for keyring unlock interrupted: %w", err)
+		}
+		if v != "" {
+			return v, nil
+		}
+		return "", encNotStoredError(imageName, backend, src2)
+	}
+
+	// source="unavailable" — transient backend probe failure. Bounded poll.
+	return retryUnavailable(imageName, backend, resolver, reset)
+}
+
+// encNotStoredError formats the terminal "credential not stored" error with
+// actionable remediation hints.
+func encNotStoredError(imageName, backend, src string) error {
+	return fmt.Errorf(
+		"encryption passphrase not available for ov/enc/%s "+
+			"(backend=%s, source=%s). "+
+			"Remediation: run `ov doctor` to check keyring health, "+
+			"store with `ov secrets set ov/enc %s`, "+
+			"or switch backend with `ov settings set secret_backend config`",
+		imageName, backend, src, imageName)
+}
+
+// retryUnavailable polls the resolver with a bounded deadline for transient
+// backend-probe failures (source="unavailable").
+func retryUnavailable(
+	imageName, backend string,
+	resolver func() (string, string),
+	reset func(),
+) (string, error) {
 	deadline := time.Now().Add(encMountDeadline)
 	attempt := 0
 	maxAttempts := int(encMountDeadline / encMountPollPeriod)
@@ -212,8 +280,6 @@ func resolveEncPassphraseForMountWithResolver(
 		if val != "" {
 			return val, nil
 		}
-		// Only "locked" and "unavailable" are retryable. "default" is
-		// terminal — the store worked and the credential is not stored.
 		retryable := src == "locked" || src == "unavailable"
 		if !retryable || !time.Now().Before(deadline) {
 			return "", fmt.Errorf(
@@ -228,9 +294,116 @@ func resolveEncPassphraseForMountWithResolver(
 			"ov: waiting for credential store (ov-enc/%s, source=%s, attempt %d/%d)...\n",
 			imageName, src, attempt, maxAttempts)
 		time.Sleep(encMountPollPeriod)
-		// Reset cached store — keyring may become available on next attempt
 		if reset != nil {
 			reset()
+		}
+	}
+}
+
+// waitForKeyringUnlock blocks until the credential resolver returns a source
+// other than "locked", or until ctx is cancelled. Uses DBus
+// PropertiesChanged signals for event-driven wakeup (zero CPU between events)
+// with a periodic backstop re-probe as a safety net.
+func waitForKeyringUnlock(
+	ctx context.Context,
+	imageName string,
+	resolver func() (string, string),
+	reset func(),
+) (string, string, error) {
+	conn, err := dbus.SessionBusPrivate()
+	if err != nil {
+		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+	}
+	if err := conn.Auth(nil); err != nil {
+		conn.Close()
+		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+	}
+	if err := conn.Hello(); err != nil {
+		conn.Close()
+		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+	}
+	defer conn.Close()
+
+	matchRule := "type='signal',interface='org.freedesktop.DBus.Properties',member='PropertiesChanged',path_namespace='/org/freedesktop/secrets/collection'"
+	call := conn.BusObject().Call("org.freedesktop.DBus.AddMatch", 0, matchRule)
+	if call.Err != nil {
+		return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+	}
+
+	sigCh := make(chan *dbus.Signal, 16)
+	conn.Signal(sigCh)
+	defer conn.RemoveSignal(sigCh)
+
+	// Re-probe after subscribing to close the subscribe-unlock race.
+	if reset != nil {
+		reset()
+	}
+	if v, src := resolver(); src != "locked" {
+		return v, src, nil
+	}
+
+	fmt.Fprintf(os.Stderr,
+		"ov: waiting for keyring unlock (ov-enc/%s, event-driven via DBus PropertiesChanged)\n",
+		imageName)
+	return waitForKeyringUnlockLoop(ctx, imageName, sigCh, resolver, reset)
+}
+
+// waitForKeyringUnlockBackstopOnly is the fallback when DBus signal
+// subscription fails. Polls at encMountSignalBackstop interval.
+func waitForKeyringUnlockBackstopOnly(
+	ctx context.Context,
+	imageName string,
+	resolver func() (string, string),
+	reset func(),
+) (string, string, error) {
+	fmt.Fprintf(os.Stderr,
+		"ov: waiting for keyring unlock (ov-enc/%s, DBus signals unavailable — %v backstop only)\n",
+		imageName, encMountSignalBackstop)
+	return waitForKeyringUnlockLoop(ctx, imageName, nil, resolver, reset)
+}
+
+// waitForKeyringUnlockLoop is the core select loop shared by both signal
+// and backstop-only modes. When sigCh is nil, only the backstop fires.
+func waitForKeyringUnlockLoop(
+	ctx context.Context,
+	imageName string,
+	sigCh <-chan *dbus.Signal,
+	resolver func() (string, string),
+	reset func(),
+) (string, string, error) {
+	backstop := time.NewTicker(encMountSignalBackstop)
+	defer backstop.Stop()
+	nextLog := time.Now().Add(encMountProgressLogInterval)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return "", "", ctx.Err()
+		case sig, ok := <-sigCh:
+			if !ok {
+				return waitForKeyringUnlockBackstopOnly(ctx, imageName, resolver, reset)
+			}
+			if !isCollectionUnlockedSignal(sig) {
+				continue
+			}
+			if reset != nil {
+				reset()
+			}
+			if v, src := resolver(); src != "locked" {
+				return v, src, nil
+			}
+		case <-backstop.C:
+			if reset != nil {
+				reset()
+			}
+			if v, src := resolver(); src != "locked" {
+				return v, src, nil
+			}
+			if time.Now().After(nextLog) {
+				fmt.Fprintf(os.Stderr,
+					"ov: still waiting for keyring unlock (ov-enc/%s)\n", imageName)
+				nextLog = time.Now().Add(encMountProgressLogInterval)
+			}
 		}
 	}
 }

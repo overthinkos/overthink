@@ -307,6 +307,130 @@ func TestFindItem_DefaultAliasDeduped(t *testing.T) {
 	}
 }
 
+// TestFindItem_LockedCollection_ReturnsInteractiveUnlock: a single healthy
+// collection whose unlock returns ErrSSInteractiveUnlockRequired. Expect
+// ErrSSInteractiveUnlockRequired (not ErrSSAllBroken).
+func TestFindItem_LockedCollection_ReturnsInteractiveUnlock(t *testing.T) {
+	f := newFakeSSOps()
+	const c1 = dbus.ObjectPath("/collections/c1")
+	f.aliasMap["default"] = c1
+	f.collectionList = []dbus.ObjectPath{c1}
+	f.labels[c1] = "atrawog"
+	f.unlockErrs[c1] = fmt.Errorf("%w: %s", ErrSSInteractiveUnlockRequired, c1)
+
+	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	if !errors.Is(err, ErrSSInteractiveUnlockRequired) {
+		t.Errorf("err = %v, want ErrSSInteractiveUnlockRequired", err)
+	}
+}
+
+// TestFindItem_MixLockedAndBroken_ReturnsAllBroken: one candidate is locked
+// (ErrSSInteractiveUnlockRequired), another is broken (I/O error). The mix
+// should return ErrSSAllBroken because not all failures are recoverable.
+func TestFindItem_MixLockedAndBroken_ReturnsAllBroken(t *testing.T) {
+	f := newFakeSSOps()
+	const c1 = dbus.ObjectPath("/collections/c1")
+	const c2 = dbus.ObjectPath("/collections/c2")
+	f.aliasMap["default"] = c1
+	f.collectionList = []dbus.ObjectPath{c1, c2}
+	f.labels[c1] = "locked-one"
+	f.labels[c2] = "broken-one"
+	f.unlockErrs[c1] = fmt.Errorf("%w: %s", ErrSSInteractiveUnlockRequired, c1)
+	f.unlockErrs[c2] = errors.New("I/O error")
+
+	_, _, err := findItemAcrossCollections(f, "ov/enc", "immich-ml", "")
+	if !errors.Is(err, ErrSSAllBroken) {
+		t.Errorf("err = %v, want ErrSSAllBroken (mix of locked + broken)", err)
+	}
+}
+
+// TestIsCollectionUnlockedSignal verifies the DBus signal filter.
+func TestIsCollectionUnlockedSignal(t *testing.T) {
+	tests := []struct {
+		name string
+		sig  *dbus.Signal
+		want bool
+	}{
+		{
+			name: "correct_unlock_signal",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
+				Body: []interface{}{
+					"org.freedesktop.Secret.Collection",
+					map[string]dbus.Variant{"Locked": dbus.MakeVariant(false)},
+					[]string{},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "locked_true_still_locked",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
+				Body: []interface{}{
+					"org.freedesktop.Secret.Collection",
+					map[string]dbus.Variant{"Locked": dbus.MakeVariant(true)},
+					[]string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "wrong_interface",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
+				Body: []interface{}{
+					"org.freedesktop.Secret.Item",
+					map[string]dbus.Variant{"Locked": dbus.MakeVariant(false)},
+					[]string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "unrelated_property",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
+				Body: []interface{}{
+					"org.freedesktop.Secret.Collection",
+					map[string]dbus.Variant{"Label": dbus.MakeVariant("foo")},
+					[]string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "nil_signal",
+			sig:  nil,
+			want: false,
+		},
+		{
+			name: "wrong_signal_name",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.Secret.Service.CollectionCreated",
+				Body: []interface{}{"something"},
+			},
+			want: false,
+		},
+		{
+			name: "empty_body",
+			sig: &dbus.Signal{
+				Name: "org.freedesktop.DBus.Properties.PropertiesChanged",
+				Body: []interface{}{},
+			},
+			want: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isCollectionUnlockedSignal(tt.sig)
+			if got != tt.want {
+				t.Errorf("isCollectionUnlockedSignal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 type countingOps struct {
 	*fakeSSOps
 	unlockCount *int

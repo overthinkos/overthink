@@ -161,6 +161,10 @@ func (k *KeyringStore) Get(service, key string) (string, error) {
 				}
 				return "", nil
 			}
+			if errors.Is(r.err, ErrSSInteractiveUnlockRequired) {
+				setKeyringState(KeyringLocked)
+				return "", &KeyringLockedError{op: "get", service: service, key: key}
+			}
 			return "", fmt.Errorf("keyring get %s/%s: %w", service, key, r.err)
 		}
 		return r.val, nil

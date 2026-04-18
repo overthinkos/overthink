@@ -30,10 +30,10 @@ jobs:
         working-directory: ov
 
       - name: Validate configuration
-        run: bin/ov validate
+        run: bin/ov image validate
 
       - name: Verify generation
-        run: bin/ov generate
+        run: bin/ov image generate
 
   build:
     needs: test
@@ -54,7 +54,7 @@ jobs:
         run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and push all images
-        run: bin/ov build --push
+        run: bin/ov image build --push
 
       - name: Delete package versions older than 24h
         if: success()

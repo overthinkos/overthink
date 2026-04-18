@@ -128,7 +128,7 @@ This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `
 git clone https://github.com/overthinkos/overthink.git
 cd overthink
 bash setup.sh    # downloads task, builds ov into bin/
-ov build         # build all images
+ov image build         # build all images
 ```
 
 **From source:**
@@ -174,16 +174,16 @@ ov secrets gpg doctor                                     # Verify GPG health
 
 ```bash
 # Build a single image for your platform
-ov build fedora
+ov image build fedora
 
 # Build an Arch Linux image (auto-builds base + builder dependencies)
-ov build arch-test
+ov image build arch-test
 
 # Drop into an interactive shell
 ov shell fedora
 
 # Build and run a GPU-accelerated Jupyter server
-ov build jupyter
+ov image build jupyter
 ov start jupyter
 
 # Configure as a systemd service (quadlet + secrets + encrypted volumes)
@@ -240,28 +240,29 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Deploy** — `ov config <image>` is the single entry point for deployment. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login — the quadlet's ExecStartPre waits for the keyring to unlock via event-driven DBus signal subscription (zero CPU cost, unbounded wait), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. When a service declares `env_provides` or `mcp_provides`, `ov config` injects those entries into `deploy.yml` under a unified `provides:` section for cross-container discovery — env vars and MCP server URLs are resolved from `{{.ContainerName}}` templates at deploy time (use `--update-all` to propagate to already-deployed services). MCP provides are pod-aware: when provider and consumer share a container, URLs resolve to `localhost`. If the image declares `env_requires` or `mcp_requires`, `ov config` warns about missing dependencies. No project source needed — just the image.
 
-**Ship** — `ov build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
+**Ship** — `ov image build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
 **Manage** — `ov update` pulls new images, syncs data from data layers into bind-backed volumes (non-destructive merge by default, `--force-seed` to overwrite), and restarts services. `ov config mount/unmount` handles encrypted volumes (each mount runs as an independent `ov-enc-<image>-<volume>.scope` systemd unit that survives container restart/stop). `ov settings migrate-secrets` moves plaintext credentials to the system keyring (GNOME Keyring, KDE Wallet, KeePassXC). For headless/SSH environments, `ov secrets init` creates a KeePass `.kdbx` database — the master password is cached in the Linux kernel keyring for 1 hour (configurable via `ov settings set secrets.kdbx_cache_timeout`), so you only enter it once per session. `ov alias install` creates host-level command aliases that transparently run inside containers.
 
 ## Command Reference
 
-The `ov` CLI has 33 top-level commands. Each one has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 25 top-level command families. Build-mode commands live under `ov image …` (the only family that reads `images.yml`); every other command reads OCI labels + `deploy.yml`. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Build pipeline** | `build`, `generate`, `validate`, `merge`, `new` | `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new` |
+| **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
 | **Deployment** | `config`, `deploy`, `start`, `stop`, `update`, `remove` | `/ov:config`, `/ov:deploy`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop automation** | `cdp`, `wl`, `vnc`, `dbus`, `record` | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:dbus`, `/ov:record` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
-| **Inspection** | `list`, `inspect`, `version` | `/ov:list`, `/ov:inspect`, `/ov:version` |
+| **Misc** | `version` | `/ov:version` |
 
 A few sample invocations:
 
 ```bash
-ov build jupyter                       # Build an image (see /ov:build for --push, --no-cache, --jobs)
+ov image build jupyter                 # Build an image (see /ov:build for --push, --no-cache, --jobs)
+ov image pull jupyter                  # Fetch into local storage (see /ov:pull for short/full/remote refs)
 ov config jupyter                      # Unified deploy setup (see /ov:config for --bind, --encrypt, --sidecar, -i, --update-all)
 ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
@@ -269,6 +270,17 @@ ov cdp open selkies-desktop "https://example.com"   # Browser automation (see /o
 ov wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
 ov vm build openclaw-browser-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
 ```
+
+### Pulling images from registries
+
+Deploy-mode commands (`ov shell`, `ov start`, `ov config`, `ov alias add`, `ov vm create`, …) read image configuration from OCI labels, which requires the image to be in local storage. If it isn't, the command fails with a recommendation:
+
+```
+Error: image "jupyter:latest" is not available locally.
+       Run 'ov image pull jupyter:latest' to fetch it first
+```
+
+`ov image pull` accepts three input forms: short names (resolved via `images.yml`, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
 
 ### Multiple Instances
 
@@ -311,20 +323,20 @@ Each entry points to the canonical skill — details belong there, not here.
 | Encrypted volume locked at boot | `ov config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov:enc`) |
 | GPU not detected | `ov doctor` then `/ov:udev` |
 | Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov:config`) |
-| Build cache stale | `ov build --no-cache <image>` (`/ov:build`) |
+| Build cache stale | `ov image build --no-cache <image>` (`/ov:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
 
 ## Adding a Layer
 
 ```bash
-ov new layer my-layer                  # Scaffold the directory
+ov image new layer my-layer                  # Scaffold the directory
 # Edit layers/my-layer/layer.yml      # Declare packages, deps, env, ports
 # Add pixi.toml, package.json, root.yml, user.yml as needed
 
 # Add to an image in images.yml:
 #   layers: [..., my-layer]
 
-ov build my-image                      # Build it
+ov image build my-image                      # Build it
 ```
 
 See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files.

@@ -23,9 +23,9 @@ You have all the time in the world and taking the time to get things properly do
 
 Two components with a clean split:
 
-**`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes:
-- **Build mode:** Parses `images.yml`, resolves layers, generates Containerfiles, builds images. See `/ov:build`, `/ov:generate`.
-- **Deploy mode:** Reads OCI labels + `deploy.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). Tunnel config is deploy.yml-only (not in labels). See `/ov:config`, `/ov:deploy`.
+**`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes with a **hard namespace split**:
+- **Build mode:** The `ov image …` family (`build`, `generate`, `validate`, `list`, `merge`, `new`, `inspect`, `pull`). **Only** these commands read `images.yml`. See `/ov:image` for the family overview and subcommand index.
+- **Deploy mode:** Every other command. Reads **exclusively** from OCI labels (via `ExtractMetadata`) + `deploy.yml`. Never touches `images.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). Tunnel config is deploy.yml-only (not in labels). When an image isn't in local storage, deploy-mode commands surface the `ErrImageNotLocal` recommendation pointing to `ov image pull`. See `/ov:config`, `/ov:deploy`, `/ov:pull`.
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
@@ -33,6 +33,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 
 | Subsystem | Skill |
 |-----------|-------|
+| Image family (build mode) | `/ov:image`, `/ov:pull`, `/ov:build`, `/ov:generate`, `/ov:validate` |
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Credential-backed layer env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
 | Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
@@ -44,6 +45,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 | Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
 | NO_PROXY Enrichment | `/ov:config` |
 | GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
+| Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 
@@ -85,7 +87,7 @@ Memory setup: `autoMemoryDirectory: ".claude/memory"` in `.claude/settings.local
 
 ### Plugins Submodule
 
-Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (37 operation skills), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (160 layer skills), `ov-images` (41 image skills) — 241 total. Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
+Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.com:overthinkos/overthink-plugins.git`). Contains 5 plugins: `ov` (38 operation skills — `/ov:pull` added with the `ov image` refactor), `ov-dev` (3 dev skills, 3 agents), `ov-jupyter` (MCP server), `ov-layers` (160 layer skills), `ov-images` (41 image skills) — 242 total. Enabled via `.claude/settings.json`. Clone: `git clone --recurse-submodules`. Update: `git submodule update --remote plugins`. See `/ov-dev:skills` for skill maintenance guidelines.
 
 ---
 
@@ -105,7 +107,10 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 ## Command Map
 
-Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/ov:<cmd>` skill with full documentation. Invoke the skill before reading source code. Key skill groupings: `/ov:config` + `/ov:deploy` + `/ov:sidecar` + `/ov:enc` (deployment), `/ov:cdp` + `/ov:wl` + `/ov:vnc` + `/ov:wl-overlay` (desktop automation), `/ov:build` + `/ov:generate` + `/ov:validate` (build pipeline).
+Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/ov:<cmd>` skill with full documentation. Invoke the skill before reading source code. Key skill groupings:
+- `/ov:image` (umbrella) + subcommand skills `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:list`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:pull` — **build pipeline** (reads images.yml).
+- `/ov:config` + `/ov:deploy` + `/ov:sidecar` + `/ov:enc` — **deployment** (reads OCI labels + deploy.yml).
+- `/ov:cdp` + `/ov:wl` + `/ov:vnc` + `/ov:wl-overlay` — **desktop automation**.
 
 ---
 

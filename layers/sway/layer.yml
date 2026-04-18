@@ -61,3 +61,22 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: sway-binary
+    file: /usr/bin/sway
+    exists: true
+  - id: sway-package
+    package: sway
+    installed: true
+  - id: sway-wrapper
+    file: ${HOME}/.local/bin/sway-wrapper
+    exists: true
+    mode: "0755"
+  - id: sway-config
+    file: ${HOME}/.config/sway/config
+    exists: true
+  - id: sway-service-running
+    scope: deploy
+    service: sway
+    running: true

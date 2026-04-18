@@ -11,3 +11,8 @@ tasks:
     to: "${HOME}/.config/sway/config.d/chrome-sway.conf"
     mode: "0644"
     user: "${USER}"
+
+tests:
+  - id: chrome-sway-config
+    file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+    exists: true

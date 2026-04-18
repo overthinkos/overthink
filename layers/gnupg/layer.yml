@@ -7,3 +7,13 @@ rpm:
 pac:
   packages:
     - gnupg
+
+tests:
+  - id: gpg-binary
+    file: /usr/bin/gpg
+    exists: true
+  - id: gpg-version
+    command: /usr/bin/gpg --version
+    exit_status: 0
+    stdout:
+      - contains: "gpg (GnuPG)"

@@ -3,3 +3,11 @@ description: Fast system information tool (neofetch successor)
 rpm:
   packages:
     - fastfetch
+
+tests:
+  - id: fastfetch-binary
+    file: /usr/bin/fastfetch
+    exists: true
+  - id: fastfetch-package
+    package: fastfetch
+    installed: true

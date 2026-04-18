@@ -131,3 +131,46 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: selkies-wrapper
+    file: ${HOME}/.local/bin/selkies-wrapper
+    exists: true
+    mode: "0755"
+  - id: selkies-capture-server
+    file: ${HOME}/.local/bin/selkies-capture-server
+    exists: true
+  - id: selkies-fileserver
+    file: ${HOME}/.local/bin/selkies-fileserver
+    exists: true
+  - id: selkies-web-ui
+    file: /usr/local/share/selkies/web
+    filetype: directory
+  - id: selkies-cert
+    file: /usr/local/share/selkies/certs/selkies.crt
+    exists: true
+  - id: selkies-cert-key
+    file: /usr/local/share/selkies/certs/selkies.key
+    exists: true
+  - id: traefik-binary
+    file: /usr/local/bin/traefik
+    exists: true
+  - id: selkies-service-running
+    scope: deploy
+    service: selkies
+    running: true
+  - id: traefik-service-running
+    scope: deploy
+    service: traefik
+    running: true
+  - id: selkies-port-reachable
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:3000}
+    reachable: true
+    timeout: 5s
+  - id: selkies-https
+    scope: deploy
+    http: https://127.0.0.1:${HOST_PORT:3000}/
+    status: 200
+    allow_insecure: true
+    timeout: 10s

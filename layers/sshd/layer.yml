@@ -43,3 +43,32 @@ tasks:
 # Systemd service (bootc images)
 system_services:
   - sshd
+
+tests:
+  - id: sshd-binary
+    file: /usr/sbin/sshd
+    exists: true
+  - id: sshd-wrapper
+    file: /usr/local/bin/sshd-wrapper
+    exists: true
+    mode: "0755"
+  - id: openssh-server-package
+    package: openssh-server
+    installed: true
+  # /etc/sudoers.d/* is root:root 0750 — unreadable to the non-root user the
+  # disposable test runs as. Verify via `sudo -n -l` instead, which exercises
+  # the rule's effect without needing to stat the file directly.
+  - id: sudoers-ov-user
+    command: sudo -n -l
+    exit_status: 0
+    stdout:
+      - contains: "NOPASSWD"
+  - id: sshd-service-running
+    scope: deploy
+    service: sshd
+    running: true
+  - id: sshd-port-reachable
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:2222}
+    reachable: true
+    timeout: 5s

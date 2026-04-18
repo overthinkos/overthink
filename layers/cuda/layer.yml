@@ -49,3 +49,17 @@ tasks:
       fi
       cd / && rm -rf "$CUDNN_DIR"
     user: root
+
+tests:
+  - id: cuda-nvcc-binary
+    file: /usr/bin/nvcc
+    exists: true
+  - id: cuda-cudart-package
+    package: cuda-cudart-devel
+    installed: true
+  - id: cudnn-header
+    command: ls /usr/include/cudnn.h
+    exit_status: 0
+  - id: onnxruntime-package
+    package: onnxruntime
+    installed: true

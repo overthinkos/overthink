@@ -41,3 +41,28 @@ tasks:
       bash /tmp/install-opentofu.sh --install-method standalone
       rm -f /tmp/install-opentofu.sh
     user: root
+
+tests:
+  - id: aws-binary
+    file: /usr/local/bin/aws
+    exists: true
+  - id: scw-binary
+    file: /usr/local/bin/scw
+    exists: true
+  - id: kubectx-binary
+    file: /usr/local/bin/kubectx
+    exists: true
+  - id: kubens-binary
+    file: /usr/local/bin/kubens
+    exists: true
+  - id: tofu-binary
+    file: /usr/local/bin/tofu
+    exists: true
+  - id: jq-binary
+    file: /usr/bin/jq
+    exists: true
+  - id: aws-version
+    command: /usr/local/bin/aws --version
+    exit_status: 0
+    stdout:
+      - contains: "aws-cli"

@@ -33,3 +33,30 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  # Workspace mount is created by the deploy volume — only present at runtime.
+  - id: workspace-dir
+    scope: deploy
+    file: ${HOME}/workspace
+    filetype: directory
+  - id: jupyter-lab-binary
+    file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
+    exists: true
+  - id: jupyter-service
+    scope: deploy
+    service: jupyter
+    running: true
+  - id: jupyter-port
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:8888}
+    reachable: true
+    timeout: 5s
+  # Service answers on its routed port at deploy time. The HOST_PORT
+  # substitution means remapping in deploy.yml just works.
+  - id: jupyter-api
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:8888}/api
+    status: 200
+    body:
+      - contains: "version"

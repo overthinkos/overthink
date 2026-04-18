@@ -27,3 +27,24 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: wayvnc-binary
+    file: /usr/bin/wayvnc
+    exists: true
+  - id: wayvnc-wrapper
+    file: ${HOME}/.local/bin/wayvnc-wrapper
+    exists: true
+    mode: "0755"
+  - id: wayvnc-package
+    package: wayvnc
+    installed: true
+  - id: wayvnc-service-running
+    scope: deploy
+    service: wayvnc
+    running: true
+  - id: wayvnc-port-reachable
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:5900}
+    reachable: true
+    timeout: 5s

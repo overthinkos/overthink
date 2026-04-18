@@ -156,6 +156,12 @@ type LayerYAML struct {
 	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
 	Tasks []Task            `yaml:"tasks,omitempty"` // ordered install operations
 
+	// Tests are declarative checks contributed by this layer. They travel
+	// in the org.overthinkos.tests OCI label (layer section) and run under
+	// `ov image test` (build-time) and `ov test` (deploy-time).
+	// See testspec.go for the Check type.
+	Tests []Check `yaml:"tests,omitempty"`
+
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
 	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
@@ -174,7 +180,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"env_provides": true, "env_requires": true, "env_accepts": true,
 	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
-	"vars": true, "tasks": true,
+	"vars": true, "tasks": true, "tests": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -435,6 +441,7 @@ type Layer struct {
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
 	vars           map[string]string // layer-local variables (from layer.yml vars:)
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
+	tests          []Check           // declarative checks (from layer.yml tests:)
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -605,6 +612,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate hooks
 		layer.hooks = ly.Hooks
+
+		// Pre-populate tests (declarative checks)
+		layer.tests = ly.Tests
 
 		// Pre-populate port relay
 		layer.PortRelayPorts = ly.PortRelay

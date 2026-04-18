@@ -21,3 +21,20 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  - id: chrome-devtools-mcp-binary
+    file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
+    exists: true
+  - id: mcp-proxy-binary
+    file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
+    exists: true
+  - id: chrome-devtools-mcp-service
+    scope: deploy
+    service: chrome-devtools-mcp
+    running: true
+  - id: chrome-devtools-mcp-port
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:9224}
+    reachable: true
+    timeout: 5s

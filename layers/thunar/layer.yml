@@ -12,3 +12,11 @@ tasks:
     to: "${HOME}/.config/sway/config.d/thunar.conf"
     mode: "0644"
     user: "${USER}"
+
+tests:
+  - id: thunar-binary
+    file: /usr/bin/thunar
+    exists: true
+  - id: thunar-sway-conf
+    file: ${HOME}/.config/sway/config.d/thunar.conf
+    exists: true

@@ -134,6 +134,15 @@ images:
       - ov
     ports:
       - "8085:8080"
+    tests:
+      # Composition: ov + dbus + filebrowser all coexist in the assembled image.
+      - id: filebrowser-composed-binaries
+        command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov && test -x /usr/bin/dbus-daemon
+        exit_status: 0
+      - id: filebrowser-volumes-exist
+        scope: deploy
+        file: ${VOLUME_CONTAINER_PATH:data}
+        filetype: directory
 
   openclaw:
     base: fedora
@@ -192,6 +201,19 @@ images:
       - "9224:9224"
     platforms:
       - linux/amd64
+    tests:
+      # Composition: core desktop binaries, VNC, and CDP coexist.
+      - id: sway-browser-vnc-binaries
+        command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
+        exit_status: 0
+      # Deploy: sway + wayvnc both up under supervisord.
+      - id: sway-browser-vnc-services
+        scope: deploy
+        command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+        exit_status: 0
+        in_container: true
+        stdout:
+          - equals: RUNNING
 
   nvidia:
     base: fedora-nonfree
@@ -220,6 +242,18 @@ images:
       - ov
     ports:
       - "8888:8888"
+    tests:
+      # Composition: jupyter + notebook-templates provisioned together.
+      - id: jupyter-notebook-templates-provisioned
+        scope: deploy
+        command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n 1
+        exit_status: 0
+        in_container: true
+        stdout:
+          - matches: "\\.ipynb"
+      - id: jupyter-mcp-extension-enabled
+        command: ${HOME}/.pixi/envs/default/bin/jupyter server extension list 2>&1 | grep -i jupyter_mcp
+        exit_status: 0
 
   jupyter-ml:
     base: nvidia
@@ -468,6 +502,20 @@ images:
       - "2222:2222"
     platforms:
       - linux/amd64
+    tests:
+      # Composition: full desktop stack present.
+      - id: selkies-desktop-binaries
+        command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
+        exit_status: 0
+      # Deploy: all four primary services reachable on their host ports.
+      # Using per-port `addr` verbs rather than a single nc loop — nc isn't
+      # in the minimal container set, and the `addr` verb natively does a
+      # Go-native TCP dial (no external tool needed).
+      - id: selkies-desktop-chrome-devtools-mcp-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:9224}
+        reachable: true
+        timeout: 5s
 
   selkies-desktop-nvidia:
     base: nvidia
@@ -503,6 +551,27 @@ images:
       - "2283:2283"
     platforms:
       - linux/amd64
+    tests:
+      # Composition: every layer's primary binary lands in the final image.
+      - id: immich-ml-stack-binaries
+        command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server && test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
+        exit_status: 0
+      # Deploy: supervisord orchestrates every required program. The process
+      # list must include all 4 long-running services (excluding the one-shot
+      # immich-db-init which runs and exits).
+      - id: immich-ml-services-running
+        scope: deploy
+        command: supervisorctl status postgresql redis immich-server immich-ml | awk '{print $2}' | sort -u
+        exit_status: 0
+        in_container: true
+        stdout:
+          - equals: RUNNING
+      # Deploy: ML endpoint (internal port 3003) is reachable from the server side.
+      - id: immich-ml-internal-ping
+        scope: deploy
+        command: curl -fsS http://127.0.0.1:3003/ping
+        exit_status: 0
+        in_container: true
 
   openwebui:
     base: fedora
@@ -513,6 +582,17 @@ images:
       - ov
     ports:
       - "8080:8080"
+    tests:
+      # Composition: entrypoint, python env, ov all together.
+      - id: openwebui-composition
+        command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/ov
+        exit_status: 0
+      # Deploy: required env var from env_requires is injected.
+      - id: openwebui-required-env-injected
+        scope: deploy
+        command: printenv WEBUI_ADMIN_EMAIL
+        exit_status: 0
+        in_container: true
 
   hermes:
     base: fedora
@@ -520,6 +600,16 @@ images:
       - agent-forwarding
       - hermes-full
       - dbus
+    tests:
+      # Composition: all 4 AI CLIs + hermes binary end up in PATH-accessible locations.
+      - id: hermes-all-clis-present
+        command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
+        exit_status: 0
+      # Deploy: hermes service is up.
+      - id: hermes-service-up
+        scope: deploy
+        service: hermes
+        running: true
 
   hermes-playwright:
     base: fedora

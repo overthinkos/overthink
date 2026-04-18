@@ -3,3 +3,17 @@ info: "Starter notebook templates for jupyter"
 data:
   - src: data/notebooks
     volume: workspace
+
+tests:
+  - id: notebook-templates-dir
+    scope: deploy
+    file: ${VOLUME_CONTAINER_PATH:workspace}
+    filetype: directory
+  # Regex has no `$` anchor — find's output ends with `\n`, and Go's regexp
+  # treats `$` as end-of-input (not end-of-line) which then doesn't match.
+  - id: notebook-templates-present
+    scope: deploy
+    command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
+    exit_status: 0
+    stdout:
+      - matches: "\\.ipynb"

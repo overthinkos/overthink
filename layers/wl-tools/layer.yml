@@ -8,3 +8,23 @@ rpm:
     - wl-clipboard
     - wlr-randr
     - ydotool
+
+tests:
+  - id: wtype-binary
+    file: /usr/bin/wtype
+    exists: true
+  - id: wl-copy-binary
+    file: /usr/bin/wl-copy
+    exists: true
+  - id: wl-paste-binary
+    file: /usr/bin/wl-paste
+    exists: true
+  - id: wlr-randr-binary
+    file: /usr/bin/wlr-randr
+    exists: true
+  - id: xdotool-binary
+    file: /usr/bin/xdotool
+    exists: true
+  - id: ydotool-binary
+    file: /usr/bin/ydotool
+    exists: true

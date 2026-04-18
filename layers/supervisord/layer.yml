@@ -4,3 +4,24 @@ depends:
 rpm:
   packages:
     - supervisor
+
+tests:
+  - id: supervisord-binary
+    file: /usr/bin/supervisord
+    exists: true
+  - id: supervisorctl-binary
+    file: /usr/bin/supervisorctl
+    exists: true
+  - id: supervisor-package
+    package: supervisor
+    installed: true
+  # Using supervisorctl rather than `process: supervisord` because pgrep
+  # isn't in the minimal image set. `supervisorctl pid` confirms the
+  # supervisord socket is reachable without tripping on intentionally-stopped
+  # programs (some layers ship autostart=false services like hermes-whatsapp,
+  # which make `supervisorctl status` return exit 3).
+  - id: supervisorctl-responds
+    scope: deploy
+    command: supervisorctl pid
+    exit_status: 0
+    in_container: true

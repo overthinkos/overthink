@@ -5,3 +5,16 @@ rpm:
   packages:
     - python3-pyatspi
     - python3-gobject
+
+tests:
+  - id: python3-pyatspi-installed
+    package: python3-pyatspi
+    installed: true
+  - id: python3-gobject-installed
+    package: python3-gobject
+    installed: true
+  # pyatspi is installed for the system python3, not the pixi Python env that
+  # dominates PATH on these images. Use the absolute system path.
+  - id: pyatspi-importable
+    command: /usr/bin/python3 -c "import pyatspi"
+    exit_status: 0

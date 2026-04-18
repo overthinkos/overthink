@@ -36,6 +36,12 @@ type DeployImageConfig struct {
 	ForwardGpgAgent *bool                `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
 	ForwardSshAgent *bool                `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
 	Sidecars        map[string]SidecarDef `yaml:"sidecars,omitempty"`          // Sidecar container overrides
+
+	// Tests are local deploy-level overlays. They merge onto the image's
+	// label-baked deploy section at runtime: entries with an id: that
+	// matches a baked entry replace it; otherwise they append. An entry
+	// with id:X and skip:true effectively disables the baked check.
+	Tests []Check `yaml:"tests,omitempty"`
 }
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.

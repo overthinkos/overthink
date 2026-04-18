@@ -36,3 +36,19 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  # Build-scope invariants on the installed artifact.
+  - id: ollama-binary
+    file: /usr/bin/ollama
+    exists: true
+  # Deploy-scope reachability + API liveness.
+  - id: ollama-tags-api
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+    status: 200
+  - id: ollama-version
+    scope: deploy
+    command: ollama --version
+    stdout:
+      - matches: "^ollama version"

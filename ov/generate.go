@@ -444,8 +444,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit EXPOSE directives for layer ports
 	g.writeExpose(&b, layerOrder)
 
-	// Emit image metadata labels
-	g.writeLabels(&b, imageName, layerOrder, img)
+	// LABEL emission is deferred to the end of the final stage — see the
+	// writeLabels call after the final USER directive below. Putting LABELs
+	// last means a test/label edit only reruns the LABEL instructions
+	// themselves (metadata-only, ~0ms on disk) instead of invalidating the
+	// buildkit cache for every downstream RUN/COPY in a 100-step stack.
 
 	// Copy builder artifacts — fully config-driven from build.yml builder: section copy_artifacts/copy_binary
 	if img.BuilderConfig != nil {
@@ -588,6 +591,13 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	} else if !inUserMode || needsRootAfter {
 		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
 	}
+
+	// Emit image metadata labels LAST so test/label edits don't invalidate
+	// the buildkit cache for all upstream RUN/COPY steps. LABELs are pure
+	// metadata (attach to the final image manifest) and have no functional
+	// dependency on subsequent instructions — they're the ideal last-line
+	// of the Containerfile.
+	g.writeLabels(&b, imageName, layerOrder, img)
 
 	// imageDir was cleaned at the start of this function; ensure it exists
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
@@ -1339,6 +1349,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelHooks, hooks)
 	}
 
+	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
+	// so every pulled image is self-describing at all three levels. Local
+	// deploy.yml overlays (by id) are applied at ov test time, not here.
+	tests := CollectTests(g.Config, g.Layers, imageName)
+	if tests != nil {
+		writeJSONLabel(b, LabelTests, tests)
+	}
+
 	// Bootc-only labels: VM config, libvirt snippets
 	if img.Bootc {
 		if img.Vm != nil {
@@ -1660,7 +1678,10 @@ func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
 	if s == "null" || s == "[]" || s == "{}" {
 		return
 	}
-	b.WriteString(fmt.Sprintf("LABEL %s='%s'\n", key, s))
+	// Wrap in single-quoted form with proper '\'' escaping so embedded single
+	// quotes (common inside test command strings like awk '{print $1}') don't
+	// terminate the LABEL value and trip podman's key=value parser.
+	b.WriteString(fmt.Sprintf("LABEL %s=%s\n", key, shellSingleQuote(s)))
 }
 
 // resolveStatus returns the effective status string. Empty defaults to "testing".

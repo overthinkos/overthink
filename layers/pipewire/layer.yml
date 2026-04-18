@@ -30,3 +30,18 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: pipewire-binary
+    file: /usr/bin/pipewire
+    exists: true
+  - id: wireplumber-binary
+    file: /usr/bin/wireplumber
+    exists: true
+  - id: pipewire-wrapper
+    file: ${HOME}/.local/bin/pipewire-wrapper
+    exists: true
+  - id: pipewire-service-running
+    scope: deploy
+    service: pipewire
+    running: true

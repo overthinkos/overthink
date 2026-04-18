@@ -5,3 +5,16 @@ rpm:
     - jetbrains-mono-fonts
     - liberation-fonts
     - nerd-fonts
+
+tests:
+  - id: jetbrains-mono-installed
+    package: jetbrains-mono-fonts
+    installed: true
+  # Fedora 43 split `liberation-fonts` into per-face packages — the dnf-level
+  # request is a virtual provides that resolves to `liberation-sans-fonts`.
+  - id: liberation-sans-installed
+    package: liberation-sans-fonts
+    installed: true
+  - id: nerd-fonts-installed
+    package: nerd-fonts
+    installed: true

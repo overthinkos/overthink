@@ -7,3 +7,11 @@ rpm:
 pac:
   packages:
     - direnv
+
+tests:
+  - id: direnv-binary
+    file: /usr/bin/direnv
+    exists: true
+  - id: direnv-version
+    command: /usr/bin/direnv version
+    exit_status: 0

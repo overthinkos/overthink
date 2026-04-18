@@ -2,3 +2,11 @@ description: OpenAI Codex CLI coding agent
 
 depends:
   - nodejs
+
+tests:
+  - id: codex-binary
+    file: ${HOME}/.npm-global/bin/codex
+    exists: true
+  - id: codex-version
+    command: ${HOME}/.npm-global/bin/codex --version
+    exit_status: 0

@@ -147,6 +147,16 @@ type ImageConfig struct {
 	FormatConfig string             `yaml:"format_config,omitempty"` // ref to build.yml (local path or @host/org/repo/path:version)
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
+
+	// Tests are image-level declarative checks (cross-layer invariants).
+	// Entries without explicit scope default to "build" and land in the
+	// image section of the OCI label.
+	Tests []Check `yaml:"tests,omitempty"`
+
+	// DeployTests are image-author-supplied deploy-level defaults. All
+	// entries default to scope: deploy and land in the deploy section of
+	// the OCI label; local deploy.yml can override them by id.
+	DeployTests []Check `yaml:"deploy_tests,omitempty"`
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

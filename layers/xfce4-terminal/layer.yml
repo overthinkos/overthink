@@ -12,3 +12,11 @@ tasks:
     to: "${HOME}/.config/sway/config.d/xfce4-terminal.conf"
     mode: "0644"
     user: "${USER}"
+
+tests:
+  - id: xfce4-terminal-binary
+    file: /usr/bin/xfce4-terminal
+    exists: true
+  - id: xfce4-terminal-sway-conf
+    file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
+    exists: true

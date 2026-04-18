@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-160 layers. 41 image definitions (31 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`.
+160 layers. 44 image definitions (31 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 243 skills across 4 plugins (`ov`, `ov-layers`, `ov-images`, `ov-dev`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -100,6 +100,30 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 **In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers use `system_services:` to declare systemd units (like sshd) or add `*.service` files for user-level services. No supervisord needed because it's a real operating system, not a container.
 
 **Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing the `init:` section of `build.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
+
+### Declarative Testing
+
+Images and deployments come with inline checks. A `tests:` block on any `layer.yml`, `image.yml`, or `deploy.yml` authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. `ov image validate` catches authoring errors at config time; `ov` bakes the checks into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs the build-scope checks against a disposable `podman run --rm` container; `ov test <image>` runs all three sections against a live service, substituting **deploy-time variables** (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once keeps working when `deploy.yml` remaps ports or rebinds volumes. Local `deploy.yml` can add or override baked checks by `id:`.
+
+```yaml
+# layers/redis/layer.yml — gold-standard pattern referenced in /ov:test
+tests:
+  - id: redis-binary          # build-scope (runs inside the built image)
+    file: /usr/bin/redis-server
+    exists: true
+  - id: redis-package
+    package: valkey-compat-redis   # Fedora 43 installed name (virtual provides)
+    installed: true
+  - id: redis-responds        # deploy-scope (runs against a live service)
+    scope: deploy
+    command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
+    stdout: PONG
+    in_container: false       # run the probe from the host
+```
+
+Seven running images carry comprehensive test coverage (363 checks total, 0 failing): `filebrowser` (24), `jupyter` (29), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (85). LABEL directives are emitted at the end of each Containerfile, so test edits rebuild in ~2 seconds instead of re-running every downstream install step.
+
+See `/ov:test` for the verb catalog, matcher forms, runtime variable table, **10 authoring gotchas** (HOST_PORT vs CONTAINER_IP routing, Fedora 43 package renames, `pgrep`/`ss`/`nc` absence, `supervisorctl status` exit-3, `status:` int vs list, regex anchors, `${VAR:-default}` non-support, stderr-vs-stdout, volume scope, root-owned files), and deploy.yml overlay rules.
 
 ### Quadlets: Containers as System Services
 
@@ -257,6 +281,7 @@ The `ov` CLI has 25 top-level command families. Build-mode commands live under `
 | **Desktop automation** | `cdp`, `wl`, `vnc`, `dbus`, `record` | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:dbus`, `/ov:record` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
+| **Testing** | `test`, `image test` | `/ov:test` |
 | **Misc** | `version` | `/ov:version` |
 
 A few sample invocations:
@@ -326,6 +351,7 @@ Each entry points to the canonical skill — details belong there, not here.
 | Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov:config`) |
 | Build cache stale | `ov image build --no-cache <image>` (`/ov:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
+| Service built fine but broken in production | `ov test <image>` runs the baked layer + image + deploy checks against the live container; `ov image test <image>` checks the disposable build (`/ov:test`) |
 
 ## Adding a Layer
 
@@ -333,6 +359,7 @@ Each entry points to the canonical skill — details belong there, not here.
 ov image new layer my-layer            # Scaffold the directory
 # Edit layers/my-layer/layer.yml       # Declare packages, deps, env, ports,
 #                                      # and tasks: (see /ov:layer for the verb catalog)
+# Optionally add tests: for file / port / http / command checks (see /ov:test)
 # Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
 # Add to an image in image.yml:
@@ -372,7 +399,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 241 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line.
+This gives Claude Code access to 243 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
 
 The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server.
 

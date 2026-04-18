@@ -155,3 +155,37 @@ service: |
 volumes:
   - name: chrome-data
     path: "~/.chrome-debug"
+
+tests:
+  - id: google-chrome-binary
+    file: /usr/bin/google-chrome-stable
+    exists: true
+  - id: chrome-wrapper
+    file: ${HOME}/.local/bin/chrome-wrapper
+    exists: true
+    mode: "0755"
+  - id: browser-open-wrapper
+    file: ${HOME}/.local/bin/browser-open
+    exists: true
+  - id: cdp-proxy-wrapper
+    file: ${HOME}/.local/bin/cdp-proxy
+    exists: true
+  - id: chrome-windows-manifest
+    file: ${HOME}/.local/share/chrome-windows/manifest.json
+    exists: true
+  - id: cdp-proxy-service
+    scope: deploy
+    service: cdp-proxy
+    running: true
+  - id: chrome-cdp-port
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:9222}
+    reachable: true
+    timeout: 5s
+  - id: chrome-cdp-version
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+    status: 200
+    timeout: 5s
+    body:
+      - contains: "webSocketDebuggerUrl"

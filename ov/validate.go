@@ -160,6 +160,10 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
 
+	// Validate declarative test specs (layer.yml, image.yml, deploy.yml
+	// tests: + image.yml deploy_tests:)
+	validateTests(cfg, layers, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}

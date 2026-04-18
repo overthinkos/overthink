@@ -19,6 +19,7 @@ type ImageCmd struct {
 	Merge    MergeCmd     `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd       `cmd:"" help:"Scaffold new components"`
 	Pull     ImagePullCmd `cmd:"" help:"Pull an image from its registry into local storage"`
+	Test     ImageTestCmd `cmd:"" help:"Run declarative tests against a freshly-run container from a built image"`
 	Validate ValidateCmd  `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
 }
 

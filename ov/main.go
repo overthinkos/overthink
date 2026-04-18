@@ -31,6 +31,7 @@ type CLI struct {
 	Start    StartCmd       `cmd:"" help:"Start a container as a background service"`
 	Status   StatusCmd      `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd        `cmd:"" help:"Stop a running service container"`
+	Test     TestCmd        `cmd:"" help:"Run declarative tests against a running service"`
 	Tmux     TmuxCmd        `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd        `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd      `cmd:"" help:"Update image and restart if active"`
@@ -227,6 +228,23 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(resolveStatus(resolved.Status))
 		case "info":
 			fmt.Println(resolved.Info)
+		case "tests":
+			// Emit the effective three-section test manifest as JSON.
+			// Mirrors what will land in the org.overthinkos.tests OCI label.
+			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			if err != nil {
+				return err
+			}
+			set := CollectTests(cfg, layers, c.Image)
+			if set == nil {
+				fmt.Println("{}")
+				return nil
+			}
+			data, err := json.MarshalIndent(set, "", "  ")
+			if err != nil {
+				return err
+			}
+			fmt.Println(string(data))
 		default:
 			return fmt.Errorf("unknown format field: %s", c.Format)
 		}

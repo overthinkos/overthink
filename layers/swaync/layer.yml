@@ -44,3 +44,14 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: swaync-binary
+    file: /usr/bin/swaync
+    exists: true
+  - id: swaync-config
+    file: ${HOME}/.config/swaync/config.json
+    exists: true
+  - id: swaync-style
+    file: ${HOME}/.config/swaync/style.css
+    exists: true

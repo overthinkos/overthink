@@ -23,3 +23,29 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=20
+
+tests:
+  # Build-scope: inside the built image.
+  - id: redis-binary
+    file: /usr/bin/redis-server
+    exists: true
+  - id: redis-cli-binary
+    file: /usr/bin/redis-cli
+    exists: true
+  # Fedora 43 replaced `redis` with `valkey-compat-redis` (dnf handles the
+  # Provides: rename). rpm-installed package name differs from the dnf install
+  # request — query the actual installed provider.
+  - id: redis-package
+    package: valkey-compat-redis
+    installed: true
+  # Deploy-scope: against the running service. HOST_PORT resolves to the
+  # effective deploy-time port mapping — works unchanged whether the
+  # deploy publishes 6379:6379 or remaps to (e.g.) 16379:6379.
+  - id: redis-responds
+    scope: deploy
+    command: redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ping
+    stdout: PONG
+    in_container: false
+  - id: redis-port-open
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:6379}

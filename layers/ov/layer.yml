@@ -5,3 +5,14 @@ tasks:
     to: /usr/local/bin/ov
     mode: "0755"
     user: root
+
+tests:
+  - id: ov-binary
+    file: /usr/local/bin/ov
+    exists: true
+    mode: "0755"
+  - id: ov-version
+    command: /usr/local/bin/ov version
+    exit_status: 0
+    stderr:
+      - matches: "[0-9]{4}\\.[0-9]+"

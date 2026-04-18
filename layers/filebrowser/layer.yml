@@ -44,3 +44,26 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  - id: filebrowser-binary
+    file: /usr/local/bin/filebrowser
+    exists: true
+    mode: "0755"
+  - id: filebrowser-config
+    file: /etc/filebrowser/config.yaml
+    exists: true
+  - id: filebrowser-service
+    scope: deploy
+    service: filebrowser
+    running: true
+  - id: filebrowser-port
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:8080}
+    reachable: true
+    timeout: 5s
+  - id: filebrowser-http
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:8080}/
+    status: 200
+    timeout: 5s

@@ -11,3 +11,9 @@ tasks:
     to: "${HOME}/.local/bin/pixelflux-record"
     mode: "0755"
     user: "${USER}"
+
+tests:
+  - id: pixelflux-record-script
+    file: ${HOME}/.local/bin/pixelflux-record
+    exists: true
+    mode: "0755"

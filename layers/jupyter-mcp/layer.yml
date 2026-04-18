@@ -15,3 +15,24 @@ tasks:
       echo '{"ServerApp": {"jpserver_extensions": {"jupyter_mcp": true}}}' > \
         "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
     user: "${USER}"
+
+tests:
+  - id: jupyter-mcp-config-enabled
+    file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
+    exists: true
+    contains:
+      - contains: "jupyter_mcp"
+  - id: fastmcp-installed
+    command: ${HOME}/.pixi/envs/default/bin/pip show fastmcp
+    exit_status: 0
+    stdout:
+      - contains: "Name: fastmcp"
+  # MCP endpoint is up iff it returns something other than 404/connection-refused.
+  # An empty POST yields 400 "Bad Request" — which still proves the server is
+  # routing /mcp to its MCP handler (a missing endpoint would 404).
+  - id: jupyter-mcp-endpoint
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:8888}/mcp
+    method: POST
+    status: 400
+    timeout: 5s

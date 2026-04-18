@@ -60,3 +60,37 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=40
+
+tests:
+  - id: immich-ml-venv
+    file: /opt/immich/machine-learning/.venv/bin/python
+    exists: true
+  - id: immich-ml-module
+    file: /opt/immich/machine-learning/immich_ml
+    filetype: directory
+  - id: immich-ml-models-dir
+    file: ${HOME}/.immich/models
+    filetype: directory
+  - id: uv-binary
+    file: /usr/local/bin/uv
+    exists: true
+  - id: immich-ml-service-running
+    scope: deploy
+    service: immich-ml
+    running: true
+  # Port 3003 isn't exposed on the host. Use curl instead of `port: listening`
+  # because ss/netstat aren't in the minimal Fedora container.
+  - id: immich-ml-internal-port
+    scope: deploy
+    command: curl -fsS -o /dev/null -w "%{http_code}" http://127.0.0.1:3003/ping
+    exit_status: 0
+    in_container: true
+    stdout:
+      - equals: "200"
+  - id: immich-ml-http
+    scope: deploy
+    command: curl -fsS http://127.0.0.1:3003/ping
+    exit_status: 0
+    in_container: true
+    stdout:
+      - contains: "pong"

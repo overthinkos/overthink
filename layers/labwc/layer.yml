@@ -53,3 +53,24 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: labwc-binary
+    file: /usr/bin/labwc
+    exists: true
+  - id: labwc-wrapper
+    file: ${HOME}/.local/bin/labwc-wrapper
+    exists: true
+  - id: labwc-rc
+    file: ${HOME}/.config/labwc/rc.xml
+    exists: true
+  - id: labwc-autostart
+    file: ${HOME}/.config/labwc/autostart
+    exists: true
+  - id: xwayland-binary
+    file: /usr/bin/Xwayland
+    exists: true
+  - id: labwc-service-running
+    scope: deploy
+    service: labwc
+    running: true

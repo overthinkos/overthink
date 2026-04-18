@@ -19,3 +19,21 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: dbus-daemon-binary
+    file: /usr/bin/dbus-daemon
+    exists: true
+  - id: dbus-daemon-package
+    package: dbus-daemon
+    installed: true
+  - id: dbus-session-env
+    scope: deploy
+    command: printenv DBUS_SESSION_BUS_ADDRESS
+    exit_status: 0
+    stdout:
+      - contains: "unix:path=/tmp/dbus-session"
+  - id: dbus-service-running
+    scope: deploy
+    service: dbus
+    running: true

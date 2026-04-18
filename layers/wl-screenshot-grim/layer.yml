@@ -1,3 +1,11 @@
 rpm:
   packages:
     - grim
+
+tests:
+  - id: grim-binary
+    file: /usr/bin/grim
+    exists: true
+  - id: grim-package
+    package: grim
+    installed: true

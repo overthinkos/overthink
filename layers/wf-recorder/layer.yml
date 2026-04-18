@@ -3,3 +3,11 @@ description: Wayland screen recorder for wlroots compositors
 rpm:
   packages:
     - wf-recorder
+
+tests:
+  - id: wf-recorder-binary
+    file: /usr/bin/wf-recorder
+    exists: true
+  - id: wf-recorder-package
+    package: wf-recorder
+    installed: true

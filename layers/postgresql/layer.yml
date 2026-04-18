@@ -125,3 +125,36 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=10
+
+tests:
+  - id: postgres-binary
+    file: /usr/bin/postgres
+    exists: true
+  - id: psql-binary
+    file: /usr/bin/psql
+    exists: true
+  - id: pg-isready-binary
+    file: /usr/bin/pg_isready
+    exists: true
+  - id: initdb-binary
+    file: /usr/bin/initdb
+    exists: true
+  - id: postgresql-package
+    package: postgresql-server
+    installed: true
+  - id: pgvector-package
+    package: pgvector
+    installed: true
+  - id: postgresql-entrypoint
+    file: /usr/local/bin/postgresql-entrypoint.sh
+    exists: true
+    mode: "0755"
+  - id: postgresql-service-running
+    scope: deploy
+    service: postgresql
+    running: true
+  - id: postgresql-ready
+    scope: deploy
+    command: pg_isready -h ${HOME}/.postgresql
+    exit_status: 0
+    in_container: true

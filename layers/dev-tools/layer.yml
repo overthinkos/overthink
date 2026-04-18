@@ -52,3 +52,26 @@ tasks:
   # git-lfs post-install config (package installed with noscripts above)
   - cmd: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
     user: root
+
+tests:
+  - id: ripgrep-binary
+    file: /usr/bin/rg
+    exists: true
+  - id: bat-binary
+    file: /usr/bin/bat
+    exists: true
+  - id: gh-binary
+    file: /usr/bin/gh
+    exists: true
+  - id: fastfetch-binary
+    file: /usr/bin/fastfetch
+    exists: true
+  - id: neovim-binary
+    file: /usr/bin/nvim
+    exists: true
+  - id: htop-binary
+    file: /usr/bin/htop
+    exists: true
+  - id: git-lfs-installed
+    package: git-lfs
+    installed: true

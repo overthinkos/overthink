@@ -7,3 +7,16 @@ rpm:
 pac:
   packages:
     - openssh
+
+tests:
+  - id: ssh-binary
+    file: /usr/bin/ssh
+    exists: true
+  - id: ssh-add-binary
+    file: /usr/bin/ssh-add
+    exists: true
+  - id: ssh-version
+    command: /usr/bin/ssh -V
+    exit_status: 0
+    stderr:
+      - contains: "OpenSSH"

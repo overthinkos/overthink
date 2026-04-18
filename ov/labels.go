@@ -64,6 +64,7 @@ const (
 	LabelMCPProvides    = "org.overthinkos.mcp_provides"
 	LabelMCPRequires    = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
+	LabelTests          = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -138,6 +139,7 @@ type ImageMetadata struct {
 	MCPProvides    []MCPServerYAML   // MCP servers provided to other containers (service discovery templates)
 	MCPRequires    []EnvDependency   // MCP servers image must have from the environment
 	MCPAccepts     []EnvDependency   // MCP servers image can optionally use
+	Tests          *LabelTestSet    // three-section (layer/image/deploy) declarative test spec
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -463,6 +465,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		if err := json.Unmarshal([]byte(v), &meta.MCPAccepts); err != nil {
 			return nil, fmt.Errorf("parsing %s: %w", LabelMCPAccepts, err)
 		}
+	}
+
+	// Tests (three-section declarative test manifest)
+	if v := labels[LabelTests]; v != "" {
+		var ts LabelTestSet
+		if err := json.Unmarshal([]byte(v), &ts); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelTests, err)
+		}
+		meta.Tests = &ts
 	}
 
 	return meta, nil

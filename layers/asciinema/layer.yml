@@ -3,3 +3,13 @@ description: Terminal session recorder (asciinema)
 rpm:
   packages:
     - asciinema
+
+tests:
+  - id: asciinema-binary
+    file: /usr/bin/asciinema
+    exists: true
+  - id: asciinema-version
+    command: /usr/bin/asciinema --version
+    exit_status: 0
+    stdout:
+      - contains: "asciinema"

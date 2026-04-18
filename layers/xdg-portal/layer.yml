@@ -27,3 +27,20 @@ tasks:
     to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
     mode: "0644"
     user: "${USER}"
+
+tests:
+  - id: xdg-desktop-portal-package
+    package: xdg-desktop-portal
+    installed: true
+  - id: xdg-portal-wlr-package
+    package: xdg-desktop-portal-wlr
+    installed: true
+  - id: slurp-binary
+    file: /usr/bin/slurp
+    exists: true
+  - id: xdg-portal-wlr-config
+    file: ${HOME}/.config/xdg-desktop-portal-wlr/config
+    exists: true
+  - id: xdg-portal-sway-conf
+    file: ${HOME}/.config/sway/config.d/portal.conf
+    exists: true

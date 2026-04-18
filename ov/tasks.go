@@ -63,6 +63,35 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }
 
+// shellAnsiQuote wraps s in bash ANSI-C quoting ($'...'). Real newlines and
+// backslashes are emitted as \n and \\ escapes, keeping the whole quoted
+// string on a single physical line. This is required inside Dockerfile
+// RUN lines, whose parser terminates the instruction at the first unquoted
+// newline even when the argument is inside shell single quotes.
+func shellAnsiQuote(s string) string {
+	var b strings.Builder
+	b.Grow(len(s) + 4)
+	b.WriteString("$'")
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '\'':
+			b.WriteString(`\'`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteRune('\'')
+	return b.String()
+}
+
 // resolveUserSpec converts a task's `user:` field to (userDirective, chownPair).
 //   - userDirective: the value to emit in `USER <value>` (numeric or name).
 //   - chownPair: the numeric "<uid>:<gid>" for COPY --chown (empty if not needed).
@@ -311,7 +340,13 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 	dest := taskSubstPath(t.To, img)
 	extract := strings.TrimSpace(t.Extract)
 
-	envPrefix := "BUILD_ARCH=$(uname -m)"
+	// Exports are terminated with `;` so subsequent shell-level parameter
+	// expansions (e.g. ${BUILD_ARCH} inside the URL) see the variable.
+	// The bare `VAR=val cmd` prefix form sets VAR only in cmd's environment
+	// *after* bash has already expanded any ${VAR} in cmd's arguments, which
+	// leaves the URL with an empty arch string.
+	envPrefix := "export BUILD_ARCH=$(uname -m);"
+	envForSh := "BUILD_ARCH=$(uname -m)"
 	if len(t.Env) > 0 {
 		keys := make([]string, 0, len(t.Env))
 		for k := range t.Env {
@@ -319,7 +354,8 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			envPrefix += fmt.Sprintf(" %s=%s", k, shellSingleQuote(t.Env[k]))
+			envPrefix += fmt.Sprintf(" export %s=%s;", k, shellSingleQuote(t.Env[k]))
+			envForSh += fmt.Sprintf(" %s=%s", k, shellSingleQuote(t.Env[k]))
 		}
 	}
 
@@ -348,7 +384,6 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 	case "sh":
 		// For piped install scripts, curl doesn't need the env vars — only
 		// the shell running the script does. Put env vars before `sh`.
-		envForSh := envPrefix
 		cmd = fmt.Sprintf(`curl -fsSL %q | %s sh`, url, envForSh)
 	case "none":
 		if dest == "" {
@@ -377,7 +412,7 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 // BUILD_ARCH is injected as a shell var so tasks using ${BUILD_ARCH} work.
 func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, userIsRoot bool) {
 	body := "BUILD_ARCH=$(uname -m)\nset -e\n" + t.Cmd
-	quoted := shellSingleQuote(body)
+	quoted := shellAnsiQuote(body)
 
 	var mounts []string
 	mounts = append(mounts, fmt.Sprintf("--mount=type=bind,from=%s,source=/,target=/ctx", layerStage))

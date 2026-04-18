@@ -56,3 +56,20 @@ tasks:
       ls -la "$PKGLIBDIR/vchord.so"
       ls "$SHAREDIR/extension/vchord.control"
     user: root
+
+tests:
+  - id: vchord-control-file
+    file: /usr/share/pgsql/extension/vchord.control
+    exists: true
+  - id: vchord-shared-preload-env
+    scope: deploy
+    command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES
+    exit_status: 0
+    stdout:
+      - contains: "vchord.so"
+  # No deploy-scope psql probe — the superuser name depends on the
+  # POSTGRES_USER env var, and ov's ${VAR} resolver can't pick up arbitrary
+  # container-env vars. Presence of vchord.control + the shared_preload_libraries
+  # env var are together sufficient to prove the extension is installed and
+  # registered. A functional "CREATE EXTENSION vchord" probe lives in the
+  # image-level supervisorctl status check (immich-db-init runs it).

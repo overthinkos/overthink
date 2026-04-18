@@ -36,3 +36,18 @@ service: |
   stdout_logfile=/dev/fd/1
   stdout_logfile_maxbytes=0
   redirect_stderr=true
+
+tests:
+  - id: waybar-binary
+    file: /usr/bin/waybar
+    exists: true
+  - id: waybar-labwc-wrapper
+    file: ${HOME}/.local/bin/waybar-labwc-wrapper
+    exists: true
+    mode: "0755"
+  - id: waybar-config
+    file: ${HOME}/.config/waybar/config
+    exists: true
+  - id: waybar-style
+    file: ${HOME}/.config/waybar/style.css
+    exists: true

@@ -233,3 +233,38 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
   priority=30
+
+tests:
+  - id: immich-server-main
+    file: /opt/immich/server/dist/main.js
+    exists: true
+  - id: immich-db-migrate-script
+    file: /usr/local/bin/immich-db-migrate.sh
+    exists: true
+    mode: "0755"
+  - id: immich-server-start-script
+    file: /usr/local/bin/immich-server-start.sh
+    exists: true
+    mode: "0755"
+  - id: immich-initdb-sql
+    file: /docker-entrypoint-initdb.d/01-immich-extensions.sql
+    exists: true
+  - id: immich-library-dir
+    file: ${HOME}/.immich/library
+    filetype: directory
+  - id: immich-server-running
+    scope: deploy
+    service: immich-server
+    running: true
+  - id: immich-port-reachable
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:2283}
+    reachable: true
+    timeout: 5s
+  - id: immich-http-ping
+    scope: deploy
+    http: http://127.0.0.1:${HOST_PORT:2283}/api/server/ping
+    status: 200
+    timeout: 10s
+    body:
+      - contains: "pong"

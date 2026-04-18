@@ -2,3 +2,11 @@ description: Google Gemini CLI for AI coding assistance and search
 
 depends:
   - nodejs
+
+tests:
+  - id: gemini-binary
+    file: ${HOME}/.npm-global/bin/gemini
+    exists: true
+  - id: gemini-version
+    command: ${HOME}/.npm-global/bin/gemini --version
+    exit_status: 0

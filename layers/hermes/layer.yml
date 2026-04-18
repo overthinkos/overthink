@@ -95,3 +95,20 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  - id: hermes-entrypoint
+    file: ${HOME}/.local/bin/hermes-entrypoint
+    exists: true
+    mode: "0755"
+  - id: hermes-binary
+    file: ${HOME}/.pixi/envs/default/bin/hermes
+    exists: true
+  - id: hermes-data-volume-mount
+    scope: deploy
+    file: /opt/data
+    filetype: directory
+  - id: hermes-service-running
+    scope: deploy
+    service: hermes
+    running: true

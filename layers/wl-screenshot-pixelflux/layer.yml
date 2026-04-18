@@ -8,3 +8,9 @@ tasks:
     to: "${HOME}/.local/bin/pixelflux-screenshot"
     mode: "0755"
     user: "${USER}"
+
+tests:
+  - id: pixelflux-screenshot-script
+    file: ${HOME}/.local/bin/pixelflux-screenshot
+    exists: true
+    mode: "0755"

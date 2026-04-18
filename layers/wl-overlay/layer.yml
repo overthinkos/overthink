@@ -16,3 +16,12 @@ tasks:
     to: "${HOME}/.local/bin/ov-overlay"
     mode: "0755"
     user: "${USER}"
+
+tests:
+  - id: ov-overlay-script
+    file: ${HOME}/.local/bin/ov-overlay
+    exists: true
+    mode: "0755"
+  - id: gtk4-layer-shell-installed
+    package: gtk4-layer-shell
+    installed: true

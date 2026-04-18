@@ -4,3 +4,8 @@ depends:
 rpm:
   packages:
     - pavucontrol
+
+tests:
+  - id: pavucontrol-binary
+    file: /usr/bin/pavucontrol
+    exists: true

@@ -1,15 +1,9 @@
-# distro.yml — Distro identity, bootstrap, and package format configuration
+# build.yml — Unified build-time configuration (test fixture)
 #
-# Each distro defines how to bootstrap a base image and how to install packages.
-# Key = distro name matched from image's distro: tags.
-# inherits: allows sharing config (e.g., ubuntu inherits debian) — inherits
-# bootstrap, workarounds, AND formats from parent.
-#
-# formats: defines package format install templates per distro.
-# Template context: all section_fields are accessible by name.
-# Template functions: cacheMounts, quote, default, splitFirst, replace, join
+# Test copy used by format_config_test.go, validate_test.go, and test_helpers_test.go.
+# No init: section — tests that exercise init load a separate fixture when needed.
 
-distros:
+distro:
   fedora:
     bootstrap:
       install_cmd: "dnf install -y --setopt=install_weak_deps=False"
@@ -141,9 +135,94 @@ distros:
         section_fields:
           packages: list
           options: list
-        # AUR install step: copies pre-built packages from builder stage and installs
         install_template: |
           COPY --from={{.StageName}} /tmp/aur-pkgs/ /tmp/aur-pkgs/
           RUN {{cacheMounts .CacheMounts}} \
               pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst && \
               rm -rf /tmp/aur-pkgs
+
+builder:
+  pixi:
+    detect_files: [pixi.toml, pyproject.toml, environment.yml]
+    cache_mounts:
+      - dst: /tmp/pixi-cache
+      - dst: /tmp/rattler-cache
+    env:
+      PIXI_CACHE_DIR: /tmp/pixi-cache
+      RATTLER_CACHE_DIR: /tmp/rattler-cache
+    install_commands:
+      pixi.toml: "pixi install"
+      pixi.toml+lock: "pixi install --frozen"
+      pyproject.toml: "pixi install --manifest-path pyproject.toml"
+      environment.yml: "pixi project import environment.yml && pixi install"
+    manylinux_fix: |
+      RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      {{- if .HasLockFile}}
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/pixi.lock pixi.lock
+      {{- end}}
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
+      {{.ManylinuxFix}}
+      ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
+      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
+    copy_artifacts:
+      - src: "{{.Home}}"
+        dst: "{{.Home}}"
+        chown: true
+    copy_binary:
+      src: /usr/local/bin/pixi
+      dst: /usr/local/bin/pixi
+
+  npm:
+    detect_files: [package.json]
+    cache_mounts:
+      - dst: /tmp/npm-cache
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
+      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
+    copy_artifacts:
+      - src: "{{.Home}}"
+        dst: "{{.Home}}"
+        chown: true
+
+  cargo:
+    detect_files: [Cargo.toml]
+    requires_src_dir: true
+    inline: true
+    cache_mounts:
+      - dst: /tmp/cargo-cache
+    install_template: |
+      RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
+          {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
+
+  aur:
+    detect_config: aur
+    cache_mounts:
+      - dst: /var/cache/pacman/pkg
+        sharing: locked
+    stage_template: |
+      FROM {{.BuilderRef}} AS {{.StageName}}
+      USER root
+      RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      USER {{.UID}}
+      WORKDIR {{.Home}}
+      RUN {{cacheMounts .CacheMounts}} \
+          mkdir -p /tmp/aur-build && \
+          cp /etc/makepkg.conf /tmp/makepkg.conf && \
+          sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
+          yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
+      {{- range .Options}} {{.}}{{end}}
+      {{- range .Packages}} \
+            {{.}}{{end}} && \
+          mkdir -p /tmp/aur-pkgs && \
+          find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
+    copy_artifacts:
+      - src: /tmp/aur-pkgs/
+        dst: /tmp/aur-pkgs/
+        chown: false

@@ -73,19 +73,15 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Load default format configs for SetFormatNames before layer scanning
-	if cfg.Defaults.FormatConfig != nil {
-		distroCfg, _, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+	// Load default build config for SetFormatNames + init detection before layer scanning
+	var defaultInitCfg *InitConfig
+	if cfg.Defaults.FormatConfig != "" {
+		distroCfg, _, initCfg, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
 		if err != nil {
-			return fmt.Errorf("loading default format configs: %w", err)
+			return fmt.Errorf("loading default build config: %w", err)
 		}
 		SetFormatNames(distroCfg)
-	}
-
-	// Load default init config for layer init system detection
-	var defaultInitCfg *InitConfig
-	if cfg.Defaults.FormatConfig != nil {
-		defaultInitCfg, _ = LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
+		defaultInitCfg = initCfg
 	}
 
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
@@ -93,7 +89,7 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Populate init systems on layers from init.yml config
+	// Populate init systems on layers from build.yml config
 	PopulateLayerInitSystems(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir)
@@ -132,8 +128,8 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(resolved.FullTag)
 		case "base":
 			fmt.Println(resolved.Base)
-		case "builders":
-			for typ, builder := range resolved.Builders {
+		case "builder":
+			for typ, builder := range resolved.Builder {
 				fmt.Printf("%s: %s\n", typ, builder)
 			}
 		case "builds":

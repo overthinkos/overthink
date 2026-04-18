@@ -211,24 +211,20 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 		return nil
 	}
 
-	// Scan format_config remote refs from defaults and per-image
+	// Scan format_config remote ref from defaults and per-image
 	if cfg != nil {
-		if fc := cfg.Defaults.FormatConfig; fc != nil {
-			for _, ref := range []string{fc.Distro, fc.Builder} {
-				if err := addRef(ref, "defaults format_config"); err != nil {
-					return nil, err
-				}
+		if ref := cfg.Defaults.FormatConfig; ref != "" {
+			if err := addRef(ref, "defaults format_config"); err != nil {
+				return nil, err
 			}
 		}
 		for imgName, img := range cfg.Images {
 			if !img.IsEnabled() {
 				continue
 			}
-			if fc := img.FormatConfig; fc != nil {
-				for _, ref := range []string{fc.Distro, fc.Builder} {
-					if err := addRef(ref, fmt.Sprintf("image %s format_config", imgName)); err != nil {
-						return nil, err
-					}
+			if ref := img.FormatConfig; ref != "" {
+				if err := addRef(ref, fmt.Sprintf("image %s format_config", imgName)); err != nil {
+					return nil, err
 				}
 			}
 		}

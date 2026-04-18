@@ -7,20 +7,16 @@ import (
 )
 
 func TestLoadDistroConfigFromFile(t *testing.T) {
-	refs := &FormatConfigRefs{
-		Distro:  "testdata/defaults/distro.yml",
-		Builder: "testdata/defaults/builder.yml",
-	}
-	distroCfg, _, err := LoadFormatConfigsForImage(nil, refs, ".")
+	distroCfg, _, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
 	if err != nil {
 		t.Fatalf("loading distro config: %v", err)
 	}
-	if distroCfg == nil || len(distroCfg.Distros) == 0 {
+	if distroCfg == nil || len(distroCfg.Distro) == 0 {
 		t.Fatal("expected non-empty distro config")
 	}
 
 	// Check fedora exists
-	fedora, ok := distroCfg.Distros["fedora"]
+	fedora, ok := distroCfg.Distro["fedora"]
 	if !ok {
 		t.Fatal("expected fedora distro definition")
 	}
@@ -50,7 +46,7 @@ func TestLoadDistroConfigFromFile(t *testing.T) {
 	}
 
 	// Check ubuntu inherits debian (including formats)
-	ubuntu, ok := distroCfg.Distros["ubuntu"]
+	ubuntu, ok := distroCfg.Distro["ubuntu"]
 	if !ok {
 		t.Fatal("expected ubuntu distro definition")
 	}
@@ -117,15 +113,11 @@ func TestValidFormat(t *testing.T) {
 }
 
 func TestLoadBuilderConfigFromFile(t *testing.T) {
-	refs := &FormatConfigRefs{
-		Distro:  "testdata/defaults/distro.yml",
-		Builder: "testdata/defaults/builder.yml",
-	}
-	_, builderCfg, err := LoadFormatConfigsForImage(nil, refs, ".")
+	_, builderCfg, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
 	if err != nil {
 		t.Fatalf("loading builder config: %v", err)
 	}
-	if builderCfg == nil || len(builderCfg.Builders) == 0 {
+	if builderCfg == nil || len(builderCfg.Builder) == 0 {
 		t.Fatal("expected non-empty builder config")
 	}
 
@@ -137,7 +129,7 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 	}
 
 	// Check pixi detect files
-	pixi := builderCfg.Builders["pixi"]
+	pixi := builderCfg.Builder["pixi"]
 	if len(pixi.DetectFiles) == 0 {
 		t.Error("pixi detect_files is empty")
 	}
@@ -146,7 +138,7 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 	}
 
 	// Check cargo is inline
-	cargo := builderCfg.Builders["cargo"]
+	cargo := builderCfg.Builder["cargo"]
 	if !cargo.Inline {
 		t.Error("cargo should be inline")
 	}
@@ -156,10 +148,7 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 }
 
 func TestBuilderNames(t *testing.T) {
-	_, builderCfg, _ := LoadFormatConfigsForImage(nil, &FormatConfigRefs{
-		Distro:  "testdata/defaults/distro.yml",
-		Builder: "testdata/defaults/builder.yml",
-	}, ".")
+	_, builderCfg, _, _ := LoadBuildConfigForImage("", testBuildConfigRef, ".")
 	names := builderCfg.BuilderNames()
 	if len(names) != 4 {
 		t.Errorf("expected 4 builder names, got %d: %v", len(names), names)
@@ -215,7 +204,7 @@ rpm:
 
 func TestAurBuilderDetectConfig(t *testing.T) {
 	builderCfg := testBuilderCfg()
-	aur := builderCfg.Builders["aur"]
+	aur := builderCfg.Builder["aur"]
 	if aur == nil {
 		t.Fatal("expected aur builder definition")
 	}
@@ -238,7 +227,7 @@ func TestResolveFormatConfigDataEmpty(t *testing.T) {
 }
 
 func TestResolveFormatConfigDataLocal(t *testing.T) {
-	data, err := ResolveFormatConfigData("testdata/defaults/distro.yml", ".")
+	data, err := ResolveFormatConfigData(testBuildConfigRef, ".")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -254,24 +243,25 @@ func TestResolveFormatConfigDataMissing(t *testing.T) {
 	}
 }
 
-func TestLoadFormatConfigsForImageFallback(t *testing.T) {
+func TestLoadBuildConfigForImageFallback(t *testing.T) {
 	// Per-image ref overrides defaults
-	imgRefs := &FormatConfigRefs{
-		Distro: "testdata/defaults/distro.yml",
-	}
-	defRefs := &FormatConfigRefs{
-		Distro:  "nonexistent.yml", // should not be used
-		Builder: "testdata/defaults/builder.yml",
-	}
-
-	distroCfg, builderCfg, err := LoadFormatConfigsForImage(imgRefs, defRefs, ".")
+	distroCfg, builderCfg, _, err := LoadBuildConfigForImage(testBuildConfigRef, "nonexistent.yml", ".")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if distroCfg == nil || len(distroCfg.Distros) == 0 {
+	if distroCfg == nil || len(distroCfg.Distro) == 0 {
 		t.Error("expected distro config from per-image ref")
 	}
-	if builderCfg == nil || len(builderCfg.Builders) == 0 {
-		t.Error("expected builder config from default ref")
+	if builderCfg == nil || len(builderCfg.Builder) == 0 {
+		t.Error("expected builder config from per-image ref")
+	}
+
+	// Fallback to defaults when per-image is empty
+	distroCfg2, _, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if distroCfg2 == nil || len(distroCfg2.Distro) == 0 {
+		t.Error("expected distro config from default ref")
 	}
 }

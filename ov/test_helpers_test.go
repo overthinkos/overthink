@@ -1,12 +1,11 @@
 package main
 
+// testBuildConfigRef is the default build.yml path used by test fixtures.
+const testBuildConfigRef = "testdata/defaults/build.yml"
+
 // testDistroConfig returns the default DistroConfig from testdata fixtures for tests.
 func testDistroConfig() *DistroConfig {
-	refs := &FormatConfigRefs{
-		Distro:  "testdata/defaults/distro.yml",
-		Builder: "testdata/defaults/builder.yml",
-	}
-	distroCfg, _, err := LoadFormatConfigsForImage(nil, refs, ".")
+	distroCfg, _, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
 	if err != nil {
 		panic("failed to load distro config from testdata: " + err.Error())
 	}
@@ -21,11 +20,7 @@ func testDistroDef(tags ...string) *DistroDef {
 
 // testBuilderCfg returns the default BuilderConfig from testdata fixtures for tests.
 func testBuilderCfg() *BuilderConfig {
-	refs := &FormatConfigRefs{
-		Distro:  "testdata/defaults/distro.yml",
-		Builder: "testdata/defaults/builder.yml",
-	}
-	_, builderCfg, err := LoadFormatConfigsForImage(nil, refs, ".")
+	_, builderCfg, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
 	if err != nil {
 		panic("failed to load builder config from testdata: " + err.Error())
 	}

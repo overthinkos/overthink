@@ -371,7 +371,7 @@ func TestPacTemplateBasic(t *testing.T) {
 
 func TestAurBuilderStageTemplate(t *testing.T) {
 	builderCfg := testBuilderCfg()
-	aurBuilder := builderCfg.Builders["aur"]
+	aurBuilder := builderCfg.Builder["aur"]
 	ctx := &BuildStageContext{
 		BuilderRef:  "ghcr.io/overthinkos/archlinux-builder:latest",
 		StageName:   "my-tool-aur-build",
@@ -419,13 +419,13 @@ func TestBuilderRefForFormat(t *testing.T) {
 	g := &Generator{
 		Images: map[string]*ResolvedImage{
 			"arch-img": {
-				Builders: BuildersMap{"aur": "archlinux-builder", "pixi": "archlinux-builder"},
+				Builder: BuilderMap{"aur": "archlinux-builder", "pixi": "archlinux-builder"},
 			},
 			"archlinux-builder": {
 				FullTag: "ghcr.io/overthinkos/archlinux-builder:2026.84.1200",
 			},
 			"no-aur-img": {
-				Builders: BuildersMap{},
+				Builder: BuilderMap{},
 			},
 		},
 	}

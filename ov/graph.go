@@ -238,7 +238,7 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 		}
 		// Collect all builder images this image may depend on
 		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builders.AllBuilders() {
+			for _, builder := range img.Builder.AllBuilders() {
 				if builder != name {
 					if _, ok := images[builder]; ok {
 						deps = append(deps, builder)
@@ -388,7 +388,7 @@ func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Lay
 			deps = append(deps, img.Base)
 		}
 		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builders.AllBuilders() {
+			for _, builder := range img.Builder.AllBuilders() {
 				if builder != name {
 					if _, ok := images[builder]; ok {
 						deps = append(deps, builder)

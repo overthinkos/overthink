@@ -5,7 +5,7 @@ defaults:
   platforms:
     - linux/amd64
   build: [rpm]
-  builders:
+  builder:
     pixi: fedora-builder
     npm: fedora-builder
     cargo: fedora-builder
@@ -13,10 +13,7 @@ defaults:
     auto: false
     max_mb: 128
     max_total_mb: 0    # 0 = no limit; set to e.g. 2048 on CI runners with limited RAM
-  format_config:
-    distro: distro.yml
-    builder: builder.yml
-    init: init.yml
+  format_config: build.yml
 
 images:
 
@@ -54,7 +51,7 @@ images:
     distro: [archlinux]
     build: [pac]
     builds: [pixi, npm, cargo, aur]
-    builders:
+    builder:
       pixi: archlinux-builder
       npm: archlinux-builder
       cargo: archlinux-builder

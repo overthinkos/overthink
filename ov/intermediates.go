@@ -234,7 +234,7 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 
 	// Collect all builder image names to exclude from intermediate generation
 	builderNames := make(map[string]bool)
-	for _, builder := range cfg.Defaults.Builders {
+	for _, builder := range cfg.Defaults.Builder {
 		if builder != "" {
 			builderNames[builder] = true
 		}
@@ -448,7 +448,7 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
 		GID:            resolveIntPtr(cfg.Defaults.GID, nil, 1000),
 		Merge:          cfg.Defaults.Merge,
-		Builders:       BuildersMap(cfg.Defaults.Builders),
+		Builder:        BuilderMap(cfg.Defaults.Builder),
 		Auto:           true,
 	}
 	// Inherit build formats from parent if defaults is empty

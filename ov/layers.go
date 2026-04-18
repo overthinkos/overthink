@@ -162,7 +162,7 @@ type LayerYAML struct {
 }
 
 // layerYAMLKnownFields lists non-format top-level keys in layer.yml.
-// Unknown keys are routed to FormatSections (if matching a distro.yml format)
+// Unknown keys are routed to FormatSections (if matching a build.yml distro format)
 // or TagSections (otherwise).
 var layerYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true, "info": true,
@@ -177,7 +177,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"vars": true, "tasks": true,
 }
 
-// layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
+// layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
 // Must be populated by calling SetFormatNames before scanning layers.
 var layerYAMLFormatNames map[string]bool
 
@@ -299,7 +299,7 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 	*ly = LayerYAML(alias)
 
 	// Capture unknown keys as format sections or tag sections.
-	// Keys matching distro.yml format names → FormatSections (parsed as raw maps).
+	// Keys matching build.yml distro format names → FormatSections (parsed as raw maps).
 	// All other unknown keys → TagSections (parsed as {packages: [...]}).
 	if value.Kind == yaml.MappingNode {
 		ly.FormatSections = make(map[string]*PackageSection)
@@ -357,7 +357,7 @@ type RouteYAML struct {
 }
 
 // Format-specific structs (RpmConfig, DebConfig, PacConfig, AurConfig) removed.
-// All format sections are now parsed dynamically as PackageSection via distro.yml format names.
+// All format sections are now parsed dynamically as PackageSection via build.yml distro format names.
 // See PackageSection type and LayerYAML.UnmarshalYAML for the generic parsing.
 
 // Layer represents a layer directory and its contents
@@ -534,7 +534,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Package config: format sections and tag sections are populated by
 		// the custom UnmarshalYAML on LayerYAML. Format sections are detected
-		// by matching top-level keys against distro.yml format names.
+		// by matching top-level keys against build.yml distro format names.
 		layer.formatSections = ly.FormatSections
 		if layer.formatSections == nil {
 			layer.formatSections = make(map[string]*PackageSection)
@@ -777,7 +777,7 @@ func PopulateLayerInitSystems(layers map[string]*Layer, initCfg *InitConfig) {
 	}
 	for _, layer := range layers {
 		layer.InitSystems = make(map[string]bool)
-		for initName, def := range initCfg.Inits {
+		for initName, def := range initCfg.Init {
 			// Check layer_fields
 			for _, field := range def.LayerFields {
 				switch field {

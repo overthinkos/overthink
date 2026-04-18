@@ -11,10 +11,10 @@ import (
 
 // --- Distro Config ---
 
-// DistroConfig represents the distro.yml configuration.
+// DistroConfig represents the `distro:` section of build.yml.
 // Each distro defines bootstrap behavior AND package format definitions.
 type DistroConfig struct {
-	Distros map[string]*DistroDef `yaml:"distros"`
+	Distro map[string]*DistroDef `yaml:"distro"`
 }
 
 // DistroDef defines distro-specific bootstrap, workarounds, and package formats.
@@ -61,7 +61,7 @@ func (dc *DistroConfig) ResolveDistro(distroTags []string) *DistroDef {
 	}
 	for _, tag := range distroTags {
 		// Try exact match first (e.g., "fedora:43")
-		if def, ok := dc.Distros[tag]; ok {
+		if def, ok := dc.Distro[tag]; ok {
 			return dc.resolveInherits(def, 10)
 		}
 		// Try base name (e.g., "fedora" from "fedora:43")
@@ -69,7 +69,7 @@ func (dc *DistroConfig) ResolveDistro(distroTags []string) *DistroDef {
 		if idx := indexOf(tag, ':'); idx >= 0 {
 			base = tag[:idx]
 		}
-		if def, ok := dc.Distros[base]; ok {
+		if def, ok := dc.Distro[base]; ok {
 			return dc.resolveInherits(def, 10)
 		}
 	}
@@ -80,7 +80,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	if def.Inherits == "" || maxDepth <= 0 {
 		return def
 	}
-	parent, ok := dc.Distros[def.Inherits]
+	parent, ok := dc.Distro[def.Inherits]
 	if !ok {
 		return def
 	}
@@ -118,7 +118,7 @@ func (dc *DistroConfig) AllFormatNames() []string {
 		return nil
 	}
 	seen := make(map[string]bool)
-	for _, distro := range dc.Distros {
+	for _, distro := range dc.Distro {
 		resolved := dc.resolveInherits(distro, 10)
 		for name := range resolved.Formats {
 			seen[name] = true
@@ -137,7 +137,7 @@ func (dc *DistroConfig) ValidFormat(name string) bool {
 	if dc == nil {
 		return false
 	}
-	for _, distro := range dc.Distros {
+	for _, distro := range dc.Distro {
 		resolved := dc.resolveInherits(distro, 10)
 		if _, ok := resolved.Formats[name]; ok {
 			return true
@@ -157,9 +157,9 @@ func indexOf(s string, c byte) int {
 
 // --- Builder Config ---
 
-// BuilderConfig represents the builder.yml configuration.
+// BuilderConfig represents the `builder:` section of build.yml.
 type BuilderConfig struct {
-	Builders map[string]*BuilderDef `yaml:"builders"`
+	Builder map[string]*BuilderDef `yaml:"builder"`
 }
 
 // BuilderDef defines a multi-stage builder (pixi, npm, cargo, etc.).
@@ -191,7 +191,7 @@ func (bc *BuilderConfig) ValidBuilderType(name string) bool {
 	if bc == nil {
 		return false
 	}
-	_, ok := bc.Builders[name]
+	_, ok := bc.Builder[name]
 	return ok
 }
 
@@ -200,8 +200,8 @@ func (bc *BuilderConfig) BuilderNames() []string {
 	if bc == nil {
 		return nil
 	}
-	names := make([]string, 0, len(bc.Builders))
-	for name := range bc.Builders {
+	names := make([]string, 0, len(bc.Builder))
+	for name := range bc.Builder {
 		names = append(names, name)
 	}
 	sortStrings(names)
@@ -243,60 +243,53 @@ func ResolveFormatConfigData(ref, dir string) ([]byte, error) {
 	return data, nil
 }
 
-// resolveConfigRef resolves a single config type through the fallback chain:
-// per-image ref → defaults ref → error.
-func resolveConfigRef(configType string, imgRef, defaultRef, dir string) ([]byte, error) {
-	// Try per-image ref first
-	if imgRef != "" {
-		return ResolveFormatConfigData(imgRef, dir)
-	}
-	// Try defaults ref
-	if defaultRef != "" {
-		return ResolveFormatConfigData(defaultRef, dir)
-	}
-	return nil, fmt.Errorf("%s: no format_config ref specified (set in defaults or per-image)", configType)
+// BuildFile is the on-disk schema of build.yml — three optional top-level
+// sections that map directly onto DistroConfig/BuilderConfig/InitConfig.
+type BuildFile struct {
+	Distro  map[string]*DistroDef  `yaml:"distro"`
+	Builder map[string]*BuilderDef `yaml:"builder"`
+	Init    map[string]*InitDef    `yaml:"init"`
 }
 
-// LoadFormatConfigsForImage loads distro and builder configs for a single image.
-// Resolution chain per config type: per-image format_config → defaults format_config → error.
-func LoadFormatConfigsForImage(imgRefs, defaultRefs *FormatConfigRefs, dir string) (*DistroConfig, *BuilderConfig, error) {
-	imgDistro, imgBuilder := "", ""
-	if imgRefs != nil {
-		imgDistro = imgRefs.Distro
-		imgBuilder = imgRefs.Builder
+// LoadBuildConfigForImage loads distro, builder, and init configs from a single
+// build.yml for a given image. Resolution chain: per-image format_config →
+// defaults format_config → error.
+//
+// The init section is optional: if build.yml has no `init:` key (or an empty
+// one), the returned InitConfig is nil — images without init config are
+// allowed (no init system, no entrypoint beyond the base image default).
+func LoadBuildConfigForImage(imgRef, defaultRef, dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
+	ref := imgRef
+	if ref == "" {
+		ref = defaultRef
 	}
-	defDistro, defBuilder := "", ""
-	if defaultRefs != nil {
-		defDistro = defaultRefs.Distro
-		defBuilder = defaultRefs.Builder
+	if ref == "" {
+		return nil, nil, nil, fmt.Errorf("build.yml: no format_config ref specified (set in defaults or per-image)")
 	}
 
-	// Resolve distro.yml (contains both bootstrap and format definitions)
-	distroData, err := resolveConfigRef("distro.yml", imgDistro, defDistro, dir)
+	data, err := ResolveFormatConfigData(ref, dir)
 	if err != nil {
-		return nil, nil, err
-	}
-	var distroCfg DistroConfig
-	if err := yaml.Unmarshal(distroData, &distroCfg); err != nil {
-		return nil, nil, fmt.Errorf("parsing distro.yml: %w", err)
+		return nil, nil, nil, err
 	}
 
-	// Resolve builder.yml
-	builderData, err := resolveConfigRef("builder.yml", imgBuilder, defBuilder, dir)
-	if err != nil {
-		return nil, nil, err
-	}
-	var builderCfg BuilderConfig
-	if err := yaml.Unmarshal(builderData, &builderCfg); err != nil {
-		return nil, nil, fmt.Errorf("parsing builder.yml: %w", err)
+	var bf BuildFile
+	if err := yaml.Unmarshal(data, &bf); err != nil {
+		return nil, nil, nil, fmt.Errorf("parsing build.yml: %w", err)
 	}
 
-	return &distroCfg, &builderCfg, nil
+	distroCfg := &DistroConfig{Distro: bf.Distro}
+	builderCfg := &BuilderConfig{Builder: bf.Builder}
+	var initCfg *InitConfig
+	if len(bf.Init) > 0 {
+		initCfg = &InitConfig{Init: bf.Init}
+	}
+
+	return distroCfg, builderCfg, initCfg, nil
 }
 
-// LoadDefaultFormatConfigs loads format configs from the defaults format_config refs.
+// LoadDefaultBuildConfig loads build config from the defaults format_config ref.
 // Used during early initialization (before per-image resolution) to get the default
 // DistroConfig for format name registration.
-func LoadDefaultFormatConfigs(defaultRefs *FormatConfigRefs, dir string) (*DistroConfig, *BuilderConfig, error) {
-	return LoadFormatConfigsForImage(nil, defaultRefs, dir)
+func LoadDefaultBuildConfig(defaultRef, dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
+	return LoadBuildConfigForImage("", defaultRef, dir)
 }

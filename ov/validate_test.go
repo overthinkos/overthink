@@ -34,10 +34,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build: BuildFormats{"invalid"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{},
 	}
@@ -196,10 +193,10 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 }
 
 // TestValidateRepoUrlAndRpmBothSet removed — format-specific validation
-// rules (e.g., "exactly one of url or rpm") are now in distro.yml validate
+// rules (e.g., "exactly one of url or rpm") are now in build.yml validate
 // section, not in Go code.
 
-// TestValidateRepoNeitherUrlNorRpm removed — format-specific validation now in distro.yml
+// TestValidateRepoNeitherUrlNorRpm removed — format-specific validation now in build.yml
 
 func TestValidatePacPkgValue(t *testing.T) {
 	cfg := &Config{
@@ -218,10 +215,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build: BuildFormats{"zypper"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{},
 	}
@@ -237,7 +231,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 }
 
 // TestValidatePacReposMissingServer removed — format-specific field requirements
-// (pac repos must have server) are now in distro.yml validate rules, not Go code.
+// (pac repos must have server) are now in build.yml validate rules, not Go code.
 
 func TestValidatePacReposMissingName(t *testing.T) {
 	cfg := &Config{
@@ -268,10 +262,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build: BuildFormats{"pac"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{
 			"arch-img": {
@@ -292,9 +283,9 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 
 	err := Validate(cfg, layers, ".")
 	if err == nil {
-		t.Fatal("expected error for aur packages without builders.aur")
+		t.Fatal("expected error for aur packages without builder.aur")
 	}
-	if !strings.Contains(err.Error(), "no builders.aur configured") {
+	if !strings.Contains(err.Error(), "no builder.aur configured") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -917,15 +908,12 @@ func TestValidateSelfBuilder(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build: BuildFormats{"rpm"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{
 			"myimg": {
 				Layers:   []string{"pixi"},
-				Builders: BuildersMap{"pixi": "myimg"},
+				Builder: BuilderMap{"pixi": "myimg"},
 			},
 		},
 	}
@@ -947,11 +935,8 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build:    BuildFormats{"rpm"},
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			Builder:  BuilderMap{"pixi": "builder", "npm": "builder"},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{
 			"builder": {Layers: []string{"pixi"}},
@@ -971,15 +956,12 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{
 			Build: BuildFormats{"rpm"},
-			FormatConfig: &FormatConfigRefs{
-				Distro:  "testdata/defaults/distro.yml",
-				Builder: "testdata/defaults/builder.yml",
-			},
+			FormatConfig: testBuildConfigRef,
 		},
 		Images: map[string]ImageConfig{
 			"app": {
 				Layers:   []string{"pixi"},
-				Builders: BuildersMap{"pixi": "nonexistent"},
+				Builder: BuilderMap{"pixi": "nonexistent"},
 			},
 		},
 	}

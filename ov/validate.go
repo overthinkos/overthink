@@ -36,16 +36,18 @@ func (e *ValidationError) HasErrors() bool {
 func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	errs := &ValidationError{}
 
-	// Load default format configs for global validation
+	// Load default build config for global validation
 	var defaultDistroCfg *DistroConfig
 	var defaultBuilderCfg *BuilderConfig
-	if cfg.Defaults.FormatConfig != nil {
-		dc, blc, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+	var defaultInitCfg *InitConfig
+	if cfg.Defaults.FormatConfig != "" {
+		dc, blc, ic, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
 		if err != nil {
-			errs.Add("loading default format configs: %v", err)
+			errs.Add("loading default build config: %v", err)
 		} else {
 			defaultDistroCfg = dc
 			defaultBuilderCfg = blc
+			defaultInitCfg = ic
 		}
 	}
 
@@ -153,16 +155,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate data layers and data images
 	validateDataLayers(cfg, layers, errs)
 
-	// Validate init system dependencies (driven by init.yml)
-	var defaultInitCfg *InitConfig
-	if cfg.Defaults.FormatConfig != nil {
-		ic, icErr := LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
-		if icErr != nil {
-			errs.Add("loading default init config: %v", icErr)
-		} else {
-			defaultInitCfg = ic
-		}
-	}
+	// Validate init system dependencies (driven by build.yml init: section)
 	if defaultInitCfg != nil {
 		validateInitDependencies(cfg, defaultInitCfg, layers, errs)
 	}
@@ -194,7 +187,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 
 		// For each init system with a depends_layer, check if it's needed and present
 		isBootc := img.Bootc
-		for initName, def := range initCfg.Inits {
+		for initName, def := range initCfg.Init {
 			if def.DependsLayer == "" {
 				continue // no dependency requirement (e.g., systemd is provided by base OS)
 			}
@@ -273,7 +266,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 						continue
 					}
 					hasAlternativeInit := false
-					for altName := range initCfg.Inits {
+					for altName := range initCfg.Init {
 						if altName != initName && layer.HasInit(altName) {
 							hasAlternativeInit = true
 							break
@@ -294,7 +287,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 }
 
 // validateBuildAndDistro validates build: and distro: entries.
-// build: entries are checked against distro.yml format definitions.
+// build: entries are checked against build.yml distro format definitions.
 // distro: is free-form (any string, including distro:version).
 func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *ValidationError) {
 	validateBuild := func(context string, build BuildFormats) {
@@ -761,19 +754,19 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 }
 
-// validateBuilders validates builders and builds configuration
+// validateBuilders validates builder and builds configuration
 func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *BuilderConfig, errs *ValidationError) {
-	// Validate defaults.builders entries
-	for typ, builder := range cfg.Defaults.Builders {
+	// Validate defaults.builder entries
+	for typ, builder := range cfg.Defaults.Builder {
 		if !builderCfg.ValidBuilderType(typ) {
-			errs.Add("defaults.builders: build type %q is not valid (known builders: %s)", typ, strings.Join(builderCfg.BuilderNames(), ", "))
+			errs.Add("defaults.builder: build type %q is not valid (known builders: %s)", typ, strings.Join(builderCfg.BuilderNames(), ", "))
 		}
 		if builder != "" {
 			builderImg, exists := cfg.Images[builder]
 			if !exists {
-				errs.Add("defaults.builders.%s: image %q not found in image.yml", typ, builder)
+				errs.Add("defaults.builder.%s: image %q not found in image.yml", typ, builder)
 			} else if !builderImg.IsEnabled() {
-				errs.Add("defaults.builders.%s: image %q is disabled", typ, builder)
+				errs.Add("defaults.builder.%s: image %q is disabled", typ, builder)
 			}
 		}
 	}
@@ -791,23 +784,23 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			}
 		}
 
-		// Validate builders: entries (per-type builder assignments)
-		for typ, builder := range img.Builders {
+		// Validate builder: entries (per-type builder assignments)
+		for typ, builder := range img.Builder {
 			if !builderCfg.ValidBuilderType(typ) {
-				errs.Add("image %q: builders.%s is not a valid build type (known builders: %s)", imageName, typ, strings.Join(builderCfg.BuilderNames(), ", "))
+				errs.Add("image %q: builder.%s is not a valid build type (known builders: %s)", imageName, typ, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
 			if builder == imageName {
-				errs.Add("image %q: builders.%s cannot reference self", imageName, typ)
+				errs.Add("image %q: builder.%s cannot reference self", imageName, typ)
 				continue
 			}
 			if builder != "" {
 				builderImg, exists := cfg.Images[builder]
 				if !exists {
-					errs.Add("image %q: builders.%s references %q which is not found in image.yml", imageName, typ, builder)
+					errs.Add("image %q: builder.%s references %q which is not found in image.yml", imageName, typ, builder)
 					continue
 				}
 				if !builderImg.IsEnabled() {
-					errs.Add("image %q: builders.%s references %q which is disabled", imageName, typ, builder)
+					errs.Add("image %q: builder.%s references %q which is disabled", imageName, typ, builder)
 					continue
 				}
 				// Check builder declares this capability
@@ -819,22 +812,22 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 					}
 				}
 				if len(builderImg.Builds) > 0 && !hasCapability {
-					errs.Add("image %q: builders.%s references %q which does not declare builds: [%s]", imageName, typ, builder, typ)
+					errs.Add("image %q: builder.%s references %q which does not declare builds: [%s]", imageName, typ, builder, typ)
 				}
 			}
 		}
 
-		// Resolve effective builders (image -> base -> defaults) to check needs
-		resolved := make(BuildersMap)
-		for typ, builder := range cfg.Defaults.Builders {
+		// Resolve effective builder map (image -> base -> defaults) to check needs
+		resolved := make(BuilderMap)
+		for typ, builder := range cfg.Defaults.Builder {
 			resolved[typ] = builder
 		}
 		if baseImg, ok := cfg.Images[img.Base]; ok && baseImg.IsEnabled() {
-			for typ, builder := range baseImg.Builders {
+			for typ, builder := range baseImg.Builder {
 				resolved[typ] = builder
 			}
 		}
-		for typ, builder := range img.Builders {
+		for typ, builder := range img.Builder {
 			resolved[typ] = builder
 		}
 		// Filter self-references
@@ -845,7 +838,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		}
 
 		// Check if layers need builders that aren't configured.
-		// Detection is fully config-driven from builder.yml:
+		// Detection is fully config-driven from build.yml builder: section:
 		//   detect_files: layer has any of these files
 		//   detect_config: layer has this format section with packages
 		layerOrder, err := ResolveLayerOrder(img.Layers, layers, nil)
@@ -857,7 +850,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			if !ok {
 				continue
 			}
-			for builderName, builderDef := range builderCfg.Builders {
+			for builderName, builderDef := range builderCfg.Builder {
 				needed := false
 				for _, f := range builderDef.DetectFiles {
 					if layerHasFile(layer, f) {
@@ -869,7 +862,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 					needed = true
 				}
 				if needed && !resolved.HasBuilder(builderName) {
-					errs.Add("image %q: layer %q needs builder %q but no builders.%s configured", imageName, layerName, builderName, builderName)
+					errs.Add("image %q: layer %q needs builder %q but no builder.%s configured", imageName, layerName, builderName, builderName)
 				}
 			}
 		}

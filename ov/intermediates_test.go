@@ -379,22 +379,22 @@ func TestComputeIntermediates_RealisticConfig(t *testing.T) {
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layers: []string{}, Tag: "v1", Registry: "r",
-			FullTag: "r/fedora:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/fedora:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
-			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"openclaw": {
 			Name: "openclaw", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"openclaw"}, Tag: "v1", Registry: "r",
-			FullTag: "r/openclaw:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/openclaw:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"}},
+		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Images: map[string]ImageConfig{
 			"builder":     {Layers: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":      {Layers: []string{}},
@@ -478,57 +478,57 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		"fedora": {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layers: []string{}, Tag: "v1", Registry: "r",
-			FullTag: "r/fedora:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/fedora:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"cuda"}, Tag: "v1", Registry: "r",
-			FullTag: "r/nvidia:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/nvidia:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"python-ml": {
 			Name: "python-ml", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"python-ml"}, Tag: "v1", Registry: "r",
-			FullTag: "r/python-ml:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/python-ml:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter": {
 			Name: "jupyter", Base: "python-ml", IsExternalBase: false,
 			Layers: []string{"jupyter"}, Tag: "v1", Registry: "r",
-			FullTag: "r/jupyter:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/jupyter:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"comfyui": {
 			Name: "comfyui", Base: "python-ml", IsExternalBase: false,
 			Layers: []string{"comfyui"}, Tag: "v1", Registry: "r",
-			FullTag: "r/comfyui:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/comfyui:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"ollama": {
 			Name: "ollama", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"ollama"}, Tag: "v1", Registry: "r",
-			FullTag: "r/ollama:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/ollama:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"openclaw-ollama": {
 			Name: "openclaw-ollama", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"openclaw", "ollama"}, Tag: "v1", Registry: "r",
-			FullTag: "r/openclaw-ollama:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/openclaw-ollama:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"traefik", "testapi"}, Tag: "v1", Registry: "r",
-			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/fedora-test:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"openclaw": {
 			Name: "openclaw", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"openclaw"}, Tag: "v1", Registry: "r",
-			FullTag: "r/openclaw:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/openclaw:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"githubrunner": {
 			Name: "githubrunner", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"github-runner"}, Tag: "v1", Registry: "r",
-			FullTag: "r/githubrunner:v1", Pkg: "rpm", Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/githubrunner:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"}},
+		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Images: map[string]ImageConfig{
 			"builder":         {Layers: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":          {Layers: []string{}},
@@ -852,7 +852,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layers: []string{}, Tag: "v1", Registry: "r", FullTag: "r/fedora:v1",
 			Pkg: "rpm", Platforms: []string{"linux/amd64", "linux/arm64"},
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"builder": {
 			Name: "builder", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
@@ -862,17 +862,17 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"cuda"}, Tag: "v1", Registry: "r", FullTag: "r/nvidia:v1",
-			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"appA": {
 			Name: "appA", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"appA"}, Tag: "v1", Registry: "r", FullTag: "r/appA:v1",
-			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"appB": {
 			Name: "appB", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"appB"}, Tag: "v1", Registry: "r", FullTag: "r/appB:v1",
-			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Pkg: "rpm", Platforms: []string{"linux/amd64"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 
@@ -880,7 +880,7 @@ func TestComputeIntermediates_PlatformInheritance(t *testing.T) {
 		Defaults: ImageConfig{
 			Registry:  "r",
 			Build:     BuildFormats{"rpm"},
-			Builders:  BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder:   BuilderMap{"pixi": "builder", "npm": "builder"},
 			Platforms: []string{"linux/amd64", "linux/arm64"},
 		},
 		Images: map[string]ImageConfig{
@@ -1020,36 +1020,36 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 			Name: "fedora", Base: "quay.io/fedora/fedora:43", IsExternalBase: true,
 			Layers: []string{}, Tag: "v1", Registry: "r",
 			FullTag: "r/fedora:v1", Pkg: "rpm",
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"nvidia": {
 			Name: "nvidia", Base: "fedora", IsExternalBase: false,
 			Layers: []string{"cuda"}, Tag: "v1", Registry: "r",
 			FullTag: "r/nvidia:v1", Pkg: "rpm",
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml": {
 			Name: "jupyter-ml", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"},
 			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml-notebook": {
 			Name: "jupyter-ml-notebook", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
 			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"},
 			Tag: "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
-			Builders: BuildersMap{"pixi": "builder", "npm": "builder"},
+			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
 
 	cfg := &Config{
-		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builders: BuildersMap{"pixi": "builder", "npm": "builder"}},
+		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Images: map[string]ImageConfig{
 			"builder": {Layers: []string{"pixi"}},
 			"fedora":  {Layers: []string{}},

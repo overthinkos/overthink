@@ -398,7 +398,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		AcmeEmail: "admin@example.com",
 		Vm:       &VmConfig{Ram: "4G", Cpus: 2},
 		InitConfig: &InitConfig{
-			Inits: map[string]*InitDef{
+			Init: map[string]*InitDef{
 				"supervisord": {
 					LayerFields: []string{"service"},
 					LabelKey:    "org.overthinkos.services.supervisord",
@@ -561,7 +561,7 @@ func TestLabelRoundTrip(t *testing.T) {
 		AcmeEmail: "test@example.com",
 		Vm:        &VmConfig{Ram: "8G", Cpus: 4, SshPort: 2222, DiskSize: "30 GiB"},
 		InitConfig: &InitConfig{
-			Inits: map[string]*InitDef{
+			Init: map[string]*InitDef{
 				"supervisord": {
 					LayerFields: []string{"service"},
 					LabelKey:    "org.overthinkos.services.supervisord",

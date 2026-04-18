@@ -189,39 +189,39 @@ func TestResolveImageBuilders(t *testing.T) {
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
-			Builders:  BuildersMap{"pixi": "default-builder", "npm": "default-builder"},
+			Builder:   BuilderMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
 		Images: map[string]ImageConfig{
 			"default-builder": {Layers: []string{}},
 			"custom-builder":  {Layers: []string{}},
 			"uses-default":    {Layers: []string{}},
-			"uses-custom":     {Layers: []string{}, Builders: BuildersMap{"pixi": "custom-builder"}},
+			"uses-custom":     {Layers: []string{}, Builder: BuilderMap{"pixi": "custom-builder"}},
 		},
 	}
 
-	// Image with no explicit builders inherits defaults.builders
+	// Image with no explicit builder inherits defaults.builder
 	resolved, err := cfg.ResolveImage("uses-default", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builders.BuilderFor("pixi") != "default-builder" {
-		t.Errorf("Builders[pixi] = %q, want %q", resolved.Builders.BuilderFor("pixi"), "default-builder")
+	if resolved.Builder.BuilderFor("pixi") != "default-builder" {
+		t.Errorf("Builder[pixi] = %q, want %q", resolved.Builder.BuilderFor("pixi"), "default-builder")
 	}
 
-	// Image with explicit builders overrides defaults per-type
+	// Image with explicit builder overrides defaults per-type
 	resolved, err = cfg.ResolveImage("uses-custom", "test", "")
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builders.BuilderFor("pixi") != "custom-builder" {
-		t.Errorf("Builders[pixi] = %q, want %q", resolved.Builders.BuilderFor("pixi"), "custom-builder")
+	if resolved.Builder.BuilderFor("pixi") != "custom-builder" {
+		t.Errorf("Builder[pixi] = %q, want %q", resolved.Builder.BuilderFor("pixi"), "custom-builder")
 	}
 	// npm should still be inherited from defaults
-	if resolved.Builders.BuilderFor("npm") != "default-builder" {
-		t.Errorf("Builders[npm] = %q, want %q", resolved.Builders.BuilderFor("npm"), "default-builder")
+	if resolved.Builder.BuilderFor("npm") != "default-builder" {
+		t.Errorf("Builder[npm] = %q, want %q", resolved.Builder.BuilderFor("npm"), "default-builder")
 	}
 
-	// No defaults.builders → empty
+	// No defaults.builder → empty
 	cfg2 := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
@@ -232,8 +232,8 @@ func TestResolveImageBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if len(resolved.Builders) != 0 {
-		t.Errorf("Builders = %v, want empty", resolved.Builders)
+	if len(resolved.Builder) != 0 {
+		t.Errorf("Builder = %v, want empty", resolved.Builder)
 	}
 
 	// Self-reference filtered out
@@ -241,7 +241,7 @@ func TestResolveImageBuilders(t *testing.T) {
 		Defaults: ImageConfig{
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
-			Builders:  BuildersMap{"pixi": "my-builder"},
+			Builder:   BuilderMap{"pixi": "my-builder"},
 		},
 		Images: map[string]ImageConfig{
 			"my-builder": {Layers: []string{}},
@@ -251,15 +251,15 @@ func TestResolveImageBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builders.HasBuilder("pixi") {
-		t.Errorf("Self-referencing builder should be filtered, got %v", resolved.Builders)
+	if resolved.Builder.HasBuilder("pixi") {
+		t.Errorf("Self-referencing builder should be filtered, got %v", resolved.Builder)
 	}
 
 	// Inheritance from base image
 	cfg4 := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
 		Images: map[string]ImageConfig{
-			"base-img":    {Build: BuildFormats{"pac"}, Layers: []string{}, Builders: BuildersMap{"aur": "aur-builder"}},
+			"base-img":    {Build: BuildFormats{"pac"}, Layers: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
 			"aur-builder": {Layers: []string{}},
 			"child-img":   {Base: "base-img", Layers: []string{}},
 		},
@@ -268,8 +268,8 @@ func TestResolveImageBuilders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if resolved.Builders.BuilderFor("aur") != "aur-builder" {
-		t.Errorf("Builders[aur] = %q, want %q (inherited from base)", resolved.Builders.BuilderFor("aur"), "aur-builder")
+	if resolved.Builder.BuilderFor("aur") != "aur-builder" {
+		t.Errorf("Builder[aur] = %q, want %q (inherited from base)", resolved.Builder.BuilderFor("aur"), "aur-builder")
 	}
 }
 

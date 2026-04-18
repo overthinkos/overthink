@@ -52,7 +52,7 @@ const (
 	LabelTags           = "org.overthinkos.tags"
 	LabelDistro         = "org.overthinkos.distro"
 	LabelBuild          = "org.overthinkos.build"
-	LabelBuilders       = "org.overthinkos.builders"
+	LabelBuilder        = "org.overthinkos.builder"
 	LabelBuilds         = "org.overthinkos.builds"
 	LabelDataEntries    = "org.overthinkos.data"
 	LabelDataImage      = "org.overthinkos.data_image"
@@ -126,7 +126,7 @@ type ImageMetadata struct {
 	Tags           []string          // union: all + distro + build formats (for task matching)
 	Distro         []string          // distro identity tags
 	BuildFormats   []string          // build format list (rpm, pac, etc.)
-	Builders       map[string]string // build type → builder image
+	Builder        map[string]string // build type → builder image
 	Builds         []string          // what this builder can build
 	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
 	DataImage      bool              // true if this is a data-only image (FROM scratch)
@@ -383,10 +383,10 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Builders
-	if v := labels[LabelBuilders]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Builders); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuilders, err)
+	// Builder
+	if v := labels[LabelBuilder]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Builder); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilder, err)
 		}
 	}
 

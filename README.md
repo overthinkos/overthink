@@ -61,6 +61,8 @@ Each layer lives in its own directory under `layers/` and can use any combinatio
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
+The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a single `build.yml` at the repo root. Three top-level sections (`distro:`, `builder:`, `init:`), one loader, one ref from `image.yml`. See `/ov:build` for the full layout.
+
 ### Multi-Distro Support: `distro:` and `build:`
 
 A single layer can target multiple distros. Two fields in `image.yml` control the behavior:
@@ -97,7 +99,7 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 **In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers use `system_services:` to declare systemd units (like sshd) or add `*.service` files for user-level services. No supervisord needed because it's a real operating system, not a container.
 
-**Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing `init.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
+**Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing the `init:` section of `build.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
 
 ### Quadlets: Containers as System Services
 

@@ -117,25 +117,22 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
-	// Load default format configs early — needed for SetFormatNames before layer scanning
-	if cfg.Defaults.FormatConfig == nil {
+	// Load default build config early — needed for SetFormatNames before layer scanning
+	if cfg.Defaults.FormatConfig == "" {
 		return nil, fmt.Errorf("defaults.format_config is required in image.yml")
 	}
-	defaultDistroCfg, _, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
+	defaultDistroCfg, _, defaultInitCfg, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
 	if err != nil {
-		return nil, fmt.Errorf("loading default format configs: %w", err)
+		return nil, fmt.Errorf("loading default build config: %w", err)
 	}
 	SetFormatNames(defaultDistroCfg)
-
-	// Load default init config for layer init system detection
-	defaultInitCfg, _ := LoadInitConfigForImage(nil, cfg.Defaults.FormatConfig, dir)
 
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	// Populate init systems on layers from init.yml config
+	// Populate init systems on layers from build.yml config
 	PopulateLayerInitSystems(layers, defaultInitCfg)
 
 	if err := Validate(cfg, layers, dir); err != nil {
@@ -295,14 +292,14 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		b.WriteString(fmt.Sprintf("COPY %s/ /\n\n", g.layerCopySource(layerName)))
 	}
 
-	// Emit per-layer multi-stage build stages — fully config-driven from builder.yml.
-	// Each builder in builder.yml declares detect_files and/or detect_config.
+	// Emit per-layer multi-stage build stages — fully config-driven from build.yml builder: section.
+	// Each builder in build.yml builder: section declares detect_files and/or detect_config.
 	// For each layer that matches, the builder's stage_template is rendered.
 	if img.BuilderConfig != nil {
 		// Process builders in deterministic order
 		builderNames := img.BuilderConfig.BuilderNames()
 		for _, builderName := range builderNames {
-			builderDef := img.BuilderConfig.Builders[builderName]
+			builderDef := img.BuilderConfig.Builder[builderName]
 			if builderDef.Inline {
 				continue // inline builders handled in writeLayerSteps
 			}
@@ -341,7 +338,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
-	// Detect active init systems from layers (driven by init.yml config)
+	// Detect active init systems from layers (driven by build.yml init: section config)
 	activeInits := make(map[string]*InitDef)
 	if img.InitConfig != nil {
 		activeInits = img.InitConfig.ActiveInits(g.Layers, layerOrder, img.Bootc)
@@ -450,11 +447,11 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit image metadata labels
 	g.writeLabels(&b, imageName, layerOrder, img)
 
-	// Copy builder artifacts — fully config-driven from builder.yml copy_artifacts/copy_binary
+	// Copy builder artifacts — fully config-driven from build.yml builder: section copy_artifacts/copy_binary
 	if img.BuilderConfig != nil {
 		builderNames := img.BuilderConfig.BuilderNames()
 		for _, builderName := range builderNames {
-			builderDef := img.BuilderConfig.Builders[builderName]
+			builderDef := img.BuilderConfig.Builder[builderName]
 			if builderDef.Inline || builderDef.StageTemplate == "" {
 				continue
 			}
@@ -531,7 +528,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		inUserMode = g.writeLayerSteps(&b, layerName, img, isLast && !needsRootAfter)
 	}
 
-	// Assemble init system configs (driven by init.yml templates)
+	// Assemble init system configs (driven by build.yml init: section templates)
 	for initName, def := range activeInits {
 		assembly, err := def.RenderAssemblyTemplate()
 		if err != nil {
@@ -713,7 +710,7 @@ func (g *Generator) resolveBaseImage(img *ResolvedImage) string {
 // or "" if no builder is configured for that format.
 func (g *Generator) builderRefForFormat(imageName, format string) string {
 	img := g.Images[imageName]
-	builder := img.Builders.BuilderFor(format)
+	builder := img.Builder.BuilderFor(format)
 	if builder == "" || builder == imageName {
 		return ""
 	}
@@ -724,7 +721,7 @@ func (g *Generator) builderRefForFormat(imageName, format string) string {
 }
 
 // writeBootstrap writes the bootstrap preamble for external base images.
-// All distro-specific behavior is driven by distro.yml config.
+// All distro-specific behavior is driven by build.yml distro: section config.
 func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString("# Bootstrap\n")
 
@@ -1060,7 +1057,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 				continue
 			}
 			// Check if this format has a builder (multi-stage install step)
-			if builderDef, ok := img.BuilderConfig.Builders[format]; ok && !builderDef.Inline {
+			if builderDef, ok := img.BuilderConfig.Builder[format]; ok && !builderDef.Inline {
 				// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
 				ctx := &InstallContext{
 					CacheMounts: formatDef.CacheMounts,
@@ -1100,10 +1097,10 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
-	// 4. Inline builders (cargo, etc.) — config-driven from builder.yml
+	// 4. Inline builders (cargo, etc.) — config-driven from build.yml builder: section
 	if img.BuilderConfig != nil {
 		for _, bName := range img.BuilderConfig.BuilderNames() {
-			bDef := img.BuilderConfig.Builders[bName]
+			bDef := img.BuilderConfig.Builder[bName]
 			if !bDef.Inline || bDef.InstallTemplate == "" {
 				continue
 			}
@@ -1137,8 +1134,8 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 }
 
 // Old format-specific write functions removed — all generation is now
-// config-driven via distro.yml format templates rendered by renderFormatInstall*
-// and builder.yml templates rendered by buildStageContext + RenderTemplate.
+// config-driven via build.yml distro: section format templates rendered by renderFormatInstall*
+// and build.yml builder: section templates rendered by buildStageContext + RenderTemplate.
 
 // expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
 func expandBuilderPath(path string, img *ResolvedImage) string {
@@ -1288,8 +1285,8 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelTags, img.Tags)
 	writeJSONLabel(b, LabelDistro, img.Distro)
 	writeJSONLabel(b, LabelBuild, img.BuildFormats)
-	if len(img.Builders) > 0 {
-		writeJSONLabel(b, LabelBuilders, map[string]string(img.Builders))
+	if len(img.Builder) > 0 {
+		writeJSONLabel(b, LabelBuilder, map[string]string(img.Builder))
 	}
 	writeJSONLabel(b, LabelBuilds, img.BuilderCapabilities)
 

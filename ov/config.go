@@ -84,22 +84,22 @@ type SecurityConfig struct {
 	Cpus          string `yaml:"cpus,omitempty" json:"cpus,omitempty"`                       // CPU quota in cores ("2.5" = 2.5 cores → podman --cpus / systemd CPUQuota=250%)
 }
 
-// BuildersMap is a map of build type → builder image name.
+// BuilderMap is a map of build type → builder image name.
 // Valid build types: pixi, npm, cargo, aur.
-type BuildersMap map[string]string
+type BuilderMap map[string]string
 
 // BuilderFor returns the builder image name for the given format, or "".
-func (m BuildersMap) BuilderFor(format string) string {
+func (m BuilderMap) BuilderFor(format string) string {
 	return m[format]
 }
 
 // HasBuilder returns true if a builder is configured for the given format.
-func (m BuildersMap) HasBuilder(format string) bool {
+func (m BuilderMap) HasBuilder(format string) bool {
 	return m[format] != ""
 }
 
 // AllBuilders returns a deduplicated sorted list of builder image names.
-func (m BuildersMap) AllBuilders() []string {
+func (m BuilderMap) AllBuilders() []string {
 	seen := make(map[string]bool)
 	var builders []string
 	for _, b := range m {
@@ -110,14 +110,6 @@ func (m BuildersMap) AllBuilders() []string {
 	}
 	sortStrings(builders)
 	return builders
-}
-
-// FormatConfigRefs holds optional references to format config files (distro.yml, builder.yml, init.yml).
-// Each ref can be a local path relative to the project root or a remote @host/org/repo/path:version ref.
-type FormatConfigRefs struct {
-	Distro  string `yaml:"distro,omitempty"`
-	Builder string `yaml:"builder,omitempty"`
-	Init    string `yaml:"init,omitempty"`
 }
 
 // ImageConfig represents configuration for a single image or defaults
@@ -140,7 +132,7 @@ type ImageConfig struct {
 	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
-	Builders   BuildersMap       `yaml:"builders,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
+	Builder    BuilderMap        `yaml:"builder,omitempty"`      // build type → builder image (pixi, npm, cargo, aur)
 	Builds     []string          `yaml:"builds,omitempty"`       // what this builder image can build (pixi, npm, cargo, aur)
 	DNS        string            `yaml:"dns,omitempty"`          // DNS hostname for traefik routing and tunnels
 	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
@@ -152,7 +144,7 @@ type ImageConfig struct {
 	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
 	Vm           *VmConfig         `yaml:"vm,omitempty"`            // virtual machine settings (bootc images)
 	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
-	FormatConfig *FormatConfigRefs `yaml:"format_config,omitempty"` // refs to distro.yml, builder.yml, init.yml
+	FormatConfig string             `yaml:"format_config,omitempty"` // ref to build.yml (local path or @host/org/repo/path:version)
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
 }
@@ -198,7 +190,7 @@ type ResolvedImage struct {
 	Merge *MergeConfig // layer merge settings (nil means use CLI defaults)
 
 	// Builder configuration (resolved: image -> base image -> defaults -> {})
-	Builders BuildersMap // build type → builder image name
+	Builder BuilderMap // build type → builder image name
 	// Builder capability declaration (image-specific, not inherited)
 	BuilderCapabilities []string // what this builder image can build (from builds: field)
 
@@ -221,11 +213,11 @@ type ResolvedImage struct {
 	// Per-image run engine override (resolved from image config and layer requirements)
 	Engine string `json:"engine,omitempty"`
 
-	// Format configs (resolved per-image from format_config refs)
-	DistroConfig  *DistroConfig  `json:"-"` // from distro.yml
+	// Build config (resolved per-image from format_config ref to build.yml)
+	DistroConfig  *DistroConfig  `json:"-"` // distro section of build.yml
 	DistroDef     *DistroDef     `json:"-"` // resolved distro definition (cached)
-	BuilderConfig *BuilderConfig `json:"-"` // from builder.yml
-	InitConfig    *InitConfig    `json:"-"` // from init.yml
+	BuilderConfig *BuilderConfig `json:"-"` // builder section of build.yml
+	InitConfig    *InitConfig    `json:"-"` // init section of build.yml
 	InitSystem    string         `json:"-"` // resolved init system name ("supervisord", "systemd", "")
 	InitDef       *InitDef       `json:"-"` // resolved init definition (cached)
 
@@ -429,25 +421,25 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.Merge = c.Defaults.Merge
 	}
 
-	// Resolve builders: image -> base image (if internal) -> defaults -> {}
-	resolved.Builders = make(BuildersMap)
-	for typ, builder := range c.Defaults.Builders {
-		resolved.Builders[typ] = builder
+	// Resolve builder: image -> base image (if internal) -> defaults -> {}
+	resolved.Builder = make(BuilderMap)
+	for typ, builder := range c.Defaults.Builder {
+		resolved.Builder[typ] = builder
 	}
 	if !resolved.IsExternalBase {
 		if baseImg, ok := c.Images[resolved.Base]; ok {
-			for typ, builder := range baseImg.Builders {
-				resolved.Builders[typ] = builder
+			for typ, builder := range baseImg.Builder {
+				resolved.Builder[typ] = builder
 			}
 		}
 	}
-	for typ, builder := range img.Builders {
-		resolved.Builders[typ] = builder
+	for typ, builder := range img.Builder {
+		resolved.Builder[typ] = builder
 	}
 	// Filter self-references (builder images must not use themselves)
-	for typ, builder := range resolved.Builders {
+	for typ, builder := range resolved.Builder {
 		if builder == name {
-			delete(resolved.Builders, typ)
+			delete(resolved.Builder, typ)
 		}
 	}
 
@@ -503,10 +495,10 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.FullTag = fmt.Sprintf("%s:%s", name, resolved.Tag)
 	}
 
-	// Resolve format configs (per-image → defaults)
-	// Only load if format_config refs exist (build mode). Runtime mode skips this.
-	if img.FormatConfig != nil || c.Defaults.FormatConfig != nil {
-		distroCfg, builderCfg, err := LoadFormatConfigsForImage(
+	// Resolve build config (per-image → defaults)
+	// Only load if format_config ref exists (build mode). Runtime mode skips this.
+	if img.FormatConfig != "" || c.Defaults.FormatConfig != "" {
+		distroCfg, builderCfg, initCfg, err := LoadBuildConfigForImage(
 			img.FormatConfig, c.Defaults.FormatConfig, dir,
 		)
 		if err != nil {
@@ -514,19 +506,11 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		}
 		resolved.DistroConfig = distroCfg
 		resolved.BuilderConfig = builderCfg
+		resolved.InitConfig = initCfg
 		// Cache resolved distro definition for quick access to formats
 		if distroCfg != nil {
 			resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
 		}
-
-		// Load init config (from init.yml)
-		initCfg, err := LoadInitConfigForImage(
-			img.FormatConfig, c.Defaults.FormatConfig, dir,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("image %s: %w", name, err)
-		}
-		resolved.InitConfig = initCfg
 	}
 
 	return resolved, nil

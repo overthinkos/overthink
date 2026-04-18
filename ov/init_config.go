@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // --- Init Config ---
 
-// InitConfig represents the init.yml configuration.
+// InitConfig represents the `init:` section of build.yml.
 // Each init system defines how to detect, build, assemble, and manage services.
 type InitConfig struct {
-	Inits map[string]*InitDef `yaml:"inits"`
+	Init map[string]*InitDef `yaml:"init"`
 }
 
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
@@ -93,7 +91,7 @@ func (ic *InitConfig) DetectLayerInits(ly *LayerYAML, layerPath string) []string
 		return nil
 	}
 	var result []string
-	for initName, def := range ic.Inits {
+	for initName, def := range ic.Init {
 		if detectsInit(def, ly, layerPath) {
 			result = append(result, initName)
 		}
@@ -139,7 +137,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 
 	// Explicit override
 	if explicit != "" {
-		if def, ok := ic.Inits[explicit]; ok {
+		if def, ok := ic.Init[explicit]; ok {
 			return explicit, def
 		}
 	}
@@ -157,7 +155,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 		}
 		// port_relay triggers the init system with a relay_template
 		if len(layer.PortRelayPorts) > 0 {
-			for initName, def := range ic.Inits {
+			for initName, def := range ic.Init {
 				if def.RelayTemplate != "" {
 					initHits[initName] = true
 				}
@@ -167,7 +165,7 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 
 	// Filter by bootc requirement
 	for initName := range initHits {
-		def := ic.Inits[initName]
+		def := ic.Init[initName]
 		if def.RequiresBootc && !isBootc {
 			delete(initHits, initName)
 		}
@@ -175,17 +173,17 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 
 	// For bootc images with systemd, use systemd (skip supervisord)
 	if isBootc && initHits["systemd"] {
-		return "systemd", ic.Inits["systemd"]
+		return "systemd", ic.Init["systemd"]
 	}
 
 	// For container images, prefer supervisord
 	if initHits["supervisord"] {
-		return "supervisord", ic.Inits["supervisord"]
+		return "supervisord", ic.Init["supervisord"]
 	}
 
 	// Return first remaining init system
 	for initName := range initHits {
-		return initName, ic.Inits[initName]
+		return initName, ic.Init[initName]
 	}
 
 	return "", nil
@@ -205,7 +203,7 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string,
 			continue
 		}
 		for initName := range layer.InitSystems {
-			if def, ok := ic.Inits[initName]; ok {
+			if def, ok := ic.Init[initName]; ok {
 				if def.RequiresBootc && !isBootc {
 					continue
 				}
@@ -214,7 +212,7 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string,
 		}
 		// port_relay triggers init systems with relay_template
 		if len(layer.PortRelayPorts) > 0 {
-			for initName, def := range ic.Inits {
+			for initName, def := range ic.Init {
 				if def.RelayTemplate != "" && (!def.RequiresBootc || isBootc) {
 					result[initName] = def
 				}
@@ -250,44 +248,16 @@ func (def *InitDef) RenderManagementCommand(operation, serviceName string) (stri
 }
 
 // --- Loading ---
-
-// LoadInitConfigForImage loads the init config for a single image.
-// Resolution chain: per-image format_config.init → defaults format_config.init → nil (optional).
-func LoadInitConfigForImage(imgRefs, defaultRefs *FormatConfigRefs, dir string) (*InitConfig, error) {
-	imgInit := ""
-	if imgRefs != nil {
-		imgInit = imgRefs.Init
-	}
-	defInit := ""
-	if defaultRefs != nil {
-		defInit = defaultRefs.Init
-	}
-
-	// init.yml is optional — return nil without error if not configured
-	if imgInit == "" && defInit == "" {
-		return nil, nil
-	}
-
-	initData, err := resolveConfigRef("init.yml", imgInit, defInit, dir)
-	if err != nil {
-		return nil, err
-	}
-
-	var initCfg InitConfig
-	if err := yaml.Unmarshal(initData, &initCfg); err != nil {
-		return nil, fmt.Errorf("parsing init.yml: %w", err)
-	}
-
-	return &initCfg, nil
-}
+// Init config is loaded as part of LoadBuildConfigForImage in format_config.go.
+// The `init:` section of build.yml is optional — absent/empty means no init system.
 
 // InitNames returns a sorted list of all init system names.
 func (ic *InitConfig) InitNames() []string {
 	if ic == nil {
 		return nil
 	}
-	names := make([]string, 0, len(ic.Inits))
-	for name := range ic.Inits {
+	names := make([]string, 0, len(ic.Init))
+	for name := range ic.Init {
 		names = append(names, name)
 	}
 	sortStrings(names)

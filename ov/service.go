@@ -107,7 +107,7 @@ func resolveServiceInit(image, instance string) (engine, containerName string, i
 		return "", "", nil, fmt.Errorf("cannot read image metadata: %w", err)
 	}
 	if meta == nil || meta.Init == "" {
-		return "", "", nil, fmt.Errorf("no init system configured for container %s (rebuild image with init.yml support)", containerName)
+		return "", "", nil, fmt.Errorf("no init system configured for container %s (rebuild image with build.yml init: section support)", containerName)
 	}
 
 	// Load init config to get management commands
@@ -121,7 +121,7 @@ func resolveServiceInit(image, instance string) (engine, containerName string, i
 
 // resolveInitDefFromMeta creates a minimal InitDef from image metadata using
 // well-known init system names (supervisord, systemd). Custom init systems
-// declared via init.yml are only honored during build; runtime uses labels.
+// declared via build.yml init: section are only honored during build; runtime uses labels.
 func resolveInitDefFromMeta(meta *ImageMetadata) (*InitDef, error) {
 	switch meta.Init {
 	case "supervisord":
@@ -145,7 +145,7 @@ func resolveInitDefFromMeta(meta *ImageMetadata) (*InitDef, error) {
 			},
 		}, nil
 	default:
-		return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (no init.yml found)", meta.Init)
+		return nil, fmt.Errorf("unknown init system %q; cannot determine management commands (no build.yml init: section found)", meta.Init)
 	}
 }
 

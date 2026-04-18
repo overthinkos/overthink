@@ -6,29 +6,28 @@ rpm:
     - waybar
 
 tasks:
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config/waybar"
+  - mkdir: "${HOME}/.config/waybar"
+    user: "${USER}"
 
-  - &user_exec
-    user: "${USER}"
-    mode: "0755"
-    copy: waybar-wrapper
+  - copy: waybar-wrapper
     to: "${HOME}/.local/bin/waybar-wrapper"
-  - <<: *user_exec
-    copy: sway-autotile
-    to: "${HOME}/.local/bin/sway-autotile"
-
-  - &user_cfg
+    mode: "0755"
     user: "${USER}"
-    mode: "0644"
-    copy: config.json
+  - copy: sway-autotile
+    to: "${HOME}/.local/bin/sway-autotile"
+    mode: "0755"
+    user: "${USER}"
+
+  - copy: config.json
     to: "${HOME}/.config/waybar/config"
-  - <<: *user_cfg
-    copy: style.css
+    mode: "0644"
+    user: "${USER}"
+  - copy: style.css
     to: "${HOME}/.config/waybar/style.css"
+    mode: "0644"
+    user: "${USER}"
 
 service: |
   [program:waybar]

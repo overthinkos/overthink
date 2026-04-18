@@ -72,11 +72,10 @@ tasks:
     user: root
 
   # User-phase setup: wrapper + config.kdl
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config/niri"
+  - mkdir: "${HOME}/.config/niri"
+    user: "${USER}"
 
   - copy: niri-wrapper
     to: "${HOME}/.local/bin/niri-wrapper"

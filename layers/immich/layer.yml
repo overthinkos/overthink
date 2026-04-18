@@ -203,15 +203,14 @@ tasks:
       exec node /opt/immich/server/dist/main
 
   # User-phase data directories
-  - &user_mkdir
+  - mkdir: "${HOME}/.immich/library"
     user: "${USER}"
-    mkdir: "${HOME}/.immich/library"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.immich/cache"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.immich/import"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.immich/external"
+  - mkdir: "${HOME}/.immich/cache"
+    user: "${USER}"
+  - mkdir: "${HOME}/.immich/import"
+    user: "${USER}"
+  - mkdir: "${HOME}/.immich/external"
+    user: "${USER}"
 
 service: |
   [program:immich-db-init]

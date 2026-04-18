@@ -24,24 +24,23 @@ rpm:
     - thunar
 
 tasks:
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config/labwc"
+  - mkdir: "${HOME}/.config/labwc"
+    user: "${USER}"
 
   - copy: labwc-wrapper
     to: "${HOME}/.local/bin/labwc-wrapper"
     mode: "0755"
     user: "${USER}"
-  - &user_cp
-    user: "${USER}"
-    mode: "0644"
-    copy: rc.xml
+  - copy: rc.xml
     to: "${HOME}/.config/labwc/rc.xml"
-  - <<: *user_cp
-    copy: autostart
+    mode: "0644"
+    user: "${USER}"
+  - copy: autostart
     to: "${HOME}/.config/labwc/autostart"
+    mode: "0644"
+    user: "${USER}"
 
 service: |
   [program:labwc]

@@ -82,23 +82,23 @@ tasks:
     user: root
 
   # User-phase setup: wrappers for the three services.
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config/selkies"
+  - mkdir: "${HOME}/.config/selkies"
+    user: "${USER}"
 
-  - &user_bin
-    user: "${USER}"
-    mode: "0755"
-    copy: selkies-wrapper
+  - copy: selkies-wrapper
     to: "${HOME}/.local/bin/selkies-wrapper"
-  - <<: *user_bin
-    copy: selkies-capture-server
+    mode: "0755"
+    user: "${USER}"
+  - copy: selkies-capture-server
     to: "${HOME}/.local/bin/selkies-capture-server"
-  - <<: *user_bin
-    copy: selkies-fileserver
+    mode: "0755"
+    user: "${USER}"
+  - copy: selkies-fileserver
     to: "${HOME}/.local/bin/selkies-fileserver"
+    mode: "0755"
+    user: "${USER}"
 
 service: |
   [program:traefik]

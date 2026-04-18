@@ -55,48 +55,48 @@ tasks:
 
   # ---- user phase: install wrappers + helpers ----
 
-  # Author pattern: anchor a whole task (first use), then <<: *name on
-  # subsequent tasks to reuse shared modifiers. Each merge entry overrides
-  # the discriminator (mkdir/copy/etc.) with its own value.
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.local/share/chrome-windows"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config"
+  - mkdir: "${HOME}/.local/share/chrome-windows"
+    user: "${USER}"
+  - mkdir: "${HOME}/.config"
+    user: "${USER}"
 
-  # Executable wrappers — all share user + mode 0755
-  - &user_bin
-    user: "${USER}"
-    mode: "0755"
-    copy: chrome-wrapper
+  # Executable wrappers
+  - copy: chrome-wrapper
     to: "${HOME}/.local/bin/chrome-wrapper"
-  - <<: *user_bin
-    copy: chrome-restart
-    to: "${HOME}/.local/bin/chrome-restart"
-  - <<: *user_bin
-    copy: browser-open
-    to: "${HOME}/.local/bin/browser-open"
-  - <<: *user_bin
-    copy: cdp-proxy
-    to: "${HOME}/.local/bin/cdp-proxy"
-  - <<: *user_bin
-    copy: chrome-crash-listener
-    to: "${HOME}/.local/bin/chrome-crash-listener"
-
-  # Chrome extension data files (0644, not executable)
-  - &user_data
+    mode: "0755"
     user: "${USER}"
-    mode: "0644"
-    copy: chrome-windows/manifest.json
+  - copy: chrome-restart
+    to: "${HOME}/.local/bin/chrome-restart"
+    mode: "0755"
+    user: "${USER}"
+  - copy: browser-open
+    to: "${HOME}/.local/bin/browser-open"
+    mode: "0755"
+    user: "${USER}"
+  - copy: cdp-proxy
+    to: "${HOME}/.local/bin/cdp-proxy"
+    mode: "0755"
+    user: "${USER}"
+  - copy: chrome-crash-listener
+    to: "${HOME}/.local/bin/chrome-crash-listener"
+    mode: "0755"
+    user: "${USER}"
+
+  # Chrome extension data files (not executable)
+  - copy: chrome-windows/manifest.json
     to: "${HOME}/.local/share/chrome-windows/manifest.json"
-  - <<: *user_data
-    copy: chrome-windows/rules.json
+    mode: "0644"
+    user: "${USER}"
+  - copy: chrome-windows/rules.json
     to: "${HOME}/.local/share/chrome-windows/rules.json"
-  - <<: *user_data
-    copy: chrome-windows/content.js
+    mode: "0644"
+    user: "${USER}"
+  - copy: chrome-windows/content.js
     to: "${HOME}/.local/share/chrome-windows/content.js"
+    mode: "0644"
+    user: "${USER}"
 
   # Ensure Chrome always launches through chrome-wrapper (CDP flags etc.)
   # regardless of how it's started.

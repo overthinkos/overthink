@@ -15,24 +15,23 @@ tasks:
       rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
     user: root
 
-  - &user_mkdir
+  - mkdir: "${HOME}/.local/bin"
     user: "${USER}"
-    mkdir: "${HOME}/.local/bin"
-  - <<: *user_mkdir
-    mkdir: "${HOME}/.config/swaync"
+  - mkdir: "${HOME}/.config/swaync"
+    user: "${USER}"
 
   - copy: swaync-wrapper
     to: "${HOME}/.local/bin/swaync-wrapper"
     mode: "0755"
     user: "${USER}"
-  - &user_cfg
-    user: "${USER}"
-    mode: "0644"
-    copy: config.json
+  - copy: config.json
     to: "${HOME}/.config/swaync/config.json"
-  - <<: *user_cfg
-    copy: style.css
+    mode: "0644"
+    user: "${USER}"
+  - copy: style.css
     to: "${HOME}/.config/swaync/style.css"
+    mode: "0644"
+    user: "${USER}"
 
 service: |
   [program:swaync]

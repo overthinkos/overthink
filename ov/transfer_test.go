@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 	"testing"
@@ -26,11 +27,11 @@ func TestEnsureImage(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "not found in docker") {
-			t.Errorf("expected 'not found in docker', got: %v", err)
+		if !errors.Is(err, ErrImageNotLocal) {
+			t.Errorf("expected ErrImageNotLocal, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "ov build") {
-			t.Errorf("expected 'ov build' hint, got: %v", err)
+		if !strings.Contains(err.Error(), "myimage:latest") {
+			t.Errorf("expected error to name the missing image, got: %v", err)
 		}
 	})
 
@@ -51,8 +52,8 @@ func TestEnsureImage(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error")
 		}
-		if !strings.Contains(err.Error(), "podman") || !strings.Contains(err.Error(), "docker") {
-			t.Errorf("expected error mentioning both engines, got: %v", err)
+		if !errors.Is(err, ErrImageNotLocal) {
+			t.Errorf("expected ErrImageNotLocal, got: %v", err)
 		}
 	})
 

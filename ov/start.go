@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 )
 
@@ -23,10 +22,9 @@ type StartCmd struct {
 }
 
 func (c *StartCmd) Run() error {
-	// Handle remote image refs
-	ref := StripURLScheme(c.Image)
-	if IsRemoteImageRef(ref) {
-		return c.runRemote(ref)
+	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	if IsRemoteImageRef(StripURLScheme(c.Image)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov start <image-name>'", c.Image)
 	}
 
 	rt, err := ResolveRuntime()
@@ -55,17 +53,6 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		EnsureCDI()
 	}
 
-	var imageRef string
-	var uid, gid int
-	var home string
-	var ports []string
-	var volumes []VolumeMount
-	var bindMounts []ResolvedBindMount
-	var security SecurityConfig
-	var network string
-	var entrypoint []string
-	var envAccepts, envRequires []EnvDependency
-
 	// Load deploy.yml for volume backing config
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
@@ -75,85 +62,43 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Try images.yml first, fall back to image labels
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused", dir)
-		if err != nil {
-			return err
-		}
-		layers, err := ScanAllLayersWithConfig(dir, cfg)
-		if err != nil {
-			return err
-		}
-		// Resolve per-image engine
-		engine = ResolveImageEngine(cfg, layers, c.Image, rt.RunEngine)
-		allVolumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, nil)
-		if err != nil {
-			return err
-		}
-		security = CollectSecurity(cfg, layers, c.Image)
-		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, mergeVolumeConfigs(deployVolumes, cliVolumes), resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-		uid = resolved.UID
-		gid = resolved.GID
-		home = resolved.Home
-		ports = resolved.Ports
-		network = resolved.Network
-		// Resolve entrypoint from init config
-		img := cfg.Images[c.Image]
-		resolvedLayers, _ := ResolveLayerOrder(img.Layers, layers, nil)
-		entrypoint = resolveEntrypoint(resolved.InitConfig, layers, resolvedLayers, resolved.Bootc)
-	} else {
-		imageRef = resolveShellImageRef("", c.Image, c.Tag)
-		if err := EnsureImage(imageRef, rt); err != nil {
-			return err
-		}
-		meta, err := ExtractMetadata(engine, imageRef)
-		if err != nil {
-			return err
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
-		}
-		// Resolve per-image engine from labels
-		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-		// Apply deploy.yml overrides
-		MergeDeployOntoMetadata(meta, dc, c.Instance)
+	// Resolve from image labels (+ deploy.yml overlay). No images.yml.
+	imageRef := resolveShellImageRef("", c.Image, c.Tag)
+	if err := EnsureImage(imageRef, rt); err != nil {
+		return err
+	}
+	meta, err := ExtractMetadata(engine, imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	}
+	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
+	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
-		// Sidecars require quadlet mode (pod networking is only available via quadlet)
-		if dc != nil {
-			if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
-				return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
-			}
-		}
-
-		uid = meta.UID
-		gid = meta.GID
-		home = meta.Home
-		ports = meta.Ports
-		security = meta.Security
-		network = meta.Network
-		entrypoint = resolveEntrypointFromMeta(meta)
-
-		// Resolve volume backing from labels + deploy config
-		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-		envAccepts = meta.EnvAccepts
-		envRequires = meta.EnvRequires
-		if meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+	// Sidecars require quadlet mode (pod networking is only available via quadlet)
+	if dc != nil {
+		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
+			return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
 		}
 	}
 
-	if cfgErr == nil {
-		imageRT := ImageRuntime(rt, engine)
-		if err := EnsureImage(imageRef, imageRT); err != nil {
-			return err
-		}
+	uid := meta.UID
+	gid := meta.GID
+	home := meta.Home
+	ports := meta.Ports
+	security := meta.Security
+	network := meta.Network
+	entrypoint := resolveEntrypointFromMeta(meta)
+
+	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+
+	envAccepts := meta.EnvAccepts
+	envRequires := meta.EnvRequires
+	if meta.Registry != "" {
+		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 	}
 
 	// Apply instance-specific volume naming
@@ -169,14 +114,9 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		return err
 	}
 
-	// Resolve env vars
-	var deployEnv []string
+	// Resolve env vars from labels
+	deployEnv := meta.Env
 	var deployEnvFile string
-	if cfgErr == nil {
-		img := cfg.Images[c.Image]
-		deployEnv = img.Env
-		deployEnvFile = img.EnvFile
-	}
 	startCtrName := containerNameInstance(c.Image, c.Instance)
 	startAccepted := AcceptedEnvSet(envAccepts, envRequires)
 	startGlobalEnv := dc.GlobalEnvForImage(c.Image, startCtrName, startAccepted)
@@ -244,35 +184,12 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	fmt.Println(containerID)
 	fmt.Fprintf(os.Stderr, "Started %s as %s\n", name, containerID)
 
-	// Start tunnel if configured
-	if cfgErr == nil {
-		resolved, resolveErr := cfg.ResolveImage(c.Image, "unused", dir)
-		if resolveErr == nil && resolved.Tunnel != nil {
-			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
-			if scanErr == nil {
-				tc := ResolveTunnelConfig(
-					c.findTunnelYAML(cfg),
-					c.Image, resolved.DNS, layers, resolved.Layers,
-					collectPortProtos(layers, resolved.Layers), resolved.Ports,
-				)
-				if tc != nil {
-					if err := TunnelStart(*tc); err != nil {
-						fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
-					}
-				}
-			}
-		}
-	} else {
-		// Label path: start tunnel from metadata
-		meta, metaErr := ExtractMetadata(engine, imageRef)
-		if metaErr == nil && meta != nil && meta.Tunnel != nil {
-			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc, c.Instance)
-			tc := TunnelConfigFromMetadata(meta)
-			if tc != nil {
-				if err := TunnelStart(*tc); err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
-				}
+	// Start tunnel if configured (deploy.yml-only; labels never carry tunnel).
+	if meta.Tunnel != nil {
+		tc := TunnelConfigFromMetadata(meta)
+		if tc != nil {
+			if err := TunnelStart(*tc); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: tunnel setup failed: %v\n", err)
 			}
 		}
 	}
@@ -280,226 +197,6 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	return nil
 }
 
-func (c *StartCmd) runRemote(ref string) error {
-	var detected DetectedDevices
-	if !c.NoAutoDetect {
-		detected = DetectHostDevices()
-		LogDetectedDevices(detected)
-	}
-
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	ctx, err := ResolveRemoteImage(ref, c.Tag)
-	if err != nil {
-		return err
-	}
-
-	if rt.RunMode == "quadlet" {
-		return c.runRemoteQuadlet(rt, ctx, detected)
-	}
-
-	// Pull or build
-	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
-		return err
-	}
-
-	// Resolve per-image engine from remote config
-	engine := rt.RunEngine
-	if ctx.Resolved != nil {
-		engine = ResolveImageEngineFromMeta(&ImageMetadata{Engine: ctx.Resolved.Engine}, rt.RunEngine)
-	}
-
-	// Ensure NVIDIA CDI specs exist for nested container GPU access
-	if detected.GPU && engine == "podman" {
-		EnsureCDI()
-	}
-
-	allVolumes, err := ctx.CollectVolumes()
-	if err != nil {
-		return err
-	}
-	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
-		return err
-	}
-
-	// Resolve env vars with global env
-	remoteDC, _ := LoadDeployConfig()
-	remoteStartCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteStartGlobalEnv := remoteDC.GlobalEnvForImage(ctx.ImageName, remoteStartCtrName, nil)
-	envVars, err := ResolveEnvVars(remoteStartGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
-	if err != nil {
-		return err
-	}
-
-	// Merge auto-detected devices
-	security := SecurityConfig{}
-	security.Devices = appendUnique(security.Devices, detected.Devices...)
-	if detected.AMDGPU {
-		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
-	}
-	envVars = appendAutoDetectedEnv(envVars, detected)
-
-	// Resolve network
-	resolvedNetwork, netErr := ResolveNetwork("", engine)
-	if netErr != nil {
-		return netErr
-	}
-
-	// Resolve entrypoint from init config
-	remoteEntrypoint := []string{"sleep", "infinity"}
-	if ctx.Layers != nil {
-		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
-	}
-
-	// Inject agent forwarding (remote direct mode, no deploy.yml overlay)
-	remoteAgentFwd := ResolveAgentForwarding(rt, nil, ctx.Resolved.Home)
-	for _, v := range remoteAgentFwd.Volumes {
-		security.Mounts = appendUnique(security.Mounts, v)
-	}
-	envVars = append(envVars, remoteAgentFwd.Env...)
-
-	name := containerNameInstance(ctx.ImageName, c.Instance)
-	workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
-	args := buildStartArgs(engine, ctx.ImageRef,
-		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, remoteEntrypoint, workDir, resolvedNetwork)
-
-	cmd := exec.Command(args[0], args[1:]...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("%s run failed: %w\n%s", EngineBinary(engine), err, strings.TrimSpace(string(output)))
-	}
-
-	containerID := strings.TrimSpace(string(output))
-	if len(containerID) > 12 {
-		containerID = containerID[:12]
-	}
-	fmt.Println(containerID)
-	fmt.Fprintf(os.Stderr, "Started %s as %s\n", name, containerID)
-	return nil
-}
-
-func (c *StartCmd) runRemoteQuadlet(rt *ResolvedRuntime, ctx *RemoteImageContext, detected DetectedDevices) error {
-	// For quadlet with remote refs: resolve and generate quadlet file
-	allVolumes, err := ctx.CollectVolumes()
-	if err != nil {
-		return err
-	}
-	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-	// Ensure image is in podman
-	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-	if err := ctx.PullOrBuild(podmanRT, c.Tag, c.Build); err != nil {
-		return err
-	}
-
-	// Resolve env vars with global env
-	remoteQDC, _ := LoadDeployConfig()
-	remoteQCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteQGlobalEnv := remoteQDC.GlobalEnvForImage(ctx.ImageName, remoteQCtrName, nil)
-	envVars, envErr := ResolveEnvVars(remoteQGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
-	if envErr != nil {
-		return envErr
-	}
-
-	// Merge auto-detected devices
-	security := SecurityConfig{}
-	security.Devices = appendUnique(security.Devices, detected.Devices...)
-	if detected.AMDGPU {
-		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
-	}
-	envVars = appendAutoDetectedEnv(envVars, detected)
-
-	// Resolve network
-	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
-	if netErr != nil {
-		return netErr
-	}
-
-	ports := ctx.Resolved.Ports
-	if len(c.Port) > 0 {
-		var portErr error
-		ports, portErr = ApplyPortOverrides(ports, c.Port)
-		if portErr != nil {
-			return portErr
-		}
-	}
-
-	// Resolve entrypoint for quadlet
-	remoteQEntrypoint := []string{"sleep", "infinity"}
-	if ctx.Layers != nil {
-		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteQEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
-	}
-
-	qcfg := QuadletConfig{
-		ImageName:      ctx.ImageName,
-		ImageRef:       ctx.ImageRef,
-		Home:           ctx.Resolved.Home,
-		Ports:          ports,
-		Volumes:        volumes,
-		BindMounts:     bindMounts,
-		GPU:            detected.GPU,
-		BindAddress:    rt.BindAddress,
-		UID:            ctx.Resolved.UID,
-		GID:            ctx.Resolved.GID,
-		Env:            envVars,
-		Instance:       c.Instance,
-		Security:       security,
-		Network:        resolvedNetwork,
-		Status:         ctx.Resolved.Status,
-		Info:           ctx.Resolved.Info,
-		Entrypoint:     remoteQEntrypoint,
-	}
-
-	content := generateQuadlet(qcfg)
-
-	qdir, err := quadletDir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(qdir, 0755); err != nil {
-		return fmt.Errorf("creating quadlet directory: %w", err)
-	}
-
-	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
-	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
-		return fmt.Errorf("writing quadlet file: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)
-
-	reloadCmd := exec.Command("systemctl", "--user", "daemon-reload")
-	if output, err := reloadCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("systemctl daemon-reload failed: %w\n%s", err, strings.TrimSpace(string(output)))
-	}
-
-	svc := serviceNameInstance(ctx.ImageName, c.Instance)
-	startCmd := exec.Command("systemctl", "--user", "start", svc)
-	startCmd.Stdout = os.Stdout
-	startCmd.Stderr = os.Stderr
-	if err := startCmd.Run(); err != nil {
-		return fmt.Errorf("starting %s: %w", svc, err)
-	}
-	fmt.Fprintf(os.Stderr, "Started %s\n", svc)
-	return nil
-}
-
-// findTunnelYAML returns the raw TunnelYAML from config for this image.
-func (c *StartCmd) findTunnelYAML(cfg *Config) *TunnelYAML {
-	img := cfg.Images[c.Image]
-	if img.Tunnel != nil {
-		return img.Tunnel
-	}
-	return cfg.Defaults.Tunnel
-}
 
 func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	exists, err := quadletExistsInstance(c.Image, c.Instance)
@@ -597,34 +294,15 @@ func (c *StopCmd) Run() error {
 func stopTunnelForImage(imageName, instance string) {
 	var tc *TunnelConfig
 
-	// Try images.yml
-	dir, err := os.Getwd()
-	if err == nil {
-		cfg, cfgErr := LoadConfig(dir)
-		if cfgErr == nil {
-			resolved, resolveErr := cfg.ResolveImage(imageName, "unused", dir)
-			if resolveErr == nil && resolved.Tunnel != nil {
-				layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
-				if scanErr == nil {
-					tunnelYAML := cfg.Images[imageName].Tunnel
-					if tunnelYAML == nil {
-						tunnelYAML = cfg.Defaults.Tunnel
-					}
-					tc = ResolveTunnelConfig(tunnelYAML, imageName, resolved.DNS, layers, resolved.Layers, collectPortProtos(layers, resolved.Layers), resolved.Ports)
-				}
-			}
-		}
-	}
-
-	// Fall back to image labels
-	if tc == nil {
-		ctrName := containerNameInstance(imageName, instance)
-		imageRef := containerImage("podman", ctrName)
-		if imageRef != "" {
-			meta, metaErr := ExtractMetadata("podman", imageRef)
-			if metaErr == nil && meta != nil && meta.Tunnel != nil {
-				dc, _ := LoadDeployConfig()
-				MergeDeployOntoMetadata(meta, dc, instance)
+	// Tunnel config comes from deploy.yml (overlaid onto ImageMetadata).
+	ctrName := containerNameInstance(imageName, instance)
+	imageRef := containerImage("podman", ctrName)
+	if imageRef != "" {
+		meta, metaErr := ExtractMetadata("podman", imageRef)
+		if metaErr == nil && meta != nil {
+			dc, _ := LoadDeployConfig()
+			MergeDeployOntoMetadata(meta, dc, instance)
+			if meta.Tunnel != nil {
 				tc = TunnelConfigFromMetadata(meta)
 			}
 		}
@@ -695,26 +373,12 @@ func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOr
 }
 
 // resolveEntrypointFromMeta determines the entrypoint from image metadata (runtime mode).
+// Uses well-known init system names; custom init systems declared via init.yml are
+// only honored during build.
 func resolveEntrypointFromMeta(meta *ImageMetadata) []string {
 	if meta.Init == "" {
 		return []string{"sleep", "infinity"}
 	}
-	// Try loading init.yml from project directory
-	dir, _ := os.Getwd()
-	cfg, _ := LoadConfig(dir)
-	if cfg != nil {
-		initCfg, err := LoadInitConfigForImage(
-			cfg.Defaults.FormatConfig, cfg.Defaults.FormatConfig, dir,
-		)
-		if err == nil && initCfg != nil {
-			if def, ok := initCfg.Inits[meta.Init]; ok {
-				if len(def.Entrypoint) > 0 {
-					return def.Entrypoint
-				}
-			}
-		}
-	}
-	// Fallback for well-known init systems
 	switch meta.Init {
 	case "supervisord":
 		return []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}

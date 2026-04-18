@@ -10,10 +10,10 @@ import (
 
 // RecordCmd manages recording sessions (terminal and desktop) inside containers.
 type RecordCmd struct {
+	Cmd   RecordCmdCmd   `cmd:"" help:"Send a command to the recording's terminal"`
+	List  RecordListCmd  `cmd:"" help:"List active recording sessions"`
 	Start RecordStartCmd `cmd:"" help:"Start a recording session"`
 	Stop  RecordStopCmd  `cmd:"" help:"Stop a recording session and save output"`
-	List  RecordListCmd  `cmd:"" help:"List active recording sessions"`
-	Cmd   RecordCmdCmd   `cmd:"" help:"Send a command to the recording's terminal"`
 }
 
 // RecordStartCmd starts a recording session inside a container.

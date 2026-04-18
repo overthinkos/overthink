@@ -12,12 +12,12 @@ import (
 // ImageConfigCmd groups image configuration subcommands.
 // Default subcommand (no keyword): full setup (quadlet + secrets + enc).
 type ImageConfigCmd struct {
-	Setup   ImageConfigSetupCmd   `cmd:"" default:"withargs" help:"Setup quadlet, secrets, and encrypted volumes"`
-	Status  ImageConfigStatusCmd  `cmd:"status" help:"Show encrypted volume status"`
 	Mount   ImageConfigMountCmd   `cmd:"mount" help:"Mount encrypted volumes"`
-	Unmount ImageConfigUnmountCmd `cmd:"unmount" help:"Unmount encrypted volumes"`
 	Passwd  ImageConfigPasswdCmd  `cmd:"passwd" help:"Change gocryptfs password"`
 	Remove  ImageConfigRemoveCmd  `cmd:"remove" help:"Remove quadlet and disable service"`
+	Setup   ImageConfigSetupCmd   `cmd:"" default:"withargs" help:"Setup quadlet, secrets, and encrypted volumes"`
+	Status  ImageConfigStatusCmd  `cmd:"status" help:"Show encrypted volume status"`
+	Unmount ImageConfigUnmountCmd `cmd:"unmount" help:"Unmount encrypted volumes"`
 }
 
 // ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
@@ -81,10 +81,9 @@ func (c *ImageConfigSetupCmd) Run() error {
 		return fmt.Errorf("image name is required")
 	}
 
-	// Handle remote image refs
-	ref := StripURLScheme(c.Image)
-	if IsRemoteImageRef(ref) {
-		return c.runRemoteConfig(rt, ref)
+	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	if IsRemoteImageRef(StripURLScheme(c.Image)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov config <image-name>'", c.Image)
 	}
 
 	return c.runConfig(rt)
@@ -682,134 +681,6 @@ skipDataProvision:
 	return nil
 }
 
-func (c *ImageConfigSetupCmd) runRemoteConfig(rt *ResolvedRuntime, ref string) error {
-	var detected DetectedDevices
-	if !c.NoAutoDetect {
-		detected = DetectHostDevices()
-		LogDetectedDevices(detected)
-	}
-
-	ctx, err := ResolveRemoteImage(ref, c.Tag)
-	if err != nil {
-		return err
-	}
-
-	allVolumes, err := ctx.CollectVolumes()
-	if err != nil {
-		return err
-	}
-
-	// Parse volume flags for remote config
-	deployVolumes := c.parseVolumeFlags()
-	if len(deployVolumes) == 0 {
-		deployVolumes = parseVolumeEnv(ctx.ImageName)
-	}
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, deployVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-	// Ensure image is in podman
-	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-	if err := ctx.PullOrBuild(podmanRT, c.Tag, c.Build); err != nil {
-		return err
-	}
-
-	// Resolve SSH key if --ssh-key was provided
-	if c.SshKey != "" {
-		remoteCName := containerNameInstance(ctx.ImageName, c.Instance)
-		sshDir, sshDirErr := containerSSHKeyDir(remoteCName)
-		if sshDirErr != nil {
-			return sshDirErr
-		}
-		pubkey, sshErr := resolveSSHPubKey(c.SshKey, sshDir)
-		if sshErr != nil {
-			return fmt.Errorf("resolving SSH key: %w", sshErr)
-		}
-		if pubkey != "" {
-			c.Env = append(c.Env, "SSH_AUTHORIZED_KEYS="+pubkey)
-		}
-	}
-
-	// Resolve env vars with global env
-	dc, _ := LoadDeployConfig()
-	remoteCtrName := containerNameInstance(ctx.ImageName, "")
-	remoteGlobalEnv := dc.GlobalEnvForImage(ctx.ImageName, remoteCtrName, nil)
-	envVars, envErr := ResolveEnvVars(remoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
-	if envErr != nil {
-		return envErr
-	}
-
-	// Merge auto-detected devices
-	security := SecurityConfig{}
-	security.Devices = appendUnique(security.Devices, detected.Devices...)
-	if detected.AMDGPU {
-		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
-	}
-	envVars = appendAutoDetectedEnv(envVars, detected)
-
-	// Resolve network
-	resolvedNetwork, netErr := ResolveNetwork("", rt.RunEngine)
-	if netErr != nil {
-		return netErr
-	}
-
-	// Resolve entrypoint for quadlet
-	remoteEntrypoint := []string{"sleep", "infinity"}
-	if ctx.Layers != nil {
-		resolvedLayers, _ := ResolveLayerOrder(ctx.Resolved.Layers, ctx.Layers, nil)
-		remoteEntrypoint = resolveEntrypoint(ctx.Resolved.InitConfig, ctx.Layers, resolvedLayers, ctx.Resolved.Bootc)
-	}
-
-	remoteOvBin, _ := os.Executable()
-	remoteBackend := resolveSecretBackend()
-	remoteIsKeyring := remoteBackend == "keyring" || remoteBackend == "auto" || remoteBackend == ""
-
-	qcfg := QuadletConfig{
-		ImageName:       ctx.ImageName,
-		ImageRef:        ctx.ImageRef,
-		Home:            ctx.Resolved.Home,
-		Ports:           ctx.Resolved.Ports,
-		Volumes:         volumes,
-		BindMounts:      bindMounts,
-		GPU:             detected.GPU,
-		BindAddress:     rt.BindAddress,
-		UID:             ctx.Resolved.UID,
-		GID:             ctx.Resolved.GID,
-		Env:             envVars,
-		Instance:        c.Instance,
-		Security:        security,
-		Network:         resolvedNetwork,
-		Status:          ctx.Resolved.Status,
-		Info:            ctx.Resolved.Info,
-		Entrypoint:      remoteEntrypoint,
-		OvBin:           remoteOvBin,
-		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
-		KeyringBackend:  remoteIsKeyring,
-	}
-
-	content := generateQuadlet(qcfg)
-
-	qdir, err := quadletDir()
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(qdir, 0755); err != nil {
-		return fmt.Errorf("creating quadlet directory: %w", err)
-	}
-
-	qpath := filepath.Join(qdir, quadletFilenameInstance(ctx.ImageName, c.Instance))
-	if err := os.WriteFile(qpath, []byte(content), 0600); err != nil {
-		return fmt.Errorf("writing quadlet file: %w", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Wrote %s\n", qpath)
-
-	reloadCmd := exec.Command("systemctl", "--user", "daemon-reload")
-	if output, err := reloadCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("systemctl daemon-reload failed: %w\n%s", err, strings.TrimSpace(string(output)))
-	}
-
-	fmt.Fprintf(os.Stderr, "Reloaded systemd user daemon\n")
-	return nil
-}
 
 // ImageConfigStatusCmd shows encrypted volume status.
 type ImageConfigStatusCmd struct {

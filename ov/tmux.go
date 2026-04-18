@@ -10,14 +10,14 @@ import (
 
 // TmuxCmd manages tmux sessions inside running containers.
 type TmuxCmd struct {
-	Shell   TmuxShellCmd   `cmd:"" help:"Persistent shell — creates or reattaches to a tmux session"`
-	Cmd     TmuxCmdCmd     `cmd:"" help:"Send a command to a tmux session (with notification)"`
-	Run     TmuxRunCmd     `cmd:"" help:"Start a command in a new detached tmux session"`
 	Attach  TmuxAttachCmd  `cmd:"" help:"Attach to an existing tmux session (interactive)"`
-	List    TmuxListCmd    `cmd:"" help:"List active tmux sessions"`
 	Capture TmuxCaptureCmd `cmd:"" help:"Capture pane output from a session"`
-	Send    TmuxSendCmd    `cmd:"" help:"Send keys to a running session"`
+	Cmd     TmuxCmdCmd     `cmd:"" help:"Send a command to a tmux session (with notification)"`
 	Kill    TmuxKillCmd    `cmd:"" help:"Kill a tmux session"`
+	List    TmuxListCmd    `cmd:"" help:"List active tmux sessions"`
+	Run     TmuxRunCmd     `cmd:"" help:"Start a command in a new detached tmux session"`
+	Send    TmuxSendCmd    `cmd:"" help:"Send keys to a running session"`
+	Shell   TmuxShellCmd   `cmd:"" help:"Persistent shell — creates or reattaches to a tmux session"`
 }
 
 // TmuxShellCmd creates or reattaches to a persistent shell session.

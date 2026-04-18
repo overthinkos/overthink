@@ -16,14 +16,14 @@ import (
 
 // VncCmd manages VNC desktop interaction in running containers.
 type VncCmd struct {
-	Screenshot VncScreenshotCmd `cmd:"" help:"Capture VNC framebuffer as PNG"`
 	Click      VncClickCmd      `cmd:"" help:"Click at x,y coordinates"`
-	Type       VncTypeCmd       `cmd:"" help:"Type text as keyboard input"`
 	Key        VncKeyCmd        `cmd:"" help:"Send a key press/release event"`
 	Mouse      VncMouseCmd      `cmd:"" help:"Move mouse to x,y without clicking"`
-	Status     VncStatusCmd     `cmd:"" help:"Check VNC server status and display info"`
 	Passwd     VncPasswdCmd     `cmd:"" help:"Set VNC password for a deployment"`
 	Rfb        VncRfbCmd        `cmd:"" help:"Send a raw RFB command"`
+	Screenshot VncScreenshotCmd `cmd:"" help:"Capture VNC framebuffer as PNG"`
+	Status     VncStatusCmd     `cmd:"" help:"Show VNC server status and display info"`
+	Type       VncTypeCmd       `cmd:"" help:"Type text as keyboard input"`
 }
 
 // VncScreenshotCmd captures the VNC framebuffer as a PNG image.

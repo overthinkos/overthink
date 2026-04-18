@@ -12,10 +12,10 @@ import (
 
 // DbusCmd interacts with D-Bus services inside containers.
 type DbusCmd struct {
-	Notify     DbusNotifyCmd     `cmd:"" help:"Send a desktop notification"`
 	Call       DbusCallCmd       `cmd:"" help:"Call a D-Bus method"`
-	List       DbusListCmd       `cmd:"" help:"List available D-Bus services"`
 	Introspect DbusIntrospectCmd `cmd:"" help:"Introspect a D-Bus service object"`
+	List       DbusListCmd       `cmd:"" help:"List available D-Bus services"`
+	Notify     DbusNotifyCmd     `cmd:"" help:"Send a desktop notification"`
 }
 
 // DbusNotifyCmd sends a desktop notification via org.freedesktop.Notifications.

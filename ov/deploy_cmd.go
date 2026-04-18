@@ -10,12 +10,12 @@ import (
 
 // DeployCmd manages deploy.yml deployment overrides.
 type DeployCmd struct {
-	Show   DeployShowCmd   `cmd:"" help:"Show current deploy.yml overrides"`
 	Export DeployExportCmd `cmd:"" help:"Export effective config as deploy.yml"`
 	Import DeployImportCmd `cmd:"" help:"Import deploy.yml file(s) into config"`
-	Reset  DeployResetCmd  `cmd:"" help:"Remove deploy.yml overrides"`
-	Status DeployStatusCmd `cmd:"" help:"Show sync status between deploy.yml and quadlet files"`
 	Path   DeployPathCmd   `cmd:"" help:"Print deploy.yml file path"`
+	Reset  DeployResetCmd  `cmd:"" help:"Remove deploy.yml overrides"`
+	Show   DeployShowCmd   `cmd:"" help:"Show current deploy.yml overrides"`
+	Status DeployStatusCmd `cmd:"" help:"Show sync status between deploy.yml and quadlet files"`
 }
 
 // DeployShowCmd displays the current deploy.yml content.

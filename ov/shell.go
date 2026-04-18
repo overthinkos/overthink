@@ -69,10 +69,10 @@ func (c *ShellCmd) Run() error {
 	// Set global forceTTY so buildShellArgs/buildExecArgs pick it up
 	forceTTY = c.TTY
 
-	// Handle remote image refs
-	ref := StripURLScheme(c.Image)
-	if IsRemoteImageRef(ref) {
-		return c.runRemote(ref)
+	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	// Users must pull first, then run shell on the short name.
+	if IsRemoteImageRef(StripURLScheme(c.Image)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov shell <image-name>'", c.Image)
 	}
 
 	var detected DetectedDevices
@@ -92,18 +92,6 @@ func (c *ShellCmd) Run() error {
 		EnsureCDI()
 	}
 
-	var imageRef string
-	var uid, gid int
-	var home string
-	var ports []string
-	var volumes []VolumeMount
-	var bindMounts []ResolvedBindMount
-	var security SecurityConfig
-	var network string
-	var deployEnv []string
-	var deployEnvFile string
-	var envAccepts, envRequires []EnvDependency
-
 	// Load deploy.yml for volume backing config
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
@@ -113,71 +101,37 @@ func (c *ShellCmd) Run() error {
 		}
 	}
 
-	// Try images.yml first (existing path)
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(c.Image, "unused", dir)
-		if err != nil {
-			return err
-		}
-		layers, err := ScanAllLayersWithConfig(dir, cfg)
-		if err != nil {
-			return err
-		}
-		// Resolve per-image engine
-		engine = ResolveImageEngine(cfg, layers, c.Image, rt.RunEngine)
-		allVolumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, nil)
-		if err != nil {
-			return err
-		}
-		security = CollectSecurity(cfg, layers, c.Image)
-		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, allVolumes, mergeVolumeConfigs(deployVolumes, cliVolumes), resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-		imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-		uid = resolved.UID
-		gid = resolved.GID
-		home = resolved.Home
-		ports = resolved.Ports
-		network = resolved.Network
-		img := cfg.Images[c.Image]
-		deployEnv = img.Env
-		deployEnvFile = img.EnvFile
-	} else {
-		// Label path: resolve from image labels
-		imageRef = resolveShellImageRef("", c.Image, c.Tag)
-		if err := EnsureImage(imageRef, rt); err != nil {
-			return err
-		}
-		meta, err := ExtractMetadata(engine, imageRef)
-		if err != nil {
-			return err
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
-		}
-		// Resolve per-image engine from labels
-		engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
-		// Apply deploy.yml overrides
-		MergeDeployOntoMetadata(meta, dc, c.Instance)
+	// Resolve from image labels (+ deploy.yml overlay). No images.yml.
+	imageRef := resolveShellImageRef("", c.Image, c.Tag)
+	if err := EnsureImage(imageRef, rt); err != nil {
+		return err
+	}
+	meta, err := ExtractMetadata(engine, imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	}
+	engine = ResolveImageEngineFromMeta(meta, rt.RunEngine)
+	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
-		uid = meta.UID
-		gid = meta.GID
-		home = meta.Home
-		ports = meta.Ports
-		security = meta.Security
-		network = meta.Network
-		deployEnv = meta.Env
+	uid := meta.UID
+	gid := meta.GID
+	home := meta.Home
+	ports := meta.Ports
+	security := meta.Security
+	network := meta.Network
+	deployEnv := meta.Env
+	var deployEnvFile string
 
-		// Resolve volume backing from labels + deploy config
-		cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-		volumes, bindMounts = ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
+	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, mergeVolumeConfigs(deployVolumes, cliVolumes), meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
-		envAccepts = meta.EnvAccepts
-		envRequires = meta.EnvRequires
-		if meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
-		}
+	envAccepts := meta.EnvAccepts
+	envRequires := meta.EnvRequires
+	if meta.Registry != "" {
+		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 	}
 
 	// Apply instance-specific volume naming
@@ -211,15 +165,6 @@ func (c *ShellCmd) Run() error {
 			return err
 		}
 		return execCommand(enginePath, args)
-	}
-
-	if cfgErr != nil {
-		// Already ensured above in the label path
-	} else {
-		imageRT := ImageRuntime(rt, engine)
-		if err := EnsureImage(imageRef, imageRT); err != nil {
-			return err
-		}
 	}
 
 	// Verify bind mounts
@@ -258,107 +203,6 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Replace process with engine
-	return execCommand(enginePath, args)
-}
-
-func (c *ShellCmd) runRemote(ref string) error {
-	var detected DetectedDevices
-	if !c.NoAutoDetect {
-		detected = DetectHostDevices()
-		LogDetectedDevices(detected)
-	}
-
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-	engine := rt.RunEngine
-
-	// Ensure NVIDIA CDI specs exist for nested container GPU access
-	if detected.GPU && engine == "podman" {
-		EnsureCDI()
-	}
-
-	ctx, err := ResolveRemoteImage(ref, c.Tag)
-	if err != nil {
-		return err
-	}
-
-	allVolumes, err := ctx.CollectVolumes()
-	if err != nil {
-		return err
-	}
-	cliVolumes := parseVolumeFlagsStandalone(c.VolumeFlag, c.Bind)
-	volumes, bindMounts := ResolveVolumeBacking(ctx.ImageName, allVolumes, cliVolumes, ctx.Resolved.Home, rt.EncryptedStoragePath, rt.VolumesPath)
-
-	// Resolve env vars with global env
-	shellRemoteDC, _ := LoadDeployConfig()
-	shellRemoteCtrName := containerNameInstance(ctx.ImageName, "")
-	shellRemoteGlobalEnv := shellRemoteDC.GlobalEnvForImage(ctx.ImageName, shellRemoteCtrName, nil)
-	envVars, envErr := ResolveEnvVars(shellRemoteGlobalEnv, nil, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
-	if envErr != nil {
-		return envErr
-	}
-
-	// Resolve agent forwarding for remote images (no deploy.yml overlay)
-	remoteAgentFwd := ResolveAgentForwarding(rt, nil, ctx.Resolved.Home)
-
-	// If the container is already running, exec into it
-	name := containerNameInstance(ctx.ImageName, c.Instance)
-	if containerRunning(engine, name) {
-		execEnv := append(envVars, remoteAgentFwd.Env...)
-		workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
-		args := buildExecArgs(engine, name, ctx.Resolved.UID, ctx.Resolved.GID, c.Command, execEnv, workDir)
-		enginePath, err := findExecutable(EngineBinary(engine))
-		if err != nil {
-			return err
-		}
-		return execCommand(enginePath, args)
-	}
-
-	// Pull or build
-	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
-		return err
-	}
-
-	// Resolve per-image engine from remote config
-	if ctx.Resolved != nil && ctx.Resolved.Engine != "" {
-		engine = ctx.Resolved.Engine
-	}
-
-	if err := verifyBindMounts(bindMounts, ctx.ImageName); err != nil {
-		return err
-	}
-
-	// Merge auto-detected devices
-	security := SecurityConfig{}
-	security.Devices = appendUnique(security.Devices, detected.Devices...)
-	if detected.AMDGPU {
-		security.GroupAdd = appendGroupsForAMDGPU(security.GroupAdd)
-	}
-	envVars = appendAutoDetectedEnv(envVars, detected)
-
-	// Inject agent forwarding mounts and env
-	for _, v := range remoteAgentFwd.Volumes {
-		security.Mounts = appendUnique(security.Mounts, v)
-	}
-	envVars = append(envVars, remoteAgentFwd.Env...)
-
-	// Resolve network
-	resolvedNetwork, netErr := ResolveNetwork("", engine)
-	if netErr != nil {
-		return netErr
-	}
-
-	workDir := resolveWorkingDir(volumes, bindMounts, ctx.Resolved.Home)
-	args := buildShellArgs(engine, ctx.ImageRef,
-		ctx.Resolved.UID, ctx.Resolved.GID, ctx.Resolved.Ports,
-		volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, workDir, resolvedNetwork)
-
-	enginePath, err := findExecutable(EngineBinary(engine))
-	if err != nil {
-		return err
-	}
 	return execCommand(enginePath, args)
 }
 

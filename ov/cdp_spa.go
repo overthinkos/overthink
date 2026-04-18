@@ -16,12 +16,12 @@ import (
 // Key advantage over ov wl/vnc: CDP Input events bypass the local compositor
 // and Chrome shortcut handlers, so Super+e and Ctrl+T pass through to the SPA.
 type CdpSpaCmd struct {
-	Click    CdpSpaClickCmd    `cmd:"" help:"Click at canvas coordinates (auto-corrected for SPA scaling)"`
-	Type     CdpSpaTypeCmd     `cmd:"" help:"Type text into the remote desktop via SPA"`
+	Click    CdpSpaClickCmd    `cmd:"" help:"Click at remote-desktop coordinates (auto-scaled for SPA)"`
 	Key      CdpSpaKeyCmd      `cmd:"" help:"Send a key press to the remote desktop via SPA"`
 	KeyCombo CdpSpaKeyComboCmd `cmd:"key-combo" help:"Send a modifier key combo (super+e, ctrl+t, alt+F4) via SPA"`
-	Mouse    CdpSpaMouseCmd    `cmd:"" help:"Move pointer to canvas coordinates without clicking"`
-	Status   CdpSpaStatusCmd   `cmd:"" help:"Show SPA state (canvas, scale, connection)"`
+	Mouse    CdpSpaMouseCmd    `cmd:"" help:"Move pointer on the remote desktop without clicking"`
+	Status   CdpSpaStatusCmd   `cmd:"" help:"Show SPA state (coordinates, scale, connection)"`
+	Type     CdpSpaTypeCmd     `cmd:"" help:"Type text into the remote desktop via SPA"`
 }
 
 // spaState holds the detected SPA state from a CDP eval query.

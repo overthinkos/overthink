@@ -9,10 +9,10 @@ import (
 
 // ServiceCmd manages services inside a running container
 type ServiceCmd struct {
-	Status  ServiceStatusCmd  `cmd:"" help:"Show status of services"`
-	Start   ServiceStartCmd   `cmd:"" help:"Start a service"`
-	Stop    ServiceStopCmd    `cmd:"" help:"Stop a service"`
-	Restart ServiceRestartCmd `cmd:"" help:"Restart a service"`
+	Restart ServiceRestartCmd `cmd:"" help:"Restart an in-container service"`
+	Start   ServiceStartCmd   `cmd:"" help:"Start an in-container service"`
+	Status  ServiceStatusCmd  `cmd:"" help:"Show status of in-container services"`
+	Stop    ServiceStopCmd    `cmd:"" help:"Stop an in-container service"`
 }
 
 // ServiceStatusCmd shows status of all services
@@ -119,25 +119,10 @@ func resolveServiceInit(image, instance string) (engine, containerName string, i
 	return engine, containerName, initDef, nil
 }
 
-// resolveInitDefFromMeta creates a minimal InitDef from image metadata.
-// In runtime mode we don't have init.yml, but we can try loading it from the project dir.
-// If that fails, we construct a basic InitDef from the init system name.
+// resolveInitDefFromMeta creates a minimal InitDef from image metadata using
+// well-known init system names (supervisord, systemd). Custom init systems
+// declared via init.yml are only honored during build; runtime uses labels.
 func resolveInitDefFromMeta(meta *ImageMetadata) (*InitDef, error) {
-	// Try loading init.yml from current directory
-	dir, _ := os.Getwd()
-	cfg, _ := LoadConfig(dir)
-	if cfg != nil {
-		initCfg, err := LoadInitConfigForImage(
-			cfg.Defaults.FormatConfig, cfg.Defaults.FormatConfig, dir,
-		)
-		if err == nil && initCfg != nil {
-			if def, ok := initCfg.Inits[meta.Init]; ok {
-				return def, nil
-			}
-		}
-	}
-
-	// Fallback: construct minimal InitDef from well-known init system names
 	switch meta.Init {
 	case "supervisord":
 		return &InitDef{

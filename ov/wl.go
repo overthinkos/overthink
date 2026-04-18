@@ -13,47 +13,47 @@ import (
 
 // WlCmd manages Wayland-native desktop interaction in running containers.
 type WlCmd struct {
-	Screenshot  WlScreenshotCmd  `cmd:"" help:"Capture desktop as PNG (via grim)"`
-	Click       WlClickCmd       `cmd:"" help:"Click at x,y coordinates (via wlrctl)"`
-	Type        WlTypeCmd        `cmd:"" help:"Type text as keyboard input (via wtype)"`
-	Key         WlKeyCmd         `cmd:"" help:"Send a key press event (via wtype)"`
-	Mouse       WlMouseCmd       `cmd:"" help:"Move mouse to x,y without clicking (via wlrctl)"`
-	Status      WlStatusCmd      `cmd:"" help:"Check Wayland desktop and tool availability"`
-	Windows     WlWindowsCmd     `cmd:"" help:"List windows (wlrctl toplevel, xdotool fallback)"`
-	Focus       WlFocusCmd       `cmd:"" help:"Focus a window by title (wlrctl toplevel, xdotool fallback)"`
-	Toplevel    WlToplevelCmd    `cmd:"" help:"List Wayland toplevel windows (via wlrctl)"`
-	Close       WlCloseCmd       `cmd:"" help:"Close a window by title (via wlrctl toplevel)"`
-	Fullscreen  WlFullscreenCmd  `cmd:"" help:"Toggle fullscreen on a window (via wlrctl toplevel)"`
-	Minimize    WlMinimizeCmd    `cmd:"" help:"Toggle minimize on a window (via wlrctl toplevel)"`
-	Exec        WlExecCmd        `cmd:"" help:"Launch an application in the container"`
-	Resolution  WlResolutionCmd  `cmd:"" help:"Set output resolution (via wlr-randr)"`
-	KeyCombo    WlKeyComboCmd    `cmd:"key-combo" help:"Send a key combination (e.g. ctrl+c, alt+tab)"`
+	Atspi       WlAtspiCmd       `cmd:"" help:"Query the accessibility tree"`
+	Click       WlClickCmd       `cmd:"" help:"Click at x,y coordinates"`
+	Clipboard   WlClipboardCmd   `cmd:"" help:"Read or write the Wayland clipboard"`
+	Close       WlCloseCmd       `cmd:"" help:"Close a window by title"`
 	DoubleClick WlDoubleClickCmd `cmd:"double-click" help:"Double-click at x,y coordinates"`
-	Scroll      WlScrollCmd      `cmd:"" help:"Scroll at coordinates (via xdotool)"`
-	Drag        WlDragCmd        `cmd:"" help:"Drag from (x1,y1) to (x2,y2) (experimental, XWayland)"`
-	Clipboard   WlClipboardCmd   `cmd:"" help:"Read/write Wayland clipboard (via wl-clipboard)"`
-	Xprop       WlXpropCmd       `cmd:"" help:"Query X11 window properties (via xprop)"`
+	Drag        WlDragCmd        `cmd:"" help:"Drag from (x1,y1) to (x2,y2)"`
+	Exec        WlExecCmd        `cmd:"" help:"Launch an application in the container"`
+	Focus       WlFocusCmd       `cmd:"" help:"Focus a window by title"`
+	Fullscreen  WlFullscreenCmd  `cmd:"" help:"Toggle fullscreen on a window"`
 	Geometry    WlGeometryCmd    `cmd:"" help:"Get window geometry (compositor-agnostic)"`
-	Atspi       WlAtspiCmd       `cmd:"" help:"Query accessibility tree (via AT-SPI2)"`
-	Overlay     WlOverlayCmd     `cmd:"" help:"Manage fullscreen overlays (via gtk4-layer-shell)"`
+	Key         WlKeyCmd         `cmd:"" help:"Send a key press event"`
+	KeyCombo    WlKeyComboCmd    `cmd:"key-combo" help:"Send a key combination (e.g. ctrl+c, alt+tab)"`
+	Minimize    WlMinimizeCmd    `cmd:"" help:"Toggle minimize on a window"`
+	Mouse       WlMouseCmd       `cmd:"" help:"Move mouse to x,y without clicking"`
+	Overlay     WlOverlayCmd     `cmd:"" help:"Manage fullscreen overlays"`
+	Resolution  WlResolutionCmd  `cmd:"" help:"Set output resolution"`
+	Screenshot  WlScreenshotCmd  `cmd:"" help:"Capture desktop as PNG"`
+	Scroll      WlScrollCmd      `cmd:"" help:"Scroll at coordinates"`
+	Status      WlStatusCmd      `cmd:"" help:"Show Wayland desktop and tool status"`
 	Sway        WlSwayCmd        `cmd:"" help:"Sway-specific compositor commands (requires sway)"`
+	Toplevel    WlToplevelCmd    `cmd:"" help:"List Wayland toplevel windows"`
+	Type        WlTypeCmd        `cmd:"" help:"Type text as keyboard input"`
+	Windows     WlWindowsCmd     `cmd:"" help:"List windows"`
+	Xprop       WlXpropCmd       `cmd:"" help:"Query X11 window properties"`
 }
 
 // WlSwayCmd groups sway IPC commands. These require the sway compositor
 // and use swaymsg. They will error on non-sway compositors (labwc, niri).
 type WlSwayCmd struct {
-	Msg        WlSwayMsgCmd        `cmd:"" help:"Run a swaymsg command"`
-	Tree       WlSwayTreeCmd       `cmd:"" help:"Get window/container tree (JSON)"`
-	Workspaces WlSwayWorkspacesCmd `cmd:"" help:"List workspaces (JSON)"`
-	Outputs    WlSwayOutputsCmd    `cmd:"" help:"List outputs (JSON)"`
-	Focus      WlSwayFocusCmd      `cmd:"" help:"Focus window by direction or criteria"`
-	Move       WlSwayMoveCmd       `cmd:"" help:"Move focused window (direction, workspace, or scratchpad)"`
-	Resize     WlSwayResizeCmd     `cmd:"" help:"Resize focused window"`
-	Kill       WlSwayKillCmd       `cmd:"" help:"Close the focused window"`
 	Floating   WlSwayFloatingCmd   `cmd:"" help:"Toggle floating on focused window"`
+	Focus      WlSwayFocusCmd      `cmd:"" help:"Focus window by direction or criteria"`
+	Kill       WlSwayKillCmd       `cmd:"" help:"Close the focused window"`
 	Layout     WlSwayLayoutCmd     `cmd:"" help:"Set layout mode (tabbed, stacking, splitv, splith)"`
-	Workspace  WlSwayWorkspaceCmd  `cmd:"" help:"Switch to a workspace"`
+	Move       WlSwayMoveCmd       `cmd:"" help:"Move focused window (direction, workspace, or scratchpad)"`
+	Msg        WlSwayMsgCmd        `cmd:"" help:"Run a swaymsg command"`
+	Outputs    WlSwayOutputsCmd    `cmd:"" help:"List outputs (JSON)"`
 	Reload     WlSwayReloadCmd     `cmd:"" help:"Reload sway configuration"`
+	Resize     WlSwayResizeCmd     `cmd:"" help:"Resize focused window"`
+	Tree       WlSwayTreeCmd       `cmd:"" help:"Get window/container tree (JSON)"`
+	Workspace  WlSwayWorkspaceCmd  `cmd:"" help:"Switch to a workspace"`
+	Workspaces WlSwayWorkspacesCmd `cmd:"" help:"List workspaces (JSON)"`
 }
 
 // WlScreenshotCmd captures the desktop as a PNG image.

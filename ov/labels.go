@@ -2,11 +2,18 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strconv"
 	"strings"
 )
+
+// ErrImageNotLocal is returned when ExtractMetadata is called on an image
+// that is not present in the engine's local storage. Deploy-mode commands
+// unwrap this sentinel at the error boundary to render a recommendation
+// pointing users to `ov image pull`.
+var ErrImageNotLocal = errors.New("image not found in local storage")
 
 // OCI label key constants (all namespaced under org.overthinkos.)
 const (
@@ -96,7 +103,7 @@ type ImageMetadata struct {
 	Aliases        []CollectedAlias
 	Security       SecurityConfig
 	Network        string
-	Tunnel         *TunnelYAML
+	Tunnel         *TunnelYAML // populated from deploy.yml overlay (not labels)
 	DNS            string
 	AcmeEmail      string
 	Env            []string
@@ -159,9 +166,13 @@ func defaultInspectLabels(engine, imageRef string) (map[string]string, error) {
 
 // ExtractMetadata reads OCI labels from a local image and returns parsed ImageMetadata.
 // Returns nil if the image has no org.overthinkos labels.
+// Returns ErrImageNotLocal wrapped with the image ref if the image is not in local storage.
 func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	labels, err := InspectLabels(engine, imageRef)
 	if err != nil {
+		if !LocalImageExists(engine, imageRef) {
+			return nil, fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
+		}
 		return nil, err
 	}
 

@@ -57,19 +57,21 @@ func TransferImage(srcEngine, dstEngine, imageRef string) error {
 }
 
 // EnsureImage ensures the image is available in the run engine's local store,
-// transferring from the build engine if needed.
+// transferring from the build engine if needed. Returns ErrImageNotLocal
+// (wrapped with the image ref) when the image is absent from both engines —
+// callers unwrap this at the CLI boundary to render the "ov image pull"
+// recommendation.
 func EnsureImage(imageRef string, rt *ResolvedRuntime) error {
 	if LocalImageExists(rt.RunEngine, imageRef) {
 		return nil
 	}
 
 	if rt.BuildEngine == rt.RunEngine {
-		return fmt.Errorf("image %s not found in %s; build it first with: ov build", imageRef, rt.RunEngine)
+		return fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
 	}
 
 	if !LocalImageExists(rt.BuildEngine, imageRef) {
-		return fmt.Errorf("image %s not found in %s or %s; build it first with: ov build",
-			imageRef, rt.RunEngine, rt.BuildEngine)
+		return fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
 	}
 
 	return TransferImage(rt.BuildEngine, rt.RunEngine, imageRef)

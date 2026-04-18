@@ -34,22 +34,22 @@ const deepQueryJS = `function deepQuery(sel, root) {
 
 // CdpCmd manages Chrome browser tabs in running containers
 type CdpCmd struct {
-	Open       CdpOpenCmd       `cmd:"" help:"Open a URL in the container's Chrome browser"`
-	List       CdpListCmd       `cmd:"" help:"List open Chrome browser tabs"`
-	Close      CdpCloseCmd      `cmd:"" help:"Close a Chrome browser tab"`
-	Text       CdpTextCmd       `cmd:"" help:"Get page text content"`
-	Html       CdpHtmlCmd       `cmd:"" help:"Get page HTML"`
-	Url        CdpUrlCmd        `cmd:"" help:"Get current page URL and title"`
-	Screenshot CdpScreenshotCmd `cmd:"" help:"Capture a screenshot"`
-	Click      CdpClickCmd      `cmd:"" help:"Click an element by CSS selector"`
-	Type       CdpTypeCmd       `cmd:"" help:"Type text into an input field"`
-	Eval       CdpEvalCmd       `cmd:"" help:"Evaluate JavaScript expression"`
-	Wait       CdpWaitCmd       `cmd:"" help:"Wait for an element to appear"`
-	Raw        CdpRawCmd        `cmd:"" help:"Send a raw CDP command"`
-	Coords     CdpCoordsCmd     `cmd:"" help:"Show element coordinates in viewport and desktop systems"`
 	Axtree     CdpAxtreeCmd     `cmd:"" help:"Get Chrome accessibility tree"`
-	Status     CdpStatusCmd     `cmd:"" help:"Check Chrome DevTools Protocol availability"`
+	Click      CdpClickCmd      `cmd:"" help:"Click an element by CSS selector"`
+	Close      CdpCloseCmd      `cmd:"" help:"Close a Chrome browser tab"`
+	Coords     CdpCoordsCmd     `cmd:"" help:"Show element coordinates in viewport and desktop systems"`
+	Eval       CdpEvalCmd       `cmd:"" help:"Evaluate JavaScript expression"`
+	Html       CdpHtmlCmd       `cmd:"" help:"Get page HTML"`
+	List       CdpListCmd       `cmd:"" help:"List open Chrome browser tabs"`
+	Open       CdpOpenCmd       `cmd:"" help:"Open a URL in the container's Chrome browser"`
+	Raw        CdpRawCmd        `cmd:"" help:"Send a raw CDP command"`
+	Screenshot CdpScreenshotCmd `cmd:"" help:"Capture a screenshot"`
 	Spa        CdpSpaCmd        `cmd:"" help:"SPA-aware remote desktop interaction (selkies)"`
+	Status     CdpStatusCmd     `cmd:"" help:"Show Chrome DevTools Protocol status"`
+	Text       CdpTextCmd       `cmd:"" help:"Get page text content"`
+	Type       CdpTypeCmd       `cmd:"" help:"Type text into an input field"`
+	Url        CdpUrlCmd        `cmd:"" help:"Get current page URL and title"`
+	Wait       CdpWaitCmd       `cmd:"" help:"Wait for an element to appear"`
 }
 
 // CdpAxtreeCmd retrieves the Chrome accessibility tree via CDP.

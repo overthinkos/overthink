@@ -16,15 +16,15 @@ import (
 // SecretsCmdGroup groups ov secrets subcommands for KeePass .kdbx management
 // and GPG-encrypted .secrets file management.
 type SecretsCmdGroup struct {
+	Delete SecretsDeleteCmd `cmd:"" help:"Delete an entry"`
+	Export SecretsExportCmd `cmd:"" help:"Export kdbx entries to stdout"`
+	Get    SecretsGetCmd    `cmd:"" help:"Get a credential value"`
+	Gpg    SecretsGpgCmd    `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
+	Import SecretsImportCmd `cmd:"" help:"Import credentials from config/keyring into kdbx"`
 	Init   SecretsInitCmd   `cmd:"" help:"Create a new .kdbx database for ov"`
 	List   SecretsListCmd   `cmd:"" help:"List all ov entries in kdbx"`
-	Get    SecretsGetCmd    `cmd:"" help:"Get a credential value"`
-	Set    SecretsSetCmd    `cmd:"" help:"Set a credential"`
-	Delete SecretsDeleteCmd `cmd:"" help:"Delete an entry"`
-	Import SecretsImportCmd `cmd:"" help:"Import credentials from config/keyring into kdbx"`
-	Export SecretsExportCmd `cmd:"" help:"Export kdbx entries to stdout"`
 	Path   SecretsPathCmd   `cmd:"" help:"Print kdbx file path"`
-	Gpg    SecretsGpgCmd    `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
+	Set    SecretsSetCmd    `cmd:"" help:"Set a credential"`
 }
 
 // --- Init ---

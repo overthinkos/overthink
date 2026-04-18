@@ -18,19 +18,19 @@ import (
 // SecretsGpgCmd groups subcommands for managing GPG-encrypted .secrets files.
 // These are project-level env files (KEY=VALUE), encrypted with GPG.
 type SecretsGpgCmd struct {
-	Show         SecretsGpgShowCmd         `cmd:"" help:"Decrypt and print .secrets to stdout"`
-	Env          SecretsGpgEnvCmd          `cmd:"" help:"Export decrypted .secrets as shell export statements"`
+	AddRecipient SecretsGpgAddRecipientCmd `cmd:"add-recipient" help:"Re-encrypt .secrets with an additional GPG recipient"`
+	Decrypt      SecretsGpgDecryptCmd      `cmd:"" help:"Decrypt .secrets to a plaintext file"`
+	Doctor       SecretsGpgDoctorCmd       `cmd:"" help:"Show GPG agent, keys, Secret Service, and .secrets health"`
 	Edit         SecretsGpgEditCmd         `cmd:"" help:"Decrypt, edit in $EDITOR, re-encrypt"`
 	Encrypt      SecretsGpgEncryptCmd      `cmd:"" help:"Encrypt a plaintext env file to .secrets"`
-	Decrypt      SecretsGpgDecryptCmd      `cmd:"" help:"Decrypt .secrets to a plaintext file"`
-	Set          SecretsGpgSetCmd          `cmd:"" help:"Set a single KEY=VALUE in .secrets"`
-	Unset        SecretsGpgUnsetCmd        `cmd:"" help:"Remove a key from .secrets"`
-	AddRecipient SecretsGpgAddRecipientCmd `cmd:"add-recipient" help:"Re-encrypt .secrets with an additional GPG recipient"`
-	Recipients   SecretsGpgRecipientsCmd   `cmd:"" help:"List GPG recipients of .secrets file"`
-	ImportKey    SecretsGpgImportKeyCmd    `cmd:"import-key" help:"Import GPG key(s) from file, directory, or Secret Service"`
+	Env          SecretsGpgEnvCmd          `cmd:"" help:"Export decrypted .secrets as shell export statements"`
 	ExportKey    SecretsGpgExportKeyCmd    `cmd:"export-key" help:"Export GPG key(s) to directory and/or Secret Service"`
+	ImportKey    SecretsGpgImportKeyCmd    `cmd:"import-key" help:"Import GPG key(s) from file, directory, or Secret Service"`
+	Recipients   SecretsGpgRecipientsCmd   `cmd:"" help:"List GPG recipients of .secrets file"`
+	Set          SecretsGpgSetCmd          `cmd:"" help:"Set a single KEY=VALUE in .secrets"`
 	Setup        SecretsGpgSetupCmd        `cmd:"" help:"Configure gpg-agent, import/generate key, store passphrase in Secret Service"`
-	Doctor       SecretsGpgDoctorCmd       `cmd:"" help:"Check GPG agent, keys, Secret Service, and .secrets health"`
+	Show         SecretsGpgShowCmd         `cmd:"" help:"Decrypt and print .secrets to stdout"`
+	Unset        SecretsGpgUnsetCmd        `cmd:"" help:"Remove a key from .secrets"`
 }
 
 // --- show ---

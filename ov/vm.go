@@ -24,13 +24,13 @@ const libvirtSessionURI = "qemu:///session"
 // VmCmd groups VM management subcommands.
 type VmCmd struct {
 	Build   VmBuildCmd   `cmd:"" help:"Build QCOW2/RAW disk image from bootc container"`
+	Console VmConsoleCmd `cmd:"" help:"Attach to VM serial console"`
 	Create  VmCreateCmd  `cmd:"" help:"Create a VM from a disk image"`
-	Start   VmStartCmd   `cmd:"" help:"Start a VM"`
-	Stop    VmStopCmd    `cmd:"" help:"Stop a VM (graceful shutdown)"`
 	Destroy VmDestroyCmd `cmd:"" help:"Remove VM definition and optionally delete disk"`
 	List    VmListCmd    `cmd:"" help:"List VMs and their status"`
-	Console VmConsoleCmd `cmd:"" help:"Attach to VM serial console"`
 	Ssh     VmSshCmd     `cmd:"" help:"SSH into a VM"`
+	Start   VmStartCmd   `cmd:"" help:"Start a VM"`
+	Stop    VmStopCmd    `cmd:"" help:"Stop a VM (graceful shutdown)"`
 }
 
 // vmName returns the VM name for an image and optional instance.
@@ -129,44 +129,26 @@ func (c *VmCreateCmd) Run() error {
 		return err
 	}
 
-	// Resolve VM settings from images.yml or image labels
-	dir, _ := os.Getwd()
+	// Resolve VM settings from image labels (+ deploy.yml overlay).
 	ram := "4G"
 	cpus := 2
 	var ports []string
 	var libvirtSnippets []string
 
-	var cfg *Config
-	if loadedCfg, cfgErr := LoadConfig(dir); cfgErr == nil {
-		cfg = loadedCfg
-		calverTag := "latest"
-		if resolved, resolveErr := cfg.ResolveImage(c.Image, calverTag, dir); resolveErr == nil {
-			if resolved.Vm != nil {
-				ram = resolved.Vm.Ram
-				cpus = resolved.Vm.Cpus
-			}
-			ports = resolved.Ports
+	engine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
+	ref := fmt.Sprintf("%s:latest", c.Image)
+	meta, metaErr := ExtractMetadata(engine, ref)
+	if metaErr == nil && meta != nil {
+		dc, _ := LoadDeployConfig()
+		MergeDeployOntoMetadata(meta, dc, c.Instance)
+		if meta.Vm != nil {
+			ram = meta.Vm.Ram
+			cpus = meta.Vm.Cpus
 		}
-
-		// Collect libvirt snippets from layers and image config
-		if layers, scanErr := ScanAllLayersWithConfig(dir, cfg); scanErr == nil {
-			libvirtSnippets = CollectLibvirtSnippets(cfg, layers, c.Image)
-		}
-	} else {
-		// Label path
-		engine := ResolveImageEngineFromDir(dir, c.Image, rt.RunEngine)
-		ref := fmt.Sprintf("%s:latest", c.Image)
-		meta, metaErr := ExtractMetadata(engine, ref)
-		if metaErr == nil && meta != nil {
-			dc, _ := LoadDeployConfig()
-			MergeDeployOntoMetadata(meta, dc, c.Instance)
-			if meta.Vm != nil {
-				ram = meta.Vm.Ram
-				cpus = meta.Vm.Cpus
-			}
-			ports = meta.Ports
-			libvirtSnippets = meta.Libvirt
-		}
+		ports = meta.Ports
+		libvirtSnippets = meta.Libvirt
+	} else if metaErr != nil {
+		return metaErr
 	}
 
 	// CLI flags override config
@@ -808,12 +790,18 @@ type VmSshCmd struct {
 }
 
 func (c *VmSshCmd) Run() error {
-	// Resolve SSH port and user from images.yml if not explicitly overridden
-	dir, _ := os.Getwd()
-	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
-		if resolved, resolveErr := cfg.ResolveImage(c.Image, "latest", dir); resolveErr == nil {
-			if resolved.Vm != nil && resolved.Vm.SshPort != 0 && c.Port == 2222 {
-				c.Port = resolved.Vm.SshPort
+	// Resolve SSH port from image labels (+ deploy.yml overlay).
+	if c.Port == 2222 {
+		rt, rtErr := ResolveRuntime()
+		if rtErr == nil {
+			engine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
+			ref := fmt.Sprintf("%s:latest", c.Image)
+			if meta, err := ExtractMetadata(engine, ref); err == nil && meta != nil {
+				dc, _ := LoadDeployConfig()
+				MergeDeployOntoMetadata(meta, dc, c.Instance)
+				if meta.Vm != nil && meta.Vm.SshPort != 0 {
+					c.Port = meta.Vm.SshPort
+				}
 			}
 		}
 	}

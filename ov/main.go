@@ -13,38 +13,31 @@ import (
 type CLI struct {
 	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
 
-	Alias    AliasCmd    `cmd:"" help:"Manage command aliases for container images"`
-	Build    BuildCmd    `cmd:"" help:"Build container images"`
-	Cdp      CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Cmd      CmdCmd      `cmd:"" help:"Run a command in a running container (with notification)"`
+	Alias    AliasCmd       `cmd:"" help:"Manage command aliases for container images"`
+	Cdp      CdpCmd         `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
+	Cmd      CmdCmd         `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config   ImageConfigCmd `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
-	Dbus     DbusCmd     `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Dbus     DbusCmd        `cmd:"" help:"Interact with D-Bus services inside containers"`
 	Deploy   DeployCmd      `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Doctor   DoctorCmd      `cmd:"" help:"Check host dependencies and report status"`
-	Generate GenerateCmd `cmd:"" help:"Write .build/ (Containerfiles)"`
-	Inspect  InspectCmd  `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd     `cmd:"" help:"List components"`
-	Logs     LogsCmd     `cmd:"" help:"Show service container logs"`
-	Merge    MergeCmd    `cmd:"" help:"Merge small layers in a built container image"`
-	New      NewCmd      `cmd:"" help:"Scaffold new components"`
-	Record   RecordCmd   `cmd:"" help:"Record terminal sessions or desktop video"`
-	Remove   RemoveCmd   `cmd:"" help:"Remove service container"`
+	Doctor   DoctorCmd      `cmd:"" help:"Show host dependency status"`
+	Image    ImageCmd       `cmd:"" help:"Build, generate, inspect, and pull container images (reads images.yml)"`
+	Logs     LogsCmd        `cmd:"" help:"Show service container logs"`
+	Record   RecordCmd      `cmd:"" help:"Record terminal sessions or desktop video"`
+	Remove   RemoveCmd      `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
-	Service  ServiceCmd  `cmd:"" help:"Manage supervisord services inside a running container"`
-	Settings SettingsCmd `cmd:"" help:"Manage runtime configuration (get/set/list)"`
-	Shell    ShellCmd    `cmd:"" help:"Start a bash shell in a container image"`
-	Start    StartCmd    `cmd:"" help:"Start a container as a background service (detached)"`
-	Status   StatusCmd   `cmd:"" help:"Show service status (all if no image given)"`
-	Stop     StopCmd     `cmd:"" help:"Stop a running service container"`
-	// Sway commands moved to: ov wl sway <subcommand>
-	Tmux     TmuxCmd     `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Udev     UdevCmd     `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update   UpdateCmd   `cmd:"" help:"Update image and restart if active"`
-	Validate ValidateCmd `cmd:"" help:"Check images.yml + layers, exit 0 or 1"`
-	Version  VersionCmd  `cmd:"" help:"Print computed CalVer tag"`
-	Vm       VmCmd       `cmd:"" help:"Manage virtual machines from bootc images"`
-	Vnc      VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl       WlCmd       `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Service  ServiceCmd     `cmd:"" help:"Manage supervisord services inside a running container"`
+	Settings SettingsCmd    `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	Shell    ShellCmd       `cmd:"" help:"Start a bash shell in a container image"`
+	Start    StartCmd       `cmd:"" help:"Start a container as a background service"`
+	Status   StatusCmd      `cmd:"" help:"Show service status (all if no image given)"`
+	Stop     StopCmd        `cmd:"" help:"Stop a running service container"`
+	Tmux     TmuxCmd        `cmd:"" help:"Manage tmux sessions inside running containers"`
+	Udev     UdevCmd        `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Update   UpdateCmd      `cmd:"" help:"Update image and restart if active"`
+	Version  VersionCmd     `cmd:"" help:"Print computed CalVer tag"`
+	Vm       VmCmd          `cmd:"" help:"Manage virtual machines from bootc images"`
+	Vnc      VncCmd         `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl       WlCmd          `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 }
 
 // GenerateCmd generates Containerfiles
@@ -119,13 +112,11 @@ func (c *InspectCmd) Run() error {
 		return err
 	}
 
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		return c.runFromConfig(cfg, dir)
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return err
 	}
-
-	// Label path: inspect from image labels
-	return c.runFromLabels()
+	return c.runFromConfig(cfg, dir)
 }
 
 func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
@@ -254,108 +245,15 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	return nil
 }
 
-func (c *InspectCmd) runFromLabels() error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-	engine := rt.RunEngine
-
-	imageRef := fmt.Sprintf("%s:latest", c.Image)
-	meta, err := ExtractMetadata(engine, imageRef)
-	if err != nil {
-		return err
-	}
-	if meta == nil {
-		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
-	}
-
-	// Apply deploy.yml overrides
-	dc, _ := LoadDeployConfig()
-	MergeDeployOntoMetadata(meta, dc, c.Instance)
-
-	if c.Format != "" {
-		switch c.Format {
-		case "registry":
-			fmt.Println(meta.Registry)
-		case "ports":
-			for _, p := range meta.Ports {
-				fmt.Println(p)
-			}
-		case "volumes":
-			for _, vol := range meta.Volumes {
-				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
-			}
-		case "aliases":
-			for _, a := range meta.Aliases {
-				fmt.Printf("%s\t%s\n", a.Name, a.Command)
-			}
-		case "tunnel":
-			tc := TunnelConfigFromMetadata(meta)
-			if tc != nil && len(tc.Ports) > 0 {
-				fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
-				for _, tp := range tc.Ports {
-					access := "private"
-					if tp.Public {
-						access = "public"
-					}
-					hostname := tp.Hostname
-					if hostname == "" {
-						hostname = "-"
-					}
-					fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
-				}
-			}
-		case "network":
-			fmt.Println(meta.Network)
-		case "engine":
-			engine := meta.Engine
-			if engine == "" {
-				engine = "(global default)"
-			}
-			fmt.Println(engine)
-		case "bind_mounts":
-			// bind_mounts are now deploy-time only; show deploy.yml volume config
-			dc, _ := LoadDeployConfig()
-			if dc != nil {
-				if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
-					for _, dv := range overlay.Volumes {
-						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
-					}
-				}
-			}
-		case "version":
-			// Not available from labels (image version is a build-time concept)
-			return fmt.Errorf("format field %q is only available from project directory (build-time field)", c.Format)
-		case "status":
-			fmt.Println(resolveStatus(meta.Status))
-		case "info":
-			fmt.Println(meta.Info)
-		case "tag", "base", "builder", "pkg", "platforms", "layers":
-			return fmt.Errorf("format field %q is only available from project directory (build-time field)", c.Format)
-		default:
-			return fmt.Errorf("unknown format field: %s", c.Format)
-		}
-		return nil
-	}
-
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(data))
-	return nil
-}
-
 // ListCmd groups list subcommands
 type ListCmd struct {
-	Images   ListImagesCmd   `cmd:"" help:"Images from images.yml"`
-	Layers   ListLayersCmd   `cmd:"" help:"Layers from filesystem"`
-	Targets  ListTargetsCmd  `cmd:"" help:"Build targets in dependency order"`
-	Services ListServicesCmd `cmd:"" help:"Layers with service in layer.yml"`
-	Routes   ListRoutesCmd   `cmd:"" help:"Layers with route in layer.yml"`
-	Volumes  ListVolumesCmd  `cmd:"" help:"Layers with volumes in layer.yml"`
-	Aliases  ListAliasesCmd  `cmd:"" help:"Layers with aliases in layer.yml"`
+	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
+	Images   ListImagesCmd   `cmd:"" help:"List images from images.yml"`
+	Layers   ListLayersCmd   `cmd:"" help:"List layers from the filesystem"`
+	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
+	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
+	Targets  ListTargetsCmd  `cmd:"" help:"List build targets in dependency order"`
+	Volumes  ListVolumesCmd  `cmd:"" help:"List layers that declare volumes"`
 }
 
 // ListImagesCmd lists images from images.yml
@@ -590,11 +488,11 @@ func (c *NewLayerCmd) Run() error {
 // SettingsCmd groups settings subcommands (renamed from ConfigCmd to free `ov config` for image configuration).
 type SettingsCmd struct {
 	Get            SettingsGetCmd          `cmd:"" help:"Print resolved value for a config key"`
-	Set            SettingsSetCmd          `cmd:"" help:"Set a config value"`
 	List           SettingsListCmd         `cmd:"" help:"Show all settings with source"`
-	Reset          SettingsResetCmd        `cmd:"" help:"Remove a key from config (revert to default)"`
-	Path           SettingsPathCmd         `cmd:"" help:"Print config file path"`
 	MigrateSecrets ConfigMigrateSecretsCmd `cmd:"migrate-secrets" help:"Migrate plaintext credentials from config.yml to system keyring"`
+	Path           SettingsPathCmd         `cmd:"" help:"Print config file path"`
+	Reset          SettingsResetCmd        `cmd:"" help:"Remove a key from config (revert to default)"`
+	Set            SettingsSetCmd          `cmd:"" help:"Set a config value"`
 }
 
 // SettingsGetCmd prints the resolved value for a key
@@ -738,5 +636,5 @@ func main() {
 	}
 
 	err := ctx.Run()
-	ctx.FatalIfErrorf(err)
+	ctx.FatalIfErrorf(FormatCLIError(err))
 }

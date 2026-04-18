@@ -26,10 +26,10 @@ SUBSYSTEM=="kfd", KERNEL=="kfd", GROUP="render", MODE="0660"
 
 // UdevCmd manages udev rules for GPU device access in containers.
 type UdevCmd struct {
-	Status   UdevStatusCmd   `cmd:"" help:"Show device access and udev rule status"`
 	Generate UdevGenerateCmd `cmd:"" help:"Print udev rules to stdout"`
 	Install  UdevInstallCmd  `cmd:"" help:"Install udev rules (requires sudo)"`
 	Remove   UdevRemoveCmd   `cmd:"" help:"Remove installed udev rules"`
+	Status   UdevStatusCmd   `cmd:"" help:"Show device access and udev rule status"`
 }
 
 // drmDevice holds info about a /dev/dri/* device.

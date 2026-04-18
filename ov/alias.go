@@ -199,9 +199,9 @@ func defaultAliasDir() string {
 // AliasCmd groups alias subcommands
 type AliasCmd struct {
 	Add       AliasAddCmd       `cmd:"" help:"Create a host command alias"`
-	Remove    AliasRemoveCmd    `cmd:"" help:"Remove an alias"`
-	List      AliasListCmd      `cmd:"" help:"List all installed aliases"`
 	Install   AliasInstallCmd   `cmd:"" help:"Install default aliases from layer.yml / images.yml"`
+	List      AliasListCmd      `cmd:"" help:"List all installed aliases"`
+	Remove    AliasRemoveCmd    `cmd:"" help:"Remove an alias"`
 	Uninstall AliasUninstallCmd `cmd:"" help:"Remove all aliases for an image"`
 }
 
@@ -214,23 +214,15 @@ type AliasAddCmd struct {
 }
 
 func (c *AliasAddCmd) Run() error {
-	dir, err := os.Getwd()
+	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
 	}
 
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return err
-	}
-
-	// Validate image exists
-	img, ok := cfg.Images[c.Image]
-	if !ok {
-		return fmt.Errorf("image %q not found in images.yml", c.Image)
-	}
-	if !img.IsEnabled() {
-		return fmt.Errorf("image %q is disabled", c.Image)
+	// Validate the image exists locally. If not, surface the standard
+	// "ov image pull" recommendation via ErrImageNotLocal.
+	if !LocalImageExists(rt.RunEngine, c.Image) {
+		return fmt.Errorf("%w: %s", ErrImageNotLocal, c.Image)
 	}
 
 	command := c.Command
@@ -304,37 +296,21 @@ type AliasInstallCmd struct {
 }
 
 func (c *AliasInstallCmd) Run() error {
-	var aliases []CollectedAlias
-
-	// Try images.yml + layers first, fall back to image labels
-	dir, _ := os.Getwd()
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		layers, err := ScanAllLayersWithConfig(dir, cfg)
-		if err != nil {
-			return err
-		}
-		aliases, err = CollectImageAliases(cfg, layers, c.Image)
-		if err != nil {
-			return err
-		}
-	} else {
-		// Fall back to image labels
-		rt, err := ResolveRuntime()
-		if err != nil {
-			return err
-		}
-		imageRef := resolveShellImageRef("", c.Image, "latest")
-		runEngine := ResolveImageEngineForDeploy(c.Image, "", rt.RunEngine)
-		meta, err := ExtractMetadata(runEngine, imageRef)
-		if err != nil {
-			return err
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
-		}
-		aliases = meta.Aliases
+	// Read aliases from image labels.
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
 	}
+	imageRef := resolveShellImageRef("", c.Image, "latest")
+	runEngine := ResolveImageEngineForDeploy(c.Image, "", rt.RunEngine)
+	meta, err := ExtractMetadata(runEngine, imageRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil {
+		return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", imageRef)
+	}
+	aliases := meta.Aliases
 
 	if len(aliases) == 0 {
 		fmt.Fprintf(os.Stderr, "No aliases defined for image %s\n", c.Image)

@@ -82,10 +82,9 @@ var updateCmdBuildFn = func(image, tag string) error {
 }
 
 func (c *UpdateCmd) Run() error {
-	// Handle remote image refs
-	ref := StripURLScheme(c.Image)
-	if IsRemoteImageRef(ref) {
-		return c.runRemoteUpdate(ref)
+	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
+	if IsRemoteImageRef(StripURLScheme(c.Image)) {
+		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov update <image-name>'", c.Image)
 	}
 
 	// Defect E fix: honor --build for LOCAL images too. Previously this flag
@@ -232,48 +231,6 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	}
 }
 
-func (c *UpdateCmd) runRemoteUpdate(ref string) error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	ctx, err := ResolveRemoteImage(ref, c.Tag)
-	if err != nil {
-		return err
-	}
-
-	if rt.RunMode == "quadlet" {
-		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-		if err := ctx.PullOrBuild(podmanRT, c.Tag, c.Build); err != nil {
-			return err
-		}
-
-		svc := serviceNameInstance(ctx.ImageName, c.Instance)
-		check := exec.Command("systemctl", "--user", "is-active", svc)
-		if err := check.Run(); err == nil {
-			fmt.Fprintf(os.Stderr, "Restarting %s\n", svc)
-			restart := exec.Command("systemctl", "--user", "restart", svc)
-			restart.Stdout = os.Stdout
-			restart.Stderr = os.Stderr
-			if err := restart.Run(); err != nil {
-				return fmt.Errorf("restarting %s: %w", svc, err)
-			}
-			fmt.Fprintf(os.Stderr, "Restarted %s\n", svc)
-		} else {
-			fmt.Fprintf(os.Stderr, "Service %s is not active, skipping restart\n", svc)
-		}
-		return nil
-	}
-
-	// Direct mode
-	if err := ctx.PullOrBuild(rt, c.Tag, c.Build); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "Image updated. Restart with: ov stop %s && ov start %s\n", ctx.ImageName, ctx.ImageName)
-	return nil
-}
-
 // RemoveCmd removes a service container
 type RemoveCmd struct {
 	Image       string   `arg:"" help:"Image name or remote ref"`
@@ -417,39 +374,18 @@ func (c *RemoveCmd) Run() error {
 	return nil
 }
 
-// runPreRemoveHook runs pre_remove hooks (best-effort).
-// Tries images.yml first, then falls back to image labels.
+// runPreRemoveHook runs pre_remove hooks (best-effort). Reads hooks from
+// the running container's OCI labels.
 func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
-	var hooks *HooksConfig
-
-	// Try images.yml
-	dir, err := os.Getwd()
-	if err == nil {
-		cfg, cfgErr := LoadConfig(dir)
-		if cfgErr == nil {
-			layers, scanErr := ScanAllLayersWithConfig(dir, cfg)
-			if scanErr == nil {
-				hooks = CollectHooks(cfg, layers, imageName)
-			}
-		}
-	}
-
-	// Fall back to image labels
-	if hooks == nil {
-		// Inspect the running container's image for labels
-		imageRef := containerImage(engine, containerName)
-		if imageRef != "" {
-			meta, metaErr := ExtractMetadata(engine, imageRef)
-			if metaErr == nil && meta != nil {
-				hooks = meta.Hooks
-			}
-		}
-	}
-
-	if hooks == nil || hooks.PreRemove == "" {
+	imageRef := containerImage(engine, containerName)
+	if imageRef == "" {
 		return
 	}
-	if err := RunHook(engine, containerName, hooks.PreRemove, c.Env); err != nil {
+	meta, metaErr := ExtractMetadata(engine, imageRef)
+	if metaErr != nil || meta == nil || meta.Hooks == nil || meta.Hooks.PreRemove == "" {
+		return
+	}
+	if err := RunHook(engine, containerName, meta.Hooks.PreRemove, c.Env); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: pre_remove hook failed: %v\n", err)
 	}
 }

@@ -13,10 +13,10 @@ const overlayDaemonSession = "ov-overlay-daemon"
 
 // WlOverlayCmd groups overlay management subcommands.
 type WlOverlayCmd struct {
-	Show   WlOverlayShowCmd   `cmd:"" help:"Show an overlay on the desktop"`
 	Hide   WlOverlayHideCmd   `cmd:"" help:"Hide an overlay by name (or all)"`
 	List   WlOverlayListCmd   `cmd:"" help:"List active overlays"`
-	Status WlOverlayStatusCmd `cmd:"" help:"Check overlay daemon status"`
+	Show   WlOverlayShowCmd   `cmd:"" help:"Show an overlay on the desktop"`
+	Status WlOverlayStatusCmd `cmd:"" help:"Show overlay daemon status"`
 }
 
 // WlOverlayShowCmd creates and displays an overlay.

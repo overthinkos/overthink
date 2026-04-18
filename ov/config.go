@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the images.yml configuration file
+// Config represents the image.yml configuration file
 type Config struct {
 	Defaults ImageConfig            `yaml:"defaults"`
 	Images   map[string]ImageConfig `yaml:"images"`
@@ -47,7 +47,7 @@ type MergeConfig struct {
 	MaxTotalMB int  `yaml:"max_total_mb,omitempty"` // maximum total image size for merge (0 = no limit)
 }
 
-// AliasConfig represents a command alias in images.yml
+// AliasConfig represents a command alias in image.yml
 type AliasConfig struct {
 	Name    string `yaml:"name"`
 	Command string `yaml:"command,omitempty"` // defaults to Name if empty
@@ -173,7 +173,7 @@ func boolPtr(v bool) *bool {
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedImage struct {
 	Name      string
-	Version   string `json:"version,omitempty"`  // CalVer version from images.yml
+	Version   string `json:"version,omitempty"`  // CalVer version from image.yml
 	Status    string `json:"status,omitempty"`   // effective status (worst of image + layers)
 	Info      string `json:"info,omitempty"`     // aggregated info from image + layers
 	Base      string   // Resolved base (external OCI ref or internal image name)
@@ -259,7 +259,7 @@ func (img *ResolvedImage) SupportsBuild(format string) bool {
 	return false
 }
 
-// LoadConfig reads and parses images.yml, then merges deploy.yml overrides.
+// LoadConfig reads and parses image.yml, then merges deploy.yml overrides.
 func LoadConfig(dir string) (*Config, error) {
 	cfg, err := LoadConfigRaw(dir)
 	if err != nil {
@@ -276,17 +276,17 @@ func LoadConfig(dir string) (*Config, error) {
 	return cfg, nil
 }
 
-// LoadConfigRaw reads and parses images.yml without merging deploy.yml overrides.
+// LoadConfigRaw reads and parses image.yml without merging deploy.yml overrides.
 func LoadConfigRaw(dir string) (*Config, error) {
-	path := filepath.Join(dir, "images.yml")
+	path := filepath.Join(dir, "image.yml")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("reading images.yml: %w", err)
+		return nil, fmt.Errorf("reading image.yml: %w", err)
 	}
 
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing images.yml: %w", err)
+		return nil, fmt.Errorf("parsing image.yml: %w", err)
 	}
 
 	return &cfg, nil
@@ -296,7 +296,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 func (c *Config) ResolveImage(name string, calverTag string, dir string) (*ResolvedImage, error) {
 	img, ok := c.Images[name]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in images.yml", name)
+		return nil, fmt.Errorf("image %q not found in image.yml", name)
 	}
 	if !img.IsEnabled() {
 		return nil, fmt.Errorf("image %q is disabled", name)
@@ -323,7 +323,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 			resolved.Base = "quay.io/fedora/fedora:43"
 		}
 
-		// Check if base is internal (another enabled image in images.yml) or external
+		// Check if base is internal (another enabled image in image.yml) or external
 		if baseImg, isInternal := c.Images[resolved.Base]; isInternal && baseImg.IsEnabled() {
 			resolved.IsExternalBase = false
 		} else {
@@ -467,7 +467,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	}
 
 	// Tunnel config is a deploy-time concern — resolved from deploy.yml only.
-	// images.yml tunnel: field is ignored (kept in struct for YAML compat).
+	// image.yml tunnel: field is ignored (kept in struct for YAML compat).
 
 	// Resolve VM config: only for bootc images, and only when configured
 	if img.Bootc && (img.Vm != nil || c.Defaults.Vm != nil) {
@@ -656,7 +656,7 @@ func resolveVmConfig(img, defaults *VmConfig) *VmConfig {
 	return vm
 }
 
-// walkBaseChainDistro walks the base chain through images.yml entries to find
+// walkBaseChainDistro walks the base chain through image.yml entries to find
 // the first ancestor with a distro: field set. Returns nil if no ancestor
 // defines distro tags or the chain reaches an external base image.
 func (c *Config) walkBaseChainDistro(baseName string) []string {
@@ -681,7 +681,7 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 	}
 }
 
-// walkBaseChainBuild walks the base chain through images.yml entries to find
+// walkBaseChainBuild walks the base chain through image.yml entries to find
 // the first ancestor with a build: field set. Returns nil if no ancestor
 // defines build formats or the chain reaches an external base image.
 func (c *Config) walkBaseChainBuild(baseName string) []string {

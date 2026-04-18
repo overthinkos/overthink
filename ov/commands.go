@@ -105,7 +105,7 @@ func (c *UpdateCmd) Run() error {
 	// Resolve per-image engine from deploy.yml
 	runEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
 
-	// Resolve image ref from labels (no images.yml dependency)
+	// Resolve image ref from labels (no image.yml dependency)
 	imageRef := fmt.Sprintf("%s:%s", c.Image, c.Tag)
 	meta, metaErr := ExtractMetadata(runEngine, imageRef)
 	if metaErr == nil && meta != nil && meta.Registry != "" {

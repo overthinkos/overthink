@@ -12,7 +12,7 @@ import (
 // shm_size takes the largest value from any layer (biggest-wins — more shared
 // memory is safer). memory_max, memory_high, memory_swap_max, and cpus take
 // the smallest value (smallest-wins — a tighter cap is a smaller blast radius).
-// Image-level security (from images.yml) overrides layer-level settings.
+// Image-level security (from image.yml) overrides layer-level settings.
 func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) SecurityConfig {
 	var merged SecurityConfig
 

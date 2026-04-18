@@ -535,7 +535,7 @@ func validatePkgConfig(layers map[string]*Layer, errs *ValidationError) {
 func validateBaseReferences(cfg *Config, errs *ValidationError) {
 	// Base references can be:
 	// 1. External OCI images (always valid)
-	// 2. Names of other images in images.yml (validated by image DAG check)
+	// 2. Names of other images in image.yml (validated by image DAG check)
 	// No additional validation needed here
 }
 
@@ -771,7 +771,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		if builder != "" {
 			builderImg, exists := cfg.Images[builder]
 			if !exists {
-				errs.Add("defaults.builders.%s: image %q not found in images.yml", typ, builder)
+				errs.Add("defaults.builders.%s: image %q not found in image.yml", typ, builder)
 			} else if !builderImg.IsEnabled() {
 				errs.Add("defaults.builders.%s: image %q is disabled", typ, builder)
 			}
@@ -803,7 +803,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			if builder != "" {
 				builderImg, exists := cfg.Images[builder]
 				if !exists {
-					errs.Add("image %q: builders.%s references %q which is not found in images.yml", imageName, typ, builder)
+					errs.Add("image %q: builders.%s references %q which is not found in image.yml", imageName, typ, builder)
 					continue
 				}
 				if !builderImg.IsEnabled() {

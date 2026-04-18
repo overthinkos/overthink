@@ -10,10 +10,10 @@ import (
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	ImageName   string              // image name from images.yml (e.g. "fedora-test")
+	ImageName   string              // image name from image.yml (e.g. "fedora-test")
 	ImageRef    string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
 	Home        string              // container home directory (for WorkingDir resolution)
-	Ports       []string            // port mappings from images.yml (e.g. ["8000:8000", "8080:8080"])
+	Ports       []string            // port mappings from image.yml (e.g. ["8000:8000", "8080:8080"])
 	Volumes     []VolumeMount       // named volumes from layer.yml declarations
 	BindMounts  []ResolvedBindMount // bind-backed volumes from deploy config
 	GPU         bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)

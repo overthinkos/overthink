@@ -14,7 +14,7 @@ Containers are a great idea with rough edges. The basics work well enough, but r
 
 Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, security declarations, and dependencies described in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order — handling the hard parts so you (and your AI) don't have to.
 
-Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers in `images.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
+Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers in `image.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
 
 ### Sandboxed AI Desktops
 
@@ -63,7 +63,7 @@ Each layer lives in its own directory under `layers/` and can use any combinatio
 
 ### Multi-Distro Support: `distro:` and `build:`
 
-A single layer can target multiple distros. Two fields in `images.yml` control the behavior:
+A single layer can target multiple distros. Two fields in `image.yml` control the behavior:
 
 ```yaml
 fedora:
@@ -109,7 +109,7 @@ Normally a container runs *inside* an operating system. Bootc flips this: the co
 
 ### Containers That Become Virtual Machines
 
-This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `images.yml`, use it everywhere.
+This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `image.yml`, use it everywhere.
 
 ## Install
 
@@ -119,7 +119,7 @@ This is where it all comes together. Take a bootc-based image, and `ov vm build`
 go install github.com/overthinkos/overthink/ov@latest
 ```
 
-This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `images.yml` and a `layers/` directory.
+This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `image.yml` and a `layers/` directory.
 
 **Full project bootstrap** (to build images from this repo):
 
@@ -196,7 +196,7 @@ ov vm start openclaw-browser-bootc
 
 ## The Layer Library
 
-160 layers compose into images via `images.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+160 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -245,7 +245,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 25 top-level command families. Build-mode commands live under `ov image …` (the only family that reads `images.yml`); every other command reads OCI labels + `deploy.yml`. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 25 top-level command families. Build-mode commands live under `ov image …` (the only family that reads `image.yml`); every other command reads OCI labels + `deploy.yml`. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
@@ -279,7 +279,7 @@ Error: image "jupyter:latest" is not available locally.
        Run 'ov image pull jupyter:latest' to fetch it first
 ```
 
-`ov image pull` accepts three input forms: short names (resolved via `images.yml`, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
+`ov image pull` accepts three input forms: short names (resolved via `image.yml`, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
 
 ### Multiple Instances
 
@@ -333,7 +333,7 @@ ov image new layer my-layer            # Scaffold the directory
 #                                      # and tasks: (see /ov:layer for the verb catalog)
 # Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
-# Add to an image in images.yml:
+# Add to an image in image.yml:
 #   layers: [..., my-layer]
 
 ov image build my-image                # Build it

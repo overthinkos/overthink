@@ -2,7 +2,7 @@
 #
 # Copy to ~/.config/ov/deploy.yml and customize for your machine.
 # Only runtime/deployment fields are supported (not build-time fields like base, layers, platforms).
-# Field-level replace: deploy.yml values fully replace images.yml values.
+# Field-level replace: deploy.yml values fully replace image.yml values.
 #
 # Supported fields per image:
 #   ports        — Host:container port mappings (replaces image ports)

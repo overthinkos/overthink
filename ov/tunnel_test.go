@@ -400,7 +400,7 @@ func TestResolveTunnelConfigCloudflarePortMap(t *testing.T) {
 }
 
 // --- Config ResolveImage Tunnel ---
-// Tunnel is a deploy-time concern — no longer resolved from images.yml.
+// Tunnel is a deploy-time concern — no longer resolved from image.yml.
 
 func TestConfigResolveTunnelIgnored(t *testing.T) {
 	cfg := &Config{
@@ -421,7 +421,7 @@ func TestConfigResolveTunnelIgnored(t *testing.T) {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
 	if resolved.Tunnel != nil {
-		t.Error("Tunnel should be nil — images.yml tunnel is ignored (deploy.yml only)")
+		t.Error("Tunnel should be nil — image.yml tunnel is ignored (deploy.yml only)")
 	}
 }
 
@@ -472,7 +472,7 @@ func TestConfigResolveTunnelNil(t *testing.T) {
 // --- Validation ---
 
 // Tunnel validation tests removed — tunnel is a deploy-time concern (deploy.yml only).
-// images.yml tunnel: field is parsed but ignored by Validate().
+// image.yml tunnel: field is parsed but ignored by Validate().
 
 func TestValidateTunnelIgnoredInImagesYml(t *testing.T) {
 	cfg := &Config{
@@ -486,9 +486,9 @@ func TestValidateTunnelIgnoredInImagesYml(t *testing.T) {
 	layers := map[string]*Layer{}
 
 	err := Validate(cfg, layers, "")
-	// Should NOT produce tunnel errors — tunnel in images.yml is ignored
+	// Should NOT produce tunnel errors — tunnel in image.yml is ignored
 	if err != nil && strings.Contains(err.Error(), "tunnel") {
-		t.Errorf("tunnel in images.yml should be ignored by Validate, got: %v", err)
+		t.Errorf("tunnel in image.yml should be ignored by Validate, got: %v", err)
 	}
 }
 

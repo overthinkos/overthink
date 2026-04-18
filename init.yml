@@ -1,7 +1,7 @@
 # init.yml — Init system definitions
 #
 # Each init system defines how to detect, build, assemble, and manage services.
-# Key = init system name used in images.yml init: field and auto-detection.
+# Key = init system name used in image.yml init: field and auto-detection.
 #
 # Detection:
 #   layer_fields: which layer.yml fields trigger this init system

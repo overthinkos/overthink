@@ -119,7 +119,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 
 	// Load default format configs early — needed for SetFormatNames before layer scanning
 	if cfg.Defaults.FormatConfig == nil {
-		return nil, fmt.Errorf("defaults.format_config is required in images.yml")
+		return nil, fmt.Errorf("defaults.format_config is required in image.yml")
 	}
 	defaultDistroCfg, _, err := LoadDefaultFormatConfigs(cfg.Defaults.FormatConfig, dir)
 	if err != nil {

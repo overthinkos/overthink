@@ -62,7 +62,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Resolve from image labels (+ deploy.yml overlay). No images.yml.
+	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
 	imageRef := resolveShellImageRef("", c.Image, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err

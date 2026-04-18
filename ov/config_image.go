@@ -96,7 +96,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		LogDetectedDevices(detected)
 	}
 
-	// Always resolve from image labels (no images.yml dependency for deployment)
+	// Always resolve from image labels (no image.yml dependency for deployment)
 	imageRef := resolveShellImageRef("", c.Image, c.Tag)
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {

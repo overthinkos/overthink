@@ -44,7 +44,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 		return nil, fmt.Errorf("downloading %s:%s: %w", parsed.RepoPath, version, err)
 	}
 
-	// Load the remote images.yml
+	// Load the remote image.yml
 	cfg, err := LoadConfig(cachePath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config from %s: %w", parsed.RepoPath, err)

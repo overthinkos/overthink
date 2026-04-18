@@ -135,7 +135,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 }
 
 // MergeDeployOverlay patches cfg.Images in-place with deployment overrides from deploy.yml.
-// Field-level replace: deploy.yml value fully replaces images.yml value.
+// Field-level replace: deploy.yml value fully replaces image.yml value.
 // Unknown images in deploy.yml are silently ignored.
 func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	if dc == nil || dc.Images == nil {

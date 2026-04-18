@@ -24,8 +24,8 @@ You have all the time in the world and taking the time to get things properly do
 Two components with a clean split:
 
 **`ov` (Go CLI)** -- all computation, building, and deployment. Two operational modes with a **hard namespace split**:
-- **Build mode:** The `ov image …` family (`build`, `generate`, `validate`, `list`, `merge`, `new`, `inspect`, `pull`). **Only** these commands read `images.yml`. See `/ov:image` for the family overview and subcommand index.
-- **Deploy mode:** Every other command. Reads **exclusively** from OCI labels (via `ExtractMetadata`) + `deploy.yml`. Never touches `images.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). Tunnel config is deploy.yml-only (not in labels). When an image isn't in local storage, deploy-mode commands surface the `ErrImageNotLocal` recommendation pointing to `ov image pull`. See `/ov:config`, `/ov:deploy`, `/ov:pull`.
+- **Build mode:** The `ov image …` family (`build`, `generate`, `validate`, `list`, `merge`, `new`, `inspect`, `pull`). **Only** these commands read `image.yml`. See `/ov:image` for the family overview and subcommand index.
+- **Deploy mode:** Every other command. Reads **exclusively** from OCI labels (via `ExtractMetadata`) + `deploy.yml`. Never touches `image.yml`. `ov config` is the single entry point (quadlet + secrets + volumes + data). Tunnel config is deploy.yml-only (not in labels). When an image isn't in local storage, deploy-mode commands surface the `ErrImageNotLocal` recommendation pointing to `ov image pull`. See `/ov:config`, `/ov:deploy`, `/ov:pull`.
 
 Source: `ov/`. Registry inspection via go-containerregistry.
 
@@ -60,11 +60,11 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 project/
 +-- bin/ov                    # Built by `task build:ov` (gitignored)
 +-- ov/                       # Go module (go 1.25.3, kong CLI, go-containerregistry)
-+-- distro.yml                # Distro bootstrap + package format definitions (referenced via images.yml)
-+-- builder.yml               # Multi-stage builder definitions (referenced via images.yml)
-+-- init.yml                  # Init system definitions: supervisord, systemd (referenced via images.yml)
++-- distro.yml                # Distro bootstrap + package format definitions (referenced via image.yml)
++-- builder.yml               # Multi-stage builder definitions (referenced via image.yml)
++-- init.yml                  # Init system definitions: supervisord, systemd (referenced via image.yml)
 +-- .build/                   # Generated (gitignored)
-+-- images.yml                # Image definitions
++-- image.yml                # Image definitions
 +-- setup.sh                  # Bootstrap: downloads task, builds ov
 +-- Taskfile.yml              # Bootstrap tasks only
 +-- taskfiles/                # Build.yml, Setup.yml

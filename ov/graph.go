@@ -233,7 +233,7 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 	for name, img := range images {
 		var deps []string
 		if !img.IsExternalBase {
-			// base is another image in images.yml
+			// base is another image in image.yml
 			deps = append(deps, img.Base)
 		}
 		// Collect all builder images this image may depend on

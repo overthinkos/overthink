@@ -8,18 +8,18 @@ import (
 	"strings"
 )
 
-// ImageCmd groups build-mode commands that operate on images.yml (or, in the
-// case of ImagePullCmd, resolve registry/tag via images.yml and then fetch the
+// ImageCmd groups build-mode commands that operate on image.yml (or, in the
+// case of ImagePullCmd, resolve registry/tag via image.yml and then fetch the
 // image into local storage so deploy-mode commands can read its OCI labels).
 type ImageCmd struct {
 	Build    BuildCmd     `cmd:"" help:"Build container images"`
 	Generate GenerateCmd  `cmd:"" help:"Write .build/ (Containerfiles)"`
 	Inspect  InspectCmd   `cmd:"" help:"Print resolved config for an image (JSON)"`
-	List     ListCmd      `cmd:"" help:"List components from images.yml"`
+	List     ListCmd      `cmd:"" help:"List components from image.yml"`
 	Merge    MergeCmd     `cmd:"" help:"Merge small layers in a built container image"`
 	New      NewCmd       `cmd:"" help:"Scaffold new components"`
 	Pull     ImagePullCmd `cmd:"" help:"Pull an image from its registry into local storage"`
-	Validate ValidateCmd  `cmd:"" help:"Check images.yml + layers, exit 0 or 1"`
+	Validate ValidateCmd  `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
 }
 
 // ImagePullCmd fetches an image from its registry into the local container
@@ -27,12 +27,12 @@ type ImageCmd struct {
 // input forms:
 //
 //   - short name (e.g. "jupyter")           — resolves registry + tag via
-//     images.yml (requires a project directory)
+//     image.yml (requires a project directory)
 //   - fully-qualified ref ("ghcr.io/...:v") — pulled as-is
 //   - remote ref ("@github.com/org/repo/image[:version]") — downloads the
-//     repo and pulls the registry ref from its images.yml
+//     repo and pulls the registry ref from its image.yml
 type ImagePullCmd struct {
-	Image    string `arg:"" help:"Image name (short, resolved via images.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
+	Image    string `arg:"" help:"Image name (short, resolved via image.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
 	Tag      string `long:"tag" default:"latest" help:"Image tag when resolving a short name"`
 	Platform string `long:"platform" help:"Target platform (default: host)"`
 }
@@ -63,14 +63,14 @@ func (c *ImagePullCmd) Run() error {
 		return c.pullRef(rt.RunEngine, c.Image)
 	}
 
-	// Short name: resolve registry via images.yml.
+	// Short name: resolve registry via image.yml.
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 	cfg, cfgErr := LoadConfig(dir)
 	if cfgErr != nil {
-		return fmt.Errorf("short name %q requires a project directory with images.yml; pass a fully-qualified ref (e.g. 'ghcr.io/org/%s:<tag>') to pull from anywhere", c.Image, c.Image)
+		return fmt.Errorf("short name %q requires a project directory with image.yml; pass a fully-qualified ref (e.g. 'ghcr.io/org/%s:<tag>') to pull from anywhere", c.Image, c.Image)
 	}
 	resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir)
 	if err != nil {
@@ -102,7 +102,7 @@ func (c *ImagePullCmd) pullRef(engine, imageRef string) error {
 
 // looksLikeFullRef returns true if the image ref contains a registry segment
 // (a "/" before any ":") — e.g. "ghcr.io/org/name:tag" — so it can be pulled
-// without images.yml resolution.
+// without image.yml resolution.
 func looksLikeFullRef(ref string) bool {
 	if strings.HasPrefix(ref, "@") {
 		return false

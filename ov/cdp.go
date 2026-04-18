@@ -764,7 +764,7 @@ func cdpDispatchKeyEvent(client *CDPClient, eventType, key string) error {
 
 // CdpEvalCmd evaluates a JavaScript expression in a tab.
 type CdpEvalCmd struct {
-	Image      string `arg:"" help:"Image name from images.yml"`
+	Image      string `arg:"" help:"Image name from image.yml"`
 	TabID      string `arg:"" help:"Tab ID (from browser list)"`
 	Expression string `arg:"" help:"JavaScript expression to evaluate"`
 	Instance   string `short:"i" long:"instance" help:"Instance name"`
@@ -787,7 +787,7 @@ func (c *CdpEvalCmd) Run() error {
 
 // CdpWaitCmd waits for an element to appear in the page.
 type CdpWaitCmd struct {
-	Image    string        `arg:"" help:"Image name from images.yml"`
+	Image    string        `arg:"" help:"Image name from image.yml"`
 	TabID    string        `arg:"" help:"Tab ID (from browser list)"`
 	Selector string        `arg:"" help:"CSS selector to wait for"`
 	Instance string        `short:"i" long:"instance" help:"Instance name"`

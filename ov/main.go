@@ -20,7 +20,7 @@ type CLI struct {
 	Dbus     DbusCmd        `cmd:"" help:"Interact with D-Bus services inside containers"`
 	Deploy   DeployCmd      `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor   DoctorCmd      `cmd:"" help:"Show host dependency status"`
-	Image    ImageCmd       `cmd:"" help:"Build, generate, inspect, and pull container images (reads images.yml)"`
+	Image    ImageCmd       `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
 	Logs     LogsCmd        `cmd:"" help:"Show service container logs"`
 	Record   RecordCmd      `cmd:"" help:"Record terminal sessions or desktop video"`
 	Remove   RemoveCmd      `cmd:"" help:"Remove service container"`
@@ -59,7 +59,7 @@ func (c *GenerateCmd) Run() error {
 	return gen.Generate()
 }
 
-// ValidateCmd validates images.yml and layers
+// ValidateCmd validates image.yml and layers
 type ValidateCmd struct{}
 
 func (c *ValidateCmd) Run() error {
@@ -248,7 +248,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 // ListCmd groups list subcommands
 type ListCmd struct {
 	Aliases  ListAliasesCmd  `cmd:"" help:"List layers that declare aliases"`
-	Images   ListImagesCmd   `cmd:"" help:"List images from images.yml"`
+	Images   ListImagesCmd   `cmd:"" help:"List images from image.yml"`
 	Layers   ListLayersCmd   `cmd:"" help:"List layers from the filesystem"`
 	Routes   ListRoutesCmd   `cmd:"" help:"List layers that declare a route"`
 	Services ListServicesCmd `cmd:"" help:"List layers that declare a service"`
@@ -256,7 +256,7 @@ type ListCmd struct {
 	Volumes  ListVolumesCmd  `cmd:"" help:"List layers that declare volumes"`
 }
 
-// ListImagesCmd lists images from images.yml
+// ListImagesCmd lists images from image.yml
 type ListImagesCmd struct{}
 
 func (c *ListImagesCmd) Run() error {

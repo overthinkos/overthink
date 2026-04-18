@@ -4,7 +4,7 @@
 # Images reference sidecars by name in their sidecars: field and can override any field.
 # Deploy.yml can further override per machine.
 #
-# Three-tier cascade: sidecar.yml template -> images.yml per-image -> deploy.yml per-machine
+# Three-tier cascade: sidecar.yml template -> image.yml per-image -> deploy.yml per-machine
 #
 # When any sidecar is configured for an image, ov config generates:
 #   - <image>.pod           — Podman pod (shared network namespace, port mappings, bridge network)

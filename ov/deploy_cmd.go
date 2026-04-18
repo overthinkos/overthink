@@ -67,7 +67,7 @@ func (c *DeployExportCmd) exportAll() error {
 	dir, _ := os.Getwd()
 	cfg, err := LoadConfigRaw(dir)
 	if err != nil {
-		return fmt.Errorf("loading images.yml: %w", err)
+		return fmt.Errorf("loading image.yml: %w", err)
 	}
 	dc := ExportAllImages(cfg)
 	if len(c.Images) > 0 {

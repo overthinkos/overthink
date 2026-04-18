@@ -162,7 +162,7 @@ type RemoteDownload struct {
 	Refs     []string // bare refs to import (e.g. "github.com/org/repo/layers/name")
 }
 
-// CollectRemoteRefs collects all unique remote refs from images.yml layer lists
+// CollectRemoteRefs collects all unique remote refs from image.yml layer lists
 // and layer.yml depends/layers fields. Different layers from the same repo can
 // use different versions. Only the same bare ref at conflicting versions is an error.
 // Returns a list of RemoteDownload grouped by (repoPath, version).
@@ -234,14 +234,14 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 		}
 	}
 
-	// Scan images.yml layer references
+	// Scan image.yml layer references
 	if cfg != nil {
 		for imgName, img := range cfg.Images {
 			if !img.IsEnabled() {
 				continue
 			}
 			for _, layerRef := range img.Layers {
-				if err := addRef(layerRef, fmt.Sprintf("images.yml image %s", imgName)); err != nil {
+				if err := addRef(layerRef, fmt.Sprintf("image.yml image %s", imgName)); err != nil {
 					return nil, err
 				}
 			}

@@ -1028,7 +1028,7 @@ func ScanRemoteLayers(repoDir string, repoPath string, wantRefs map[string]bool)
 
 // ScanAllLayers scans local layers and all remote layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
-// Remote refs are collected from @-prefixed refs in layer.yml and images.yml.
+// Remote refs are collected from @-prefixed refs in layer.yml and image.yml.
 func ScanAllLayers(dir string) (map[string]*Layer, error) {
 	return ScanAllLayersWithConfig(dir, nil)
 }

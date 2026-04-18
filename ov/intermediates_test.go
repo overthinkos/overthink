@@ -358,7 +358,7 @@ func TestImageNeedsBuilder(t *testing.T) {
 }
 
 func TestComputeIntermediates_RealisticConfig(t *testing.T) {
-	// Simplified version of the actual images.yml setup
+	// Simplified version of the actual image.yml setup
 	layers := map[string]*Layer{
 		"pixi":            {Name: "pixi", Depends: nil, HasTasks: true},
 		"nodejs":          {Name: "nodejs", Depends: nil, HasTasks: true},

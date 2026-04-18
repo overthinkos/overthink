@@ -135,7 +135,7 @@ type CollectedAlias struct {
 func CollectImageAliases(cfg *Config, layers map[string]*Layer, imageName string) ([]CollectedAlias, error) {
 	img, ok := cfg.Images[imageName]
 	if !ok {
-		return nil, fmt.Errorf("image %q not found in images.yml", imageName)
+		return nil, fmt.Errorf("image %q not found in image.yml", imageName)
 	}
 
 	// Resolve layers for this image (includes transitive deps)
@@ -199,7 +199,7 @@ func defaultAliasDir() string {
 // AliasCmd groups alias subcommands
 type AliasCmd struct {
 	Add       AliasAddCmd       `cmd:"" help:"Create a host command alias"`
-	Install   AliasInstallCmd   `cmd:"" help:"Install default aliases from layer.yml / images.yml"`
+	Install   AliasInstallCmd   `cmd:"" help:"Install default aliases from layer.yml / image.yml"`
 	List      AliasListCmd      `cmd:"" help:"List all installed aliases"`
 	Remove    AliasRemoveCmd    `cmd:"" help:"Remove an alias"`
 	Uninstall AliasUninstallCmd `cmd:"" help:"Remove all aliases for an image"`
@@ -208,7 +208,7 @@ type AliasCmd struct {
 // AliasAddCmd creates a single alias
 type AliasAddCmd struct {
 	Name    string `arg:"" help:"Alias name (command on host)"`
-	Image   string `arg:"" help:"Image name from images.yml"`
+	Image   string `arg:"" help:"Image name from image.yml"`
 	Command string `arg:"" optional:"" help:"Command inside container (default: alias name)"`
 	Dest    string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
@@ -291,7 +291,7 @@ func (c *AliasListCmd) Run() error {
 
 // AliasInstallCmd installs all default aliases for an image
 type AliasInstallCmd struct {
-	Image string `arg:"" help:"Image name from images.yml"`
+	Image string `arg:"" help:"Image name from image.yml"`
 	Dest  string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
 
@@ -339,7 +339,7 @@ func (c *AliasInstallCmd) Run() error {
 
 // AliasUninstallCmd removes all aliases for an image
 type AliasUninstallCmd struct {
-	Image string `arg:"" help:"Image name from images.yml"`
+	Image string `arg:"" help:"Image name from image.yml"`
 	Dest  string `long:"dest" default:"" help:"Directory for wrapper scripts (default: ~/.local/bin)"`
 }
 

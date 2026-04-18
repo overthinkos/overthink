@@ -30,11 +30,8 @@ func TestLayerPixi(t *testing.T) {
 		t.Fatal("pixi layer not found")
 	}
 
-	if !pixi.HasRootYml {
-		t.Error("pixi should have root.yml")
-	}
-	if !pixi.HasUserYml {
-		t.Error("pixi should have user.yml")
+	if !pixi.HasTasks {
+		t.Error("pixi should have tasks:")
 	}
 	if pixi.FormatSection("rpm") != nil {
 		t.Error("pixi should not have rpm format section")
@@ -172,6 +169,10 @@ func TestLayerCargoTool(t *testing.T) {
 }
 
 func TestHasInstallFiles(t *testing.T) {
+	// Format-section detection depends on SetFormatNames being called first
+	// (so unknown top-level keys get routed to FormatSections, not discarded).
+	SetFormatNames(testDistroConfig())
+
 	layers, err := ScanLayers("testdata")
 	if err != nil {
 		t.Fatalf("ScanLayers() error = %v", err)
@@ -439,7 +440,7 @@ func TestLayerPortRelay(t *testing.T) {
 	// Test direct struct construction (no testdata file needed)
 	layer := &Layer{
 		Name:           "chrome",
-		HasUserYml:     true,
+		HasTasks:       true,
 		PortRelayPorts: []int{9222},
 		HasPorts:       true,
 		ports:          []string{"9222"},
@@ -458,7 +459,7 @@ func TestLayerPortRelay(t *testing.T) {
 func TestLayerPortRelayNone(t *testing.T) {
 	layer := &Layer{
 		Name:       "basic",
-		HasRootYml: true,
+		HasTasks: true,
 	}
 
 	if len(layer.PortRelayPorts) != 0 {
@@ -469,7 +470,7 @@ func TestLayerPortRelayNone(t *testing.T) {
 func TestLayerPortRelayMultiple(t *testing.T) {
 	layer := &Layer{
 		Name:           "multi",
-		HasUserYml:     true,
+		HasTasks:       true,
 		PortRelayPorts: []int{9222, 5900},
 		HasPorts:       true,
 		ports:          []string{"9222", "5900"},

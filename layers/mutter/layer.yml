@@ -18,6 +18,18 @@ rpm:
     - libglvnd-gles
     - egl-wayland
 
+tasks:
+  # mutter may ship with cap_sys_nice which blocks exec in rootless user
+  # namespaces. Strip — not needed for headless compositor.
+  - setcap: /usr/bin/mutter
+
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: mutter-wrapper
+    to: "${HOME}/.local/bin/mutter-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:mutter]
   command=%(ENV_HOME)s/.local/bin/mutter-wrapper

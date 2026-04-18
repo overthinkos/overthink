@@ -1,6 +1,0 @@
-version: '3'
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.immich/models
-      - mkdir -p ~/.cache/immich_ml

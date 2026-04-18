@@ -9,3 +9,9 @@ pac:
   packages:
     - socat
     - iproute2
+
+tasks:
+  - copy: relay-wrapper
+    to: /usr/local/bin/relay-wrapper
+    mode: "0755"
+    user: root

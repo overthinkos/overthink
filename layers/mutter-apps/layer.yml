@@ -7,6 +7,14 @@ rpm:
     - gnome-terminal
     - nautilus
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: mutter-app-wrapper
+    to: "${HOME}/.local/bin/mutter-app-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:gnome-terminal]
   command=%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait

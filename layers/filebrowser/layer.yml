@@ -17,6 +17,23 @@ aliases:
   - name: filebrowser
     command: filebrowser
 
+vars:
+  FILEBROWSER_VERSION: v1.2.4-stable
+
+tasks:
+  - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
+    extract: none
+    to: /usr/local/bin/filebrowser
+    mode: "0755"
+    user: root
+
+  - mkdir: /etc/filebrowser
+    user: root
+  - copy: config.yaml
+    to: /etc/filebrowser/config.yaml
+    mode: "0644"
+    user: root
+
 service: |
   [program:filebrowser]
   command=/usr/local/bin/filebrowser

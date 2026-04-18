@@ -5,6 +5,31 @@ rpm:
   packages:
     - waybar
 
+tasks:
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config/waybar"
+
+  - &user_exec
+    user: "${USER}"
+    mode: "0755"
+    copy: waybar-wrapper
+    to: "${HOME}/.local/bin/waybar-wrapper"
+  - <<: *user_exec
+    copy: sway-autotile
+    to: "${HOME}/.local/bin/sway-autotile"
+
+  - &user_cfg
+    user: "${USER}"
+    mode: "0644"
+    copy: config.json
+    to: "${HOME}/.config/waybar/config"
+  - <<: *user_cfg
+    copy: style.css
+    to: "${HOME}/.config/waybar/style.css"
+
 service: |
   [program:waybar]
   command=%(ENV_HOME)s/.local/bin/waybar-wrapper

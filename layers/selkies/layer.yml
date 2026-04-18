@@ -36,6 +36,70 @@ rpm:
     - file
     - lsof
 
+vars:
+  TRAEFIK_VERSION: v3.4.0
+
+tasks:
+  # Move pre-built Selkies web UI from the pixi build-stage output into the
+  # system share directory. The pixi stage writes to /home/user/.local/share
+  # under the build user's home; we relocate so the runtime has no dependency
+  # on the builder-user layout.
+  - cmd: |
+      mkdir -p /usr/local/share/selkies/web
+      cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+      rm -rf /home/user/.local/share/selkies-build
+    user: root
+
+  # Traefik binary (same version the dedicated traefik layer uses).
+  - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+    extract: tar.gz
+    to: /usr/local/bin
+    include: [traefik]
+    user: root
+
+  # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
+  # procedural — stays in cmd: rather than a contrived write: pair.
+  - mkdir: /usr/local/share/selkies/certs
+    user: root
+  - cmd: |
+      openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+        -keyout /usr/local/share/selkies/certs/selkies.key \
+        -out /usr/local/share/selkies/certs/selkies.crt \
+        -days 3650 -nodes \
+        -subj "/CN=selkies" \
+        -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+      chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+    user: root
+
+  # Traefik configs from the layer dir.
+  - copy: traefik.yml
+    to: /usr/local/share/selkies/traefik.yml
+    mode: "0644"
+    user: root
+  - copy: traefik-dynamic.yml
+    to: /usr/local/share/selkies/traefik-dynamic.yml
+    mode: "0644"
+    user: root
+
+  # User-phase setup: wrappers for the three services.
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config/selkies"
+
+  - &user_bin
+    user: "${USER}"
+    mode: "0755"
+    copy: selkies-wrapper
+    to: "${HOME}/.local/bin/selkies-wrapper"
+  - <<: *user_bin
+    copy: selkies-capture-server
+    to: "${HOME}/.local/bin/selkies-capture-server"
+  - <<: *user_bin
+    copy: selkies-fileserver
+    to: "${HOME}/.local/bin/selkies-fileserver"
+
 service: |
   [program:traefik]
   command=/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml

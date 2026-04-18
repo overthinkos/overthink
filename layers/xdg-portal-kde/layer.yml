@@ -10,3 +10,11 @@ rpm:
   packages:
     - xdg-desktop-portal
     - xdg-desktop-portal-kde
+
+tasks:
+  - mkdir: "${HOME}/.config/xdg-desktop-portal"
+    user: "${USER}"
+  - copy: portals.conf
+    to: "${HOME}/.config/xdg-desktop-portal/portals.conf"
+    mode: "0644"
+    user: "${USER}"

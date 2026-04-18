@@ -8,6 +8,14 @@ route:
   host: testapi.localhost
   port: 9090
 
+tasks:
+  - mkdir: "${HOME}/testapi"
+    user: "${USER}"
+  - copy: app.py
+    to: "${HOME}/testapi/app.py"
+    mode: "0644"
+    user: "${USER}"
+
 service: |
   [program:testapi]
   command=/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090

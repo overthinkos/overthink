@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp /ctx/mutter-app-wrapper ~/.local/bin/mutter-app-wrapper
-      - chmod +x ~/.local/bin/mutter-app-wrapper

@@ -28,6 +28,18 @@ service: |
   stdout_logfile_maxbytes=0
   redirect_stderr=true
 
+tasks:
+  - copy: sshd-wrapper
+    to: /usr/local/bin/sshd-wrapper
+    mode: "0755"
+    user: root
+
+  - write: /etc/sudoers.d/ov-user
+    mode: "0440"
+    user: root
+    content: |
+      user ALL=(ALL) NOPASSWD: ALL
+
 # Systemd service (bootc images)
 system_services:
   - sshd

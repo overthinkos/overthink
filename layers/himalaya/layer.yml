@@ -2,3 +2,7 @@ description: Himalaya email CLI (IMAP/SMTP)
 
 depends:
   - rust
+
+tasks:
+  - cmd: cargo install himalaya --locked
+    user: "${USER}"

@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp /ctx/wayvnc-wrapper ~/.local/bin/wayvnc-wrapper
-      - chmod +x ~/.local/bin/wayvnc-wrapper

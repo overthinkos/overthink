@@ -6,3 +6,20 @@ layers:
 
 env:
   CHROME_FLAGS: "--enable-features=VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
+
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - mkdir: "${HOME}/.config/openbox"
+    user: "${USER}"
+  - copy: chrome-x11-wrapper
+    to: "${HOME}/.local/bin/chrome-wrapper"
+    mode: "0755"
+    user: "${USER}"
+  # Add Chrome launch line to the openbox autostart file (append, not replace).
+  # Kept as a cmd: because `write:` creates/overwrites; here we need append.
+  - cmd: |
+      cat >> ${HOME}/.config/openbox/autostart << 'EOF'
+      chrome-wrapper &
+      EOF
+    user: "${USER}"

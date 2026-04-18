@@ -16,3 +16,7 @@ volumes:
 aliases:
   - name: websvc
     command: websvc-server
+
+tasks:
+  - cmd: echo "setup webservice"
+    user: "${USER}"

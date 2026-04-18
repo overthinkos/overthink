@@ -81,6 +81,138 @@ route:
   host: "immich.localhost"
   port: 2283
 
+tasks:
+  # Fetch + extract Immich source
+  - cmd: |
+      curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
+      mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
+    user: root
+
+  # Build the server with pnpm. npm_config_cache is redirected so the root
+  # user's build doesn't stash a root-owned ~/.cache that taints later steps.
+  - cmd: |
+      cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+      cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
+      cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
+    user: root
+
+  # Geodata for reverse geocoding
+  - cmd: |
+      mkdir -p /build/geodata
+      cd /build/geodata
+      curl -sL https://download.geonames.org/export/dump/admin1CodesASCII.txt -o admin1CodesASCII.txt
+      curl -sL https://download.geonames.org/export/dump/admin2Codes.txt -o admin2Codes.txt
+      curl -sL https://download.geonames.org/export/dump/cities500.zip -o cities500.zip && unzip -o cities500.zip && rm cities500.zip
+      curl -sL "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_admin_0_countries.geojson" -o ne_10m_admin_0_countries.geojson
+      date -I > geodata-date.txt
+      echo '{}' > /build/build-lock.json
+      mkdir -p /build/corePlugin
+      cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
+    user: root
+
+  # Build web UI
+  - cmd: |
+      cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
+      cp -r /tmp/immich/web/build /build/www
+    user: root
+
+  # Build core plugin (TypeScript → WASM via extism-js). Installs the
+  # toolchain, builds, then scrubs the toolchain to keep the final image lean.
+  - cmd: |
+      EXTISM_JS_VERSION=1.6.0
+      BINARYEN_VERSION=124
+      ARCH=$(uname -m)
+
+      curl -sL "https://github.com/extism/js-pdk/releases/download/v${EXTISM_JS_VERSION}/extism-js-${ARCH}-linux-v${EXTISM_JS_VERSION}.gz" | gunzip > /usr/local/bin/extism-js
+      chmod +x /usr/local/bin/extism-js
+
+      curl -sL "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-${ARCH}-linux.tar.gz" | tar xz -C /tmp
+      cp /tmp/binaryen-version_${BINARYEN_VERSION}/bin/* /usr/local/bin/
+      rm -rf /tmp/binaryen-version_${BINARYEN_VERSION}
+
+      cd /tmp/immich/plugins
+      npm_config_cache=/tmp/npm-root-cache pnpm install --frozen-lockfile
+      npm_config_cache=/tmp/npm-root-cache pnpm run build
+
+      mkdir -p /build/corePlugin/dist
+      cp -r dist/* /build/corePlugin/dist/
+
+      rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-eval /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
+    user: root
+
+  - cmd: rm -rf /tmp/immich
+    user: root
+
+  # Postgres init-sql for immich-specific extensions. write: replaces the
+  # original heredoc — file content lives in YAML, no shell heredoc escaping.
+  - write: /docker-entrypoint-initdb.d/01-immich-extensions.sql
+    user: root
+    mode: "0644"
+    content: |
+      CREATE EXTENSION IF NOT EXISTS vector;
+      CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
+      CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
+
+  # DB migration wrapper — runs on every container start via supervisord.
+  # Idempotent CREATE EXTENSION IF NOT EXISTS handles both fresh and upgraded DBs.
+  - write: /usr/local/bin/immich-db-migrate.sh
+    user: root
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+      HOME=${HOME:-/home/user}
+      SOCKET_DIR="$HOME/.postgresql"
+      POSTGRES_USER=${POSTGRES_USER:-immich}
+      POSTGRES_DB=${POSTGRES_DB:-immich}
+
+      # Wait for PostgreSQL (up to 600s — WAL recovery after heavy ops can take minutes)
+      for i in $(seq 1 600); do
+          pg_isready -h "$SOCKET_DIR" -U "$POSTGRES_USER" >/dev/null 2>&1 && break
+          sleep 1
+      done
+      if ! pg_isready -h "$SOCKET_DIR" -U "$POSTGRES_USER" >/dev/null 2>&1; then
+          echo "PostgreSQL timed out after 600s" >&2
+          exit 1
+      fi
+
+      # Ensure core extensions (idempotent — safe on every startup)
+      psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+          -c "CREATE EXTENSION IF NOT EXISTS vector;" \
+          -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"
+
+      # VectorChord if available (conditional — works with or without vectorchord layer)
+      if psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+          "SELECT 1 FROM pg_available_extensions WHERE name = 'vchord'" | grep -q 1; then
+          psql -h "$SOCKET_DIR" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 \
+              -c "CREATE EXTENSION IF NOT EXISTS vchord CASCADE;"
+          echo "VectorChord extension ensured"
+      else
+          echo "VectorChord not available — skipping"
+      fi
+
+  # Immich server startup wrapper — waits for PostgreSQL before starting node.
+  - write: /usr/local/bin/immich-server-start.sh
+    user: root
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      until pg_isready -h "$HOME/.postgresql" -U "${POSTGRES_USER:-immich}" >/dev/null 2>&1; do
+          sleep 1
+      done
+      exec node /opt/immich/server/dist/main
+
+  # User-phase data directories
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.immich/library"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.immich/cache"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.immich/import"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.immich/external"
+
 service: |
   [program:immich-db-init]
   command=/usr/local/bin/immich-db-migrate.sh

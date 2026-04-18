@@ -11,6 +11,14 @@ rpm:
     - pipewire-utils
     - wireplumber
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: pipewire-wrapper
+    to: "${HOME}/.local/bin/pipewire-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:pipewire]
   command=%(ENV_HOME)s/.local/bin/pipewire-wrapper

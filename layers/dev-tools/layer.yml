@@ -47,3 +47,8 @@ rpm:
     - zoxide
   options:
     - "--setopt=tsflags=noscripts"
+
+tasks:
+  # git-lfs post-install config (package installed with noscripts above)
+  - cmd: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
+    user: root

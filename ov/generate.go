@@ -1027,6 +1027,13 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Track if we've switched to user mode
 	asUser := false
 
+	// 0. ENV from vars: + ARCH (ARG TARGETARCH) — emitted once per layer
+	// before packages/tasks so Docker's variable substitution sees the
+	// values in subsequent directives (COPY dests, RUN commands, etc.).
+	if layer.HasTasks || len(layer.vars) > 0 {
+		emitVarsEnv(b, layer.vars)
+	}
+
 	// 1. System packages from layer.yml — fully config-driven.
 	// Phase 1: Walk distro: tags — first matching section wins (override).
 	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
@@ -1075,9 +1082,22 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
-	// 2. root.yml (root)
-	if layer.HasRootYml {
-		g.writeRootYml(b, stageName, layer, img)
+	// 2a. tasks: list (new path — replaces both root.yml and user.yml).
+	// Validator rejects layers that have both tasks: and root.yml/user.yml.
+	if layer.HasTasks {
+		imageName := img.Name
+		buildDir := filepath.Join(g.BuildDir, imageName)
+		contextRelPrefix := filepath.ToSlash(filepath.Join(".build", imageName))
+		finalUser, err := g.emitTasks(b, layer, img, buildDir, contextRelPrefix, "0")
+		if err != nil {
+			// Phase 0: log but continue; validator should catch this earlier.
+			b.WriteString(fmt.Sprintf("# emitTasks error: %v\n", err))
+		}
+		if finalUser != "0" && finalUser != "root" {
+			// Tasks ended in non-root state; reset for builders/user.yml that
+			// follow in existing code paths (they assume USER=root at entry).
+			b.WriteString("USER root\n")
+		}
 	}
 
 	// 4. Inline builders (cargo, etc.) — config-driven from builder.yml
@@ -1107,15 +1127,6 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
-	// 5. user.yml (user)
-	if layer.HasUserYml {
-		if !asUser {
-			b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
-			asUser = true
-		}
-		g.writeUserYml(b, stageName, layer, img)
-	}
-
 	// Reset to root for next layer (skip for last layer when no root steps follow)
 	if asUser && !skipRootReset {
 		b.WriteString("USER root\n")
@@ -1128,31 +1139,6 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 // Old format-specific write functions removed — all generation is now
 // config-driven via distro.yml format templates rendered by renderFormatInstall*
 // and builder.yml templates rendered by buildStageContext + RenderTemplate.
-
-func (g *Generator) writeRootYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
-	// Resolve which tasks to call: intersection of image tags and defined tasks
-	tasks := img.MatchingTasks(layer.RootYmlTasks)
-	if len(tasks) == 0 {
-		return // no matching tasks for this image's tags
-	}
-
-	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	// Cache mounts from primary format's config
-	var formatDef *FormatDef
-	if img.DistroDef != nil {
-		formatDef = img.DistroDef.Formats[img.Pkg]
-	}
-	if formatDef != nil {
-		for _, m := range formatDef.CacheMounts {
-			sharing := m.Sharing
-			if sharing == "" {
-				sharing = "locked"
-			}
-			b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=%s,sharing=%s \\\n", m.Dst, sharing))
-		}
-	}
-	b.WriteString(fmt.Sprintf("    cd /ctx && task -t root.yml %s\n", strings.Join(tasks, " ")))
-}
 
 // expandBuilderPath replaces {{.Home}} placeholders in copy artifact paths.
 func expandBuilderPath(path string, img *ResolvedImage) string {
@@ -1261,18 +1247,6 @@ func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages
 	if err == nil {
 		b.WriteString(rendered)
 	}
-}
-
-func (g *Generator) writeUserYml(b *strings.Builder, layerName string, layer *Layer, img *ResolvedImage) {
-	// Resolve which tasks to call: intersection of image tags and defined tasks
-	tasks := img.MatchingTasks(layer.UserYmlTasks)
-	if len(tasks) == 0 {
-		return // no matching tasks for this image's tags
-	}
-
-	b.WriteString(fmt.Sprintf("RUN --mount=type=bind,from=%s,source=/,target=/ctx \\\n", layerName))
-	b.WriteString(fmt.Sprintf("    --mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d \\\n", img.UID, img.GID))
-	b.WriteString(fmt.Sprintf("    cd /ctx && task -t user.yml %s\n", strings.Join(tasks, " ")))
 }
 
 // writeLabels emits OCI LABEL directives with all runtime-relevant metadata.

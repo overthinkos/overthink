@@ -1,1 +1,7 @@
 description: Overthink CLI (ov) binary
+
+tasks:
+  - copy: bin/ov
+    to: /usr/local/bin/ov
+    mode: "0755"
+    user: root

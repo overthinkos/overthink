@@ -11,3 +11,16 @@ volumes:
     path: "~/.config/heroic"
   - name: heroic-games
     path: "~/Games/Heroic"
+
+vars:
+  HEROIC_VERSION: 2.20.1
+
+tasks:
+  # Heroic ships as an .rpm from GitHub releases — fetch, install with dnf
+  # (which pulls in transitive deps), then clean up the staged file.
+  - cmd: |
+      ARCH=$(uname -m)
+      curl -fsSL "https://github.com/Heroic-Games-Launcher/HeroicGamesLauncher/releases/download/v${HEROIC_VERSION}/Heroic-${HEROIC_VERSION}-linux-${ARCH}.rpm" -o /tmp/heroic.rpm
+      dnf install -y /tmp/heroic.rpm
+      rm -f /tmp/heroic.rpm
+    user: root

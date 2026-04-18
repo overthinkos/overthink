@@ -5,6 +5,14 @@ depends:
 layers:
   - chrome
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: chrome-mutter-wrapper
+    to: "${HOME}/.local/bin/chrome-mutter-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:chrome]
   command=%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper

@@ -53,12 +53,11 @@ When services run as separate containers, **service discovery happens automatica
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
-- **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, cross-container env injection (`env_provides`), MCP server discovery (`mcp_provides`), dependency declarations (`env_requires`/`env_accepts`, `mcp_requires`/`mcp_accepts`), ports, services, volumes, routes, and metadata (`version`, `status`, `info`)
-- **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user)
-- **`package.json`** — npm packages for Node.js (multi-stage build, runs as user)
-- **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user)
-- **`root.yml`** — Custom install script (Taskfile format) with tag-based task dispatch (`all:` for common, `rpm:`/`pac:`/`fedora:` for specific) that runs as root
-- **`user.yml`** — Custom install script (Taskfile format) with the same tag-based dispatch that runs as the container user
+- **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, cross-container env injection (`env_provides`), MCP server discovery (`mcp_provides`), dependency declarations (`env_requires`/`env_accepts`, `mcp_requires`/`mcp_accepts`), ports, services, volumes, routes, metadata (`version`, `status`, `info`), layer-local build variables (`vars:` for `${VAR}` substitution), and the `tasks:` install list.
+- **`tasks:` inside `layer.yml`** — Ordered install operations. Eight verbs: `cmd` (shell), `mkdir`, `copy` (layer-dir file → container), `write` (inline content → container — no shell heredoc), `link` (symlink), `download` (curl + extract), `setcap` (file capabilities), `build` (explicit pixi/npm/cargo placement). Each task carries a `user:` field (`root` / `${USER}` / literal username / `uid:gid`). Strict author-controlled ordering. YAML anchors + `${VAR}` substitution for DRY. See `/ov:layer` for the full verb catalog.
+- **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user).
+- **`package.json`** — npm packages for Node.js (multi-stage build, runs as user).
+- **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user).
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
@@ -80,11 +79,11 @@ archlinux:
   builds: [pixi, npm, cargo, aur]
 ```
 
-These flow through to all three layer file types:
-- **`layer.yml`** — `distro:` tags are checked first (first match wins, prevents version conflicts). If no distro section matches, `build:` formats install ALL matching sections in order.
-- **`root.yml` / `user.yml`** — **Additive**: all matching tasks run (`all:` → distro tags → build formats)
+These fields flow through to `layer.yml`:
+- **Package sections** — `distro:` tags are checked first (first match wins, prevents version conflicts). If no distro section matches, `build:` formats install ALL matching sections in order.
+- **`tasks:`** — Not dispatched by tag. If a task must run on only one distro, guard it in-task: put a distro-specific package in the matching `rpm:`/`pac:` section, or add a shell `if [ -f /etc/fedora-release ]; then …; fi` inside a `cmd:` block.
 
-This means `fedora-ov` and `arch-ov` share the exact same layer list — only the packages and scripts differ per distro.
+This means `fedora-ov` and `arch-ov` share the exact same layer list — only the package sets (and rarely, a few shell-guarded tasks) differ per distro.
 
 ### Docker or Podman — Your Choice
 
@@ -329,17 +328,18 @@ Each entry points to the canonical skill — details belong there, not here.
 ## Adding a Layer
 
 ```bash
-ov image new layer my-layer                  # Scaffold the directory
-# Edit layers/my-layer/layer.yml      # Declare packages, deps, env, ports
-# Add pixi.toml, package.json, root.yml, user.yml as needed
+ov image new layer my-layer            # Scaffold the directory
+# Edit layers/my-layer/layer.yml       # Declare packages, deps, env, ports,
+#                                      # and tasks: (see /ov:layer for the verb catalog)
+# Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
 # Add to an image in images.yml:
 #   layers: [..., my-layer]
 
-ov image build my-image                      # Build it
+ov image build my-image                # Build it
 ```
 
-See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files.
+See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files. The `/ov:layer` skill is the canonical reference for the `tasks:` verb catalog (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`, `setcap`, `build`), `vars:` substitution, YAML anchors, and execution-order rules.
 
 ## Works with Claude Code
 

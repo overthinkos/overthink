@@ -1,0 +1,42 @@
+description: COPR and external desktop packages (CoolerControl, Ghostty, Nerd Fonts, WinBoat)
+
+tasks:
+  # Each install block is independently guarded so a missing COPR for the
+  # current Fedora release degrades gracefully rather than failing the build.
+
+  # CoolerControl
+  - cmd: |
+      if dnf5 copr enable -y coolercontrol/coolercontrol 2>/dev/null; then
+        dnf5 install -y coolercontrol
+        dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:coolercontrol:coolercontrol.enabled=0"
+      else
+        echo "CoolerControl COPR not available for this release, skipping"
+      fi
+    user: root
+
+  # Ghostty — `rpm --replacefiles` resolves a terminfo conflict with ncurses-term
+  - cmd: |
+      if dnf5 copr enable -y pgdev/ghostty 2>/dev/null; then
+        dnf5 download ghostty --arch x86_64 --arch noarch --destdir /tmp/ghostty-rpms
+        dnf5 install -y zlib-ng
+        rpm -Uvh --replacefiles /tmp/ghostty-rpms/ghostty-*.x86_64.rpm
+        rm -rf /tmp/ghostty-rpms
+        dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:pgdev:ghostty.enabled=0"
+      else
+        echo "Ghostty COPR not available for this release, skipping"
+      fi
+    user: root
+
+  # Nerd Fonts from Terra
+  - cmd: dnf5 install -y --enable-repo="terra" nerd-fonts 2>/dev/null || echo "Nerd Fonts not available, skipping"
+    user: root
+
+  # WinBoat
+  - cmd: |
+      if dnf5 copr enable -y smswim/winboat 2>/dev/null; then
+        dnf5 install -y winboat
+        dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:smswim:winboat.enabled=0"
+      else
+        echo "WinBoat COPR not available for this release, skipping"
+      fi
+    user: root

@@ -3,3 +3,30 @@ description: sherpa-onnx offline text-to-speech
 env:
   SHERPA_ONNX_RUNTIME_DIR: "~/.local/share/sherpa-onnx/runtime"
   SHERPA_ONNX_MODEL_DIR: "~/.local/share/sherpa-onnx/models"
+
+vars:
+  SHERPA_VERSION: v1.12.23
+
+tasks:
+  - mkdir: "${HOME}/.local/share/sherpa-onnx/runtime"
+    user: "${USER}"
+  - mkdir: "${HOME}/.local/share/sherpa-onnx/models"
+    user: "${USER}"
+
+  # Runtime binaries + libs. Upstream names: linux-x64 / linux-aarch64 — a
+  # shell expression inside cmd handles the BuildKit-arch → upstream-suffix mapping.
+  - cmd: |
+      case "${BUILD_ARCH}" in
+        x86_64) SUFFIX="linux-x64" ;;
+        aarch64) SUFFIX="linux-aarch64" ;;
+        *) echo "Unsupported arch: ${BUILD_ARCH}"; exit 1 ;;
+      esac
+      curl -fsSL "https://github.com/k2-fsa/sherpa-onnx/releases/download/${SHERPA_VERSION}/sherpa-onnx-${SHERPA_VERSION}-${SUFFIX}-shared.tar.bz2" \
+        | tar -xjf - --strip-components=1 -C ~/.local/share/sherpa-onnx/runtime
+    user: "${USER}"
+
+  # TTS model
+  - cmd: |
+      curl -fsSL "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-piper-en_US-lessac-high.tar.bz2" \
+        | tar -xjf - -C ~/.local/share/sherpa-onnx/models
+    user: "${USER}"

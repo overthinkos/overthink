@@ -72,6 +72,14 @@ secrets:
   - name: webui-secret-key
     env: WEBUI_SECRET_KEY
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: openwebui-entrypoint
+    to: "${HOME}/.local/bin/openwebui-entrypoint"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:openwebui]
   command=%(ENV_HOME)s/.local/bin/openwebui-entrypoint

@@ -1,7 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.config/xdg-desktop-portal
-      - cp /ctx/portals.conf ~/.config/xdg-desktop-portal/portals.conf

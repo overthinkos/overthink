@@ -8,6 +8,14 @@ rpm:
   packages:
     - wayvnc
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: wayvnc-wrapper
+    to: "${HOME}/.local/bin/wayvnc-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:wayvnc]
   command=%(ENV_HOME)s/.local/bin/wayvnc-wrapper

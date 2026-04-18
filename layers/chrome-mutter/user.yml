@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp /ctx/chrome-mutter-wrapper ~/.local/bin/chrome-mutter-wrapper
-      - chmod +x ~/.local/bin/chrome-mutter-wrapper

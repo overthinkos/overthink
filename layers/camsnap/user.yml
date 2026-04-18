@@ -1,7 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - go install github.com/steipete/camsnap/cmd/camsnap@latest
-      - go clean -cache

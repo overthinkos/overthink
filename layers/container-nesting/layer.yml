@@ -36,3 +36,38 @@ security:
 env:
   OV_BUILD_ENGINE: "podman"
   OV_RUN_ENGINE: "podman"
+
+tasks:
+  # Rootless podman: subuid/subgid mappings for root
+  - cmd: |
+      echo "root:100000:65536" >> /etc/subuid
+      echo "root:100000:65536" >> /etc/subgid
+    user: root
+
+  # File capabilities for rootless user-namespace mapping. Guarded because
+  # newuidmap may not be installed on every derivation.
+  - cmd: |
+      if [ -f /usr/bin/newuidmap ]; then
+        setcap cap_setuid=ep /usr/bin/newuidmap
+        setcap cap_setgid=ep /usr/bin/newgidmap
+      fi
+    user: root
+
+  # Nested podman config for container-in-container support:
+  # - cgroups=disabled: cgroupfs is read-only at nesting depth 2+
+  # - netns=host: netavark can't create netns inside containers
+  # - userns=host: newuidmap fails in nested user namespaces
+  # - cgroup_manager=cgroupfs: systemd unavailable in container context
+  - mkdir: /etc/containers
+    user: root
+  - write: /etc/containers/containers.conf
+    user: root
+    mode: "0644"
+    content: |
+      [engine]
+      cgroup_manager = "cgroupfs"
+
+      [containers]
+      cgroups = "disabled"
+      netns = "host"
+      userns = "host"

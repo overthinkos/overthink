@@ -16,3 +16,16 @@ pac:
 
 env:
   LD_LIBRARY_PATH: "/usr/lib64"
+
+tasks:
+  # Vulkan ICD symlinks for nvidia-ctk CDI. Conditional because the ICD JSON
+  # files may or may not be present depending on the driver package — || true
+  # keeps the RUN from failing on distros that don't ship them here.
+  - mkdir: /etc/vulkan/icd.d
+    user: root
+  - cmd: |
+      [ -f /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json ] && \
+        ln -sf /usr/share/vulkan/icd.d/nvidia_icd.x86_64.json /etc/vulkan/icd.d/nvidia_icd.json || true
+      [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
+        ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
+    user: root

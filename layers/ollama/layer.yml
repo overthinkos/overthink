@@ -20,6 +20,13 @@ aliases:
   - name: ollama
     command: ollama
 
+tasks:
+  # Ollama binary release tarball (no systemd)
+  - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
+    extract: tar.zst
+    to: /usr
+    user: root
+
 service: |
   [program:ollama]
   command=ollama serve

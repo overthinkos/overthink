@@ -3,3 +3,11 @@ description: Desktop video recorder via pixelflux H.264 pipeline
 depends:
   - selkies
   - ffmpeg
+
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: pixelflux-record
+    to: "${HOME}/.local/bin/pixelflux-record"
+    mode: "0755"
+    user: "${USER}"

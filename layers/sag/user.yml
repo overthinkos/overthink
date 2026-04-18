@@ -1,7 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - go install github.com/steipete/sag/cmd/sag@latest
-      - go clean -cache

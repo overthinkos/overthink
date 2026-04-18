@@ -1,9 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.config/sway/config.d
-      - cp /ctx/portal.conf ~/.config/sway/config.d/portal.conf
-      - mkdir -p ~/.config/xdg-desktop-portal-wlr
-      - cp /ctx/xdg-desktop-portal-wlr-config ~/.config/xdg-desktop-portal-wlr/config

@@ -4,3 +4,11 @@ depends:
 rpm:
   packages:
     - xfce4-terminal
+
+tasks:
+  - mkdir: "${HOME}/.config/sway/config.d"
+    user: "${USER}"
+  - copy: xfce4-terminal.conf
+    to: "${HOME}/.config/sway/config.d/xfce4-terminal.conf"
+    mode: "0644"
+    user: "${USER}"

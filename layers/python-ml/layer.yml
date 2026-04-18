@@ -7,3 +7,11 @@ layers:
 env:
   NVIDIA_PYTHON_PROJECT: "~/.pixi"
   LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+
+tasks:
+  # vLLM cu130 nightly wheel (--no-deps: runtime deps provided by pixi.toml).
+  # Runs after the pixi builder stage has installed the Python env.
+  - cmd: |
+      ~/.pixi/envs/default/bin/python -m pip install --no-deps \
+        'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
+    user: "${USER}"

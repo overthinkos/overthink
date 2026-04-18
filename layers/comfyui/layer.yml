@@ -14,6 +14,20 @@ volumes:
   - name: comfyui
     path: "~/ComfyUI"
 
+tasks:
+  # Clone ComfyUI + the Manager into the workspace volume staging dir.
+  # || true on the main clone makes this idempotent if an earlier build left
+  # a partial clone (rare but observed in failed CI runs).
+  - cmd: |
+      git clone --depth 1 https://github.com/comfyanonymous/ComfyUI.git ${HOME}/ComfyUI || true
+      cd ${HOME}/ComfyUI
+      mkdir -p models/{checkpoints,clip,clip_vision,configs,controlnet}
+      mkdir -p models/{diffusers,diffusion_models,embeddings,gligen,hypernetworks,loras}
+      mkdir -p models/{photomaker,style_models,text_encoders,unet,upscale_models,vae,vae_approx}
+      mkdir -p custom_nodes output input user
+      git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
+    user: "${USER}"
+
 service: |
   [program:comfyui]
   command=python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0

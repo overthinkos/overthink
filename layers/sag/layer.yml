@@ -12,3 +12,9 @@ env:
 
 path_append:
   - "~/go/bin"
+
+tasks:
+  - cmd: |
+      go install github.com/steipete/sag/cmd/sag@latest
+      go clean -cache
+    user: "${USER}"

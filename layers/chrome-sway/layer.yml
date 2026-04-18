@@ -3,3 +3,11 @@ depends:
 
 layers:
   - chrome
+
+tasks:
+  - mkdir: "${HOME}/.config/sway/config.d"
+    user: "${USER}"
+  - copy: chrome-sway.conf
+    to: "${HOME}/.config/sway/config.d/chrome-sway.conf"
+    mode: "0644"
+    user: "${USER}"

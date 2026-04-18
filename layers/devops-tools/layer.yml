@@ -7,3 +7,37 @@ rpm:
     - jq
     - rsync
     - unzip
+
+tasks:
+  # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
+  # symlinks into /usr/local/bin.
+  - cmd: |
+      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+      cd /tmp && unzip -q awscliv2.zip
+      ./aws/install
+      rm -rf /tmp/awscliv2.zip /tmp/aws
+    user: root
+
+  # Scaleway CLI — GitHub API lookup with a pinned fallback for when the API
+  # is rate-limited or offline during builds.
+  - cmd: |
+      SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
+      [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
+      curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
+      chmod +x /usr/local/bin/scw
+    user: root
+
+  # kubectx + kubens — plain shell scripts from master
+  - cmd: |
+      curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
+      curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
+      chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
+    user: root
+
+  # OpenTofu via official installer script
+  - cmd: |
+      curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
+      chmod +x /tmp/install-opentofu.sh
+      bash /tmp/install-opentofu.sh --install-method standalone
+      rm -f /tmp/install-opentofu.sh
+    user: root

@@ -1,2 +1,6 @@
 depends:
   - nodejs
+
+tasks:
+  - cmd: cargo install taplo-cli --locked
+    user: "${USER}"

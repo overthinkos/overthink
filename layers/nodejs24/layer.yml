@@ -11,3 +11,14 @@ rpm:
   packages:
     - nodejs24
     - nodejs24-npm
+
+tasks:
+  - link: /usr/local/bin/node
+    target: /usr/bin/node-24
+    user: root
+  - link: /usr/local/bin/npm
+    target: /usr/bin/npm-24
+    user: root
+  - link: /usr/local/bin/npx
+    target: /usr/bin/npx-24
+    user: root

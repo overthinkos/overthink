@@ -5,6 +5,35 @@ rpm:
   packages:
     - SwayNotificationCenter
 
+tasks:
+  # Remove D-Bus auto-activation service files to prevent D-Bus from spawning
+  # competing swaync instances. In supervisord-managed containers, swaync is
+  # started by supervisord — D-Bus activation races with it, causing the
+  # supervisord instance to lose its bus name and exit with status 1.
+  - cmd: |
+      rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
+      rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
+    user: root
+
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config/swaync"
+
+  - copy: swaync-wrapper
+    to: "${HOME}/.local/bin/swaync-wrapper"
+    mode: "0755"
+    user: "${USER}"
+  - &user_cfg
+    user: "${USER}"
+    mode: "0644"
+    copy: config.json
+    to: "${HOME}/.config/swaync/config.json"
+  - <<: *user_cfg
+    copy: style.css
+    to: "${HOME}/.config/swaync/style.css"
+
 service: |
   [program:swaync]
   command=%(ENV_HOME)s/.local/bin/swaync-wrapper

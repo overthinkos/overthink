@@ -8,3 +8,11 @@ rpm:
     - gtk4
     - gtk4-layer-shell
     - python3-gobject
+
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: ov-overlay
+    to: "${HOME}/.local/bin/ov-overlay"
+    mode: "0755"
+    user: "${USER}"

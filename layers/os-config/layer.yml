@@ -1,0 +1,30 @@
+description: OS system configuration — SDDM/KDE tweaks, services, cleanup, initramfs rebuild
+
+tasks:
+  # Remove gaming desktop entries if present (bootc-specific cleanup)
+  - cmd: |
+      rm -f /usr/share/applications/steam.desktop 2>/dev/null || true
+      rm -f /usr/share/applications/lutris.desktop 2>/dev/null || true
+    user: root
+
+  # Enable all systemd presets
+  - cmd: systemctl preset-all 2>/dev/null || true
+    user: root
+
+  # Fix /opt directory permissions for rpm-ostree (symlink /opt → /var/opt)
+  - cmd: |
+      if [ -L /opt ] && [ -d /var/opt ]; then
+        mkdir -p /usr/lib/opt
+        for dir in /var/opt/*/; do
+          [ -d "$dir" ] && cp -a "$dir" /usr/lib/opt/ || true
+        done
+      fi
+    user: root
+
+  # Rebuild initramfs for the installed kernel
+  - cmd: |
+      if command -v dracut &>/dev/null; then
+        KERNEL_VERSION=$(ls /usr/lib/modules/ | sort -V | tail -1)
+        [ -n "$KERNEL_VERSION" ] && dracut --force --kver "$KERNEL_VERSION" 2>/dev/null || true
+      fi
+    user: root

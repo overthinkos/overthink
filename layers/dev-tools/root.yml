@@ -1,7 +1,0 @@
-# git-lfs post-install config (package installed via layer.yml with noscripts)
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true

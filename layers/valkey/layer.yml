@@ -20,6 +20,10 @@ volumes:
   - name: valkey-data
     path: "~/.valkey"
 
+tasks:
+  - mkdir: "${HOME}/.valkey"
+    user: "${USER}"
+
 service: |
   [program:valkey]
   command=/usr/bin/valkey-server --bind 0.0.0.0 --port 6379 --protected-mode no --dir %(ENV_HOME)s/.valkey --save 60 1 --loglevel notice

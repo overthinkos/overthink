@@ -50,12 +50,12 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		Layers: map[string]*Layer{
 			"traefik": {
 				Name:       "traefik",
-				HasRootYml: true,
+				HasTasks: true,
 			},
 			"svc": {
 				Name:     "svc",
 				HasRoute: true,
-				HasUserYml: true,
+				HasTasks: true,
 				route:    &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -110,7 +110,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 			"svc": {
 				Name:       "svc",
 				HasRoute:   true,
-				HasUserYml: true,
+				HasTasks: true,
 				route:      &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
@@ -161,18 +161,18 @@ func TestGenerateInitFragments(t *testing.T) {
 		Layers: map[string]*Layer{
 			"python": {
 				Name:       "python",
-				HasRootYml: true,
+				HasTasks: true,
 			},
 			"svc": {
 				Name:        "svc",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasUserYml:  true,
+				HasTasks:   true,
 				serviceConf: "[program:svc]\ncommand=svc serve\nautostart=true\n",
 			},
 			"other": {
 				Name:        "other",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasUserYml:  true,
+				HasTasks:   true,
 				serviceConf: "[program:other]\ncommand=other run",
 			},
 		},
@@ -230,11 +230,11 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		Layers: map[string]*Layer{
 			"socat": {
 				Name:       "socat",
-				HasRootYml: true,
+				HasTasks: true,
 			},
 			"chrome": {
 				Name:           "chrome",
-				HasUserYml:     true,
+				HasTasks:       true,
 				PortRelayPorts: []int{9222},
 				InitSystems:    map[string]bool{"supervisord": true},
 				serviceConf:    "[program:chrome]\ncommand=chrome\nautostart=true\n",
@@ -412,32 +412,6 @@ func TestAurInstallTemplate(t *testing.T) {
 	}
 	if !strings.Contains(out, "pacman -U --noconfirm") {
 		t.Error("should install with pacman -U")
-	}
-}
-
-func TestWriteRootYmlPac(t *testing.T) {
-	g := &Generator{}
-	var b strings.Builder
-	layer := &Layer{
-		Name:         "test-layer",
-		HasRootYml:   true,
-		RootYmlTasks: []string{"all"},
-	}
-	img := &ResolvedImage{Pkg: "pac", BuildFormats: []string{"pac"}, Tags: []string{"all", "pac"}, DistroDef: testDistroDef("archlinux"), BuilderConfig: testBuilderCfg()}
-	g.writeRootYml(&b, "test-layer", layer, img)
-	out := b.String()
-
-	if !strings.Contains(out, "/var/cache/pacman/pkg") {
-		t.Error("should use pacman cache mount for pac")
-	}
-	if strings.Contains(out, "libdnf5") {
-		t.Error("should not use dnf cache for pac")
-	}
-	if strings.Contains(out, "/var/cache/apt") {
-		t.Error("should not use apt cache for pac")
-	}
-	if !strings.Contains(out, "task -t root.yml all") {
-		t.Error("should call tag-based tasks")
 	}
 }
 

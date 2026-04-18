@@ -56,3 +56,53 @@ hooks:
   pre_remove: |
     /opt/actions-runner/config.sh remove \
       --token "${RUNNER_TOKEN}"
+
+tasks:
+  # GitHub Actions runner binary — pinned to the latest stable tag at build time
+  - cmd: |
+      ARCH=$(uname -m)
+      case "$ARCH" in
+        x86_64) ;;
+        *) echo "Unsupported architecture: $ARCH" >&2; exit 1;;
+      esac
+      VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+      curl -fsSL "https://github.com/actions/runner/releases/download/v${VERSION}/actions-runner-linux-x64-${VERSION}.tar.gz" -o /tmp/actions-runner.tar.gz
+      mkdir -p /opt/actions-runner
+      tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
+      rm /tmp/actions-runner.tar.gz
+      cd /opt/actions-runner && ./bin/installdependencies.sh || true
+      chmod +x /opt/actions-runner/run.sh /opt/actions-runner/config.sh
+    user: root
+
+  # cosign — pinned version
+  - download: "https://github.com/sigstore/cosign/releases/download/v3.0.2/cosign-linux-${ARCH}"
+    extract: none
+    to: /usr/local/bin/cosign
+    mode: "0755"
+    user: root
+
+  # File capabilities for rootless container support
+  - setcap: /usr/bin/newuidmap
+    caps: "cap_setuid=ep"
+  - setcap: /usr/bin/newgidmap
+    caps: "cap_setgid=ep"
+
+  # subuid/subgid for rootless podman inside the runner container
+  - cmd: |
+      echo "root:100000:65536" >> /etc/subuid
+      echo "root:100000:65536" >> /etc/subgid
+    user: root
+
+  # Registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
+  - mkdir: /etc/containers/registries.conf.d
+    user: root
+  - write: /etc/containers/registries.conf.d/ghcr-mirror.conf
+    user: root
+    mode: "0644"
+    content: |
+      [[registry]]
+      prefix = "ghcr.io"
+      location = "ghcr.io"
+      [[registry.mirror]]
+      location = "127.0.0.1:5000"
+      insecure = true

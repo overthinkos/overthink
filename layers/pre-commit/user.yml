@@ -1,6 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - cargo install taplo-cli --locked

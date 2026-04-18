@@ -1,7 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.config/sway/config.d
-      - cp /ctx/xfce4-terminal.conf ~/.config/sway/config.d/xfce4-terminal.conf

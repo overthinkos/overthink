@@ -26,3 +26,8 @@ rpm:
 
 security:
   shm_size: "1g"
+
+tasks:
+  # Install Chromium browser binary only (system deps handled by rpm packages)
+  - cmd: HOME=/tmp npx playwright install chromium
+    user: "${USER}"

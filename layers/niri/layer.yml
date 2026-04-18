@@ -46,6 +46,47 @@ rpm:
     - cairo-gobject-devel
     - libdisplay-info-devel
 
+vars:
+  NIRI_BRANCH: feat/virtual
+
+tasks:
+  # Build niri from QaidVoid/niri feat/virtual branch (virtual output support).
+  # Based on niri main + virtual output commits. Provides NIRI_BACKEND=headless
+  # and `niri msg create-virtual-output`.
+  - cmd: |
+      git clone --depth 1 --branch ${NIRI_BRANCH} https://github.com/QaidVoid/niri.git /tmp/niri-src
+      cd /tmp/niri-src
+      cargo build --release
+      install -m 755 target/release/niri /usr/local/bin/niri
+      rm -rf /tmp/niri-src
+    user: root
+
+  # Clean up build dependencies to shrink the final image.
+  - cmd: |
+      dnf remove -y \
+        clang-devel libudev-devel mesa-libgbm-devel libxkbcommon-devel \
+        wayland-devel libinput-devel dbus-devel systemd-devel \
+        libseat-devel pipewire-devel pango-devel cairo-gobject-devel \
+        libdisplay-info-devel || true
+      rm -rf /root/.cargo/registry /root/.cargo/git
+    user: root
+
+  # User-phase setup: wrapper + config.kdl
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config/niri"
+
+  - copy: niri-wrapper
+    to: "${HOME}/.local/bin/niri-wrapper"
+    mode: "0755"
+    user: "${USER}"
+  - copy: config.kdl
+    to: "${HOME}/.config/niri/config.kdl"
+    mode: "0644"
+    user: "${USER}"
+
 service: |
   [program:niri]
   command=%(ENV_HOME)s/.local/bin/niri-wrapper

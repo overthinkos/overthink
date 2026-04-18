@@ -28,6 +28,28 @@ rpm:
     - egl-wayland
     - wlr-randr
 
+tasks:
+  # sway ships with cap_sys_nice file capability which prevents execution
+  # in rootless containers (kernel blocks exec of binaries with file caps
+  # in user namespaces). Strip it — not needed for headless compositor.
+  - setcap: /usr/bin/sway
+
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - mkdir: "${HOME}/.config/sway"
+    user: "${USER}"
+  - mkdir: "${HOME}/.config/sway/config.d"
+    user: "${USER}"
+
+  - copy: sway-wrapper
+    to: "${HOME}/.local/bin/sway-wrapper"
+    mode: "0755"
+    user: "${USER}"
+  - copy: config
+    to: "${HOME}/.config/sway/config"
+    mode: "0644"
+    user: "${USER}"
+
 service: |
   [program:sway]
   command=%(ENV_HOME)s/.local/bin/sway-wrapper

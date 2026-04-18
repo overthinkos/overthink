@@ -322,7 +322,7 @@ func TestWriteLabelsPortRelay(t *testing.T) {
 		Layers: map[string]*Layer{
 			"chrome": {
 				Name:           "chrome",
-				HasUserYml:     true,
+				HasTasks:       true,
 				PortRelayPorts: []int{9222},
 			},
 		},
@@ -363,7 +363,7 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		Layers: map[string]*Layer{
 			"svc": {
 				Name:        "svc",
-				HasUserYml:  true,
+				HasTasks:   true,
 				InitSystems: map[string]bool{"supervisord": true},
 				serviceConf: "[program:svc]\ncommand=svc serve",
 				HasVolumes:  true,
@@ -474,7 +474,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		Layers: map[string]*Layer{
 			"base": {
 				Name:       "base",
-				HasRootYml: true,
+				HasTasks: true,
 			},
 		},
 	}
@@ -522,7 +522,7 @@ func TestLabelRoundTrip(t *testing.T) {
 		Layers: map[string]*Layer{
 			"svc": {
 				Name:       "svc",
-				HasUserYml: true,
+				HasTasks: true,
 				HasVolumes: true,
 				volumes: []VolumeYAML{
 					{Name: "cache", Path: "/home/testuser/.cache/myapp"},

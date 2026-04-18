@@ -8,3 +8,8 @@ rpm:
     - docker-ce
     - docker-ce-cli
     - docker-compose-plugin
+
+tasks:
+  # Load iptable_nat kernel module at boot (needed for docker networking)
+  - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
+    user: root

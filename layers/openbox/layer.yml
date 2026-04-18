@@ -6,6 +6,20 @@ rpm:
     - openbox
     - xterm
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - mkdir: "${HOME}/.config/openbox"
+    user: "${USER}"
+  - copy: openbox-wrapper
+    to: "${HOME}/.local/bin/openbox-wrapper"
+    mode: "0755"
+    user: "${USER}"
+  - copy: rc.xml
+    to: "${HOME}/.config/openbox/rc.xml"
+    mode: "0644"
+    user: "${USER}"
+
 service: |
   [program:openbox]
   command=%(ENV_HOME)s/.local/bin/openbox-wrapper

@@ -8,3 +8,9 @@ env:
 
 path_append:
   - "~/go/bin"
+
+tasks:
+  - cmd: |
+      go install github.com/steipete/wacli/cmd/wacli@latest
+      go clean -cache
+    user: "${USER}"

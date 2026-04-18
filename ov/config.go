@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -258,42 +257,6 @@ func (img *ResolvedImage) SupportsBuild(format string) bool {
 		}
 	}
 	return false
-}
-
-// MatchingTasks returns the subset of definedTasks that match this image's tags,
-// ordered by tag hierarchy (all → format → distro → version).
-// Comma-separated task names (e.g., "debian,ubuntu") match if any component
-// is in the image's tag set.
-func (img *ResolvedImage) MatchingTasks(definedTasks []string) []string {
-	// Build a set of defined task names for quick lookup
-	defined := make(map[string]bool, len(definedTasks))
-	for _, t := range definedTasks {
-		defined[t] = true
-	}
-
-	var result []string
-	// Walk image tags in order (all → format → distro → version)
-	for _, tag := range img.Tags {
-		if defined[tag] {
-			result = append(result, tag)
-		}
-	}
-
-	// Also check comma-separated task names against image tags
-	for _, taskName := range definedTasks {
-		if strings.Contains(taskName, ",") {
-			parts := strings.Split(taskName, ",")
-			for _, part := range parts {
-				part = strings.TrimSpace(part)
-				if img.SupportsTag(part) {
-					result = append(result, taskName)
-					break
-				}
-			}
-		}
-	}
-
-	return result
 }
 
 // LoadConfig reads and parses images.yml, then merges deploy.yml overrides.

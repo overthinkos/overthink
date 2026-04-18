@@ -67,6 +67,14 @@ aliases:
   - name: hermes-agent
     command: hermes-agent
 
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: hermes-entrypoint
+    to: "${HOME}/.local/bin/hermes-entrypoint"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:hermes]
   command=%(ENV_HOME)s/.local/bin/hermes-entrypoint

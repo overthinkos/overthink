@@ -18,6 +18,18 @@ rpm:
     - libglvnd-gles
     - egl-wayland
 
+tasks:
+  # kwin_wayland ships with cap_sys_nice which blocks exec in rootless user
+  # namespaces. Strip — not needed for headless compositor.
+  - setcap: /usr/bin/kwin_wayland
+
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: kwin-wrapper
+    to: "${HOME}/.local/bin/kwin-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
 service: |
   [program:kwin]
   command=%(ENV_HOME)s/.local/bin/kwin-wrapper

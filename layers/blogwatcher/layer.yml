@@ -8,3 +8,9 @@ env:
 
 path_append:
   - "~/go/bin"
+
+tasks:
+  - cmd: |
+      go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
+      go clean -cache
+    user: "${USER}"

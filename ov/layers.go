@@ -152,6 +152,10 @@ type LayerYAML struct {
 	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`   // MCP servers this layer MUST have from the environment
 	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`    // MCP servers this layer CAN optionally use
 
+	// Replaces root.yml / user.yml — see Task type and docs/plan.
+	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
+	Tasks []Task            `yaml:"tasks,omitempty"` // ordered install operations
+
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
 	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
@@ -170,6 +174,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"env_provides": true, "env_requires": true, "env_accepts": true,
 	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
+	"vars": true, "tasks": true,
 }
 
 // layerYAMLFormatNames caches known format names from distro.yml for YAML parsing.
@@ -202,6 +207,86 @@ type PackageSection struct {
 // Packages are installed using the primary format's tool (dnf, apt, pacman).
 type TagPkgConfig struct {
 	Packages []string `yaml:"packages,omitempty"`
+}
+
+// Task is a single install operation in layer.yml `tasks:` list.
+// Exactly one of the verb-discriminator fields (Cmd, Mkdir, Copy, Write,
+// Link, Download, Setcap, Build) must be non-empty — enforced by Kind().
+// The remaining fields are shared modifiers; validator enforces which
+// modifiers are legal per verb.
+//
+// See plan: /home/atrawog/.claude/plans/can-you-ultrathink-and-partitioned-codd.md
+type Task struct {
+	// Verb discriminators — exactly one non-empty
+	Cmd      string `yaml:"cmd,omitempty"`      // shell command (escape hatch)
+	Mkdir    string `yaml:"mkdir,omitempty"`    // directory path to create
+	Copy     string `yaml:"copy,omitempty"`     // layer-dir file to copy (src)
+	Write    string `yaml:"write,omitempty"`    // destination path for inline content
+	Link     string `yaml:"link,omitempty"`     // link path (where the symlink goes)
+	Download string `yaml:"download,omitempty"` // URL to fetch
+	Setcap   string `yaml:"setcap,omitempty"`   // file path for capability operation
+	Build    string `yaml:"build,omitempty"`    // builder selector, currently only "all"
+
+	// Shared modifiers — validity depends on verb
+	User    string            `yaml:"user,omitempty"`    // user context: root / ${USER} / name / uid:gid
+	Mode    string            `yaml:"mode,omitempty"`    // octal permissions
+	To      string            `yaml:"to,omitempty"`      // destination (copy, download)
+	Target  string            `yaml:"target,omitempty"`  // symlink target
+	Content string            `yaml:"content,omitempty"` // inline content for write
+	Extract string            `yaml:"extract,omitempty"` // archive format for download
+	Include []string          `yaml:"include,omitempty"` // path filter for download
+	Env     map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
+	Caps    string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
+	Comment string            `yaml:"comment,omitempty"` // optional Containerfile comment
+}
+
+// TaskVerbs is the set of valid discriminator keys on a Task.
+// Order is stable (used for deterministic error messages).
+var TaskVerbs = []string{"cmd", "mkdir", "copy", "write", "link", "download", "setcap", "build"}
+
+// Kind returns the task's verb ("cmd", "mkdir", …) and an error if zero or
+// multiple verbs are set. Callers in the generator assume Kind returned nil
+// before branching on the returned string.
+func (t *Task) Kind() (string, error) {
+	verbs := t.presentVerbs()
+	if len(verbs) == 0 {
+		return "", fmt.Errorf("task has no action (expected exactly one of: %s)", strings.Join(TaskVerbs, ", "))
+	}
+	if len(verbs) > 1 {
+		return "", fmt.Errorf("task has conflicting actions: %s (expected exactly one)", strings.Join(verbs, ", "))
+	}
+	return verbs[0], nil
+}
+
+// presentVerbs returns the discriminator field names that are non-empty.
+// Deterministic order (matches TaskVerbs) for stable error messages.
+func (t *Task) presentVerbs() []string {
+	out := make([]string, 0, 1)
+	if t.Cmd != "" {
+		out = append(out, "cmd")
+	}
+	if t.Mkdir != "" {
+		out = append(out, "mkdir")
+	}
+	if t.Copy != "" {
+		out = append(out, "copy")
+	}
+	if t.Write != "" {
+		out = append(out, "write")
+	}
+	if t.Link != "" {
+		out = append(out, "link")
+	}
+	if t.Download != "" {
+		out = append(out, "download")
+	}
+	if t.Setcap != "" {
+		out = append(out, "setcap")
+	}
+	if t.Build != "" {
+		out = append(out, "build")
+	}
+	return out
 }
 
 func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
@@ -282,14 +367,12 @@ type Layer struct {
 	Version           string // CalVer version from layer.yml
 	Status            string // working, testing, broken (empty = testing)
 	Info              string // free-form status description
-	HasRootYml        bool
 	HasPixiToml       bool
 	HasPyprojectToml  bool
 	HasEnvironmentYml bool
 	HasPackageJson    bool
 	HasCargoToml      bool
 	HasSrcDir         bool
-	HasUserYml        bool
 	HasEnv            bool
 	HasPorts          bool
 	HasRoute          bool
@@ -307,12 +390,11 @@ type Layer struct {
 	HasMCPRequires     bool
 	HasMCPAccepts      bool
 	HasLibvirt         bool
-	RootYmlTasks       []string // task names defined in root.yml (e.g., ["all", "rpm", "fedora"])
+	HasTasks           bool // layer.yml has a non-empty tasks: list
 
 	// Init system detection (populated by PopulateLayerInitSystems)
-	InitSystems    map[string]bool   // set of init system names this layer triggers
-	PortRelayPorts []int             // port_relay: field (init-agnostic)
-	UserYmlTasks       []string // task names defined in user.yml
+	InitSystems    map[string]bool // set of init system names this layer triggers
+	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
 	Depends           []string // bare refs (version stripped) for resolution
 	RawDepends        []string // original refs with :version for remote ref collection
@@ -351,6 +433,8 @@ type Layer struct {
 	mcpRequires    []EnvDependency   // MCP servers this layer must have
 	mcpAccepts     []EnvDependency   // MCP servers this layer can optionally use
 	engine         string            // required run engine from layer.yml ("docker", "podman", or "")
+	vars           map[string]string // layer-local variables (from layer.yml vars:)
+	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 }
 
 // ScanLayers scans the layers/ directory and returns all layers
@@ -402,23 +486,13 @@ func scanLayer(path string, name string) (*Layer, error) {
 	}
 
 	// Check for install files
-	layer.HasRootYml = fileExists(filepath.Join(path, "root.yml"))
 	layer.HasPixiToml = fileExists(filepath.Join(path, "pixi.toml"))
 	layer.HasPyprojectToml = fileExists(filepath.Join(path, "pyproject.toml"))
 	layer.HasEnvironmentYml = fileExists(filepath.Join(path, "environment.yml"))
 	layer.HasPackageJson = fileExists(filepath.Join(path, "package.json"))
 	layer.HasCargoToml = fileExists(filepath.Join(path, "Cargo.toml"))
 	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
-	layer.HasUserYml = fileExists(filepath.Join(path, "user.yml"))
 	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
-
-	// Parse task names from root.yml/user.yml for tag-based task dispatch
-	if layer.HasRootYml {
-		layer.RootYmlTasks = parseTaskfileTaskNames(filepath.Join(path, "root.yml"))
-	}
-	if layer.HasUserYml {
-		layer.UserYmlTasks = parseTaskfileTaskNames(filepath.Join(path, "user.yml"))
-	}
 
 	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystems)
 	svcFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
@@ -582,6 +656,11 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate engine requirement
 		layer.engine = ly.Engine
+
+		// Pre-populate vars + tasks (replacement for root.yml/user.yml)
+		layer.vars = ly.Vars
+		layer.tasks = ly.Tasks
+		layer.HasTasks = len(ly.Tasks) > 0
 	}
 
 	return layer, nil
@@ -589,9 +668,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 // HasInstallFiles returns true if the layer has at least one install file
 func (l *Layer) HasInstallFiles() bool {
-	return l.HasFormatPackages() || l.HasRootYml ||
+	return l.HasFormatPackages() ||
 		l.HasPixiToml || l.HasPyprojectToml || l.HasEnvironmentYml ||
-		l.HasPackageJson || l.HasCargoToml || l.HasUserYml
+		l.HasPackageJson || l.HasCargoToml ||
+		l.HasTasks
 }
 
 // HasContent returns true if the layer has install files or any configuration
@@ -1024,24 +1104,3 @@ func dirExists(path string) bool {
 	return info.IsDir()
 }
 
-// parseTaskfileTaskNames extracts top-level task names from a Taskfile (root.yml/user.yml).
-// Returns the list of task names (e.g., ["all", "rpm", "fedora:43"]).
-func parseTaskfileTaskNames(path string) []string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-
-	var tf struct {
-		Tasks map[string]interface{} `yaml:"tasks"`
-	}
-	if err := yaml.Unmarshal(data, &tf); err != nil {
-		return nil
-	}
-
-	names := make([]string, 0, len(tf.Tasks))
-	for name := range tf.Tasks {
-		names = append(names, name)
-	}
-	return names
-}

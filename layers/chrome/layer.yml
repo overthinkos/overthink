@@ -46,6 +46,68 @@ rpm:
     - iproute
     - libva-utils
 
+tasks:
+  # Install Google Chrome from Google's direct .rpm. dnf handles URL sources
+  # natively; cmd: as root is the right vehicle since this needs real dnf
+  # (not a declared rpm package section).
+  - cmd: dnf install -y https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+    user: root
+
+  # ---- user phase: install wrappers + helpers ----
+
+  # Author pattern: anchor a whole task (first use), then <<: *name on
+  # subsequent tasks to reuse shared modifiers. Each merge entry overrides
+  # the discriminator (mkdir/copy/etc.) with its own value.
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.local/share/chrome-windows"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config"
+
+  # Executable wrappers — all share user + mode 0755
+  - &user_bin
+    user: "${USER}"
+    mode: "0755"
+    copy: chrome-wrapper
+    to: "${HOME}/.local/bin/chrome-wrapper"
+  - <<: *user_bin
+    copy: chrome-restart
+    to: "${HOME}/.local/bin/chrome-restart"
+  - <<: *user_bin
+    copy: browser-open
+    to: "${HOME}/.local/bin/browser-open"
+  - <<: *user_bin
+    copy: cdp-proxy
+    to: "${HOME}/.local/bin/cdp-proxy"
+  - <<: *user_bin
+    copy: chrome-crash-listener
+    to: "${HOME}/.local/bin/chrome-crash-listener"
+
+  # Chrome extension data files (0644, not executable)
+  - &user_data
+    user: "${USER}"
+    mode: "0644"
+    copy: chrome-windows/manifest.json
+    to: "${HOME}/.local/share/chrome-windows/manifest.json"
+  - <<: *user_data
+    copy: chrome-windows/rules.json
+    to: "${HOME}/.local/share/chrome-windows/rules.json"
+  - <<: *user_data
+    copy: chrome-windows/content.js
+    to: "${HOME}/.local/share/chrome-windows/content.js"
+
+  # Ensure Chrome always launches through chrome-wrapper (CDP flags etc.)
+  # regardless of how it's started.
+  - link: "${HOME}/.local/bin/google-chrome-stable"
+    target: chrome-wrapper
+    user: "${USER}"
+
+  # Register chrome as the default browser in xdg-settings.
+  - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop
+    user: "${USER}"
+
 env_provides:
   BROWSER_CDP_URL: "http://{{.ContainerName}}:9222"
 

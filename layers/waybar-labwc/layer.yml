@@ -5,6 +5,27 @@ rpm:
   packages:
     - waybar
 
+tasks:
+  - &user_mkdir
+    user: "${USER}"
+    mkdir: "${HOME}/.local/bin"
+  - <<: *user_mkdir
+    mkdir: "${HOME}/.config/waybar"
+
+  - copy: waybar-labwc-wrapper
+    to: "${HOME}/.local/bin/waybar-labwc-wrapper"
+    mode: "0755"
+    user: "${USER}"
+
+  - &user_cfg
+    user: "${USER}"
+    mode: "0644"
+    copy: config.json
+    to: "${HOME}/.config/waybar/config"
+  - <<: *user_cfg
+    copy: style.css
+    to: "${HOME}/.config/waybar/style.css"
+
 service: |
   [program:waybar]
   command=%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper

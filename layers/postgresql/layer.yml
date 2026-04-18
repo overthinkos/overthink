@@ -17,6 +17,105 @@ volumes:
   - name: pgdata
     path: "~/.postgresql/data"
 
+tasks:
+  # Socket + postgres data dirs. chown must come after mkdir so the later
+  # supervisord run-as-user doesn't trip on root-owned paths.
+  - cmd: |
+      mkdir -p /home/user/.postgresql
+      chown 1000:1000 /home/user/.postgresql
+      mkdir -p /docker-entrypoint-initdb.d
+    user: root
+
+  # Entry-point wrapper. This used to live inside a heredoc under root.yml —
+  # now the script content is the YAML `content:` and the generator stages
+  # it into the build context + COPY so shell never parses it. Any `$`-sign
+  # in the script stays literal (it's file content, not a cmd).
+  - write: /usr/local/bin/postgresql-entrypoint.sh
+    user: root
+    mode: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      HOME=${HOME:-/home/user}
+      POSTGRES_USER=${POSTGRES_USER:-postgres}
+      POSTGRES_DB=${POSTGRES_DB:-$POSTGRES_USER}
+      POSTGRES_HOST_AUTH_METHOD=${POSTGRES_HOST_AUTH_METHOD:-scram-sha-256}
+      PGDATA=${PGDATA:-$HOME/.postgresql/data}
+      PGDATA="${PGDATA/#~/$HOME}"
+      SOCKET_DIR="$HOME/.postgresql"
+
+      # Docker-compatible: read password from file
+      if [ -n "${POSTGRES_PASSWORD_FILE:-}" ] && [ -f "$POSTGRES_PASSWORD_FILE" ]; then
+          POSTGRES_PASSWORD=$(cat "$POSTGRES_PASSWORD_FILE")
+          export POSTGRES_PASSWORD
+      fi
+
+      # Password required unless trust auth
+      if [ "${POSTGRES_HOST_AUTH_METHOD}" != "trust" ] && [ -z "${POSTGRES_PASSWORD:-}" ]; then
+          echo "Error: POSTGRES_PASSWORD is required (or set POSTGRES_HOST_AUTH_METHOD=trust)" >&2
+          exit 1
+      fi
+
+      # Initialize cluster only on first run
+      if [ ! -f "$PGDATA/PG_VERSION" ]; then
+          echo "Initializing PostgreSQL cluster in $PGDATA..."
+          mkdir -p "$PGDATA" "$SOCKET_DIR"
+
+          INITDB_ARGS=(-D "$PGDATA" --username="$POSTGRES_USER"
+                       --encoding=UTF8 --locale=C
+                       --auth-host="$POSTGRES_HOST_AUTH_METHOD"
+                       --auth-local=trust)
+
+          [ -n "${POSTGRES_INITDB_ARGS:-}" ]   && INITDB_ARGS+=($POSTGRES_INITDB_ARGS)
+          [ -n "${POSTGRES_INITDB_WALDIR:-}" ] && INITDB_ARGS+=(--waldir="$POSTGRES_INITDB_WALDIR")
+
+          if [ "${POSTGRES_HOST_AUTH_METHOD}" != "trust" ] && [ -n "${POSTGRES_PASSWORD:-}" ]; then
+              PWFILE=$(mktemp)
+              chmod 600 "$PWFILE"
+              echo "$POSTGRES_PASSWORD" > "$PWFILE"
+              INITDB_ARGS+=(--pwfile="$PWFILE")
+              trap 'rm -f "$PWFILE"' EXIT
+          fi
+
+          initdb "${INITDB_ARGS[@]}"
+
+          SPL_OPTS=""
+          if [ -n "${POSTGRES_SHARED_PRELOAD_LIBRARIES:-}" ]; then
+              SPL_OPTS="-c shared_preload_libraries=$POSTGRES_SHARED_PRELOAD_LIBRARIES"
+          fi
+
+          pg_ctl -D "$PGDATA" -o "-c unix_socket_directories=$SOCKET_DIR -c listen_addresses='' $SPL_OPTS" -w start
+
+          if [ "$POSTGRES_DB" != "postgres" ]; then
+              psql -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --host="$SOCKET_DIR" postgres \
+                  -c "CREATE DATABASE \"$POSTGRES_DB\"" \
+                  -c "GRANT ALL PRIVILEGES ON DATABASE \"$POSTGRES_DB\" TO \"$POSTGRES_USER\"" \
+                  -c "ALTER DATABASE \"$POSTGRES_DB\" OWNER TO \"$POSTGRES_USER\""
+          fi
+
+          for f in /docker-entrypoint-initdb.d/*; do
+              [ -e "$f" ] || continue
+              echo "Running init script: $f"
+              case "$f" in
+                  *.sh)     bash "$f" ;;
+                  *.sql)    psql -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --host="$SOCKET_DIR" --dbname="$POSTGRES_DB" < "$f" ;;
+                  *.sql.gz) gunzip -c "$f" | psql -v ON_ERROR_STOP=1 --username="$POSTGRES_USER" --host="$SOCKET_DIR" --dbname="$POSTGRES_DB" ;;
+                  *)        echo "Ignoring: $f" ;;
+              esac
+          done
+
+          pg_ctl -D "$PGDATA" -m fast -w stop
+          echo "PostgreSQL initialization complete."
+      fi
+
+      mkdir -p "$SOCKET_DIR"
+      POSTGRES_ARGS=(-D "$PGDATA" -c "unix_socket_directories=$SOCKET_DIR" -c "listen_addresses=127.0.0.1")
+      if [ -n "${POSTGRES_SHARED_PRELOAD_LIBRARIES:-}" ]; then
+          POSTGRES_ARGS+=(-c "shared_preload_libraries=$POSTGRES_SHARED_PRELOAD_LIBRARIES")
+      fi
+      exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
+
 service: |
   [program:postgresql]
   command=/usr/local/bin/postgresql-entrypoint.sh

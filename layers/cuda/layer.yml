@@ -25,3 +25,27 @@ rpm:
     - libcufile-devel
   exclude:
     - "nvidia-driver*"
+
+tasks:
+  # cuDNN headers are shipped in a -devel package that has a hard dependency
+  # on the NVIDIA driver. Extract headers + lib symlinks manually via rpm2cpio
+  # to bypass the driver pull-in.
+  - cmd: |
+      CUDNN_DIR=$(mktemp -d)
+      cd "$CUDNN_DIR"
+      if dnf5 download --enable-repo="fedora-multimedia" cuda-cudnn-devel 2>/dev/null; then
+        rpm2cpio cuda-cudnn-devel*.rpm | cpio -idm 2>/dev/null
+        [ -d ./usr/include ] && cp -v ./usr/include/cudnn*.h /usr/include/
+        while IFS= read -r -d '' link; do
+          name=$(basename "$link")
+          versioned=""
+          for v in /usr/lib64/"${name}".*; do
+            if [ -f "$v" ] && ! echo "$v" | grep -q '\.so$'; then
+              versioned="$v"; break
+            fi
+          done
+          [ -n "$versioned" ] && [ ! -e /usr/lib64/"$name" ] && ln -sv "$(basename "$versioned")" /usr/lib64/"$name"
+        done < <(find ./usr/lib64 -maxdepth 1 -name '*.so' -type l -print0 2>/dev/null)
+      fi
+      cd / && rm -rf "$CUDNN_DIR"
+    user: root

@@ -12,3 +12,11 @@ rpm:
     - xdg-desktop-portal-gnome
     - xdg-desktop-portal-gtk
     - python3-gobject
+
+tasks:
+  - mkdir: "${HOME}/.config/xdg-desktop-portal"
+    user: "${USER}"
+  - copy: portals.conf
+    to: "${HOME}/.config/xdg-desktop-portal/portals.conf"
+    mode: "0644"
+    user: "${USER}"

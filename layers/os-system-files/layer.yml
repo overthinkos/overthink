@@ -1,0 +1,21 @@
+description: System files overlay + justfile imports for bazzite-ai bootc images
+
+tasks:
+  # Stage the system_files/ subtree and bazzite-ai just fragments from the
+  # layer directory into their canonical system paths.
+  - cmd: |
+      cp -a /ctx/system_files/* / 2>/dev/null || true
+      mkdir -p /usr/share/bazzite-ai/just
+      cp -a /ctx/just/* /usr/share/bazzite-ai/just/ 2>/dev/null || true
+    user: root
+
+  # Auto-generated ublue-os just include pointing at the bazzite-ai entry.
+  # mkdir is explicit so write's parent-dir auto-insert stays a no-op.
+  - mkdir: /usr/share/ublue-os/just
+    user: root
+  - write: /usr/share/ublue-os/just/60-custom.just
+    user: root
+    mode: "0644"
+    content: |
+      # Auto-generated bazzite-ai imports
+      import "/usr/share/bazzite-ai/just/_entry.just"

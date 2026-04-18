@@ -280,12 +280,12 @@ func TestLayersProvidedByImage(t *testing.T) {
 
 func TestExpandLayers(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":         {Name: "pipewire", HasRootYml: true},
-		"wayvnc":           {Name: "wayvnc", HasRootYml: true},
-		"chrome":           {Name: "chrome", HasRootYml: true},
-		"waybar":           {Name: "waybar", HasRootYml: true},
+		"pipewire":         {Name: "pipewire", HasTasks: true},
+		"wayvnc":           {Name: "wayvnc", HasTasks: true},
+		"chrome":           {Name: "chrome", HasTasks: true},
+		"waybar":           {Name: "waybar", HasTasks: true},
 		"sway-desktop":     {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
-		"openclaw":         {Name: "openclaw", HasUserYml: true},
+		"openclaw":         {Name: "openclaw", HasTasks: true},
 	}
 
 	// Basic expansion
@@ -301,8 +301,8 @@ func TestExpandLayers(t *testing.T) {
 
 func TestExpandLayersDedup(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasRootYml: true},
-		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"pipewire":     {Name: "pipewire", HasTasks: true},
+		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
 	}
 
@@ -319,9 +319,9 @@ func TestExpandLayersDedup(t *testing.T) {
 
 func TestExpandLayersNested(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasRootYml: true},
-		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
-		"chrome":       {Name: "chrome", HasRootYml: true},
+		"pipewire":     {Name: "pipewire", HasTasks: true},
+		"wayvnc":       {Name: "wayvnc", HasTasks: true},
+		"chrome":       {Name: "chrome", HasTasks: true},
 		"vnc-stack":    {Name: "vnc-stack", IncludedLayers: []string{"pipewire", "wayvnc"}},
 		"browser-desk": {Name: "browser-desk", IncludedLayers: []string{"vnc-stack", "chrome"}},
 	}
@@ -350,10 +350,10 @@ func TestExpandLayersCycle(t *testing.T) {
 
 func TestExpandLayersWithContent(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire": {Name: "pipewire", HasRootYml: true},
-		"wayvnc":   {Name: "wayvnc", HasRootYml: true},
+		"pipewire": {Name: "pipewire", HasTasks: true},
+		"wayvnc":   {Name: "wayvnc", HasTasks: true},
 		// Composing layer that also has its own install content
-		"desktop": {Name: "desktop", HasUserYml: true, IncludedLayers: []string{"pipewire", "wayvnc"}},
+		"desktop": {Name: "desktop", HasTasks: true, IncludedLayers: []string{"pipewire", "wayvnc"}},
 	}
 
 	result, err := ExpandLayers([]string{"desktop"}, layers)
@@ -369,9 +369,9 @@ func TestExpandLayersWithContent(t *testing.T) {
 
 func TestResolveLayerOrderWithComposition(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":         {Name: "pixi", HasRootYml: true},
-		"python":       {Name: "python", HasRootYml: true, Depends: []string{"pixi"}},
-		"supervisord":  {Name: "supervisord", HasRootYml: true, Depends: []string{"python"}},
+		"pixi":         {Name: "pixi", HasTasks: true},
+		"python":       {Name: "python", HasTasks: true, Depends: []string{"pixi"}},
+		"supervisord":  {Name: "supervisord", HasTasks: true, Depends: []string{"python"}},
 		"svc-stack":    {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
 	}
 
@@ -388,10 +388,10 @@ func TestResolveLayerOrderWithComposition(t *testing.T) {
 
 func TestDependsOnComposingLayer(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasRootYml: true},
-		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"pipewire":     {Name: "pipewire", HasTasks: true},
+		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
-		"myapp":        {Name: "myapp", HasRootYml: true, Depends: []string{"sway-desktop"}},
+		"myapp":        {Name: "myapp", HasTasks: true, Depends: []string{"sway-desktop"}},
 	}
 
 	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)

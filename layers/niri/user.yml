@@ -1,9 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin ~/.config/niri
-      - cp /ctx/niri-wrapper ~/.local/bin/niri-wrapper
-      - chmod +x ~/.local/bin/niri-wrapper
-      - cp /ctx/config.kdl ~/.config/niri/config.kdl

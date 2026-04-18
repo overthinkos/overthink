@@ -12,3 +12,18 @@ rpm:
     - xdg-desktop-portal-wlr
     - xdg-desktop-portal-gtk
     - slurp
+
+tasks:
+  - mkdir: "${HOME}/.config/sway/config.d"
+    user: "${USER}"
+  - copy: portal.conf
+    to: "${HOME}/.config/sway/config.d/portal.conf"
+    mode: "0644"
+    user: "${USER}"
+
+  - mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
+    user: "${USER}"
+  - copy: xdg-desktop-portal-wlr-config
+    to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
+    mode: "0644"
+    user: "${USER}"

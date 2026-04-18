@@ -1,0 +1,5 @@
+tasks:
+  - cmd: echo "installing pixi"
+    user: root
+  - cmd: echo "init pixi project"
+    user: "${USER}"

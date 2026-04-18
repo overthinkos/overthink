@@ -1,8 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin
-      - cp /ctx/openwebui-entrypoint ~/.local/bin/openwebui-entrypoint
-      - chmod +x ~/.local/bin/openwebui-entrypoint

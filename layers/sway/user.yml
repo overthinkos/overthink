@@ -1,9 +1,0 @@
-version: '3'
-
-tasks:
-  all:
-    cmds:
-      - mkdir -p ~/.local/bin ~/.config/sway ~/.config/sway/config.d
-      - cp /ctx/sway-wrapper ~/.local/bin/sway-wrapper
-      - chmod +x ~/.local/bin/sway-wrapper
-      - cp /ctx/config ~/.config/sway/config

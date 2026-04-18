@@ -1,3 +1,25 @@
 rpm:
   packages:
     - sway-systemd
+
+tasks:
+  # Autologin on tty1 for desktop boot
+  - mkdir: /etc/systemd/system/getty@tty1.service.d
+    user: root
+  - write: /etc/systemd/system/getty@tty1.service.d/autologin.conf
+    user: root
+    mode: "0644"
+    content: |
+      [Service]
+      ExecStart=
+      ExecStart=-/sbin/agetty --autologin user --noclear %I $TERM
+
+  # Default to graphical target; enable user-global PipeWire + WirePlumber.
+  # Each cmd is suffixed `|| true` because the directives succeed on live
+  # systems and may fail harmlessly during offline bootc builds.
+  - cmd: systemctl set-default graphical.target 2>/dev/null || true
+    user: root
+  - cmd: |
+      systemctl --global enable pipewire.socket 2>/dev/null || true
+      systemctl --global enable wireplumber.service 2>/dev/null || true
+    user: root

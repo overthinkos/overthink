@@ -4,3 +4,14 @@ rpm:
   packages:
     - act-cli
     - guestfs-tools
+
+tasks:
+  # actionlint: GitHub release URL is dynamically looked up because upstream
+  # names files by version and architecture. Stays in cmd for the API call.
+  - cmd: |
+      URL=$(curl -fsSL https://api.github.com/repos/rhysd/actionlint/releases/latest | grep "browser_download_url.*linux_${ARCH}.tar.gz\"" | cut -d'"' -f4)
+      curl -fsSL "$URL" -o /tmp/actionlint.tar.gz
+      tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin/ actionlint
+      chmod +x /usr/local/bin/actionlint
+      rm -f /tmp/actionlint.tar.gz
+    user: root

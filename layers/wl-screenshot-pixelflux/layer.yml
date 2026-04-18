@@ -1,2 +1,10 @@
 depends:
   - selkies
+
+tasks:
+  - mkdir: "${HOME}/.local/bin"
+    user: "${USER}"
+  - copy: pixelflux-screenshot
+    to: "${HOME}/.local/bin/pixelflux-screenshot"
+    mode: "0755"
+    user: "${USER}"

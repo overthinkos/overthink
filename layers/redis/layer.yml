@@ -10,6 +10,10 @@ env:
 ports:
   - 6379
 
+tasks:
+  - mkdir: "${HOME}/.redis"
+    user: "${USER}"
+
 service: |
   [program:redis]
   command=/usr/bin/redis-server --bind 127.0.0.1 --port 6379 --dir %(ENV_HOME)s/.redis --save 60 1

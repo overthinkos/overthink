@@ -34,6 +34,7 @@ Source: `ov/`. Registry inspection via go-containerregistry.
 | Subsystem | Skill |
 |-----------|-------|
 | Image family (build mode) | `/ov:image`, `/ov:pull`, `/ov:build`, `/ov:generate`, `/ov:validate` |
+| Install tasks (verb catalog: `cmd`/`mkdir`/`copy`/`write`/`link`/`download`/`setcap`/`build`, `vars:`, `${VAR}`, YAML anchors) | `/ov:layer` (authoritative), `/ov:generate`, `/ov:validate`, `/ov-dev:generate` |
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Credential-backed layer env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
 | Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
@@ -105,21 +106,15 @@ Skills, agents, and MCP servers live in `plugins/` (git submodule: `git@github.c
 
 ---
 
-## Command Map
+## Host-side Task Commands (bootstrap only)
 
-Use `ov --help` and `ov <cmd> --help` for flags. Every command has a matching `/ov:<cmd>` skill with full documentation. Invoke the skill before reading source code. Key skill groupings:
-- `/ov:image` (umbrella) + subcommand skills `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:list`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:pull` — **build pipeline** (reads images.yml).
-- `/ov:config` + `/ov:deploy` + `/ov:sidecar` + `/ov:enc` — **deployment** (reads OCI labels + deploy.yml).
-- `/ov:cdp` + `/ov:wl` + `/ov:vnc` + `/ov:wl-overlay` — **desktop automation**.
+Taskfiles are strictly for building `ov` from source — not for in-container install logic. All layer-install logic lives in `layer.yml` `tasks:` (see `/ov:layer`).
 
----
+- `task build:ov` — Compile `bin/ov` and install via distro dispatch.
+- `task setup:builder` — Create multi-platform buildx builder.
+- `task setup:all` — Full setup (build ov + create builder).
 
-## Task Commands (bootstrap only)
-
-- `task build:ov` -- Build ov from source into `bin/ov` and install (auto-detects distro, auto-calls `build:install`)
-- `task build:install` -- Install ov for the current host via distro dispatch. On Arch family (Arch/Manjaro/EndeavourOS) it runs `makepkg -efi --noconfirm` (pacman package to `/usr/bin/ov`). On all other distros (Fedora/Bazzite/Debian/Ubuntu/...) it uses `install -D -m 0755 bin/ov $HOME/.local/bin/ov` and warns if `~/.local/bin` is not on `$PATH`. Escape hatches: `task build:install-arch` forces makepkg, `task build:install-portable` forces the `install -D` path.
-- `task setup:builder` -- Create multi-platform buildx builder
-- `task setup:all` -- Full setup (build ov + create builder)
+See the source Taskfiles (`Taskfile.yml` + `taskfiles/{Build,Setup}.yml`) for flag-level detail — they're the only Taskfiles in the project.
 
 ---
 

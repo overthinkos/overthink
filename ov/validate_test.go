@@ -19,9 +19,8 @@ func TestValidateSuccess(t *testing.T) {
 
 	layers := map[string]*Layer{
 		"pixi": {
-			Name:       "pixi",
-			HasRootYml: true,
-			HasUserYml: true,
+			Name:     "pixi",
+			HasTasks: true,
 		},
 	}
 
@@ -77,7 +76,7 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasRootYml: true},
+		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -134,7 +133,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 	layers := map[string]*Layer{
 		"layer": {
 			Name:       "layer",
-			HasRootYml: true,
+			HasTasks: true,
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"copr": []interface{}{"owner/project"}}},
 			},
@@ -157,7 +156,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 	layers := map[string]*Layer{
 		"layer": {
 			Name:       "layer",
-			HasRootYml: true, // needs some install file
+			HasTasks: true, // needs some install file
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"repos": []interface{}{map[string]interface{}{"name": "test", "url": "http://example.com"}}}},
 			},
@@ -180,7 +179,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 	layers := map[string]*Layer{
 		"layer": {
 			Name:       "layer",
-			HasRootYml: true,
+			HasTasks: true,
 			formatSections: map[string]*PackageSection{
 				"rpm": {FormatName: "rpm", Raw: map[string]interface{}{"modules": []interface{}{"valkey:remi-9.0"}}},
 			},
@@ -307,7 +306,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 	layers := map[string]*Layer{
 		"layer": {
 			Name:       "layer",
-			HasRootYml: true,
+			HasTasks: true,
 			Depends:    []string{"unknown"},
 		},
 	}
@@ -348,9 +347,9 @@ func TestValidateLayerCycle(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasRootYml: true, Depends: []string{"b"}},
-		"b": {Name: "b", HasRootYml: true, Depends: []string{"c"}},
-		"c": {Name: "c", HasRootYml: true, Depends: []string{"a"}},
+		"a": {Name: "a", HasTasks: true, Depends: []string{"b"}},
+		"b": {Name: "b", HasTasks: true, Depends: []string{"c"}},
+		"c": {Name: "c", HasTasks: true, Depends: []string{"a"}},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -394,7 +393,7 @@ func TestValidateLayerPortsValid(t *testing.T) {
 	layers := map[string]*Layer{
 		"web": {
 			Name:       "web",
-			HasUserYml: true,
+			HasTasks: true,
 			HasPorts:   true,
 			ports:      []string{"8080", "9090"},
 		},
@@ -413,7 +412,7 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 	layers := map[string]*Layer{
 		"web": {
 			Name:       "web",
-			HasUserYml: true,
+			HasTasks: true,
 			HasPorts:   true,
 			ports:      []string{"99999"},
 		},
@@ -435,7 +434,7 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 	layers := map[string]*Layer{
 		"web": {
 			Name:       "web",
-			HasUserYml: true,
+			HasTasks: true,
 			HasPorts:   true,
 			ports:      []string{"0"},
 		},
@@ -465,7 +464,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasUserYml: true},
+		"web": {Name: "web", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -484,7 +483,7 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasUserYml: true},
+		"web": {Name: "web", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -506,7 +505,7 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"web": {Name: "web", HasUserYml: true},
+		"web": {Name: "web", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -526,7 +525,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 		"svc": {
 			Name:     "svc",
 			HasRoute: true,
-			HasUserYml: true,
+			HasTasks: true,
 			route:    &RouteConfig{Host: "", Port: "8080"},
 		},
 	}
@@ -548,7 +547,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 		"svc": {
 			Name:     "svc",
 			HasRoute: true,
-			HasUserYml: true,
+			HasTasks: true,
 			route:    &RouteConfig{Host: "svc.localhost", Port: ""},
 		},
 	}
@@ -570,7 +569,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 		"svc": {
 			Name:     "svc",
 			HasRoute: true,
-			HasUserYml: true,
+			HasTasks: true,
 			route:    &RouteConfig{Host: "svc.localhost", Port: "99999"},
 		},
 	}
@@ -596,7 +595,7 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 		"svc": {
 			Name:       "svc",
 			HasRoute:   true,
-			HasUserYml: true,
+			HasTasks: true,
 			route:      &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
@@ -621,12 +620,12 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 	layers := map[string]*Layer{
 		"traefik": {
 			Name:       "traefik",
-			HasRootYml: true,
+			HasTasks: true,
 		},
 		"svc": {
 			Name:     "svc",
 			HasRoute: true,
-			HasUserYml: true,
+			HasTasks: true,
 			route:    &RouteConfig{Host: "svc.localhost", Port: "8080"},
 		},
 	}
@@ -654,7 +653,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasRootYml: true},
+		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -670,7 +669,7 @@ func TestValidateVolumesValid(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes:    []VolumeYAML{{Name: "data", Path: "~/.myapp"}},
 		},
@@ -689,7 +688,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes:    []VolumeYAML{{Name: "", Path: "~/.myapp"}},
 		},
@@ -711,7 +710,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes:    []VolumeYAML{{Name: "data", Path: ""}},
 		},
@@ -733,7 +732,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes:    []VolumeYAML{{Name: "My Data!", Path: "~/.myapp"}},
 		},
@@ -755,7 +754,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes: []VolumeYAML{
 				{Name: "data", Path: "~/.myapp"},
@@ -786,7 +785,7 @@ func TestValidateAliasesValid(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
@@ -805,7 +804,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "", Command: "cmd"}},
 		},
@@ -827,7 +826,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "mycli", Command: ""}},
 		},
@@ -849,7 +848,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasAliases: true,
 			aliases: []AliasYAML{
 				{Name: "mycli", Command: "cmd1"},
@@ -874,7 +873,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasUserYml: true,
+			HasTasks: true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "-bad", Command: "cmd"}},
 		},
@@ -902,7 +901,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"svc": {Name: "svc", HasUserYml: true},
+		"svc": {Name: "svc", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -931,7 +930,7 @@ func TestValidateSelfBuilder(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasRootYml: true},
+		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, ".")
@@ -959,7 +958,7 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasRootYml: true},
+		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, ".")
@@ -985,7 +984,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", HasRootYml: true},
+		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
 	err := Validate(cfg, layers, ".")
@@ -1029,8 +1028,8 @@ func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pipewire":     {Name: "pipewire", HasRootYml: true},
-		"wayvnc":       {Name: "wayvnc", HasRootYml: true},
+		"pipewire":     {Name: "pipewire", HasTasks: true},
+		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
 	}
 
@@ -1045,8 +1044,8 @@ func TestValidateLayerIncludesCycle(t *testing.T) {
 		Images: map[string]ImageConfig{},
 	}
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasRootYml: true, IncludedLayers: []string{"b"}},
-		"b": {Name: "b", HasRootYml: true, IncludedLayers: []string{"a"}},
+		"a": {Name: "a", HasTasks: true, IncludedLayers: []string{"b"}},
+		"b": {Name: "b", HasTasks: true, IncludedLayers: []string{"a"}},
 	}
 
 	err := Validate(cfg, layers, "")
@@ -1101,12 +1100,12 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasRootYml: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
-		"python":      {Name: "python", HasRootYml: true},
-		"socat":       {Name: "socat", HasRootYml: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
+		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+		"python":      {Name: "python", HasTasks: true},
+		"socat":       {Name: "socat", HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {
 			Name:         "chrome",
-			HasUserYml:   true,
+			HasTasks:     true,
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
@@ -1127,7 +1126,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:         "svc",
-			HasUserYml:   true,
+			HasTasks:     true,
 			HasPorts:     true,
 			ports:        []string{"99999"},
 			portSpecs:    []PortSpec{{Port: 99999, Protocol: "http"}},
@@ -1151,7 +1150,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:         "svc",
-			HasUserYml:   true,
+			HasTasks:     true,
 			HasPorts:     true,
 			ports:        []string{"8080"},
 			portSpecs:    []PortSpec{{Port: 8080, Protocol: "http"}},
@@ -1175,7 +1174,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:         "svc",
-			HasUserYml:   true,
+			HasTasks:     true,
 			PortRelayPorts: []int{9222},
 		},
 	}
@@ -1196,7 +1195,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:         "svc",
-			HasUserYml:   true,
+			HasTasks:     true,
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
@@ -1222,7 +1221,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 	layers := map[string]*Layer{
 		"chrome": {
 			Name:         "chrome",
-			HasUserYml:   true,
+			HasTasks:     true,
 			HasPorts:     true,
 			ports:        []string{"9222"},
 			portSpecs:    []PortSpec{{Port: 9222, Protocol: "http"}},
@@ -1254,7 +1253,7 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 	layers := map[string]*Layer{
 		"jupyter": {
 			Name:       "jupyter",
-			HasRootYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
@@ -1299,7 +1298,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 	layers := map[string]*Layer{
 		"jupyter": {
 			Name:       "jupyter",
-			HasRootYml: true,
+			HasTasks: true,
 			HasVolumes: true,
 			volumes: []VolumeYAML{
 				{Name: "workspace", Path: "~/workspace"},
@@ -1307,7 +1306,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 		},
 		"notebook-templates": {
 			Name:       "notebook-templates",
-			HasRootYml: true,
+			HasTasks: true,
 			HasData:    true,
 			data: []DataYAML{
 				{Src: "data/notebooks", Volume: "workspace"},
@@ -1330,7 +1329,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 // secretDepsLayer builds a minimal layer with the given secret dependency
 // configuration, for reuse across tests.
 func secretDepsLayer(name string, opts func(l *Layer)) *Layer {
-	l := &Layer{Name: name, HasRootYml: true}
+	l := &Layer{Name: name, HasTasks: true}
 	if opts != nil {
 		opts(l)
 	}

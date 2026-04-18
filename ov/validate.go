@@ -60,6 +60,9 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// Validate layer contents
 	validateLayerContents(layers, errs)
 
+	// Validate tasks: field (replaces root.yml/user.yml)
+	validateLayerTasks(layers, errs)
+
 	// Validate env files
 	validateEnvFiles(layers, errs)
 
@@ -1857,4 +1860,213 @@ func isValidEnvVarName(s string) bool {
 		return false
 	}
 	return true
+}
+
+// --- Task validation (replaces root.yml / user.yml) ---
+
+var (
+	taskModePattern        = regexp.MustCompile(`^0[0-7]{3,4}$`)
+	taskVarKeyPattern      = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
+	taskUserLiteralPattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
+	taskUserUIDGIDPattern  = regexp.MustCompile(`^\d+:\d+$`)
+	taskCapsPattern        = regexp.MustCompile(`^cap_[a-z_]+[=+][a-z]+(,cap_[a-z_]+[=+][a-z]+)*$`)
+	taskExtractValid       = map[string]bool{
+		"":        true, // auto-detect
+		"tar.gz":  true,
+		"tar.xz":  true,
+		"tar.zst": true,
+		"zip":     true,
+		"none":    true,
+		"sh":      true,
+	}
+)
+
+// validateLayerTasks enforces the tasks: schema:
+//   - exactly-one-verb per task
+//   - per-verb required modifier presence
+//   - path / mode / caps format checks
+//   - vars: key rules (pattern, no auto-export collision, no env: collision)
+//   - ${VAR} references resolve against vars ∪ auto-exports
+//   - dual-config: tasks: AND root.yml/user.yml in same layer → error
+//   - build: value restricted to "all" in initial implementation
+func validateLayerTasks(layers map[string]*Layer, errs *ValidationError) {
+	for name, layer := range layers {
+		// vars: validation
+		for k, v := range layer.vars {
+			if !taskVarKeyPattern.MatchString(k) {
+				errs.Add("layer %q: vars: key %q is not a valid shell identifier (expected ^[A-Z_][A-Z0-9_]*$)", name, k)
+			}
+			if taskAutoExports[k] {
+				errs.Add("layer %q: vars: key %q collides with a reserved auto-export (USER, UID, GID, HOME, ARCH, BUILD_ARCH)", name, k)
+			}
+			if layer.envConfig != nil {
+				if _, exists := layer.envConfig.Vars[k]; exists {
+					errs.Add("layer %q: vars: key %q also declared in env: — pick one", name, k)
+				}
+			}
+			_ = v // value is free-form; no further pattern enforced
+		}
+
+		if !layer.HasTasks {
+			continue
+		}
+
+		known := taskKnownNames(layer.vars)
+		for i, t := range layer.tasks {
+			// Exactly-one-verb
+			verb, err := t.Kind()
+			if err != nil {
+				errs.Add("layer %q: tasks[%d]: %v", name, i, err)
+				continue
+			}
+
+			validateSingleTask(name, i, verb, &t, known, errs)
+		}
+	}
+}
+
+// validateSingleTask runs per-verb modifier and field validation for a single
+// task. Errors accumulate in errs. known is the set of ${VAR} names that
+// resolve (auto-exports ∪ layer.Vars keys).
+func validateSingleTask(layerName string, idx int, verb string, t *Task, known map[string]bool, errs *ValidationError) {
+	// user: format check
+	if t.User != "" {
+		u := t.User
+		if !isValidTaskUser(u) {
+			errs.Add("layer %q: tasks[%d]: user: %q is not valid (expected root, ${USER}, a name matching ^[a-z_][a-z0-9_-]*$, or <uid>:<gid>)", layerName, idx, u)
+		}
+	}
+
+	// mode: format check (applies to mkdir/copy/write/download)
+	if t.Mode != "" && !taskModePattern.MatchString(t.Mode) {
+		errs.Add("layer %q: tasks[%d]: mode: %q is not valid octal (expected ^0[0-7]{3,4}$)", layerName, idx, t.Mode)
+	}
+
+	// Per-verb required modifiers
+	switch verb {
+	case "cmd":
+		if strings.TrimSpace(t.Cmd) == "" {
+			errs.Add("layer %q: tasks[%d]: cmd: must be non-empty", layerName, idx)
+		}
+
+	case "mkdir":
+		if !isAbsOrHomePath(t.Mkdir) {
+			errs.Add("layer %q: tasks[%d]: mkdir: %q must be an absolute path or start with ~/ / ${HOME}", layerName, idx, t.Mkdir)
+		}
+
+	case "copy":
+		if t.Copy == "" {
+			errs.Add("layer %q: tasks[%d]: copy: requires a non-empty source", layerName, idx)
+		} else if strings.HasPrefix(t.Copy, "/") {
+			errs.Add("layer %q: tasks[%d]: copy: %q must be a relative path (layer-dir file)", layerName, idx, t.Copy)
+		} else if strings.Contains(t.Copy, "..") {
+			errs.Add("layer %q: tasks[%d]: copy: %q may not contain .. (no traversal)", layerName, idx, t.Copy)
+		}
+		if t.To == "" {
+			errs.Add("layer %q: tasks[%d]: copy: requires to: destination", layerName, idx)
+		} else if !isAbsOrHomePath(t.To) {
+			errs.Add("layer %q: tasks[%d]: copy to: %q must be an absolute path or start with ~/ / ${HOME}", layerName, idx, t.To)
+		}
+
+	case "write":
+		if !isAbsOrHomePath(t.Write) {
+			errs.Add("layer %q: tasks[%d]: write: %q must be an absolute path or start with ~/ / ${HOME}", layerName, idx, t.Write)
+		}
+		if t.Content == "" {
+			errs.Add("layer %q: tasks[%d]: write: requires non-empty content:", layerName, idx)
+		}
+
+	case "link":
+		if !isAbsOrHomePath(t.Link) {
+			errs.Add("layer %q: tasks[%d]: link: %q must be an absolute path or start with ~/ / ${HOME}", layerName, idx, t.Link)
+		}
+		if t.Target == "" {
+			errs.Add("layer %q: tasks[%d]: link: requires target: (what the symlink points to)", layerName, idx)
+		}
+
+	case "download":
+		if t.Download == "" {
+			errs.Add("layer %q: tasks[%d]: download: requires a URL", layerName, idx)
+		}
+		if !taskExtractValid[t.Extract] {
+			errs.Add("layer %q: tasks[%d]: download extract: %q not valid (expected one of tar.gz, tar.xz, tar.zst, zip, none, sh)", layerName, idx, t.Extract)
+		}
+		// to: required unless extract=sh (script typically decides own install path)
+		if t.Extract != "sh" && t.To == "" {
+			errs.Add("layer %q: tasks[%d]: download requires to: destination (unless extract: sh)", layerName, idx)
+		}
+
+	case "setcap":
+		if !strings.HasPrefix(t.Setcap, "/") {
+			errs.Add("layer %q: tasks[%d]: setcap: %q must be an absolute path", layerName, idx, t.Setcap)
+		}
+		if t.Caps != "" && !taskCapsPattern.MatchString(t.Caps) {
+			errs.Add("layer %q: tasks[%d]: setcap caps: %q not valid (expected cap_name=flags[,cap_name=flags])", layerName, idx, t.Caps)
+		}
+
+	case "build":
+		if t.Build != "all" {
+			errs.Add("layer %q: tasks[%d]: build: %q not supported (initial implementation accepts only \"all\")", layerName, idx, t.Build)
+		}
+	}
+
+	// ${VAR} reference validation in all non-shell fields.
+	// cmd: and write: content are passed verbatim to shell / filesystem,
+	// so unresolved ${BAR} is legal there (shell handles, or literal bytes).
+	nonShellFields := map[string]string{
+		"mkdir":    t.Mkdir,
+		"copy":     t.Copy,
+		"write":    t.Write,
+		"link":     t.Link,
+		"target":   t.Target,
+		"to":       t.To,
+		"download": t.Download,
+		"setcap":   t.Setcap,
+	}
+	for field, val := range nonShellFields {
+		if val == "" {
+			continue
+		}
+		if unresolved := taskUnresolvedRefs(val, known); len(unresolved) > 0 {
+			errs.Add("layer %q: tasks[%d]: %s references unknown ${VAR}: %s (declare in vars: or use an auto-export)", layerName, idx, field, strings.Join(unresolved, ", "))
+		}
+	}
+}
+
+// isValidTaskUser returns true for accepted user: values: "root", "${USER}",
+// a name matching lowercase-alphanum-hyphen, a numeric "<uid>:<gid>", or a
+// string containing ${VAR} references (which resolve at generate time).
+func isValidTaskUser(u string) bool {
+	if u == "root" || u == "${USER}" || u == "${UID}:${GID}" {
+		return true
+	}
+	if taskUserUIDGIDPattern.MatchString(u) {
+		return true
+	}
+	if taskUserLiteralPattern.MatchString(u) {
+		return true
+	}
+	// Allow bare numeric uid
+	if _, err := strconv.Atoi(u); err == nil {
+		return true
+	}
+	return false
+}
+
+// isAbsOrHomePath returns true for absolute paths or paths starting with
+// ~/ or ${HOME}/. Empty paths return false (required-field check).
+func isAbsOrHomePath(p string) bool {
+	if p == "" {
+		return false
+	}
+	if strings.HasPrefix(p, "/") {
+		return true
+	}
+	if strings.HasPrefix(p, "~/") {
+		return true
+	}
+	if strings.HasPrefix(p, "${HOME}") {
+		return true
+	}
+	return false
 }

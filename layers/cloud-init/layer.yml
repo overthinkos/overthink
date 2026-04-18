@@ -11,3 +11,12 @@ system_services:
   - cloud-init
   - cloud-config
   - cloud-final
+
+tasks:
+  - mkdir: /etc/cloud/cloud.cfg.d
+    user: root
+  - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+    mode: "0644"
+    user: root
+    content: |
+      datasource_list: [ NoCloud, None ]

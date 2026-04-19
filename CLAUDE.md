@@ -48,6 +48,7 @@ You have all the time in the world and taking the time to get things properly do
 | Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc/mcp), runtime variables, deploy.yml overlay, 10 authoring gotchas |
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
 | Bootc-specific boot wiring (tty1 autologin, graphical target, systemd-user supervisord, linger sentinel, external-base `distro:` gotcha, `/dev:/dev` mount, `vm.ssh_port` plumbing, dual USER-context tests) | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm`, `/ov:generate`, `/ov:image`, `/ov:test` |
+| Rootless nested containers & rootless VMs (kernel `mount_too_revealing()` RCA, `unmask=/proc/*`, `_CONTAINERS_USERNS_CONFIGURED=""`, `BUILDAH_ISOLATION=chroot`, subuid-fits-in-outer-userns pattern, supervisord-managed `virtqemud` / `virtnetworkd`) | `/ov-layers:container-nesting`, `/ov-layers:virtualization`, `/ov-images:selkies-desktop-ov` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 
@@ -67,10 +68,7 @@ See `/ov-dev:go` for directory structure and `/ov-dev:skills` for plugin/skill o
 - **Tests ship with the image**: every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives are emitted last in each Containerfile so test edits rebuild in ~2 seconds instead of minutes.
 - **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. OCI labels come strictly from `image.yml` + `layer.yml`; `deploy.yml` is deploy-mode state that must never bleed into baked images. See `/ov-dev:go` "Mode purity" for the bug this prevents.
 
-**Authoring + deployment specifics live in skills** — look them up, don't duplicate:
-
-- Authoring (the building blocks): `/ov:layer`, `/ov:image`, `/ov:build`, `/ov:test`.
-- Deployment (running the blocks): `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc`. Quadlet default; `ov config` before `ov start`; tunnel is deploy.yml-only.
+**Authoring + deployment specifics live in skills** — see the subsystems table above for the full mapping. Quick entry points: authoring → `/ov:layer`, `/ov:image`, `/ov:build`, `/ov:test`; deployment → `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc`. Quadlet is default; `ov config` before `ov start`; tunnel is deploy.yml-only.
 
 ---
 

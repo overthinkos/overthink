@@ -80,6 +80,11 @@ images:
     gid: 0
     user: root
     network: host
+    security:
+      cap_add: [ALL]
+      security_opt:
+        - label=disable
+        - seccomp=unconfined
     layers:
       - agent-forwarding
       - ov-full
@@ -95,6 +100,11 @@ images:
     gid: 0
     user: root
     network: host
+    security:
+      cap_add: [ALL]
+      security_opt:
+        - label=disable
+        - seccomp=unconfined
     layers:
       - agent-forwarding
       - ov-full
@@ -375,6 +385,11 @@ images:
     gid: 0
     user: root
     network: host
+    security:
+      cap_add: [ALL]
+      security_opt:
+        - label=disable
+        - seccomp=unconfined
 
   openclaw-browser-bootc:
     enabled: false
@@ -590,6 +605,98 @@ images:
       - id: selkies-desktop-bootc-binaries
         command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
         exit_status: 0
+
+  # selkies-desktop-ov: fully rootless streaming desktop + ov toolchain.
+  # Runs everything (Chrome, labwc, supervisord, virtqemud, nested podman) as
+  # uid 1000 / user. ZERO additive capabilities — nesting works via
+  # containers.conf userns=host + _CONTAINERS_USERNS_CONFIGURED env
+  # (matches quay.io/podman/stable's recipe, bypasses the kernel's
+  # mount_too_revealing /proc check). NVENC preserved via nvidia base.
+  selkies-desktop-ov:
+    base: nvidia
+    layers:
+      - agent-forwarding
+      - selkies-desktop
+      - ov-full
+      - container-nesting
+      - golang
+      - gh
+      - dbus
+      - ov
+    ports:
+      - "3000:3000"
+      - "9222:9222"
+      - "9224:9224"
+      - "2222:2222"
+    platforms:
+      - linux/amd64
+    tests:
+      # Build-time structural gates
+      - id: selkies-desktop-ov-nested-binaries
+        command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
+        exit_status: 0
+      - id: selkies-desktop-ov-ov-binaries
+        command: test -x /usr/local/bin/ov && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
+        exit_status: 0
+      - id: selkies-desktop-ov-subuid-user-two-ranges
+        # user must have EXACTLY TWO subuid entries (1:999 + 1001:64535) —
+        # matches the podman/stable canonical pattern that fits inside the
+        # outer rootless user namespace.
+        command: grep -cE '^user:[0-9]+:[0-9]+$' /etc/subuid
+        exit_status: 0
+        stdout:
+          - matches: "^2"
+      - id: selkies-desktop-ov-newuidmap-cap
+        command: getcap /usr/bin/newuidmap | grep -c cap_setuid
+        exit_status: 0
+      - id: selkies-desktop-ov-policy-json
+        file: /etc/containers/policy.json
+        exists: true
+      # userns=host is the critical kernel-level fix — verify at both paths.
+      - id: selkies-desktop-ov-containers-conf-userns-host
+        command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
+        exit_status: 0
+      - id: selkies-desktop-ov-user-containers-conf-userns-host
+        command: grep -E '^userns\s*=\s*"host"' /home/user/.config/containers/containers.conf
+        exit_status: 0
+      # Env vars baked into image must be present (empty string = set, not unset).
+      - id: selkies-desktop-ov-env-containers-userns-configured
+        command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
+        exit_status: 0
+      - id: selkies-desktop-ov-env-buildah-isolation
+        command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
+        exit_status: 0
+      # Deploy-time: nested rootless podman must succeed with ZERO extra caps —
+      # works via container-nesting's unmask=/proc/* security_opt which
+      # bypasses the mount_too_revealing kernel check. Uses quay.io mirror
+      # to avoid docker.io rate limits.
+      - id: selkies-desktop-ov-nested-podman-run
+        scope: deploy
+        command: podman run --rm quay.io/libpod/alpine:latest /bin/true
+        in_container: true
+        timeout: 60s
+      # Deploy-time: libvirt session daemon reachable via session URI.
+      - id: selkies-desktop-ov-libvirt-session-list
+        scope: deploy
+        command: virsh -c qemu:///session list --all
+        exit_status: 0
+        in_container: true
+      # Deploy-time: HW KVM acceleration available to session daemon.
+      - id: selkies-desktop-ov-libvirt-kvm-domain
+        scope: deploy
+        command: virsh -c qemu:///session domcapabilities 2>/dev/null | grep -c '<domain>kvm</domain>'
+        in_container: true
+        stdout:
+          - matches: "^[1-9]"
+      # Deploy-time: ov CLI works inside the container as the desktop user.
+      - id: selkies-desktop-ov-ov-version
+        scope: deploy
+        command: ov version
+        in_container: true
+      - id: selkies-desktop-ov-ov-doctor
+        scope: deploy
+        command: ov doctor
+        in_container: true
 
   immich-ml:
     base: fedora

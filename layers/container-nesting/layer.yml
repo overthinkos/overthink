@@ -1,4 +1,4 @@
-description: Container-in-container support (engines, rootless config, tunnels, credentials)
+description: Container-in-container support (rootless nested podman, buildah, skopeo).
 
 rpm:
   repos:
@@ -27,25 +27,88 @@ volumes:
     path: /var/lib/containers/storage
 
 security:
-  cap_add:
-    - ALL
+  # NO cap_add — rootless nested podman needs zero additive capabilities
+  # when the mount_too_revealing kernel check is bypassed at the mount
+  # level (via security_opt unmask=/proc/* below).
+  #
+  # Root cause empirically identified 2026-04-19: podman's default rootless
+  # container spec includes linux.maskedPaths covering /proc/kcore,
+  # /proc/keys, /proc/timer_list etc. When nested crun tries to mount /proc
+  # for an inner container, the kernel's fs/namespace.c:mount_too_revealing
+  # check rejects it because the new /proc would expose submounts the outer
+  # is masking. Removing those maskedPaths via unmask=/proc/* eliminates
+  # the mismatch — no caps or --privileged needed.
+  #
+  # Security trade-off: /proc/kcore (kernel memory) and /proc/keys (keyring)
+  # become visible inside the outer container. Within a rootless user
+  # namespace, reading these still requires CAP_SYS_ADMIN in the init
+  # userns (which we don't have), so the actual info leak is minimal.
+  #
+  # Images that genuinely want the old full-hammer posture (fedora-ov,
+  # arch-ov, githubrunner) assert `security: {cap_add: [ALL], security_opt:
+  # [...]}` at the image level; ov/security.go unions onto this layer.
   security_opt:
-    - label=disable
-    - seccomp=unconfined
+    - unmask=/proc/*
+  devices:
+    # /dev/fuse is needed by fuse-overlayfs (inner podman's storage driver
+    # of choice when the kernel overlay isn't usable from a rootless outer).
+    - /dev/fuse
+    # /dev/net/tun is probed by podman/pasta at startup even when
+    # containers.conf sets netns=host; absence causes an init-time warning
+    # that can mask later failures.
+    - /dev/net/tun
 
 env:
   OV_BUILD_ENGINE: "podman"
   OV_RUN_ENGINE: "podman"
+  # These two env vars are the hidden contract that makes rootless-in-rootless
+  # podman work without --privileged:
+  #
+  # _CONTAINERS_USERNS_CONFIGURED=""  (empty string — set, not unset): tells
+  #   the inner podman "you are already inside a rootless user namespace, do
+  #   not re-exec via newuidmap to create a new one". Without this, the
+  #   inner podman creates a DESCENDANT user namespace, and the kernel's
+  #   mount_too_revealing check refuses the /proc mount downstream.
+  #
+  # BUILDAH_ISOLATION=chroot: tells buildah RUN steps to use chroot
+  #   isolation instead of the OCI runtime. Without this, buildah falls
+  #   back to OCI runtime isolation which re-creates a descendant user
+  #   namespace and re-triggers the same kernel check during builds.
+  _CONTAINERS_USERNS_CONFIGURED: ""
+  BUILDAH_ISOLATION: "chroot"
 
 tasks:
-  # Rootless podman: subuid/subgid mappings for root
+  # Rootless podman: subuid/subgid mappings that fit inside the outer
+  # rootless user namespace's visible subid window.
+  #
+  # Host delegates atrawog:100000:65536 via /etc/subuid → inside the outer
+  # container, that's mapped as subid 1-65535 (via ov shell's
+  # --userns=keep-id). So inner subid entries must live in 1-65535.
+  #
+  # Pattern (from quay.io/podman/stable):
+  #   - root    : 1:65535       (single full-range entry)
+  #   - <user1000>: 1:999 + 1001:64535  (two ranges skipping own uid 1000)
   - cmd: |
-      echo "root:100000:65536" >> /etc/subuid
-      echo "root:100000:65536" >> /etc/subgid
+      touch /etc/subuid /etc/subgid
+      sed -i "/^root:/d" /etc/subuid /etc/subgid
+      echo "root:1:65535" >> /etc/subuid
+      echo "root:1:65535" >> /etc/subgid
+      uid1000=$(getent passwd 1000 2>/dev/null | cut -d: -f1 || true)
+      if [ -n "${uid1000}" ] && [ "${uid1000}" != "root" ]; then
+        sed -i "/^${uid1000}:/d" /etc/subuid /etc/subgid
+        {
+          echo "${uid1000}:1:999"
+          echo "${uid1000}:1001:64535"
+        } >> /etc/subuid
+        {
+          echo "${uid1000}:1:999"
+          echo "${uid1000}:1001:64535"
+        } >> /etc/subgid
+      fi
     user: root
 
-  # File capabilities for rootless user-namespace mapping. Guarded because
-  # newuidmap may not be installed on every derivation.
+  # File capabilities for newuidmap/newgidmap — required for subid
+  # delegation to a nested user namespace. File caps attach to the binary.
   - cmd: |
       if [ -f /usr/bin/newuidmap ]; then
         setcap cap_setuid=ep /usr/bin/newuidmap
@@ -53,21 +116,83 @@ tasks:
       fi
     user: root
 
-  # Nested podman config for container-in-container support:
-  # - cgroups=disabled: cgroupfs is read-only at nesting depth 2+
-  # - netns=host: netavark can't create netns inside containers
-  # - userns=host: newuidmap fails in nested user namespaces
-  # - cgroup_manager=cgroupfs: systemd unavailable in container context
   - mkdir: /etc/containers
     user: root
+
+  # Also ensure the user's config dir exists — rootless podman prefers
+  # ~/.config/containers/* over /etc/containers/*.
+  - mkdir: "${HOME}/.config/containers"
+    user: "${USER}"
+
+  # containers.conf — matches quay.io/podman/stable's canonical config.
+  # All five namespaces=host so the inner podman stays in the outer's
+  # user/network/ipc/uts/cgroup namespace. Critical: userns=host is what
+  # avoids the kernel's mount_too_revealing /proc check (the inner is in
+  # the SAME userns as the outer /proc, not a descendant).
+  #
+  # Written to BOTH /etc/containers and ~/.config/containers because
+  # rootless podman prefers the user location; writing only /etc is
+  # effectively a no-op once ~/.config exists.
   - write: /etc/containers/containers.conf
     user: root
     mode: "0644"
-    content: |
-      [engine]
-      cgroup_manager = "cgroupfs"
-
+    content: &containers_conf_content |
       [containers]
       cgroups = "disabled"
+      cgroupns = "host"
+      ipcns = "host"
       netns = "host"
       userns = "host"
+      utsns = "host"
+      log_driver = "k8s-file"
+
+      [engine]
+      cgroup_manager = "cgroupfs"
+      events_logger = "file"
+      runtime = "crun"
+  - write: "${HOME}/.config/containers/containers.conf"
+    user: "${USER}"
+    mode: "0644"
+    content: *containers_conf_content
+
+  # policy.json — required by podman pull/run for image signature policy.
+  - write: /etc/containers/policy.json
+    user: root
+    mode: "0644"
+    content: &policy_json_content |
+      {"default":[{"type":"insecureAcceptAnything"}]}
+  - write: "${HOME}/.config/containers/policy.json"
+    user: "${USER}"
+    mode: "0644"
+    content: *policy_json_content
+
+  # System-wide storage.conf (used by root images: fedora-ov/arch-ov/
+  # githubrunner). fuse-overlayfs at /var/lib/containers/storage.
+  - write: /etc/containers/storage.conf
+    user: root
+    mode: "0644"
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "/run/containers/storage"
+      graphroot = "/var/lib/containers/storage"
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+      mountopt = "nodev,fsync=0"
+
+  # User-level storage.conf — user-writable paths under $HOME so rootless
+  # podman can initialize its storage without root. The default would point
+  # to /var/lib/containers/storage which the uid-1000 user cannot write.
+  - write: "${HOME}/.config/containers/storage.conf"
+    user: "${USER}"
+    mode: "0644"
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "${HOME}/.local/share/containers/run"
+      graphroot = "${HOME}/.local/share/containers/storage"
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+      mountopt = "nodev,fsync=0"

@@ -1,3 +1,8 @@
+description: QEMU/KVM/libvirt stack with a rootless-friendly libvirt session daemon (virtqemud) under supervisord.
+
+depends:
+  - supervisord
+
 rpm:
   options:
     - --allowerasing
@@ -6,6 +11,14 @@ rpm:
     - genisoimage
     - guestfs-tools
     - libguestfs-tools
+    # libvirt-daemon set — provides /usr/sbin/virtqemud, virtnetworkd, virsh.
+    # virt-manager pulls some of these transitively, but declare them
+    # explicitly so the image can run the session daemon even without
+    # virt-manager installed (no desktop required).
+    - libvirt-client
+    - libvirt-daemon
+    - libvirt-daemon-config-network
+    - libvirt-daemon-driver-qemu
     - libvirt-nss
     - passt
     - qemu-guest-agent
@@ -24,3 +37,71 @@ pac:
     - qemu-img
     - virtiofsd
     - libvirt
+
+# virtqemud + virtnetworkd run under supervisord. No `user=` directive —
+# they inherit the parent supervisord's uid (root on fedora-ov/arch-ov/
+# githubrunner; `user` on selkies-desktop-ov). virtqemud honors the
+# qemu:///session path keyed by $XDG_RUNTIME_DIR at either uid.
+#
+# priority=5/6 places these ahead of desktop priorities (labwc=12,
+# selkies=18) so the libvirt socket is available when later services or
+# interactive `ov vm` calls try to connect.
+#
+# --timeout 0 keeps the daemons alive instead of exiting on idle.
+service: |
+  [program:virtqemud]
+  command=/usr/sbin/virtqemud --timeout 0
+  autostart=true
+  autorestart=true
+  priority=5
+  startsecs=2
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+  [program:virtnetworkd]
+  command=/usr/sbin/virtnetworkd --timeout 0
+  autostart=true
+  autorestart=true
+  priority=6
+  startsecs=2
+  stdout_logfile=/dev/fd/1
+  stdout_logfile_maxbytes=0
+  redirect_stderr=true
+
+tests:
+  - id: virtqemud-binary
+    file: /usr/sbin/virtqemud
+    exists: true
+  - id: virtnetworkd-binary
+    file: /usr/sbin/virtnetworkd
+    exists: true
+  - id: virsh-binary
+    file: /usr/bin/virsh
+    exists: true
+  - id: qemu-system-x86-binary
+    file: /usr/bin/qemu-system-x86_64
+    exists: true
+  - id: qemu-img-binary
+    file: /usr/bin/qemu-img
+    exists: true
+  - id: virtqemud-running
+    scope: deploy
+    service: virtqemud
+    running: true
+  - id: virtnetworkd-running
+    scope: deploy
+    service: virtnetworkd
+    running: true
+  - id: libvirt-session-list
+    scope: deploy
+    command: virsh -c qemu:///session list --all
+    exit_status: 0
+    in_container: true
+  - id: libvirt-kvm-acceleration
+    scope: deploy
+    command: virsh -c qemu:///session domcapabilities 2>/dev/null | grep -c '<domain>kvm</domain>'
+    exit_status: 0
+    in_container: true
+    stdout:
+      - matches: "^[1-9]"

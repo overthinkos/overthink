@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-162 layers. 42 image definitions (32 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 247 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+162 layers. 43 image definitions (33 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 248 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -19,6 +19,8 @@ Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layer
 ### Sandboxed AI Desktops
 
 One of Overthink's design goals is running sandboxed [OpenClaw](https://github.com/overthinkos/openclaw) systems. The approach flips the usual AI sandboxing model: instead of restricting what the AI agent can do, Overthink gives it full access to a complete desktop environment — Chrome, a Wayland compositor, development tools, network services — and sandboxes the entire desktop inside a container managed by `ov`. The AI agent operates freely within its environment while the host stays fully isolated. This is how images like `openclaw-sway-browser` and `openclaw-ollama-sway-browser` work: a full AI workstation with no host compromise.
+
+`/ov-images:selkies-desktop-ov` takes this a step further: the sandboxed streaming desktop itself carries the full `ov` toolchain, so the AI (or the user) can build images, launch nested rootless pods, and create libvirt VMs from a terminal inside the browser-accessible desktop — all at uid 1000 with no `--privileged` and no added capabilities. The rootless-in-rootless recipe (kernel `mount_too_revealing()` RCA, surgical `unmask=/proc/*`, `virtqemud` session daemon) is documented in `/ov-layers:container-nesting` and `/ov-layers:virtualization`.
 
 ### AI Agent Integration
 
@@ -107,7 +109,7 @@ Images and deployments come with inline checks. A `tests:` block on any `layer.y
 
 `ov test` is also the parent router for live-container drive verbs: `ov test cdp` (Chrome DevTools), `ov test wl` (Wayland), `ov test dbus` (D-Bus / notifications), `ov test vnc` (VNC), `ov test mcp` (Model Context Protocol clients) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
 
-Seven running images ship comprehensive coverage (376 checks total, 0 failing): `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov test mcp` verb. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
+Running images ship comprehensive coverage: `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov test mcp` verb. `selkies-desktop-ov` (91 image-scope checks — matching its `selkies-desktop` ancestor, plus extra gates for the nested-podman recipe) joins them once deploy-scope verification lands. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
 
 See `/ov:test` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
 
@@ -122,6 +124,8 @@ Normally a container runs *inside* an operating system. Bootc flips this: the co
 ### Containers That Become Virtual Machines
 
 This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `image.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-images:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov:vm` for VM lifecycle + bootc-specific build caveats.
+
+VM creation also works **rootless** via `qemu:///session` and a supervisord-managed `virtqemud` daemon, so `ov vm create` runs from inside a rootless container (e.g., `/ov-images:selkies-desktop-ov`) as uid 1000 with only `/dev/kvm` passthrough — no root, no `--privileged`, no `CAP_SYS_ADMIN`. See `/ov-layers:virtualization` for the supervisord program definitions and the session-mode setup.
 
 ## Install
 
@@ -359,7 +363,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 244 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
+This gives Claude Code access to 248 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
 
 The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov test mcp` (see `/ov:mcp`).
 

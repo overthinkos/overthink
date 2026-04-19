@@ -29,7 +29,7 @@ type CLI struct {
 	Start    StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
-	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc)"`
+	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp)"`
 	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`

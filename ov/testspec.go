@@ -55,6 +55,7 @@ type Check struct {
 	Wl   string `yaml:"wl,omitempty"   json:"wl,omitempty"`
 	Dbus string `yaml:"dbus,omitempty" json:"dbus,omitempty"`
 	Vnc  string `yaml:"vnc,omitempty"  json:"vnc,omitempty"`
+	Mcp  string `yaml:"mcp,omitempty"  json:"mcp,omitempty"`
 
 	// Shared modifiers
 	ID          string `yaml:"id,omitempty"           json:"id,omitempty"`
@@ -158,6 +159,13 @@ type Check struct {
 	Target           string   `yaml:"target,omitempty"             json:"target,omitempty"`               // wl: focus/close/geometry/xprop target
 	Action           string   `yaml:"action,omitempty"             json:"action,omitempty"`               // wl: atspi action (tree/find/click)
 	Query            string   `yaml:"query,omitempty"              json:"query,omitempty"`                // cdp: axtree filter / wl: atspi find query
+
+	// mcp-specific modifiers. See /ov:test "Method allowlist — mcp" for which
+	// methods require which fields; enforcement in validate_tests.go.
+	McpName string `yaml:"mcp_name,omitempty" json:"mcp_name,omitempty"` // mcp: server name when image exposes multiple mcp_provides
+	Tool    string `yaml:"tool,omitempty"     json:"tool,omitempty"`     // mcp: tool name for the `call` method
+	URI     string `yaml:"uri,omitempty"      json:"uri,omitempty"`      // mcp: resource URI for the `read` method
+	Input   string `yaml:"input,omitempty"    json:"input,omitempty"`    // mcp: JSON argument blob for the `call` method (e.g. '{"path":"x.ipynb"}')
 }
 
 // CheckVerbs lists valid discriminator keys in stable order (used for
@@ -166,7 +174,7 @@ var CheckVerbs = []string{
 	"file", "package", "service", "port", "process", "command",
 	"http", "dns", "user", "group", "interface", "kernel-param",
 	"mount", "addr", "matching",
-	"cdp", "wl", "dbus", "vnc",
+	"cdp", "wl", "dbus", "vnc", "mcp",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -241,6 +249,9 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.Vnc != "" {
 		set = append(set, "vnc")
+	}
+	if c.Mcp != "" {
+		set = append(set, "mcp")
 	}
 	return set
 }
@@ -531,11 +542,13 @@ func (c *Check) StringFields() []*string {
 		&c.Server, &c.Home, &c.Shell,
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
-		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc,
+		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
 		&c.Tab, &c.Expression, &c.URL, &c.Selector,
 		&c.Dest, &c.Path, &c.Artifact,
 		&c.Button, &c.Text, &c.KeyName, &c.Combo,
 		&c.Direction, &c.Target, &c.Action, &c.Query,
+		// mcp-specific modifiers
+		&c.McpName, &c.Tool, &c.URI, &c.Input,
 	}
 }
 

@@ -244,6 +244,8 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result = r.runDbus(ctx, &expanded)
 	case "vnc":
 		result = r.runVnc(ctx, &expanded)
+	case "mcp":
+		result = r.runMcp(ctx, &expanded)
 	default:
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("unknown verb %q", kind)

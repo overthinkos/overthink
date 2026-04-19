@@ -60,3 +60,21 @@ tests:
     status: 200
     body:
       - contains: "version"
+  # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
+  # Runs only under `ov test <image>` (deploy-scope).
+  - id: mcp-jupyter-ping
+    scope: deploy
+    mcp: ping
+    timeout: 10s
+  - id: mcp-jupyter-list-tools
+    scope: deploy
+    mcp: list-tools
+    stdout:
+      - contains: insert_cell
+      - contains: execute_cell
+  - id: mcp-jupyter-list-notebooks
+    scope: deploy
+    mcp: call
+    tool: list_notebooks
+    input: "{}"
+    exit_status: 0

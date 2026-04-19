@@ -32,7 +32,7 @@ You have all the time in the world and taking the time to get things properly do
 | Subsystem | Skill |
 |-----------|-------|
 | Image family (build mode) | `/ov:image`, `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:pull` |
-| Testing (test mode) | `/ov:test` (parent router: `ov test <image>` + declarative verbs cdp/wl/dbus/vnc), `/ov-dev:go` (impl map: `testspec.go`, `testrun.go`, `testrun_ov_verbs.go`, `validate_tests.go`) |
+| Testing (test mode) | `/ov:test` (parent router: `ov test <image>` + declarative verbs cdp/wl/dbus/vnc/mcp — see also `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`), `/ov-dev:go` (impl map: `testspec.go`, `testrun.go`, `testrun_ov_verbs.go`, `validate_tests.go`, `mcp.go`, `mcp_client.go`) |
 | Install tasks (`tasks:` verb catalog, `vars:`, `${VAR}`, YAML anchors) | `/ov:layer` (authoritative) |
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Credential-backed env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
@@ -45,7 +45,7 @@ You have all the time in the world and taking the time to get things properly do
 | Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
 | GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
 | Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
-| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc), runtime variables, deploy.yml overlay, 10 authoring gotchas |
+| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc/mcp), runtime variables, deploy.yml overlay, 10 authoring gotchas |
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.

@@ -38,3 +38,17 @@ tests:
     addr: 127.0.0.1:${HOST_PORT:9224}
     reachable: true
     timeout: 5s
+  # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
+  # Runs only under `ov test <image>` (deploy-scope). No `call` test — the
+  # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
+  # safe non-destructive probes.
+  - id: mcp-chrome-devtools-ping
+    scope: deploy
+    mcp: ping
+    timeout: 10s
+  - id: mcp-chrome-devtools-list-tools
+    scope: deploy
+    mcp: list-tools
+    stdout:
+      - contains: navigate_page
+      - contains: take_screenshot

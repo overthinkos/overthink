@@ -39,3 +39,24 @@ service: |
   stdout_logfile_maxbytes=0
   stderr_logfile=/dev/stderr
   stderr_logfile_maxbytes=0
+
+tests:
+  # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
+  # Runs only under `ov test <image>` (deploy-scope). Build-scope and
+  # functional HTTP checks are contributed by the composed jupyter-mcp layer.
+  - id: mcp-jupyter-ml-ping
+    scope: deploy
+    mcp: ping
+    timeout: 10s
+  - id: mcp-jupyter-ml-list-tools
+    scope: deploy
+    mcp: list-tools
+    stdout:
+      - contains: insert_cell
+      - contains: execute_cell
+  - id: mcp-jupyter-ml-list-notebooks
+    scope: deploy
+    mcp: call
+    tool: list_notebooks
+    input: "{}"
+    exit_status: 0

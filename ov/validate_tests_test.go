@@ -137,6 +137,82 @@ func TestValidateTests_UnknownMatcherOp(t *testing.T) {
 	}
 }
 
+// mcp verb is deploy-scope-only like cdp/wl/dbus/vnc.
+func TestValidateTests_McpRejectedInBuildScope(t *testing.T) {
+	layers := map[string]*Layer{
+		"jupyter": {Name: "jupyter", tests: []Check{
+			{Mcp: "ping"}, // default scope at layer level is build
+		}},
+	}
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	got := runValidateTests(t, cfg, layers)
+	if !strings.Contains(got, "mcp:") || !strings.Contains(got, `scope:"deploy"`) {
+		t.Errorf("expected deploy-scope error for mcp: %s", got)
+	}
+}
+
+// mcp: call requires tool modifier.
+func TestValidateTests_McpCallRequiresTool(t *testing.T) {
+	layers := map[string]*Layer{
+		"jupyter": {Name: "jupyter", tests: []Check{
+			{Mcp: "call", Scope: "deploy"}, // missing tool
+		}},
+	}
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	got := runValidateTests(t, cfg, layers)
+	if !strings.Contains(got, "mcp") || !strings.Contains(got, "tool") {
+		t.Errorf("expected mcp call tool-required error: %s", got)
+	}
+}
+
+// mcp: read requires uri modifier.
+func TestValidateTests_McpReadRequiresURI(t *testing.T) {
+	layers := map[string]*Layer{
+		"jupyter": {Name: "jupyter", tests: []Check{
+			{Mcp: "read", Scope: "deploy"}, // missing uri
+		}},
+	}
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	got := runValidateTests(t, cfg, layers)
+	if !strings.Contains(got, "mcp") || !strings.Contains(got, "uri") {
+		t.Errorf("expected mcp read uri-required error: %s", got)
+	}
+}
+
+// Unknown mcp method rejected with a listing of allowed methods.
+func TestValidateTests_McpUnknownMethod(t *testing.T) {
+	layers := map[string]*Layer{
+		"jupyter": {Name: "jupyter", tests: []Check{
+			{Mcp: "bogus", Scope: "deploy"},
+		}},
+	}
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	got := runValidateTests(t, cfg, layers)
+	if !strings.Contains(got, "mcp: unknown method") {
+		t.Errorf("expected unknown method error: %s", got)
+	}
+	if !strings.Contains(got, "ping") || !strings.Contains(got, "list-tools") {
+		t.Errorf("expected error to list allowed methods: %s", got)
+	}
+}
+
+// Valid mcp checks produce no errors.
+func TestValidateTests_McpClean(t *testing.T) {
+	layers := map[string]*Layer{
+		"jupyter": {Name: "jupyter", tests: []Check{
+			{Mcp: "ping", Scope: "deploy"},
+			{Mcp: "list-tools", Scope: "deploy"},
+			{Mcp: "call", Tool: "list_notebooks", Input: "{}", Scope: "deploy"},
+			{Mcp: "read", URI: "file:///x", Scope: "deploy"},
+		}},
+	}
+	cfg := &Config{Images: map[string]ImageConfig{}}
+	got := runValidateTests(t, cfg, layers)
+	if got != "" {
+		t.Errorf("clean mcp fixture produced errors: %s", got)
+	}
+}
+
 // Full valid fixture — should produce no errors.
 func TestValidateTests_Clean(t *testing.T) {
 	layers := map[string]*Layer{

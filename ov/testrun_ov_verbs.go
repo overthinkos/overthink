@@ -158,6 +158,25 @@ var vncMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
+// mcp methods
+// ---------------------------------------------------------------------------
+//
+// The mcp verb dispatches to `ov test mcp <method> <image> …`, which uses
+// github.com/modelcontextprotocol/go-sdk to connect to the declared MCP
+// server. Methods mirror the SDK's ClientSession surface. See
+// mcp.go / mcp_client.go for the host-side implementation.
+
+var mcpMethods = map[string]methodSpec{
+	"ping":           {path: []string{"mcp", "ping"}, posArgs: posMcpCommon},
+	"servers":        {path: []string{"mcp", "servers"}, posArgs: posMcpCommon},
+	"list-tools":     {path: []string{"mcp", "list-tools"}, posArgs: posMcpCommon},
+	"list-resources": {path: []string{"mcp", "list-resources"}, posArgs: posMcpCommon},
+	"list-prompts":   {path: []string{"mcp", "list-prompts"}, posArgs: posMcpCommon},
+	"call":           {path: []string{"mcp", "call"}, required: []string{"Tool"}, posArgs: posMcpCall},
+	"read":           {path: []string{"mcp", "read"}, required: []string{"URI"}, posArgs: posMcpRead},
+}
+
+// ---------------------------------------------------------------------------
 // positional-arg builders — reused across verbs.
 // Each returns the positional args to insert AFTER the image name,
 // BEFORE any -i instance flag. They never fail: required-modifier checks
@@ -250,6 +269,36 @@ func posDbusNotify(c *Check) []string {
 	return args
 }
 
+// mcp positional builders. Any `--name` flag piggybacks on the positional
+// slice — Kong accepts flags in any position, so returning them alongside
+// positionals avoids extending methodSpec with a dedicated flag hook.
+
+func posMcpCommon(c *Check) []string {
+	if c.McpName == "" {
+		return nil
+	}
+	return []string{"--name", c.McpName}
+}
+
+func posMcpCall(c *Check) []string {
+	args := []string{c.Tool}
+	if c.Input != "" {
+		args = append(args, c.Input)
+	}
+	if c.McpName != "" {
+		args = append(args, "--name", c.McpName)
+	}
+	return args
+}
+
+func posMcpRead(c *Check) []string {
+	args := []string{c.URI}
+	if c.McpName != "" {
+		args = append(args, "--name", c.McpName)
+	}
+	return args
+}
+
 // ---------------------------------------------------------------------------
 // Verb dispatchers
 // ---------------------------------------------------------------------------
@@ -268,6 +317,10 @@ func (r *Runner) runDbus(ctx context.Context, c *Check) TestResult {
 
 func (r *Runner) runVnc(ctx context.Context, c *Check) TestResult {
 	return r.runOvVerb(ctx, c, "vnc", c.Vnc, vncMethods)
+}
+
+func (r *Runner) runMcp(ctx context.Context, c *Check) TestResult {
+	return r.runOvVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
 }
 
 // runOvVerb is the shared dispatch path: skip checks, method lookup,
@@ -405,6 +458,14 @@ func isZeroField(c *Check, name string) bool {
 		return c.Query == ""
 	case "Command":
 		return c.Command == ""
+	case "Tool":
+		return c.Tool == ""
+	case "URI":
+		return c.URI == ""
+	case "Input":
+		return c.Input == ""
+	case "McpName":
+		return c.McpName == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

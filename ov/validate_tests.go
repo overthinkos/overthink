@@ -126,8 +126,8 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 }
 
 // validateOvVerb checks method-name allowlists, required modifiers, and
-// deploy-scope enforcement for the cdp/wl/dbus/vnc verbs. No-op for other
-// verbs.
+// deploy-scope enforcement for the cdp/wl/dbus/vnc/mcp verbs. No-op for
+// other verbs.
 func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *ValidationError) {
 	var (
 		method    string
@@ -142,6 +142,8 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 		method, allowlist = c.Dbus, dbusMethods
 	case "vnc":
 		method, allowlist = c.Vnc, vncMethods
+	case "mcp":
+		method, allowlist = c.Mcp, mcpMethods
 	default:
 		return
 	}

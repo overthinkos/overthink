@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-160 layers. 44 image definitions (31 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 243 skills across 4 plugins (`ov`, `ov-layers`, `ov-images`, `ov-dev`).
+160 layers. 41 image definitions (31 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 243 skills across 4 plugins (`ov`, `ov-layers`, `ov-images`, `ov-dev`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -103,27 +103,13 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Declarative Testing
 
-Images and deployments come with inline checks. A `tests:` block on any `layer.yml`, `image.yml`, or `deploy.yml` authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. `ov image validate` catches authoring errors at config time; `ov` bakes the checks into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs the build-scope checks against a disposable `podman run --rm` container; `ov test <image>` runs all three sections against a live service, substituting **deploy-time variables** (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once keeps working when `deploy.yml` remaps ports or rebinds volumes. Local `deploy.yml` can add or override baked checks by `id:`.
+Images and deployments come with inline checks. A `tests:` block on any `layer.yml`, `image.yml`, or `deploy.yml` authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
 
-```yaml
-# layers/redis/layer.yml — gold-standard pattern referenced in /ov:test
-tests:
-  - id: redis-binary          # build-scope (runs inside the built image)
-    file: /usr/bin/redis-server
-    exists: true
-  - id: redis-package
-    package: valkey-compat-redis   # Fedora 43 installed name (virtual provides)
-    installed: true
-  - id: redis-responds        # deploy-scope (runs against a live service)
-    scope: deploy
-    command: redis-cli -h 127.0.0.1 -p ${HOST_PORT:6379} ping
-    stdout: PONG
-    in_container: false       # run the probe from the host
-```
+`ov test` is also the parent router for live-container drive verbs: `ov test cdp` (Chrome DevTools), `ov test wl` (Wayland), `ov test dbus` (D-Bus / notifications), `ov test vnc` (VNC) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`. **All four are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC assertions into the same three-section OCI-label pipeline as the built-in verbs.
 
-Seven running images carry comprehensive test coverage (363 checks total, 0 failing): `filebrowser` (24), `jupyter` (29), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (85). LABEL directives are emitted at the end of each Containerfile, so test edits rebuild in ~2 seconds instead of re-running every downstream install step.
+Seven running images ship comprehensive coverage (371 checks total, 0 failing): `filebrowser` (24), `jupyter` (29), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (90). LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
 
-See `/ov:test` for the verb catalog, matcher forms, runtime variable table, **10 authoring gotchas** (HOST_PORT vs CONTAINER_IP routing, Fedora 43 package renames, `pgrep`/`ss`/`nc` absence, `supervisorctl status` exit-3, `status:` int vs list, regex anchors, `${VAR:-default}` non-support, stderr-vs-stdout, volume scope, root-owned files), and deploy.yml overlay rules.
+See `/ov:test` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
 
 ### Quadlets: Containers as System Services
 
@@ -164,36 +150,9 @@ cd ov && go build -o ../bin/ov .
 
 ### Secret Management
 
-Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that `ov secrets gpg env` decrypts in memory when direnv loads the directory. No plaintext on disk.
+Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that `ov secrets gpg env` decrypts in memory when direnv loads the directory. No plaintext on disk. Requires a GPG key + gpg-agent (locally or SSH-forwarded), direnv hooked into your shell, and a one-time `direnv allow`. After that, `cd`ing into the project auto-decrypts `.secrets` and exports the variables via `.envrc`'s `eval "$(ov secrets gpg env)"`.
 
-**Prerequisites:**
-- GPG key and gpg-agent running (locally or forwarded via SSH)
-- direnv installed and hooked into your shell
-- `ov` installed (provides `ov secrets gpg env`)
-
-**Setup:**
-```bash
-# Allow direnv in this project (one-time)
-direnv allow
-```
-
-After setup, `cd`ing into the project automatically decrypts `.secrets` and exports the variables. The `.envrc` uses `eval "$(ov secrets gpg env)"` — no external direnvrc dependency needed.
-
-**Managing .secrets with ov:**
-```bash
-ov secrets gpg env                                        # Decrypt for direnv/eval
-ov secrets gpg encrypt -r <KEY_ID> -i .env -o .secrets   # Encrypt
-ov secrets gpg show                                       # View contents
-ov secrets gpg set API_KEY sk-test-abc                    # Add/update a key
-ov secrets gpg edit                                       # Edit in $EDITOR
-ov secrets gpg unset OLD_KEY                              # Remove a key
-ov secrets gpg recipients                                 # List who can decrypt
-ov secrets gpg import-key <path>                          # Import key from file/dir
-ov secrets gpg import-key --from-keystore                 # Restore key from KeePassXC
-ov secrets gpg export-key <dir> --to-keystore             # Backup key to dir + KeePassXC
-ov secrets gpg setup -p                                   # Configure gpg-agent + KeePassXC
-ov secrets gpg doctor                                     # Verify GPG health
-```
+Manage `.secrets` with `ov secrets gpg {env, show, set, unset, edit, encrypt, recipients, import-key, export-key, setup, doctor}`. See `/ov:secrets` for the full command reference, KeePassXC integration for key backup/restore, and headless/SSH workflows.
 
 ## Quick Taste
 
@@ -271,17 +230,17 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 25 top-level command families. Build-mode commands live under `ov image …` (the only family that reads `image.yml`); every other command reads OCI labels + `deploy.yml`. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 22 top-level command families split across three modes with disjoint input sets: **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`). Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
 | **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
 | **Deployment** | `config`, `deploy`, `start`, `stop`, `update`, `remove` | `/ov:config`, `/ov:deploy`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
-| **Desktop automation** | `cdp`, `wl`, `vnc`, `dbus`, `record` | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:dbus`, `/ov:record` |
+| **Desktop recording** | `record` | `/ov:record` |
+| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
-| **Testing** | `test`, `image test` | `/ov:test` |
 | **Misc** | `version` | `/ov:version` |
 
 A few sample invocations:
@@ -292,8 +251,8 @@ ov image pull jupyter                  # Fetch into local storage (see /ov:pull 
 ov config jupyter                      # Unified deploy setup (see /ov:config for --bind, --encrypt, --sidecar, -i, --update-all)
 ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
-ov cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
-ov wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
+ov test cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
+ov test wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
 ov vm build openclaw-browser-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
 ```
 
@@ -335,7 +294,7 @@ The Tailscale sidecar routes outbound traffic through a Tailscale exit node whil
 
 ### Wayland Overlays
 
-`ov wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
+`ov test wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
 
 ## Troubleshooting
 

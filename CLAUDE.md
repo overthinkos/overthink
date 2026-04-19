@@ -21,20 +21,18 @@ You have all the time in the world and taking the time to get things properly do
 
 ## Architecture Overview
 
-`ov` (Go CLI, source in `ov/`) has a **hard namespace split** between
-**build mode** (the `ov image …` family — only these commands read
-`image.yml`) and **deploy mode** (every other command — reads OCI labels
-+ `deploy.yml`, never `image.yml`). See `/ov:image` for the build-mode
-family and `/ov:config`, `/ov:deploy`, `/ov:pull` for the deploy side.
-Build vocabulary (distro bootstrap, builders, init systems) lives in
-`build.yml` — see `/ov:build`. Go implementation map: `/ov-dev:go`.
+`ov` (Go CLI, source in `ov/`) has a three-mode namespace split with strictly disjoint input sets — each mode owns a distinct input file and never reads another mode's input:
 
-**Key subsystems** — invoke the skill for full details. Each skill is
-the single source of truth for its area; don't copy their contents here.
+- **Build mode** — `ov image {build, generate, validate, merge, new, inspect, list, pull}`. Reads `image.yml` + `build.yml`. Writes Containerfiles, built images, OCI labels. See `/ov:image`, `/ov:build`.
+- **Test mode** — `ov test` (all forms: `run`, `cdp`, `wl`, `dbus`, `vnc`) + `ov image test`. Reads only OCI labels (`org.overthinkos.tests`) + local `deploy.yml` tests overlay + container/image runtime state. Never reads `image.yml`. Writes nothing persistent. The tests OCI label is baked at build time from `image.yml` + `layer.yml` authoring only — `deploy.yml` contributes the local tests overlay at test-run time, not to the label. See `/ov:test`.
+- **Deploy mode** — every other command (`config`, `deploy`, `start`, `stop`, `update`, `remove`, `shell`, `cmd`, `service`, `status`, `logs`, `tmux`, `doctor`, `udev`, `vm`, `secrets`, `settings`, `alias`, `record`, `version`). Reads OCI labels + `deploy.yml`. Writes `deploy.yml`, quadlet files, credential stores. See `/ov:config`, `/ov:deploy`, `/ov-dev:go`.
+
+**Key subsystems** — each skill is the single source of truth for its area; don't copy their contents here.
 
 | Subsystem | Skill |
 |-----------|-------|
 | Image family (build mode) | `/ov:image`, `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:pull` |
+| Testing (test mode) | `/ov:test` (parent router: `ov test <image>` + declarative verbs cdp/wl/dbus/vnc), `/ov-dev:go` (impl map: `testspec.go`, `testrun.go`, `testrun_ov_verbs.go`, `validate_tests.go`) |
 | Install tasks (`tasks:` verb catalog, `vars:`, `${VAR}`, YAML anchors) | `/ov:layer` (authoritative) |
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Credential-backed env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
@@ -43,11 +41,11 @@ the single source of truth for its area; don't copy their contents here.
 | Sidecars & Tunnels (deploy.yml-only) | `/ov:sidecar`, `/ov:deploy` |
 | Init Systems | `/ov:generate`, `/ov:layer` |
 | Multi-distro | `/ov:build`, `/ov:layer` |
-| Desktop Automation | `/ov:cdp`, `/ov:wl`, `/ov:vnc`, `/ov:wl-overlay` |
+| Desktop Automation | `/ov:test` (parent router) with nested verbs `/ov:cdp`, `/ov:dbus`, `/ov:vnc`, `/ov:wl`; plus `/ov:wl-overlay` (Wayland overlay helpers) |
 | Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
 | GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
 | Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
-| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog, runtime variables, deploy.yml overlay, and 10 authoring gotchas |
+| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc), runtime variables, deploy.yml overlay, 10 authoring gotchas |
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
@@ -56,13 +54,7 @@ the single source of truth for its area; don't copy their contents here.
 
 ## Repository Layout
 
-Project directory tree, skills submodule (`plugins/`), and sync
-conventions (public git vs private Syncthing for memory/settings) live
-in `/ov-dev:go` (directory structure) and `/ov-dev:skills` (plugin
-structure + two-layer sync). 4 plugins with skills (`ov`, `ov-layers`,
-`ov-images`, `ov-dev`) + 1 empty (`ov-jupyter`, MCP integration only).
-**243 skills total — 1:1 coverage for every ov command, layer, and
-image.**
+See `/ov-dev:go` for directory structure and `/ov-dev:skills` for plugin/skill organization.
 
 ---
 
@@ -72,6 +64,7 @@ image.**
 - Lowercase-hyphenated names for layers and images.
 - All logic lives in `ov`; Taskfiles are strictly bootstrap (build the `ov` binary). See `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 - **Tests ship with the image**: every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives are emitted last in each Containerfile so test edits rebuild in ~2 seconds instead of minutes.
+- **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. OCI labels come strictly from `image.yml` + `layer.yml`; `deploy.yml` is deploy-mode state that must never bleed into baked images. See `/ov-dev:go` "Mode purity" for the bug this prevents.
 
 **Authoring + deployment specifics live in skills** — look them up, don't duplicate:
 
@@ -82,14 +75,7 @@ image.**
 
 ## Skills First (Blocking)
 
-Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort).
-
-- `/ov:<cmd>` for operations, `/ov-layers:<name>` for layer internals, `/ov-images:<name>` for image composition, `/ov-dev:go` for Go code edits.
-- Multi-step workflows: invoke ALL skills in the chain.
-- For desktop automation routing (CDP / WL / VNC / SPA / AT-SPI hierarchy), see `/ov:cdp`.
-- For skill chains, workflow positions, maintenance guidelines, and the 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator): see `/ov-dev:skills` and `/ov-dev:go`.
-
-Each skill's trailing `## Related …` and `Workflow position` sections enumerate chains — do not duplicate them here.
+Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort). Multi-step workflows: invoke ALL skills in the chain. See `/ov-dev:skills` for skill routing, chains, maintenance guidelines, and the 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator).
 
 
 ## AI Attribution (Fedora Policy Compliant)

@@ -188,17 +188,17 @@ func dbusIntrospectLocal(dest, path string) error {
 
 // --- Remote D-Bus operations (host → container delegation) ---
 
-// dbusNotifyRemoteStrict sends a notification to a container, returning errors (for ov dbus notify).
+// dbusNotifyRemoteStrict sends a notification to a container, returning errors (for ov test dbus notify).
 func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 	// Try native ov binary first
 	if checkToolAvailable(engine, name, "ov") == nil {
-		cmd := exec.Command(engine, "exec", name, "ov", "dbus", "notify", ".", title, body)
+		cmd := exec.Command(engine, "exec", name, "ov", "test", "dbus", "notify", ".", title, body)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
-		fmt.Fprintf(os.Stderr, "Warning: in-container ov dbus failed, trying gdbus fallback\n")
+		fmt.Fprintf(os.Stderr, "Warning: in-container ov test dbus failed, trying gdbus fallback\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: ov binary not found in container, falling back to gdbus\n"+
 			"  For native D-Bus support, add the 'ov' layer to your image.\n")
@@ -226,7 +226,7 @@ func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 func dbusCallRemote(engine, name, dest, path, method string, args []string) error {
 	// Try native ov binary first
 	if checkToolAvailable(engine, name, "ov") == nil {
-		ovArgs := []string{"exec", name, "ov", "dbus", "call", ".", dest, path, method}
+		ovArgs := []string{"exec", name, "ov", "test", "dbus", "call", ".", dest, path, method}
 		ovArgs = append(ovArgs, args...)
 		cmd := exec.Command(engine, ovArgs...)
 		cmd.Stdout = os.Stdout

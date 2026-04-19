@@ -214,6 +214,31 @@ images:
         in_container: true
         stdout:
           - equals: RUNNING
+      # Live-container verbs — exercise the declarative cdp:/wl:/vnc:/dbus: surface.
+      # All deploy-scope (require running container + port mappings).
+      - id: sway-browser-vnc-cdp-up
+        scope: deploy
+        cdp: status
+        stdout:
+          contains: ok
+      - id: sway-browser-vnc-vnc-up
+        scope: deploy
+        vnc: status
+        stdout:
+          contains: ok
+      - id: sway-browser-vnc-wl-has-windows
+        scope: deploy
+        wl: toplevel
+      - id: sway-browser-vnc-dbus-notifications-registered
+        scope: deploy
+        dbus: list
+        stdout:
+          contains: org.freedesktop.Notifications
+      - id: sway-browser-vnc-vnc-framebuffer
+        scope: deploy
+        vnc: screenshot
+        artifact: /tmp/sway-browser-vnc-fb.png
+        artifact_min_bytes: 5000
 
   nvidia:
     base: fedora-nonfree

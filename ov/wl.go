@@ -949,7 +949,7 @@ func (c *WlXpropCmd) Run() error {
 	// Check if XWayland is running.
 	if execWlCmdSilent(engine, name, `pgrep -f Xwayland >/dev/null 2>&1`) != nil {
 		fmt.Fprintf(os.Stderr, "XWayland is not running (no X11 clients have been launched)\n")
-		fmt.Fprintf(os.Stderr, "Launch an X11 app first: ov wl exec <image> xterm\n")
+		fmt.Fprintf(os.Stderr, "Launch an X11 app first: ov test wl exec <image> xterm\n")
 		return nil
 	}
 

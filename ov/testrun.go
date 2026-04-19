@@ -136,12 +136,19 @@ func asExitError(err error, ee **exec.ExitError) bool {
 }
 
 // Runner wires together the execution context for one pass of checks.
+//
+// Image and Instance are the user-supplied names under RunModeTest, used to
+// build CLI invocations for the cdp/wl/dbus/vnc verbs (testrun_ov_verbs.go).
+// They are empty under RunModeImageTest, which causes those verbs to skip
+// with a clear message — they need a running container with port mappings.
 type Runner struct {
 	Exec        Executor
 	Resolver    *TestVarResolver
 	Mode        RunMode
 	HTTPClient  *http.Client
 	DialTimeout time.Duration
+	Image       string
+	Instance    string
 }
 
 // NewRunner constructs a Runner with sensible defaults. Caller passes an
@@ -229,6 +236,14 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result = r.runAddr(ctx, &expanded)
 	case "matching":
 		result = r.runMatching(ctx, &expanded)
+	case "cdp":
+		result = r.runCdp(ctx, &expanded)
+	case "wl":
+		result = r.runWl(ctx, &expanded)
+	case "dbus":
+		result = r.runDbus(ctx, &expanded)
+	case "vnc":
+		result = r.runVnc(ctx, &expanded)
 	default:
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("unknown verb %q", kind)

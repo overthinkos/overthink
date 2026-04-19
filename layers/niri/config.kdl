@@ -43,7 +43,7 @@ layout {
 // Disable client-side decorations (prefer server-side borders)
 prefer-no-csd
 
-// Disable screenshot path (use ov wl screenshot instead)
+// Disable screenshot path (use ov test wl screenshot instead)
 screenshot-path null
 
 // XWayland: niri 25.x requires xwayland-satellite (separate package).

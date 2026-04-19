@@ -17,7 +17,7 @@ func sendContainerNotification(engine, containerName, title, body string) {
 
 	// Remote mode: delegate to container's ov binary, fall back to gdbus
 	if checkToolAvailable(engine, containerName, "ov") == nil {
-		cmd := exec.Command(engine, "exec", containerName, "ov", "dbus", "notify", ".", title, body)
+		cmd := exec.Command(engine, "exec", containerName, "ov", "test", "dbus", "notify", ".", title, body)
 		if cmd.Run() == nil {
 			return
 		}

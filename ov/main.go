@@ -13,32 +13,28 @@ import (
 type CLI struct {
 	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
 
-	Alias    AliasCmd       `cmd:"" help:"Manage command aliases for container images"`
-	Cdp      CdpCmd         `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Cmd      CmdCmd         `cmd:"" help:"Run a command in a running container (with notification)"`
-	Config   ImageConfigCmd `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
-	Dbus     DbusCmd        `cmd:"" help:"Interact with D-Bus services inside containers"`
-	Deploy   DeployCmd      `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Doctor   DoctorCmd      `cmd:"" help:"Show host dependency status"`
-	Image    ImageCmd       `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
-	Logs     LogsCmd        `cmd:"" help:"Show service container logs"`
-	Record   RecordCmd      `cmd:"" help:"Record terminal sessions or desktop video"`
-	Remove   RemoveCmd      `cmd:"" help:"Remove service container"`
+	Alias    AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
+	Cmd      CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
+	Config   ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Deploy   DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Doctor   DoctorCmd       `cmd:"" help:"Show host dependency status"`
+	Image    ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
+	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
+	Record   RecordCmd       `cmd:"" help:"Record terminal sessions or desktop video"`
+	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
-	Service  ServiceCmd     `cmd:"" help:"Manage supervisord services inside a running container"`
-	Settings SettingsCmd    `cmd:"" help:"Manage runtime configuration (get/set/list)"`
-	Shell    ShellCmd       `cmd:"" help:"Start a bash shell in a container image"`
-	Start    StartCmd       `cmd:"" help:"Start a container as a background service"`
-	Status   StatusCmd      `cmd:"" help:"Show service status (all if no image given)"`
-	Stop     StopCmd        `cmd:"" help:"Stop a running service container"`
-	Test     TestCmd        `cmd:"" help:"Run declarative tests against a running service"`
-	Tmux     TmuxCmd        `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Udev     UdevCmd        `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update   UpdateCmd      `cmd:"" help:"Update image and restart if active"`
-	Version  VersionCmd     `cmd:"" help:"Print computed CalVer tag"`
-	Vm       VmCmd          `cmd:"" help:"Manage virtual machines from bootc images"`
-	Vnc      VncCmd         `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl       WlCmd          `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Service  ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
+	Settings SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	Shell    ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
+	Start    StartCmd        `cmd:"" help:"Start a container as a background service"`
+	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
+	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
+	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc)"`
+	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
+	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`
+	Version  VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
+	Vm       VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
 }
 
 // GenerateCmd generates Containerfiles

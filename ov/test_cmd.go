@@ -8,7 +8,20 @@ import (
 	"strings"
 )
 
-// TestCmd runs tests against a running service — the deploy-time entry point.
+// TestCmd groups the deploy-time test runner with the live-container
+// interaction verbs (cdp, wl, dbus, vnc). The default subcommand is `run`
+// (tagged default:"withargs"), so `ov test <image>` still dispatches to the
+// test runner; explicit subcommand names (cdp/wl/dbus/vnc) take over when
+// matched.
+type TestCmd struct {
+	Run  TestRunCmd `cmd:"" default:"withargs" help:"Run declarative tests against a running service"`
+	Cdp  CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
+	Dbus DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Vnc  VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl   WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+}
+
+// TestRunCmd runs tests against a running service — the deploy-time entry point.
 //
 //   - Extracts the image's three-section LabelTestSet from OCI labels.
 //   - Applies the local deploy.yml tests overlay (merge by id:).
@@ -19,7 +32,7 @@ import (
 //
 // The command exits non-zero on any failed check. Skipped checks (missing
 // runtime context, skip: true, id-override with skip) do not fail the run.
-type TestCmd struct {
+type TestRunCmd struct {
 	Image    string   `arg:"" help:"Image name"`
 	Instance string   `short:"i" long:"instance" help:"Instance name"`
 	Format   string   `long:"format" default:"text" help:"Output format: text, json, tap"`
@@ -27,7 +40,7 @@ type TestCmd struct {
 	Section  string   `long:"section" help:"Only run this section: layer, image, or deploy"`
 }
 
-func (c *TestCmd) Run() error {
+func (c *TestRunCmd) Run() error {
 	engine, containerName, err := resolveContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
@@ -76,6 +89,8 @@ func (c *TestCmd) Run() error {
 	}
 
 	runner := NewRunner(&ContainerExecutor{Engine: engine, ContainerName: containerName}, resolver, RunModeTest)
+	runner.Image = c.Image
+	runner.Instance = c.Instance
 	results := runner.Run(context.Background(), checks)
 
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
@@ -87,14 +102,18 @@ func (c *TestCmd) Run() error {
 }
 
 // ImageTestCmd runs tests against a disposable container started from the
-// built image — the build-time / CI entry point.
+// built image — a test-mode entry point that executes build-scope and
+// image-scope checks without requiring a long-running deployment.
 //
 //   - Executes layer + image sections by default.
 //   - --include-deploy also executes the deploy section (useful for
 //     exercising deploy-default checks that don't need runtime vars).
+//
+// Image references resolve purely against local container storage via
+// resolveLocalImageRef — never reads image.yml. Run `ov image pull <name>` or
+// `ov image build <name>` first if the image isn't in local storage yet.
 type ImageTestCmd struct {
-	Image         string   `arg:"" help:"Image name (short — resolved via image.yml — or fully-qualified ref)"`
-	Tag           string   `long:"tag" default:"auto" help:"Image tag when resolving a short name"`
+	Image         string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads image.yml)"`
 	Format        string   `long:"format" default:"text" help:"Output format: text, json, tap"`
 	Filter        []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
 	IncludeDeploy bool     `long:"include-deploy" help:"Also run the deploy section (normally skipped)"`
@@ -106,18 +125,9 @@ func (c *ImageTestCmd) Run() error {
 		return err
 	}
 
-	// Resolve image ref the same way ov image pull does: short name → image.yml lookup,
-	// full ref → pass through.
-	imageRef := c.Image
-	if !looksLikeFullRef(c.Image) {
-		dir, _ := os.Getwd()
-		cfg, cfgErr := LoadConfig(dir)
-		if cfgErr == nil {
-			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir)
-			if err == nil {
-				imageRef = resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-			}
-		}
+	imageRef, err := resolveLocalImageRef(rt.RunEngine, c.Image)
+	if err != nil {
+		return err
 	}
 
 	meta, err := ExtractMetadata(rt.RunEngine, imageRef)

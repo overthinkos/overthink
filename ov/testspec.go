@@ -46,6 +46,16 @@ type Check struct {
 	Addr        string `yaml:"addr,omitempty"          json:"addr,omitempty"`
 	Matching    any    `yaml:"matching,omitempty"      json:"matching,omitempty"`
 
+	// Test-mode live-container verbs — each is a method-name discriminator
+	// validated against the CLI's subcommand surface. Dispatched by runCdp/
+	// runWl/runDbus/runVnc in testrun_ov_verbs.go via subprocess delegation
+	// to `ov test <verb> <method>`. See /ov:test for authoring, /ov:cdp,
+	// /ov:wl, /ov:dbus, /ov:vnc for per-verb method semantics.
+	Cdp  string `yaml:"cdp,omitempty"  json:"cdp,omitempty"`
+	Wl   string `yaml:"wl,omitempty"   json:"wl,omitempty"`
+	Dbus string `yaml:"dbus,omitempty" json:"dbus,omitempty"`
+	Vnc  string `yaml:"vnc,omitempty"  json:"vnc,omitempty"`
+
 	// Shared modifiers
 	ID          string `yaml:"id,omitempty"           json:"id,omitempty"`
 	Description string `yaml:"description,omitempty"  json:"description,omitempty"`
@@ -125,6 +135,29 @@ type Check struct {
 
 	// command-specific routing (false = run from host, true = run via podman exec)
 	FromHost bool `yaml:"from_host,omitempty" json:"from_host,omitempty"`
+
+	// cdp/wl/dbus/vnc-specific modifiers. Applicable sets vary per method —
+	// validate_tests.go enforces required-modifier rules per {verb, method}.
+	Tab              string   `yaml:"tab,omitempty"                json:"tab,omitempty"`                  // cdp: tab id
+	Expression       string   `yaml:"expression,omitempty"         json:"expression,omitempty"`           // cdp: eval expression
+	URL              string   `yaml:"url,omitempty"                json:"url,omitempty"`                  // cdp: open url
+	Selector         string   `yaml:"selector,omitempty"           json:"selector,omitempty"`             // cdp: click/type/wait/coords/axtree
+	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`                 // dbus: service name
+	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`                 // dbus: object path
+	Args             []string `yaml:"args,omitempty"               json:"args,omitempty"`                 // dbus: method args (type:value)
+	Artifact         string   `yaml:"artifact,omitempty"           json:"artifact,omitempty"`             // cdp/wl/vnc: output file path for screenshot / raw capture
+	ArtifactMinBytes int      `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"`   // post-run size assertion on artifact
+	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                   // wl/vnc: click/mouse x coord
+	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                   // wl/vnc: click/mouse y coord
+	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`               // wl/vnc: left/middle/right
+	Text             string   `yaml:"text,omitempty"               json:"text,omitempty"`                 // wl/vnc: type text / overlay text
+	KeyName          string   `yaml:"key,omitempty"                json:"key,omitempty"`                  // wl/vnc: key name (Return/Escape/...)
+	Combo            string   `yaml:"combo,omitempty"              json:"combo,omitempty"`                // wl: key-combo (ctrl+c)
+	Direction        string   `yaml:"direction,omitempty"          json:"direction,omitempty"`            // wl: scroll up/down/left/right
+	Amount           int      `yaml:"amount,omitempty"             json:"amount,omitempty"`               // wl: scroll amount
+	Target           string   `yaml:"target,omitempty"             json:"target,omitempty"`               // wl: focus/close/geometry/xprop target
+	Action           string   `yaml:"action,omitempty"             json:"action,omitempty"`               // wl: atspi action (tree/find/click)
+	Query            string   `yaml:"query,omitempty"              json:"query,omitempty"`                // cdp: axtree filter / wl: atspi find query
 }
 
 // CheckVerbs lists valid discriminator keys in stable order (used for
@@ -133,6 +166,7 @@ var CheckVerbs = []string{
 	"file", "package", "service", "port", "process", "command",
 	"http", "dns", "user", "group", "interface", "kernel-param",
 	"mount", "addr", "matching",
+	"cdp", "wl", "dbus", "vnc",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -195,6 +229,18 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.Matching != nil {
 		set = append(set, "matching")
+	}
+	if c.Cdp != "" {
+		set = append(set, "cdp")
+	}
+	if c.Wl != "" {
+		set = append(set, "wl")
+	}
+	if c.Dbus != "" {
+		set = append(set, "dbus")
+	}
+	if c.Vnc != "" {
+		set = append(set, "vnc")
 	}
 	return set
 }
@@ -484,6 +530,12 @@ func (c *Check) StringFields() []*string {
 		&c.IP, &c.CAFile, &c.Method, &c.RequestBody,
 		&c.Server, &c.Home, &c.Shell,
 		&c.MountSource, &c.Filesystem,
+		// Test-mode live-container verb discriminators + modifiers.
+		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc,
+		&c.Tab, &c.Expression, &c.URL, &c.Selector,
+		&c.Dest, &c.Path, &c.Artifact,
+		&c.Button, &c.Text, &c.KeyName, &c.Combo,
+		&c.Direction, &c.Target, &c.Action, &c.Query,
 	}
 }
 

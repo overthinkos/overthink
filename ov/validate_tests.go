@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -115,6 +116,62 @@ func validateCheck(c *Check, loc, effectiveScope string, errs *ValidationError) 
 	validateMatchers(c.Headers, loc+" headers", errs)
 	validateMatchers(c.Opts, loc+" opts", errs)
 	validateMatchers(c.Value, loc+" value", errs)
+
+	// cdp/wl/dbus/vnc verbs: validate method allowlist + required modifiers
+	// + scope enforcement (all four are deploy-scope-only since they need a
+	// running container with port mappings). The allowlists live in
+	// testrun_ov_verbs.go next to the dispatch logic so adding a new method
+	// means touching one file.
+	validateOvVerb(c, verb, loc, effectiveScope, errs)
+}
+
+// validateOvVerb checks method-name allowlists, required modifiers, and
+// deploy-scope enforcement for the cdp/wl/dbus/vnc verbs. No-op for other
+// verbs.
+func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *ValidationError) {
+	var (
+		method    string
+		allowlist map[string]methodSpec
+	)
+	switch verb {
+	case "cdp":
+		method, allowlist = c.Cdp, cdpMethods
+	case "wl":
+		method, allowlist = c.Wl, wlMethods
+	case "dbus":
+		method, allowlist = c.Dbus, dbusMethods
+	case "vnc":
+		method, allowlist = c.Vnc, vncMethods
+	default:
+		return
+	}
+
+	spec, ok := allowlist[method]
+	if !ok {
+		methods := make([]string, 0, len(allowlist))
+		for k := range allowlist {
+			methods = append(methods, k)
+		}
+		sort.Strings(methods)
+		errs.Add("%s: %s: unknown method %q (allowed: %s)", loc, verb, method, strings.Join(methods, ", "))
+		return
+	}
+
+	// Deploy-scope only — these verbs need a running container with port
+	// mappings; build-scope (ov image test) correctly skips them at runtime.
+	if effectiveScope == "build" {
+		errs.Add("%s: %s: verb requires scope:\"deploy\" (needs a running container with port mappings)", loc, verb)
+	}
+
+	for _, f := range spec.required {
+		if isZeroField(c, f) {
+			errs.Add("%s: %s: %s requires modifier %q", loc, verb, method, strings.ToLower(f))
+		}
+	}
+
+	if spec.artifact && c.Artifact == "" {
+		errs.Add("%s: %s: %s is an artifact-producing method; set artifact: <path>", loc, verb, method)
+	}
 }
 
 // collectCheckRefs returns every ${NAME[:arg]} key referenced across every

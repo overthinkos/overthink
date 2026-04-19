@@ -136,7 +136,7 @@ func (c *VNCClient) handshake(password string) error {
 		}
 	case 2: // VNC auth
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `ov vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `ov test vnc passwd <image>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -325,7 +325,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSVnc, vencryptX509Vnc:
 		// VNC DES challenge-response inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `ov vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `ov test vnc passwd <image>` to set a password")
 		}
 		if err := c.vncAuth(password); err != nil {
 			return err
@@ -340,7 +340,7 @@ func (c *VNCClient) vencryptHandshake(password string) error {
 	case vencryptTLSPlain, vencryptX509Plain:
 		// Plain username/password inside TLS.
 		if password == "" {
-			return fmt.Errorf("VNC server requires authentication; run `ov vnc passwd <image>` to set a password")
+			return fmt.Errorf("VNC server requires authentication; run `ov test vnc passwd <image>` to set a password")
 		}
 		username := "user"
 		if err := binary.Write(c.conn, binary.BigEndian, uint32(len(username))); err != nil {

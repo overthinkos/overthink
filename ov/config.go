@@ -261,21 +261,21 @@ func (img *ResolvedImage) SupportsBuild(format string) bool {
 	return false
 }
 
-// LoadConfig reads and parses image.yml, then merges deploy.yml overrides.
+// LoadConfig reads and parses image.yml — the build-mode input.
+//
+// Previously this function also merged deploy.yml overrides via
+// MergeDeployOverlay. That was an architectural bug: build-mode commands
+// (ov image build/generate/inspect/validate/list/merge/pull/…) would bake
+// deploy-mode state into Containerfiles and OCI labels (e.g., port remaps
+// from deploy.yml showed up as the canonical port list in the built image's
+// org.overthinkos.ports label). Deploy-mode commands never called LoadConfig
+// in the first place — they read OCI labels + deploy.yml directly — so
+// dropping the merge is a clean mode-split fix with zero deploy-mode impact.
+//
+// If a future caller genuinely needs the merged view, call
+// `LoadDeployConfig` + `MergeDeployOverlay` explicitly after LoadConfig.
 func LoadConfig(dir string) (*Config, error) {
-	cfg, err := LoadConfigRaw(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Merge per-deployment overrides from deploy.yml
-	dc, dcErr := LoadDeployConfig()
-	if dcErr != nil {
-		return nil, dcErr
-	}
-	MergeDeployOverlay(cfg, dc)
-
-	return cfg, nil
+	return LoadConfigRaw(dir)
 }
 
 // LoadConfigRaw reads and parses image.yml without merging deploy.yml overrides.

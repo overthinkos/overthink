@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-160 layers. 41 image definitions (31 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 244 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+162 layers. 42 image definitions (32 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 247 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -121,7 +121,7 @@ Normally a container runs *inside* an operating system. Bootc flips this: the co
 
 ### Containers That Become Virtual Machines
 
-This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `image.yml`, use it everywhere.
+This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `image.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-images:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov:vm` for VM lifecycle + bootc-specific build caveats.
 
 ## Install
 
@@ -173,15 +173,16 @@ ov start jupyter
 # Configure as a systemd service (quadlet + secrets + encrypted volumes)
 ov config jupyter
 
-# Build a bootable VM disk image
-ov vm build openclaw-browser-bootc --type qcow2
-ov vm create openclaw-browser-bootc --ram 8G --cpus 4
-ov vm start openclaw-browser-bootc
+# Build a bootable VM disk image (selkies-desktop-bootc is the canonical bootc example)
+ov image build selkies-desktop-bootc
+ov vm build selkies-desktop-bootc --type qcow2
+ov vm create selkies-desktop-bootc
+ov vm start selkies-desktop-bootc
 ```
 
 ## The Layer Library
 
-160 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+162 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -193,7 +194,7 @@ ov vm start openclaw-browser-bootc
 | **AI & Agents** | `openclaw`, `hermes`, `hermes-full`, `hermes-playwright`, `openwebui`, `claude-code`, `codex`, `gemini` | AI gateways, agents, LLM UIs, and coding CLIs |
 | **Applications** | `immich`, `immich-ml`, `github-runner`, `steam`, `heroic`, `vscode`, `dev-tools`, `filebrowser`, `devops-tools` | End-user apps and workstation tooling |
 | **Desktop Utilities** | `ffmpeg`, `wf-recorder`, `wl-record-pixelflux`, `wl-screenshot-pixelflux`, `wl-overlay`, `asciinema`, `libnotify`, `fastfetch` | Multimedia, recording, overlays, notifications |
-| **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting` | Agent forwarding, encrypted storage, nesting |
+| **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting`, `tailscale`, `keepassxc` | Agent forwarding, encrypted storage, mesh VPN, password manager, nesting |
 | **OS / Bootc** | `bootc-base`, `bootc-config`, `cloud-init`, `os-config`, `os-system-files`, `qemu-guest-agent`, `socat` | Bootable disk image and VM integration |
 
 **Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `niri-desktop`, `x11-desktop`, `mutter-desktop`, `kwin-desktop`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-layers:<name>` skill for the exact composition recipe.
@@ -253,7 +254,7 @@ ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
 ov test cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
 ov test wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
-ov vm build openclaw-browser-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
+ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
 ```
 
 ### Pulling images from registries

@@ -14,7 +14,43 @@ tasks:
       ExecStart=
       ExecStart=-/sbin/agetty --autologin user --noclear %I $TERM
 
+  # User-level systemd unit that runs supervisord under the `user` session.
+  # The selkies-desktop sublayers (labwc/waybar-labwc/selkies/chrome/swaync)
+  # ship their orchestration as supervisord `[program:*]` fragments assembled
+  # into /etc/supervisord.conf at build time. On bootc systemd is PID 1 and
+  # nothing wraps supervisord by default — without this unit the desktop tier
+  # never starts at boot. On non-bootc container images `ENTRYPOINT=supervisord`
+  # already handles the same job, so this unit is bootc-only and intentionally
+  # lives in `bootc-config` (which is only pulled into bootc images).
+  - write: /etc/systemd/user/supervisord.service
+    user: root
+    mode: "0644"
+    content: |
+      [Unit]
+      Description=Supervisord (user session — bootc desktop autostart)
+      After=default.target
+      ConditionFileIsExecutable=/usr/bin/supervisord
+      ConditionPathExists=/etc/supervisord.conf
+
+      [Service]
+      Type=simple
+      # Redirect stdout/stderr to real files so that /dev/fd/1 (used as
+      # stdout_logfile=/dev/fd/1 by many supervisord program fragments)
+      # points to an openable file. With the default journal pipe, opening
+      # /dev/fd/1 returns ENXIO and every program enters FATAL state with
+      # "unknown error making dispatchers for <name>: ENXIO".
+      StandardOutput=file:/tmp/supervisord-stdout.log
+      StandardError=file:/tmp/supervisord-stderr.log
+      ExecStart=/usr/bin/supervisord -c /etc/supervisord.conf -n
+      Restart=on-failure
+      RestartSec=3
+
+      [Install]
+      WantedBy=default.target
+
   # Default to graphical target; enable user-global PipeWire + WirePlumber.
+  # Enable supervisord.service globally (per-user --global enable) so that
+  # any user session started via tty1 autologin brings the desktop tier up.
   # Each cmd is suffixed `|| true` because the directives succeed on live
   # systems and may fail harmlessly during offline bootc builds.
   - cmd: systemctl set-default graphical.target 2>/dev/null || true
@@ -22,4 +58,15 @@ tasks:
   - cmd: |
       systemctl --global enable pipewire.socket 2>/dev/null || true
       systemctl --global enable wireplumber.service 2>/dev/null || true
+      systemctl --global enable supervisord.service 2>/dev/null || true
+    user: root
+
+  # Belt-and-suspenders: enable linger for `user` so systemd --user starts
+  # even without a tty1 autologin session (e.g. diagnostics via SSH-only).
+  # loginctl can't run in an offline bootc build, so we plant the sentinel
+  # file directly (empty file; existence alone enables linger).
+  - mkdir: /var/lib/systemd/linger
+    user: root
+    mode: "0755"
+  - cmd: touch /var/lib/systemd/linger/user
     user: root

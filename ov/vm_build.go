@@ -153,11 +153,19 @@ func (c *VmBuildCmd) Run() error {
 	}
 	fmt.Fprintf(os.Stderr, "Running bootc install to-disk via %s...\n", strings.Join(engineCmd, " "))
 
-	// Build container run args
+	// Build container run args. `-v /dev:/dev` is required so that the
+	// privileged container shares the host's /dev namespace — `bootc install
+	// to-disk --via-loopback` calls `losetup` which needs to create new
+	// `/dev/loopN` device nodes via `/dev/loop-control`. Without the host
+	// /dev mount, the container's default tmpfs /dev has `/dev/loop-control`
+	// but new loop devices created by the kernel are invisible to the
+	// container (different mount namespace), producing
+	// `losetup: failed to set up loop device: No such file or directory`.
 	args := []string{
 		"run", "--rm", "--privileged",
 		"--pid=host",
 		"--security-opt", "label=type:unconfined_t",
+		"-v", "/dev:/dev",
 		"-v", rawDiskPath + ":/output/disk.raw",
 		"-v", "/var/lib/containers:/var/lib/containers",
 	}

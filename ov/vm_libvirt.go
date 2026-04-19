@@ -155,7 +155,7 @@ func libvirtSessionSocket() string {
 }
 
 // buildDomainXML constructs a minimal libvirt domain XML for a VM.
-func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu bool, smbiosCredentials ...string) string {
+func buildDomainXML(name, qcow2 string, ramMB, cpus, sshPort int, ports []string, gpu bool, smbiosCredentials ...string) string {
 	var b strings.Builder
 
 	b.WriteString(fmt.Sprintf(`<domain type='kvm'>
@@ -181,9 +181,10 @@ func buildDomainXML(name, qcow2 string, ramMB, cpus int, ports []string, gpu boo
       <model type='virtio'/>
 `, name, ramMB, cpus, qcow2))
 
-	// Port forwards
+	// Port forwards: SSH mapping comes from image.yml `vm.ssh_port`
+	// (default 2222) — published ports from the image labels follow.
 	b.WriteString("      <portForward proto='tcp'>\n")
-	b.WriteString("        <range start='22' to='2222'/>\n")
+	b.WriteString(fmt.Sprintf("        <range start='22' to='%d'/>\n", sshPort))
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) == 2 {

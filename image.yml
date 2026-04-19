@@ -557,6 +557,40 @@ images:
     platforms:
       - linux/amd64
 
+  selkies-desktop-bootc:
+    base: "quay.io/fedora/fedora-bootc:43"
+    bootc: true
+    distro: ["fedora:43", fedora]
+    layers:
+      - agent-forwarding
+      - bootc-base
+      - rpmfusion
+      - selkies-desktop
+      - tailscale
+      - keepassxc
+      - dbus
+      - ov
+    platforms:
+      - linux/amd64
+    # No 2222:2222 published: bootc runs systemd's sshd on port 22 (enabled via
+    # the sshd layer's system_services:), so the supervisord-only sshd-wrapper
+    # on 2222 is inactive. vm.ssh_port below forwards host 2250 → VM 22.
+    # Host ports shifted to 13xxx/19xxx ranges to avoid collision with any
+    # running `ov-selkies-desktop*` container on the standard 3000/9222/9224.
+    ports:
+      - "13000:3000"
+      - "19222:9222"
+      - "19224:9224"
+    vm:
+      ssh_port: 2250
+      disk_size: "40 GiB"
+      ram: "8G"
+      cpus: 4
+    tests:
+      - id: selkies-desktop-bootc-binaries
+        command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
+        exit_status: 0
+
   immich-ml:
     base: fedora
     layers:

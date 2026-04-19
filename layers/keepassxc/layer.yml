@@ -1,0 +1,14 @@
+description: KeePassXC password manager
+
+rpm:
+  packages:
+    - keepassxc
+
+pac:
+  packages:
+    - keepassxc
+
+tests:
+  - id: keepassxc-binary
+    command: test -x /usr/bin/keepassxc
+    exit_status: 0

@@ -132,6 +132,7 @@ func (c *VmCreateCmd) Run() error {
 	// Resolve VM settings from image labels (+ deploy.yml overlay).
 	ram := "4G"
 	cpus := 2
+	sshPort := 2222
 	var ports []string
 	var libvirtSnippets []string
 
@@ -144,6 +145,9 @@ func (c *VmCreateCmd) Run() error {
 		if meta.Vm != nil {
 			ram = meta.Vm.Ram
 			cpus = meta.Vm.Cpus
+			if meta.Vm.SshPort != 0 {
+				sshPort = meta.Vm.SshPort
+			}
 		}
 		ports = meta.Ports
 		libvirtSnippets = meta.Libvirt
@@ -177,7 +181,7 @@ func (c *VmCreateCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		if err := c.createLibvirt(name, qcow2, ram, cpus, ports, sshPubKey); err != nil {
+		if err := c.createLibvirt(name, qcow2, ram, cpus, sshPort, ports, sshPubKey); err != nil {
 			return err
 		}
 	case "qemu":
@@ -188,7 +192,7 @@ func (c *VmCreateCmd) Run() error {
 		if len(libvirtSnippets) > 0 {
 			fmt.Fprintf(os.Stderr, "Warning: libvirt snippets are not supported with the QEMU backend (skipping %d snippet(s))\n", len(libvirtSnippets))
 		}
-		return c.createQemu(name, qcow2, ram, cpus, ports, sshPubKey)
+		return c.createQemu(name, qcow2, ram, cpus, sshPort, ports, sshPubKey)
 	}
 
 	// Inject libvirt XML snippets for libvirt backend
@@ -201,7 +205,7 @@ func (c *VmCreateCmd) Run() error {
 	return nil
 }
 
-func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []string, sshPubKey string) error {
+func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
 	ramMB := parseRAMtoMB(ram)
 
 	var detected DetectedDevices
@@ -219,7 +223,7 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []s
 		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
 	}
 
-	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, ports, gpu, smbiosCreds...)
+	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, sshPort, ports, gpu, smbiosCreds...)
 
 	conn, err := connectLibvirt()
 	if err != nil {
@@ -236,7 +240,7 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus int, ports []s
 	return nil
 }
 
-func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []string, sshPubKey string) error {
+func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
 	dir, err := vmDir()
 	if err != nil {
 		return err
@@ -272,8 +276,9 @@ func (c *VmCreateCmd) createQemu(name, qcow2, ram string, cpus int, ports []stri
 		fmt.Fprintf(os.Stderr, "Injecting SSH key via SMBIOS credential\n")
 	}
 
-	// Port forwarding
-	hostfwds := "hostfwd=tcp::2222-:22"
+	// Port forwarding: SSH mapping comes from image.yml `vm.ssh_port`
+	// (default 2222) — published ports from the image labels follow.
+	hostfwds := fmt.Sprintf("hostfwd=tcp::%d-:22", sshPort)
 	for _, p := range ports {
 		parts := strings.SplitN(p, ":", 2)
 		if len(parts) == 2 {

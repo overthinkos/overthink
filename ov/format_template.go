@@ -80,6 +80,19 @@ var templateFuncs = template.FuncMap{
 
 	// printf is a template-accessible Sprintf.
 	"printf": fmt.Sprintf,
+
+	// anyRepoHasURL reports whether any repo entry declares a `url` key
+	// (i.e. needs `dnf5 config-manager addrepo`). Lets install_template
+	// conditionally install `dnf5-plugins` — necessary on bootc bases
+	// which strip it from the default install.
+	"anyRepoHasURL": func(repos []map[string]interface{}) bool {
+		for _, r := range repos {
+			if u, ok := r["url"]; ok && fmt.Sprint(u) != "" {
+				return true
+			}
+		}
+		return false
+	},
 }
 
 // InstallContext provides data to format install templates.

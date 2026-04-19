@@ -373,6 +373,13 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Emit init system stages (fragment assembly or file copy)
 	// When a child image adds services, include parent-provided configs
 	// so the assembled config contains all services from the full chain.
+	//
+	// Track which init defs actually received fragment content. When a layer
+	// chain only contributes via `system_services:` (plain unit names), no
+	// fragment files are COPY'd into the scratch stage — emitting an empty
+	// `FROM scratch AS <stage>` plus the `assembly_template` RUN that bind-
+	// mounts from it would fail at build time with "no such file or directory".
+	initHasFragments := map[string]bool{}
 	for initName, def := range activeInits {
 		initLayerOrder := layerOrder
 		if !img.IsExternalBase {
@@ -383,6 +390,30 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 		if err := g.generateInitFragments(imageName, initName, def, initLayerOrder); err != nil {
 			return err
+		}
+
+		// Pre-scan the layer chain to decide whether this init has any fragment
+		// content. If not, skip both the scratch stage emission and the
+		// assembly_template RUN (see second loop below).
+		hasFragments := false
+		for _, layerName := range initLayerOrder {
+			layer := g.Layers[layerName]
+			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
+				hasFragments = true
+				break
+			}
+			if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
+				hasFragments = true
+				break
+			}
+			if def.Model == "file_copy" && len(layer.ServiceFiles()) > 0 {
+				hasFragments = true
+				break
+			}
+		}
+		initHasFragments[initName] = hasFragments
+		if !hasFragments {
+			continue
 		}
 
 		// Emit scratch stage with COPY lines for fragments
@@ -533,16 +564,22 @@ func (g *Generator) generateContainerfile(imageName string) error {
 
 	// Assemble init system configs (driven by build.yml init: section templates)
 	for initName, def := range activeInits {
-		assembly, err := def.RenderAssemblyTemplate()
-		if err != nil {
-			return fmt.Errorf("rendering assembly for %s: %w", initName, err)
-		}
-		if assembly != "" {
-			b.WriteString(assembly)
-			if !strings.HasSuffix(assembly, "\n") {
+		// assembly_template bind-mounts from the scratch stage emitted above;
+		// skip it when no fragments were contributed (stage was not emitted).
+		// system_enable_template and post_assembly_template are independent
+		// and still run below.
+		if initHasFragments[initName] {
+			assembly, err := def.RenderAssemblyTemplate()
+			if err != nil {
+				return fmt.Errorf("rendering assembly for %s: %w", initName, err)
+			}
+			if assembly != "" {
+				b.WriteString(assembly)
+				if !strings.HasSuffix(assembly, "\n") {
+					b.WriteString("\n")
+				}
 				b.WriteString("\n")
 			}
-			b.WriteString("\n")
 		}
 
 		// System-level service enablement (e.g., systemctl enable sshd)

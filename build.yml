@@ -44,6 +44,9 @@ distro:
           {{- range .Repos}}{{if .rpm}}
               dnf install -y {{quote .rpm}} && \
           {{- end}}{{end}}
+          {{- if or (anyRepoHasURL .Repos) .Copr}}
+              dnf install -y dnf5-plugins && \
+          {{- end}}
           {{- range .Repos}}{{if .url}}
               dnf5 config-manager addrepo --from-repofile={{quote .url}} 2>/dev/null || true && \
               dnf5 config-manager setopt {{quote (printf "%s.enabled=0" .name)}} && \

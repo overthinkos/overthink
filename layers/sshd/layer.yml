@@ -57,9 +57,12 @@ tests:
     installed: true
   # /etc/sudoers.d/* is root:root 0750 — unreadable to the non-root user the
   # disposable test runs as. Verify via `sudo -n -l` instead, which exercises
-  # the rule's effect without needing to stat the file directly.
+  # the rule's effect without needing to stat the file directly. Bootc images
+  # keep USER=root (systemd handles user sessions), so drop to `user` first
+  # when running as root so we always probe the uid=1000 sudoers entry.
   - id: sudoers-ov-user
-    command: sudo -n -l
+    command: |
+      if [ "$(id -u)" = "0" ]; then runuser -l user -s /bin/bash -c 'sudo -n -l'; else sudo -n -l; fi
     exit_status: 0
     stdout:
       - contains: "NOPASSWD"

@@ -47,6 +47,7 @@ You have all the time in the world and taking the time to get things properly do
 | Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
 | Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc/mcp), runtime variables, deploy.yml overlay, 10 authoring gotchas |
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
+| Bootc-specific boot wiring (tty1 autologin, graphical target, systemd-user supervisord, linger sentinel, external-base `distro:` gotcha, `/dev:/dev` mount, `vm.ssh_port` plumbing, dual USER-context tests) | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm`, `/ov:generate`, `/ov:image`, `/ov:test` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 

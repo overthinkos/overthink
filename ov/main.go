@@ -21,12 +21,22 @@ type CLI struct {
 	// ctx.Run() so every existing call site picks up the change.
 	Dir string `short:"C" long:"dir" env:"OV_PROJECT_DIR" help:"Project directory containing image.yml (default: cwd)" type:"path"`
 
+	// Repo points ov at a remote git repo as the project source instead
+	// of cwd / --dir. Spec is OWNER/REPO[@REF] (auto-prefixed with
+	// github.com/) or HOST/OWNER/REPO[@REF]. The literal "default" expands
+	// to overthinkos/overthink. main() resolves this to a local cache path
+	// (~/.cache/ov/repos/...) and falls through into the existing --dir
+	// chdir block, so every os.Getwd() site Just Works. Mutually exclusive
+	// with --dir.
+	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read image.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
+
 	Alias    AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Cmd      CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config   ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
 	Deploy   DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
 	Doctor   DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Image    ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
+	Layer    LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
 	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Record   RecordCmd       `cmd:"" help:"Record terminal sessions or desktop video"`
@@ -488,7 +498,9 @@ func (c *ListVolumesCmd) Run() error {
 
 // NewCmd groups scaffolding subcommands
 type NewCmd struct {
-	Layer NewLayerCmd `cmd:"" help:"Scaffold a layer directory"`
+	Layer   NewLayerCmd   `cmd:"" help:"Scaffold a layer directory"`
+	Project NewProjectCmd `cmd:"" help:"Scaffold a fresh ov project (image.yml + build.yml ref + layers/)"`
+	Image   NewImageCmd   `cmd:"" help:"Add a new image entry to image.yml"`
 }
 
 // NewLayerCmd scaffolds a new layer
@@ -653,10 +665,26 @@ func main() {
 		os.Setenv("OV_KDBX_PATH", cli.Kdbx)
 	}
 
-	// Honour -C / --dir / OV_PROJECT_DIR before dispatch. Chdir is the
-	// single-point intervention: every build-mode command reaches project
-	// files through os.Getwd(), so one chdir here propagates to all of them
-	// without touching 10+ call sites.
+	// Resolve --repo before --dir. Both end up driving the same chdir
+	// intervention below. Mutually exclusive: --repo would race with --dir.
+	if cli.Repo != "" {
+		if cli.Dir != "" {
+			fmt.Fprintln(os.Stderr, "ov: --repo and --dir are mutually exclusive")
+			os.Exit(1)
+		}
+		path, err := ResolveProjectRepo(cli.Repo)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ov: cannot resolve --repo %q: %v\n", cli.Repo, err)
+			os.Exit(1)
+		}
+		cli.Dir = path
+	}
+
+	// Honour -C / --dir / OV_PROJECT_DIR (and --repo, after the resolver
+	// above) before dispatch. Chdir is the single-point intervention:
+	// every build-mode command reaches project files through os.Getwd(),
+	// so one chdir here propagates to all of them without touching 10+
+	// call sites.
 	if cli.Dir != "" {
 		if err := os.Chdir(cli.Dir); err != nil {
 			fmt.Fprintf(os.Stderr, "ov: cannot chdir to --dir %q: %v\n", cli.Dir, err)

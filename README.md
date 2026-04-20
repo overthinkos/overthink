@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-162 layers. 43 image definitions (33 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 248 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+163 layers. 43 image definitions (33 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 249 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -186,7 +186,7 @@ ov vm start selkies-desktop-bootc
 
 ## The Layer Library
 
-162 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+163 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -235,21 +235,28 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 23 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 24 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
+| **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
+| **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov:image` "Authoring" table + `/ov:new`, `/ov:layer` |
 | **Deployment** | `config`, `deploy`, `start`, `stop`, `update`, `remove` | `/ov:config`, `/ov:deploy`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
-| **MCP gateway (cross-mode)** | `mcp serve` (176 tools from Kong reflection; Streamable HTTP / stdio; `--read-only` filter) | `/ov:mcp` Part 2 + `/ov-layers:ov-mcp` for the deployment layer |
+| **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov:mcp` + `/ov-layers:ov-mcp` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
 | **Misc** | `version` | `/ov:version` |
 
-**Global flags** (apply to every command): `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` overrides the project directory (where `image.yml` lives) for build-mode commands — honoured before Kong dispatches the subcommand. Load-bearing for running `ov mcp serve` inside a container with the project bind-mounted at `/project`. `--kdbx <path>` overrides the KeePass credential store location.
+**Global flags** (apply to every command):
+
+- `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — override the project directory (where `image.yml` lives) for build-mode commands. Honoured before Kong dispatches the subcommand.
+- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `image.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Mutually exclusive with `--dir`. See `/ov:image` "Project directory resolution".
+- `--kdbx <path>` — override the KeePass credential store location.
+
+Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/project` with `OV_PROJECT_DIR=/project` (the `ov-mcp` layer default), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. The top-level CLI never auto-fetches — only `ov mcp serve` does.
 
 A few sample invocations:
 
@@ -367,7 +374,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 248 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
+This gives Claude Code access to 249 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
 
 The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov test mcp` (see `/ov:mcp`).
 

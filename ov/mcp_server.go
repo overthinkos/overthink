@@ -75,9 +75,25 @@ var mcpDestructivePaths = map[string]bool{
 	"deploy.import": true,
 	"deploy.reset":  true,
 	// Image build/push/scaffold
-	"image.build":     true,
-	"image.merge":     true,
-	"image.new.layer": true,
+	"image.build":       true,
+	"image.merge":       true,
+	"image.new.layer":   true,
+	"image.new.project": true,
+	"image.new.image":   true,
+	// MCP-first authoring surface — mutates image.yml or filesystem.
+	// (image.fetch is idempotent + additive; image.cat is read-only — neither
+	// is listed.)
+	"image.set":       true,
+	"image.add-layer": true,
+	"image.rm-layer":  true,
+	"image.refresh":   true, // deletes + re-clones cache
+	"image.write":     true, // writes arbitrary file under project root
+	// Layer authoring — mutates layer.yml.
+	"layer.set":     true,
+	"layer.add-rpm": true,
+	"layer.add-deb": true,
+	"layer.add-pac": true,
+	"layer.add-aur": true,
 	// VM lifecycle
 	"vm.create":  true,
 	"vm.destroy": true,
@@ -115,14 +131,26 @@ type McpCmdGroup struct {
 }
 
 // McpServeCmd: `ov mcp serve`
+//
+// Note: this command does NOT define its own --repo flag. The top-level
+// `ov --repo OWNER/REPO mcp serve` (or env var OV_PROJECT_REPO) is the
+// supported way to pin the project repo. main() resolves the repo and
+// chdirs before dispatching, so by the time bootstrapProject() runs, the
+// cwd is already inside the cached repo. We only need a flag here for the
+// opt-out case (--no-default-repo), since auto-fallback is unique to this
+// command.
 type McpServeCmd struct {
-	Listen   string `long:"listen" default:":18765" help:"TCP listen address for Streamable HTTP transport"`
-	Path     string `long:"path" default:"/mcp" help:"HTTP path prefix for the MCP endpoint"`
-	Stdio    bool   `long:"stdio" help:"Use stdio transport instead of HTTP (for editor/LLM integration)"`
-	ReadOnly bool   `long:"read-only" help:"Skip registration of tools that mutate state"`
+	Listen        string `long:"listen" default:":18765" help:"TCP listen address for Streamable HTTP transport"`
+	Path          string `long:"path" default:"/mcp" help:"HTTP path prefix for the MCP endpoint"`
+	Stdio         bool   `long:"stdio" help:"Use stdio transport instead of HTTP (for editor/LLM integration)"`
+	ReadOnly      bool   `long:"read-only" help:"Skip registration of tools that mutate state"`
+	NoDefaultRepo bool   `long:"no-default-repo" help:"Disable auto-fallback to overthinkos/overthink; require --dir / --repo / local image.yml"`
 }
 
 func (c *McpServeCmd) Run() error {
+	if err := c.bootstrapProject(); err != nil {
+		return err
+	}
 	server, err := buildMcpServer(c.ReadOnly)
 	if err != nil {
 		return err
@@ -147,6 +175,48 @@ func (c *McpServeCmd) Run() error {
 // mcpRegisteredToolCount is only used for the startup banner. We keep a shadow
 // counter because the SDK doesn't expose a tool count on *mcp.Server.
 var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCount }
+
+// bootstrapProject is the only command that auto-fetches a remote project.
+// Top-level CLI stays opt-in (no --repo means use cwd); ov mcp serve is the
+// designated exception, because an MCP server with no project is useless.
+//
+// Precedence:
+//   1. Top-level --dir / OV_PROJECT_DIR set → main() already chdir'd, do nothing.
+//   2. Top-level --repo / OV_PROJECT_REPO set → main() already resolved + chdir'd.
+//   3. Local image.yml in cwd → use cwd as-is.
+//   4. None of the above → silently chdir into the overthinkos/overthink cache,
+//      unless --no-default-repo is set (then hard-fail with a clear message).
+func (c *McpServeCmd) bootstrapProject() error {
+	// Cases 1 + 2: top-level Repo / Dir are not visible from this command's
+	// receiver, but main() has already chdir'd if either was set. We detect
+	// those cases via the env vars (Kong populates them from the flags
+	// before main() ran).
+	if os.Getenv("OV_PROJECT_DIR") != "" || os.Getenv("OV_PROJECT_REPO") != "" {
+		return nil
+	}
+
+	// Case 3: a local image.yml exists in cwd.
+	if _, err := os.Stat("image.yml"); err == nil {
+		return nil
+	}
+
+	// Case 4: auto-fallback to overthinkos/overthink (or hard-fail).
+	if c.NoDefaultRepo {
+		return fmt.Errorf("ov mcp serve: no project source found. " +
+			"Set OV_PROJECT_DIR / OV_PROJECT_REPO, pass --dir / --repo, or place an image.yml in cwd " +
+			"(remove --no-default-repo to auto-fall back to overthinkos/overthink)")
+	}
+	path, err := ResolveProjectRepo("default")
+	if err != nil {
+		return fmt.Errorf("auto-fetching default project repo (%s): %w", DefaultProjectRepo, err)
+	}
+	if err := os.Chdir(path); err != nil {
+		return fmt.Errorf("chdir to %s: %w", path, err)
+	}
+	fmt.Fprintf(os.Stderr, "ov mcp: no local project found; using default repo %s (%s)\n",
+		DefaultProjectRepo, path)
+	return nil
+}
 
 var mcpLastRegisteredCount int
 

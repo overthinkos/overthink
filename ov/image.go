@@ -21,6 +21,16 @@ type ImageCmd struct {
 	Pull     ImagePullCmd `cmd:"" help:"Pull an image from its registry into local storage"`
 	Test     ImageTestCmd `cmd:"" help:"Run declarative tests against a freshly-run container from a built image"`
 	Validate ValidateCmd  `cmd:"" help:"Check image.yml + layers, exit 0 or 1"`
+
+	// Authoring verbs — added so the MCP tool surface (auto-reflected from
+	// Kong) can author a project from scratch over RPC.
+	Set      ImageSetCmd      `cmd:"" help:"Set a value in image.yml by dot-path (e.g. images.foo.base fedora)"`
+	AddLayer ImageAddLayerCmd `cmd:"add-layer" help:"Append a layer to an image's layers: list (idempotent)"`
+	RmLayer  ImageRmLayerCmd  `cmd:"rm-layer" help:"Remove a layer from an image's layers: list"`
+	Fetch    ImageFetchCmd    `cmd:"" help:"Pre-prime the remote-repo cache (default: overthinkos/overthink)"`
+	Refresh  ImageRefreshCmd  `cmd:"" help:"Force re-clone of a remote project repo"`
+	Write    ImageWriteCmd    `cmd:"" help:"Write file contents under the project root (escape hatch for free-form files)"`
+	Cat      ImageCatCmd      `cmd:"" help:"Print file contents from under the project root"`
 }
 
 // ImagePullCmd fetches an image from its registry into the local container

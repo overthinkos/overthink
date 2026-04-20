@@ -62,3 +62,32 @@ tasks:
       find /tmp/grafanactl -name "grafanactl" | head -1 | xargs -I{} mv {} /usr/local/bin/grafanactl
       chmod +x /usr/local/bin/grafanactl && rm -rf /tmp/grafanactl.tar.gz /tmp/grafanactl
     user: root
+
+tests:
+  - id: mcp-grafana-binary
+    file: /usr/local/bin/mcp-grafana
+    exists: true
+  - id: logcli-binary
+    file: /usr/local/bin/logcli
+    exists: true
+  - id: logcli-version
+    command: /usr/local/bin/logcli --version
+    exit_status: 0
+  - id: promtool-binary
+    file: /usr/local/bin/promtool
+    exists: true
+  - id: promtool-version
+    command: /usr/local/bin/promtool --version
+    exit_status: 0
+  - id: mimirtool-binary
+    file: /usr/local/bin/mimirtool
+    exists: true
+  - id: tempo-cli-binary
+    file: /usr/local/bin/tempo-cli
+    exists: true
+  - id: tanka-binary
+    file: /usr/local/bin/tk
+    exists: true
+  - id: grafanactl-binary
+    file: /usr/local/bin/grafanactl
+    exists: true

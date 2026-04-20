@@ -6,12 +6,34 @@ rpm:
     - guestfs-tools
 
 tasks:
-  # actionlint: GitHub release URL is dynamically looked up because upstream
-  # names files by version and architecture. Stays in cmd for the API call.
+  # actionlint: version-pinned to avoid GitHub API rate limits and the
+  # greedy-regex bug that broke URL extraction against single-line JSON.
+  # Uses /releases/download/<tag>/<asset> which is stable and cacheable.
   - cmd: |
-      URL=$(curl -fsSL https://api.github.com/repos/rhysd/actionlint/releases/latest | grep "browser_download_url.*linux_${ARCH}.tar.gz\"" | cut -d'"' -f4)
-      curl -fsSL "$URL" -o /tmp/actionlint.tar.gz
+      set -e
+      ACTIONLINT_VERSION="1.7.12"
+      BUILD_ARCH=$(uname -m)
+      case "$BUILD_ARCH" in
+        x86_64) ARCH=amd64 ;;
+        aarch64) ARCH=arm64 ;;
+        *) echo "unsupported arch: $BUILD_ARCH" >&2; exit 1 ;;
+      esac
+      curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_${ARCH}.tar.gz" -o /tmp/actionlint.tar.gz
       tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin/ actionlint
       chmod +x /usr/local/bin/actionlint
       rm -f /tmp/actionlint.tar.gz
     user: root
+
+tests:
+  - id: act-binary
+    file: /usr/bin/act
+    exists: true
+  - id: act-version
+    command: /usr/bin/act --version
+    exit_status: 0
+  - id: actionlint-binary
+    file: /usr/local/bin/actionlint
+    exists: true
+  - id: actionlint-version
+    command: /usr/local/bin/actionlint -version
+    exit_status: 0

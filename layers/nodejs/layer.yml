@@ -19,3 +19,17 @@ pac:
   packages:
     - nodejs
     - npm
+
+tests:
+  - id: node-binary
+    file: /usr/bin/node
+    exists: true
+  - id: node-version
+    command: /usr/bin/node --version
+    exit_status: 0
+  - id: npm-binary
+    file: /usr/bin/npm
+    exists: true
+  - id: npm-version
+    command: /usr/bin/npm --version
+    exit_status: 0

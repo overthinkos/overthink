@@ -7,3 +7,11 @@ rpm:
 pac:
   packages:
     - gocryptfs
+
+tests:
+  - id: gocryptfs-binary
+    file: /usr/bin/gocryptfs
+    exists: true
+  - id: gocryptfs-version
+    command: /usr/bin/gocryptfs -version
+    exit_status: 0

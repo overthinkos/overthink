@@ -239,8 +239,9 @@ type Task struct {
 	To      string            `yaml:"to,omitempty"`      // destination (copy, download)
 	Target  string            `yaml:"target,omitempty"`  // symlink target
 	Content string            `yaml:"content,omitempty"` // inline content for write
-	Extract string            `yaml:"extract,omitempty"` // archive format for download
-	Include []string          `yaml:"include,omitempty"` // path filter for download
+	Extract         string   `yaml:"extract,omitempty"`          // archive format for download
+	Include         []string `yaml:"include,omitempty"`          // path filter for download
+	StripComponents int      `yaml:"strip_components,omitempty"` // strip N leading path components from tar entries
 	Env     map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
 	Caps    string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
 	Comment string            `yaml:"comment,omitempty"` // optional Containerfile comment

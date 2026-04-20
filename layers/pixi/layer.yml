@@ -12,3 +12,11 @@ tasks:
     extract: tar.gz
     to: /usr/local/bin
     user: root
+
+tests:
+  - id: pixi-binary
+    file: /usr/local/bin/pixi
+    exists: true
+  - id: pixi-version
+    command: /usr/local/bin/pixi --version
+    exit_status: 0

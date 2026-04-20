@@ -61,3 +61,23 @@ pac:
     - make
     - ninja
     - pkgconf
+
+tests:
+  - id: gcc-binary
+    file: /usr/bin/gcc
+    exists: true
+  - id: gcc-version
+    command: /usr/bin/gcc --version
+    exit_status: 0
+  - id: make-binary
+    file: /usr/bin/make
+    exists: true
+  - id: make-version
+    command: /usr/bin/make --version
+    exit_status: 0
+  - id: cmake-binary
+    file: /usr/bin/cmake
+    exists: true
+  - id: cmake-version
+    command: /usr/bin/cmake --version
+    exit_status: 0

@@ -13,3 +13,23 @@ tasks:
     to: /usr/bin/k3d
     mode: "0755"
     user: root
+
+tests:
+  - id: kubectl-binary
+    file: /usr/bin/kubectl
+    exists: true
+  - id: kubectl-version
+    command: /usr/bin/kubectl version --client
+    exit_status: 0
+  - id: helm-binary
+    file: /usr/bin/helm
+    exists: true
+  - id: helm-version
+    command: /usr/bin/helm version --short
+    exit_status: 0
+  - id: k3d-binary
+    file: /usr/bin/k3d
+    exists: true
+  - id: k3d-version
+    command: /usr/bin/k3d version
+    exit_status: 0

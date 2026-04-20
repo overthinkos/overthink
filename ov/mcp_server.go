@@ -180,32 +180,34 @@ var mcpRegisteredToolCount = func(*mcp.Server) int { return mcpLastRegisteredCou
 // Top-level CLI stays opt-in (no --repo means use cwd); ov mcp serve is the
 // designated exception, because an MCP server with no project is useless.
 //
-// Precedence:
-//   1. Top-level --dir / OV_PROJECT_DIR set → main() already chdir'd, do nothing.
-//   2. Top-level --repo / OV_PROJECT_REPO set → main() already resolved + chdir'd.
-//   3. Local image.yml in cwd → use cwd as-is.
-//   4. None of the above → silently chdir into the overthinkos/overthink cache,
-//      unless --no-default-repo is set (then hard-fail with a clear message).
+// Resolution order (after main() has already chdir'd for --dir/--repo if set):
+//  1. image.yml exists in cwd → use cwd (covers explicit --dir / OV_PROJECT_DIR
+//     with a real checkout, --repo with a cloned cache, and ambient cwd).
+//  2. --no-default-repo → hard-fail with guidance.
+//  3. Otherwise → silently chdir into the overthinkos/overthink cache (the
+//     "let me just inspect images" default so ov mcp serve is useful out of
+//     the box, especially in container images like fedora-coder whose
+//     /workspace bind mount may be empty at first start).
+//
+// Note: this deliberately does NOT early-return just because OV_PROJECT_DIR
+// is set. A pointed-at-but-empty /workspace (common: the dev has started the
+// container without `--bind project=<path>`) would otherwise leave the agent
+// staring at an image.yml-less directory with no recourse. Falling through to
+// the default repo makes `image.list.images` and friends work by default.
 func (c *McpServeCmd) bootstrapProject() error {
-	// Cases 1 + 2: top-level Repo / Dir are not visible from this command's
-	// receiver, but main() has already chdir'd if either was set. We detect
-	// those cases via the env vars (Kong populates them from the flags
-	// before main() ran).
-	if os.Getenv("OV_PROJECT_DIR") != "" || os.Getenv("OV_PROJECT_REPO") != "" {
-		return nil
-	}
-
-	// Case 3: a local image.yml exists in cwd.
+	// Case 1: image.yml exists in cwd (main() has already chdir'd if --dir
+	// or --repo was supplied, so cwd reflects all three origins).
 	if _, err := os.Stat("image.yml"); err == nil {
 		return nil
 	}
 
-	// Case 4: auto-fallback to overthinkos/overthink (or hard-fail).
+	// Case 2: opt-out flag set — hard-fail with guidance.
 	if c.NoDefaultRepo {
 		return fmt.Errorf("ov mcp serve: no project source found. " +
 			"Set OV_PROJECT_DIR / OV_PROJECT_REPO, pass --dir / --repo, or place an image.yml in cwd " +
 			"(remove --no-default-repo to auto-fall back to overthinkos/overthink)")
 	}
+	// Case 3: auto-fallback to overthinkos/overthink.
 	path, err := ResolveProjectRepo("default")
 	if err != nil {
 		return fmt.Errorf("auto-fetching default project repo (%s): %w", DefaultProjectRepo, err)
@@ -213,8 +215,13 @@ func (c *McpServeCmd) bootstrapProject() error {
 	if err := os.Chdir(path); err != nil {
 		return fmt.Errorf("chdir to %s: %w", path, err)
 	}
-	fmt.Fprintf(os.Stderr, "ov mcp: no local project found; using default repo %s (%s)\n",
-		DefaultProjectRepo, path)
+	// Name the reason so a confused dev reading server logs can trace it.
+	reason := "no image.yml in cwd"
+	if dir := os.Getenv("OV_PROJECT_DIR"); dir != "" {
+		reason = fmt.Sprintf("OV_PROJECT_DIR=%s has no image.yml", dir)
+	}
+	fmt.Fprintf(os.Stderr, "ov mcp: %s; falling back to default repo %s (%s)\n",
+		reason, DefaultProjectRepo, path)
 	return nil
 }
 

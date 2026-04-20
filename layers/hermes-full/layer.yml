@@ -5,6 +5,7 @@ layers:
   - claude-code
   - codex
   - gemini
+  - forgecode
   - dev-tools
   - devops-tools
   - ov

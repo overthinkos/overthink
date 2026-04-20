@@ -197,3 +197,32 @@ tasks:
       [storage.options.overlay]
       mount_program = "/usr/bin/fuse-overlayfs"
       mountopt = "nodev,fsync=0"
+
+tests:
+  - id: podman-binary
+    file: /usr/bin/podman
+    exists: true
+  - id: podman-version
+    command: /usr/bin/podman --version
+    exit_status: 0
+  - id: buildah-binary
+    file: /usr/bin/buildah
+    exists: true
+  - id: buildah-version
+    command: /usr/bin/buildah --version
+    exit_status: 0
+  - id: skopeo-binary
+    file: /usr/bin/skopeo
+    exists: true
+  - id: skopeo-version
+    command: /usr/bin/skopeo --version
+    exit_status: 0
+  - id: newuidmap-binary
+    file: /usr/bin/newuidmap
+    exists: true
+  - id: tailscale-binary
+    file: /usr/bin/tailscale
+    exists: true
+  - id: tailscale-version
+    command: /usr/bin/tailscale version
+    exit_status: 0

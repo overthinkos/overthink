@@ -4,3 +4,17 @@ depends:
 tasks:
   - cmd: cargo install taplo-cli --locked
     user: "${USER}"
+
+tests:
+  - id: taplo-binary
+    file: ${HOME}/.cargo/bin/taplo
+    exists: true
+  - id: taplo-version
+    command: ${HOME}/.cargo/bin/taplo --version
+    exit_status: 0
+  - id: pre-commit-binary
+    file: ${HOME}/.pixi/envs/default/bin/pre-commit
+    exists: true
+  - id: pre-commit-version
+    command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
+    exit_status: 0

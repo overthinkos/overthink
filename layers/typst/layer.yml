@@ -12,3 +12,11 @@ tasks:
       chmod +x /usr/local/bin/typst
       rm -rf /tmp/typst.tar.xz /tmp/typst-*
     user: root
+
+tests:
+  - id: typst-binary
+    file: /usr/local/bin/typst
+    exists: true
+  - id: typst-version
+    command: /usr/local/bin/typst --version
+    exit_status: 0

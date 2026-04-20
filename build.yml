@@ -222,6 +222,10 @@ builder:
       FROM {{.BuilderRef}} AS {{.StageName}}
       USER {{.UID}}
       WORKDIR {{.Home}}
+      # Override NPM_CONFIG_PREFIX from the builder image so npm writes to
+      # the TARGET image's HOME (not the builder's /home/user). Without this,
+      # uid=0 target images silently get empty copy_artifacts.
+      ENV NPM_CONFIG_PREFIX={{.Home}}/.npm-global
       COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
       RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
     copy_artifacts:

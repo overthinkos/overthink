@@ -33,7 +33,7 @@ You have all the time in the world and taking the time to get things properly do
 | Subsystem | Skill |
 |-----------|-------|
 | Image family (build mode) | `/ov:image`, `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:pull` |
-| Testing (test mode) | `/ov:test` (parent router: `ov test <image>` + declarative verbs cdp/wl/dbus/vnc/mcp — see also `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`), `/ov-dev:go` (impl map: `testspec.go`, `testrun.go`, `testrun_ov_verbs.go`, `validate_tests.go`, `mcp.go`, `mcp_client.go`) |
+| Testing (test mode) | `/ov:test` (parent router + nested verbs `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`), `/ov-dev:go` for impl map |
 | Install tasks (`tasks:` verb catalog, `vars:`, `${VAR}`, YAML anchors) | `/ov:layer` (authoritative) |
 | Credentials & Secrets | `/ov:secrets`, `/ov:config` |
 | Credential-backed env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
@@ -46,11 +46,11 @@ You have all the time in the world and taking the time to get things properly do
 | Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
 | GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
 | Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
-| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` — verb catalog (file/port/command/http/package/service/process/dns/user/group/interface/kernel-param/mount/addr/matching + cdp/wl/dbus/vnc/mcp), runtime variables, deploy.yml overlay, 10 authoring gotchas |
+| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` (verb catalog, runtime variables, deploy.yml overlay, authoring gotchas) |
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
-| Bootc-specific boot wiring (tty1 autologin, graphical target, systemd-user supervisord, linger sentinel, external-base `distro:` gotcha, `/dev:/dev` mount, `vm.ssh_port` plumbing, dual USER-context tests) | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm`, `/ov:generate`, `/ov:image`, `/ov:test` |
-| Rootless nested containers & rootless VMs (kernel `mount_too_revealing()` RCA, `unmask=/proc/*`, `_CONTAINERS_USERNS_CONFIGURED=""`, `BUILDAH_ISOLATION=chroot`, subuid-fits-in-outer-userns pattern, supervisord-managed `virtqemud` / `virtnetworkd`) | `/ov-layers:container-nesting`, `/ov-layers:virtualization`, `/ov-images:selkies-desktop-ov` |
-| MCP server (`ov mcp serve`) — 190 tools auto-generated from Kong reflection including the project-scaffolding + YAML-editing + file-write authoring surface, Streamable-HTTP + stdio transports, destructive-hint annotations, `--read-only` filter, auto-fallback to `overthinkos/overthink` (opt out with `--no-default-repo`), deployed via `ov-mcp` layer with optional `/project` bind-mount | `/ov:mcp`, `/ov-layers:ov-mcp`, `/ov-dev:go` |
+| Bootc-specific boot wiring | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm` |
+| Rootless nested containers & rootless VMs | `/ov-layers:container-nesting` (kernel RCA), `/ov-layers:virtualization` (libvirt session), `/ov-images:selkies-desktop-ov` (streaming-desktop composition), `/ov-images:fedora-coder` (headless composition) |
+| MCP server (`ov mcp serve`) — gateway exposing every CLI leaf as an MCP tool | `/ov:mcp` (server architecture + Kong reflection + auto-fallback semantics), `/ov-layers:ov-mcp` (deployment layer + `/workspace` bind-mount + 3 deployment patterns) |
 | Cross-distro test package names (`package_map:` on the `package:` verb) | `/ov:test`, `/ov-layers:sshd` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
@@ -69,8 +69,9 @@ See `/ov-dev:go` for directory structure and `/ov-dev:skills` for plugin/skill o
 - Lowercase-hyphenated names for layers and images.
 - All logic lives in `ov`; Taskfiles are strictly bootstrap (build the `ov` binary). See `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 - **Tests ship with the image**: every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives are emitted last in each Containerfile so test edits rebuild in ~2 seconds instead of minutes.
-- **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. OCI labels come strictly from `image.yml` + `layer.yml`; `deploy.yml` is deploy-mode state that must never bleed into baked images. See `/ov-dev:go` "Mode purity" for the bug this prevents.
-- **Project directory resolution** (build mode): build-mode commands resolve `image.yml` via `os.Getwd()`. Override with `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` (local) or `--repo <owner/repo[@ref]>` / `OV_PROJECT_REPO=...` (remote, defaults to `overthinkos/overthink` via the `default` literal) — honoured before Kong dispatch so every existing `os.Getwd()` call site picks up the target directory. `--repo` and `--dir` are mutually exclusive. Remote repos are cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). `ov mcp serve` is the **only** command that auto-falls back to `overthinkos/overthink` when nothing else is set; the top-level CLI stays opt-in. Disable that fallback with `ov mcp serve --no-default-repo`. See `/ov:image` "Project directory resolution" and `/ov:mcp` "Project-dir wiring".
+- **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
+- **Project directory resolution** (build mode): `-C` / `--dir` / `OV_PROJECT_DIR` (local) or `--repo` / `OV_PROJECT_REPO` (remote, cached in `~/.cache/ov/repos/`). `--repo` + `--dir` are mutually exclusive. `ov mcp serve` auto-falls back to `overthinkos/overthink` whenever the resolved cwd has no `image.yml` (refined 2026-04). See `/ov:image` "Project directory resolution" and `/ov:mcp` "Project-dir wiring".
+- **Don't declare defensive deps**: a layer's `depends:` on another layer carries a correctness cost — the depended layer ships in every downstream image whether the runtime uses it or not. Declare deps only when the layer *actually uses* the target at runtime. Historical examples removed in 2026-04: `supervisord` and `language-runtimes` both declared `depends: python` (the pixi-python ov-layer) when the real dep was the RPM `python3` package — dropping both cut several hundred MB from every deployable image. `uv` similarly dropped `depends: python` + its `pixi.toml` once it was rewritten as a direct-download Rust binary. See `/ov-layers:supervisord`, `/ov-layers:language-runtimes`, `/ov-layers:uv`.
 
 **Authoring + deployment specifics live in skills** — see the subsystems table above for the full mapping. Quick entry points: authoring → `/ov:layer`, `/ov:image`, `/ov:build`, `/ov:test`; deployment → `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc`. Quadlet is default; `ov config` before `ov start`; tunnel is deploy.yml-only.
 

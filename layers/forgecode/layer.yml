@@ -1,0 +1,12 @@
+description: Forge AI coding agent CLI (forgecode.dev)
+
+depends:
+  - nodejs
+
+tests:
+  - id: forge-binary
+    file: ${HOME}/.npm-global/bin/forge
+    exists: true
+  - id: forge-version
+    command: ${HOME}/.npm-global/bin/forge --version
+    exit_status: 0

@@ -125,9 +125,14 @@ func rewriteMCPURLForHost(rawURL, ctrName string, inspect *ContainerInspection) 
 
 // lookupHostPort reads the first host-side port binding for a given container
 // port. Mirrors the logic in mergeRuntimeVars (testvars.go:200-213).
+// Host-networked containers have an empty NetworkSettings.Ports — but every
+// container port IS a host port, so just return it verbatim in that case.
 func lookupHostPort(inspect *ContainerInspection, containerPort string) (string, bool) {
 	if inspect == nil {
 		return "", false
+	}
+	if inspect.IsHostNetworked() {
+		return containerPort, true
 	}
 	for key, binds := range inspect.NetworkSettings.Ports {
 		portStr := key

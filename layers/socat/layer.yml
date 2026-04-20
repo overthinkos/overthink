@@ -15,3 +15,15 @@ tasks:
     to: /usr/local/bin/relay-wrapper
     mode: "0755"
     user: root
+
+tests:
+  - id: socat-binary
+    file: /usr/bin/socat
+    exists: true
+  - id: socat-version
+    command: /usr/bin/socat -V
+    exit_status: 0
+  - id: relay-wrapper
+    file: /usr/local/bin/relay-wrapper
+    exists: true
+    mode: "0755"

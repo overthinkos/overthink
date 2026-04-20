@@ -15,8 +15,26 @@ import (
 type ContainerInspection struct {
 	Name            string             `json:"Name"`
 	Config          InspectConfig      `json:"Config"`
+	HostConfig      InspectHostConfig  `json:"HostConfig"`
 	NetworkSettings InspectNetwork     `json:"NetworkSettings"`
 	Mounts          []InspectMount     `json:"Mounts"`
+}
+
+// InspectHostConfig carries the fields inside the "HostConfig" object that
+// we need — currently just NetworkMode so host-networked containers can be
+// detected (their NetworkSettings.Ports is empty, but container ports are
+// bound 1:1 to host ports).
+type InspectHostConfig struct {
+	NetworkMode string `json:"NetworkMode"`
+}
+
+// IsHostNetworked returns true when the container uses --network=host, in
+// which case every container port is trivially the same host port.
+func (c *ContainerInspection) IsHostNetworked() bool {
+	if c == nil {
+		return false
+	}
+	return c.HostConfig.NetworkMode == "host"
 }
 
 // InspectConfig carries the fields inside the "Config" object that we need:
@@ -197,19 +215,39 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 	}
 
 	// HOST_PORT:<container-port> → effective host port from the first binding.
-	for k, binds := range c.NetworkSettings.Ports {
-		portStr := k
-		if i := strings.IndexByte(k, '/'); i >= 0 {
-			portStr = k[:i] // strip "/tcp" / "/udp"
+	// Host-networked containers have an empty NetworkSettings.Ports but every
+	// container port IS the host port — populate HOST_PORT:<N> = <N> from
+	// the image metadata so test vars resolve correctly under network: host.
+	if c.IsHostNetworked() {
+		if meta != nil {
+			for _, p := range meta.Ports {
+				containerPort := p
+				if i := strings.IndexByte(p, ':'); i >= 0 {
+					containerPort = p[i+1:]
+				}
+				if j := strings.IndexByte(containerPort, '/'); j >= 0 {
+					containerPort = containerPort[:j]
+				}
+				if containerPort != "" {
+					env["HOST_PORT:"+containerPort] = containerPort
+				}
+			}
 		}
-		if len(binds) == 0 {
-			continue
+	} else {
+		for k, binds := range c.NetworkSettings.Ports {
+			portStr := k
+			if i := strings.IndexByte(k, '/'); i >= 0 {
+				portStr = k[:i] // strip "/tcp" / "/udp"
+			}
+			if len(binds) == 0 {
+				continue
+			}
+			hostPort := binds[0].HostPort
+			if hostPort == "" {
+				continue
+			}
+			env["HOST_PORT:"+portStr] = hostPort
 		}
-		hostPort := binds[0].HostPort
-		if hostPort == "" {
-			continue
-		}
-		env["HOST_PORT:"+portStr] = hostPort
 	}
 
 	// VOLUME_PATH / VOLUME_CONTAINER_PATH — short name comes from either the

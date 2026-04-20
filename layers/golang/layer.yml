@@ -7,3 +7,11 @@ rpm:
 pac:
   packages:
     - go
+
+tests:
+  - id: go-binary
+    file: /usr/bin/go
+    exists: true
+  - id: go-version
+    command: /usr/bin/go version
+    exit_status: 0

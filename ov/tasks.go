@@ -359,6 +359,15 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 		}
 	}
 
+	// strip_components is valid for tar.* formats; append as --strip-components=N
+	// so tarballs that nest everything under a version-or-arch top-level dir
+	// (common for Go, most Rust/Go tools, Node.js binary releases) can drop
+	// that wrapper and land their binaries directly at the dest path.
+	stripFlag := ""
+	if t.StripComponents > 0 {
+		stripFlag = fmt.Sprintf(" --strip-components=%d", t.StripComponents)
+	}
+
 	var cmd string
 	switch extract {
 	case "tar.gz", "":
@@ -371,14 +380,14 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 		}
 		if extract == "tar.gz" {
 			inc := strings.Join(t.Include, " ")
-			cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xzf - -C %s %s`, envPrefix, url, dest, inc)
+			cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xzf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
 		}
 	case "tar.xz":
 		inc := strings.Join(t.Include, " ")
-		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xJf - -C %s %s`, envPrefix, url, dest, inc)
+		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xJf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
 	case "tar.zst":
 		inc := strings.Join(t.Include, " ")
-		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar --zstd -xf - -C %s %s`, envPrefix, url, dest, inc)
+		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar --zstd -xf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
 	case "zip":
 		cmd = fmt.Sprintf(`%s curl -fsSL %q -o /tmp/dl.zip && unzip -o /tmp/dl.zip -d %s && rm /tmp/dl.zip`, envPrefix, url, dest)
 	case "sh":

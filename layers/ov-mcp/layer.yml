@@ -20,13 +20,28 @@ volumes:
   # empty, the project-dir-dependent MCP tools return a clear error
   # (`image.yml not found`); the session-wide tools (status, version,
   # doctor, secrets, settings) continue to work.
+  #
+  # Volume name stays `project` (stable bind-mount API). In-container path
+  # is `/workspace` — a neutral term that works whether the image runs as
+  # root (HOME=/root) or uid 1000 (HOME=/home/user), and whether the
+  # contents are an overthink checkout or any other dev workspace.
   - name: project
-    path: /project
+    path: /workspace
 
 env:
   # Build-mode commands resolve image.yml via os.Getwd(); the -C / --dir /
   # OV_PROJECT_DIR global in ov/main.go honours this before dispatch.
-  OV_PROJECT_DIR: "/project"
+  OV_PROJECT_DIR: "/workspace"
+
+tasks:
+  # Ensure /workspace exists in the built image with world-writable
+  # permissions, so `ov version` (and any other cwd-sensitive command)
+  # can chdir successfully even when no bind-mount is attached. 0777 is
+  # the only mode that works for both root (fedora-coder) and user-1000
+  # (jupyter et al.) deployments without baking in a uid assumption.
+  - mkdir: /workspace
+    mode: "0777"
+    user: root
 
 service: |
   [program:ov-mcp]

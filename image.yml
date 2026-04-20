@@ -76,17 +76,9 @@ images:
 
   arch-ov:
     base: archlinux
-    uid: 0
-    gid: 0
-    user: root
     ports:
       - "2222:2222"
       - "18765:18765"
-    security:
-      cap_add: [ALL]
-      security_opt:
-        - label=disable
-        - seccomp=unconfined
     layers:
       - agent-forwarding
       - ov-full
@@ -99,15 +91,7 @@ images:
 
   fedora-ov:
     base: fedora
-    uid: 0
-    gid: 0
-    user: root
     network: host
-    security:
-      cap_add: [ALL]
-      security_opt:
-        - label=disable
-        - seccomp=unconfined
     layers:
       - agent-forwarding
       - ov-full
@@ -116,6 +100,97 @@ images:
       - sshd
       - container-nesting
       - nvidia
+
+  # Kitchen-sink development image: coding + AI coding CLIs + DevOps.
+  # Runs as the default user (uid=1000) with passwordless sudo (from the sshd
+  # layer's sudoers config). Rootless nested containers + virtualization
+  # work via container-nesting's layer-level security_opt (unmask=/proc/*,
+  # /dev/fuse, /dev/net/tun) — zero additive capabilities. Matches the
+  # selkies-desktop-ov pattern. Base is fedora-nonfree because build-toolchain
+  # pulls ffmpeg-devel and x264-devel which live in RPM Fusion.
+  fedora-coder:
+    base: fedora-nonfree
+    network: host
+    ports:
+      - "2222:2222"
+      - "18765:18765"
+    layers:
+      # Baseline (matches fedora-ov shape)
+      - agent-forwarding
+      - sshd
+      - ov-full
+      - ov-mcp
+      - container-nesting
+      - dbus
+      - tmux
+
+      # Language runtimes + managers
+      - language-runtimes
+      - golang
+      - nodejs24
+      - rust
+      - pixi
+      - uv
+
+      # Build + developer tooling
+      - build-toolchain
+      - dev-tools
+      - pre-commit
+      - direnv
+      - gh
+      - typst
+      - asciinema
+
+      # AI coding CLIs
+      - claude-code
+      - codex
+      - gemini
+      - forgecode
+      - oracle
+
+      # DevOps / cloud / infra
+      - devops-tools
+      - kubernetes
+      - docker-ce
+      - github-actions
+      - google-cloud
+      - google-cloud-npm
+      - grafana-tools
+
+    tests:
+      - id: fedora-coder-ai-clis
+        command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+        exit_status: 0
+
+      - id: fedora-coder-languages
+        command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+        exit_status: 0
+
+      - id: fedora-coder-devops
+        command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+        exit_status: 0
+
+      - id: fedora-coder-ov
+        command: test -x /usr/local/bin/ov
+        exit_status: 0
+
+      - id: fedora-coder-sshd-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:2222}
+        reachable: true
+        timeout: 5s
+
+      - id: fedora-coder-ov-version
+        scope: deploy
+        command: ov version
+        in_container: true
+        exit_status: 0
+
+      - id: fedora-coder-mcp-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:18765}
+        reachable: true
+        timeout: 5s
 
   fedora-test:
     enabled: false
@@ -384,15 +459,7 @@ images:
       - dbus
     platforms:
       - linux/amd64
-    uid: 0
-    gid: 0
-    user: root
     network: host
-    security:
-      cap_add: [ALL]
-      security_opt:
-        - label=disable
-        - seccomp=unconfined
 
   openclaw-browser-bootc:
     enabled: false

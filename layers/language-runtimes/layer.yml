@@ -1,7 +1,6 @@
 depends:
   - nodejs
   - rust
-  - python
 
 rpm:
   packages:
@@ -13,3 +12,23 @@ rpm:
     - python3-devel
     - python3-ramalama
     - nodejs-devel
+
+tests:
+  - id: dotnet-binary
+    file: /usr/bin/dotnet
+    exists: true
+  - id: dotnet-version
+    command: /usr/bin/dotnet --version
+    exit_status: 0
+  - id: php-binary
+    file: /usr/bin/php
+    exists: true
+  - id: php-version
+    command: /usr/bin/php --version
+    exit_status: 0
+  - id: system-python3
+    file: /usr/bin/python3
+    exists: true
+  - id: system-python3-version
+    command: /usr/bin/python3 --version
+    exit_status: 0

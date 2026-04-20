@@ -13,3 +13,20 @@ tasks:
   # Load iptable_nat kernel module at boot (needed for docker networking)
   - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
     user: root
+
+tests:
+  - id: docker-binary
+    file: /usr/bin/docker
+    exists: true
+  - id: docker-version
+    command: /usr/bin/docker --version
+    exit_status: 0
+  - id: containerd-binary
+    file: /usr/bin/containerd
+    exists: true
+  - id: containerd-version
+    command: /usr/bin/containerd --version
+    exit_status: 0
+  - id: docker-compose-plugin
+    command: /usr/bin/docker compose version
+    exit_status: 0

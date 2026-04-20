@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-163 layers. 43 image definitions (33 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 249 skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+164 layers. 44 image definitions (34 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 250+ skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -15,6 +15,21 @@ Containers are a great idea with rough edges. The basics work well enough, but r
 Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, security declarations, and dependencies described in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order — handling the hard parts so you (and your AI) don't have to.
 
 Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers in `image.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
+
+### Rootless-first power-user images
+
+The four "power-user" images that carry the full `ov` toolchain —
+`fedora-coder`, `fedora-ov`, `arch-ov`, `githubrunner` — all run as
+uid=1000 with passwordless sudo (via the `sshd` layer's
+`/etc/sudoers.d/ov-user` drop-in). Rootless nested containers and
+rootless libvirt VMs work with zero additive capabilities via the
+surgical `unmask=/proc/*` security_opt from the `container-nesting`
+layer. Historic `uid: 0` / `cap_add: [ALL]` postures were dropped in
+2026-04 once the kernel-level RCA was complete. See
+`/ov-layers:container-nesting` for the `mount_too_revealing()` RCA and
+`/ov-images:fedora-coder` (32-layer kitchen sink) or
+`/ov-images:selkies-desktop-ov` (streaming-desktop variant) for
+canonical compositions.
 
 ### Sandboxed AI Desktops
 
@@ -56,7 +71,7 @@ When services run as separate containers, **service discovery happens automatica
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
 - **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, cross-container env injection (`env_provides`), MCP server discovery (`mcp_provides`), dependency declarations (`env_requires`/`env_accepts`, `mcp_requires`/`mcp_accepts`), ports, services, volumes, routes, metadata (`version`, `status`, `info`), layer-local build variables (`vars:` for `${VAR}` substitution), and the `tasks:` install list.
-- **`tasks:` inside `layer.yml`** — Ordered install operations. Eight verbs: `cmd` (shell), `mkdir`, `copy` (layer-dir file → container), `write` (inline content → container — no shell heredoc), `link` (symlink), `download` (curl + extract), `setcap` (file capabilities), `build` (explicit pixi/npm/cargo placement). Each task carries a `user:` field (`root` / `${USER}` / literal username / `uid:gid`). Strict author-controlled ordering. YAML anchors + `${VAR}` substitution for DRY. See `/ov:layer` for the full verb catalog.
+- **`tasks:` inside `layer.yml`** — Ordered install operations. Eight verbs: `cmd` (shell), `mkdir`, `copy` (layer-dir file → container), `write` (inline content → container — no shell heredoc), `link` (symlink), `download` (curl + extract, supports `strip_components: N` for tarballs nested under a top-level arch/version dir — new 2026-04), `setcap` (file capabilities), `build` (explicit pixi/npm/cargo placement). Each task carries a `user:` field (`root` / `${USER}` / literal username / `uid:gid`). Strict author-controlled ordering. YAML anchors + `${VAR}` substitution for DRY. See `/ov:layer` for the full verb catalog.
 - **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user).
 - **`package.json`** — npm packages for Node.js (multi-stage build, runs as user).
 - **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user).
@@ -170,6 +185,11 @@ ov image build arch-test
 # Drop into an interactive shell
 ov shell fedora
 
+# Build the kitchen-sink developer image (coding CLIs + DevOps + language runtimes)
+ov image build fedora-coder
+ov start fedora-coder
+ssh -p 2222 user@localhost           # uid=1000, passwordless sudo
+
 # Build and run a GPU-accelerated Jupyter server
 ov image build jupyter
 ov start jupyter
@@ -195,7 +215,7 @@ ov vm start selkies-desktop-bootc
 | **GPU & ML** | `cuda`, `rocm`, `nvidia`, `llama-cpp`, `python-ml`, `jupyter`, `jupyter-ml`, `unsloth`, `unsloth-studio`, `ollama`, `comfyui` | NVIDIA/AMD runtimes and ML stacks |
 | **Desktop Compositors** | `sway`, `labwc`, `niri`, `mutter`, `kwin`, `wayvnc`, `pipewire`, `selkies` | Wayland/X11 servers, audio, browser-streamed desktops |
 | **Chrome variants** | `chrome`, `chrome-sway`, `chrome-niri`, `chrome-mutter`, `chrome-kwin`, `chrome-x11` | Chrome DevTools on `:9222` + DevTools MCP on `:9224` (29 tools) per compositor |
-| **AI & Agents** | `openclaw`, `hermes`, `hermes-full`, `hermes-playwright`, `openwebui`, `claude-code`, `codex`, `gemini` | AI gateways, agents, LLM UIs, and coding CLIs |
+| **AI & Agents** | `openclaw`, `hermes`, `hermes-full`, `hermes-playwright`, `openwebui`, `claude-code`, `codex`, `gemini`, `forgecode`, `oracle` | AI gateways, agents, LLM UIs, and coding CLIs |
 | **Applications** | `immich`, `immich-ml`, `github-runner`, `steam`, `heroic`, `vscode`, `dev-tools`, `filebrowser`, `devops-tools` | End-user apps and workstation tooling |
 | **Desktop Utilities** | `ffmpeg`, `wf-recorder`, `wl-record-pixelflux`, `wl-screenshot-pixelflux`, `wl-overlay`, `asciinema`, `libnotify`, `fastfetch` | Multimedia, recording, overlays, notifications |
 | **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting`, `tailscale`, `keepassxc` | Agent forwarding, encrypted storage, mesh VPN, password manager, nesting |
@@ -256,7 +276,7 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 - `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `image.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Mutually exclusive with `--dir`. See `/ov:image` "Project directory resolution".
 - `--kdbx <path>` — override the KeePass credential store location.
 
-Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/project` with `OV_PROJECT_DIR=/project` (the `ov-mcp` layer default), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. The top-level CLI never auto-fetches — only `ov mcp serve` does.
+Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/workspace` with `ov config --bind project=/host/path` (the `ov-mcp` layer default, world-writable), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. **Refined in 2026-04**: the fallback now fires whenever the resolved cwd has no `image.yml`, regardless of `OV_PROJECT_DIR` being set. Previously the fallback only fired when `OV_PROJECT_DIR` was empty — but the `ov-mcp` layer permanently sets `OV_PROJECT_DIR=/workspace`, so the fallback was effectively dead code. Now a deployer who forgets `--bind` still gets a working MCP server (backed by the upstream repo) with a clear log line naming the reason. The top-level CLI never auto-fetches — only `ov mcp serve` does; `--no-default-repo` opts out.
 
 A few sample invocations:
 

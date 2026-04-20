@@ -141,7 +141,50 @@ func (c *ImageTestCmd) Run() error {
 		return nil
 	}
 
-	resolver := ResolveTestVarsBuild(meta)
+	// Executor selection:
+	//   - --include-deploy: prefer a running container (built from this
+	//     image) so deploy tests see real service state, real port
+	//     mappings, real runtime env. Only fall back to the disposable
+	//     container if nothing is running — and in that case deploy tests
+	//     will largely skip or fail, which is the honest outcome.
+	//   - Otherwise (build-scope only): always use the disposable container.
+	//     Layer/image tests are build-time invariants; a running container
+	//     is unnecessary and could mask differences between the built image
+	//     and its deployed state.
+	var executor Executor
+	var resolver *TestVarResolver
+	var liveContainer string
+	mode := RunModeImageTest
+
+	if c.IncludeDeploy {
+		// Use the image's own short name from the OCI label, not c.Image —
+		// c.Image may be a full ref (`ghcr.io/overthinkos/fedora-coder:latest`)
+		// which wouldn't map to the `ov-<image>` container name scheme.
+		imageName := meta.Image
+		engineBin := EngineBinary(rt.RunEngine)
+		candidate := containerNameInstance(imageName, "")
+		if containerRunning(engineBin, candidate) {
+			liveContainer = candidate
+			executor = &ContainerExecutor{Engine: rt.RunEngine, ContainerName: candidate}
+			// Runtime var resolver populates HOST_PORT, INSTANCE, etc. from
+			// the live container's inspect output. Load deploy.yml overlay
+			// so deploy-overridden settings (e.g. remapped ports) win.
+			dc, _ := LoadDeployConfig()
+			var deployOverlay *DeployImageConfig
+			if dc != nil {
+				if entry, ok := dc.Images[deployKey(imageName, "")]; ok {
+					deployOverlay = &entry
+				}
+			}
+			resolver, _ = ResolveTestVarsRuntime(meta, deployOverlay, rt.RunEngine, candidate)
+			mode = RunModeTest
+		}
+	}
+
+	if executor == nil {
+		executor = &ImageExecutor{Engine: rt.RunEngine, ImageRef: imageRef}
+		resolver = ResolveTestVarsBuild(meta)
+	}
 
 	// Build the check list. Under ov image test the default sections are
 	// layer + image; --include-deploy opts in the deploy section too.
@@ -156,11 +199,21 @@ func (c *ImageTestCmd) Run() error {
 		return nil
 	}
 
-	runner := NewRunner(&ImageExecutor{Engine: rt.RunEngine, ImageRef: imageRef}, resolver, RunModeImageTest)
+	runner := NewRunner(executor, resolver, mode)
+	if liveContainer != "" {
+		// Use short image name (from OCI label) so sub-command invocations
+		// like `ov test mcp ping <image>` and HOST_PORT resolution work —
+		// c.Image may be a full ref which doesn't map to container naming.
+		runner.Image = meta.Image
+	}
 	runner.Distros = meta.Distro
 	results := runner.Run(context.Background(), checks)
 
-	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
+	if liveContainer != "" {
+		fmt.Fprintf(os.Stderr, "Image: %s (live container: %s)\n", imageRef, liveContainer)
+	} else {
+		fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
+	}
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
 		return fmt.Errorf("%d check(s) failed", fails)

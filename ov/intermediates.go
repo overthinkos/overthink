@@ -212,7 +212,19 @@ func AbsoluteLayerSequence(imageName string, images map[string]*ResolvedImage, l
 	return seq
 }
 
-// ComputeIntermediates analyzes all images, groups them by direct parent (Base),
+// siblingKey identifies a sibling-grouping equivalence class for intermediate
+// computation. Grouping by (Base, UID) — not just Base — ensures that images
+// with different user contexts (e.g. uid=1000 default vs. uid=0 root) don't
+// share an auto-intermediate. Sharing would bake one group's HOME-relative
+// paths (path_append `~/.foo/bin`, env vars using `~` or `$HOME`) into the
+// intermediate's `ENV PATH` directives, leaving the other group with dead
+// PATH entries that can't be overridden by its own ENV emission.
+type siblingKey struct {
+	base string
+	uid  int
+}
+
+// ComputeIntermediates analyzes all images, groups them by (Base, UID),
 // builds prefix tries of relative layer sequences within each sibling group,
 // creates intermediates at branching points, and returns updated images map.
 // User-defined images always take priority over auto-intermediates.
@@ -240,13 +252,18 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 		}
 	}
 
-	// Group images by their direct parent (Base field)
-	siblingGroups := make(map[string][]string)
+	// Default UID — used to decide whether an intermediate needs a UID
+	// suffix in its name to avoid collision with the default-UID sibling.
+	defaultUID := resolveIntPtr(cfg.Defaults.UID, nil, 1000)
+
+	// Group images by (Base, UID). See siblingKey docstring for rationale.
+	siblingGroups := make(map[siblingKey][]string)
 	for name, img := range images {
 		if builderNames[name] {
 			continue
 		}
-		siblingGroups[img.Base] = append(siblingGroups[img.Base], name)
+		k := siblingKey{img.Base, img.UID}
+		siblingGroups[k] = append(siblingGroups[k], name)
 	}
 
 	// Process internal-base groups in topological order (parents before children)
@@ -256,24 +273,27 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 		return nil, fmt.Errorf("resolving image order: %w", err)
 	}
 
-	processed := make(map[string]bool)
+	processed := make(map[siblingKey]bool)
 	for _, parentName := range imageOrder {
-		children := siblingGroups[parentName]
-		if len(children) < 2 {
-			continue
-		}
-		processed[parentName] = true
-		if err := processSiblingGroup(parentName, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
-			return nil, err
+		// Each parent may host multiple sibling groups (one per UID).
+		// Iterate every sibling key whose base matches parentName.
+		for k, children := range siblingGroups {
+			if k.base != parentName || len(children) < 2 {
+				continue
+			}
+			processed[k] = true
+			if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+				return nil, err
+			}
 		}
 	}
 
 	// Process external-base groups (parent is an external OCI ref, not in imageOrder)
-	for parentBase, children := range siblingGroups {
-		if processed[parentBase] || len(children) < 2 {
+	for k, children := range siblingGroups {
+		if processed[k] || len(children) < 2 {
 			continue
 		}
-		if err := processSiblingGroup(parentBase, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+		if err := processSiblingGroup(k.base, k.uid, defaultUID, children, result, images, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 			return nil, err
 		}
 	}
@@ -282,8 +302,11 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 }
 
 // processSiblingGroup builds a prefix trie from the relative layer sequences
-// of children sharing the same parent, and creates intermediates at branch points.
-func processSiblingGroup(parentName string, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+// of children sharing the same parent + uid, and creates intermediates at
+// branch points. The uid is the shared UID of this sibling group; it flows
+// through walkTrieScoped into createIntermediate so the emitted ENV PATH
+// references the correct HOME for this group's user context.
+func processSiblingGroup(parentName string, uid, defaultUID int, children []string, result, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	sortStrings(children)
 
 	// Get layers provided by parent
@@ -311,7 +334,7 @@ func processSiblingGroup(parentName string, children []string, result, origImage
 		node.images = append(node.images, childName)
 	}
 
-	return walkTrieScoped(root, parentName, result, origImages, layers, cfg, tag, globalOrder, pixiBound)
+	return walkTrieScoped(root, parentName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound)
 }
 
 // relativeLayerSequence returns an image's layers minus what the parent provides,
@@ -334,7 +357,9 @@ func relativeLayerSequence(imageName string, parentProvided map[string]bool, ima
 
 // walkTrieScoped walks the trie creating intermediates at branch points.
 // User-defined images at branch points are reused as intermediates without rebasing.
-func walkTrieScoped(node *trieNode, parentName string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
+// uid + defaultUID propagate from the sibling group so auto-intermediates
+// inherit the right user context and get UID-suffixed names when needed.
+func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, layers map[string]*Layer, cfg *Config, tag string, globalOrder []string, pixiBound map[string]bool) error {
 	for _, childLayerName := range sortedKeys(node.children) {
 		child := node.children[childLayerName]
 
@@ -366,18 +391,18 @@ func walkTrieScoped(node *trieNode, parentName string, result map[string]*Resolv
 			if len(userImages) == 1 && len(current.images) == 1 {
 				// Single user image at branch: use it as intermediate, preserve its Base
 				intermediateName := userImages[0]
-				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			} else {
 				// 0 or 2+ user images: create auto-intermediate
-				intermediateName := pickAutoName(pathLayers, parentName, result, origImages)
-				createIntermediate(intermediateName, parentName, pathLayers, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
+				intermediateName := pickAutoName(pathLayers, parentName, uid, defaultUID, result, origImages)
+				createIntermediate(intermediateName, parentName, uid, pathLayers, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
 				// Rebase all terminal images to this intermediate
 				for _, imgName := range current.images {
 					updateImageBase(imgName, intermediateName, result)
 				}
-				if err := walkTrieScoped(current, intermediateName, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
+				if err := walkTrieScoped(current, intermediateName, uid, defaultUID, result, origImages, layers, cfg, tag, globalOrder, pixiBound); err != nil {
 					return err
 				}
 			}
@@ -393,8 +418,11 @@ func walkTrieScoped(node *trieNode, parentName string, result map[string]*Resolv
 
 // pickAutoName chooses a name for an auto-intermediate using {parent}-{lastLayer}.
 // For OCI refs (e.g. "quay.io/fedora/fedora:43"), extracts the short image name.
+// When uid != defaultUID, appends "-uid<N>" so uid=0 and uid=1000 intermediates
+// at the same trie position get distinct OCI tags (otherwise they'd collide
+// and one group's HOME-baked ENV would poison the other).
 // Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
-func pickAutoName(pathLayers []string, parentName string, result, origImages map[string]*ResolvedImage) string {
+func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedImage) string {
 	lastLayer := pathLayers[len(pathLayers)-1]
 
 	// Extract short parent name from OCI refs: "quay.io/fedora/fedora:43" → "fedora"
@@ -407,6 +435,9 @@ func pickAutoName(pathLayers []string, parentName string, result, origImages map
 	}
 
 	baseName := shortParent + "-" + lastLayer
+	if uid != defaultUID {
+		baseName = fmt.Sprintf("%s-uid%d", baseName, uid)
+	}
 	name := baseName
 	suffix := 2
 	for {
@@ -421,7 +452,10 @@ func pickAutoName(pathLayers []string, parentName string, result, origImages map
 }
 
 // createIntermediate creates an auto-generated intermediate image in the result map.
-func createIntermediate(name, parentName string, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
+// uid is the sibling group's UID — it determines the intermediate's User/GID/Home
+// so HOME-relative env/path_append expansion matches the children that will
+// inherit from this intermediate.
+func createIntermediate(name, parentName string, uid int, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
 	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
@@ -454,6 +488,23 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		inheritedBuilds = []string(cfg.Defaults.Build)
 	}
 
+	// Derive User/GID/Home from the sibling group's UID. uid=0 is root with
+	// /root as HOME; any other UID reuses cfg.Defaults.User (typically "user")
+	// and /home/<user>. This keeps HOME-relative ENV expansion consistent
+	// with the child images that inherit this intermediate.
+	var user string
+	var gid int
+	if uid == 0 {
+		user = "root"
+		gid = 0
+	} else {
+		user = cfg.Defaults.User
+		if user == "" {
+			user = "user"
+		}
+		gid = resolveIntPtr(cfg.Defaults.GID, nil, 1000)
+	}
+
 	img := &ResolvedImage{
 		Name:           name,
 		Base:           parentName,
@@ -464,9 +515,9 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Distro:         inheritedDistro,
 		BuildFormats:   inheritedBuilds,
 		Platforms:      platforms,
-		User:           cfg.Defaults.User,
-		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
-		GID:            resolveIntPtr(cfg.Defaults.GID, nil, 1000),
+		User:           user,
+		UID:            uid,
+		GID:            gid,
 		Merge:          cfg.Defaults.Merge,
 		Builder:        BuilderMap(cfg.Defaults.Builder),
 		Auto:           true,
@@ -485,10 +536,11 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 	// Build unified Tags: ["all"] + Distro + BuildFormats
 	img.Tags = append([]string{"all"}, img.Distro...)
 	img.Tags = append(img.Tags, img.BuildFormats...)
-	if img.User == "" {
-		img.User = "user"
+	if img.User == "root" {
+		img.Home = "/root"
+	} else {
+		img.Home = fmt.Sprintf("/home/%s", img.User)
 	}
-	img.Home = fmt.Sprintf("/home/%s", img.User)
 	if img.Registry != "" {
 		img.FullTag = fmt.Sprintf("%s/%s:%s", img.Registry, name, tag)
 	} else {

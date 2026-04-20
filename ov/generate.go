@@ -813,10 +813,20 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString("    case \"$ARCH\" in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac && \\\n")
 	b.WriteString("    curl -fsSL \"https://github.com/go-task/task/releases/latest/download/task_linux_${ARCH}.tar.gz\" | tar -xzf - -C /usr/local/bin task\n\n")
 
-	// Create user/group if they don't exist at configured UID/GID
-	b.WriteString(fmt.Sprintf("RUN getent passwd %d >/dev/null 2>&1 || \\\n", img.UID))
-	b.WriteString(fmt.Sprintf("    (getent group %d >/dev/null 2>&1 || groupadd -g %d %s && \\\n", img.GID, img.GID, img.User))
-	b.WriteString(fmt.Sprintf("     useradd -m -u %d -g %d -s /bin/bash %s)\n\n", img.UID, img.GID, img.User))
+	// User/group handling — two modes driven by resolved user_policy:
+	//   UserAdopted=true  → base image already ships this user at the
+	//                        declared uid/gid/home; skip creation.
+	//   UserAdopted=false → idempotent create (no-op if uid already taken;
+	//                        the policy layer blocks the collision case
+	//                        via auto/create semantics before we get here).
+	if img.UserAdopted {
+		b.WriteString(fmt.Sprintf("# User %s (uid=%d) adopted from base image (declared in build.yml distro.base_user) — no useradd needed\n\n", img.User, img.UID))
+	} else {
+		b.WriteString(fmt.Sprintf("RUN if ! getent passwd %d >/dev/null 2>&1; then \\\n", img.UID))
+		b.WriteString(fmt.Sprintf("      (getent group %d >/dev/null 2>&1 || groupadd -g %d %s) && \\\n", img.GID, img.GID, img.User))
+		b.WriteString(fmt.Sprintf("      useradd -m -u %d -g %d -s /bin/bash %s; \\\n", img.UID, img.GID, img.User))
+		b.WriteString("    fi\n\n")
+	}
 
 	// WORKDIR only - ENV comes from layer env files
 	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
@@ -1083,11 +1093,28 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	// Phase 2: If no distro match, walk build: formats — ALL matching sections installed in order.
 	distroMatched := false
 	for _, tag := range img.Distro {
-		if tagCfg := layer.TagSection(tag); tagCfg != nil && len(tagCfg.Packages) > 0 {
-			g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg, img)
-			distroMatched = true
-			break
+		tagCfg := layer.TagSection(tag)
+		if tagCfg == nil || len(tagCfg.Packages) == 0 {
+			continue
 		}
+		// Route through the primary format's full install_template so tag
+		// sections get the same schema (repos, options, keys) as `deb:` /
+		// `rpm:` / `pac:`. Falls back to the packages-only path if no
+		// Raw map was populated (legacy tag sections).
+		if img.DistroDef != nil {
+			if formatDef := img.DistroDef.Formats[img.Pkg]; formatDef != nil && tagCfg.Raw != nil {
+				ctx := NewInstallContext(tagCfg.Raw, formatDef.CacheMounts)
+				rendered, err := RenderTemplate(img.Pkg+"-tag-install", formatDef.InstallTemplate, ctx)
+				if err == nil {
+					b.WriteString(rendered)
+					distroMatched = true
+					break
+				}
+			}
+		}
+		g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg, img)
+		distroMatched = true
+		break
 	}
 
 	if !distroMatched {

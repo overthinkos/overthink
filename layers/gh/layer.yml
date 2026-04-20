@@ -14,6 +14,20 @@ pac:
     - git
     - git-lfs
 
+# Debian / Ubuntu: gh is not in Debian main. Use the official GitHub CLI apt
+# repo (cli.github.com). The repo suite is a fixed "stable" (distro-agnostic).
+deb:
+  repos:
+    - name: github-cli
+      url: "https://cli.github.com/packages"
+      key: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+      suite: "stable"
+      components: "main"
+  packages:
+    - gh
+    - git
+    - git-lfs
+
 tasks:
   # git-lfs post-install config (package installed with noscripts above so
   # the systemd-triggered git-lfs install step doesn't run in the build).

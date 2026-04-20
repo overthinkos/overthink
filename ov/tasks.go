@@ -417,12 +417,13 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 
 // emitCmd emits a single RUN for a cmd task, with the layer-stage /ctx bind
 // mount plus cache mounts appropriate to the user (distro format caches for
-// root, npm cache for non-root). Shell is bash -c 'set -e; <command>'.
+// root, npm cache for non-root). Shell is bash invoked via Dockerfile
+// heredoc syntax so the command works regardless of whether /bin/sh is bash
+// (Fedora, Arch) or dash (Debian, Ubuntu). Heredoc body is processed by
+// bash directly — no ANSI-C $'...' quoting involved, which dash doesn't
+// understand and the OCI image format doesn't honor SHELL directives for.
 // BUILD_ARCH is injected as a shell var so tasks using ${BUILD_ARCH} work.
 func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, userIsRoot bool) {
-	body := "BUILD_ARCH=$(uname -m)\nset -e\n" + t.Cmd
-	quoted := shellAnsiQuote(body)
-
 	var mounts []string
 	mounts = append(mounts, fmt.Sprintf("--mount=type=bind,from=%s,source=/,target=/ctx", layerStage))
 
@@ -445,7 +446,17 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 	for _, m := range mounts {
 		b.WriteString(m + " ")
 	}
-	b.WriteString("bash -c " + quoted + "\n")
+	// Heredoc with 'OVCMD' (single-quoted delimiter) — body passed verbatim to
+	// bash; no $ / `backtick` substitution happens during heredoc parsing, so
+	// authors' $(cmd) / ${VAR} remain intact for bash itself to evaluate.
+	b.WriteString("bash <<'OVCMD'\n")
+	b.WriteString("BUILD_ARCH=$(uname -m)\n")
+	b.WriteString("set -e\n")
+	b.WriteString(t.Cmd)
+	if !strings.HasSuffix(t.Cmd, "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString("OVCMD\n")
 }
 
 // --- Orchestrator ---

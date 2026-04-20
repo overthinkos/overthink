@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-164 layers. 44 image definitions (34 enabled by default). Docker and Podman. `linux/amd64`. Fedora, Debian, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 250+ skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+164 layers. 49 image definitions (41 enabled by default, as of 2026-04-20). Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 250+ skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -21,7 +21,14 @@ Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layer
 The four "power-user" images that carry the full `ov` toolchain —
 `fedora-coder`, `fedora-ov`, `arch-ov`, `githubrunner` — all run as
 uid=1000 with passwordless sudo (via the `sshd` layer's
-`/etc/sudoers.d/ov-user` drop-in). Rootless nested containers and
+`/etc/sudoers.d/ov-user` drop-in). Four cross-distro "coder" images —
+`/ov-images:fedora-coder`, `/ov-images:arch-coder`,
+`/ov-images:debian-coder`, `/ov-images:ubuntu-coder` — share the
+identical ~30 layers and 80-line test block, differing only in each
+layer's package-format section (`rpm:` / `pac:` / `deb:`) and the
+resolved uid-1000 user (`user` via create mode on fedora/arch/debian;
+`ubuntu` via adopt mode on ubuntu-coder — see
+[user_policy](#user-policy-adopt-vs-create) below). Rootless nested containers and
 rootless libvirt VMs work with zero additive capabilities via the
 surgical `unmask=/proc/*` security_opt from the `container-nesting`
 layer. Historic `uid: 0` / `cap_add: [ALL]` postures were dropped in
@@ -102,7 +109,23 @@ These fields flow through to `layer.yml`:
 - **Package sections** — `distro:` tags are checked first (first match wins, prevents version conflicts). If no distro section matches, `build:` formats install ALL matching sections in order.
 - **`tasks:`** — Not dispatched by tag. If a task must run on only one distro, guard it in-task: put a distro-specific package in the matching `rpm:`/`pac:` section, or add a shell `if [ -f /etc/fedora-release ]; then …; fi` inside a `cmd:` block.
 
-This means `fedora-ov` and `arch-ov` share the exact same layer list — only the package sets (and rarely, a few shell-guarded tasks) differ per distro.
+This means `fedora-ov` and `arch-ov` share the exact same layer list — only the package sets (and rarely, a few shell-guarded tasks) differ per distro. The same applies to the four cross-distro coder images (`fedora-coder` / `arch-coder` / `debian-coder` / `ubuntu-coder`) which share ~30 layers and an identical 80-line test block.
+
+**Tag sections support full install surface (2026-04)** — distro-version tag sections (`debian:13:`, `ubuntu:24.04:`, `fedora:43:`) can carry `repos:`, `keys:`, `options:`, and `packages:`, not just packages. Useful when upstream apt-repo URLs differ per codename (Docker CE, Kubernetes). See `/ov:layer`.
+
+#### user_policy: adopt vs create
+
+Base images differ in whether they ship a pre-existing uid-1000 account. Ubuntu 24.04 ships `ubuntu:ubuntu`; Fedora / Arch / Debian 13 ship nothing at uid 1000. Overthink handles this declaratively via `build.yml distro.<name>.base_user:` + an image-level `user_policy:` field:
+
+| Policy | Behavior |
+|---|---|
+| `auto` (default) | Adopt `base_user` if declared AND the image didn't explicitly set `user:`; otherwise create the configured user. |
+| `adopt` | Always adopt. Hard-errors without a declaration. |
+| `create` | Always create via `useradd`. |
+
+So `ubuntu-coder` runs as `ubuntu:/home/ubuntu` (adopt) while `debian-coder`, `fedora-coder`, `arch-coder` run as `user:/home/user` (create) — zero image-level diff, zero layer-level special cases. Layers that need to reference the uid-1000 account by name use `getent passwd 1000` discovery (see `/ov-layers:sshd`) rather than hardcoding a literal.
+
+See `/ov:image` "user_policy" and `/ov:build` "base_user:" for the full reference and decision matrix.
 
 ### Docker or Podman — Your Choice
 
@@ -121,6 +144,8 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 ### Declarative Testing
 
 Images and deployments come with inline checks. A `tests:` block on any `layer.yml`, `image.yml`, or `deploy.yml` authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
+
+Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov:test`).
 
 `ov test` is also the parent router for live-container drive verbs: `ov test cdp` (Chrome DevTools), `ov test wl` (Wayland), `ov test dbus` (D-Bus / notifications), `ov test vnc` (VNC), `ov test mcp` (Model Context Protocol clients) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
 
@@ -206,7 +231,7 @@ ov vm start selkies-desktop-bootc
 
 ## The Layer Library
 
-163 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+164 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -394,7 +419,7 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 249 skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
+This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
 
 The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov test mcp` (see `/ov:mcp`).
 

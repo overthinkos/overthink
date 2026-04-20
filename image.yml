@@ -37,14 +37,40 @@ images:
       - build-toolchain
 
   ubuntu:
-    enabled: false
     base: "ubuntu:24.04"
+    distro: ["ubuntu:24.04", ubuntu, debian]
     build: [deb]
+    builds: [pixi, npm, cargo]
+    builder:
+      pixi: ubuntu-builder
+      npm: ubuntu-builder
+      cargo: ubuntu-builder
+
+  ubuntu-builder:
+    base: ubuntu
+    builds: [pixi, npm, cargo]
+    layers:
+      - pixi
+      - nodejs
+      - build-toolchain
 
   debian:
-    enabled: false
     base: "debian:13"
+    distro: ["debian:13", debian]
     build: [deb]
+    builds: [pixi, npm, cargo]
+    builder:
+      pixi: debian-builder
+      npm: debian-builder
+      cargo: debian-builder
+
+  debian-builder:
+    base: debian
+    builds: [pixi, npm, cargo]
+    layers:
+      - pixi
+      - nodejs
+      - build-toolchain
 
   archlinux:
     base: "docker.io/library/archlinux:latest"
@@ -110,7 +136,6 @@ images:
   # pulls ffmpeg-devel and x264-devel which live in RPM Fusion.
   fedora-coder:
     base: fedora-nonfree
-    network: host
     ports:
       - "2222:2222"
       - "18765:18765"
@@ -187,6 +212,250 @@ images:
         exit_status: 0
 
       - id: fedora-coder-mcp-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:18765}
+        reachable: true
+        timeout: 5s
+
+  arch-coder:
+    base: archlinux
+    ports:
+      - "2222:2222"
+      - "18765:18765"
+    layers:
+      # Baseline (matches arch-ov shape + dbus/tmux for dev UX)
+      - agent-forwarding
+      - sshd
+      - ov-full
+      - ov-mcp
+      - container-nesting
+      - dbus
+      - tmux
+
+      # Language runtimes + managers
+      - language-runtimes
+      - golang
+      - nodejs              # Arch has no nodejs24 (layer-tasks has single Target string, no per-distro symlink) — swap to plain nodejs
+      - rust
+      - pixi
+      - uv
+
+      # Build + developer tooling
+      - build-toolchain
+      - dev-tools
+      - pre-commit
+      - direnv
+      - gh
+      - typst
+      - asciinema
+
+      # AI coding CLIs
+      - claude-code
+      - codex
+      - gemini
+      - forgecode
+      - oracle
+
+      # DevOps / cloud / infra
+      - devops-tools
+      - kubernetes
+      - docker-ce
+      - github-actions
+      - google-cloud
+      - google-cloud-npm
+      - grafana-tools
+
+    tests:
+      - id: arch-coder-ai-clis
+        command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+        exit_status: 0
+
+      - id: arch-coder-languages
+        command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+        exit_status: 0
+
+      - id: arch-coder-devops
+        command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+        exit_status: 0
+
+      - id: arch-coder-ov
+        command: test -x /usr/local/bin/ov
+        exit_status: 0
+
+      - id: arch-coder-sshd-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:2222}
+        reachable: true
+        timeout: 5s
+
+      - id: arch-coder-ov-version
+        scope: deploy
+        command: ov version
+        in_container: true
+        exit_status: 0
+
+      - id: arch-coder-mcp-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:18765}
+        reachable: true
+        timeout: 5s
+
+  debian-coder:
+    base: debian
+    ports:
+      - "2222:2222"
+      - "18765:18765"
+    layers:
+      # Baseline (matches arch-coder / fedora-coder shape)
+      - agent-forwarding
+      - sshd
+      - ov-full
+      - ov-mcp
+      - container-nesting
+      - dbus
+      - tmux
+
+      # Language runtimes + managers
+      - language-runtimes
+      - golang
+      - nodejs               # Debian has no nodejs24 — plain nodejs (matches arch-coder)
+      - rust
+      - pixi
+      - uv
+
+      # Build + developer tooling
+      - build-toolchain
+      - dev-tools
+      - pre-commit
+      - direnv
+      - gh
+      - typst
+      - asciinema
+
+      # AI coding CLIs
+      - claude-code
+      - codex
+      - gemini
+      - forgecode
+      - oracle
+
+      # DevOps / cloud / infra
+      - devops-tools
+      - kubernetes
+      - docker-ce
+      - github-actions
+      - google-cloud
+      - google-cloud-npm
+      - grafana-tools
+
+    tests:
+      - id: debian-coder-ai-clis
+        command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+        exit_status: 0
+
+      - id: debian-coder-languages
+        command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+        exit_status: 0
+
+      - id: debian-coder-devops
+        command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+        exit_status: 0
+
+      - id: debian-coder-ov
+        command: test -x /usr/local/bin/ov
+        exit_status: 0
+
+      - id: debian-coder-sshd-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:2222}
+        reachable: true
+        timeout: 5s
+
+      - id: debian-coder-ov-version
+        scope: deploy
+        command: ov version
+        in_container: true
+        exit_status: 0
+
+      - id: debian-coder-mcp-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:18765}
+        reachable: true
+        timeout: 5s
+
+  ubuntu-coder:
+    base: ubuntu
+    ports:
+      - "2222:2222"
+      - "18765:18765"
+    layers:
+      - agent-forwarding
+      - sshd
+      - ov-full
+      - ov-mcp
+      - container-nesting
+      - dbus
+      - tmux
+
+      - language-runtimes
+      - golang
+      - nodejs
+      - rust
+      - pixi
+      - uv
+
+      - build-toolchain
+      - dev-tools
+      - pre-commit
+      - direnv
+      - gh
+      - typst
+      - asciinema
+
+      - claude-code
+      - codex
+      - gemini
+      - forgecode
+      - oracle
+
+      - devops-tools
+      - kubernetes
+      - docker-ce
+      - github-actions
+      - google-cloud
+      - google-cloud-npm
+      - grafana-tools
+
+    tests:
+      - id: ubuntu-coder-ai-clis
+        command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+        exit_status: 0
+
+      - id: ubuntu-coder-languages
+        command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+        exit_status: 0
+
+      - id: ubuntu-coder-devops
+        command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+        exit_status: 0
+
+      - id: ubuntu-coder-ov
+        command: test -x /usr/local/bin/ov
+        exit_status: 0
+
+      - id: ubuntu-coder-sshd-port
+        scope: deploy
+        addr: 127.0.0.1:${HOST_PORT:2222}
+        reachable: true
+        timeout: 5s
+
+      - id: ubuntu-coder-ov-version
+        scope: deploy
+        command: ov version
+        in_container: true
+        exit_status: 0
+
+      - id: ubuntu-coder-mcp-port
         scope: deploy
         addr: 127.0.0.1:${HOST_PORT:18765}
         reachable: true

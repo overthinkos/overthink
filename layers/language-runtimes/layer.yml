@@ -13,6 +13,100 @@ rpm:
     - python3-ramalama
     - nodejs-devel
 
+# Arch equivalents. `dotnet-sdk` is in `extra`; `go`/`php`/`icu`/`python`
+# are core. Arch ships headers with the main package (no -devel split),
+# so `nodejs-devel`/`python3-devel` have no separate pac: entries. Dropped
+# packages on Arch: `python3-ramalama` (not packaged — install via
+# `uv tool install ramalama` at runtime if needed) and
+# `golang-bazil-fuse-devel` (Go library fetched via `go get`, not a
+# system package on Arch).
+pac:
+  packages:
+    - dotnet-sdk
+    - go
+    - icu
+    - php
+    - python
+
+# Debian/Ubuntu: dotnet-sdk-9.0 is not in Debian or Ubuntu main repositories.
+# Microsoft publishes a codename-keyed apt repo at packages.microsoft.com —
+# so we need per-distro-version tag sections to pick the right URL + suite.
+# First-match-wins via the image's distro: priority list. The plain `deb:`
+# fallback below stays as documentation for any deb-based distro that
+# doesn't have its own override yet.
+#
+# Drops (same for all deb-family distros): python3-ramalama (not packaged;
+# uv tool install ramalama at runtime), golang-bazil-fuse-devel (Go library
+# fetched via `go get`), nodejs-devel (Debian/Ubuntu's nodejs already ships
+# the needed headers; no separate -dev split required).
+deb:
+  packages:
+    - golang-go
+    - libicu-dev
+    - php-cli
+    - python3-dev
+
+# Distro-version tag sections install the non-Microsoft packages via the
+# standard apt path. dotnet-sdk-9.0 is handled by the task: block below
+# via Microsoft's packages-microsoft-prod.deb bootstrap — Microsoft
+# periodically rotates their signing keys (as of 2026-02 the InRelease
+# signature uses key EE4D7792F748182B which microsoft.asc alone no longer
+# validates), and their bootstrap .deb is the documented stable way to
+# track those rotations without baking specific key fingerprints into
+# layer config.
+debian:13:
+  packages:
+    - golang-go
+    - libicu-dev
+    - php-cli
+    - python3-dev
+
+ubuntu:24.04:
+  packages:
+    - golang-go
+    - libicu-dev
+    - php-cli
+    - python3-dev
+
+tasks:
+  # dotnet-sdk-9.0 installer — distro-agnostic gate.
+  #
+  # No-op on Fedora/Arch — their rpm:/pac: blocks already installed
+  # dotnet-sdk-9.0 via distro repos.
+  #
+  # On Debian/Ubuntu, neither Canonical's archive nor Microsoft's apt repo
+  # reliably ship dotnet-sdk-9.0 (verified 2026-04: Canonical noble ships
+  # 8.0 and 10.0 only; Microsoft's noble apt repo ships only 10.0; Debian
+  # 13 via Microsoft's repo does have 9.0, but relying on that cross-distro
+  # asymmetry invites future drift). Microsoft's official dotnet-install.sh
+  # downloads a specific channel's tarball to an arbitrary prefix — the
+  # canonical cross-distro install method. We install to /usr/share/dotnet
+  # and symlink into /usr/bin so the standard test probes /usr/bin/dotnet
+  # successfully.
+  #
+  # The outer `command -v dotnet` guard makes the task idempotent across
+  # tag-only rebuilds and skips Fedora/Arch where the package installed
+  # dotnet already.
+  - cmd: |
+      if command -v dotnet >/dev/null 2>&1; then
+        exit 0
+      fi
+      if ! command -v apt-get >/dev/null 2>&1; then
+        # Not a Debian-family distro — defer to the distro's declarative
+        # package section (or accept it's intentionally unavailable).
+        exit 0
+      fi
+      # Microsoft's dotnet-install.sh needs libicu at runtime but doesn't
+      # bring transitive dependencies. libicu-dev is already installed by
+      # this layer's deb: section.
+      install -d /usr/share/dotnet
+      curl -fsSL https://builds.dotnet.microsoft.com/dotnet/scripts/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+      chmod +x /tmp/dotnet-install.sh
+      /tmp/dotnet-install.sh --channel 9.0 --install-dir /usr/share/dotnet
+      ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet
+      rm -f /tmp/dotnet-install.sh
+    user: root
+
 tests:
   - id: dotnet-binary
     file: /usr/bin/dotnet

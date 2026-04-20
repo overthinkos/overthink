@@ -8,6 +8,15 @@ rpm:
 pac:
   packages: []
 
+# Debian / Ubuntu: gvisor-tap-vsock and podman-machine are not packaged
+# upstream. podman-machine is bundled inside Debian's `podman` (as the
+# `podman machine` subcommand), and gvisor-tap-vsock has no deb package —
+# users needing rootless VM-socket passthrough would install it separately.
+# For the coder use case, this is acceptable: the container-nesting layer
+# already provides the rootless nested podman fallback path.
+deb:
+  packages: []
+
 layers:
   - ov
   - virtualization

@@ -90,6 +90,15 @@ type Check struct {
 	// package names (e.g. openssh-server on Fedora vs openssh on Arch).
 	PackageMap map[string]string `yaml:"package_map,omitempty" json:"package_map,omitempty"`
 
+	// ExcludeDistros lists distro tags on which this check must NOT run.
+	// The test runner skips (not fails) the check when any of the image's
+	// distro tags matches an entry here. Use this when a probe is only
+	// meaningful on some distros — e.g. a `file: /usr/bin/fastfetch`
+	// probe when the package only ships on some distros' repos. Matched
+	// against the full image distro list (e.g. ["ubuntu:24.04", "ubuntu",
+	// "debian"]) so `ubuntu:24.04` and `ubuntu` both match.
+	ExcludeDistros []string `yaml:"exclude_distros,omitempty" json:"exclude_distros,omitempty"`
+
 	// service-specific
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	Running *bool `yaml:"running,omitempty" json:"running,omitempty"` // also reused by process

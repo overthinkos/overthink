@@ -4,6 +4,14 @@ rpm:
   packages:
     - tmux
 
+pac:
+  packages:
+    - tmux
+
+deb:
+  packages:
+    - tmux
+
 tests:
   - id: tmux-binary
     file: /usr/bin/tmux

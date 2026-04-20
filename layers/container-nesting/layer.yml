@@ -23,6 +23,61 @@ pac:
     - skopeo
     - tailscale
 
+# Debian / Ubuntu family-level shared packages (podman, buildah, skopeo,
+# crun, fuse-overlayfs, libsecret are all in Debian/Ubuntu main with
+# identical names). Tailscale uses codename-specific suites, so it's pulled
+# in via the per-version tag overrides below — not here.
+debian,ubuntu:
+  packages:
+    - buildah
+    - crun
+    - fuse-overlayfs
+    - libsecret-1-0
+    - passwd        # provides newuidmap/newgidmap and the shadow-utils bits
+    - podman
+    - skopeo
+    - uidmap
+
+# Tailscale: the apt repo uses codename-specific suites (trixie / noble).
+# These sections override the family-level debian,ubuntu: section above
+# via first-match-wins, so we re-list the base packages alongside
+# tailscale + the upstream repo.
+debian:13:
+  repos:
+    - name: tailscale
+      url: "https://pkgs.tailscale.com/stable/debian"
+      key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+      suite: trixie
+      components: main
+  packages:
+    - buildah
+    - crun
+    - fuse-overlayfs
+    - libsecret-1-0
+    - passwd
+    - podman
+    - skopeo
+    - tailscale
+    - uidmap
+
+ubuntu:24.04:
+  repos:
+    - name: tailscale
+      url: "https://pkgs.tailscale.com/stable/ubuntu"
+      key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+      suite: noble
+      components: main
+  packages:
+    - buildah
+    - crun
+    - fuse-overlayfs
+    - libsecret-1-0
+    - passwd
+    - podman
+    - skopeo
+    - tailscale
+    - uidmap
+
 volumes:
   - name: storage
     path: /var/lib/containers/storage

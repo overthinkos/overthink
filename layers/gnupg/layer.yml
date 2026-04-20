@@ -8,6 +8,10 @@ pac:
   packages:
     - gnupg
 
+deb:
+  packages:
+    - gnupg
+
 tests:
   - id: gpg-binary
     file: /usr/bin/gpg

@@ -8,6 +8,10 @@ pac:
   packages:
     - gocryptfs
 
+deb:
+  packages:
+    - gocryptfs
+
 tests:
   - id: gocryptfs-binary
     file: /usr/bin/gocryptfs

@@ -51,16 +51,78 @@ pac:
     - binutils
     - bison
     - ccache
+    - clang             # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
     - cmake
+    - ffmpeg            # provides ffmpeg + dev headers (Arch doesn't split -devel)
     - flex
     - gcc
     - gdb
     - git
     - glibc
+    - libdrm            # gbm / drm transitive
+    - libinput          # smithay backend_libinput
+    - libjpeg-turbo     # turbojpeg-sys (headers bundled on Arch)
+    - seatd             # smithay session handling (Arch ships libseat inside seatd)
     - libtool
+    - libva             # libva-sys (VA-API)
+    - libxkbcommon      # keyboard backend
     - make
+    - mesa              # smithay backend_gbm (provides libgbm)
+    - nasm              # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
     - ninja
+    - patch             # for source patching in cargo/pip build stages
+    - pixman            # smithay renderer_pixman feature
     - pkgconf
+    - rust              # rustc + cargo for setuptools-rust (pixelflux_wayland)
+    - systemd           # smithay backend_udev via libudev
+    - wayland           # smithay wayland_frontend / backend_* features
+    - x264              # x264-sys
+
+# Debian / Ubuntu equivalents. Naming conventions:
+#   *-devel (Fedora) → lib*-dev / *-dev (Debian)
+#   build-essential bundles gcc/g++/make/libc6-dev (Debian meta-package)
+#   ffmpeg-devel is split across libav{codec,format,util,swscale}-dev on Debian
+#   ninja-build is Debian's package name for ninja
+# Drops (RPM-specific or unpackaged): redhat-rpm-config, rpm-build, rpm-sign,
+# pkgconf-m4, pkgconf-pkg-config (absorbed into pkg-config), cli11-devel
+# (header-only; install via cmake FetchContent if actually needed).
+deb:
+  packages:
+    - autoconf
+    - automake
+    - binutils
+    - bison
+    - build-essential
+    - cargo
+    - ccache
+    - clang
+    - cmake
+    - flex
+    - gdb
+    - git
+    - libavcodec-dev
+    - libavformat-dev
+    - libavutil-dev
+    - libclang-dev
+    - libdrm-dev
+    - libgbm-dev
+    - libinput-dev
+    - libturbojpeg0-dev
+    - libpixman-1-dev
+    - libseat-dev
+    - libsystemd-dev
+    - libswscale-dev
+    - libtool
+    - libudev-dev
+    - libva-dev
+    - libwayland-dev
+    - libx264-dev
+    - libxkbcommon-dev
+    - nasm
+    - ninja-build
+    - patch
+    - pkg-config
+    - rustc
 
 tests:
   - id: gcc-binary

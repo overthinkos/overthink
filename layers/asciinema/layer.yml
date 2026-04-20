@@ -4,6 +4,14 @@ rpm:
   packages:
     - asciinema
 
+pac:
+  packages:
+    - asciinema
+
+deb:
+  packages:
+    - asciinema
+
 tests:
   - id: asciinema-binary
     file: /usr/bin/asciinema

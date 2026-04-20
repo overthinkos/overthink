@@ -23,6 +23,22 @@ type DistroDef struct {
 	Bootstrap   BootstrapDef          `yaml:"bootstrap"`
 	Workarounds []string              `yaml:"workarounds,omitempty"`
 	Formats     map[string]*FormatDef `yaml:"formats,omitempty"`
+	// BaseUser declares a pre-existing uid account that ships in the
+	// upstream base image — e.g. ubuntu:ubuntu uid 1000 on ubuntu:24.04.
+	// When present and the image's user_policy allows adoption, ov adopts
+	// this account verbatim instead of creating a new user at the
+	// configured uid. Nil on distros whose canonical base images ship no
+	// pre-existing user account (fedora, arch, plain debian:13).
+	BaseUser *BaseUserDef `yaml:"base_user,omitempty"`
+}
+
+// BaseUserDef describes a user account that already exists in a base image.
+// All four fields are required when the block is declared.
+type BaseUserDef struct {
+	Name string `yaml:"name"`
+	UID  int    `yaml:"uid"`
+	GID  int    `yaml:"gid"`
+	Home string `yaml:"home"`
 }
 
 // BootstrapDef defines how to bootstrap a base image.
@@ -85,6 +101,13 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 		return def
 	}
 	resolved := dc.resolveInherits(parent, maxDepth-1)
+	// BaseUser: child wins when set, otherwise inherit from parent. A child
+	// can still clear an inherited base_user by declaring `base_user: null`,
+	// though the nil-vs-absent distinction is the normal YAML semantic.
+	baseUser := def.BaseUser
+	if baseUser == nil {
+		baseUser = resolved.BaseUser
+	}
 	// Child overrides parent for non-zero fields
 	if def.Bootstrap.InstallCmd != "" {
 		// Child has its own bootstrap — use child, but inherit formats if missing
@@ -94,18 +117,34 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 				Bootstrap:   def.Bootstrap,
 				Workarounds: def.Workarounds,
 				Formats:     resolved.Formats,
+				BaseUser:    baseUser,
 			}
 			return merged
 		}
+		if def.BaseUser == nil && resolved.BaseUser != nil {
+			// Inherit base_user even when child has its own bootstrap
+			merged := *def
+			merged.BaseUser = baseUser
+			return &merged
+		}
 		return def
 	}
-	// Child has no bootstrap — inherit everything from parent, but overlay child's formats
+	// Child has no bootstrap — inherit everything from parent, but overlay
+	// child's formats (if any) and child's base_user (if any). The base_user
+	// overlay is critical because a child distro like `ubuntu` inherits the
+	// apt bootstrap from `debian` yet still needs to declare its own
+	// pre-existing uid account (ubuntu:1000 on ubuntu:24.04 base images).
+	formats := resolved.Formats
 	if len(def.Formats) > 0 {
+		formats = def.Formats
+	}
+	if def.BaseUser != nil || len(def.Formats) > 0 {
 		merged := &DistroDef{
 			Inherits:    def.Inherits,
 			Bootstrap:   resolved.Bootstrap,
 			Workarounds: resolved.Workarounds,
-			Formats:     def.Formats,
+			Formats:     formats,
+			BaseUser:    baseUser,
 		}
 		return merged
 	}

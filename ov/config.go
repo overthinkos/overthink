@@ -127,9 +127,10 @@ type ImageConfig struct {
 	Build     BuildFormats  `yaml:"build,omitempty"`        // package formats ["rpm"] — all installed in order
 	Layers    []string      `yaml:"layers,omitempty"`
 	Ports     []string      `yaml:"ports,omitempty"`    // runtime port mappings ["host:container"]
-	User      string        `yaml:"user,omitempty"`     // username (default: "user")
-	UID       *int          `yaml:"uid,omitempty"`      // user ID (default: 1000)
-	GID       *int          `yaml:"gid,omitempty"`      // group ID (default: 1000)
+	User       string        `yaml:"user,omitempty"`         // username (default: "user")
+	UID        *int          `yaml:"uid,omitempty"`          // user ID (default: 1000)
+	GID        *int          `yaml:"gid,omitempty"`          // group ID (default: 1000)
+	UserPolicy string        `yaml:"user_policy,omitempty"`  // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
 	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
 	Builder    BuilderMap        `yaml:"builder,omitempty"`      // build type → builder image (pixi, npm, cargo, aur)
@@ -195,6 +196,11 @@ type ResolvedImage struct {
 	UID  int    // user ID
 	GID  int    // group ID
 	Home string // resolved home directory (detected or /home/<user>)
+	// UserAdopted is true when the resolved user came from the distro's
+	// base_user declaration (build.yml `distro.<name>.base_user`) rather
+	// than being created by the bootstrap. Consulted by writeBootstrap to
+	// skip the useradd step — the base image already ships this account.
+	UserAdopted bool
 
 	// Merge configuration
 	Merge *MergeConfig // layer merge settings (nil means use CLI defaults)
@@ -521,6 +527,47 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		if distroCfg != nil {
 			resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
 		}
+	}
+
+	// Reconcile user_policy against the distro's base_user declaration.
+	// Must run after DistroDef is resolved. Updates resolved.User/UID/GID/
+	// Home when adopting so all downstream substitution (${USER}, ${HOME},
+	// COPY --chown, sudoers writes) sees the adopted identity.
+	policy := img.UserPolicy
+	if policy == "" {
+		policy = c.Defaults.UserPolicy
+	}
+	if policy == "" {
+		policy = "auto"
+	}
+	baseUser := (*BaseUserDef)(nil)
+	if resolved.DistroDef != nil {
+		baseUser = resolved.DistroDef.BaseUser
+	}
+	userExplicitlySet := img.User != "" || c.Defaults.User != ""
+	switch policy {
+	case "adopt":
+		if baseUser == nil {
+			return nil, fmt.Errorf("image %s: user_policy: adopt requires distro %v to declare base_user in build.yml", name, resolved.Distro)
+		}
+		resolved.User = baseUser.Name
+		resolved.UID = baseUser.UID
+		resolved.GID = baseUser.GID
+		resolved.Home = baseUser.Home
+		resolved.UserAdopted = true
+	case "auto":
+		if baseUser != nil && !userExplicitlySet {
+			resolved.User = baseUser.Name
+			resolved.UID = baseUser.UID
+			resolved.GID = baseUser.GID
+			resolved.Home = baseUser.Home
+			resolved.UserAdopted = true
+		}
+	case "create":
+		// no-op — resolved.User/UID/GID/Home already reflect image config +
+		// defaults + hardcoded fallback, and writeBootstrap will useradd.
+	default:
+		return nil, fmt.Errorf("image %s: unknown user_policy %q (expected auto, adopt, or create)", name, policy)
 	}
 
 	return resolved, nil

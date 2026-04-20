@@ -8,6 +8,10 @@ pac:
   packages:
     - direnv
 
+deb:
+  packages:
+    - direnv
+
 tests:
   - id: direnv-binary
     file: /usr/bin/direnv

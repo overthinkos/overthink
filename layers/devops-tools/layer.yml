@@ -8,6 +8,20 @@ rpm:
     - rsync
     - unzip
 
+pac:
+  packages:
+    - bind-tools
+    - jq
+    - rsync
+    - unzip
+
+deb:
+  packages:
+    - dnsutils        # Debian's equivalent of bind-utils / bind-tools
+    - jq
+    - rsync
+    - unzip
+
 tasks:
   # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
   # symlinks into /usr/local/bin.

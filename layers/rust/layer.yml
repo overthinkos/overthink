@@ -6,6 +6,10 @@ rpm:
     - rust
     - cargo
 
+pac:
+  packages:
+    - rust
+
 deb:
   packages:
     - rustc

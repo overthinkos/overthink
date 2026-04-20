@@ -1,10 +1,10 @@
 # Overthink — The Container Management Experience for You and Your AI
 
-Compose, build, deploy, and manage container images from a library of fully configurable layers.
-Built on a generic init system framework (`build.yml` → `init:` section) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
+Compose, build, deploy, and manage container images from a library of fully configurable layers. Built on a generic init system framework (`build.yml` → `init:` section) and `ov` (Go CLI). Designed to work equally well from the command line and from AI agents like Claude Code. Supports both Docker and Podman.
+
+See `README.md` for the user-facing feature overview and command reference, `plugins/README.md` for the full skill index. This file carries only **project-specific rules and mandates** — architectural descriptions belong in skills (the single source of truth).
 
 ---
-
 
 ## Five Cornerstones of AI Scut Testing
 
@@ -19,68 +19,31 @@ Built on a generic init system framework (`build.yml` → `init:` section) and `
 Always pick the cleanest long-term approach and prioritize having a clean codebase with any deprecated code fully removed above everything.
 You have all the time in the world and taking the time to get things properly done is ALWAYS worth the effort.
 
-## Architecture Overview
+## Where things are documented
 
-`ov` (Go CLI, source in `ov/`) has a three-mode namespace split with strictly disjoint input sets — each mode owns a distinct input file and never reads another mode's input:
+- **README.md** — user-facing intro: features, key concepts, install, quick taste, lifecycle, command reference.
+- **`plugins/README.md`** — index of all 250+ skills across five plugins.
+- **`plugins/ov/skills/<cmd>/SKILL.md`** — one skill per `ov` subcommand (`/ov:image`, `/ov:build`, `/ov:config`, `/ov:test`, …).
+- **`plugins/ov-layers/skills/<name>/SKILL.md`** — one skill per layer (164 of them).
+- **`plugins/ov-images/skills/<name>/SKILL.md`** — one skill per defined image (49 of them).
+- **`plugins/ov-dev/skills/`** — developer-facing (Go codebase map, generate internals, skill maintenance).
 
-- **Build mode** — `ov image {build, generate, validate, merge, new, inspect, list, pull}`. Reads `image.yml` + `build.yml`. Writes Containerfiles, built images, OCI labels. See `/ov:image`, `/ov:build`.
-- **Test mode** — `ov test` (all forms: `run`, `cdp`, `wl`, `dbus`, `vnc`) + `ov image test`. Reads only OCI labels (`org.overthinkos.tests`) + local `deploy.yml` tests overlay + container/image runtime state. Never reads `image.yml`. Writes nothing persistent. The tests OCI label is baked at build time from `image.yml` + `layer.yml` authoring only — `deploy.yml` contributes the local tests overlay at test-run time, not to the label. See `/ov:test`.
-- **Deploy mode** — every other command (`config`, `deploy`, `start`, `stop`, `update`, `remove`, `shell`, `cmd`, `service`, `status`, `logs`, `tmux`, `doctor`, `udev`, `vm`, `secrets`, `settings`, `alias`, `record`, `version`). Reads OCI labels + `deploy.yml`. Writes `deploy.yml`, quadlet files, credential stores. See `/ov:config`, `/ov:deploy`, `/ov-dev:go`.
-- **Gateway (cross-mode)** — `ov mcp serve` exposes the *entire* CLI surface (all three modes) as MCP tools over Streamable HTTP or stdio, auto-generated from Kong reflection. Used by LLM agents driving `ov` remotely. Not a fourth mode: it is a remote-procedure surface onto the same modes above. See `/ov:mcp`.
-
-**Key subsystems** — each skill is the single source of truth for its area; don't copy their contents here.
-
-| Subsystem | Skill |
-|-----------|-------|
-| Image family (build mode) | `/ov:image`, `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:pull` |
-| Testing (test mode) | `/ov:test` (parent router + nested verbs `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`), `/ov-dev:go` for impl map |
-| Install tasks (`tasks:` verb catalog, `vars:`, `${VAR}`, YAML anchors) | `/ov:layer` (authoritative) |
-| Credentials & Secrets | `/ov:secrets`, `/ov:config` |
-| Credential-backed env vars (`secret_accepts` / `secret_requires`) | `/ov:layer`, `/ov:secrets` |
-| Volumes & Encrypted Storage | `/ov:deploy`, `/ov:config`, `/ov:enc` |
-| env/mcp provides/requires/accepts | `/ov:config`, `/ov:layer` |
-| Sidecars & Tunnels (deploy.yml-only) | `/ov:sidecar`, `/ov:deploy` |
-| Init Systems | `/ov:generate`, `/ov:layer` |
-| Multi-distro | `/ov:build`, `/ov:layer` |
-| Desktop Automation | `/ov:test` (parent router) with nested verbs `/ov:cdp`, `/ov:dbus`, `/ov:vnc`, `/ov:wl`; plus `/ov:wl-overlay` (Wayland overlay helpers) |
-| Keyboard & Locale | `/ov-layers:labwc`, `/ov-layers:selkies` |
-| GPU Auto-detection | `/ov:doctor`, `/ov:shell` |
-| Missing-image recovery | `/ov:pull` (`ErrImageNotLocal` sentinel in `ov/labels.go`) |
-| Declarative testing (`tests:` / `deploy_tests:` / `org.overthinkos.tests`) | `/ov:test` (verb catalog, runtime variables, deploy.yml overlay, authoring gotchas) |
-| Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
-| Bootc-specific boot wiring | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm` |
-| Rootless nested containers & rootless VMs | `/ov-layers:container-nesting` (kernel RCA), `/ov-layers:virtualization` (libvirt session), `/ov-images:selkies-desktop-ov` (streaming-desktop composition), `/ov-images:fedora-coder` (headless composition) |
-| MCP server (`ov mcp serve`) — gateway exposing every CLI leaf as an MCP tool | `/ov:mcp` (server architecture + Kong reflection + auto-fallback semantics), `/ov-layers:ov-mcp` (deployment layer + `/workspace` bind-mount + 3 deployment patterns) |
-| Cross-distro test package names (`package_map:` on the `package:` verb) | `/ov:test`, `/ov-layers:sshd` |
-
-**`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
-
----
-
-## Repository Layout
-
-See `/ov-dev:go` for directory structure and `/ov-dev:skills` for plugin/skill organization.
+Architecture, mode split (build / test / deploy / mcp-gateway), subsystem mapping — all delegated to skills. Don't duplicate them here.
 
 ---
 
 ## Key Rules
 
-- MUST invoke skills before exploring the codebase — skills are the primary knowledge source.
-- Lowercase-hyphenated names for layers and images.
-- All logic lives in `ov`; Taskfiles are strictly bootstrap (build the `ov` binary). See `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
-- **Tests ship with the image**: every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives are emitted last in each Containerfile so test edits rebuild in ~2 seconds instead of minutes.
-- **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
-- **Project directory resolution** (build mode): `-C` / `--dir` / `OV_PROJECT_DIR` (local) or `--repo` / `OV_PROJECT_REPO` (remote, cached in `~/.cache/ov/repos/`). `--repo` + `--dir` are mutually exclusive. `ov mcp serve` auto-falls back to `overthinkos/overthink` whenever the resolved cwd has no `image.yml` (refined 2026-04). See `/ov:image` "Project directory resolution" and `/ov:mcp` "Project-dir wiring".
-- **Don't declare defensive deps**: a layer's `depends:` on another layer carries a correctness cost — the depended layer ships in every downstream image whether the runtime uses it or not. Declare deps only when the layer *actually uses* the target at runtime. Historical examples removed in 2026-04: `supervisord` and `language-runtimes` both declared `depends: python` (the pixi-python ov-layer) when the real dep was the RPM `python3` package — dropping both cut several hundred MB from every deployable image. `uv` similarly dropped `depends: python` + its `pixi.toml` once it was rewritten as a direct-download Rust binary. See `/ov-layers:supervisord`, `/ov-layers:language-runtimes`, `/ov-layers:uv`.
-
-**Authoring + deployment specifics live in skills** — see the subsystems table above for the full mapping. Quick entry points: authoring → `/ov:layer`, `/ov:image`, `/ov:build`, `/ov:test`; deployment → `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc`. Quadlet is default; `ov config` before `ov start`; tunnel is deploy.yml-only.
+- **Skills first** — invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort). Multi-step workflows: invoke ALL skills in the chain. See `/ov-dev:skills` for routing, chains, and the 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator).
+- **Lowercase-hyphenated names** for layers and images.
+- **All logic lives in `ov`** — Taskfiles are strictly bootstrap (build the `ov` binary). Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
+- **Tests ship with the image** — every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives emit last in each Containerfile so test edits rebuild in ~2 seconds.
+- **Mode purity** — `LoadConfig` reads `image.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
+- **Project directory resolution** (build mode) — `-C` / `--dir` / `OV_PROJECT_DIR` (local) or `--repo` / `OV_PROJECT_REPO` (remote, cached in `~/.cache/ov/repos/`). `--repo` + `--dir` are mutually exclusive. `ov mcp serve` auto-falls back to `overthinkos/overthink` whenever the resolved cwd has no `image.yml`. See `/ov:image` "Project directory resolution" and `/ov:mcp`.
+- **Don't declare defensive deps** — a layer's `depends:` on another layer ships that layer in every downstream image whether the runtime uses it or not. Declare deps only when the layer *actually uses* the target at runtime. Historical examples removed 2026-04: `supervisord`, `language-runtimes`, and `uv` all dropped vestigial `depends: python` (they use system `python3`, not the pixi env). See `/ov-layers:supervisord`, `/ov-layers:language-runtimes`, `/ov-layers:uv`.
+- **User policy: adopt over rename** — when an upstream base image ships a pre-existing uid-1000 account (Ubuntu 24.04 ships `ubuntu:ubuntu`), declare it via `build.yml distro.<name>.base_user:` and let `user_policy: auto` (the default) adopt it. Never `usermod -l` rename — it fights the base image's conventions and breaks cloud-init / docs assumptions. Layers that need the uid-1000 account's name use `getent passwd 1000` discovery inside `cmd:` (see `/ov-layers:sshd`), not hardcoded literals or `$USER`. See `/ov:image` "user_policy" and `/ov:build` "base_user:".
 
 ---
-
-## Skills First (Blocking)
-
-Invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort). Multi-step workflows: invoke ALL skills in the chain. See `/ov-dev:skills` for skill routing, chains, maintenance guidelines, and the 3 blocking enforcement agents (layer-validator, root-cause-analyzer, testing-validator).
-
 
 ## AI Attribution (Fedora Policy Compliant)
 

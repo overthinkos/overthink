@@ -6,6 +6,10 @@ pac:
   packages:
     - supervisor
 
+deb:
+  packages:
+    - supervisor
+
 tests:
   - id: supervisord-binary
     file: /usr/bin/supervisord

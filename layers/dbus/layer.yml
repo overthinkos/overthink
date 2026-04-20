@@ -8,6 +8,14 @@ rpm:
   packages:
     - dbus-daemon
 
+pac:
+  packages:
+    - dbus
+
+deb:
+  packages:
+    - dbus
+
 service: |
   [program:dbus]
   command=dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session
@@ -26,6 +34,8 @@ tests:
     exists: true
   - id: dbus-daemon-package
     package: dbus-daemon
+    package_map:
+      archlinux: dbus
     installed: true
   - id: dbus-session-env
     scope: deploy

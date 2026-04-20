@@ -9,6 +9,49 @@ rpm:
     - docker-ce-cli
     - docker-compose-plugin
 
+# Arch ships Docker natively in the `extra` repo — no Docker upstream
+# repo required. `docker` provides /usr/bin/docker; `docker-buildx` and
+# `docker-compose` are separate packages. `containerd` is the runtime.
+pac:
+  packages:
+    - containerd
+    - docker
+    - docker-buildx
+    - docker-compose
+
+# Debian / Ubuntu: Docker's official apt repo uses codename-specific suites
+# (trixie for Debian 13, noble for Ubuntu 24.04). Distro-version tag
+# sections override the generic deb: fallback so each image gets its own
+# repo URL + suite. First-match-wins: debian-coder hits debian:13, ubuntu-
+# coder hits ubuntu:24.04.
+debian:13:
+  repos:
+    - name: docker-ce-debian
+      url: "https://download.docker.com/linux/debian"
+      key: "https://download.docker.com/linux/debian/gpg"
+      suite: trixie
+      components: stable
+  packages:
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-ce
+    - docker-ce-cli
+    - docker-compose-plugin
+
+ubuntu:24.04:
+  repos:
+    - name: docker-ce-ubuntu
+      url: "https://download.docker.com/linux/ubuntu"
+      key: "https://download.docker.com/linux/ubuntu/gpg"
+      suite: noble
+      components: stable
+  packages:
+    - containerd.io
+    - docker-buildx-plugin
+    - docker-ce
+    - docker-ce-cli
+    - docker-compose-plugin
+
 tasks:
   # Load iptable_nat kernel module at boot (needed for docker networking)
   - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf

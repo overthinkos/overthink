@@ -209,10 +209,14 @@ type PackageSection struct {
 	Raw        map[string]interface{} // all fields from YAML, passed to templates
 }
 
-// TagPkgConfig is a simplified package config for distro/version-specific sections.
-// Packages are installed using the primary format's tool (dnf, apt, pacman).
+// TagPkgConfig is a distro/version-specific package config (e.g. `debian:13:`,
+// `ubuntu:24.04:`, `fedora:43:`). Packages are installed using the primary
+// format's tool (dnf, apt, pacman). Raw captures the full YAML so that tag
+// sections can carry `repos:`, `options:`, `keys:` — the same schema as the
+// generic format section — for version-specific upstream repo configurations.
 type TagPkgConfig struct {
-	Packages []string `yaml:"packages,omitempty"`
+	Packages []string               `yaml:"packages,omitempty"`
+	Raw      map[string]interface{} `yaml:"-"`
 }
 
 // Task is a single install operation in layer.yml `tasks:` list.
@@ -334,11 +338,18 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 					ly.FormatSections[key] = section
 				}
 			} else {
-				// Tag section: parse as simple {packages: [...]}
+				// Tag section: parse BOTH the typed struct (for Packages access)
+				// AND the raw map (for repos/options/keys passthrough to the
+				// install template). Same dual-decode pattern as FormatSections.
 				var cfg TagPkgConfig
 				if err := value.Content[i+1].Decode(&cfg); err != nil {
 					continue
 				}
+				var raw map[string]interface{}
+				if err := value.Content[i+1].Decode(&raw); err != nil {
+					continue
+				}
+				cfg.Raw = raw
 				if len(cfg.Packages) == 0 {
 					continue
 				}

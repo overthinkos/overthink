@@ -8,6 +8,10 @@ pac:
   packages:
     - openssh
 
+deb:
+  packages:
+    - openssh-client
+
 tests:
   - id: ssh-binary
     file: /usr/bin/ssh

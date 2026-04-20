@@ -13,6 +13,12 @@ pac:
     - openssh
     - sudo
 
+deb:
+  packages:
+    - openssh-server
+    - openssh-client
+    - sudo
+
 ports:
   - tcp:2222
 
@@ -34,11 +40,23 @@ tasks:
     mode: "0755"
     user: root
 
-  - write: /etc/sudoers.d/ov-user
-    mode: "0440"
+  # Sudoers file targets the ACTUAL uid-1000 account, not a hardcoded
+  # literal. System-discovery via `getent passwd 1000` works uniformly
+  # across both paths: create mode (Fedora/Arch/plain Debian — the account
+  # is named "user") and adopt mode (Ubuntu — the account is named
+  # "ubuntu" per the base_user declaration in build.yml). Note: we can't
+  # use ${USER} here because the generator doesn't substitute in cmd: body
+  # (per layer-authoring docs) and RUN shells don't have $USER set by
+  # default. getent is the reliable path.
+  - cmd: |
+      account=$(getent passwd 1000 | cut -d: -f1)
+      if [ -z "$account" ]; then
+        echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
+        exit 1
+      fi
+      printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/ov-user
+      chmod 0440 /etc/sudoers.d/ov-user
     user: root
-    content: |
-      user ALL=(ALL) NOPASSWD: ALL
 
 # Systemd service (bootc images)
 system_services:

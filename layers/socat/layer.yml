@@ -10,6 +10,11 @@ pac:
     - socat
     - iproute2
 
+deb:
+  packages:
+    - socat
+    - iproute2
+
 tasks:
   - copy: relay-wrapper
     to: /usr/local/bin/relay-wrapper

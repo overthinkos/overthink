@@ -8,6 +8,10 @@ pac:
   packages:
     - go
 
+deb:
+  packages:
+    - golang-go
+
 tests:
   - id: go-binary
     file: /usr/bin/go

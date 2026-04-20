@@ -198,6 +198,21 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result.Elapsed = time.Since(start)
 		return result
 	}
+	// exclude_distros: skip when any of the image's distro tags intersects
+	// with the exclusion list. Used for probes that are only meaningful on
+	// some distros (e.g. a binary that a given distro renames or drops).
+	if len(c.ExcludeDistros) > 0 && len(r.Distros) > 0 {
+		for _, imgTag := range r.Distros {
+			for _, excl := range c.ExcludeDistros {
+				if imgTag == excl {
+					result.Status = TestSkip
+					result.Message = fmt.Sprintf("excluded on distro %q", imgTag)
+					result.Elapsed = time.Since(start)
+					return result
+				}
+			}
+		}
+	}
 
 	// Expand variables in-place on a copy so repeated runs over the same
 	// check list don't accumulate substitutions.

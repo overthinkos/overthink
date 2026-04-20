@@ -15,12 +15,13 @@ rpm:
 pac:
   packages:
     - buildah
-    - docker
+    - crun
     - fuse-overlayfs
+    - libsecret
+    - podman
     - shadow
     - skopeo
     - tailscale
-    - libsecret
 
 volumes:
   - name: storage

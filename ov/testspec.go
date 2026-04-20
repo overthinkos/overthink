@@ -82,6 +82,13 @@ type Check struct {
 	// package-specific
 	Installed *bool    `yaml:"installed,omitempty" json:"installed,omitempty"`
 	Versions  []string `yaml:"versions,omitempty"  json:"versions,omitempty"`
+	// PackageMap overrides the Package name per distro. Keys match the image's
+	// distro tags (e.g. "archlinux", "fedora", "ubuntu", "debian"). If the
+	// running image's distro tag is present in the map, that value replaces
+	// Package for the probe; otherwise Package is used as-is. Required for
+	// cross-distro tests where the same software ships under different
+	// package names (e.g. openssh-server on Fedora vs openssh on Arch).
+	PackageMap map[string]string `yaml:"package_map,omitempty" json:"package_map,omitempty"`
 
 	// service-specific
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`

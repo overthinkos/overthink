@@ -14,5 +14,5 @@ tests:
   - id: ov-version
     command: /usr/local/bin/ov version
     exit_status: 0
-    stderr:
+    stdout:
       - matches: "[0-9]{4}\\.[0-9]+"

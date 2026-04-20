@@ -12,6 +12,14 @@ import (
 // CLI defines the command-line interface structure
 type CLI struct {
 	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
+	// Dir is the project directory that every build-mode command resolves
+	// image.yml / layers/ / build.yml relative to. Default is the process
+	// cwd. Useful for MCP servers and remote agents that run outside a
+	// project checkout — set OV_PROJECT_DIR or pass -C / --dir to point at
+	// a mounted project root. Build-mode commands call os.Getwd()
+	// unconditionally; when this flag is set, main() chdirs before Kong's
+	// ctx.Run() so every existing call site picks up the change.
+	Dir string `short:"C" long:"dir" env:"OV_PROJECT_DIR" help:"Project directory containing image.yml (default: cwd)" type:"path"`
 
 	Alias    AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
 	Cmd      CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
@@ -20,6 +28,7 @@ type CLI struct {
 	Doctor   DoctorCmd       `cmd:"" help:"Show host dependency status"`
 	Image    ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
 	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
+	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Record   RecordCmd       `cmd:"" help:"Record terminal sessions or desktop video"`
 	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
@@ -619,8 +628,7 @@ func (c *SettingsPathCmd) Run() error {
 type VersionCmd struct{}
 
 func (c *VersionCmd) Run() error {
-	version := ComputeCalVer()
-	println(version)
+	fmt.Println(ComputeCalVer())
 	return nil
 }
 
@@ -643,6 +651,17 @@ func main() {
 	// Set global --kdbx flag into env so resolveKdbxPaths() picks it up everywhere
 	if cli.Kdbx != "" {
 		os.Setenv("OV_KDBX_PATH", cli.Kdbx)
+	}
+
+	// Honour -C / --dir / OV_PROJECT_DIR before dispatch. Chdir is the
+	// single-point intervention: every build-mode command reaches project
+	// files through os.Getwd(), so one chdir here propagates to all of them
+	// without touching 10+ call sites.
+	if cli.Dir != "" {
+		if err := os.Chdir(cli.Dir); err != nil {
+			fmt.Fprintf(os.Stderr, "ov: cannot chdir to --dir %q: %v\n", cli.Dir, err)
+			os.Exit(1)
+		}
 	}
 
 	err := ctx.Run()

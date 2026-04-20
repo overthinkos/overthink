@@ -21,14 +21,34 @@ import (
 // supervisorctl / systemctl for services) and falls back cleanly.
 // ---------------------------------------------------------------------------
 
+// resolvePackageName picks the correct package name for the running image's
+// distro. If Check.PackageMap has a key matching any of the image's distro
+// tags, that mapping wins; otherwise the Check.Package scalar is used as-is.
+// The first matching distro tag wins — tags are authored in priority order
+// ("fedora:43" before "fedora"), so a map keyed by either hits.
+func resolvePackageName(c *Check, distros []string) string {
+	if len(c.PackageMap) == 0 {
+		return c.Package
+	}
+	for _, tag := range distros {
+		if name, ok := c.PackageMap[tag]; ok && name != "" {
+			return name
+		}
+	}
+	return c.Package
+}
+
 // runPackage: `rpm -q`, `dpkg -s`, or `pacman -Q` — exit 0 ⇒ installed.
 // When Versions is set, pulls the version string and compares exactly.
+// PackageMap (if set) overrides the package name per distro — the first
+// Distros tag that matches a map key wins; otherwise Package is used.
 func (r *Runner) runPackage(ctx context.Context, c *Check) TestResult {
 	wantInstalled := true
 	if c.Installed != nil {
 		wantInstalled = *c.Installed
 	}
-	pkg := shellSingleQuote(c.Package)
+	name := resolvePackageName(c, r.Distros)
+	pkg := shellSingleQuote(name)
 	probe := fmt.Sprintf(
 		`rpm -q %[1]s >/dev/null 2>&1 || (dpkg -s %[1]s 2>/dev/null | grep -q "^Status:.*install ok installed") || pacman -Q %[1]s >/dev/null 2>&1`,
 		pkg)

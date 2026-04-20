@@ -5,6 +5,10 @@ rpm:
   packages:
     - supervisor
 
+pac:
+  packages:
+    - supervisor
+
 tests:
   - id: supervisord-binary
     file: /usr/bin/supervisord

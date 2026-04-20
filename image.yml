@@ -79,7 +79,9 @@ images:
     uid: 0
     gid: 0
     user: root
-    network: host
+    ports:
+      - "2222:2222"
+      - "18765:18765"
     security:
       cap_add: [ALL]
       security_opt:
@@ -88,6 +90,7 @@ images:
     layers:
       - agent-forwarding
       - ov-full
+      - ov-mcp
       - golang
       - gh
       - sshd

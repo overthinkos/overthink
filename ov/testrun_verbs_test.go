@@ -234,3 +234,75 @@ func TestRunner_Matching(t *testing.T) {
 		t.Errorf("got %+v", res[0])
 	}
 }
+
+// TestResolvePackageName covers the package_map distro-aware lookup added to
+// support cross-distro tests where package names diverge (e.g.
+// openssh-server on Fedora vs openssh on Arch). The first matching distro
+// tag wins; unmatched distros fall back to the Package scalar.
+func TestResolvePackageName(t *testing.T) {
+	cases := []struct {
+		name    string
+		check   Check
+		distros []string
+		want    string
+	}{
+		{
+			name:    "empty map returns scalar",
+			check:   Check{Package: "openssh-server"},
+			distros: []string{"fedora"},
+			want:    "openssh-server",
+		},
+		{
+			name: "map key matches distro tag",
+			check: Check{Package: "openssh-server", PackageMap: map[string]string{
+				"archlinux": "openssh",
+				"fedora":    "openssh-server",
+			}},
+			distros: []string{"archlinux"},
+			want:    "openssh",
+		},
+		{
+			name: "first matching tag wins",
+			check: Check{Package: "openssh-server", PackageMap: map[string]string{
+				"fedora:43": "openssh-server43",
+				"fedora":    "openssh-server",
+			}},
+			distros: []string{"fedora:43", "fedora"},
+			want:    "openssh-server43",
+		},
+		{
+			name: "no tag matches — fallback to scalar",
+			check: Check{Package: "openssh-server", PackageMap: map[string]string{
+				"archlinux": "openssh",
+			}},
+			distros: []string{"ubuntu"},
+			want:    "openssh-server",
+		},
+		{
+			name: "empty distros — fallback to scalar",
+			check: Check{Package: "openssh-server", PackageMap: map[string]string{
+				"archlinux": "openssh",
+			}},
+			distros: nil,
+			want:    "openssh-server",
+		},
+		{
+			name: "empty string map value — fall through to next distro",
+			check: Check{Package: "openssh-server", PackageMap: map[string]string{
+				"archlinux": "",
+				"fedora":    "openssh-server",
+			}},
+			distros: []string{"archlinux", "fedora"},
+			want:    "openssh-server",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolvePackageName(&tc.check, tc.distros)
+			if got != tc.want {
+				t.Errorf("resolvePackageName() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

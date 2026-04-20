@@ -235,7 +235,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 22 top-level command families split across three modes with disjoint input sets: **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`). Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 23 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
@@ -244,9 +244,12 @@ The `ov` CLI has 22 top-level command families split across three modes with dis
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
+| **MCP gateway (cross-mode)** | `mcp serve` (176 tools from Kong reflection; Streamable HTTP / stdio; `--read-only` filter) | `/ov:mcp` Part 2 + `/ov-layers:ov-mcp` for the deployment layer |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
 | **Misc** | `version` | `/ov:version` |
+
+**Global flags** (apply to every command): `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` overrides the project directory (where `image.yml` lives) for build-mode commands — honoured before Kong dispatches the subcommand. Load-bearing for running `ov mcp serve` inside a container with the project bind-mounted at `/project`. `--kdbx <path>` overrides the KeePass credential store location.
 
 A few sample invocations:
 
@@ -259,6 +262,7 @@ ov shell jupyter                       # Interactive dev shell with volumes + GP
 ov test cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
 ov test wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
 ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
+ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov:mcp Part 2)
 ```
 
 ### Pulling images from registries

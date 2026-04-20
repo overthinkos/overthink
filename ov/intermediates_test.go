@@ -1112,3 +1112,117 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	}
 	t.Logf("Build order: %v", order)
 }
+
+// TestComputeIntermediates_InheritDistroFromParent guards against a regression
+// where auto-intermediates inherited `distro:` and `build:` from
+// `cfg.Defaults` even when the parent image explicitly overrode them. Fedora
+// is declared as build:[rpm] in defaults; archlinux overrides to build:[pac].
+// An arch-rooted intermediate must inherit [pac] + [archlinux], not fall
+// through to defaults. See root cause in ov/intermediates.go createIntermediate.
+func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
+	layers := map[string]*Layer{
+		"a": {Name: "a", HasTasks: true},
+		"b": {Name: "b", HasTasks: true},
+		"c": {Name: "c", HasTasks: true},
+	}
+
+	images := map[string]*ResolvedImage{
+		"fedora": {
+			Name: "fedora", Base: "ext:fedora", IsExternalBase: true,
+			Layers: []string{}, Tag: "v1", Registry: "r",
+			FullTag: "r/fedora:v1", Pkg: "rpm",
+			Distro:       []string{"fedora"},
+			BuildFormats: []string{"rpm"},
+		},
+		"archlinux": {
+			Name: "archlinux", Base: "ext:arch", IsExternalBase: true,
+			Layers: []string{}, Tag: "v1", Registry: "r",
+			FullTag: "r/archlinux:v1", Pkg: "pac",
+			Distro:       []string{"archlinux"},
+			BuildFormats: []string{"pac"},
+		},
+		"arch-a-b": {
+			Name: "arch-a-b", Base: "archlinux", IsExternalBase: false,
+			Layers: []string{"a", "b"}, Tag: "v1", Registry: "r",
+			FullTag: "r/arch-a-b:v1", Pkg: "pac",
+			Distro: []string{"archlinux"}, BuildFormats: []string{"pac"},
+		},
+		"arch-a-c": {
+			Name: "arch-a-c", Base: "archlinux", IsExternalBase: false,
+			Layers: []string{"a", "c"}, Tag: "v1", Registry: "r",
+			FullTag: "r/arch-a-c:v1", Pkg: "pac",
+			Distro: []string{"archlinux"}, BuildFormats: []string{"pac"},
+		},
+	}
+
+	// Defaults explicitly use rpm to prove the fix: parent archlinux must
+	// win over these defaults in the auto-intermediate.
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry: "r",
+			Distro:   []string{"fedora"},
+			Build:    BuildFormats{"rpm"},
+		},
+		Images: map[string]ImageConfig{
+			"fedora":    {Layers: []string{}},
+			"archlinux": {Base: "ext:arch", Layers: []string{}},
+			"arch-a-b":  {Base: "archlinux", Layers: []string{"a", "b"}},
+			"arch-a-c":  {Base: "archlinux", Layers: []string{"a", "c"}},
+		},
+	}
+
+	result, err := ComputeIntermediates(images, layers, cfg, "v1")
+	if err != nil {
+		t.Fatalf("ComputeIntermediates() error = %v", err)
+	}
+
+	// Find the auto-intermediate that contains layer "a" rooted at archlinux.
+	var archInter *ResolvedImage
+	for _, img := range result {
+		if !img.Auto {
+			continue
+		}
+		if img.Base != "archlinux" {
+			continue
+		}
+		archInter = img
+		break
+	}
+	if archInter == nil {
+		t.Fatalf("expected an auto-intermediate with Base=archlinux, got none. result keys: %v", resultNames(result))
+	}
+
+	// The critical assertion: parent distro/build must be inherited, not
+	// overwritten by cfg.Defaults (which is fedora/rpm in this test).
+	if got, want := archInter.BuildFormats, []string{"pac"}; !slicesEqual(got, want) {
+		t.Errorf("auto-intermediate %q: BuildFormats = %v, want %v (must inherit from parent archlinux, not defaults)",
+			archInter.Name, got, want)
+	}
+	if got, want := archInter.Distro, []string{"archlinux"}; !slicesEqual(got, want) {
+		t.Errorf("auto-intermediate %q: Distro = %v, want %v (must inherit from parent archlinux, not defaults)",
+			archInter.Name, got, want)
+	}
+	if archInter.Pkg != "pac" {
+		t.Errorf("auto-intermediate %q: Pkg = %q, want %q", archInter.Name, archInter.Pkg, "pac")
+	}
+}
+
+func resultNames(m map[string]*ResolvedImage) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

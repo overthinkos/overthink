@@ -1,0 +1,92 @@
+description: "MCP server exposing the full ov CLI as tools (Streamable HTTP on port 18765)"
+
+layers:
+  - ov
+  - supervisord
+
+ports:
+  - 18765
+
+mcp_provides:
+  - name: ov
+    url: "http://{{.ContainerName}}:18765/mcp"
+    transport: http
+
+volumes:
+  # Project checkout bind-mounted from the host so build-mode MCP tools
+  # (image.build, image.inspect, image.list.*) have access to image.yml +
+  # layers/. Deployers point this at their overthink repo via
+  # `ov config <image> --bind project=/path/to/overthink`. When absent or
+  # empty, the project-dir-dependent MCP tools return a clear error
+  # (`image.yml not found`); the session-wide tools (status, version,
+  # doctor, secrets, settings) continue to work.
+  - name: project
+    path: /project
+
+env:
+  # Build-mode commands resolve image.yml via os.Getwd(); the -C / --dir /
+  # OV_PROJECT_DIR global in ov/main.go honours this before dispatch.
+  OV_PROJECT_DIR: "/project"
+
+service: |
+  [program:ov-mcp]
+  command=/usr/local/bin/ov mcp serve --listen :18765
+  autostart=true
+  autorestart=true
+  stdout_logfile=/dev/stdout
+  stdout_logfile_maxbytes=0
+  stderr_logfile=/dev/stderr
+  stderr_logfile_maxbytes=0
+  # OV_PROJECT_DIR lives in the container-level env above; supervisord
+  # programs inherit the container env by default, so no duplication here.
+
+tests:
+  - id: ov-mcp-service
+    scope: deploy
+    service: ov-mcp
+    running: true
+  - id: ov-mcp-port
+    scope: deploy
+    addr: 127.0.0.1:${HOST_PORT:18765}
+    reachable: true
+    timeout: 5s
+  # MCP server exercised live via the in-repo MCP client (ov test mcp).
+  # Confirms the server initialises and enumerates tools derived from the
+  # Kong CLI model. mcp_name: ov disambiguates on images that also expose
+  # other MCP servers (jupyter, chrome-devtools).
+  - id: mcp-ov-ping
+    scope: deploy
+    mcp: ping
+    mcp_name: ov
+    timeout: 10s
+  - id: mcp-ov-list-tools
+    scope: deploy
+    mcp: list-tools
+    mcp_name: ov
+    stdout:
+      - contains: image.build
+      - contains: status
+      - contains: test.mcp.ping
+  # Live tool invocation — version is the safest non-destructive tool on
+  # the surface (zero arguments, zero side effects, deterministic output).
+  - id: mcp-ov-call-version
+    scope: deploy
+    mcp: call
+    tool: version
+    input: "{}"
+    mcp_name: ov
+    exit_status: 0
+    stdout:
+      - matches: "[0-9]{4}\\.[0-9]+"
+  # Build-mode tool invocation through the bind-mounted project dir.
+  # Proves OV_PROJECT_DIR wiring: image.list.images requires image.yml,
+  # which is only reachable via the /project bind from the host.
+  - id: mcp-ov-call-list-images
+    scope: deploy
+    mcp: call
+    tool: image.list.images
+    input: "{}"
+    mcp_name: ov
+    exit_status: 0
+    stdout:
+      - contains: "fedora"

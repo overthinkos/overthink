@@ -26,6 +26,7 @@ You have all the time in the world and taking the time to get things properly do
 - **Build mode** — `ov image {build, generate, validate, merge, new, inspect, list, pull}`. Reads `image.yml` + `build.yml`. Writes Containerfiles, built images, OCI labels. See `/ov:image`, `/ov:build`.
 - **Test mode** — `ov test` (all forms: `run`, `cdp`, `wl`, `dbus`, `vnc`) + `ov image test`. Reads only OCI labels (`org.overthinkos.tests`) + local `deploy.yml` tests overlay + container/image runtime state. Never reads `image.yml`. Writes nothing persistent. The tests OCI label is baked at build time from `image.yml` + `layer.yml` authoring only — `deploy.yml` contributes the local tests overlay at test-run time, not to the label. See `/ov:test`.
 - **Deploy mode** — every other command (`config`, `deploy`, `start`, `stop`, `update`, `remove`, `shell`, `cmd`, `service`, `status`, `logs`, `tmux`, `doctor`, `udev`, `vm`, `secrets`, `settings`, `alias`, `record`, `version`). Reads OCI labels + `deploy.yml`. Writes `deploy.yml`, quadlet files, credential stores. See `/ov:config`, `/ov:deploy`, `/ov-dev:go`.
+- **Gateway (cross-mode)** — `ov mcp serve` exposes the *entire* CLI surface (all three modes) as MCP tools over Streamable HTTP or stdio, auto-generated from Kong reflection. Used by LLM agents driving `ov` remotely. Not a fourth mode: it is a remote-procedure surface onto the same modes above. See `/ov:mcp`.
 
 **Key subsystems** — each skill is the single source of truth for its area; don't copy their contents here.
 
@@ -49,6 +50,8 @@ You have all the time in the world and taking the time to get things properly do
 | Containerfile generation (LABELs-at-end, `shellAnsiQuote`, `writeJSONLabel`) | `/ov:generate`, `/ov-dev:generate`, `/ov-dev:go` |
 | Bootc-specific boot wiring (tty1 autologin, graphical target, systemd-user supervisord, linger sentinel, external-base `distro:` gotcha, `/dev:/dev` mount, `vm.ssh_port` plumbing, dual USER-context tests) | `/ov-layers:bootc-config`, `/ov-layers:supervisord`, `/ov-images:selkies-desktop-bootc`, `/ov:vm`, `/ov:generate`, `/ov:image`, `/ov:test` |
 | Rootless nested containers & rootless VMs (kernel `mount_too_revealing()` RCA, `unmask=/proc/*`, `_CONTAINERS_USERNS_CONFIGURED=""`, `BUILDAH_ISOLATION=chroot`, subuid-fits-in-outer-userns pattern, supervisord-managed `virtqemud` / `virtnetworkd`) | `/ov-layers:container-nesting`, `/ov-layers:virtualization`, `/ov-images:selkies-desktop-ov` |
+| MCP server (`ov mcp serve`) — 176 tools auto-generated from Kong reflection, Streamable-HTTP + stdio transports, destructive-hint annotations, `--read-only` filter, deployed via `ov-mcp` layer with `/project` bind-mount | `/ov:mcp`, `/ov-layers:ov-mcp`, `/ov-dev:go` |
+| Cross-distro test package names (`package_map:` on the `package:` verb) | `/ov:test`, `/ov-layers:sshd` |
 
 **`task` (Taskfile)** -- bootstrap only: builds `ov` from source. Source: `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 
@@ -67,6 +70,7 @@ See `/ov-dev:go` for directory structure and `/ov-dev:skills` for plugin/skill o
 - All logic lives in `ov`; Taskfiles are strictly bootstrap (build the `ov` binary). See `Taskfile.yml` + `taskfiles/{Build,Setup}.yml`.
 - **Tests ship with the image**: every layer that installs a service ships a `tests:` block (see `/ov:test`). LABEL directives are emitted last in each Containerfile so test edits rebuild in ~2 seconds instead of minutes.
 - **Mode purity**: `LoadConfig` reads `image.yml` only — never merges `deploy.yml`. OCI labels come strictly from `image.yml` + `layer.yml`; `deploy.yml` is deploy-mode state that must never bleed into baked images. See `/ov-dev:go` "Mode purity" for the bug this prevents.
+- **Project directory resolution** (build mode): build-mode commands resolve `image.yml` via `os.Getwd()`. Override with `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — honoured before Kong dispatch so every existing `os.Getwd()` call site picks up the target directory. Load-bearing for `ov mcp serve` inside a container, where the project is bind-mounted at `/project`. See `/ov:image` "Project directory resolution".
 
 **Authoring + deployment specifics live in skills** — see the subsystems table above for the full mapping. Quick entry points: authoring → `/ov:layer`, `/ov:image`, `/ov:build`, `/ov:test`; deployment → `/ov:config`, `/ov:deploy`, `/ov:sidecar`, `/ov:enc`. Quadlet is default; `ov config` before `ov start`; tunnel is deploy.yml-only.
 

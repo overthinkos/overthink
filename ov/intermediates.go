@@ -434,6 +434,26 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		platforms = intersectPlatforms(parent.Platforms, platforms)
 	}
 
+	// Distro + BuildFormats MUST come from the parent first. Only non-auto
+	// parents have their own values; external roots fall back to defaults.
+	// This was previously inverted — defaults won even when the parent was
+	// an explicit non-default base (e.g. archlinux with build: [pac]), so
+	// every arch-rooted auto-intermediate got mis-tagged as build: [rpm]
+	// and all `pac:`-only layer sections silently dropped out of the
+	// generated Containerfile. Fixed by resolving parent first.
+	var inheritedDistro []string
+	var inheritedBuilds []string
+	if parent, ok := result[parentName]; ok {
+		inheritedDistro = parent.Distro
+		inheritedBuilds = parent.BuildFormats
+	}
+	if len(inheritedDistro) == 0 {
+		inheritedDistro = cfg.Defaults.Distro
+	}
+	if len(inheritedBuilds) == 0 {
+		inheritedBuilds = []string(cfg.Defaults.Build)
+	}
+
 	img := &ResolvedImage{
 		Name:           name,
 		Base:           parentName,
@@ -441,8 +461,8 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Layers:         ownLayers,
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
-		Distro:       cfg.Defaults.Distro,
-		BuildFormats: []string(cfg.Defaults.Build),
+		Distro:         inheritedDistro,
+		BuildFormats:   inheritedBuilds,
 		Platforms:      platforms,
 		User:           cfg.Defaults.User,
 		UID:            resolveIntPtr(cfg.Defaults.UID, nil, 1000),
@@ -450,12 +470,6 @@ func createIntermediate(name, parentName string, pathLayers []string, result map
 		Merge:          cfg.Defaults.Merge,
 		Builder:        BuilderMap(cfg.Defaults.Builder),
 		Auto:           true,
-	}
-	// Inherit build formats from parent if defaults is empty
-	if len(img.BuildFormats) == 0 {
-		if parent, ok := result[parentName]; ok {
-			img.BuildFormats = parent.BuildFormats
-		}
 	}
 	if len(img.BuildFormats) == 0 {
 		fmt.Fprintf(os.Stderr, "Warning: auto-intermediate %s has no build formats (set build: in defaults)\n", name)

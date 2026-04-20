@@ -92,6 +92,7 @@ func (c *TestRunCmd) Run() error {
 	runner := NewRunner(&ContainerExecutor{Engine: engine, ContainerName: containerName}, resolver, RunModeTest)
 	runner.Image = c.Image
 	runner.Instance = c.Instance
+	runner.Distros = meta.Distro
 	results := runner.Run(context.Background(), checks)
 
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
@@ -156,6 +157,7 @@ func (c *ImageTestCmd) Run() error {
 	}
 
 	runner := NewRunner(&ImageExecutor{Engine: rt.RunEngine, ImageRef: imageRef}, resolver, RunModeImageTest)
+	runner.Distros = meta.Distro
 	results := runner.Run(context.Background(), checks)
 
 	fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)

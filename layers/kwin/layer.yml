@@ -30,14 +30,13 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:kwin]
-  command=%(ENV_HOME)s/.local/bin/kwin-wrapper
-  autostart=true
-  autorestart=true
-  priority=10
-  startsecs=3
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: kwin
+    exec: "%(ENV_HOME)s/.local/bin/kwin-wrapper"
+    env:
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 10
+    enable: true
+    scope: system
+

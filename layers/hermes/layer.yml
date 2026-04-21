@@ -75,26 +75,7 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:hermes]
-  command=%(ENV_HOME)s/.local/bin/hermes-entrypoint
-  directory=%(ENV_HOME)s
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
-  [program:hermes-whatsapp]
-  command=node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js
-  directory=%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge
-  autostart=false
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
 tests:
   - id: hermes-entrypoint
@@ -112,3 +93,19 @@ tests:
     scope: deploy
     service: hermes
     running: true
+
+services:
+  - name: hermes
+    exec: "%(ENV_HOME)s/.local/bin/hermes-entrypoint"
+    restart: always
+    working_directory: "%(ENV_HOME)s"
+    enable: true
+    scope: system
+
+  - name: hermes-whatsapp
+    exec: "node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js"
+    restart: always
+    working_directory: "%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge"
+    enable: true
+    scope: system
+

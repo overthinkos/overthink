@@ -58,3 +58,8 @@ output/
 
 # KeePass credential databases (local, not committed)
 *.kdbx
+
+# Containerfile regression snapshot (ephemeral; used during the ov deploy
+# refactor to verify byte-identical output after IR lift)
+/.regression-snapshot/
+/.regression-snapshot-checksums.txt

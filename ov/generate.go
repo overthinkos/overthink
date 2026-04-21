@@ -1355,14 +1355,14 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))
 	}
 
-	// Distro, build, and builder labels
-	writeJSONLabel(b, LabelTags, img.Tags)
-	writeJSONLabel(b, LabelDistro, img.Distro)
-	writeJSONLabel(b, LabelBuild, img.BuildFormats)
+	// Platform identity + builder-pool coordination labels.
+	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
+	writeJSONLabel(b, LabelPlatformDistro, img.Distro)
+	writeJSONLabel(b, LabelPlatformFormats, img.BuildFormats)
 	if len(img.Builder) > 0 {
-		writeJSONLabel(b, LabelBuilder, map[string]string(img.Builder))
+		writeJSONLabel(b, LabelBuilderUses, map[string]string(img.Builder))
 	}
-	writeJSONLabel(b, LabelBuilds, img.BuilderCapabilities)
+	writeJSONLabel(b, LabelBuilderProvides, img.BuilderCapabilities)
 
 	// JSON array labels (omitted when empty)
 	writeJSONLabel(b, LabelPorts, img.Ports)

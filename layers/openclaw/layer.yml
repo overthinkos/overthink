@@ -20,12 +20,10 @@ aliases:
   - name: openclaw
     command: openclaw
 
-service: |
-  [program:openclaw]
-  command=%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
+services:
+  - name: openclaw
+    exec: "%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789"
+    restart: always
+    enable: true
+    scope: system
+

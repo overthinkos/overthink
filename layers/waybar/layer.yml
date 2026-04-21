@@ -29,28 +29,7 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:waybar]
-  command=%(ENV_HOME)s/.local/bin/waybar-wrapper
-  autostart=true
-  autorestart=true
-  priority=15
-  startsecs=0
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
-  [program:sway-autotile]
-  command=%(ENV_HOME)s/.local/bin/sway-autotile
-  autostart=true
-  autorestart=true
-  priority=16
-  startsecs=0
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   - id: waybar-binary
@@ -65,3 +44,25 @@ tests:
   - id: sway-autotile-script
     file: ${HOME}/.local/bin/sway-autotile
     exists: true
+
+services:
+  - name: waybar
+    exec: "%(ENV_HOME)s/.local/bin/waybar-wrapper"
+    env:
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 15
+    enable: true
+    scope: system
+
+  - name: sway-autotile
+    exec: "%(ENV_HOME)s/.local/bin/sway-autotile"
+    env:
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 16
+    enable: true
+    scope: system
+

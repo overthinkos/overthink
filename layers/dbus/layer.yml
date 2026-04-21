@@ -16,17 +16,6 @@ deb:
   packages:
     - dbus
 
-service: |
-  [program:dbus]
-  command=dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session
-  autostart=true
-  autorestart=true
-  priority=2
-  startsecs=1
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   - id: dbus-daemon-binary
@@ -47,3 +36,14 @@ tests:
     scope: deploy
     service: dbus
     running: true
+
+services:
+  - name: dbus
+    exec: "dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session"
+    env:
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 2
+    enable: true
+    scope: system
+

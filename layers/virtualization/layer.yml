@@ -101,26 +101,7 @@ ubuntu:24.04:
 # interactive `ov vm` calls try to connect.
 #
 # --timeout 0 keeps the daemons alive instead of exiting on idle.
-service: |
-  [program:virtqemud]
-  command=/usr/sbin/virtqemud --timeout 0
-  autostart=true
-  autorestart=true
-  priority=5
-  startsecs=2
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
-  [program:virtnetworkd]
-  command=/usr/sbin/virtnetworkd --timeout 0
-  autostart=true
-  autorestart=true
-  priority=6
-  startsecs=2
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   # virtqemud / virtnetworkd ship as separate binaries on Fedora and Arch,
@@ -171,3 +152,19 @@ tests:
     in_container: true
     stdout:
       - matches: "^[1-9]"
+
+services:
+  - name: virtqemud
+    exec: "/usr/sbin/virtqemud --timeout 0"
+    restart: always
+    priority: 5
+    enable: true
+    scope: system
+
+  - name: virtnetworkd
+    exec: "/usr/sbin/virtnetworkd --timeout 0"
+    restart: always
+    priority: 6
+    enable: true
+    scope: system
+

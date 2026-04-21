@@ -116,15 +116,6 @@ tasks:
       fi
       exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
 
-service: |
-  [program:postgresql]
-  command=/usr/local/bin/postgresql-entrypoint.sh
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
-  priority=10
 
 tests:
   - id: postgres-binary
@@ -158,3 +149,12 @@ tests:
     command: pg_isready -h ${HOME}/.postgresql
     exit_status: 0
     in_container: true
+
+services:
+  - name: postgresql
+    exec: /usr/local/bin/postgresql-entrypoint.sh
+    restart: always
+    priority: 10
+    enable: true
+    scope: system
+

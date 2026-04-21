@@ -30,14 +30,13 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:mutter]
-  command=%(ENV_HOME)s/.local/bin/mutter-wrapper
-  autostart=true
-  autorestart=true
-  priority=10
-  startsecs=3
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: mutter
+    exec: "%(ENV_HOME)s/.local/bin/mutter-wrapper"
+    env:
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 10
+    enable: true
+    scope: system
+

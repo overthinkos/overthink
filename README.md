@@ -127,17 +127,39 @@ So `ubuntu-coder` runs as `ubuntu:/home/ubuntu` (adopt) while `debian-coder`, `f
 
 See `/ov:image` "user_policy" and `/ov:build` "base_user:" for the full reference and decision matrix.
 
+### Two deploy targets: containers and the host
+
+Images typically run as containers. But Overthink can also **apply the same layer recipe directly to your workstation** via `ov deploy add host <ref>` — the layers' packages, files, and services land on your local filesystem via the host's native package manager, systemd, and shell profile, without standing up a container. The same `InstallPlan` IR drives container builds (`ov image build`), container deploys (`ov deploy add <name>`), and host deploys (`ov deploy add host`) — so whatever works in an image behaves the same way on the host.
+
+```bash
+# Install one layer to the host
+ov deploy add host ripgrep
+
+# Apply a whole image's layer set to your workstation
+ov deploy add host fedora-coder --with-services --yes
+
+# Overlay a private layer onto a shared base
+ov deploy add host fedora-coder --add-layer ./private-overlay.yml
+
+# Reverse it (runs ReverseOps: dnf remove, systemctl disable, rm env.d file, etc.)
+ov deploy del host --yes
+```
+
+Everything installed is recorded in a ledger at `~/.config/overthink/installed/` (per-layer JSON with deploy-refcount), so `ov deploy del host` reverses the exact operations that ran. Opt-in gates (`--with-services`, `--allow-repo-changes`, `--allow-root-tasks`) make intent explicit for side-effects that mutate global host state. See `/ov:host-deploy` for the full executor model, ledger layout, and the 15 ReverseOp kinds.
+
+Layer overlays work on both targets: `ov deploy add my-dev fedora-coder --add-layer team-extras` synthesizes an overlay Containerfile and deploys the overlay image; `ov deploy add host fedora-coder --add-layer team-extras` merges the extra layers into the host-target plan. Same `add_layers:` field in `deploy.yml` drives both.
+
 ### Docker or Podman — Your Choice
 
 Docker is the container tool most people know. Podman is a newer alternative from Red Hat that runs without a background daemon and integrates natively with Linux systemd. `ov` works with either — same commands, same images, same results. Switch with `ov settings set engine.build podman`.
 
 ### Init Systems: Generic, Configurable, Extensible
 
-**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares `service:` in `layer.yml`, `ov` generates a supervisord config and bundles it into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
+**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares a `services:` entry in `layer.yml` (unified schema introduced 2026-04 — see `/ov:layer`), `ov` renders it through the init-system's `service_schema` in `build.yml` (supervisord INI or systemd unit file, depending on the target init) and bundles the result into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
 
-**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated.
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated. When you use `ov deploy add host` to apply layers directly (no container), the same `services:` entries are rendered as systemd units on the host's `systemd` — user-scope at `~/.config/systemd/user/` or system-scope at `/etc/systemd/system/` depending on `scope:`.
 
-**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers use `system_services:` to declare systemd units (like sshd) or add `*.service` files for user-level services. No supervisord needed because it's a real operating system, not a container.
+**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers declare services via the same unified `services:` list; entries with `use_packaged: <unit>` reuse the distro-shipped unit (e.g., `sshd.service` from openssh-server) with optional drop-in overrides, while custom entries become new `.service` files. No supervisord needed because it's a real operating system, not a container.
 
 **Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing the `init:` section of `build.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
 
@@ -227,6 +249,14 @@ ov image build selkies-desktop-bootc
 ov vm build selkies-desktop-bootc --type qcow2
 ov vm create selkies-desktop-bootc
 ov vm start selkies-desktop-bootc
+
+# Apply layers directly to the local filesystem (no container)
+ov deploy add host ripgrep
+ov deploy add host fedora-coder --with-services --yes
+ov deploy add host fedora-coder \
+    --add-layer github.com/team/configs/layers/sshkeys \
+    --add-layer ./private-overlay.yml
+ov deploy del host                    # reverses everything via ReverseOps + ledger
 ```
 
 ## The Layer Library
@@ -272,7 +302,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 **Run** — `ov start <image>` launches a detached service container with the configured init system managing your processes, traefik routing your services, and persistent volumes for data.
 
-**Deploy** — `ov config <image>` is the single entry point for deployment. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login — the quadlet's ExecStartPre waits for the keyring to unlock via event-driven DBus signal subscription (zero CPU cost, unbounded wait), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. When a service declares `env_provides` or `mcp_provides`, `ov config` injects those entries into `deploy.yml` under a unified `provides:` section for cross-container discovery — env vars and MCP server URLs are resolved from `{{.ContainerName}}` templates at deploy time (use `--update-all` to propagate to already-deployed services). MCP provides are pod-aware: when provider and consumer share a container, URLs resolve to `localhost`. If the image declares `env_requires` or `mcp_requires`, `ov config` warns about missing dependencies. No project source needed — just the image.
+**Deploy** — `ov deploy add <name> <ref>` is the unified entry point for applying a deployment. The literal name `host` targets the local filesystem; any other name is a container deployment. `ov config <image>` remains the primary way to set up a container deploy (quadlet + secrets + encrypted volumes), and is the single entry point when you're not using `add_layers:` overlays. It reads the image's embedded labels, generates a quadlet, provisions secrets (with `--password auto` for hands-free setup or `--password manual` to prompt), configures volume backing (`--bind name` for host bind mounts, `--encrypt name` for gocryptfs, or `--volume name:encrypt:/path` for explicit per-volume encrypted paths), provisions data from data layers into bind-backed volumes (`--seed` by default, `--force-seed` to overwrite, `--data-from <image>` for external data sources), saves deployment state to `~/.config/ov/deploy.yml`, and registers with systemd. `ov config` must be run before `ov start` in quadlet mode. For services with encrypted volumes, boot behavior depends on the credential backend: **Secret Service (keyring)** auto-starts after login — the quadlet's ExecStartPre waits for the keyring to unlock via event-driven DBus signal subscription (zero CPU cost, unbounded wait), while **KeePass or no backend** requires `ov start` after login to prompt for the passphrase. When a service declares `env_provides` or `mcp_provides`, `ov config` injects those entries into `deploy.yml` under a unified `provides:` section for cross-container discovery — env vars and MCP server URLs are resolved from `{{.ContainerName}}` templates at deploy time (use `--update-all` to propagate to already-deployed services). MCP provides are pod-aware: when provider and consumer share a container, URLs resolve to `localhost`. If the image declares `env_requires` or `mcp_requires`, `ov config` warns about missing dependencies. No project source needed — just the image.
 
 **Ship** — `ov image build --push` builds for all platforms and pushes to your registry. `ov vm build` turns bootc images into bootable disk images.
 
@@ -286,7 +316,7 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 |---|---|---|
 | **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
 | **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov:image` "Authoring" table + `/ov:new`, `/ov:layer` |
-| **Deployment** | `config`, `deploy`, `start`, `stop`, `update`, `remove` | `/ov:config`, `/ov:deploy`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
+| **Deployment** | `deploy add`/`del` (unified verb; `host` targets local system), `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |

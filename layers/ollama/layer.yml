@@ -27,15 +27,6 @@ tasks:
     to: /usr
     user: root
 
-service: |
-  [program:ollama]
-  command=ollama serve
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
 tests:
   # Build-scope invariants on the installed artifact.
@@ -52,3 +43,11 @@ tests:
     command: ollama --version
     stdout:
       - matches: "^ollama version"
+
+services:
+  - name: ollama
+    exec: "ollama serve"
+    restart: always
+    enable: true
+    scope: system
+

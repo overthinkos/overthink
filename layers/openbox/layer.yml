@@ -20,14 +20,13 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:openbox]
-  command=%(ENV_HOME)s/.local/bin/openbox-wrapper
-  autostart=true
-  autorestart=true
-  priority=12
-  startsecs=1
-  environment=DISPLAY=":0"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: openbox
+    exec: "%(ENV_HOME)s/.local/bin/openbox-wrapper"
+    env:
+      DISPLAY: ":0"
+    restart: always
+    priority: 12
+    enable: true
+    scope: system
+

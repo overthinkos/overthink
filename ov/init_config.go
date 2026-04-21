@@ -51,6 +51,27 @@ type InitDef struct {
 
 	// OCI label key for service list
 	LabelKey string `yaml:"label_key,omitempty"`
+
+	// ServiceSchema: templates for the unified `services:` schema
+	// introduced in the BuildTarget refactor. Nil on init systems that
+	// only support the legacy `service:` (raw INI) path; populated for
+	// systemd and future init systems that consume the structured spec.
+	ServiceSchema *ServiceSchemaDef `yaml:"service_schema,omitempty"`
+}
+
+// ServiceSchemaDef carries the templates that turn a ServiceEntry into
+// a native unit for a given init system. Matches the design in the
+// final plan: each init system provides service_template (custom unit
+// body), unit_path_template (where to install it), dropin_template /
+// dropin_path_template (for use_packaged: entries), plus a flag that
+// says whether use_packaged is supported at all (supervisord isn't,
+// since it doesn't consume systemd units).
+type ServiceSchemaDef struct {
+	ServiceTemplate    string `yaml:"service_template,omitempty"`
+	UnitPathTemplate   string `yaml:"unit_path_template,omitempty"`
+	DropinTemplate     string `yaml:"dropin_template,omitempty"`
+	DropinPathTemplate string `yaml:"dropin_path_template,omitempty"`
+	SupportsPackaged   bool   `yaml:"supports_packaged,omitempty"`
 }
 
 // FragmentContext is the template context for fragment_template rendering.

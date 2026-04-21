@@ -8,8 +8,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// DeployCmd manages deploy.yml deployment overrides.
+// DeployCmd manages deployments and deploy.yml overrides.
+//
+// The `add` and `del` subcommands (added in the BuildTarget refactor)
+// apply an image/layer plan to a target: either a container (named
+// anything) or the local host (literal name "host"). The existing
+// config-management subcommands (export/import/show/reset/path/status)
+// remain unchanged — they manipulate deploy.yml itself.
 type DeployCmd struct {
+	Add DeployAddCmd `cmd:"" help:"Apply a deploy: 'host' targets the local system; any other name targets a container"`
+	Del DeployDelCmd `cmd:"" help:"Tear down a deploy by name"`
+
 	Export DeployExportCmd `cmd:"" help:"Export effective config as deploy.yml"`
 	Import DeployImportCmd `cmd:"" help:"Import deploy.yml file(s) into config"`
 	Path   DeployPathCmd   `cmd:"" help:"Print deploy.yml file path"`

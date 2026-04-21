@@ -42,6 +42,66 @@ type DeployImageConfig struct {
 	// matches a baked entry replace it; otherwise they append. An entry
 	// with id:X and skip:true effectively disables the baked check.
 	Tests []Check `yaml:"tests,omitempty"`
+
+	// --- BuildTarget refactor fields (Task 13) ---
+	//
+	// Target selects the deploy destination. Empty or "container" →
+	// the existing quadlet/podman pipeline. "host" → apply layers
+	// directly to the invoking user's filesystem via HostDeployTarget.
+	// Only honored when this entry's map key is "host" (the literal
+	// deploy name) or when --target=host is passed on the CLI; a
+	// container-named entry with target:host is a config error.
+	Target string `yaml:"target,omitempty"`
+
+	// AddLayers are overlay layer refs applied on top of the image.
+	// Each entry is a DeployRef (local name / local YAML path /
+	// remote github ref). Same syntax as the command-line --add-layer
+	// flag.
+	AddLayers []string `yaml:"add_layers,omitempty"`
+
+	// InstallOpts carries host-target-specific flags that would
+	// otherwise have to be passed on every command invocation.
+	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
+}
+
+// InstallOptsConfig holds deploy.yml install_opts settings for a host
+// deploy. Mirrors the command-line flags on DeployAddCmd so a user can
+// pin their choices in deploy.yml instead of repeating them.
+type InstallOptsConfig struct {
+	WithServices     bool   `yaml:"with_services,omitempty"`
+	AllowRepoChanges bool   `yaml:"allow_repo_changes,omitempty"`
+	AllowRootTasks   bool   `yaml:"allow_root_tasks,omitempty"`
+	SkipIncompatible bool   `yaml:"skip_incompatible,omitempty"`
+	Verify           bool   `yaml:"verify,omitempty"`
+	BuilderImage     string `yaml:"builder_image,omitempty"`
+}
+
+// ApplyTo merges install_opts settings into an EmitOpts. CLI flags
+// still win — deploy.yml provides defaults, not overrides. Nil
+// receiver is a no-op.
+func (o *InstallOptsConfig) ApplyTo(opts EmitOpts) EmitOpts {
+	if o == nil {
+		return opts
+	}
+	if !opts.WithServices {
+		opts.WithServices = o.WithServices
+	}
+	if !opts.AllowRepoChanges {
+		opts.AllowRepoChanges = o.AllowRepoChanges
+	}
+	if !opts.AllowRootTasks {
+		opts.AllowRootTasks = o.AllowRootTasks
+	}
+	if !opts.SkipIncompatible {
+		opts.SkipIncompatible = o.SkipIncompatible
+	}
+	if !opts.Verify {
+		opts.Verify = o.Verify
+	}
+	if opts.BuilderImageOverride == "" {
+		opts.BuilderImageOverride = o.BuilderImage
+	}
+	return opts
 }
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.

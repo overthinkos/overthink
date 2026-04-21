@@ -16,12 +16,11 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:testapi]
-  command=/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090
-  directory=/home/user/testapi
-  autostart=true
-  autorestart=true
-  redirect_stderr=true
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
+services:
+  - name: testapi
+    exec: "/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
+    restart: always
+    working_directory: /home/user/testapi
+    enable: true
+    scope: system
+

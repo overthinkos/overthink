@@ -13,14 +13,15 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:chrome]
-  command=%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper
-  autostart=true
-  autorestart=false
-  priority=15
-  startsecs=0
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: chrome
+    exec: "%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper"
+    env:
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: no
+    priority: 15
+    enable: true
+    scope: system
+

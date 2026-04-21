@@ -15,25 +15,26 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:gnome-terminal]
-  command=%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait
-  autostart=true
-  autorestart=false
-  priority=16
-  startsecs=0
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: gnome-terminal
+    exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait"
+    env:
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: no
+    priority: 16
+    enable: true
+    scope: system
 
-  [program:nautilus]
-  command=%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus
-  autostart=true
-  autorestart=false
-  priority=16
-  startsecs=0
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0",DBUS_SESSION_BUS_ADDRESS="unix:path=/tmp/dbus-session"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+  - name: nautilus
+    exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus"
+    env:
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: no
+    priority: 16
+    enable: true
+    scope: system
+

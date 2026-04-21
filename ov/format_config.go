@@ -55,11 +55,87 @@ type CacheMountDef struct {
 }
 
 // FormatDef defines a package format (rpm, deb, pac, aur, apk, etc.).
+//
+// Template resolution:
+//
+//   - Legacy path: `install_template:` holds a monolithic Containerfile-
+//     shaped template used by the OCI target.
+//   - New path: `phases:` holds three-phase × two-venue templates where
+//     each entry carries both a container: (Containerfile directives with
+//     BuildKit cache mounts) and a host: (plain shell) rendering of the
+//     same operation. The host target requires the new path; the OCI
+//     target prefers phases.install.container when set and falls back to
+//     install_template otherwise.
+//
+// Keeping both fields lets us migrate build.yml per-format one at a time
+// (Task 4 / 7 migrations) without breaking OCI output for the rest.
 type FormatDef struct {
-	CacheMounts     []CacheMountDef  `yaml:"cache_mounts"`
+	CacheMounts     []CacheMountDef   `yaml:"cache_mounts"`
 	SectionFields   map[string]string `yaml:"section_fields"`
-	InstallTemplate string            `yaml:"install_template"`
+	InstallTemplate string            `yaml:"install_template,omitempty"`
+	Phases          *PhaseSet         `yaml:"phases,omitempty"`
 	Validate        []FormatRule      `yaml:"validate,omitempty"`
+}
+
+// PhaseSet carries three-phase templates for a format or builder.
+// Phases run in order: prepare (repo config, key import, copr enable)
+// → install (the actual dnf/apt/pacman/pixi/cargo command) → cleanup
+// (copr disable, scratch cleanup). Each phase has separate container
+// and host renderings so cache-mount directives stay out of the host
+// path and shell-specific wrappers stay out of the container path.
+type PhaseSet struct {
+	Prepare *PhaseTemplates `yaml:"prepare,omitempty"`
+	Install *PhaseTemplates `yaml:"install,omitempty"`
+	Cleanup *PhaseTemplates `yaml:"cleanup,omitempty"`
+}
+
+// PhaseTemplates carries both renderings (container + host) of one
+// phase. Either may be empty — a phase with only a host: block is valid
+// (e.g. repo mutations that only make sense on a real host), as is a
+// phase with only a container: block (cache cleanup inside the build).
+type PhaseTemplates struct {
+	Container string `yaml:"container,omitempty"`
+	Host      string `yaml:"host,omitempty"`
+}
+
+// PhaseTemplate looks up the template string for a (phase, venue)
+// lookup, with documented fallback behavior: if the new phases: block
+// lacks the requested cell, fall back to the legacy InstallTemplate for
+// (PhaseInstall, container) only — the combination covered by the
+// legacy field. All other lookups return "" when the new path is absent.
+func (f *FormatDef) PhaseTemplate(phase Phase, venue Venue) string {
+	if f == nil {
+		return ""
+	}
+	if f.Phases != nil {
+		var pt *PhaseTemplates
+		switch phase {
+		case PhasePrepare:
+			pt = f.Phases.Prepare
+		case PhaseInstall:
+			pt = f.Phases.Install
+		case PhaseCleanup:
+			pt = f.Phases.Cleanup
+		}
+		if pt != nil {
+			switch venue {
+			case VenueHostNative:
+				if pt.Host != "" {
+					return pt.Host
+				}
+			case VenueContainerBuilder:
+				if pt.Container != "" {
+					return pt.Container
+				}
+			}
+		}
+	}
+	// Legacy fallback: the old InstallTemplate only describes the
+	// install-phase in container venue.
+	if phase == PhaseInstall && venue == VenueContainerBuilder {
+		return f.InstallTemplate
+	}
+	return ""
 }
 
 // FormatRule is a validation rule for format section fields.
@@ -202,6 +278,13 @@ type BuilderConfig struct {
 }
 
 // BuilderDef defines a multi-stage builder (pixi, npm, cargo, etc.).
+//
+// The legacy `stage_template:` / `install_template:` fields emit a
+// single Containerfile chunk. The new `phases:` field matches FormatDef
+// and lets a builder specify separate container + host renderings for
+// each of prepare/install/cleanup — required for HostDeployTarget to
+// invoke the builder via `podman run` with HOME-remapped bind-mounts
+// rather than as a build stage.
 type BuilderDef struct {
 	DetectFiles     []string          `yaml:"detect_files,omitempty"`
 	DetectConfig    string            `yaml:"detect_config,omitempty"`
@@ -211,11 +294,64 @@ type BuilderDef struct {
 	Env             map[string]string `yaml:"env,omitempty"`
 	StageTemplate   string            `yaml:"stage_template,omitempty"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
+	Phases          *PhaseSet         `yaml:"phases,omitempty"`
 	InstallCommands map[string]string `yaml:"install_commands,omitempty"`
 	ManylinuxFix    string            `yaml:"manylinux_fix,omitempty"`
 	BuildScript     string            `yaml:"build_script,omitempty"`
 	CopyArtifacts   []CopyDef         `yaml:"copy_artifacts,omitempty"`
 	CopyBinary      *CopyDef          `yaml:"copy_binary,omitempty"`
+
+	// PathContributions lists sub-paths under the builder's install prefix
+	// that should be added to PATH on deploy targets. Used by the compiler
+	// (install_build.go) to derive implicit PATH additions from builder
+	// outputs (pixi env bin, cargo bin, npm-global bin). Authors can
+	// override per-layer via layer.yml path_append: as today. Empty list
+	// means "this builder doesn't contribute to PATH" (aur — installs
+	// to /usr/bin via pacman -U).
+	PathContributions []string `yaml:"path_contributions,omitempty"`
+}
+
+// PhaseTemplate is the BuilderDef analog of FormatDef.PhaseTemplate.
+// Same fallback rules apply: (PhaseInstall, container) falls back to
+// legacy InstallTemplate or StageTemplate when Phases is absent.
+func (b *BuilderDef) PhaseTemplate(phase Phase, venue Venue) string {
+	if b == nil {
+		return ""
+	}
+	if b.Phases != nil {
+		var pt *PhaseTemplates
+		switch phase {
+		case PhasePrepare:
+			pt = b.Phases.Prepare
+		case PhaseInstall:
+			pt = b.Phases.Install
+		case PhaseCleanup:
+			pt = b.Phases.Cleanup
+		}
+		if pt != nil {
+			switch venue {
+			case VenueHostNative:
+				if pt.Host != "" {
+					return pt.Host
+				}
+			case VenueContainerBuilder:
+				if pt.Container != "" {
+					return pt.Container
+				}
+			}
+		}
+	}
+	// Legacy fallbacks. Builders have two legacy fields: Inline builders
+	// (cargo) use InstallTemplate; non-inline (pixi/npm/aur) use
+	// StageTemplate. The host path needs the container-shaped template to
+	// synthesize a podman-run equivalent.
+	if phase == PhaseInstall && venue == VenueContainerBuilder {
+		if b.Inline && b.InstallTemplate != "" {
+			return b.InstallTemplate
+		}
+		return b.StageTemplate
+	}
+	return ""
 }
 
 // CopyDef defines a COPY directive for builder artifacts.

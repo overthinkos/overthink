@@ -212,27 +212,7 @@ tasks:
   - mkdir: "${HOME}/.immich/external"
     user: "${USER}"
 
-service: |
-  [program:immich-db-init]
-  command=/usr/local/bin/immich-db-migrate.sh
-  autostart=true
-  autorestart=false
-  startsecs=0
-  exitcodes=0
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
-  priority=15
 
-  [program:immich-server]
-  command=/usr/local/bin/immich-server-start.sh
-  directory=/opt/immich/server
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
-  priority=30
 
 tests:
   - id: immich-server-main
@@ -268,3 +248,20 @@ tests:
     timeout: 10s
     body:
       - contains: "pong"
+
+services:
+  - name: immich-db-init
+    exec: /usr/local/bin/immich-db-migrate.sh
+    restart: no
+    priority: 15
+    enable: true
+    scope: system
+
+  - name: immich-server
+    exec: /usr/local/bin/immich-server-start.sh
+    restart: always
+    working_directory: /opt/immich/server
+    priority: 30
+    enable: true
+    scope: system
+

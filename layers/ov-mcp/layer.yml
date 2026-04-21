@@ -43,17 +43,6 @@ tasks:
     mode: "0777"
     user: root
 
-service: |
-  [program:ov-mcp]
-  command=/usr/local/bin/ov mcp serve --listen :18765
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
-  # OV_PROJECT_DIR lives in the container-level env above; supervisord
-  # programs inherit the container env by default, so no duplication here.
 
 tests:
   - id: ov-mcp-service
@@ -105,3 +94,11 @@ tests:
     exit_status: 0
     stdout:
       - contains: "fedora"
+
+services:
+  - name: ov-mcp
+    exec: "/usr/local/bin/ov mcp serve --listen :18765"
+    restart: always
+    enable: true
+    scope: system
+

@@ -23,16 +23,6 @@ ports:
   - tcp:2222
 
 # Supervisord service (containers)
-service: |
-  [program:sshd]
-  command=/usr/local/bin/sshd-wrapper
-  autostart=true
-  autorestart=true
-  priority=3
-  startsecs=1
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tasks:
   - copy: sshd-wrapper
@@ -59,8 +49,6 @@ tasks:
     user: root
 
 # Systemd service (bootc images)
-system_services:
-  - sshd
 
 tests:
   - id: sshd-binary
@@ -97,3 +85,17 @@ tests:
     addr: 127.0.0.1:${HOST_PORT:2222}
     reachable: true
     timeout: 5s
+
+services:
+  - name: sshd
+    use_packaged: sshd.service
+    enable: true
+    scope: system
+
+  - name: sshd
+    exec: /usr/local/bin/sshd-wrapper
+    restart: always
+    priority: 3
+    enable: true
+    scope: system
+

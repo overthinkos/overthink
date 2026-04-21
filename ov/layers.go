@@ -133,6 +133,14 @@ type LayerYAML struct {
 	Ports          []PortSpec        `yaml:"ports,omitempty"`
 	Route          *RouteYAML        `yaml:"route,omitempty"`
 	Service        string            `yaml:"service,omitempty"`
+	// Services is the unified service schema introduced by the
+	// BuildTarget refactor. It subsumes both the legacy `service:`
+	// (raw supervisord INI) and `system_services:` (list of packaged
+	// unit names) fields: a Services entry with `use_packaged:` set
+	// replaces a system_services entry; a structured entry replaces a
+	// service: program block. The two legacy fields continue to work
+	// for backwards compat during the migration (Task 7).
+	Services       []ServiceEntry    `yaml:"services,omitempty"`
 	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
 	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
@@ -431,9 +439,10 @@ type Layer struct {
 	portSpecs      []PortSpec // full PortSpec data with protocol info
 	envConfig      *EnvConfig
 	route          *RouteConfig
-	serviceConf    string   // raw content of service: field (supervisord INI fragment)
-	serviceFiles   []string // paths to *.service files in layer dir (systemd user-level)
-	systemServices []string // system-level service units to enable (e.g., "sshd")
+	serviceConf    string         // raw content of service: field (supervisord INI fragment)
+	serviceFiles   []string       // paths to *.service files in layer dir (systemd user-level)
+	systemServices []string       // system-level service units to enable (e.g., "sshd")
+	services       []ServiceEntry // unified services: list (preferred over serviceConf/systemServices)
 	volumes        []VolumeYAML
 	aliases        []AliasYAML
 	extract        []ExtractYAML
@@ -547,6 +556,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 			layer.IncludedLayers[i] = BareRef(ref)
 		}
 		layer.serviceConf = ly.Service
+		layer.services = ly.Services
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
 		layer.HasPorts = len(ly.Ports) > 0
 		layer.HasRoute = ly.Route != nil
@@ -769,6 +779,21 @@ func (l *Layer) PortSpecs() []PortSpec {
 // ServiceConf returns the service: field content from layer.yml (supervisord INI fragment)
 func (l *Layer) ServiceConf() string {
 	return l.serviceConf
+}
+
+// Services returns the layer's unified services: list. This is the
+// preferred source for new code (Task 6 onwards); the two legacy
+// fields (ServiceConf + SystemServiceUnits) continue to work for
+// layers that haven't migrated yet.
+func (l *Layer) Services() []ServiceEntry {
+	return l.services
+}
+
+// HasStructuredServices returns true when the layer uses the unified
+// services: list. When true, the compiler ignores legacy service: /
+// system_services: to avoid double-registering a service.
+func (l *Layer) HasStructuredServices() bool {
+	return len(l.services) > 0
 }
 
 // ServiceFiles returns detected *.service file paths from the layer directory (systemd user-level)

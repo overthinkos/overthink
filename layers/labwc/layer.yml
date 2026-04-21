@@ -42,17 +42,6 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:labwc]
-  command=%(ENV_HOME)s/.local/bin/labwc-wrapper
-  autostart=true
-  autorestart=true
-  priority=12
-  startsecs=2
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   - id: labwc-binary
@@ -74,3 +63,14 @@ tests:
     scope: deploy
     service: labwc
     running: true
+
+services:
+  - name: labwc
+    exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
+    env:
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 12
+    enable: true
+    scope: system
+

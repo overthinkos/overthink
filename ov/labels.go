@@ -48,12 +48,11 @@ const (
 	LabelStatus         = "org.overthinkos.status"
 	LabelInfo           = "org.overthinkos.info"
 	LabelLayerVersions  = "org.overthinkos.layer_versions"
-	LabelSecrets        = "org.overthinkos.secrets"
-	LabelTags           = "org.overthinkos.tags"
-	LabelDistro         = "org.overthinkos.distro"
-	LabelBuild          = "org.overthinkos.build"
-	LabelBuilder        = "org.overthinkos.builder"
-	LabelBuilds         = "org.overthinkos.builds"
+	LabelSecrets         = "org.overthinkos.secrets"
+	LabelPlatformDistro  = "org.overthinkos.platform.distro"
+	LabelPlatformFormats = "org.overthinkos.platform.formats"
+	LabelBuilderUses     = "org.overthinkos.builder.uses"
+	LabelBuilderProvides = "org.overthinkos.builder.provides"
 	LabelDataEntries    = "org.overthinkos.data"
 	LabelDataImage      = "org.overthinkos.data_image"
 	LabelEnvProvides    = "org.overthinkos.env_provides"
@@ -124,11 +123,10 @@ type ImageMetadata struct {
 	Info           string            // aggregated status info
 	LayerVersions  map[string]string // layer name -> CalVer version
 	Secrets        []LabelSecret     // secret requirements (metadata only, no values)
-	Tags           []string          // union: all + distro + build formats (for task matching)
-	Distro         []string          // distro identity tags
-	BuildFormats   []string          // build format list (rpm, pac, etc.)
-	Builder        map[string]string // build type → builder image
-	Builds         []string          // what this builder can build
+	Distro         []string          // distro identity tags (org.overthinkos.platform.distro)
+	BuildFormats   []string          // package formats installed (org.overthinkos.platform.formats)
+	Builder        map[string]string // format → builder image (org.overthinkos.builder.uses)
+	Builds         []string          // builder capability: formats this image can build (org.overthinkos.builder.provides)
 	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
 	DataImage      bool              // true if this is a data-only image (FROM scratch)
 	EnvProvides    map[string]string // env vars provided to other containers (service discovery templates)
@@ -364,38 +362,31 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		}
 	}
 
-	// Tags (union: all + distro + build formats)
-	if v := labels[LabelTags]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Tags); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelTags, err)
-		}
-	}
-
-	// Distro tags
-	if v := labels[LabelDistro]; v != "" {
+	// Platform distro (distro identity tags; first match picks bootstrap/format templates)
+	if v := labels[LabelPlatformDistro]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Distro); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelDistro, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelPlatformDistro, err)
 		}
 	}
 
-	// Build formats
-	if v := labels[LabelBuild]; v != "" {
+	// Platform formats (package formats installed in this image: pac, rpm, pixi, …)
+	if v := labels[LabelPlatformFormats]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.BuildFormats); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuild, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelPlatformFormats, err)
 		}
 	}
 
-	// Builder
-	if v := labels[LabelBuilder]; v != "" {
+	// Builder uses (consumer-side routing: format → builder-image name)
+	if v := labels[LabelBuilderUses]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Builder); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuilder, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderUses, err)
 		}
 	}
 
-	// Builds
-	if v := labels[LabelBuilds]; v != "" {
+	// Builder provides (producer-side capability: formats this image can build for others)
+	if v := labels[LabelBuilderProvides]; v != "" {
 		if err := json.Unmarshal([]byte(v), &meta.Builds); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelBuilds, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelBuilderProvides, err)
 		}
 	}
 

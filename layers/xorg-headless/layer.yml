@@ -64,13 +64,11 @@ tasks:
         Screen "Screen0"
       EndSection
 
-service: |
-  [program:xorg]
-  command=Xorg :0 -noreset +extension GLX +extension RANDR +extension RENDER
-  autostart=true
-  autorestart=true
-  priority=10
-  startsecs=2
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: xorg
+    exec: "Xorg :0 -noreset +extension GLX +extension RANDR +extension RENDER"
+    restart: always
+    priority: 10
+    enable: true
+    scope: system
+

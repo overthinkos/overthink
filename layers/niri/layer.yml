@@ -86,14 +86,13 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:niri]
-  command=%(ENV_HOME)s/.local/bin/niri-wrapper
-  autostart=true
-  autorestart=true
-  priority=10
-  startsecs=3
-  environment=XDG_RUNTIME_DIR="/tmp"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
+services:
+  - name: niri
+    exec: "%(ENV_HOME)s/.local/bin/niri-wrapper"
+    env:
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 10
+    enable: true
+    scope: system
+

@@ -114,43 +114,8 @@ env_provides:
 ports:
   - 9222
 
-service: |
-  [program:cdp-proxy]
-  command=%(ENV_HOME)s/.local/bin/cdp-proxy
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
-  # Chrome under supervisord with a 3-strike circuit breaker. autostart=false
-  # because Chrome needs a Wayland compositor up first — the compositor's
-  # autostart calls `supervisorctl start chrome` once it's ready. If Chrome
-  # crashes 3 times within startsecs, supervisord gives up (FATAL) and the
-  # chrome-crash eventlistener terminates supervisord so systemd rebuilds the
-  # container — the only way to clear orphan memfd shmem from previous crashes.
-  [program:chrome]
-  command=%(ENV_HOME)s/.local/bin/chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized
-  autostart=false
-  autorestart=true
-  startretries=3
-  startsecs=5
-  exitcodes=0
-  stopsignal=TERM
-  stopwaitsecs=5
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
-  [eventlistener:chrome-crash]
-  command=%(ENV_HOME)s/.local/bin/chrome-crash-listener
-  events=PROCESS_STATE_FATAL
-  autostart=true
-  autorestart=true
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
 volumes:
   - name: chrome-data
@@ -189,3 +154,17 @@ tests:
     timeout: 5s
     body:
       - contains: "webSocketDebuggerUrl"
+
+services:
+  - name: cdp-proxy
+    exec: "%(ENV_HOME)s/.local/bin/cdp-proxy"
+    restart: always
+    enable: true
+    scope: system
+
+  - name: chrome
+    exec: "%(ENV_HOME)s/.local/bin/chrome-crash-listener"
+    restart: always
+    enable: true
+    scope: system
+

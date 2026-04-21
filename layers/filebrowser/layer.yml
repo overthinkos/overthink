@@ -34,16 +34,6 @@ tasks:
     mode: "0644"
     user: root
 
-service: |
-  [program:filebrowser]
-  command=/usr/local/bin/filebrowser
-  environment=FILEBROWSER_CONFIG="/etc/filebrowser/config.yaml"
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
 
 tests:
   - id: filebrowser-binary
@@ -67,3 +57,13 @@ tests:
     http: http://127.0.0.1:${HOST_PORT:8080}/
     status: 200
     timeout: 5s
+
+services:
+  - name: filebrowser
+    exec: /usr/local/bin/filebrowser
+    env:
+      FILEBROWSER_CONFIG: /etc/filebrowser/config.yaml
+    restart: always
+    enable: true
+    scope: system
+

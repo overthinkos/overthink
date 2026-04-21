@@ -33,15 +33,6 @@ env:
   OV_BUILD_ENGINE: "podman"
   OV_RUN_ENGINE: "podman"
 
-service: |
-  [program:github-runner]
-  command=/opt/actions-runner/run.sh
-  directory=/opt/actions-runner
-  autostart=true
-  autorestart=true
-  redirect_stderr=true
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
 
 hooks:
   post_enable: |
@@ -106,3 +97,12 @@ tasks:
       [[registry.mirror]]
       location = "127.0.0.1:5000"
       insecure = true
+
+services:
+  - name: github-runner
+    exec: /opt/actions-runner/run.sh
+    restart: always
+    working_directory: /opt/actions-runner
+    enable: true
+    scope: system
+

@@ -28,13 +28,11 @@ tasks:
       git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
     user: "${USER}"
 
-service: |
-  [program:comfyui]
-  command=python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0
-  directory=%(ENV_HOME)s/ComfyUI
-  autostart=true
-  autorestart=true
-  stdout_logfile=/dev/stdout
-  stdout_logfile_maxbytes=0
-  stderr_logfile=/dev/stderr
-  stderr_logfile_maxbytes=0
+services:
+  - name: comfyui
+    exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
+    restart: always
+    working_directory: "%(ENV_HOME)s/ComfyUI"
+    enable: true
+    scope: system
+

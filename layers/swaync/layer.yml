@@ -33,17 +33,6 @@ tasks:
     mode: "0644"
     user: "${USER}"
 
-service: |
-  [program:swaync]
-  command=%(ENV_HOME)s/.local/bin/swaync-wrapper
-  autostart=true
-  autorestart=true
-  priority=14
-  startsecs=2
-  environment=XDG_RUNTIME_DIR="/tmp",WAYLAND_DISPLAY="wayland-0"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   - id: swaync-binary
@@ -55,3 +44,15 @@ tests:
   - id: swaync-style
     file: ${HOME}/.config/swaync/style.css
     exists: true
+
+services:
+  - name: swaync
+    exec: "%(ENV_HOME)s/.local/bin/swaync-wrapper"
+    env:
+      WAYLAND_DISPLAY: wayland-0
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 14
+    enable: true
+    scope: system
+

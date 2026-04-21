@@ -1,0 +1,562 @@
+package main
+
+// install_build.go — the InstallPlan compiler.
+//
+// BuildDeployPlan walks a resolved image plus its layer set and produces
+// an InstallPlan (ov/install_plan.go) — the IR that both the OCI target
+// (Containerfile emission) and the host target (shell + podman execution)
+// consume.
+//
+// This function is intentionally pure: given the same inputs, it produces
+// the same InstallPlan regardless of filesystem or environment. Side
+// effects happen later, inside DeployTarget.Emit implementations.
+//
+// Logic here replaces the per-layer walk inside writeLayerSteps
+// (generate.go:1075-1208). Instead of emitting Containerfile text
+// directly, we emit structured InstallSteps that know *what* to do —
+// leaving *how* to render up to each target.
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// HostContext carries host-side information the compiler needs to decide
+// (a) which format section to pick for the host target, (b) which
+// builder image to run user-scope builders in, (c) whether to gate
+// AUR-specific steps, etc. For the OCI target, the caller passes a
+// zero-value HostContext (the compiler ignores host-only choices when
+// Target is "oci").
+type HostContext struct {
+	// Target selects compilation mode. "" or "oci" means "compile for
+	// container build"; "host" means "compile for direct host execution".
+	// Primarily affects which steps get VenueSkip (container-only fields
+	// like ports:/volumes: are skipped on "host").
+	Target string
+
+	// Distro is the resolved host distro tag, e.g. "fedora:43". Used to
+	// pick the right format section when compiling for a host target
+	// whose distro differs from the image's primary distro.
+	Distro string
+
+	// GlibcVersion is the host's glibc major.minor as reported by
+	// `ldd --version`. Used by the host target's preflight check against
+	// the selected builder image. Optional; empty means skip the check.
+	GlibcVersion string
+
+	// BuilderImage overrides the default builder-image selection for
+	// VenueContainerBuilder steps. Populated from --builder-image. ""
+	// means "use build.yml default".
+	BuilderImage string
+}
+
+// BuildDeployPlan compiles one Layer into an InstallPlan.
+//
+// For whole-image deploys, the caller iterates the ordered layer list
+// (from ResolveLayerOrder) and builds one plan per layer, then merges
+// them. Keeping one plan per layer makes refcounting trivial in the
+// ledger: each layer's teardown is independent.
+func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*InstallPlan, error) {
+	if layer == nil {
+		return nil, fmt.Errorf("BuildDeployPlan: nil layer")
+	}
+	if img == nil {
+		return nil, fmt.Errorf("BuildDeployPlan: nil image %q", layer.Name)
+	}
+
+	plan := &InstallPlan{
+		Image:          img.Name,
+		Version:        layer.Version,
+		Distro:         primaryDistroTag(img, hostCtx),
+		Layer:          layer.Name,
+		LayersIncluded: []string{layer.Name},
+	}
+
+	// 0. Shell-env hook: vars + env + path_append — applies regardless of
+	// target. OCI target will emit as ENV directives; host target as
+	// env.d file + managed-block PATH.
+	if hook := compileShellHookStep(layer, img); hook != nil {
+		plan.Steps = append(plan.Steps, hook)
+	}
+
+	// 1. System packages — distro tag wins over build format sections.
+	// When compiling for the host target, pick the format matching the
+	// host distro instead of the image's primary format.
+	pkgSteps := compileSystemPackageSteps(layer, img, hostCtx)
+	plan.Steps = append(plan.Steps, pkgSteps...)
+
+	// 2. Inline tasks (cmd / mkdir / copy / write / link / download / setcap).
+	taskSteps := compileTaskSteps(layer, img)
+	plan.Steps = append(plan.Steps, taskSteps...)
+
+	// 3. Multi-stage builders triggered by layer manifest files.
+	builderSteps := compileBuilderSteps(layer, img, hostCtx)
+	plan.Steps = append(plan.Steps, builderSteps...)
+
+	// 4. Services: both legacy `service:` (supervisord INI fragments) and
+	// `system_services:` (systemd unit names). After the Task 6 migration
+	// lands these both flow through a unified `services:` schema; for now
+	// we read the two fields independently.
+	svcSteps := compileServiceSteps(layer, img, hostCtx)
+	plan.Steps = append(plan.Steps, svcSteps...)
+
+	return plan, nil
+}
+
+// MergePlans combines a list of per-layer plans into one whole-image
+// plan. Used by deploy targets that want to see all steps in one
+// sequence (for sudo batching, overall dry-run display, etc.) while
+// preserving per-layer provenance for the ledger.
+func MergePlans(plans []*InstallPlan, image string, addLayers []string) *InstallPlan {
+	out := &InstallPlan{
+		Image:     image,
+		AddLayers: append([]string(nil), addLayers...),
+	}
+	if len(plans) == 0 {
+		return out
+	}
+	out.Distro = plans[0].Distro
+	for _, p := range plans {
+		if p == nil {
+			continue
+		}
+		out.Steps = append(out.Steps, p.Steps...)
+		out.LayersIncluded = append(out.LayersIncluded, p.Layer)
+	}
+	out.DeployID = computeDeployID(image, out.LayersIncluded, addLayers)
+	return out
+}
+
+// computeDeployID returns a deterministic hex hash that identifies a
+// specific deploy (image + ordered layer set + add_layers). Used as the
+// ledger key so re-deploys of the same config are recognizable and
+// layer-refcount bookkeeping is stable.
+func computeDeployID(image string, layers, addLayers []string) string {
+	h := sha256.New()
+	h.Write([]byte(image))
+	h.Write([]byte{0})
+	for _, l := range layers {
+		h.Write([]byte(l))
+		h.Write([]byte{0})
+	}
+	h.Write([]byte{1})
+	for _, l := range addLayers {
+		h.Write([]byte(l))
+		h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// primaryDistroTag picks the distro tag this plan is materialized against.
+// For host compilation we use the host's detected distro; otherwise we
+// fall back to the image's first distro entry.
+func primaryDistroTag(img *ResolvedImage, hostCtx HostContext) string {
+	if hostCtx.Target == "host" && hostCtx.Distro != "" {
+		return hostCtx.Distro
+	}
+	if len(img.Distro) > 0 {
+		return img.Distro[0]
+	}
+	return ""
+}
+
+// ---------------------------------------------------------------------------
+// Shell hook compilation
+// ---------------------------------------------------------------------------
+
+// compileShellHookStep returns a ShellHookStep for the layer's env: and
+// path_append: fields, or nil if the layer contributes neither. Path
+// entries are {{.Home}}-substituted using the image's resolved Home so
+// targets can emit them literally.
+func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
+	envCfg, _ := layer.EnvConfig()
+	if envCfg == nil {
+		return nil
+	}
+	if len(envCfg.Vars) == 0 && len(envCfg.PathAppend) == 0 {
+		return nil
+	}
+	vars := make(map[string]string, len(envCfg.Vars))
+	for k, v := range envCfg.Vars {
+		vars[k] = ExpandPath(v, img.Home)
+	}
+	paths := make([]string, 0, len(envCfg.PathAppend))
+	for _, p := range envCfg.PathAppend {
+		paths = append(paths, ExpandPath(p, img.Home))
+	}
+	return &ShellHookStep{
+		LayerName: layer.Name,
+		EnvVars:   vars,
+		PathAdd:   paths,
+	}
+}
+
+// ---------------------------------------------------------------------------
+// System package compilation
+// ---------------------------------------------------------------------------
+
+// compileSystemPackageSteps emits SystemPackagesStep(s) for the layer's
+// package sections, honoring the distro-tag-wins-over-build-format rule
+// from today's writeLayerSteps.
+//
+// Phase 1: walk img.Distro tags in order; first match wins. If a tag
+// section is found, emit ONE install step using that section and stop.
+//
+// Phase 2: if no tag matched, walk img.BuildFormats in order; emit one
+// install step per format section that has packages. (Today's
+// writeLayerSteps does this to support images that install both rpm and
+// aur packages, for example.)
+//
+// For the IR we additionally break each install into the three-phase
+// structure (prepare/install/cleanup) so the host target can gate
+// PhasePrepare on --allow-repo-changes. Current build.yml only has one
+// phase per format (the monolithic install_template); Task 4 will split
+// templates into phases. Until then, we emit everything as PhaseInstall.
+func compileSystemPackageSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	if img.DistroDef == nil {
+		return nil
+	}
+
+	// Phase 1: distro tag section
+	for _, tag := range img.Distro {
+		tagCfg := layer.TagSection(tag)
+		if tagCfg == nil || len(tagCfg.Packages) == 0 {
+			continue
+		}
+		formatDef := img.DistroDef.Formats[img.Pkg]
+		if formatDef == nil {
+			return nil
+		}
+		return []InstallStep{buildSystemPackagesStep(img.Pkg, PhaseInstall, tagCfg.Packages, tagCfg.Raw, formatDef.CacheMounts)}
+	}
+
+	// Phase 2: format sections in build_formats order
+	var steps []InstallStep
+	for _, format := range img.BuildFormats {
+		section := layer.FormatSection(format)
+		if section == nil || len(section.Packages) == 0 {
+			continue
+		}
+		formatDef := img.DistroDef.Formats[format]
+		if formatDef == nil {
+			continue
+		}
+		steps = append(steps, buildSystemPackagesStep(format, PhaseInstall, section.Packages, section.Raw, formatDef.CacheMounts))
+	}
+	return steps
+}
+
+// buildSystemPackagesStep constructs a SystemPackagesStep from a
+// PackageSection's Raw map, extracting the well-known structured fields
+// (repos, options, copr, modules, exclude, keys) for gate evaluation
+// while also preserving the full Raw map for template rendering later.
+func buildSystemPackagesStep(format string, phase Phase, packages []string, raw map[string]interface{}, cacheMounts []CacheMountDef) *SystemPackagesStep {
+	step := &SystemPackagesStep{
+		Format:            format,
+		Phase:             phase,
+		Packages:          append([]string(nil), packages...),
+		Options:           extractStringSlice(raw, "options"),
+		Copr:              extractStringSlice(raw, "copr"),
+		Modules:           extractStringSlice(raw, "modules"),
+		Exclude:           extractStringSlice(raw, "exclude"),
+		Keys:              extractStringSlice(raw, "keys"),
+		RawInstallContext: raw,
+	}
+	if repoList, ok := raw["repos"].([]interface{}); ok {
+		for _, r := range repoList {
+			if m, ok := r.(map[string]interface{}); ok {
+				step.Repos = append(step.Repos, RepoSpec{Raw: m})
+			}
+		}
+	}
+	for _, cm := range cacheMounts {
+		step.CacheMounts = append(step.CacheMounts, CacheMountSpec{Dst: cm.Dst, Sharing: cm.Sharing})
+	}
+	return step
+}
+
+// ---------------------------------------------------------------------------
+// Task compilation
+// ---------------------------------------------------------------------------
+
+// compileTaskSteps turns the layer's tasks: list into TaskSteps. The
+// resolved user is captured at compile time so the host target doesn't
+// need to re-resolve ${USER} later; CtxPath carries the layer's absolute
+// directory for /ctx/ substitution on the host.
+func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
+	if !layer.HasTasks || len(layer.tasks) == 0 {
+		return nil
+	}
+	out := make([]InstallStep, 0, len(layer.tasks))
+	for i := range layer.tasks {
+		task := &layer.tasks[i]
+		userDir, _ := resolveUserSpec(task.User, img)
+		out = append(out, &TaskStep{
+			Task:         task,
+			LayerName:    layer.Name,
+			LayerDir:     layer.Path,
+			CtxPath:      layer.Path,
+			ResolvedUser: userDir,
+		})
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// Builder compilation
+// ---------------------------------------------------------------------------
+
+// compileBuilderSteps emits one BuilderStep per triggered multi-stage or
+// inline builder. Detection matches today's Generator.layerNeedsBuilder
+// logic: DetectFiles (pixi/npm/cargo) and DetectConfig (aur).
+func compileBuilderSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	if img.BuilderConfig == nil {
+		return nil
+	}
+	// Deterministic builder iteration order — matches today's BuilderNames.
+	names := img.BuilderConfig.BuilderNames()
+	var out []InstallStep
+	for _, bName := range names {
+		bDef := img.BuilderConfig.Builder[bName]
+		if bDef == nil {
+			continue
+		}
+		if !layerNeedsBuilderStep(layer, bDef) {
+			continue
+		}
+		step := &BuilderStep{
+			Builder:   bName,
+			LayerName: layer.Name,
+			LayerDir:  layer.Path,
+			Phase:     PhaseInstall,
+		}
+		step.BuilderImage = resolveBuilderImage(bName, img, hostCtx)
+		step.RawStageContext = collectBuilderContext(layer, bName, bDef, img)
+
+		// aur produces .pkg.tar.zst files in the container at /tmp/aur-pkgs/
+		// and we need to pull them out on the host target. The container
+		// (OCI) target ignores Artifacts — it uses COPY --from directly.
+		if bName == "aur" {
+			step.Artifacts = []ArtifactRef{{
+				ContainerPath: "/tmp/aur-pkgs/",
+				HostPath:      "", // host-target populates at emit time (tmpdir)
+				Chown:         false,
+			}}
+		}
+		out = append(out, step)
+	}
+	return out
+}
+
+// layerNeedsBuilderStep mirrors Generator.layerNeedsBuilder without
+// requiring a Generator receiver — the compiler doesn't have one.
+func layerNeedsBuilderStep(layer *Layer, bDef *BuilderDef) bool {
+	if bDef == nil {
+		return false
+	}
+	for _, f := range bDef.DetectFiles {
+		if layerHasFile(layer, f) {
+			return true
+		}
+	}
+	if bDef.DetectConfig != "" {
+		section := layer.FormatSection(bDef.DetectConfig)
+		if section != nil && len(section.Packages) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveBuilderImage selects the builder image for a given builder name.
+// Priority: hostCtx override > image.Builder map > "" (caller must error
+// or fall back to a sensible default).
+func resolveBuilderImage(name string, img *ResolvedImage, hostCtx HostContext) string {
+	if hostCtx.BuilderImage != "" {
+		return hostCtx.BuilderImage
+	}
+	if img.Builder != nil {
+		if ref, ok := img.Builder[name]; ok {
+			return ref
+		}
+	}
+	return ""
+}
+
+// collectBuilderContext extracts the per-builder ledger/teardown context.
+// Populates the "env_name"/"binaries"/"packages" keys the BuilderStep's
+// Reverse() method reads — best-effort; accurate env/binary detection
+// typically happens after the builder runs (binaries come from the
+// layer's Cargo.toml [[bin]] section, etc.). For now we capture names
+// derivable from layer.yml alone; the host target refines these at
+// execution time.
+func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, img *ResolvedImage) map[string]interface{} {
+	ctx := map[string]interface{}{
+		"layer":   layer.Name,
+		"builder": builderName,
+		"home":    img.Home,
+	}
+	switch builderName {
+	case "pixi":
+		// Default pixi env name. A layer with pixi.toml using a
+		// [workspace] or [project] name overrides this; the host target
+		// can read pixi.toml at install time and amend.
+		ctx["env_name"] = pixiDefaultEnvName(layer)
+	case "cargo":
+		// Cargo binaries are knowable only by reading Cargo.toml's
+		// [[bin]] entries. For the skeleton we record the layer name as
+		// a placeholder — the host target will read the real names
+		// after `cargo install` and update the ledger. Empty list means
+		// "best-effort uninstall via cargo uninstall <layer-name>".
+	case "npm":
+		// npm packages come from package.json dependencies; the host
+		// target reads those at install time.
+	case "aur":
+		if section := layer.FormatSection("aur"); section != nil {
+			ctx["packages"] = append([]string(nil), section.Packages...)
+		}
+	}
+	return ctx
+}
+
+// pixiDefaultEnvName returns the default pixi env name for a layer.
+// Pixi uses "default" unless the manifest declares otherwise; we keep it
+// simple and let the host target refine at install time.
+func pixiDefaultEnvName(layer *Layer) string {
+	return "default"
+}
+
+// ---------------------------------------------------------------------------
+// Service compilation
+// ---------------------------------------------------------------------------
+
+// compileServiceSteps turns the layer's service declarations into IR
+// steps. Preference order:
+//
+//  1. Unified `services:` list (Task 6) — preferred when present.
+//     Each entry becomes either a ServicePackagedStep (use_packaged:)
+//     or a ServiceCustomStep (full spec).
+//
+//  2. Legacy `system_services:` + `service:` fields — used only when
+//     the layer hasn't migrated to the unified schema. system_services
+//     entries map to ServicePackagedStep; service: maps to a single
+//     ServiceCustomStep carrying the raw INI as UnitText (rendered by
+//     the legacy supervisord fragment pipeline in the OCI target).
+func compileServiceSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	if layer.HasStructuredServices() {
+		return compileServiceStepsFromSchema(layer, img, hostCtx)
+	}
+	return compileServiceStepsLegacy(layer, img, hostCtx)
+}
+
+// compileServiceStepsFromSchema handles layers using the unified
+// services: list. Each entry's use_packaged/custom path produces the
+// matching step kind.
+func compileServiceStepsFromSchema(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	var out []InstallStep
+	for i := range layer.Services() {
+		entry := &layer.Services()[i]
+		scope := ScopeSystem
+		if entry.EffectiveScope() == "user" {
+			scope = ScopeUser
+		}
+		if entry.IsPackaged() {
+			out = append(out, &ServicePackagedStep{
+				Unit:        ensureServiceSuffix(entry.UsePackaged),
+				TargetScope: scope,
+				Enable:      entry.Enable,
+				LayerName:   layer.Name,
+				// OverridesText / OverridesPath are populated by
+				// DeployTarget.Emit at render time — the compiler
+				// doesn't know the target init system yet.
+			})
+			continue
+		}
+		// Custom service. UnitText is left empty here — the target
+		// renders the unit using its init system's service_template at
+		// emit time. The step carries the ServiceEntry via a marker so
+		// the target can look it up.
+		step := &ServiceCustomStep{
+			Name:        fmt.Sprintf("ov-%s-%s", layer.Name, entry.Name),
+			TargetScope: scope,
+			Enable:      entry.Enable,
+			LayerName:   layer.Name,
+		}
+		out = append(out, step)
+	}
+	return out
+}
+
+// compileServiceStepsLegacy handles layers still using the
+// service: / system_services: pair. Identical to the pre-Task-6 path.
+func compileServiceStepsLegacy(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	var out []InstallStep
+
+	for _, unit := range layer.SystemServiceUnits() {
+		out = append(out, &ServicePackagedStep{
+			Unit:        ensureServiceSuffix(unit),
+			TargetScope: ScopeSystem,
+			Enable:      true,
+			LayerName:   layer.Name,
+		})
+	}
+
+	if svc := layer.ServiceConf(); strings.TrimSpace(svc) != "" {
+		out = append(out, &ServiceCustomStep{
+			Name:        fmt.Sprintf("ov-%s", layer.Name),
+			UnitText:    svc,
+			TargetScope: ScopeSystem,
+			Enable:      true,
+			LayerName:   layer.Name,
+		})
+	}
+
+	return out
+}
+
+// ensureServiceSuffix adds `.service` if missing. Distinguishes unit
+// types: if the caller already included a suffix (e.g. "foo.timer",
+// "foo.socket"), leave it alone.
+func ensureServiceSuffix(unit string) string {
+	if unit == "" {
+		return unit
+	}
+	known := []string{".service", ".timer", ".socket", ".path", ".target", ".mount", ".slice"}
+	for _, s := range known {
+		if strings.HasSuffix(unit, s) {
+			return unit
+		}
+	}
+	return unit + ".service"
+}
+
+// ---------------------------------------------------------------------------
+// Debug helpers
+// ---------------------------------------------------------------------------
+
+// DescribePlan returns a short human-readable summary of a plan. Used by
+// --dry-run table output and by TestDescribePlan for golden comparison.
+func DescribePlan(p *InstallPlan) string {
+	if p == nil {
+		return "<nil>"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Plan: layer=%s image=%s distro=%s steps=%d\n",
+		p.Layer, p.Image, p.Distro, len(p.Steps))
+	counts := map[StepKind]int{}
+	for _, s := range p.Steps {
+		counts[s.Kind()]++
+	}
+	kinds := make([]string, 0, len(counts))
+	for k := range counts {
+		kinds = append(kinds, string(k))
+	}
+	sort.Strings(kinds)
+	for _, k := range kinds {
+		fmt.Fprintf(&b, "  %s: %d\n", k, counts[StepKind(k)])
+	}
+	return b.String()
+}

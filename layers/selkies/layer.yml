@@ -100,37 +100,8 @@ tasks:
     mode: "0755"
     user: "${USER}"
 
-service: |
-  [program:traefik]
-  command=/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml
-  autostart=true
-  autorestart=true
-  priority=18
-  startsecs=1
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
-  [program:selkies-fileserver]
-  command=python3 %(ENV_HOME)s/.local/bin/selkies-fileserver
-  autostart=true
-  autorestart=true
-  priority=19
-  startsecs=1
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
-  [program:selkies]
-  command=%(ENV_HOME)s/.local/bin/selkies-wrapper
-  autostart=true
-  autorestart=true
-  priority=8
-  startsecs=3
-  environment=XDG_RUNTIME_DIR="/tmp",PIXELFLUX_WAYLAND="true"
-  stdout_logfile=/dev/fd/1
-  stdout_logfile_maxbytes=0
-  redirect_stderr=true
 
 tests:
   - id: selkies-wrapper
@@ -174,3 +145,29 @@ tests:
     status: 200
     allow_insecure: true
     timeout: 10s
+
+services:
+  - name: traefik
+    exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
+    restart: always
+    priority: 18
+    enable: true
+    scope: system
+
+  - name: selkies-fileserver
+    exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
+    restart: always
+    priority: 19
+    enable: true
+    scope: system
+
+  - name: selkies
+    exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
+    env:
+      PIXELFLUX_WAYLAND: true
+      XDG_RUNTIME_DIR: /tmp
+    restart: always
+    priority: 8
+    enable: true
+    scope: system
+

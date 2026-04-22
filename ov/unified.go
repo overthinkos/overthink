@@ -50,6 +50,7 @@ type UnifiedFile struct {
 	Defaults    ImageConfig              `yaml:"defaults,omitempty"`
 	Images      map[string]ImageConfig   `yaml:"images,omitempty"`
 	Layers      map[string]*InlineLayer  `yaml:"layers,omitempty"`
+	VMs         map[string]*VmSpec       `yaml:"vms,omitempty"`
 	Deployments *DeploymentsSection      `yaml:"deployments,omitempty"`
 }
 
@@ -62,6 +63,7 @@ type DiscoverConfig struct {
 	Builders    []ScanSpec `yaml:"builders,omitempty"`
 	Distros     []ScanSpec `yaml:"distros,omitempty"`
 	Inits       []ScanSpec `yaml:"inits,omitempty"`
+	VMs         []ScanSpec `yaml:"vms,omitempty"`
 	Clusters    []ScanSpec `yaml:"clusters,omitempty"` // reserved for Part F
 }
 
@@ -152,6 +154,7 @@ type kindKeyedDoc struct {
 	Builder    *BuilderDoc    `yaml:"builder,omitempty"`
 	Distro     *DistroDoc     `yaml:"distro,omitempty"`
 	Init       *InitDoc       `yaml:"init,omitempty"`
+	VM         *VmDoc         `yaml:"vm,omitempty"`
 }
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
@@ -204,6 +207,18 @@ type InitDoc struct {
 	InitDef `yaml:",inline"`
 }
 
+// VmDoc wraps a single VmSpec with an explicit name. The standalone
+// form is authored as a top-level `kind: vm` + `name: <name>` document
+// (often as a paired entry in the same file as a kind:image entry for
+// bootc images — see migrate vm-spec).
+type VmDoc struct {
+	Name    string  `yaml:"name"`
+	Version string  `yaml:"version,omitempty"`
+	Status  string  `yaml:"status,omitempty"`
+	Info    string  `yaml:"info,omitempty"`
+	Spec    VmSpec  `yaml:"spec"`
+}
+
 // -----------------------------------------------------------------------------
 // Entity kind table — drives scanner + router + merge path.
 // -----------------------------------------------------------------------------
@@ -220,6 +235,7 @@ var entityKinds = []entityKind{
 	{Key: "builder", Filename: "builder.yml"},
 	{Key: "distro", Filename: "distro.yml"},
 	{Key: "init", Filename: "init.yml"},
+	{Key: "vm", Filename: "vm.yml"},
 }
 
 // -----------------------------------------------------------------------------
@@ -449,6 +465,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 		dst.Discover.Builders = append(dst.Discover.Builders, src.Discover.Builders...)
 		dst.Discover.Distros = append(dst.Discover.Distros, src.Discover.Distros...)
 		dst.Discover.Inits = append(dst.Discover.Inits, src.Discover.Inits...)
+		dst.Discover.VMs = append(dst.Discover.VMs, src.Discover.VMs...)
 		dst.Discover.Clusters = append(dst.Discover.Clusters, src.Discover.Clusters...)
 	}
 	mergeDistroMap(&dst.Distros, src.Distros)
@@ -456,6 +473,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeInitMap(&dst.Inits, src.Inits)
 	mergeImageMap(&dst.Images, src.Images)
 	mergeLayerMap(&dst.Layers, src.Layers)
+	mergeVmMap(&dst.VMs, src.VMs)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -524,6 +542,20 @@ func mergeLayerMap(dst *map[string]*InlineLayer, src map[string]*InlineLayer) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*InlineLayer)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+func mergeVmMap(dst *map[string]*VmSpec, src map[string]*VmSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*VmSpec)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -632,6 +664,9 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Init != nil {
 		count++
 	}
+	if kd.VM != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
 	}
@@ -704,6 +739,17 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Inits[kd.Init.Name]; !exists {
 			initDef := kd.Init.InitDef
 			merged.Inits[kd.Init.Name] = &initDef
+		}
+	case kd.VM != nil:
+		if kd.VM.Name == "" {
+			return fmt.Errorf("vm: missing name")
+		}
+		if merged.VMs == nil {
+			merged.VMs = map[string]*VmSpec{}
+		}
+		if _, exists := merged.VMs[kd.VM.Name]; !exists {
+			spec := kd.VM.Spec
+			merged.VMs[kd.VM.Name] = &spec
 		}
 	}
 	_ = srcDir

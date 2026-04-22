@@ -151,10 +151,14 @@ func (c *DeployAddCmd) Run() error {
 	}
 
 	// Dispatch to the chosen target.
-	if c.Name == "host" {
+	switch {
+	case c.Name == "host":
 		return c.runHost(plans, dir, distroCfg, opts)
+	case strings.HasPrefix(c.Name, "vm:"):
+		return c.runVM(plans, dir, opts)
+	default:
+		return c.runContainer(plans, base, distroCfg, builderCfg, opts)
 	}
-	return c.runContainer(plans, base, distroCfg, builderCfg, opts)
 }
 
 // Run executes `ov deploy del`.
@@ -169,10 +173,14 @@ func (c *DeployDelCmd) Run() error {
 	}
 	defer lock.Release()
 
-	if c.Name == "host" {
+	switch {
+	case c.Name == "host":
 		return c.runHostDel(paths)
+	case strings.HasPrefix(c.Name, "vm:"):
+		return c.runVmDel(paths)
+	default:
+		return c.runContainerDel(paths)
 	}
-	return c.runContainerDel(paths)
 }
 
 // runHostDel tears down host deploys: runs each ReverseOp, removes

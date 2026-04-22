@@ -8,30 +8,56 @@
 # Resolved through overthink.yml includes: alongside images.yml.
 
 vms:
+    # --- Upstream Arch Linux cloud image ---
+    #
+    # Boots under BIOS (SeaBIOS) with virtio-gpu + SPICE, so virt-manager
+    # can open a working console without the UEFI/simpledrm/qxldrmfb race
+    # that afflicts the upstream BOOTX64.EFI binary (whose embedded grub
+    # config is stale relative to /etc/default/grub on vda3).
+    #
+    # Sized generously (8 GiB / 4 cpus / 40 GiB) so cloud-init's first-
+    # boot `pacman -S spice-vdagent` (which pulls GTK3 + X11 libs) doesn't
+    # starve sshd.
+    #
+    # Usage:
+    #   ov vm build arch-cloud-base           # fetch qcow2 + seed ISO
+    #   ov vm create arch-cloud-base          # define + start domain
+    #   ov vm ssh arch-cloud-base -l arch     # shell in
+    #   virt-manager                          # open SPICE console
     arch-cloud-base:
         source:
             kind: cloud_image
             url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
             checksum:
                 type: sha256
+            # Adopt upstream's pre-existing account instead of creating one
+            # (mirrors container-side `base_user:` + `user_policy: adopt`).
             base_user: arch
-        disk_size: 20G
-        ram: 2G
-        cpus: 2
+        # --- Hardware ---
+        disk_size: 40G
+        ram: 8G
+        cpus: 4
         machine: q35
-        firmware: uefi-insecure
+        # BIOS boot — NOT UEFI. The Arch cloud image's GPT includes a
+        # 1 MB BIOS boot partition at vda1 specifically to support BIOS
+        # boot. Under BIOS, GRUB reads /boot/grub/grub.cfg directly from
+        # vda3 (which has fbcon=nodefer applied); UEFI would route through
+        # the stale BOOTX64.EFI binary on the ESP.
+        firmware: bios
         network:
             mode: user
         ssh:
-            port: 2224
+            port: 2224      # 2222/2223 may collide with rootlessport
             key_source: generate
         cloud_init:
             timezone: UTC
             packages:
                 - sudo
+                - spice-vdagent    # clipboard + resize share via virt-manager SPICE
             runcmd:
                 - pacman-key --init
                 - pacman-key --populate archlinux
+                - systemctl enable --now spice-vdagentd
             ov_install:
                 strategy: auto
         libvirt:
@@ -43,10 +69,15 @@ vms:
                     - type: spice
                       autoport: "yes"
                       listen: 127.0.0.1
+                # virtio-gpu — NOT qxl. Native Linux DRM driver, no QXL
+                # ram_size/vram_size/vram64_size_mb/vgamem_mb quartet, no
+                # simpledrm handoff race. SPICE streams pixels from
+                # virtio-gpu just as well as it does from QXL.
                 video:
-                    - model: qxl
+                    - model: virtio
                       vram: 65536
                       heads: 1
+                      accel3d: false
                 rng:
                     - model: virtio
                       backend: /dev/urandom

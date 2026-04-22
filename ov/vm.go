@@ -129,6 +129,18 @@ func (c *VmCreateCmd) Run() error {
 		return err
 	}
 
+	// --- New kind:vm entity path (D1, D4, D12) ---
+	// When c.Image matches a kind:vm entity in overthink.yml, branch
+	// into the VmSpec-driven create pipeline: RenderDomain for libvirt,
+	// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed}.qcow2/iso
+	// produced by `ov vm build` (the cloud_image branch of vm_build.go).
+	dir, _ := os.Getwd()
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
+		if spec, hit := uf.VMs[c.Image]; hit {
+			return c.runVmSpecCreate(c.Image, spec, backend)
+		}
+	}
+
 	// Resolve VM settings from image labels (+ deploy.yml overlay).
 	ram := "4G"
 	cpus := 2

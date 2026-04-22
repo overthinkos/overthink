@@ -49,6 +49,17 @@ func (c *VmBuildCmd) Run() error {
 		return rtErr
 	}
 
+	// --- New kind:vm entity path (D1, D4, D12) ---
+	// When imageName matches a kind:vm entity in overthink.yml, branch
+	// into the VmSpec-driven build pipeline: cloud_image → fetch+
+	// resize+seed ISO; bootc → bootc install reading the bootc-branch
+	// fields from VmSpec.Source.
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
+		if spec, hit := uf.VMs[imageName]; hit {
+			return c.runVmSpecBuild(imageName, spec, rt)
+		}
+	}
+
 	var vmCfg *VmConfig
 	var imageRef string
 
@@ -271,4 +282,61 @@ func normalizeSize(size string) string {
 	s = strings.ReplaceAll(s, "MiB", "M")
 	s = strings.ReplaceAll(s, "TiB", "T")
 	return s
+}
+
+// runVmSpecBuild handles `ov vm build <vm-name>` where <vm-name>
+// matches a kind:vm entity in overthink.yml. Branches on source.kind:
+//
+//	cloud_image → fetch URL + qcow2 overlay + resize + seed ISO (D4)
+//	bootc       → bootc install to-disk reading VmSpec.Source fields (D12)
+//
+// The new path lives alongside the legacy VmConfig path in VmBuildCmd.Run
+// until the Hard Cutover commit (Task 21) deletes the legacy branch.
+func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRuntime) error {
+	fmt.Fprintf(os.Stderr, "Building VM %q (source.kind=%s)\n", vmName, spec.Source.Kind)
+
+	switch spec.Source.Kind {
+	case "cloud_image":
+		outputDir, err := filepath.Abs(filepath.Join("output", "qcow2"))
+		if err != nil {
+			return err
+		}
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		vmStateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
+		if err := os.MkdirAll(vmStateDir, 0o755); err != nil {
+			return err
+		}
+		// Hydrate existing VmDeployState (for stable instance-id across
+		// rebuilds).
+		var existingState *VmDeployState
+		if dc, _ := LoadDeployConfig(); dc != nil {
+			if e, ok := dc.Images["vm:"+vmName]; ok {
+				existingState = e.VmState
+			}
+		}
+		res, err := BuildCloudImage(spec, outputDir, vmStateDir, existingState)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s (base sha256=%s)\n", res.DiskPath, res.BaseImageSHA256)
+		fmt.Fprintf(os.Stderr, "Wrote %s\n", res.SeedIsoPath)
+		fmt.Fprintf(os.Stderr, "Instance-id: %s\n", res.InstanceID)
+		return nil
+
+	case "bootc":
+		// Bootc VMs need an existing container image to `bootc install`
+		// against. Look up the referenced kind:image and delegate to the
+		// existing bootc install pipeline via a synthetic VmConfig.
+		// This is a temporary shim while the legacy VmConfig machinery
+		// is still in place; the Hard Cutover commit will collapse the
+		// two paths into one.
+		_ = rt
+		return fmt.Errorf("bootc source via kind:vm entity: full wiring lands in the Hard Cutover commit (Task 21). Workaround: use the existing legacy kind:image + bootc: true path for now")
+
+	default:
+		return fmt.Errorf("vm %q: unsupported source.kind %q (want cloud_image or bootc)", vmName, spec.Source.Kind)
+	}
 }

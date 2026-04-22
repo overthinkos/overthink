@@ -181,10 +181,10 @@ func validateServiceName(engine, containerName, serviceName string) error {
 	if meta == nil {
 		return fmt.Errorf("no overthinkos metadata found for container %s", containerName)
 	}
-	for _, s := range meta.Services {
+	for _, s := range meta.ServiceNames {
 		if s == serviceName {
 			return nil
 		}
 	}
-	return fmt.Errorf("service %q not found in image (available: %s)", serviceName, strings.Join(meta.Services, ", "))
+	return fmt.Errorf("service %q not found in image (available: %s)", serviceName, strings.Join(meta.ServiceNames, ", "))
 }

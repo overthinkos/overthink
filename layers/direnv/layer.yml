@@ -1,21 +1,24 @@
-description: direnv — automatic environment variable loading from .envrc files
+layer:
+  name: direnv
+  description: direnv — automatic environment variable loading from .envrc files
 
-rpm:
-  packages:
-    - direnv
+  rpm:
+    packages:
+      - direnv
 
-pac:
-  packages:
-    - direnv
+  pac:
+    packages:
+      - direnv
 
-deb:
-  packages:
-    - direnv
+  deb:
+    packages:
+      - direnv
 
-tests:
-  - id: direnv-binary
-    file: /usr/bin/direnv
-    exists: true
-  - id: direnv-version
-    command: /usr/bin/direnv version
-    exit_status: 0
+  tests:
+    - id: direnv-binary
+      file: /usr/bin/direnv
+      exists: true
+    - id: direnv-version
+      command: /usr/bin/direnv version
+      exit_status: 0
+

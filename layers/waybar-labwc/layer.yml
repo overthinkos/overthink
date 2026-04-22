@@ -1,54 +1,58 @@
-depends:
-  - labwc
+layer:
+  name: waybar-labwc
+  depends:
+    - labwc
 
-rpm:
-  packages:
-    - waybar
+  rpm:
+    packages:
+      - waybar
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - mkdir: "${HOME}/.config/waybar"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - mkdir: "${HOME}/.config/waybar"
+      user: "${USER}"
 
-  - copy: waybar-labwc-wrapper
-    to: "${HOME}/.local/bin/waybar-labwc-wrapper"
-    mode: "0755"
-    user: "${USER}"
+    - copy: waybar-labwc-wrapper
+      to: "${HOME}/.local/bin/waybar-labwc-wrapper"
+      mode: "0755"
+      user: "${USER}"
 
-  - copy: config.json
-    to: "${HOME}/.config/waybar/config"
-    mode: "0644"
-    user: "${USER}"
-  - copy: style.css
-    to: "${HOME}/.config/waybar/style.css"
-    mode: "0644"
-    user: "${USER}"
+    - copy: config.json
+      to: "${HOME}/.config/waybar/config"
+      mode: "0644"
+      user: "${USER}"
+    - copy: style.css
+      to: "${HOME}/.config/waybar/style.css"
+      mode: "0644"
+      user: "${USER}"
 
 
-tests:
-  - id: waybar-binary
-    file: /usr/bin/waybar
-    exists: true
-  - id: waybar-labwc-wrapper
-    file: ${HOME}/.local/bin/waybar-labwc-wrapper
-    exists: true
-    mode: "0755"
-  - id: waybar-config
-    file: ${HOME}/.config/waybar/config
-    exists: true
-  - id: waybar-style
-    file: ${HOME}/.config/waybar/style.css
-    exists: true
+  tests:
+    - id: waybar-binary
+      file: /usr/bin/waybar
+      exists: true
+    - id: waybar-labwc-wrapper
+      file: ${HOME}/.local/bin/waybar-labwc-wrapper
+      exists: true
+      mode: "0755"
+    - id: waybar-config
+      file: ${HOME}/.config/waybar/config
+      exists: true
+    - id: waybar-style
+      file: ${HOME}/.config/waybar/style.css
+      exists: true
 
-services:
-  - name: waybar
-    exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
-    env:
-      WAYLAND_DISPLAY: wayland-0
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 15
-    enable: true
-    scope: system
+  service:
+    - name: waybar
+      exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
+      env:
+        WAYLAND_DISPLAY: wayland-0
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 15
+      start_secs: 0
+      enable: true
+      scope: system
+
 

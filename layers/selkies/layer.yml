@@ -1,173 +1,179 @@
-depends:
-  - supervisord
-  - python
-  - pipewire
+layer:
+  name: selkies
+  depends:
+    - supervisord
+    - python
+    - pipewire
 
-env:
-  LANG: "C.UTF-8"
-  PIXELFLUX_WAYLAND: "true"
-  PULSE_SERVER: "unix:/tmp/pulse/native"
+  env:
+    LANG: "C.UTF-8"
+    PIXELFLUX_WAYLAND: "true"
+    PULSE_SERVER: "unix:/tmp/pulse/native"
 
-ports:
-  - "https+insecure:3000"
+  ports:
+    - "https+insecure:3000"
 
-security:
-  shm_size: "1g"
+  security:
+    shm_size: "1g"
 
-volumes:
-  - name: selkies-config
-    path: "~/.config/selkies"
+  volumes:
+    - name: selkies-config
+      path: "~/.config/selkies"
 
-rpm:
-  packages:
-    - wl-clipboard
-    - libICE
-    - libSM
-    - pulseaudio-libs
-    - pulseaudio-utils
-    - mesa-va-drivers
-    - libva
-    - libva-utils
-    - procps-ng
-    - iproute
-    - iputils
-    - strace
-    - htop
-    - file
-    - lsof
+  rpm:
+    packages:
+      - wl-clipboard
+      - libICE
+      - libSM
+      - pulseaudio-libs
+      - pulseaudio-utils
+      - mesa-va-drivers
+      - libva
+      - libva-utils
+      - procps-ng
+      - iproute
+      - iputils
+      - strace
+      - htop
+      - file
+      - lsof
 
-vars:
-  TRAEFIK_VERSION: v3.4.0
+  vars:
+    TRAEFIK_VERSION: v3.4.0
 
-tasks:
-  # Move pre-built Selkies web UI from the pixi build-stage output into the
-  # system share directory. The pixi stage writes to /home/user/.local/share
-  # under the build user's home; we relocate so the runtime has no dependency
-  # on the builder-user layout.
-  - cmd: |
-      mkdir -p /usr/local/share/selkies/web
-      cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
-      rm -rf /home/user/.local/share/selkies-build
-    user: root
+  tasks:
+    # Move pre-built Selkies web UI from the pixi build-stage output into the
+    # system share directory. The pixi stage writes to /home/user/.local/share
+    # under the build user's home; we relocate so the runtime has no dependency
+    # on the builder-user layout.
+    - cmd: |
+        mkdir -p /usr/local/share/selkies/web
+        cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+        rm -rf /home/user/.local/share/selkies-build
+      user: root
 
-  # Traefik binary (same version the dedicated traefik layer uses).
-  - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
-    extract: tar.gz
-    to: /usr/local/bin
-    include: [traefik]
-    user: root
+    # Traefik binary (same version the dedicated traefik layer uses).
+    - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+      extract: tar.gz
+      to: /usr/local/bin
+      include: [traefik]
+      user: root
 
-  # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
-  # procedural — stays in cmd: rather than a contrived write: pair.
-  - mkdir: /usr/local/share/selkies/certs
-    user: root
-  - cmd: |
-      openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-        -keyout /usr/local/share/selkies/certs/selkies.key \
-        -out /usr/local/share/selkies/certs/selkies.crt \
-        -days 3650 -nodes \
-        -subj "/CN=selkies" \
-        -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
-      chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
-    user: root
+    # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
+    # procedural — stays in cmd: rather than a contrived write: pair.
+    - mkdir: /usr/local/share/selkies/certs
+      user: root
+    - cmd: |
+        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+          -keyout /usr/local/share/selkies/certs/selkies.key \
+          -out /usr/local/share/selkies/certs/selkies.crt \
+          -days 3650 -nodes \
+          -subj "/CN=selkies" \
+          -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+        chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+      user: root
 
-  # Traefik configs from the layer dir.
-  - copy: traefik.yml
-    to: /usr/local/share/selkies/traefik.yml
-    mode: "0644"
-    user: root
-  - copy: traefik-dynamic.yml
-    to: /usr/local/share/selkies/traefik-dynamic.yml
-    mode: "0644"
-    user: root
+    # Traefik configs from the layer dir.
+    - copy: traefik.yml
+      to: /usr/local/share/selkies/traefik.yml
+      mode: "0644"
+      user: root
+    - copy: traefik-dynamic.yml
+      to: /usr/local/share/selkies/traefik-dynamic.yml
+      mode: "0644"
+      user: root
 
-  # User-phase setup: wrappers for the three services.
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - mkdir: "${HOME}/.config/selkies"
-    user: "${USER}"
+    # User-phase setup: wrappers for the three services.
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - mkdir: "${HOME}/.config/selkies"
+      user: "${USER}"
 
-  - copy: selkies-wrapper
-    to: "${HOME}/.local/bin/selkies-wrapper"
-    mode: "0755"
-    user: "${USER}"
-  - copy: selkies-capture-server
-    to: "${HOME}/.local/bin/selkies-capture-server"
-    mode: "0755"
-    user: "${USER}"
-  - copy: selkies-fileserver
-    to: "${HOME}/.local/bin/selkies-fileserver"
-    mode: "0755"
-    user: "${USER}"
-
-
+    - copy: selkies-wrapper
+      to: "${HOME}/.local/bin/selkies-wrapper"
+      mode: "0755"
+      user: "${USER}"
+    - copy: selkies-capture-server
+      to: "${HOME}/.local/bin/selkies-capture-server"
+      mode: "0755"
+      user: "${USER}"
+    - copy: selkies-fileserver
+      to: "${HOME}/.local/bin/selkies-fileserver"
+      mode: "0755"
+      user: "${USER}"
 
 
-tests:
-  - id: selkies-wrapper
-    file: ${HOME}/.local/bin/selkies-wrapper
-    exists: true
-    mode: "0755"
-  - id: selkies-capture-server
-    file: ${HOME}/.local/bin/selkies-capture-server
-    exists: true
-  - id: selkies-fileserver
-    file: ${HOME}/.local/bin/selkies-fileserver
-    exists: true
-  - id: selkies-web-ui
-    file: /usr/local/share/selkies/web
-    filetype: directory
-  - id: selkies-cert
-    file: /usr/local/share/selkies/certs/selkies.crt
-    exists: true
-  - id: selkies-cert-key
-    file: /usr/local/share/selkies/certs/selkies.key
-    exists: true
-  - id: traefik-binary
-    file: /usr/local/bin/traefik
-    exists: true
-  - id: selkies-service-running
-    scope: deploy
-    service: selkies
-    running: true
-  - id: traefik-service-running
-    scope: deploy
-    service: traefik
-    running: true
-  - id: selkies-port-reachable
-    scope: deploy
-    addr: 127.0.0.1:${HOST_PORT:3000}
-    reachable: true
-    timeout: 5s
-  - id: selkies-https
-    scope: deploy
-    http: https://127.0.0.1:${HOST_PORT:3000}/
-    status: 200
-    allow_insecure: true
-    timeout: 10s
 
-services:
-  - name: traefik
-    exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
-    restart: always
-    priority: 18
-    enable: true
-    scope: system
 
-  - name: selkies-fileserver
-    exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
-    restart: always
-    priority: 19
-    enable: true
-    scope: system
+  tests:
+    - id: selkies-wrapper
+      file: ${HOME}/.local/bin/selkies-wrapper
+      exists: true
+      mode: "0755"
+    - id: selkies-capture-server
+      file: ${HOME}/.local/bin/selkies-capture-server
+      exists: true
+    - id: selkies-fileserver
+      file: ${HOME}/.local/bin/selkies-fileserver
+      exists: true
+    - id: selkies-web-ui
+      file: /usr/local/share/selkies/web
+      filetype: directory
+    - id: selkies-cert
+      file: /usr/local/share/selkies/certs/selkies.crt
+      exists: true
+    - id: selkies-cert-key
+      file: /usr/local/share/selkies/certs/selkies.key
+      exists: true
+    - id: traefik-binary
+      file: /usr/local/bin/traefik
+      exists: true
+    - id: selkies-service-running
+      scope: deploy
+      service: selkies
+      running: true
+    - id: traefik-service-running
+      scope: deploy
+      service: traefik
+      running: true
+    - id: selkies-port-reachable
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:3000}
+      reachable: true
+      timeout: 5s
+    - id: selkies-https
+      scope: deploy
+      http: https://127.0.0.1:${HOST_PORT:3000}/
+      status: 200
+      allow_insecure: true
+      timeout: 10s
 
-  - name: selkies
-    exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
-    env:
-      PIXELFLUX_WAYLAND: true
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 8
-    enable: true
-    scope: system
+  service:
+    - name: traefik
+      exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
+      restart: always
+      priority: 18
+      start_secs: 1
+      enable: true
+      scope: system
+
+    - name: selkies-fileserver
+      exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
+      restart: always
+      priority: 19
+      start_secs: 1
+      enable: true
+      scope: system
+
+    - name: selkies
+      exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
+      env:
+        PIXELFLUX_WAYLAND: true
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 8
+      start_secs: 3
+      enable: true
+      scope: system
+
 

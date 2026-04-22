@@ -1,5 +1,8 @@
-depends:
-  - niri
+layer:
+  name: chrome-niri
+  depends:
+    - niri
 
-layers:
-  - chrome
+  layers:
+    - chrome
+

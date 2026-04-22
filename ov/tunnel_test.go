@@ -416,7 +416,7 @@ func TestConfigResolveTunnelIgnored(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test", "")
+	resolved, err := cfg.ResolveImage("myapp", "test", testProjectDir(t))
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -440,7 +440,7 @@ func TestConfigResolveTunnelDefaultsIgnored(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test", "")
+	resolved, err := cfg.ResolveImage("myapp", "test", testProjectDir(t))
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestConfigResolveTunnelNil(t *testing.T) {
 		},
 	}
 
-	resolved, err := cfg.ResolveImage("myapp", "test", "")
+	resolved, err := cfg.ResolveImage("myapp", "test", testProjectDir(t))
 	if err != nil {
 		t.Fatalf("ResolveImage error: %v", err)
 	}
@@ -485,7 +485,7 @@ func TestValidateTunnelIgnoredInImagesYml(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, "")
+	err := Validate(cfg, layers, testProjectDir(t))
 	// Should NOT produce tunnel errors — tunnel in image.yml is ignored
 	if err != nil && strings.Contains(err.Error(), "tunnel") {
 		t.Errorf("tunnel in image.yml should be ignored by Validate, got: %v", err)

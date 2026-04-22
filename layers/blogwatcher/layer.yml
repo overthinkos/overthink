@@ -1,16 +1,19 @@
-description: Blog/RSS feed monitor CLI
+layer:
+  name: blogwatcher
+  description: Blog/RSS feed monitor CLI
 
-depends:
-  - golang
+  depends:
+    - golang
 
-env:
-  GOPATH: "~/go"
+  env:
+    GOPATH: "~/go"
 
-path_append:
-  - "~/go/bin"
+  path_append:
+    - "~/go/bin"
 
-tasks:
-  - cmd: |
-      go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
-      go clean -cache
-    user: "${USER}"
+  tasks:
+    - cmd: |
+        go install github.com/Hyaxia/blogwatcher/cmd/blogwatcher@latest
+        go clean -cache
+      user: "${USER}"
+

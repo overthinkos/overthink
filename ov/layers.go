@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -122,9 +123,14 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
-	Version        string            `yaml:"version,omitempty"`  // CalVer version (YYYY.DDD.HHMM) of this layer definition
-	Status         string            `yaml:"status,omitempty"`   // working, testing, broken (default: testing)
-	Info           string            `yaml:"info,omitempty"`     // free-form description of what works/doesn't
+	Version        string            `yaml:"version,omitempty"`   // CalVer version (YYYY.DDD.HHMM) of this layer definition
+	Status         string            `yaml:"status,omitempty"`    // working, testing, broken (default: testing)
+	Info           string            `yaml:"info,omitempty"`      // free-form description of what works/doesn't
+	// Directory is the anchor for relative file references in this layer (tasks.copy,
+	// tasks.write inline paths, data.src, extract, install-file detection). Defaults
+	// to "." — the directory containing this layer.yml. Relative values resolve
+	// against that directory; absolute values are used as-is.
+	Directory      string            `yaml:"directory,omitempty"`
 	Layers         []string          `yaml:"layers,omitempty"`
 	Depends        []string          `yaml:"depends,omitempty"`
 	Engine         string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
@@ -132,20 +138,17 @@ type LayerYAML struct {
 	PathAppend     []string          `yaml:"path_append,omitempty"`
 	Ports          []PortSpec        `yaml:"ports,omitempty"`
 	Route          *RouteYAML        `yaml:"route,omitempty"`
-	Service        string            `yaml:"service,omitempty"`
-	// Services is the unified service schema introduced by the
-	// BuildTarget refactor. It subsumes both the legacy `service:`
-	// (raw supervisord INI) and `system_services:` (list of packaged
-	// unit names) fields: a Services entry with `use_packaged:` set
-	// replaces a system_services entry; a structured entry replaces a
-	// service: program block. The two legacy fields continue to work
-	// for backwards compat during the migration (Task 7).
-	Services       []ServiceEntry    `yaml:"services,omitempty"`
+	// Service is the unified service schema: a list of ServiceEntry.
+	// Each entry either reuses a packaged unit (use_packaged:) or
+	// defines a custom service (exec: ...). Init system is selected by
+	// per-entry routing — see PopulateLayerInitSystems. No legacy
+	// raw-INI `service:` string form; external layers must run
+	// `ov migrate unified --rewrite-layers` to convert.
+	Service        []ServiceEntry    `yaml:"service,omitempty"`
 	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
 	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
 	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
 	Security       *SecurityConfig   `yaml:"security,omitempty"`
-	SystemServices []string          `yaml:"system_services,omitempty"`
 	Libvirt        []string          `yaml:"libvirt,omitempty"`
 	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
@@ -180,10 +183,16 @@ type LayerYAML struct {
 // or TagSections (otherwise).
 var layerYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true, "info": true,
+	"directory": true,
+	// `name:` and `from:` are consumed by kind-keyed wrappers (LayerDoc,
+	// InlineLayer) — not by LayerYAML itself. Listed here so the custom
+	// UnmarshalYAML's unknown-key router doesn't mistake them for format
+	// sections or tag sections.
+	"name": true, "from": true,
 	"layers": true, "depends": true, "engine": true, "env": true,
 	"path_append": true, "ports": true, "route": true, "service": true,
 	"volumes": true, "aliases": true, "extract": true, "security": true,
-	"system_services": true, "libvirt": true, "hooks": true,
+	"libvirt": true, "hooks": true,
 	"port_relay": true, "secrets": true, "data": true,
 	"env_provides": true, "env_requires": true, "env_accepts": true,
 	"secret_accepts": true, "secret_requires": true,
@@ -389,7 +398,8 @@ type RouteYAML struct {
 // Layer represents a layer directory and its contents
 type Layer struct {
 	Name              string
-	Path              string
+	Path              string // directory containing layer.yml
+	SourceDir         string // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
 	Version           string // CalVer version from layer.yml
 	Status            string // working, testing, broken (empty = testing)
 	Info              string // free-form status description
@@ -439,10 +449,8 @@ type Layer struct {
 	portSpecs      []PortSpec // full PortSpec data with protocol info
 	envConfig      *EnvConfig
 	route          *RouteConfig
-	serviceConf    string         // raw content of service: field (supervisord INI fragment)
-	serviceFiles   []string       // paths to *.service files in layer dir (systemd user-level)
-	systemServices []string       // system-level service units to enable (e.g., "sshd")
-	services       []ServiceEntry // unified services: list (preferred over serviceConf/systemServices)
+	serviceFiles   []string       // paths to *.service files in layer dir (systemd user-level, file_copy model)
+	service        []ServiceEntry // unified service: list (the only service schema)
 	volumes        []VolumeYAML
 	aliases        []AliasYAML
 	extract        []ExtractYAML
@@ -465,8 +473,27 @@ type Layer struct {
 	tests          []Check           // declarative checks (from layer.yml tests:)
 }
 
-// ScanLayers scans the layers/ directory and returns all layers
+// ScanLayers returns all layers for the project at dir. Post-unified-cutover
+// this loads overthink.yml via LoadUnified, applies discover:, and projects
+// the layers map. Legacy `layers/` directory scan remains as a fallback when
+// overthink.yml is absent (e.g., transitional test fixtures).
 func ScanLayers(dir string) (map[string]*Layer, error) {
+	uf, present, err := LoadUnified(dir)
+	if err != nil {
+		return nil, fmt.Errorf("loading overthink.yml: %w", err)
+	}
+	if present {
+		if err := uf.ApplyDiscover(dir); err != nil {
+			return nil, fmt.Errorf("discover: %w", err)
+		}
+		return uf.ProjectLayers(dir)
+	}
+	return legacyScanLayersDir(dir)
+}
+
+// legacyScanLayersDir is the pre-unified filesystem walk. Kept for test
+// fixtures (and the migration tool) that don't yet have an overthink.yml.
+func legacyScanLayersDir(dir string) (map[string]*Layer, error) {
 	layersDir := filepath.Join(dir, "layers")
 	entries, err := os.ReadDir(layersDir)
 	if err != nil {
@@ -475,13 +502,11 @@ func ScanLayers(dir string) (map[string]*Layer, error) {
 		}
 		return nil, fmt.Errorf("reading layers directory: %w", err)
 	}
-
 	layers := make(map[string]*Layer)
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-
 		name := entry.Name()
 		layer, err := scanLayer(filepath.Join(layersDir, name), name)
 		if err != nil {
@@ -489,21 +514,109 @@ func ScanLayers(dir string) (map[string]*Layer, error) {
 		}
 		layers[name] = layer
 	}
-
 	return layers, nil
 }
 
-// parseLayerYAML reads and unmarshals a layer.yml file
+// parseLayerYAML reads and unmarshals a layer.yml file. Strict schema:
+//   - Empty / comment-only file → zero-value LayerYAML.
+//   - Single top-level `layer:` key → decode its body as LayerYAML (canonical form).
+//   - `layer:` + other top-level keys → error (ambiguous shape).
+//   - Multi-document stream → error (layer.yml is not a bundle file).
+//   - Flat form (no `layer:` wrapper) → error with migration hint.
 func parseLayerYAML(path string) (*LayerYAML, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	var ly LayerYAML
-	if err := yaml.Unmarshal(data, &ly); err != nil {
-		return nil, err
+
+	// Empty / comment-only guard.
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return &LayerYAML{}, nil
 	}
-	return &ly, nil
+
+	// Parse as a multi-document stream — reject if more than one non-empty doc.
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	var docs []yaml.Node
+	for {
+		var node yaml.Node
+		if err := decoder.Decode(&node); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		// Skip empty (null-valued) docs.
+		if node.Kind == 0 || (node.Kind == yaml.DocumentNode && (len(node.Content) == 0 || (len(node.Content) == 1 && node.Content[0].Tag == "!!null"))) {
+			continue
+		}
+		docs = append(docs, node)
+	}
+	if len(docs) == 0 {
+		return &LayerYAML{}, nil
+	}
+	if len(docs) > 1 {
+		return nil, fmt.Errorf("%s: layer.yml is not a multi-document stream; bundle files belong in the unified overthink.yml", path)
+	}
+
+	node := &docs[0]
+	// Unwrap the DocumentNode wrapper.
+	inner := node
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		inner = node.Content[0]
+	}
+	if inner.Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%s: top level must be a mapping (got kind=%v)", path, inner.Kind)
+	}
+
+	// Collect top-level keys.
+	var keys []string
+	var layerIdx = -1
+	for i := 0; i < len(inner.Content); i += 2 {
+		k := inner.Content[i].Value
+		keys = append(keys, k)
+		if k == "layer" {
+			layerIdx = i + 1
+		}
+	}
+
+	if layerIdx >= 0 {
+		// Canonical kind-keyed form — `layer:` must be the only top-level key.
+		if len(keys) != 1 {
+			var other []string
+			for _, k := range keys {
+				if k != "layer" {
+					other = append(other, k)
+				}
+			}
+			return nil, fmt.Errorf("%s: ambiguous — `layer:` wrapper present AND other top-level keys %v (pick one form)", path, other)
+		}
+		var ly LayerYAML
+		if err := inner.Content[layerIdx].Decode(&ly); err != nil {
+			return nil, fmt.Errorf("%s: %w", path, err)
+		}
+		return &ly, nil
+	}
+
+	// No `layer:` wrapper — legacy flat form. Reject with migration hint.
+	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate unified --rewrite-layers` to convert to the canonical `layer:` kind-keyed form", path)
+}
+
+// resolveLayerSourceDir returns the anchor directory for relative file lookups
+// within a layer (tasks.copy, data.src, install-file probes). The `directory:`
+// field in layer.yml overrides the default (path = directory containing layer.yml).
+//
+//   - "" or "." → path (current behavior; full backward compatibility)
+//   - absolute path → used as-is
+//   - relative → joined onto path
+func resolveLayerSourceDir(path, directory string) string {
+	if directory == "" || directory == "." {
+		return path
+	}
+	if filepath.IsAbs(directory) {
+		return filepath.Clean(directory)
+	}
+	return filepath.Clean(filepath.Join(path, directory))
 }
 
 // scanLayer scans a single layer directory
@@ -513,28 +626,41 @@ func scanLayer(path string, name string) (*Layer, error) {
 		Path: path,
 	}
 
-	// Check for install files
-	layer.HasPixiToml = fileExists(filepath.Join(path, "pixi.toml"))
-	layer.HasPyprojectToml = fileExists(filepath.Join(path, "pyproject.toml"))
-	layer.HasEnvironmentYml = fileExists(filepath.Join(path, "environment.yml"))
-	layer.HasPackageJson = fileExists(filepath.Join(path, "package.json"))
-	layer.HasCargoToml = fileExists(filepath.Join(path, "Cargo.toml"))
-	layer.HasSrcDir = dirExists(filepath.Join(path, "src"))
-	layer.HasPixiLock = fileExists(filepath.Join(path, "pixi.lock"))
+	// Parse layer.yml FIRST so `directory:` can redirect the anchor
+	// used by install-file detection and service-file globbing below.
+	var ly *LayerYAML
+	yamlPath := filepath.Join(path, "layer.yml")
+	if fileExists(yamlPath) {
+		parsed, err := parseLayerYAML(yamlPath)
+		if err != nil {
+			return nil, fmt.Errorf("parsing layer.yml: %w", err)
+		}
+		ly = parsed
+	}
+
+	// Resolve SourceDir from `directory:` (defaults to path)
+	var directoryField string
+	if ly != nil {
+		directoryField = ly.Directory
+	}
+	layer.SourceDir = resolveLayerSourceDir(path, directoryField)
+
+	// Check for install files (anchored at SourceDir — honors `directory:`)
+	layer.HasPixiToml = fileExists(filepath.Join(layer.SourceDir, "pixi.toml"))
+	layer.HasPyprojectToml = fileExists(filepath.Join(layer.SourceDir, "pyproject.toml"))
+	layer.HasEnvironmentYml = fileExists(filepath.Join(layer.SourceDir, "environment.yml"))
+	layer.HasPackageJson = fileExists(filepath.Join(layer.SourceDir, "package.json"))
+	layer.HasCargoToml = fileExists(filepath.Join(layer.SourceDir, "Cargo.toml"))
+	layer.HasSrcDir = dirExists(filepath.Join(layer.SourceDir, "src"))
+	layer.HasPixiLock = fileExists(filepath.Join(layer.SourceDir, "pixi.lock"))
 
 	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystems)
-	svcFiles, _ := filepath.Glob(filepath.Join(path, "*.service"))
+	svcFiles, _ := filepath.Glob(filepath.Join(layer.SourceDir, "*.service"))
 	if len(svcFiles) > 0 {
 		layer.serviceFiles = svcFiles
 	}
 
-	// Parse layer.yml if present
-	yamlPath := filepath.Join(path, "layer.yml")
-	if fileExists(yamlPath) {
-		ly, err := parseLayerYAML(yamlPath)
-		if err != nil {
-			return nil, fmt.Errorf("parsing layer.yml: %w", err)
-		}
+	if ly != nil {
 
 		// Pre-populate version, status, info
 		layer.Version = ly.Version
@@ -555,8 +681,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		for i, ref := range ly.Layers {
 			layer.IncludedLayers[i] = BareRef(ref)
 		}
-		layer.serviceConf = ly.Service
-		layer.services = ly.Services
+		layer.service = ly.Service
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
 		layer.HasPorts = len(ly.Ports) > 0
 		layer.HasRoute = ly.Route != nil
@@ -622,9 +747,6 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate security
 		layer.security = ly.Security
-
-		// Pre-populate system services
-		layer.systemServices = ly.SystemServices
 
 		// Pre-populate libvirt snippets
 		if len(ly.Libvirt) > 0 {
@@ -712,7 +834,7 @@ func (l *Layer) HasContent() bool {
 	return l.HasInstallFiles() || l.HasEnv || l.HasPorts || l.HasRoute ||
 		l.HasVolumes || l.HasAliases || l.HasExtract || l.HasData || l.HasLibvirt ||
 		l.HasAnyInit() || len(l.PortRelayPorts) > 0 ||
-		len(l.serviceFiles) > 0 || len(l.systemServices) > 0
+		len(l.serviceFiles) > 0 || len(l.service) > 0
 }
 
 // PixiManifest returns the filename of the pixi manifest if it exists
@@ -776,34 +898,23 @@ func (l *Layer) PortSpecs() []PortSpec {
 	return l.portSpecs
 }
 
-// ServiceConf returns the service: field content from layer.yml (supervisord INI fragment)
-func (l *Layer) ServiceConf() string {
-	return l.serviceConf
+// Service returns the layer's unified service: list (ServiceEntry slice).
+// This is the only service schema — legacy raw-INI and system_services: are
+// retired entirely. External layers that still have the legacy forms must run
+// `ov migrate unified --rewrite-layers`.
+func (l *Layer) Service() []ServiceEntry {
+	return l.service
 }
 
-// Services returns the layer's unified services: list. This is the
-// preferred source for new code (Task 6 onwards); the two legacy
-// fields (ServiceConf + SystemServiceUnits) continue to work for
-// layers that haven't migrated yet.
-func (l *Layer) Services() []ServiceEntry {
-	return l.services
+// HasService returns true when the layer declares at least one service entry.
+func (l *Layer) HasService() bool {
+	return len(l.service) > 0
 }
 
-// HasStructuredServices returns true when the layer uses the unified
-// services: list. When true, the compiler ignores legacy service: /
-// system_services: to avoid double-registering a service.
-func (l *Layer) HasStructuredServices() bool {
-	return len(l.services) > 0
-}
-
-// ServiceFiles returns detected *.service file paths from the layer directory (systemd user-level)
+// ServiceFiles returns detected *.service file paths from the layer directory
+// (consumed by the systemd init's file_copy model, e.g. *.service globs).
 func (l *Layer) ServiceFiles() []string {
 	return l.serviceFiles
-}
-
-// SystemServiceUnits returns system-level service units to enable (e.g., "sshd")
-func (l *Layer) SystemServiceUnits() []string {
-	return l.systemServices
 }
 
 // HasAnyInit returns true if this layer triggers any init system.
@@ -825,22 +936,39 @@ func PopulateLayerInitSystems(layers map[string]*Layer, initCfg *InitConfig) {
 	for _, layer := range layers {
 		layer.InitSystems = make(map[string]bool)
 		for initName, def := range initCfg.Init {
-			// Check layer_fields
+			// Schema-driven detection: iterate the unified service: entries.
+			// Each entry binds to init systems per per-entry routing:
+			//   - IsPackaged()  → inits with ServiceSchema.SupportsPackaged
+			//   - custom exec   → inits with ServiceSchema.ServiceTemplate != ""
+			// The legacy `layer_fields: [service]` config just gates whether
+			// this init participates in schema detection at all.
+			participatesInSchema := false
 			for _, field := range def.LayerFields {
-				switch field {
-				case "service":
-					if layer.serviceConf != "" {
-						layer.InitSystems[initName] = true
-					}
-				case "system_services":
-					if len(layer.systemServices) > 0 {
-						layer.InitSystems[initName] = true
+				if field == "service" {
+					participatesInSchema = true
+					break
+				}
+			}
+			if participatesInSchema {
+				for i := range layer.service {
+					entry := &layer.service[i]
+					if entry.IsPackaged() {
+						if def.ServiceSchema != nil && def.ServiceSchema.SupportsPackaged {
+							layer.InitSystems[initName] = true
+							break
+						}
+					} else {
+						if def.ServiceSchema != nil && def.ServiceSchema.ServiceTemplate != "" {
+							layer.InitSystems[initName] = true
+							break
+						}
 					}
 				}
 			}
-			// Check layer_files
+			// Check layer_files (anchored at SourceDir — honors `directory:`)
+			// for init systems like systemd that use the file_copy model.
 			for _, pattern := range def.LayerFiles {
-				matches, _ := filepath.Glob(filepath.Join(layer.Path, pattern))
+				matches, _ := filepath.Glob(filepath.Join(layer.SourceDir, pattern))
 				if len(matches) > 0 {
 					layer.InitSystems[initName] = true
 				}
@@ -1013,7 +1141,7 @@ func (l *Layer) NeedsGit() bool {
 	if manifest == "" {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(l.Path, manifest))
+	data, err := os.ReadFile(filepath.Join(l.SourceDir, manifest))
 	if err != nil {
 		return false
 	}
@@ -1028,7 +1156,7 @@ func (l *Layer) HasPypiDeps() bool {
 	if manifest == "" {
 		return false
 	}
-	data, err := os.ReadFile(filepath.Join(l.Path, manifest))
+	data, err := os.ReadFile(filepath.Join(l.SourceDir, manifest))
 	if err != nil {
 		return false
 	}

@@ -1,76 +1,80 @@
-depends:
-  - dbus
+layer:
+  name: labwc
+  depends:
+    - dbus
 
-# autostart script has a wait-for-supervisord-socket guard (see autostart)
-env:
-  WAYLAND_DISPLAY: "wayland-0"
-  XDG_RUNTIME_DIR: "/tmp"
+  # autostart script has a wait-for-supervisord-socket guard (see autostart)
+  env:
+    WAYLAND_DISPLAY: "wayland-0"
+    XDG_RUNTIME_DIR: "/tmp"
 
-env_accepts:
-  - name: XKB_DEFAULT_LAYOUT
-    description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
-  - name: XKB_DEFAULT_VARIANT
-    description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
-  - name: XKB_DEFAULT_MODEL
-    description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
-  - name: XKB_DEFAULT_OPTIONS
-    description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
+  env_accepts:
+    - name: XKB_DEFAULT_LAYOUT
+      description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
+    - name: XKB_DEFAULT_VARIANT
+      description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
+    - name: XKB_DEFAULT_MODEL
+      description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
+    - name: XKB_DEFAULT_OPTIONS
+      description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
 
-rpm:
-  packages:
-    - labwc
-    - foot
-    - xorg-x11-server-Xwayland
-    - thunar
+  rpm:
+    packages:
+      - labwc
+      - foot
+      - xorg-x11-server-Xwayland
+      - thunar
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - mkdir: "${HOME}/.config/labwc"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - mkdir: "${HOME}/.config/labwc"
+      user: "${USER}"
 
-  - copy: labwc-wrapper
-    to: "${HOME}/.local/bin/labwc-wrapper"
-    mode: "0755"
-    user: "${USER}"
-  - copy: rc.xml
-    to: "${HOME}/.config/labwc/rc.xml"
-    mode: "0644"
-    user: "${USER}"
-  - copy: autostart
-    to: "${HOME}/.config/labwc/autostart"
-    mode: "0644"
-    user: "${USER}"
+    - copy: labwc-wrapper
+      to: "${HOME}/.local/bin/labwc-wrapper"
+      mode: "0755"
+      user: "${USER}"
+    - copy: rc.xml
+      to: "${HOME}/.config/labwc/rc.xml"
+      mode: "0644"
+      user: "${USER}"
+    - copy: autostart
+      to: "${HOME}/.config/labwc/autostart"
+      mode: "0644"
+      user: "${USER}"
 
 
-tests:
-  - id: labwc-binary
-    file: /usr/bin/labwc
-    exists: true
-  - id: labwc-wrapper
-    file: ${HOME}/.local/bin/labwc-wrapper
-    exists: true
-  - id: labwc-rc
-    file: ${HOME}/.config/labwc/rc.xml
-    exists: true
-  - id: labwc-autostart
-    file: ${HOME}/.config/labwc/autostart
-    exists: true
-  - id: xwayland-binary
-    file: /usr/bin/Xwayland
-    exists: true
-  - id: labwc-service-running
-    scope: deploy
-    service: labwc
-    running: true
+  tests:
+    - id: labwc-binary
+      file: /usr/bin/labwc
+      exists: true
+    - id: labwc-wrapper
+      file: ${HOME}/.local/bin/labwc-wrapper
+      exists: true
+    - id: labwc-rc
+      file: ${HOME}/.config/labwc/rc.xml
+      exists: true
+    - id: labwc-autostart
+      file: ${HOME}/.config/labwc/autostart
+      exists: true
+    - id: xwayland-binary
+      file: /usr/bin/Xwayland
+      exists: true
+    - id: labwc-service-running
+      scope: deploy
+      service: labwc
+      running: true
 
-services:
-  - name: labwc
-    exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
-    env:
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 12
-    enable: true
-    scope: system
+  service:
+    - name: labwc
+      exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
+      env:
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 12
+      start_secs: 2
+      enable: true
+      scope: system
+
 

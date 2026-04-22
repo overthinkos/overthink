@@ -1,14 +1,17 @@
-rpm:
-  packages:
-    - qemu-guest-agent
+layer:
+  name: qemu-guest-agent
+  rpm:
+    packages:
+      - qemu-guest-agent
 
 
-libvirt:
-  - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
+  libvirt:
+    - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
 
-services:
-  - name: qemu-guest-agent
-    use_packaged: qemu-guest-agent.service
-    enable: true
-    scope: system
+  service:
+    - name: qemu-guest-agent
+      use_packaged: qemu-guest-agent.service
+      enable: true
+      scope: system
+
 

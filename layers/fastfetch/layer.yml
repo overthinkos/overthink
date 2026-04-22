@@ -1,13 +1,16 @@
-description: Fast system information tool (neofetch successor)
+layer:
+  name: fastfetch
+  description: Fast system information tool (neofetch successor)
 
-rpm:
-  packages:
-    - fastfetch
+  rpm:
+    packages:
+      - fastfetch
 
-tests:
-  - id: fastfetch-binary
-    file: /usr/bin/fastfetch
-    exists: true
-  - id: fastfetch-package
-    package: fastfetch
-    installed: true
+  tests:
+    - id: fastfetch-binary
+      file: /usr/bin/fastfetch
+      exists: true
+    - id: fastfetch-package
+      package: fastfetch
+      installed: true
+

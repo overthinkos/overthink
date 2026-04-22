@@ -164,10 +164,10 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 		t.Errorf("Init = %q, want %q", meta.Init, "supervisord")
 	}
 
-	// Services for active init system
+	// Per-init active service names (legacy label companion)
 	wantServices := []string{"traefik", "testapi"}
-	if !reflect.DeepEqual(meta.Services, wantServices) {
-		t.Errorf("Services = %v, want %v", meta.Services, wantServices)
+	if !reflect.DeepEqual(meta.ServiceNames, wantServices) {
+		t.Errorf("ServiceNames = %v, want %v", meta.ServiceNames, wantServices)
 	}
 
 	// Layer env vars
@@ -363,9 +363,9 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		Layers: map[string]*Layer{
 			"svc": {
 				Name:        "svc",
-				HasTasks:   true,
+				HasTasks:    true,
 				InitSystems: map[string]bool{"supervisord": true},
-				serviceConf: "[program:svc]\ncommand=svc serve",
+				service:     []ServiceEntry{{Name: "svc", Exec: "svc serve"}},
 				HasVolumes:  true,
 				volumes: []VolumeYAML{
 					{Name: "data", Path: "/home/user/.myapp"},
@@ -540,9 +540,12 @@ func TestLabelRoundTrip(t *testing.T) {
 					Vars:       map[string]string{"LANG": "en_US.UTF-8"},
 					PathAppend: []string{"/opt/svc/bin"},
 				},
-				InitSystems:    map[string]bool{"supervisord": true},
-				serviceConf:    "[program:svc]\ncommand=svc serve",
-				systemServices: []string{"sshd", "docker"},
+				InitSystems: map[string]bool{"supervisord": true},
+				service: []ServiceEntry{
+					{Name: "svc", Exec: "svc serve"},
+					{Name: "sshd", UsePackaged: "sshd.service", Enable: true},
+					{Name: "docker", UsePackaged: "docker.service", Enable: true},
+				},
 			},
 		},
 	}
@@ -684,10 +687,10 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Errorf("Init = %q, want %q", meta.Init, "supervisord")
 	}
 
-	// Services for active init system (supervisord)
+	// Per-init active service names (supervisord)
 	wantSvcNames := []string{"svc"}
-	if !reflect.DeepEqual(meta.Services, wantSvcNames) {
-		t.Errorf("Services = %v, want %v", meta.Services, wantSvcNames)
+	if !reflect.DeepEqual(meta.ServiceNames, wantSvcNames) {
+		t.Errorf("ServiceNames = %v, want %v", meta.ServiceNames, wantSvcNames)
 	}
 
 	// Layer env

@@ -1,28 +1,31 @@
-depends:
-  - cuda
-  - supervisord
+layer:
+  name: unsloth-studio
+  depends:
+    - cuda
+    - supervisord
 
-layers:
-  - llama-cpp
-  - unsloth
+  layers:
+    - llama-cpp
+    - unsloth
 
-env:
-  NVIDIA_PYTHON_PROJECT: "~/.pixi"
-  LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
+  env:
+    NVIDIA_PYTHON_PROJECT: "~/.pixi"
+    LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
 
-ports:
-  - 8888
-  - 8000
+  ports:
+    - 8888
+    - 8000
 
-volumes:
-  - name: workspace
-    path: "~/workspace"
+  volumes:
+    - name: workspace
+      path: "~/workspace"
 
-services:
-  - name: unsloth-studio
-    exec: "pixi run start-studio"
-    restart: always
-    working_directory: "%(ENV_HOME)s"
-    enable: true
-    scope: system
+  service:
+    - name: unsloth-studio
+      exec: "pixi run start-studio"
+      restart: always
+      working_directory: "%(ENV_HOME)s"
+      enable: true
+      scope: system
+
 

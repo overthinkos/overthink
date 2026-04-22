@@ -2,11 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // --- Distro Config ---
@@ -384,39 +379,10 @@ func (bc *BuilderConfig) BuilderNames() []string {
 }
 
 // --- Loading ---
-
-// ResolveFormatConfigData resolves a format config reference to raw YAML bytes.
-// ref can be:
-//   - empty string: returns nil (fall through to next level)
-//   - @host/org/repo/path:version: downloads remote repo and reads file from cache
-//   - bare path: reads relative to dir
-func ResolveFormatConfigData(ref, dir string) ([]byte, error) {
-	if ref == "" {
-		return nil, nil
-	}
-
-	if strings.HasPrefix(ref, "@") {
-		parsed := ParseRemoteRef(ref)
-		cachePath, err := EnsureRepoDownloaded(parsed.RepoPath, parsed.Version)
-		if err != nil {
-			return nil, fmt.Errorf("downloading %s: %w", ref, err)
-		}
-		filePath := filepath.Join(cachePath, parsed.SubPath)
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			return nil, fmt.Errorf("reading remote config %s (at %s): %w", ref, filePath, err)
-		}
-		return data, nil
-	}
-
-	// Local path relative to project dir
-	path := filepath.Join(dir, ref)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading config %s: %w", path, err)
-	}
-	return data, nil
-}
+//
+// ResolveFormatConfigData has been removed. Build config resolution now goes
+// through LoadUnified — which reads overthink.yml + includes: (local and
+// remote-ref). See ov/unified.go.
 
 // BuildFile is the on-disk schema of build.yml — three optional top-level
 // sections that map directly onto DistroConfig/BuilderConfig/InitConfig.
@@ -426,45 +392,26 @@ type BuildFile struct {
 	Init    map[string]*InitDef    `yaml:"init"`
 }
 
-// LoadBuildConfigForImage loads distro, builder, and init configs from a single
-// build.yml for a given image. Resolution chain: per-image format_config →
-// defaults format_config → error.
+// LoadBuildConfigForImage loads distro, builder, and init configs for the
+// project at dir. Post-unified-cutover this reads from overthink.yml (via
+// LoadUnified) rather than following a format_config: pointer.
 //
-// The init section is optional: if build.yml has no `init:` key (or an empty
-// one), the returned InitConfig is nil — images without init config are
-// allowed (no init system, no entrypoint beyond the base image default).
-func LoadBuildConfigForImage(imgRef, defaultRef, dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
-	ref := imgRef
-	if ref == "" {
-		ref = defaultRef
-	}
-	if ref == "" {
-		return nil, nil, nil, fmt.Errorf("build.yml: no format_config ref specified (set in defaults or per-image)")
-	}
-
-	data, err := ResolveFormatConfigData(ref, dir)
+// The init section is optional: projects without an `inits:` block return a
+// nil *InitConfig (no init system, no entrypoint beyond the base image default).
+func LoadBuildConfigForImage(dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
+	uf, present, err := LoadUnified(dir)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
-
-	var bf BuildFile
-	if err := yaml.Unmarshal(data, &bf); err != nil {
-		return nil, nil, nil, fmt.Errorf("parsing build.yml: %w", err)
+	if !present {
+		return nil, nil, nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified`)", dir)
 	}
-
-	distroCfg := &DistroConfig{Distro: bf.Distro}
-	builderCfg := &BuilderConfig{Builder: bf.Builder}
-	var initCfg *InitConfig
-	if len(bf.Init) > 0 {
-		initCfg = &InitConfig{Init: bf.Init}
-	}
-
-	return distroCfg, builderCfg, initCfg, nil
+	return uf.ProjectDistroConfig(), uf.ProjectBuilderConfig(), uf.ProjectInitConfig(), nil
 }
 
-// LoadDefaultBuildConfig loads build config from the defaults format_config ref.
-// Used during early initialization (before per-image resolution) to get the default
-// DistroConfig for format name registration.
-func LoadDefaultBuildConfig(defaultRef, dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
-	return LoadBuildConfigForImage("", defaultRef, dir)
+// LoadDefaultBuildConfig is retained as an alias for the single-argument form.
+// Former call sites pass just the project directory; the legacy (defaultRef,
+// dir) two-argument form is gone.
+func LoadDefaultBuildConfig(dir string) (*DistroConfig, *BuilderConfig, *InitConfig, error) {
+	return LoadBuildConfigForImage(dir)
 }

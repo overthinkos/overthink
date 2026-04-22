@@ -7,7 +7,7 @@ import (
 )
 
 func TestLoadDistroConfigFromFile(t *testing.T) {
-	distroCfg, _, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
+	distroCfg, _, _, err := LoadBuildConfigForImage(testdataDir)
 	if err != nil {
 		t.Fatalf("loading distro config: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestValidFormat(t *testing.T) {
 }
 
 func TestLoadBuilderConfigFromFile(t *testing.T) {
-	_, builderCfg, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
+	_, builderCfg, _, err := LoadBuildConfigForImage(testdataDir)
 	if err != nil {
 		t.Fatalf("loading builder config: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestLoadBuilderConfigFromFile(t *testing.T) {
 }
 
 func TestBuilderNames(t *testing.T) {
-	_, builderCfg, _, _ := LoadBuildConfigForImage("", testBuildConfigRef, ".")
+	_, builderCfg, _, _ := LoadBuildConfigForImage(testdataDir)
 	names := builderCfg.BuilderNames()
 	if len(names) != 4 {
 		t.Errorf("expected 4 builder names, got %d: %v", len(names), names)
@@ -216,48 +216,27 @@ func TestAurBuilderDetectConfig(t *testing.T) {
 	}
 }
 
-func TestResolveFormatConfigDataEmpty(t *testing.T) {
-	data, err := ResolveFormatConfigData("", ".")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if data != nil {
-		t.Error("expected nil data for empty ref")
-	}
-}
-
-func TestResolveFormatConfigDataLocal(t *testing.T) {
-	data, err := ResolveFormatConfigData(testBuildConfigRef, ".")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(data) == 0 {
-		t.Error("expected non-empty data for local ref")
-	}
-}
-
-func TestResolveFormatConfigDataMissing(t *testing.T) {
-	_, err := ResolveFormatConfigData("nonexistent.yml", ".")
-	if err == nil {
-		t.Error("expected error for missing file")
-	}
-}
+// ResolveFormatConfigData tests removed — the helper was deleted as part of
+// the unified-cutover (format_config: field replaced by overthink.yml's
+// includes: mechanism).
 
 func TestLoadBuildConfigForImageFallback(t *testing.T) {
-	// Per-image ref overrides defaults
-	distroCfg, builderCfg, _, err := LoadBuildConfigForImage(testBuildConfigRef, "nonexistent.yml", ".")
+	// Post-unified-cutover there is no per-image / per-default fallback — the
+	// unified loader reads overthink.yml in the project directory. This test
+	// now verifies that reading via LoadBuildConfigForImage(dir) produces the
+	// same config twice (i.e., is deterministic and idempotent).
+	distroCfg, builderCfg, _, err := LoadBuildConfigForImage(testdataDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if distroCfg == nil || len(distroCfg.Distro) == 0 {
-		t.Error("expected distro config from per-image ref")
+		t.Error("expected distro config from overthink.yml")
 	}
 	if builderCfg == nil || len(builderCfg.Builder) == 0 {
-		t.Error("expected builder config from per-image ref")
+		t.Error("expected builder config from overthink.yml")
 	}
 
-	// Fallback to defaults when per-image is empty
-	distroCfg2, _, _, err := LoadBuildConfigForImage("", testBuildConfigRef, ".")
+	distroCfg2, _, _, err := LoadBuildConfigForImage(testdataDir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

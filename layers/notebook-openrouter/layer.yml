@@ -1,10 +1,13 @@
-info: "OpenRouter API integration notebook collection"
+layer:
+  name: notebook-openrouter
+  info: "OpenRouter API integration notebook collection"
 
-env_requires:
-  - name: OPENROUTER_API_KEY
-    description: "API key for OpenRouter LLM inference"
+  env_requires:
+    - name: OPENROUTER_API_KEY
+      description: "API key for OpenRouter LLM inference"
 
-data:
-  - src: data/openrouter
-    volume: workspace
-    dest: openrouter
+  data:
+    - src: data/openrouter
+      volume: workspace
+      dest: openrouter
+

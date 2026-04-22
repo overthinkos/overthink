@@ -1,29 +1,32 @@
-depends:
-  - nodejs
-  - socat
-  - supervisord
+layer:
+  name: openclaw
+  depends:
+    - nodejs
+    - socat
+    - supervisord
 
-env:
-  NODE_ENV: "production"
+  env:
+    NODE_ENV: "production"
 
-ports:
-  - 18789
+  ports:
+    - 18789
 
-port_relay:
-  - 18789
+  port_relay:
+    - 18789
 
-volumes:
-  - name: data
-    path: "~/.openclaw"
+  volumes:
+    - name: data
+      path: "~/.openclaw"
 
-aliases:
-  - name: openclaw
-    command: openclaw
+  aliases:
+    - name: openclaw
+      command: openclaw
 
-services:
-  - name: openclaw
-    exec: "%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789"
-    restart: always
-    enable: true
-    scope: system
+  service:
+    - name: openclaw
+      exec: "%(ENV_HOME)s/.npm-global/bin/openclaw gateway --port 18789"
+      restart: always
+      enable: true
+      scope: system
+
 

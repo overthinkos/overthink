@@ -1,12 +1,15 @@
-description: Oracle CLI for prompt bundling and multi-engine AI queries
+layer:
+  name: oracle
+  description: Oracle CLI for prompt bundling and multi-engine AI queries
 
-depends:
-  - nodejs
+  depends:
+    - nodejs
 
-tests:
-  - id: oracle-binary
-    file: ${HOME}/.npm-global/bin/oracle
-    exists: true
-  - id: oracle-version
-    command: ${HOME}/.npm-global/bin/oracle --version
-    exit_status: 0
+  tests:
+    - id: oracle-binary
+      file: ${HOME}/.npm-global/bin/oracle
+      exists: true
+    - id: oracle-version
+      command: ${HOME}/.npm-global/bin/oracle --version
+      exit_status: 0
+

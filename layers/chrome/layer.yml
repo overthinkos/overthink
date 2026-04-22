@@ -1,170 +1,195 @@
-depends:
-  - supervisord
+layer:
+  name: chrome
+  depends:
+    - supervisord
 
-layers:
-  - chrome-devtools-mcp
+  layers:
+    - chrome-devtools-mcp
 
-path_append:
-  - "~/.local/bin"
+  path_append:
+    - "~/.local/bin"
 
-env:
-  CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
-  BROWSER: "browser-open"
+  env:
+    CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
+    BROWSER: "browser-open"
 
-env_accepts:
-  - name: HTTP_PROXY
-    description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
-  - name: HTTPS_PROXY
-    description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
-  - name: NO_PROXY
-    description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
+  env_accepts:
+    - name: HTTP_PROXY
+      description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
+    - name: HTTPS_PROXY
+      description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
+    - name: NO_PROXY
+      description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
 
-security:
-  shm_size: "1g"
-  # Chrome crash-loop containment. MemoryMax is the hard OOM line for the
-  # container's cgroup; MemoryHigh causes reclaim pressure well before OOM so
-  # Chrome gets a chance to shed caches. MemorySwapMax keeps a runaway tab
-  # from dragging the host into swap thrash (which is the actual failure
-  # mode this cap exists to prevent — see the shmem-leak RCA). Override
-  # per-instance with `ov config --memory-max=...`.
-  memory_max: "6g"
-  memory_high: "5g"
-  memory_swap_max: "2g"
+  security:
+    shm_size: "1g"
+    # Chrome crash-loop containment. MemoryMax is the hard OOM line for the
+    # container's cgroup; MemoryHigh causes reclaim pressure well before OOM so
+    # Chrome gets a chance to shed caches. MemorySwapMax keeps a runaway tab
+    # from dragging the host into swap thrash (which is the actual failure
+    # mode this cap exists to prevent — see the shmem-leak RCA). Override
+    # per-instance with `ov config --memory-max=...`.
+    memory_max: "6g"
+    memory_high: "5g"
+    memory_swap_max: "2g"
 
-rpm:
-  packages:
-    - vulkan-loader
-    - mesa-dri-drivers
-    - alsa-lib
-    - at-spi2-core
-    - cups-libs
-    - gtk3
-    - libdrm
-    - libxkbcommon
-    - nss
-    - procps-ng
-    - iproute
-    - libva-utils
+  rpm:
+    packages:
+      - vulkan-loader
+      - mesa-dri-drivers
+      - alsa-lib
+      - at-spi2-core
+      - cups-libs
+      - gtk3
+      - libdrm
+      - libxkbcommon
+      - nss
+      - procps-ng
+      - iproute
+      - libva-utils
 
-tasks:
-  # Install Google Chrome from Google's direct .rpm. dnf handles URL sources
-  # natively; cmd: as root is the right vehicle since this needs real dnf
-  # (not a declared rpm package section).
-  - cmd: dnf install -y https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
-    user: root
+  tasks:
+    # Install Google Chrome from Google's direct .rpm. dnf handles URL sources
+    # natively; cmd: as root is the right vehicle since this needs real dnf
+    # (not a declared rpm package section).
+    - cmd: dnf install -y https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm
+      user: root
 
-  # ---- user phase: install wrappers + helpers ----
+    # ---- user phase: install wrappers + helpers ----
 
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - mkdir: "${HOME}/.local/share/chrome-windows"
-    user: "${USER}"
-  - mkdir: "${HOME}/.config"
-    user: "${USER}"
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - mkdir: "${HOME}/.local/share/chrome-windows"
+      user: "${USER}"
+    - mkdir: "${HOME}/.config"
+      user: "${USER}"
 
-  # Executable wrappers
-  - copy: chrome-wrapper
-    to: "${HOME}/.local/bin/chrome-wrapper"
-    mode: "0755"
-    user: "${USER}"
-  - copy: chrome-restart
-    to: "${HOME}/.local/bin/chrome-restart"
-    mode: "0755"
-    user: "${USER}"
-  - copy: browser-open
-    to: "${HOME}/.local/bin/browser-open"
-    mode: "0755"
-    user: "${USER}"
-  - copy: cdp-proxy
-    to: "${HOME}/.local/bin/cdp-proxy"
-    mode: "0755"
-    user: "${USER}"
-  - copy: chrome-crash-listener
-    to: "${HOME}/.local/bin/chrome-crash-listener"
-    mode: "0755"
-    user: "${USER}"
+    # Executable wrappers
+    - copy: chrome-wrapper
+      to: "${HOME}/.local/bin/chrome-wrapper"
+      mode: "0755"
+      user: "${USER}"
+    - copy: chrome-restart
+      to: "${HOME}/.local/bin/chrome-restart"
+      mode: "0755"
+      user: "${USER}"
+    - copy: browser-open
+      to: "${HOME}/.local/bin/browser-open"
+      mode: "0755"
+      user: "${USER}"
+    - copy: cdp-proxy
+      to: "${HOME}/.local/bin/cdp-proxy"
+      mode: "0755"
+      user: "${USER}"
+    - copy: chrome-crash-listener
+      to: "${HOME}/.local/bin/chrome-crash-listener"
+      mode: "0755"
+      user: "${USER}"
 
-  # Chrome extension data files (not executable)
-  - copy: chrome-windows/manifest.json
-    to: "${HOME}/.local/share/chrome-windows/manifest.json"
-    mode: "0644"
-    user: "${USER}"
-  - copy: chrome-windows/rules.json
-    to: "${HOME}/.local/share/chrome-windows/rules.json"
-    mode: "0644"
-    user: "${USER}"
-  - copy: chrome-windows/content.js
-    to: "${HOME}/.local/share/chrome-windows/content.js"
-    mode: "0644"
-    user: "${USER}"
+    # Chrome extension data files (not executable)
+    - copy: chrome-windows/manifest.json
+      to: "${HOME}/.local/share/chrome-windows/manifest.json"
+      mode: "0644"
+      user: "${USER}"
+    - copy: chrome-windows/rules.json
+      to: "${HOME}/.local/share/chrome-windows/rules.json"
+      mode: "0644"
+      user: "${USER}"
+    - copy: chrome-windows/content.js
+      to: "${HOME}/.local/share/chrome-windows/content.js"
+      mode: "0644"
+      user: "${USER}"
 
-  # Ensure Chrome always launches through chrome-wrapper (CDP flags etc.)
-  # regardless of how it's started.
-  - link: "${HOME}/.local/bin/google-chrome-stable"
-    target: chrome-wrapper
-    user: "${USER}"
+    # Ensure Chrome always launches through chrome-wrapper (CDP flags etc.)
+    # regardless of how it's started.
+    - link: "${HOME}/.local/bin/google-chrome-stable"
+      target: chrome-wrapper
+      user: "${USER}"
 
-  # Register chrome as the default browser in xdg-settings.
-  - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop
-    user: "${USER}"
+    # Register chrome as the default browser in xdg-settings.
+    - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop
+      user: "${USER}"
 
-env_provides:
-  BROWSER_CDP_URL: "http://{{.ContainerName}}:9222"
+  env_provides:
+    BROWSER_CDP_URL: "http://{{.ContainerName}}:9222"
 
-ports:
-  - 9222
-
-
+  ports:
+    - 9222
 
 
-volumes:
-  - name: chrome-data
-    path: "~/.chrome-debug"
 
-tests:
-  - id: google-chrome-binary
-    file: /usr/bin/google-chrome-stable
-    exists: true
-  - id: chrome-wrapper
-    file: ${HOME}/.local/bin/chrome-wrapper
-    exists: true
-    mode: "0755"
-  - id: browser-open-wrapper
-    file: ${HOME}/.local/bin/browser-open
-    exists: true
-  - id: cdp-proxy-wrapper
-    file: ${HOME}/.local/bin/cdp-proxy
-    exists: true
-  - id: chrome-windows-manifest
-    file: ${HOME}/.local/share/chrome-windows/manifest.json
-    exists: true
-  - id: cdp-proxy-service
-    scope: deploy
-    service: cdp-proxy
-    running: true
-  - id: chrome-cdp-port
-    scope: deploy
-    addr: 127.0.0.1:${HOST_PORT:9222}
-    reachable: true
-    timeout: 5s
-  - id: chrome-cdp-version
-    scope: deploy
-    http: http://127.0.0.1:${HOST_PORT:9222}/json/version
-    status: 200
-    timeout: 5s
-    body:
-      - contains: "webSocketDebuggerUrl"
 
-services:
-  - name: cdp-proxy
-    exec: "%(ENV_HOME)s/.local/bin/cdp-proxy"
-    restart: always
-    enable: true
-    scope: system
+  volumes:
+    - name: chrome-data
+      path: "~/.chrome-debug"
 
-  - name: chrome
-    exec: "%(ENV_HOME)s/.local/bin/chrome-crash-listener"
-    restart: always
-    enable: true
-    scope: system
+  tests:
+    - id: google-chrome-binary
+      file: /usr/bin/google-chrome-stable
+      exists: true
+    - id: chrome-wrapper
+      file: ${HOME}/.local/bin/chrome-wrapper
+      exists: true
+      mode: "0755"
+    - id: browser-open-wrapper
+      file: ${HOME}/.local/bin/browser-open
+      exists: true
+    - id: cdp-proxy-wrapper
+      file: ${HOME}/.local/bin/cdp-proxy
+      exists: true
+    - id: chrome-windows-manifest
+      file: ${HOME}/.local/share/chrome-windows/manifest.json
+      exists: true
+    - id: cdp-proxy-service
+      scope: deploy
+      service: cdp-proxy
+      running: true
+    - id: chrome-cdp-port
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:9222}
+      reachable: true
+      timeout: 5s
+    - id: chrome-cdp-version
+      scope: deploy
+      http: http://127.0.0.1:${HOST_PORT:9222}/json/version
+      status: 200
+      timeout: 5s
+      body:
+        - contains: "webSocketDebuggerUrl"
+
+  service:
+    - name: cdp-proxy
+      exec: "%(ENV_HOME)s/.local/bin/cdp-proxy"
+      restart: always
+      enable: true
+      scope: system
+
+    # Chrome under supervisord with a 3-strike circuit breaker. auto_start:
+    # false because Chrome needs a Wayland compositor up first — the
+    # compositor's autostart calls `supervisorctl start chrome` once it's
+    # ready. If Chrome crashes 3 times within startsecs, supervisord gives
+    # up (FATAL) and the chrome-crash eventlistener terminates supervisord
+    # so systemd rebuilds the container — the only way to clear orphan
+    # memfd shmem from previous crashes.
+    - name: chrome
+      exec: "%(ENV_HOME)s/.local/bin/chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized"
+      restart: always
+      auto_start: false
+      start_retries: 3
+      start_secs: 5
+      exit_codes: "0"
+      stop_signal: TERM
+      stop_timeout: "5"
+      enable: true
+      scope: system
+
+    - name: chrome-crash
+      kind: eventlistener
+      exec: "%(ENV_HOME)s/.local/bin/chrome-crash-listener"
+      events: PROCESS_STATE_FATAL
+      auto_start: true
+      restart: always
+      enable: true
+      scope: system
+
 

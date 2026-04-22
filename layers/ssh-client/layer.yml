@@ -1,26 +1,29 @@
-description: OpenSSH client tools for SSH agent forwarding
+layer:
+  name: ssh-client
+  description: OpenSSH client tools for SSH agent forwarding
 
-rpm:
-  packages:
-    - openssh-clients
+  rpm:
+    packages:
+      - openssh-clients
 
-pac:
-  packages:
-    - openssh
+  pac:
+    packages:
+      - openssh
 
-deb:
-  packages:
-    - openssh-client
+  deb:
+    packages:
+      - openssh-client
 
-tests:
-  - id: ssh-binary
-    file: /usr/bin/ssh
-    exists: true
-  - id: ssh-add-binary
-    file: /usr/bin/ssh-add
-    exists: true
-  - id: ssh-version
-    command: /usr/bin/ssh -V
-    exit_status: 0
-    stderr:
-      - contains: "OpenSSH"
+  tests:
+    - id: ssh-binary
+      file: /usr/bin/ssh
+      exists: true
+    - id: ssh-add-binary
+      file: /usr/bin/ssh-add
+      exists: true
+    - id: ssh-version
+      command: /usr/bin/ssh -V
+      exit_status: 0
+      stderr:
+        - contains: "OpenSSH"
+

@@ -1,7 +1,10 @@
-depends:
-  - niri
+layer:
+  name: niri-apps
+  depends:
+    - niri
 
-rpm:
-  packages:
-    - xfce4-terminal
-    - thunar
+  rpm:
+    packages:
+      - xfce4-terminal
+      - thunar
+

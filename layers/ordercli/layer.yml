@@ -1,16 +1,19 @@
-description: Food delivery order status CLI (Foodora)
+layer:
+  name: ordercli
+  description: Food delivery order status CLI (Foodora)
 
-depends:
-  - golang
+  depends:
+    - golang
 
-env:
-  GOPATH: "~/go"
+  env:
+    GOPATH: "~/go"
 
-path_append:
-  - "~/go/bin"
+  path_append:
+    - "~/go/bin"
 
-tasks:
-  - cmd: |
-      go install github.com/steipete/ordercli/cmd/ordercli@latest
-      go clean -cache
-    user: "${USER}"
+  tasks:
+    - cmd: |
+        go install github.com/steipete/ordercli/cmd/ordercli@latest
+        go clean -cache
+      user: "${USER}"
+

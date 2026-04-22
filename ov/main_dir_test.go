@@ -105,7 +105,10 @@ func buildOvBinary(t *testing.T) string {
 // images` has something to parse. Mirrors the scaffold of a real project.
 func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
-	imageYAML := `defaults:
+	// Post-unified-cutover: write overthink.yml (the unified format) instead
+	// of a legacy image.yml. LoadConfig reads overthink.yml exclusively.
+	overthinkYAML := `version: 1
+defaults:
   registry: ghcr.io/test
   tag: latest
   platforms:
@@ -117,7 +120,7 @@ images:
     base: "quay.io/fedora/fedora:43"
     distro: ["fedora:43", fedora]
 `
-	if err := os.WriteFile(filepath.Join(dir, "image.yml"), []byte(imageYAML), 0644); err != nil {
-		t.Fatalf("writing image.yml: %v", err)
+	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(overthinkYAML), 0644); err != nil {
+		t.Fatalf("writing overthink.yml: %v", err)
 	}
 }

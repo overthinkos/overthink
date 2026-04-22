@@ -48,10 +48,11 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedIma
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	// SetFormatNames must run before layer scanning so format sections
-	// (rpm:/deb:/pac:) are recognized. Matches the main command path at
-	// main.go:92-99 and generate.go:120-128.
-	if cfg.Defaults.FormatConfig != "" {
-		distroCfg, _, _, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
+	// (rpm:/deb:/pac:) are recognized. Post-unified-cutover LoadDefaultBuildConfig
+	// reads overthink.yml directly.
+	{
+		_ = cfg
+		distroCfg, _, _, err := LoadDefaultBuildConfig(dir)
 		if err != nil {
 			t.Fatalf("LoadDefaultBuildConfig: %v", err)
 		}

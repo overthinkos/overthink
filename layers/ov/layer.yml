@@ -1,18 +1,21 @@
-description: Overthink CLI (ov) binary
+layer:
+  name: ov
+  description: Overthink CLI (ov) binary
 
-tasks:
-  - copy: bin/ov
-    to: /usr/local/bin/ov
-    mode: "0755"
-    user: root
+  tasks:
+    - copy: bin/ov
+      to: /usr/local/bin/ov
+      mode: "0755"
+      user: root
 
-tests:
-  - id: ov-binary
-    file: /usr/local/bin/ov
-    exists: true
-    mode: "0755"
-  - id: ov-version
-    command: /usr/local/bin/ov version
-    exit_status: 0
-    stdout:
-      - matches: "[0-9]{4}\\.[0-9]+"
+  tests:
+    - id: ov-binary
+      file: /usr/local/bin/ov
+      exists: true
+      mode: "0755"
+    - id: ov-version
+      command: /usr/local/bin/ov version
+      exit_status: 0
+      stdout:
+        - matches: "[0-9]{4}\\.[0-9]+"
+

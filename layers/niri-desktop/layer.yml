@@ -1,7 +1,10 @@
-layers:
-  - pipewire
-  - xdg-portal-niri
-  - niri
-  - chrome-niri
-  - wl-overlay
-  - niri-apps
+layer:
+  name: niri-desktop
+  layers:
+    - pipewire
+    - xdg-portal-niri
+    - niri
+    - chrome-niri
+    - wl-overlay
+    - niri-apps
+

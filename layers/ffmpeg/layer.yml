@@ -1,9 +1,12 @@
-description: FFmpeg multimedia framework
+layer:
+  name: ffmpeg
+  description: FFmpeg multimedia framework
 
-rpm:
-  repos:
-    - name: fedora-multimedia
-      url: "https://negativo17.org/repos/fedora-multimedia.repo"
-      gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-  packages:
-    - ffmpeg
+  rpm:
+    repos:
+      - name: fedora-multimedia
+        url: "https://negativo17.org/repos/fedora-multimedia.repo"
+        gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
+    packages:
+      - ffmpeg
+

@@ -1,97 +1,100 @@
-depends:
-  - nodejs
+layer:
+  name: devops-tools
+  depends:
+    - nodejs
 
-rpm:
-  packages:
-    - bind-utils
-    - jq
-    - rsync
-    - unzip
+  rpm:
+    packages:
+      - bind-utils
+      - jq
+      - rsync
+      - unzip
 
-pac:
-  packages:
-    - bind-tools
-    - jq
-    - rsync
-    - unzip
+  pac:
+    packages:
+      - bind-tools
+      - jq
+      - rsync
+      - unzip
 
-deb:
-  packages:
-    - dnsutils        # Debian's equivalent of bind-utils / bind-tools
-    - jq
-    - rsync
-    - unzip
+  deb:
+    packages:
+      - dnsutils        # Debian's equivalent of bind-utils / bind-tools
+      - jq
+      - rsync
+      - unzip
 
-tasks:
-  # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
-  # symlinks into /usr/local/bin.
-  - cmd: |
-      curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
-      cd /tmp && unzip -q awscliv2.zip
-      ./aws/install
-      rm -rf /tmp/awscliv2.zip /tmp/aws
-    user: root
+  tasks:
+    # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
+    # symlinks into /usr/local/bin.
+    - cmd: |
+        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+        cd /tmp && unzip -q awscliv2.zip
+        ./aws/install
+        rm -rf /tmp/awscliv2.zip /tmp/aws
+      user: root
 
-  # Scaleway CLI — GitHub API lookup with a pinned fallback for when the API
-  # is rate-limited or offline during builds.
-  - cmd: |
-      SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
-      [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
-      curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
-      chmod +x /usr/local/bin/scw
-    user: root
+    # Scaleway CLI — GitHub API lookup with a pinned fallback for when the API
+    # is rate-limited or offline during builds.
+    - cmd: |
+        SCW_URL=$(curl -fsSL https://api.github.com/repos/scaleway/scaleway-cli/releases/latest | grep "browser_download_url.*linux_amd64\"" | grep -v ".sha256" | cut -d'"' -f4)
+        [ -z "$SCW_URL" ] && SCW_URL="https://github.com/scaleway/scaleway-cli/releases/download/v2.45.0/scaleway-cli_2.45.0_linux_amd64"
+        curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
+        chmod +x /usr/local/bin/scw
+      user: root
 
-  # kubectx + kubens — plain shell scripts from master
-  - cmd: |
-      curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
-      curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
-      chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
-    user: root
+    # kubectx + kubens — plain shell scripts from master
+    - cmd: |
+        curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
+        curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
+        chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
+      user: root
 
-  # OpenTofu via official installer script
-  - cmd: |
-      curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
-      chmod +x /tmp/install-opentofu.sh
-      bash /tmp/install-opentofu.sh --install-method standalone
-      rm -f /tmp/install-opentofu.sh
-    user: root
+    # OpenTofu via official installer script
+    - cmd: |
+        curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
+        chmod +x /tmp/install-opentofu.sh
+        bash /tmp/install-opentofu.sh --install-method standalone
+        rm -f /tmp/install-opentofu.sh
+      user: root
 
-tests:
-  - id: aws-binary
-    file: /usr/local/bin/aws
-    exists: true
-  - id: scw-binary
-    file: /usr/local/bin/scw
-    exists: true
-  - id: kubectx-binary
-    file: /usr/local/bin/kubectx
-    exists: true
-  - id: kubens-binary
-    file: /usr/local/bin/kubens
-    exists: true
-  - id: tofu-binary
-    file: /usr/local/bin/tofu
-    exists: true
-  - id: jq-binary
-    file: /usr/bin/jq
-    exists: true
-  - id: aws-version
-    command: /usr/local/bin/aws --version
-    exit_status: 0
-    stdout:
-      - contains: "aws-cli"
-  - id: scw-version
-    command: /usr/local/bin/scw version
-    exit_status: 0
-  - id: kubectx-help
-    command: /usr/local/bin/kubectx --help
-    exit_status: 0
-  - id: kubens-help
-    command: /usr/local/bin/kubens --help
-    exit_status: 0
-  - id: tofu-version
-    command: /usr/local/bin/tofu version
-    exit_status: 0
-  - id: jq-version
-    command: /usr/bin/jq --version
-    exit_status: 0
+  tests:
+    - id: aws-binary
+      file: /usr/local/bin/aws
+      exists: true
+    - id: scw-binary
+      file: /usr/local/bin/scw
+      exists: true
+    - id: kubectx-binary
+      file: /usr/local/bin/kubectx
+      exists: true
+    - id: kubens-binary
+      file: /usr/local/bin/kubens
+      exists: true
+    - id: tofu-binary
+      file: /usr/local/bin/tofu
+      exists: true
+    - id: jq-binary
+      file: /usr/bin/jq
+      exists: true
+    - id: aws-version
+      command: /usr/local/bin/aws --version
+      exit_status: 0
+      stdout:
+        - contains: "aws-cli"
+    - id: scw-version
+      command: /usr/local/bin/scw version
+      exit_status: 0
+    - id: kubectx-help
+      command: /usr/local/bin/kubectx --help
+      exit_status: 0
+    - id: kubens-help
+      command: /usr/local/bin/kubens --help
+      exit_status: 0
+    - id: tofu-version
+      command: /usr/local/bin/tofu version
+      exit_status: 0
+    - id: jq-version
+      command: /usr/bin/jq --version
+      exit_status: 0
+

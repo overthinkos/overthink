@@ -1,32 +1,36 @@
-depends:
-  - xorg-headless
+layer:
+  name: openbox
+  depends:
+    - xorg-headless
 
-rpm:
-  packages:
-    - openbox
-    - xterm
+  rpm:
+    packages:
+      - openbox
+      - xterm
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - mkdir: "${HOME}/.config/openbox"
-    user: "${USER}"
-  - copy: openbox-wrapper
-    to: "${HOME}/.local/bin/openbox-wrapper"
-    mode: "0755"
-    user: "${USER}"
-  - copy: rc.xml
-    to: "${HOME}/.config/openbox/rc.xml"
-    mode: "0644"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - mkdir: "${HOME}/.config/openbox"
+      user: "${USER}"
+    - copy: openbox-wrapper
+      to: "${HOME}/.local/bin/openbox-wrapper"
+      mode: "0755"
+      user: "${USER}"
+    - copy: rc.xml
+      to: "${HOME}/.config/openbox/rc.xml"
+      mode: "0644"
+      user: "${USER}"
 
-services:
-  - name: openbox
-    exec: "%(ENV_HOME)s/.local/bin/openbox-wrapper"
-    env:
-      DISPLAY: ":0"
-    restart: always
-    priority: 12
-    enable: true
-    scope: system
+  service:
+    - name: openbox
+      exec: "%(ENV_HOME)s/.local/bin/openbox-wrapper"
+      env:
+        DISPLAY: ":0"
+      restart: always
+      priority: 12
+      start_secs: 1
+      enable: true
+      scope: system
+
 

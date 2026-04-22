@@ -138,7 +138,11 @@ func IsRepoCached(repoPath, version string) (bool, error) {
 }
 
 // EnsureRepoDownloaded downloads the repo if not already cached.
-// Returns the cache path.
+// Returns the cache path. Newly-downloaded caches are auto-migrated via
+// `MigrateUnified --rewrite-layers` so any legacy-form layer.yml files in
+// the remote are normalized to the canonical `layer: {name, ...}` form
+// before the runtime parses them. Already-cached repos are NOT re-migrated
+// (they were migrated on first download).
 func EnsureRepoDownloaded(repoPath, version string) (string, error) {
 	cached, err := IsRepoCached(repoPath, version)
 	if err != nil {
@@ -151,7 +155,19 @@ func EnsureRepoDownloaded(repoPath, version string) (string, error) {
 		}
 		return path, nil
 	}
-	return DownloadRepo(repoPath, version)
+	path, err := DownloadRepo(repoPath, version)
+	if err != nil {
+		return "", err
+	}
+	// One-shot migration of the freshly-cloned cache. Idempotent: if the
+	// remote is already in unified form, this is a no-op.
+	if _, err := MigrateUnified(MigrateUnifiedOpts{
+		Dir:           path,
+		RewriteLayers: true,
+	}); err != nil {
+		return path, fmt.Errorf("auto-migrating remote cache %s: %w", path, err)
+	}
+	return path, nil
 }
 
 // RemoteDownload represents a unique (repo, version) pair to download,
@@ -211,24 +227,8 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 		return nil
 	}
 
-	// Scan format_config remote ref from defaults and per-image
-	if cfg != nil {
-		if ref := cfg.Defaults.FormatConfig; ref != "" {
-			if err := addRef(ref, "defaults format_config"); err != nil {
-				return nil, err
-			}
-		}
-		for imgName, img := range cfg.Images {
-			if !img.IsEnabled() {
-				continue
-			}
-			if ref := img.FormatConfig; ref != "" {
-				if err := addRef(ref, fmt.Sprintf("image %s format_config", imgName)); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
+	// format_config: has been removed. Remote build-config refs now live in
+	// overthink.yml's `includes:` mechanism (see unified.go).
 
 	// Scan image.yml layer references
 	if cfg != nil {

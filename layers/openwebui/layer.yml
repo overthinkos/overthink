@@ -1,115 +1,118 @@
-description: Open WebUI with auto-configured LLM providers, MCP servers, and Jupyter
+layer:
+  name: openwebui
+  description: Open WebUI with auto-configured LLM providers, MCP servers, and Jupyter
 
-depends:
-  - python
-  - supervisord
+  depends:
+    - python
+    - supervisord
 
-env:
-  DATA_DIR: "/opt/data"
-  PORT: "8080"
-  DOCKER: "true"
-  ENABLE_DIRECT_CONNECTIONS: "true"
-  ENABLE_CODE_EXECUTION: "true"
-  ENABLE_PERSISTENT_CONFIG: "false"
-  ENABLE_VERSION_UPDATE_CHECK: "false"
+  env:
+    DATA_DIR: "/opt/data"
+    PORT: "8080"
+    DOCKER: "true"
+    ENABLE_DIRECT_CONNECTIONS: "true"
+    ENABLE_CODE_EXECUTION: "true"
+    ENABLE_PERSISTENT_CONFIG: "false"
+    ENABLE_VERSION_UPDATE_CHECK: "false"
 
-env_requires:
-  - name: WEBUI_ADMIN_EMAIL
-    description: "Admin account email (identifier, not a credential) — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
+  env_requires:
+    - name: WEBUI_ADMIN_EMAIL
+      description: "Admin account email (identifier, not a credential) — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
 
-env_accepts:
-  - name: OLLAMA_HOST
-    description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
-  - name: OPENAI_API_BASE_URL
-    description: "OpenAI-compatible API base URL"
-  - name: WEBUI_AUTH
-    description: "Enable authentication (default: true)"
-  - name: OV_MCP_SERVERS
-    description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
-  - name: IMMICH_API_URL
-    description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
+  env_accepts:
+    - name: OLLAMA_HOST
+      description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
+    - name: OPENAI_API_BASE_URL
+      description: "OpenAI-compatible API base URL"
+    - name: WEBUI_AUTH
+      description: "Enable authentication (default: true)"
+    - name: OV_MCP_SERVERS
+      description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+    - name: IMMICH_API_URL
+      description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
 
-# Credential-store-backed env vars. Values live in the user's credential
-# backend (keyring/kdbx/config) and are injected at runtime via podman
-# secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
-# or the quadlet file as plaintext. See /ov:secrets and /ov:layer.
-secret_requires:
-  - name: WEBUI_ADMIN_PASSWORD
-    description: "Initial admin account password for Open WebUI first-run setup"
+  # Credential-store-backed env vars. Values live in the user's credential
+  # backend (keyring/kdbx/config) and are injected at runtime via podman
+  # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
+  # or the quadlet file as plaintext. See /ov:secrets and /ov:layer.
+  secret_requires:
+    - name: WEBUI_ADMIN_PASSWORD
+      description: "Initial admin account password for Open WebUI first-run setup"
 
-secret_accepts:
-  - name: OPENROUTER_API_KEY
-    description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"
-    key: ov/api-key/openrouter
-  - name: OLLAMA_API_KEY
-    description: "API key for Ollama Cloud inference"
-    key: ov/api-key/ollama
-  - name: OPENAI_API_KEY
-    description: "Direct OpenAI API key"
-    key: ov/api-key/openai
-  - name: IMMICH_API_KEY
-    description: "Immich API key for programmatic access to the running immich instance"
-    key: ov/api-key/immich
+  secret_accepts:
+    - name: OPENROUTER_API_KEY
+      description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"
+      key: ov/api-key/openrouter
+    - name: OLLAMA_API_KEY
+      description: "API key for Ollama Cloud inference"
+      key: ov/api-key/ollama
+    - name: OPENAI_API_KEY
+      description: "Direct OpenAI API key"
+      key: ov/api-key/openai
+    - name: IMMICH_API_KEY
+      description: "Immich API key for programmatic access to the running immich instance"
+      key: ov/api-key/immich
 
-mcp_accepts:
-  - name: jupyter
-    description: "JupyterLab CRDT MCP server for notebook manipulation"
-  - name: chrome-devtools
-    description: "Chrome DevTools MCP server for browser automation"
+  mcp_accepts:
+    - name: jupyter
+      description: "JupyterLab CRDT MCP server for notebook manipulation"
+    - name: chrome-devtools
+      description: "Chrome DevTools MCP server for browser automation"
 
-ports:
-  - 8080
+  ports:
+    - 8080
 
-volumes:
-  - name: data
-    path: "/opt/data"
+  volumes:
+    - name: data
+      path: "/opt/data"
 
-aliases:
-  - name: open-webui
-    command: open-webui
+  aliases:
+    - name: open-webui
+      command: open-webui
 
-secrets:
-  - name: webui-secret-key
-    env: WEBUI_SECRET_KEY
+  secrets:
+    - name: webui-secret-key
+      env: WEBUI_SECRET_KEY
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: openwebui-entrypoint
-    to: "${HOME}/.local/bin/openwebui-entrypoint"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: openwebui-entrypoint
+      to: "${HOME}/.local/bin/openwebui-entrypoint"
+      mode: "0755"
+      user: "${USER}"
 
 
-tests:
-  - id: openwebui-entrypoint
-    file: ${HOME}/.local/bin/openwebui-entrypoint
-    exists: true
-    mode: "0755"
-  - id: openwebui-service
-    scope: deploy
-    service: openwebui
-    running: true
-  - id: openwebui-port
-    scope: deploy
-    addr: 127.0.0.1:${HOST_PORT:8080}
-    reachable: true
-    timeout: 5s
-  - id: openwebui-http
-    scope: deploy
-    http: http://127.0.0.1:${HOST_PORT:8080}/
-    status: 200
-    timeout: 30s
-  - id: openwebui-admin-email-set
-    scope: deploy
-    command: printenv WEBUI_ADMIN_EMAIL
-    exit_status: 0
+  tests:
+    - id: openwebui-entrypoint
+      file: ${HOME}/.local/bin/openwebui-entrypoint
+      exists: true
+      mode: "0755"
+    - id: openwebui-service
+      scope: deploy
+      service: openwebui
+      running: true
+    - id: openwebui-port
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:8080}
+      reachable: true
+      timeout: 5s
+    - id: openwebui-http
+      scope: deploy
+      http: http://127.0.0.1:${HOST_PORT:8080}/
+      status: 200
+      timeout: 30s
+    - id: openwebui-admin-email-set
+      scope: deploy
+      command: printenv WEBUI_ADMIN_EMAIL
+      exit_status: 0
 
-services:
-  - name: openwebui
-    exec: "%(ENV_HOME)s/.local/bin/openwebui-entrypoint"
-    restart: always
-    working_directory: "%(ENV_HOME)s"
-    enable: true
-    scope: system
+  service:
+    - name: openwebui
+      exec: "%(ENV_HOME)s/.local/bin/openwebui-entrypoint"
+      restart: always
+      working_directory: "%(ENV_HOME)s"
+      enable: true
+      scope: system
+
 

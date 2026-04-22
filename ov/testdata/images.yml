@@ -1,0 +1,48 @@
+defaults:
+    base: quay.io/fedora/fedora:43
+    platforms:
+        - linux/amd64
+        - linux/arm64
+    tag: auto
+    registry: ghcr.io/test
+    build:
+        - rpm
+images:
+    base:
+        layers:
+            - pixi
+    bazzite:
+        base: ghcr.io/ublue-os/bazzite:stable
+        bootc: true
+        platforms:
+            - linux/amd64
+        layers:
+            - custom-packages
+    cuda:
+        platforms:
+            - linux/amd64
+        layers:
+            - pixi
+            - cuda
+    disabled-image:
+        enabled: false
+        layers:
+            - nonexistent-layer
+    inference:
+        base: ml-cuda
+        tag: nightly
+        layers:
+            - supervisord
+            - ollama
+    ml-cuda:
+        base: cuda
+        layers:
+            - python
+            - ml-libs
+    ubuntu-dev:
+        base: ubuntu:24.04
+        build:
+            - deb
+        layers:
+            - pixi
+            - nodejs

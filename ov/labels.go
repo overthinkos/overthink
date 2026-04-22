@@ -64,6 +64,10 @@ const (
 	LabelMCPRequires    = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
 	LabelTests          = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
+	// LabelServices — structured JSON array of CapabilityService (full
+	// per-entry spec, not just names). Source-less deploy (`ov deploy from-image`)
+	// reads this to reconstruct every service's config without the repo.
+	LabelServices = "org.overthinkos.services"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -79,6 +83,36 @@ type LabelVolume struct {
 type LabelRoute struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+}
+
+// CapabilityService is the full structured spec of a single service entry
+// baked into an OCI label. Mirrors ServiceEntry's fields plus two origin
+// annotations (Init, Layer) so a source-less consumer can reconstruct
+// everything `ov deploy` needs without the source repo.
+type CapabilityService struct {
+	Name             string            `json:"name"`
+	Scope            string            `json:"scope,omitempty"`
+	Enable           bool              `json:"enable,omitempty"`
+	UsePackaged      string            `json:"use_packaged,omitempty"`
+	Exec             string            `json:"exec,omitempty"`
+	Env              map[string]string `json:"env,omitempty"`
+	Restart          string            `json:"restart,omitempty"`
+	WorkingDirectory string            `json:"working_directory,omitempty"`
+	User             string            `json:"user,omitempty"`
+	After            []string          `json:"after,omitempty"`
+	Before           []string          `json:"before,omitempty"`
+	Stdout           string            `json:"stdout,omitempty"`
+	StopTimeout      string            `json:"stop_timeout,omitempty"`
+	Kind             string            `json:"kind,omitempty"`
+	Events           string            `json:"events,omitempty"`
+	AutoStart        *bool             `json:"auto_start,omitempty"`
+	StartRetries     int               `json:"start_retries,omitempty"`
+	StartSecs        int               `json:"start_secs,omitempty"`
+	StopSignal       string            `json:"stop_signal,omitempty"`
+	ExitCodes        string            `json:"exit_codes,omitempty"`
+	Priority         int               `json:"priority,omitempty"`
+	Init             string            `json:"init,omitempty"`  // which init system owns this entry
+	Layer            string            `json:"layer,omitempty"` // source layer name
 }
 
 // LabelDataEntry represents a data mapping stored in the org.overthinkos.data label.
@@ -112,7 +146,8 @@ type ImageMetadata struct {
 	Libvirt        []string
 	Routes         []LabelRoute
 	Init           string            // active init system name ("supervisord", "systemd", "")
-	Services       []string          // service names for the active init system
+	Services       []CapabilityService // structured per-entry service specs (LabelServices); source-less deploy reads these
+	ServiceNames   []string          // per-init service names (LabelInit companion); used by `ov service status/restart`
 	EnvLayers      map[string]string
 	PathAppend     []string
 	Engine         string
@@ -295,14 +330,21 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	// Init system
 	meta.Init = labels[LabelInit]
 
-	// Services: read from init-specific label key
+	// ServiceNames: read from init-specific label key
 	// The label key is stored as org.overthinkos.services.<init> (e.g., org.overthinkos.services.supervisord)
 	if meta.Init != "" {
 		svcLabel := "org.overthinkos.services." + meta.Init
 		if v := labels[svcLabel]; v != "" {
-			if err := json.Unmarshal([]byte(v), &meta.Services); err != nil {
+			if err := json.Unmarshal([]byte(v), &meta.ServiceNames); err != nil {
 				return nil, fmt.Errorf("parsing %s: %w", svcLabel, err)
 			}
+		}
+	}
+
+	// Services: full structured per-entry data (LabelServices).
+	if v := labels[LabelServices]; v != "" {
+		if err := json.Unmarshal([]byte(v), &meta.Services); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelServices, err)
 		}
 	}
 

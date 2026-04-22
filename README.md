@@ -14,7 +14,7 @@ Containers are a great idea with rough edges. The basics work well enough, but r
 
 Overthink treats container images like composable building blocks. Each **layer** is a self-contained unit — its packages, environment variables, services, volumes, security declarations, and dependencies described in a simple `layer.yml`. An **image** is just a list of layers on top of a base. The `ov` CLI resolves the dependency graph, generates optimized Containerfiles with multi-stage builds and cache mounts, and builds everything in the right order — handling the hard parts so you (and your AI) don't have to.
 
-Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers in `image.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
+Want a GPU-accelerated Jupyter notebook? That's `cuda` + `jupyter` — two layers, one image definition. Need to add Ollama for local LLMs? Add the `ollama` layer. Want a full AI workstation with a Wayland desktop, Chrome, VNC, and an AI gateway? Still just a list of layers under an `image:` entry in `overthink.yml`. Overthink handles the rest: dependency resolution, build ordering, supervisor configs, traefik routes, volume declarations, security mounts, and GPU passthrough.
 
 ### Rootless-first power-user images
 
@@ -73,6 +73,23 @@ A layer is a reusable building block — packages, config, services. An image is
 
 When services run as separate containers, **service discovery happens automatically**. A layer can declare `env_provides` — environment variables (with `{{.ContainerName}}` templates) that get injected into all other deployed containers at `ov config` time. For example, deploying `ollama` automatically provides `OLLAMA_HOST=http://ov-ollama:11434` to every other container — no manual environment setup needed. Similarly, `mcp_provides` declares MCP servers that get auto-discovered by consumers like Hermes — deploying `jupyter` automatically registers its MCP server (`http://{{.ContainerName}}:8888/mcp`) with any hermes instance, even when they run in the same container (pod-aware resolution to `localhost`). Layers can also declare `env_requires`/`mcp_requires` (mandatory) and `env_accepts`/`mcp_accepts` (optional) for documentation and deploy-time validation.
 
+### The Unified YAML: `overthink.yml`
+
+A single `overthink.yml` at the repo root is the project's entry point — everything else (distro / builder / init vocabulary, image definitions, layer definitions) is expressed as kind-keyed `build:` / `image:` / `layer:` entries in that file (or in files pulled in via `includes:`). `ov` never reads `image.yml` directly any more; the loader (`LoadUnified`) resolves includes, auto-discovers layers via `discover:`, and fetches remote `@host/org/repo:version` refs into a transparent cache at `~/.cache/ov/repos/`.
+
+```yaml
+# overthink.yml
+version: 1
+includes:
+  - build.yml                           # distro/builder/init vocabulary (kind: build)
+  - image.yml                           # image definitions (kind: image)
+discover:
+  - layers                              # scan layers/*/layer.yml for kind: layer
+  - "@github.com/team/private/layers"   # remote repo (any ref form)
+```
+
+Each `layer.yml` uses a strict kind-keyed wrapper (`layer: {...}`); flat-form files are rejected at parse time. Projects predating this format convert in one shot with `ov migrate unified --rewrite-layers` — the command is idempotent and auto-invoked on remote-cache fetches so external repos pull through cleanly. See `/ov:migrate` and `/ov:layer`.
+
 ### Building Layers: Package Managers & Config Files
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
@@ -85,11 +102,11 @@ Each layer lives in its own directory under `layers/` and can use any combinatio
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
-The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a single `build.yml` at the repo root. Three top-level sections (`distro:`, `builder:`, `init:`), one loader, one ref from `image.yml`. See `/ov:build` for the full layout.
+The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a `build:` entry (commonly split out to `build.yml` and pulled in via `overthink.yml includes:`). Three top-level sections (`distro:`, `builder:`, `init:`), one loader. See `/ov:build` for the full layout.
 
 ### Multi-Distro Support: `distro:` and `build:`
 
-A single layer can target multiple distros. Two fields in `image.yml` control the behavior:
+A single layer can target multiple distros. Two fields on each `image:` entry in `overthink.yml` control the behavior:
 
 ```yaml
 fedora:
@@ -155,7 +172,7 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Init Systems: Generic, Configurable, Extensible
 
-**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares a `services:` entry in `layer.yml` (unified schema introduced 2026-04 — see `/ov:layer`), `ov` renders it through the init-system's `service_schema` in `build.yml` (supervisord INI or systemd unit file, depending on the target init) and bundles the result into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
+**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares a `service:` list in `layer.yml` (unified structured schema — 22 fields per entry including `kind: eventlistener` for supervisord circuit breakers like chrome's 3-strike crash detector — see `/ov:layer` and `/ov-layers:chrome`), `ov` renders it through the init-system's `service_schema` in `build.yml` (supervisord INI or systemd unit file, depending on the target init) and bundles the result into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
 
 **On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated. When you use `ov deploy add host` to apply layers directly (no container), the same `services:` entries are rendered as systemd units on the host's `systemd` — user-scope at `~/.config/systemd/user/` or system-scope at `/etc/systemd/system/` depending on `scope:`.
 
@@ -165,7 +182,7 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Declarative Testing
 
-Images and deployments come with inline checks. A `tests:` block on any `layer.yml`, `image.yml`, or `deploy.yml` authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
+Images and deployments come with inline checks. A `tests:` block on any `layer:`, `image:`, or `deploy.yml` entry authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
 
 Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov:test`).
 
@@ -185,7 +202,7 @@ Normally a container runs *inside* an operating system. Bootc flips this: the co
 
 ### Containers That Become Virtual Machines
 
-This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once in `image.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-images:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov:vm` for VM lifecycle + bootc-specific build caveats.
+This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once as an `image:` entry in `overthink.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-images:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov:vm` for VM lifecycle + bootc-specific build caveats.
 
 VM creation also works **rootless** via `qemu:///session` and a supervisord-managed `virtqemud` daemon, so `ov vm create` runs from inside a rootless container (e.g., `/ov-images:selkies-desktop-ov`) as uid 1000 with only `/dev/kvm` passthrough — no root, no `--privileged`, no `CAP_SYS_ADMIN`. See `/ov-layers:virtualization` for the supervisord program definitions and the session-mode setup.
 
@@ -197,7 +214,7 @@ VM creation also works **rootless** via `qemu:///session` and a supervisord-mana
 go install github.com/overthinkos/overthink/ov@latest
 ```
 
-This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `image.yml` and a `layers/` directory.
+This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `overthink.yml` and a `layers/` directory. Legacy `image.yml`/`build.yml`/flat-form `layer.yml` projects convert in one shot with `ov migrate unified --rewrite-layers` (see `/ov:migrate`).
 
 **Full project bootstrap** (to build images from this repo):
 
@@ -261,7 +278,7 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 
 ## The Layer Library
 
-164 layers compose into images via `image.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+164 layers compose into images via `overthink.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -310,13 +327,14 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 24 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `image.yml` + `build.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `image.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 24 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `overthink.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `overthink.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
 | **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
 | **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov:image` "Authoring" table + `/ov:new`, `/ov:layer` |
-| **Deployment** | `deploy add`/`del` (unified verb; `host` targets local system), `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
+| **Deployment** | `deploy add`/`del` (unified verb; `host` targets local filesystem, `kubernetes` emits a Kustomize tree, any other name is a container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
+| **Schema migration** | `migrate unified` — convert legacy `image.yml`/`build.yml`/flat-form `layer.yml` into unified `overthink.yml` with kind-keyed layer wrappers; idempotent; auto-invoked on remote-cache downloads | `/ov:migrate` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
@@ -327,11 +345,11 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 
 **Global flags** (apply to every command):
 
-- `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — override the project directory (where `image.yml` lives) for build-mode commands. Honoured before Kong dispatches the subcommand.
-- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `image.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Mutually exclusive with `--dir`. See `/ov:image` "Project directory resolution".
+- `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — override the project directory (where `overthink.yml` lives) for build-mode commands. Honoured before Kong dispatches the subcommand.
+- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `overthink.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Remote refs containing legacy `image.yml` are auto-migrated on download (see `/ov:migrate`). Mutually exclusive with `--dir`. See `/ov:image` "Project directory resolution".
 - `--kdbx <path>` — override the KeePass credential store location.
 
-Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/workspace` with `ov config --bind project=/host/path` (the `ov-mcp` layer default, world-writable), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. **Refined in 2026-04**: the fallback now fires whenever the resolved cwd has no `image.yml`, regardless of `OV_PROJECT_DIR` being set. Previously the fallback only fired when `OV_PROJECT_DIR` was empty — but the `ov-mcp` layer permanently sets `OV_PROJECT_DIR=/workspace`, so the fallback was effectively dead code. Now a deployer who forgets `--bind` still gets a working MCP server (backed by the upstream repo) with a clear log line naming the reason. The top-level CLI never auto-fetches — only `ov mcp serve` does; `--no-default-repo` opts out.
+Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/workspace` with `ov config --bind project=/host/path` (the `ov-mcp` layer default, world-writable), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. **Refined in 2026-04**: the fallback now fires whenever the resolved cwd has no `overthink.yml`, regardless of `OV_PROJECT_DIR` being set. Previously the fallback only fired when `OV_PROJECT_DIR` was empty — but the `ov-mcp` layer permanently sets `OV_PROJECT_DIR=/workspace`, so the fallback was effectively dead code. Now a deployer who forgets `--bind` still gets a working MCP server (backed by the upstream repo) with a clear log line naming the reason. The top-level CLI never auto-fetches — only `ov mcp serve` does; `--no-default-repo` opts out.
 
 A few sample invocations:
 
@@ -356,7 +374,7 @@ Error: image "jupyter:latest" is not available locally.
        Run 'ov image pull jupyter:latest' to fetch it first
 ```
 
-`ov image pull` accepts three input forms: short names (resolved via `image.yml`, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
+`ov image pull` accepts three input forms: short names (resolved via `overthink.yml`'s `image:` entries, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
 
 ### Multiple Instances
 
@@ -412,7 +430,7 @@ ov image new layer my-layer            # Scaffold the directory
 # Optionally add tests: for file / port / http / command checks (see /ov:test)
 # Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
-# Add to an image in image.yml:
+# Add to an image: entry in overthink.yml:
 #   layers: [..., my-layer]
 
 ov image build my-image                # Build it

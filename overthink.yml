@@ -1,0 +1,9 @@
+version: 1
+includes:
+    - build.yml
+    - images.yml
+    - deploy.yml
+discover:
+    layers:
+        - path: layers
+          recursive: true

@@ -1,4 +1,7 @@
-description: nano-pdf CLI for PDF editing with natural language
+layer:
+  name: nano-pdf
+  description: nano-pdf CLI for PDF editing with natural language
 
-depends:
-  - python
+  depends:
+    - python
+

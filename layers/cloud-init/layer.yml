@@ -1,39 +1,42 @@
-depends:
-  - sshd
+layer:
+  name: cloud-init
+  depends:
+    - sshd
 
-rpm:
-  packages:
-    - cloud-init
-    - cloud-utils-growpart
+  rpm:
+    packages:
+      - cloud-init
+      - cloud-utils-growpart
 
 
-tasks:
-  - mkdir: /etc/cloud/cloud.cfg.d
-    user: root
-  - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
-    mode: "0644"
-    user: root
-    content: |
-      datasource_list: [ NoCloud, None ]
+  tasks:
+    - mkdir: /etc/cloud/cloud.cfg.d
+      user: root
+    - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg
+      mode: "0644"
+      user: root
+      content: |
+        datasource_list: [ NoCloud, None ]
 
-services:
-  - name: cloud-init-local
-    use_packaged: cloud-init-local.service
-    enable: true
-    scope: system
+  service:
+    - name: cloud-init-local
+      use_packaged: cloud-init-local.service
+      enable: true
+      scope: system
 
-  - name: cloud-init
-    use_packaged: cloud-init.service
-    enable: true
-    scope: system
+    - name: cloud-init
+      use_packaged: cloud-init.service
+      enable: true
+      scope: system
 
-  - name: cloud-config
-    use_packaged: cloud-config.service
-    enable: true
-    scope: system
+    - name: cloud-config
+      use_packaged: cloud-config.service
+      enable: true
+      scope: system
 
-  - name: cloud-final
-    use_packaged: cloud-final.service
-    enable: true
-    scope: system
+    - name: cloud-final
+      use_packaged: cloud-final.service
+      enable: true
+      scope: system
+
 

@@ -1,22 +1,25 @@
-ports:
-  - 8080
-  - 9090
+layer:
+  name: webservice
+  ports:
+    - 8080
+    - 9090
 
-port_relay:
-  - 8080
+  port_relay:
+    - 8080
 
-route:
-  host: webservice.localhost
-  port: 8080
+  route:
+    host: webservice.localhost
+    port: 8080
 
-volumes:
-  - name: data
-    path: "~/.webservice"
+  volumes:
+    - name: data
+      path: "~/.webservice"
 
-aliases:
-  - name: websvc
-    command: websvc-server
+  aliases:
+    - name: websvc
+      command: websvc-server
 
-tasks:
-  - cmd: echo "setup webservice"
-    user: "${USER}"
+  tasks:
+    - cmd: echo "setup webservice"
+      user: "${USER}"
+

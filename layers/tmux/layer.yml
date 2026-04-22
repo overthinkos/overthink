@@ -1,26 +1,29 @@
-description: Terminal multiplexer
+layer:
+  name: tmux
+  description: Terminal multiplexer
 
-rpm:
-  packages:
-    - tmux
+  rpm:
+    packages:
+      - tmux
 
-pac:
-  packages:
-    - tmux
+  pac:
+    packages:
+      - tmux
 
-deb:
-  packages:
-    - tmux
+  deb:
+    packages:
+      - tmux
 
-tests:
-  - id: tmux-binary
-    file: /usr/bin/tmux
-    exists: true
-  - id: tmux-package
-    package: tmux
-    installed: true
-  - id: tmux-version
-    command: /usr/bin/tmux -V
-    exit_status: 0
-    stdout:
-      - matches: "^tmux"
+  tests:
+    - id: tmux-binary
+      file: /usr/bin/tmux
+      exists: true
+    - id: tmux-package
+      package: tmux
+      installed: true
+    - id: tmux-version
+      command: /usr/bin/tmux -V
+      exit_status: 0
+      stdout:
+        - matches: "^tmux"
+

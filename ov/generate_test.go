@@ -156,32 +156,42 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 func TestGenerateInitFragments(t *testing.T) {
 	tmpDir := t.TempDir()
 
+	// Schema-driven: each layer's service: list contains structured entries.
+	// generateInitFragments iterates them and calls RenderService per entry.
 	g := &Generator{
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"python": {
-				Name:       "python",
+				Name:     "python",
 				HasTasks: true,
 			},
 			"svc": {
 				Name:        "svc",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasTasks:   true,
-				serviceConf: "[program:svc]\ncommand=svc serve\nautostart=true\n",
+				HasTasks:    true,
+				service: []ServiceEntry{
+					{Name: "svc", Exec: "svc serve"},
+				},
 			},
 			"other": {
 				Name:        "other",
 				InitSystems: map[string]bool{"supervisord": true},
-				HasTasks:   true,
-				serviceConf: "[program:other]\ncommand=other run",
+				HasTasks:    true,
+				service: []ServiceEntry{
+					{Name: "other", Exec: "other run"},
+				},
 			},
 		},
 	}
 
+	// Minimal supervisord-like template that renders a [program:NAME] block.
 	supervisordDef := &InitDef{
-		Model:            "fragment_assembly",
-		FragmentDir:      "supervisor",
-		FragmentTemplate: "{{.Content}}",
+		Model:       "fragment_assembly",
+		FragmentDir: "supervisor",
+		ServiceSchema: &ServiceSchemaDef{
+			SupportsPackaged: false,
+			ServiceTemplate:  "[program:{{.Name}}]\ncommand={{.Exec}}\n",
+		},
 	}
 
 	err := g.generateInitFragments("test-image", "supervisord", supervisordDef, []string{"python", "svc", "other"})
@@ -189,34 +199,30 @@ func TestGenerateInitFragments(t *testing.T) {
 		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
-	// svc fragment should be at position 02 (index 1 + 1)
+	// Layer ordering: python=1, svc=2, other=3. Each layer with service entries
+	// gets ONE fragment file named <NN>-<layer>.conf containing all its entries.
 	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-svc.conf")
 	if err != nil {
-		t.Fatalf("reading svc supervisor config: %v", err)
+		t.Fatalf("reading svc supervisor fragment: %v", err)
 	}
 	if !strings.Contains(string(data), "[program:svc]") {
-		t.Error("svc fragment should contain [program:svc]")
+		t.Errorf("svc fragment missing [program:svc]; got: %q", string(data))
 	}
-	if !strings.HasSuffix(string(data), "\n") {
-		t.Error("supervisor config should end with newline")
+	if !strings.Contains(string(data), "command=svc serve") {
+		t.Errorf("svc fragment missing exec command; got: %q", string(data))
 	}
 
-	// other supervisor config should be at position 03
 	data, err = os.ReadFile(tmpDir + "/test-image/supervisor/03-other.conf")
 	if err != nil {
-		t.Fatalf("reading other supervisor config: %v", err)
+		t.Fatalf("reading other supervisor fragment: %v", err)
 	}
 	if !strings.Contains(string(data), "[program:other]") {
-		t.Error("other fragment should contain [program:other]")
-	}
-	if !strings.HasSuffix(string(data), "\n") {
-		t.Error("supervisor config without trailing newline should get one added")
+		t.Errorf("other fragment missing [program:other]; got: %q", string(data))
 	}
 
-	// python has no supervisord, should not have a supervisor config
-	_, err = os.ReadFile(tmpDir + "/test-image/supervisor/01-python.conf")
-	if err == nil {
-		t.Error("python should not have a supervisor config")
+	// python has no service: entry → no fragment file.
+	if _, err := os.Stat(tmpDir + "/test-image/supervisor/01-python.conf"); err == nil {
+		t.Error("python should not produce a fragment")
 	}
 }
 
@@ -237,16 +243,21 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 				HasTasks:       true,
 				PortRelayPorts: []int{9222},
 				InitSystems:    map[string]bool{"supervisord": true},
-				serviceConf:    "[program:chrome]\ncommand=chrome\nautostart=true\n",
+				service: []ServiceEntry{
+					{Name: "chrome", Exec: "chrome"},
+				},
 			},
 		},
 	}
 
 	supervisordDef := &InitDef{
-		Model:            "fragment_assembly",
-		FragmentDir:      "supervisor",
-		FragmentTemplate: "{{.Content}}",
-		RelayTemplate:    relayTmpl,
+		Model:       "fragment_assembly",
+		FragmentDir: "supervisor",
+		ServiceSchema: &ServiceSchemaDef{
+			SupportsPackaged: false,
+			ServiceTemplate:  "[program:{{.Name}}]\ncommand={{.Exec}}\n",
+		},
+		RelayTemplate: relayTmpl,
 	}
 
 	err := g.generateInitFragments("test-image", "supervisord", supervisordDef, []string{"socat", "chrome"})
@@ -254,7 +265,8 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		t.Fatalf("generateInitFragments() error = %v", err)
 	}
 
-	// Regular service config should exist
+	// Layer ordering: socat=1, chrome=2. chrome has both a service: entry
+	// and a port_relay, producing 02-chrome.conf + 02-relay-9222.conf.
 	data, err := os.ReadFile(tmpDir + "/test-image/supervisor/02-chrome.conf")
 	if err != nil {
 		t.Fatalf("reading chrome supervisor config: %v", err)
@@ -263,7 +275,6 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		t.Error("chrome fragment should contain [program:chrome]")
 	}
 
-	// Relay config should also exist
 	data, err = os.ReadFile(tmpDir + "/test-image/supervisor/02-relay-9222.conf")
 	if err != nil {
 		t.Fatalf("reading relay supervisor config: %v", err)

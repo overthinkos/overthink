@@ -1,6 +1,9 @@
-layers:
-  - sway-desktop
-  - wayvnc
+layer:
+  name: sway-desktop-vnc
+  layers:
+    - sway-desktop
+    - wayvnc
 
-env:
-  WLR_RENDERER: "pixman"
+  env:
+    WLR_RENDERER: "pixman"
+

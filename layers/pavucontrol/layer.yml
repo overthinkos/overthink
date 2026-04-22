@@ -1,11 +1,14 @@
-depends:
-  - pipewire
+layer:
+  name: pavucontrol
+  depends:
+    - pipewire
 
-rpm:
-  packages:
-    - pavucontrol
+  rpm:
+    packages:
+      - pavucontrol
 
-tests:
-  - id: pavucontrol-binary
-    file: /usr/bin/pavucontrol
-    exists: true
+  tests:
+    - id: pavucontrol-binary
+      file: /usr/bin/pavucontrol
+      exists: true
+

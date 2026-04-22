@@ -1,31 +1,34 @@
-description: Maximal OpenClaw deployment (gateway + browser + all feasible tools/skills)
+layer:
+  name: openclaw-full
+  description: Maximal OpenClaw deployment (gateway + browser + all feasible tools/skills)
 
-layers:
-  - openclaw
-  - chrome
-  - claude-code
-  - codex
-  - gemini
-  - clawhub
-  - mcporter
-  - oracle
-  - xurl
-  - summarize
-  - playwright
-  - blogwatcher
-  - gifgrep
-  - wacli
-  - goplaces
-  - songsee
-  - sag
-  - camsnap
-  - gogcli
-  - ordercli
-  - himalaya
-  - uv
-  - nano-pdf
-  - gh
-  - tmux
-  - ffmpeg
-  - ripgrep
-  - sqlite
+  layers:
+    - openclaw
+    - chrome
+    - claude-code
+    - codex
+    - gemini
+    - clawhub
+    - mcporter
+    - oracle
+    - xurl
+    - summarize
+    - playwright
+    - blogwatcher
+    - gifgrep
+    - wacli
+    - goplaces
+    - songsee
+    - sag
+    - camsnap
+    - gogcli
+    - ordercli
+    - himalaya
+    - uv
+    - nano-pdf
+    - gh
+    - tmux
+    - ffmpeg
+    - ripgrep
+    - sqlite
+

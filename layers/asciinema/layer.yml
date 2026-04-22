@@ -1,23 +1,26 @@
-description: Terminal session recorder (asciinema)
+layer:
+  name: asciinema
+  description: Terminal session recorder (asciinema)
 
-rpm:
-  packages:
-    - asciinema
+  rpm:
+    packages:
+      - asciinema
 
-pac:
-  packages:
-    - asciinema
+  pac:
+    packages:
+      - asciinema
 
-deb:
-  packages:
-    - asciinema
+  deb:
+    packages:
+      - asciinema
 
-tests:
-  - id: asciinema-binary
-    file: /usr/bin/asciinema
-    exists: true
-  - id: asciinema-version
-    command: /usr/bin/asciinema --version
-    exit_status: 0
-    stdout:
-      - contains: "asciinema"
+  tests:
+    - id: asciinema-binary
+      file: /usr/bin/asciinema
+      exists: true
+    - id: asciinema-version
+      command: /usr/bin/asciinema --version
+      exit_status: 0
+      stdout:
+        - contains: "asciinema"
+

@@ -1,20 +1,23 @@
-rpm:
-  packages:
-    - avahi-devel
-    - avahi-glib-devel
-    - eigen3-devel
-    - glslang-devel
-    - gstreamer1-devel
-    - json-devel
-    - libnotify-devel
-    - librealsense
-    - libuvc
-    - libXrandr-devel
-    - opencv
-    - opencv-video
-    - openhmd
-    - openvr-api
-    - openxr-devel
-    - systemd-devel
-    - vulkan-devel
-    - vulkan-loader-devel
+layer:
+  name: vr-streaming
+  rpm:
+    packages:
+      - avahi-devel
+      - avahi-glib-devel
+      - eigen3-devel
+      - glslang-devel
+      - gstreamer1-devel
+      - json-devel
+      - libnotify-devel
+      - librealsense
+      - libuvc
+      - libXrandr-devel
+      - opencv
+      - opencv-video
+      - openhmd
+      - openvr-api
+      - openxr-devel
+      - systemd-devel
+      - vulkan-devel
+      - vulkan-loader-devel
+

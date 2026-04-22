@@ -1,42 +1,46 @@
-depends:
-  - dbus
+layer:
+  name: mutter
+  depends:
+    - dbus
 
-env:
-  XDG_RUNTIME_DIR: "/tmp"
-  WAYLAND_DISPLAY: "wayland-0"
-  XDG_CURRENT_DESKTOP: "GNOME"
-  XDG_SESSION_TYPE: "wayland"
-  EGL_LOG_LEVEL: "fatal"
+  env:
+    XDG_RUNTIME_DIR: "/tmp"
+    WAYLAND_DISPLAY: "wayland-0"
+    XDG_CURRENT_DESKTOP: "GNOME"
+    XDG_SESSION_TYPE: "wayland"
+    EGL_LOG_LEVEL: "fatal"
 
-rpm:
-  packages:
-    - mutter
-    - xorg-x11-server-Xwayland
-    - mesa-dri-drivers
-    - mesa-vulkan-drivers
-    - libglvnd-egl
-    - libglvnd-gles
-    - egl-wayland
+  rpm:
+    packages:
+      - mutter
+      - xorg-x11-server-Xwayland
+      - mesa-dri-drivers
+      - mesa-vulkan-drivers
+      - libglvnd-egl
+      - libglvnd-gles
+      - egl-wayland
 
-tasks:
-  # mutter may ship with cap_sys_nice which blocks exec in rootless user
-  # namespaces. Strip — not needed for headless compositor.
-  - setcap: /usr/bin/mutter
+  tasks:
+    # mutter may ship with cap_sys_nice which blocks exec in rootless user
+    # namespaces. Strip — not needed for headless compositor.
+    - setcap: /usr/bin/mutter
 
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: mutter-wrapper
-    to: "${HOME}/.local/bin/mutter-wrapper"
-    mode: "0755"
-    user: "${USER}"
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: mutter-wrapper
+      to: "${HOME}/.local/bin/mutter-wrapper"
+      mode: "0755"
+      user: "${USER}"
 
-services:
-  - name: mutter
-    exec: "%(ENV_HOME)s/.local/bin/mutter-wrapper"
-    env:
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 10
-    enable: true
-    scope: system
+  service:
+    - name: mutter
+      exec: "%(ENV_HOME)s/.local/bin/mutter-wrapper"
+      env:
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 10
+      start_secs: 3
+      enable: true
+      scope: system
+
 

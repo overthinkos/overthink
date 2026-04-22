@@ -1,47 +1,51 @@
-depends:
-  - supervisord
+layer:
+  name: pipewire
+  depends:
+    - supervisord
 
-env:
-  XDG_RUNTIME_DIR: "/tmp"
+  env:
+    XDG_RUNTIME_DIR: "/tmp"
 
-rpm:
-  packages:
-    - pipewire
-    - pipewire-pulseaudio
-    - pipewire-utils
-    - wireplumber
+  rpm:
+    packages:
+      - pipewire
+      - pipewire-pulseaudio
+      - pipewire-utils
+      - wireplumber
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: pipewire-wrapper
-    to: "${HOME}/.local/bin/pipewire-wrapper"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: pipewire-wrapper
+      to: "${HOME}/.local/bin/pipewire-wrapper"
+      mode: "0755"
+      user: "${USER}"
 
 
-tests:
-  - id: pipewire-binary
-    file: /usr/bin/pipewire
-    exists: true
-  - id: wireplumber-binary
-    file: /usr/bin/wireplumber
-    exists: true
-  - id: pipewire-wrapper
-    file: ${HOME}/.local/bin/pipewire-wrapper
-    exists: true
-  - id: pipewire-service-running
-    scope: deploy
-    service: pipewire
-    running: true
+  tests:
+    - id: pipewire-binary
+      file: /usr/bin/pipewire
+      exists: true
+    - id: wireplumber-binary
+      file: /usr/bin/wireplumber
+      exists: true
+    - id: pipewire-wrapper
+      file: ${HOME}/.local/bin/pipewire-wrapper
+      exists: true
+    - id: pipewire-service-running
+      scope: deploy
+      service: pipewire
+      running: true
 
-services:
-  - name: pipewire
-    exec: "%(ENV_HOME)s/.local/bin/pipewire-wrapper"
-    env:
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 5
-    enable: true
-    scope: system
+  service:
+    - name: pipewire
+      exec: "%(ENV_HOME)s/.local/bin/pipewire-wrapper"
+      env:
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 5
+      start_secs: 2
+      enable: true
+      scope: system
+
 

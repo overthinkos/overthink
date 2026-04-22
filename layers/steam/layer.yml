@@ -1,19 +1,22 @@
-depends:
-  - sway
+layer:
+  name: steam
+  depends:
+    - sway
 
-env:
-  STEAM_RUNTIME_PREFER_HOST_LIBRARIES: "0"
+  env:
+    STEAM_RUNTIME_PREFER_HOST_LIBRARIES: "0"
 
-rpm:
-  packages:
-    - steam
-    - gamescope
-  options:
-    - --allowerasing
+  rpm:
+    packages:
+      - steam
+      - gamescope
+    options:
+      - --allowerasing
 
-security:
-  shm_size: "1g"
+  security:
+    shm_size: "1g"
 
-volumes:
-  - name: steam-data
-    path: "~/.local/share/Steam"
+  volumes:
+    - name: steam-data
+      path: "~/.local/share/Steam"
+

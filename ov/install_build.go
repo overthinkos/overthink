@@ -297,8 +297,8 @@ func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
 		out = append(out, &TaskStep{
 			Task:         task,
 			LayerName:    layer.Name,
-			LayerDir:     layer.Path,
-			CtxPath:      layer.Path,
+			LayerDir:     layer.SourceDir,
+			CtxPath:      layer.SourceDir,
 			ResolvedUser: userDir,
 		})
 	}
@@ -330,7 +330,7 @@ func compileBuilderSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) 
 		step := &BuilderStep{
 			Builder:   bName,
 			LayerName: layer.Name,
-			LayerDir:  layer.Path,
+			LayerDir:  layer.SourceDir,
 			Phase:     PhaseInstall,
 		}
 		step.BuilderImage = resolveBuilderImage(bName, img, hostCtx)
@@ -440,25 +440,14 @@ func pixiDefaultEnvName(layer *Layer) string {
 //     Each entry becomes either a ServicePackagedStep (use_packaged:)
 //     or a ServiceCustomStep (full spec).
 //
-//  2. Legacy `system_services:` + `service:` fields — used only when
-//     the layer hasn't migrated to the unified schema. system_services
-//     entries map to ServicePackagedStep; service: maps to a single
-//     ServiceCustomStep carrying the raw INI as UnitText (rendered by
-//     the legacy supervisord fragment pipeline in the OCI target).
+// compileServiceSteps — unified schema only. Each ServiceEntry becomes
+// either a ServicePackagedStep (use_packaged:) or a ServiceCustomStep
+// (custom exec). Legacy fields (raw-INI service:, system_services:) are
+// gone — external layers must run `ov migrate unified --rewrite-layers`.
 func compileServiceSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
-	if layer.HasStructuredServices() {
-		return compileServiceStepsFromSchema(layer, img, hostCtx)
-	}
-	return compileServiceStepsLegacy(layer, img, hostCtx)
-}
-
-// compileServiceStepsFromSchema handles layers using the unified
-// services: list. Each entry's use_packaged/custom path produces the
-// matching step kind.
-func compileServiceStepsFromSchema(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
-	for i := range layer.Services() {
-		entry := &layer.Services()[i]
+	for i := range layer.Service() {
+		entry := &layer.Service()[i]
 		scope := ScopeSystem
 		if entry.EffectiveScope() == "user" {
 			scope = ScopeUser
@@ -475,45 +464,13 @@ func compileServiceStepsFromSchema(layer *Layer, img *ResolvedImage, hostCtx Hos
 			})
 			continue
 		}
-		// Custom service. UnitText is left empty here — the target
-		// renders the unit using its init system's service_template at
-		// emit time. The step carries the ServiceEntry via a marker so
-		// the target can look it up.
-		step := &ServiceCustomStep{
+		out = append(out, &ServiceCustomStep{
 			Name:        fmt.Sprintf("ov-%s-%s", layer.Name, entry.Name),
 			TargetScope: scope,
 			Enable:      entry.Enable,
 			LayerName:   layer.Name,
-		}
-		out = append(out, step)
-	}
-	return out
-}
-
-// compileServiceStepsLegacy handles layers still using the
-// service: / system_services: pair. Identical to the pre-Task-6 path.
-func compileServiceStepsLegacy(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
-	var out []InstallStep
-
-	for _, unit := range layer.SystemServiceUnits() {
-		out = append(out, &ServicePackagedStep{
-			Unit:        ensureServiceSuffix(unit),
-			TargetScope: ScopeSystem,
-			Enable:      true,
-			LayerName:   layer.Name,
 		})
 	}
-
-	if svc := layer.ServiceConf(); strings.TrimSpace(svc) != "" {
-		out = append(out, &ServiceCustomStep{
-			Name:        fmt.Sprintf("ov-%s", layer.Name),
-			UnitText:    svc,
-			TargetScope: ScopeSystem,
-			Enable:      true,
-			LayerName:   layer.Name,
-		})
-	}
-
 	return out
 }
 

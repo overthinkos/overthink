@@ -36,12 +36,14 @@ func (e *ValidationError) HasErrors() bool {
 func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	errs := &ValidationError{}
 
-	// Load default build config for global validation
+	// Load default build config for global validation. Unconditional — the
+	// caller is required to pass a project dir containing overthink.yml.
+	// Tests that need in-memory-only validation must use testProjectDir(t).
 	var defaultDistroCfg *DistroConfig
 	var defaultBuilderCfg *BuilderConfig
 	var defaultInitCfg *InitConfig
-	if cfg.Defaults.FormatConfig != "" {
-		dc, blc, ic, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
+	{
+		dc, blc, ic, err := LoadDefaultBuildConfig(dir)
 		if err != nil {
 			errs.Add("loading default build config: %v", err)
 		} else {
@@ -115,7 +117,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	validateSystemdServices(cfg, layers, errs)
 
 	// Validate system_services entries
-	validateSystemServices(cfg, layers, errs)
+	validatePackagedServices(cfg, layers, errs)
 
 	// Validate libvirt snippets
 	validateLibvirt(cfg, layers, errs)
@@ -355,6 +357,12 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 		// Layer must have at least one install file, a layers: field (composition), or data declarations
 		if !layer.HasInstallFiles() && len(layer.IncludedLayers) == 0 && !layer.HasData {
 			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
+		}
+
+		// If `directory:` redirected the source anchor, SourceDir must exist.
+		// (For the default case SourceDir == Path, which is guaranteed to exist.)
+		if layer.SourceDir != layer.Path && !dirExists(layer.SourceDir) {
+			errs.Add("layer %q: directory %q does not exist (resolved to %q)", name, layer.SourceDir, layer.SourceDir)
 		}
 
 		// Cargo.toml requires src/ directory
@@ -1182,40 +1190,53 @@ func validateSystemdServices(cfg *Config, layers map[string]*Layer, errs *Valida
 	}
 }
 
-// validateSystemServices validates system_services entries in layers
-func validateSystemServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	for name, layer := range layers {
-		if len(layer.SystemServiceUnits()) == 0 {
-			continue
+// validatePackagedServices validates use_packaged: entries in each layer's
+// service: list. Use_packaged names the distro-shipped systemd unit that the
+// entry reuses (e.g. "sshd.service", "postgresql.service"). Rules:
+//   - use_packaged name cannot contain paths or spaces (must be a unit name).
+//   - The layer must declare packages that provide those units.
+//   - Packaged entries only work on bootc / systemd images; warn otherwise.
+func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+	layerHasPackaged := func(l *Layer) bool {
+		for i := range l.Service() {
+			if l.Service()[i].IsPackaged() {
+				return true
+			}
 		}
-		for _, unit := range layer.SystemServiceUnits() {
+		return false
+	}
+	for name, layer := range layers {
+		for i := range layer.Service() {
+			entry := &layer.Service()[i]
+			if !entry.IsPackaged() {
+				continue
+			}
+			unit := entry.UsePackaged
 			if unit == "" {
-				errs.Add("layer %q: system_services entry cannot be empty", name)
+				errs.Add("layer %q: service[%d] use_packaged cannot be empty", name, i)
 			}
 			if strings.Contains(unit, "/") || strings.Contains(unit, " ") {
-				errs.Add("layer %q: system_services entry %q must be a unit name (no paths or spaces)", name, unit)
+				errs.Add("layer %q: service[%d] use_packaged %q must be a unit name (no paths or spaces)", name, i, unit)
 			}
 		}
-		if !layer.HasFormatPackages() {
-			errs.Add("layer %q: system_services requires system packages that provide those units", name)
+		if layerHasPackaged(layer) && !layer.HasFormatPackages() {
+			errs.Add("layer %q: use_packaged entries require layer format packages that provide those units", name)
 		}
 	}
 
-	// Warn if system_services are used in non-bootc images
+	// Warn if use_packaged is used in non-bootc images (only systemd can
+	// consume packaged units — supervisord is the container init and can't).
 	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		if img.Bootc {
+		if !img.IsEnabled() || img.Bootc {
 			continue
 		}
 		for _, layerRef := range img.Layers {
 			bare := BareRef(layerRef)
 			layer, ok := layers[bare]
-			if !ok || len(layer.SystemServiceUnits()) == 0 {
+			if !ok || !layerHasPackaged(layer) {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with system_services, but is not a bootc image (systemd units will be ignored)\n", imageName, bare)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with use_packaged entries, but is not a bootc image (systemd units will be ignored)\n", imageName, bare)
 		}
 	}
 }
@@ -1546,7 +1567,7 @@ func layerHasFile(layer *Layer, filename string) bool {
 	case "Cargo.toml":
 		return layer.HasCargoToml
 	default:
-		return fileExists(filepath.Join(layer.Path, filename))
+		return fileExists(filepath.Join(layer.SourceDir, filename))
 	}
 }
 
@@ -1565,7 +1586,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 			continue
 		}
 		for _, d := range layer.Data() {
-			srcPath := filepath.Join(layer.Path, d.Src)
+			srcPath := filepath.Join(layer.SourceDir, d.Src)
 			if !dirExists(srcPath) {
 				errs.Add("layer %s: data src %q does not exist or is not a directory", name, d.Src)
 			}
@@ -1625,17 +1646,14 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 				if !ok {
 					continue
 				}
-				if layer.serviceConf != "" {
-					errs.Add("image %s: data_image includes layer %s which has a service declaration", imgName, layerName)
+				if layer.HasService() {
+					errs.Add("image %s: data_image includes layer %s which has service: declarations", imgName, layerName)
 				}
 				if layer.HasPorts {
 					errs.Add("image %s: data_image includes layer %s which has port declarations", imgName, layerName)
 				}
 				if len(layer.PortRelayPorts) > 0 {
 					errs.Add("image %s: data_image includes layer %s which has port_relay declarations", imgName, layerName)
-				}
-				if len(layer.systemServices) > 0 {
-					errs.Add("image %s: data_image includes layer %s which has system_services declarations", imgName, layerName)
 				}
 			}
 		}

@@ -1,7 +1,10 @@
-depends:
-  - kwin
+layer:
+  name: kwin-apps
+  depends:
+    - kwin
 
-rpm:
-  packages:
-    - dolphin
-    - konsole
+  rpm:
+    packages:
+      - dolphin
+      - konsole
+

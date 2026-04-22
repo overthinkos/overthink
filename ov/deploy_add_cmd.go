@@ -533,7 +533,8 @@ func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, er
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	distroCfg, builderCfg, _, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
+	_ = cfg // FormatConfig deprecated — unified loader reads overthink.yml directly.
+	distroCfg, builderCfg, _, err := LoadDefaultBuildConfig(dir)
 	if err != nil {
 		return nil, nil, nil, err
 	}

@@ -48,10 +48,53 @@ type DeployImageConfig struct {
 	// Target selects the deploy destination. Empty or "container" →
 	// the existing quadlet/podman pipeline. "host" → apply layers
 	// directly to the invoking user's filesystem via HostDeployTarget.
-	// Only honored when this entry's map key is "host" (the literal
-	// deploy name) or when --target=host is passed on the CLI; a
-	// container-named entry with target:host is a config error.
+	// "kubernetes" → emit a Kustomize tree via K8sDeployTarget (Part F).
+	// Only honored when this entry's map key matches (host/kubernetes)
+	// or when --target=... is passed on the CLI; a container-named
+	// entry with target:host is a config error.
 	Target string `yaml:"target,omitempty"`
+
+	// Kubernetes carries the `kubernetes:` sub-block. Only consulted when
+	// Target == "kubernetes". All cluster-wide K8s knobs (storage class,
+	// ingress class, cert issuer) live in ClusterProfile, selected via
+	// Kubernetes.Cluster — not here.
+	Kubernetes *K8sDeployConfig `yaml:"kubernetes,omitempty"`
+
+	// --- Generic target-agnostic intent fields (Part F.4).
+	// Each is optional; empty defaults preserve today's behavior.
+
+	// Kind describes the workload's intrinsic type. Drives the K8s
+	// workload-kind heuristic (service + storage → StatefulSet, etc.) and
+	// can inform systemd unit type or CronJob generation on other targets.
+	// Empty → assumed "service" when target is kubernetes.
+	Kind string `yaml:"kind,omitempty"` // service | daemon | batch | scheduled | oneshot
+
+	// Replicas — number of instances. Ignored for single-instance workloads
+	// (daemon/batch/oneshot) or non-K8s targets that don't support scaling.
+	Replicas int `yaml:"replicas,omitempty"`
+
+	// Restart policy — always | on-failure | never. K8s interprets this on
+	// Pod/Job/CronJob; Deployment/StatefulSet/DaemonSet always use "Always"
+	// per K8s semantics regardless of this value.
+	Restart string `yaml:"restart,omitempty"`
+
+	// Schedule — cron expression for kind: scheduled.
+	Schedule string `yaml:"schedule,omitempty"`
+
+	// Resources — CPU + memory requests. Limits come from the existing
+	// Security.MemoryMax / .Cpus fields (preserves today's meaning).
+	Resources *DeployResources `yaml:"resources,omitempty"`
+
+	// Expose — external exposure intent. Target-agnostic: maps to Ingress
+	// on K8s, Traefik router on container target, etc.
+	Expose *DeployExpose `yaml:"expose,omitempty"`
+
+	// Storage — declarative PVC/volume requests. Augments (does not replace)
+	// the existing Volumes list which covers container-target volume backing.
+	Storage []DeployStorage `yaml:"storage,omitempty"`
+
+	// Probes — target-agnostic liveness/readiness/startup specs.
+	Probes *DeployProbes `yaml:"probes,omitempty"`
 
 	// AddLayers are overlay layer refs applied on top of the image.
 	// Each entry is a DeployRef (local name / local YAML path /
@@ -118,6 +161,44 @@ type DeployVolumeConfig struct {
 type DeploySecretConfig struct {
 	Name   string `yaml:"name"`              // matches layer secret name
 	Source string `yaml:"source,omitempty"`   // "keyring" (default), "env:VAR", "file:/path"
+}
+
+// DeployResources — target-agnostic resource requests. Upper bounds (limits)
+// come from the existing SecurityConfig (MemoryMax / Cpus). Values use K8s
+// quantity strings ("500m" cpu, "512Mi" memory) which podman/systemd can
+// interpret for container/host targets.
+type DeployResources struct {
+	CPURequest    string `yaml:"cpu_request,omitempty"`
+	MemoryRequest string `yaml:"memory_request,omitempty"`
+}
+
+// DeployExpose — external exposure intent (URL host, path, TLS). Maps to
+// K8s Ingress/HTTPRoute, Traefik router on container target, etc.
+type DeployExpose struct {
+	Host string `yaml:"host,omitempty"` // public DNS name
+	Path string `yaml:"path,omitempty"` // URL path prefix, default "/"
+	TLS  bool   `yaml:"tls,omitempty"`
+	Port string `yaml:"port,omitempty"` // container port name or number
+}
+
+// DeployStorage — declarative storage request. class_hint is generic
+// ("fast"/"cheap"/"encrypted"); the cluster profile maps it to a real
+// K8s StorageClass name. access is generic
+// (single-writer / many-readers / many-writers).
+type DeployStorage struct {
+	Name      string `yaml:"name"`
+	Size      string `yaml:"size,omitempty"`       // e.g. "20Gi"
+	ClassHint string `yaml:"class_hint,omitempty"` // fast | cheap | encrypted | default
+	Access    string `yaml:"access,omitempty"`     // single-writer | many-readers | many-writers
+	Path      string `yaml:"path,omitempty"`       // container mount path (optional — layer can declare)
+}
+
+// DeployProbes — target-agnostic probes. Each entry is a Check (same shape
+// as the existing declarative test vocabulary: file, command, addr, http…).
+type DeployProbes struct {
+	Liveness  *Check `yaml:"liveness,omitempty"`
+	Readiness *Check `yaml:"readiness,omitempty"`
+	Startup   *Check `yaml:"startup,omitempty"`
 }
 
 // deployKey returns the deploy.yml map key for an image, optionally qualified by instance.

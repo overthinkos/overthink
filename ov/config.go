@@ -2,8 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 
 	"gopkg.in/yaml.v3"
 )
@@ -145,7 +143,6 @@ type ImageConfig struct {
 	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
 	Vm           *VmConfig         `yaml:"vm,omitempty"`            // virtual machine settings (bootc images)
 	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
-	FormatConfig string             `yaml:"format_config,omitempty"` // ref to build.yml (local path or @host/org/repo/path:version)
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
 
@@ -267,37 +264,26 @@ func (img *ResolvedImage) SupportsBuild(format string) bool {
 	return false
 }
 
-// LoadConfig reads and parses image.yml — the build-mode input.
-//
-// Previously this function also merged deploy.yml overrides via
-// MergeDeployOverlay. That was an architectural bug: build-mode commands
-// (ov image build/generate/inspect/validate/list/merge/pull/…) would bake
-// deploy-mode state into Containerfiles and OCI labels (e.g., port remaps
-// from deploy.yml showed up as the canonical port list in the built image's
-// org.overthinkos.ports label). Deploy-mode commands never called LoadConfig
-// in the first place — they read OCI labels + deploy.yml directly — so
-// dropping the merge is a clean mode-split fix with zero deploy-mode impact.
-//
-// If a future caller genuinely needs the merged view, call
-// `LoadDeployConfig` + `MergeDeployOverlay` explicitly after LoadConfig.
+// LoadConfig reads overthink.yml and returns the Config (defaults + images)
+// projection. Mode purity preserved: this never merges deploy.yml content.
+// Deploy-mode commands must call LoadDeployConfig + MergeDeployOverlay
+// explicitly.
 func LoadConfig(dir string) (*Config, error) {
 	return LoadConfigRaw(dir)
 }
 
-// LoadConfigRaw reads and parses image.yml without merging deploy.yml overrides.
+// LoadConfigRaw is an alias retained for call sites that previously
+// distinguished raw-vs-merged loads. Both forms now read overthink.yml via
+// LoadUnified and return the Images projection.
 func LoadConfigRaw(dir string) (*Config, error) {
-	path := filepath.Join(dir, "image.yml")
-	data, err := os.ReadFile(path)
+	uf, present, err := LoadUnified(dir)
 	if err != nil {
-		return nil, fmt.Errorf("reading image.yml: %w", err)
+		return nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing image.yml: %w", err)
+	if !present {
+		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified` to convert legacy image.yml/build.yml/deploy.yml)", dir)
 	}
-
-	return &cfg, nil
+	return uf.ProjectConfig(), nil
 }
 
 // ResolveImage resolves a single image's configuration by applying defaults
@@ -511,22 +497,18 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		resolved.FullTag = fmt.Sprintf("%s:%s", name, resolved.Tag)
 	}
 
-	// Resolve build config (per-image → defaults)
-	// Only load if format_config ref exists (build mode). Runtime mode skips this.
-	if img.FormatConfig != "" || c.Defaults.FormatConfig != "" {
-		distroCfg, builderCfg, initCfg, err := LoadBuildConfigForImage(
-			img.FormatConfig, c.Defaults.FormatConfig, dir,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("image %s: %w", name, err)
-		}
-		resolved.DistroConfig = distroCfg
-		resolved.BuilderConfig = builderCfg
-		resolved.InitConfig = initCfg
-		// Cache resolved distro definition for quick access to formats
-		if distroCfg != nil {
-			resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
-		}
+	// Resolve build config from overthink.yml. Unconditional — caller must
+	// supply a project dir containing overthink.yml. Tests that need
+	// in-memory-only resolution use testProjectDir(t).
+	distroCfg, builderCfg, initCfg, err := LoadBuildConfigForImage(dir)
+	if err != nil {
+		return nil, fmt.Errorf("image %s: %w", name, err)
+	}
+	resolved.DistroConfig = distroCfg
+	resolved.BuilderConfig = builderCfg
+	resolved.InitConfig = initCfg
+	if distroCfg != nil {
+		resolved.DistroDef = distroCfg.ResolveDistro(resolved.Distro)
 	}
 
 	// Reconcile user_policy against the distro's base_user declaration.

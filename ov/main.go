@@ -39,6 +39,7 @@ type CLI struct {
 	Layer    LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
 	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
+	Migrate  MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
 	Record   RecordCmd       `cmd:"" help:"Record terminal sessions or desktop video"`
 	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
@@ -89,10 +90,10 @@ func (c *ValidateCmd) Run() error {
 		return err
 	}
 
-	// Load default build config for SetFormatNames + init detection before layer scanning
+	// Load default build config for SetFormatNames + init detection before layer scanning.
 	var defaultInitCfg *InitConfig
-	if cfg.Defaults.FormatConfig != "" {
-		distroCfg, _, initCfg, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
+	{
+		distroCfg, _, initCfg, err := LoadDefaultBuildConfig(dir)
 		if err != nil {
 			return fmt.Errorf("loading default build config: %w", err)
 		}

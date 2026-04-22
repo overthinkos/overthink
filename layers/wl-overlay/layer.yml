@@ -1,27 +1,30 @@
-description: Wayland overlay windows via gtk4-layer-shell (for screen recordings)
+layer:
+  name: wl-overlay
+  description: Wayland overlay windows via gtk4-layer-shell (for screen recordings)
 
-depends:
-  - dbus
+  depends:
+    - dbus
 
-rpm:
-  packages:
-    - gtk4
-    - gtk4-layer-shell
-    - python3-gobject
+  rpm:
+    packages:
+      - gtk4
+      - gtk4-layer-shell
+      - python3-gobject
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: ov-overlay
-    to: "${HOME}/.local/bin/ov-overlay"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: ov-overlay
+      to: "${HOME}/.local/bin/ov-overlay"
+      mode: "0755"
+      user: "${USER}"
 
-tests:
-  - id: ov-overlay-script
-    file: ${HOME}/.local/bin/ov-overlay
-    exists: true
-    mode: "0755"
-  - id: gtk4-layer-shell-installed
-    package: gtk4-layer-shell
-    installed: true
+  tests:
+    - id: ov-overlay-script
+      file: ${HOME}/.local/bin/ov-overlay
+      exists: true
+      mode: "0755"
+    - id: gtk4-layer-shell-installed
+      package: gtk4-layer-shell
+      installed: true
+

@@ -1,5 +1,8 @@
-layers:
-  - pipewire
-  - xdg-portal-gnome
-  - chrome-mutter
-  - mutter-apps
+layer:
+  name: mutter-desktop
+  layers:
+    - pipewire
+    - xdg-portal-gnome
+    - chrome-mutter
+    - mutter-apps
+

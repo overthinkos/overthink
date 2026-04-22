@@ -1,26 +1,29 @@
-depends:
-  - supervisord
+layer:
+  name: testapi
+  depends:
+    - supervisord
 
-ports:
-  - 9090
+  ports:
+    - 9090
 
-route:
-  host: testapi.localhost
-  port: 9090
+  route:
+    host: testapi.localhost
+    port: 9090
 
-tasks:
-  - mkdir: "${HOME}/testapi"
-    user: "${USER}"
-  - copy: app.py
-    to: "${HOME}/testapi/app.py"
-    mode: "0644"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/testapi"
+      user: "${USER}"
+    - copy: app.py
+      to: "${HOME}/testapi/app.py"
+      mode: "0644"
+      user: "${USER}"
 
-services:
-  - name: testapi
-    exec: "/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
-    restart: always
-    working_directory: /home/user/testapi
-    enable: true
-    scope: system
+  service:
+    - name: testapi
+      exec: "/home/user/.pixi/envs/default/bin/uvicorn app:app --host 0.0.0.0 --port 9090"
+      restart: always
+      working_directory: /home/user/testapi
+      enable: true
+      scope: system
+
 

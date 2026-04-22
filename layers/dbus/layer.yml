@@ -1,49 +1,52 @@
-depends:
-  - supervisord
+layer:
+  name: dbus
+  depends:
+    - supervisord
 
-env:
-  DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+  env:
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
 
-rpm:
-  packages:
-    - dbus-daemon
+  rpm:
+    packages:
+      - dbus-daemon
 
-pac:
-  packages:
-    - dbus
+  pac:
+    packages:
+      - dbus
 
-deb:
-  packages:
-    - dbus
+  deb:
+    packages:
+      - dbus
 
 
-tests:
-  - id: dbus-daemon-binary
-    file: /usr/bin/dbus-daemon
-    exists: true
-  - id: dbus-daemon-package
-    package: dbus-daemon
-    package_map:
-      archlinux: dbus
-    installed: true
-  - id: dbus-session-env
-    scope: deploy
-    command: printenv DBUS_SESSION_BUS_ADDRESS
-    exit_status: 0
-    stdout:
-      - contains: "unix:path=/tmp/dbus-session"
-  - id: dbus-service-running
-    scope: deploy
-    service: dbus
-    running: true
+  tests:
+    - id: dbus-daemon-binary
+      file: /usr/bin/dbus-daemon
+      exists: true
+    - id: dbus-daemon-package
+      package: dbus-daemon
+      package_map:
+        archlinux: dbus
+      installed: true
+    - id: dbus-session-env
+      scope: deploy
+      command: printenv DBUS_SESSION_BUS_ADDRESS
+      exit_status: 0
+      stdout:
+        - contains: "unix:path=/tmp/dbus-session"
+    - id: dbus-service-running
+      scope: deploy
+      service: dbus
+      running: true
 
-services:
-  - name: dbus
-    exec: "dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session"
-    env:
-      XDG_RUNTIME_DIR: /tmp
-    restart: always
-    priority: 2
-    enable: true
-    scope: system
+  service:
+    - name: dbus
+      exec: "dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session"
+      env:
+        XDG_RUNTIME_DIR: /tmp
+      restart: always
+      priority: 2
+      enable: true
+      scope: system
+
 

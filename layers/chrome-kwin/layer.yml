@@ -1,5 +1,8 @@
-depends:
-  - kwin
+layer:
+  name: chrome-kwin
+  depends:
+    - kwin
 
-layers:
-  - chrome
+  layers:
+    - chrome
+

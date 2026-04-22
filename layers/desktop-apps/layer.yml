@@ -1,10 +1,13 @@
-rpm:
-  packages:
-    - btop
-    - chromium
-    - cloud-init
-    - cockpit
-    - keepassxc
-    - transmission
-    - vlc
-    - zsh
+layer:
+  name: desktop-apps
+  rpm:
+    packages:
+      - btop
+      - chromium
+      - cloud-init
+      - cockpit
+      - keepassxc
+      - transmission
+      - vlc
+      - zsh
+

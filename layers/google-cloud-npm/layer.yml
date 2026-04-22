@@ -1,11 +1,14 @@
-depends:
-  - google-cloud
-  - nodejs
+layer:
+  name: google-cloud-npm
+  depends:
+    - google-cloud
+    - nodejs
 
-tests:
-  - id: firebase-binary
-    file: ${HOME}/.npm-global/bin/firebase
-    exists: true
-  - id: firebase-version
-    command: ${HOME}/.npm-global/bin/firebase --version
-    exit_status: 0
+  tests:
+    - id: firebase-binary
+      file: ${HOME}/.npm-global/bin/firebase
+      exists: true
+    - id: firebase-version
+      command: ${HOME}/.npm-global/bin/firebase --version
+      exit_status: 0
+

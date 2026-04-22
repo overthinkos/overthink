@@ -1,13 +1,16 @@
-depends:
-  - dbus
-  - niri
-  - pipewire
+layer:
+  name: xdg-portal-niri
+  depends:
+    - dbus
+    - niri
+    - pipewire
 
-env:
-  XDG_CURRENT_DESKTOP: "niri"
+  env:
+    XDG_CURRENT_DESKTOP: "niri"
 
-rpm:
-  packages:
-    - xdg-desktop-portal
-    - xdg-desktop-portal-gtk
-    - xdg-desktop-portal-gnome
+  rpm:
+    packages:
+      - xdg-desktop-portal
+      - xdg-desktop-portal-gtk
+      - xdg-desktop-portal-gnome
+

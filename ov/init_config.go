@@ -28,7 +28,8 @@ type InitDef struct {
 	// Fragment assembly model
 	HeaderFile       string `yaml:"header_file,omitempty"`
 	FragmentDir      string `yaml:"fragment_dir,omitempty"` // subdir under .build/<image>/
-	FragmentTemplate string `yaml:"fragment_template,omitempty"`
+	// FragmentTemplate removed — the unified service: schema uses
+	// ServiceSchema.ServiceTemplate, rendered per-entry via RenderService.
 	RelayTemplate    string `yaml:"relay_template,omitempty"`
 
 	// Containerfile stage
@@ -122,22 +123,36 @@ func (ic *InitConfig) DetectLayerInits(ly *LayerYAML, layerPath string) []string
 }
 
 // detectsInit checks if a layer matches an init system's detection criteria.
+// Schema-driven: iterates the unified service: list + per-entry init routing
+// (IsPackaged → ServiceSchema.SupportsPackaged; custom exec → ServiceSchema.ServiceTemplate).
 func detectsInit(def *InitDef, ly *LayerYAML, layerPath string) bool {
-	// Check layer_fields: does the layer.yml have this field set?
+	if ly == nil {
+		return false
+	}
+	// layer_fields: [service] gates schema-driven detection.
+	participatesInSchema := false
 	for _, field := range def.LayerFields {
-		switch field {
-		case "service":
-			if ly != nil && ly.Service != "" {
-				return true
-			}
-		case "system_services":
-			if ly != nil && len(ly.SystemServices) > 0 {
-				return true
+		if field == "service" {
+			participatesInSchema = true
+			break
+		}
+	}
+	if participatesInSchema {
+		for i := range ly.Service {
+			entry := &ly.Service[i]
+			if entry.IsPackaged() {
+				if def.ServiceSchema != nil && def.ServiceSchema.SupportsPackaged {
+					return true
+				}
+			} else {
+				if def.ServiceSchema != nil && def.ServiceSchema.ServiceTemplate != "" {
+					return true
+				}
 			}
 		}
 	}
 
-	// Check layer_files: does the layer directory contain matching files?
+	// layer_files: glob the layer dir (file_copy model — systemd *.service units).
 	for _, pattern := range def.LayerFiles {
 		matches, _ := filepath.Glob(filepath.Join(layerPath, pattern))
 		if len(matches) > 0 {
@@ -298,26 +313,11 @@ func (def *InitDef) RenderStageFragmentCopy(imageName, fileName string) (string,
 	return RenderTemplate("stage-fragment-copy", def.StageFragmentCopy, ctx)
 }
 
-// RenderFragmentTemplate renders the fragment_template for a layer's service content.
-func (def *InitDef) RenderFragmentTemplate(content, layerName string, index int) (string, error) {
-	if def.FragmentTemplate == "" {
-		return content, nil
-	}
-	ctx := FragmentContext{
-		Content:   content,
-		LayerName: layerName,
-		Index:     index,
-	}
-	result, err := RenderTemplate("fragment", def.FragmentTemplate, ctx)
-	if err != nil {
-		return "", err
-	}
-	// Ensure trailing newline
-	if !strings.HasSuffix(result, "\n") {
-		result += "\n"
-	}
-	return result, nil
-}
+// RenderFragmentTemplate was the legacy path that took raw-INI service
+// content from a layer.yml `service: |STRING|` and re-rendered it via an
+// init-system template. Replaced by RenderService per F3 of the services
+// refactor — each ServiceEntry is rendered via ServiceSchema.ServiceTemplate.
+// Function deleted; fragment_template field removed from InitDef.
 
 // RenderRelayTemplate renders the relay_template for a port relay.
 func (def *InitDef) RenderRelayTemplate(port int, layerName string, index int) (string, error) {

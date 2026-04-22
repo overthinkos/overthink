@@ -74,6 +74,43 @@ type ServiceEntry struct {
 	Scope     string            `yaml:"scope,omitempty"` // system | user; default system
 	Enable    bool              `yaml:"enable,omitempty"`
 	Overrides *ServiceOverrides `yaml:"overrides,omitempty"`
+
+	// --- supervisord/systemd lifecycle directives ---
+
+	// Kind discriminates supervisord [program:X] vs [eventlistener:X].
+	// Default "" == "program". systemd ignores this (renders as Service unit).
+	Kind string `yaml:"kind,omitempty"`
+
+	// Events — supervisord eventlistener trigger list (comma-separated),
+	// e.g. "PROCESS_STATE_FATAL". Required when kind: eventlistener.
+	Events string `yaml:"events,omitempty"`
+
+	// AutoStart is tri-state: nil → template default (true for program,
+	// true for eventlistener); *false → autostart=false; *true → autostart=true.
+	// Use `auto_start: false` for services started manually (e.g., chrome
+	// started by the compositor once Wayland is up).
+	AutoStart *bool `yaml:"auto_start,omitempty"`
+
+	// StartRetries — max (re)start attempts before the program enters FATAL.
+	// Supervisord default is 3. Set explicitly to override.
+	StartRetries int `yaml:"start_retries,omitempty"`
+
+	// StartSecs — seconds the process must stay up to count as "started."
+	// Default 1; longer values are needed for services like Wayland
+	// compositors that take time to reach steady state.
+	StartSecs int `yaml:"start_secs,omitempty"`
+
+	// StopSignal — signal sent on graceful stop. Default TERM; some
+	// programs need INT or HUP. Case-insensitive.
+	StopSignal string `yaml:"stop_signal,omitempty"`
+
+	// ExitCodes — comma-separated "successful" exit codes. Supervisord
+	// default is "0,2". Relevant only when Restart == "no" or "on-failure".
+	ExitCodes string `yaml:"exit_codes,omitempty"`
+
+	// Priority — startup / shutdown order. Lower = earlier to start,
+	// later to stop. Supervisord default 999.
+	Priority int `yaml:"priority,omitempty"`
 }
 
 // ServiceOverrides describes drop-in modifications to a packaged unit.
@@ -126,6 +163,16 @@ type ServiceRenderContext struct {
 	SystemUnitDir    string // e.g. "/etc/systemd/system"
 	UserUnitDir      string // e.g. "/home/user/.config/systemd/user"
 	FragmentDir      string // supervisord fragment directory
+
+	// Lifecycle directives (supervisord + systemd). See ServiceEntry for semantics.
+	Kind         string
+	Events       string
+	AutoStart    *bool
+	StartRetries int
+	StartSecs    int
+	StopSignal   string
+	ExitCodes    string
+	Priority     int
 }
 
 // KeyValue is a deterministic env-var ordering helper.
@@ -186,6 +233,15 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	ctx.Restart = entry.Restart
 	ctx.Stdout = entry.Stdout
 	ctx.StopTimeout = entry.StopTimeout
+	// Lifecycle directives — passed through verbatim to the init-system template.
+	ctx.Kind = entry.Kind
+	ctx.Events = entry.Events
+	ctx.AutoStart = entry.AutoStart
+	ctx.StartRetries = entry.StartRetries
+	ctx.StartSecs = entry.StartSecs
+	ctx.StopSignal = entry.StopSignal
+	ctx.ExitCodes = entry.ExitCodes
+	ctx.Priority = entry.Priority
 
 	if entry.IsPackaged() {
 		if !schema.SupportsPackaged {
@@ -281,6 +337,15 @@ func serviceRenderFuncs() template.FuncMap {
 	return template.FuncMap{
 		"join": func(s []string, sep string) string {
 			return strings.Join(s, sep)
+		},
+		// derefBool dereferences a *bool for template conditionals —
+		// callers check `{{if .AutoStart}}` for "explicitly set" then
+		// `{{derefBool .AutoStart}}` to get the true/false value.
+		"derefBool": func(b *bool) bool {
+			if b == nil {
+				return false
+			}
+			return *b
 		},
 		// systemdRestart maps the abstract `restart:` keyword to
 		// systemd's Restart= policy.

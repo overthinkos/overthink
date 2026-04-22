@@ -1,12 +1,15 @@
-description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
+layer:
+  name: hermes-full
+  description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
 
-layers:
-  - hermes
-  - claude-code
-  - codex
-  - gemini
-  - forgecode
-  - dev-tools
-  - devops-tools
-  - ov
-  - tmux
+  layers:
+    - hermes
+    - claude-code
+    - codex
+    - gemini
+    - forgecode
+    - dev-tools
+    - devops-tools
+    - ov
+    - tmux
+

@@ -1,5 +1,8 @@
-description: SQLite database CLI
+layer:
+  name: sqlite
+  description: SQLite database CLI
 
-rpm:
-  packages:
-    - sqlite
+  rpm:
+    packages:
+      - sqlite
+

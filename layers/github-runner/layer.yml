@@ -1,108 +1,111 @@
-depends:
-  - supervisord
+layer:
+  name: github-runner
+  depends:
+    - supervisord
 
-rpm:
-  packages:
-    - skopeo
-    - jq
-    - libcap
-    - util-linux-script
-    - osbuild-selinux
-    - systemd-container
-    - openssh-clients
-    - cloud-utils-growpart
-    - podman
-    - buildah
-    - golang
-    - git
-    - qemu-user-static-aarch64
+  rpm:
+    packages:
+      - skopeo
+      - jq
+      - libcap
+      - util-linux-script
+      - osbuild-selinux
+      - systemd-container
+      - openssh-clients
+      - cloud-utils-growpart
+      - podman
+      - buildah
+      - golang
+      - git
+      - qemu-user-static-aarch64
 
-volumes:
-  - name: state
-    path: /opt/actions-runner
-  - name: storage
-    path: /var/lib/containers/storage
+  volumes:
+    - name: state
+      path: /opt/actions-runner
+    - name: storage
+      path: /var/lib/containers/storage
 
-security:
-  privileged: true
+  security:
+    privileged: true
 
-env:
-  RUNNER_ALLOW_RUNASROOT: "1"
-  RUNNER_WORK_DIR: "/opt/actions-runner/_work"
-  RUNNER_GROUP: "Default"
-  OV_BUILD_ENGINE: "podman"
-  OV_RUN_ENGINE: "podman"
+  env:
+    RUNNER_ALLOW_RUNASROOT: "1"
+    RUNNER_WORK_DIR: "/opt/actions-runner/_work"
+    RUNNER_GROUP: "Default"
+    OV_BUILD_ENGINE: "podman"
+    OV_RUN_ENGINE: "podman"
 
 
-hooks:
-  post_enable: |
-    : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
-    : "${RUNNER_LABELS:=overthink}"
-    /opt/actions-runner/config.sh --unattended \
-      --url "https://github.com/${RUNNER_ORG}" \
-      --token "${RUNNER_TOKEN}" \
-      --name "${RUNNER_NAME}" \
-      --labels "${RUNNER_LABELS}" \
-      --replace --work _work
-  pre_remove: |
-    /opt/actions-runner/config.sh remove \
-      --token "${RUNNER_TOKEN}"
+  hooks:
+    post_enable: |
+      : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
+      : "${RUNNER_LABELS:=overthink}"
+      /opt/actions-runner/config.sh --unattended \
+        --url "https://github.com/${RUNNER_ORG}" \
+        --token "${RUNNER_TOKEN}" \
+        --name "${RUNNER_NAME}" \
+        --labels "${RUNNER_LABELS}" \
+        --replace --work _work
+    pre_remove: |
+      /opt/actions-runner/config.sh remove \
+        --token "${RUNNER_TOKEN}"
 
-tasks:
-  # GitHub Actions runner binary — pinned to the latest stable tag at build time
-  - cmd: |
-      ARCH=$(uname -m)
-      case "$ARCH" in
-        x86_64) ;;
-        *) echo "Unsupported architecture: $ARCH" >&2; exit 1;;
-      esac
-      VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
-      curl -fsSL "https://github.com/actions/runner/releases/download/v${VERSION}/actions-runner-linux-x64-${VERSION}.tar.gz" -o /tmp/actions-runner.tar.gz
-      mkdir -p /opt/actions-runner
-      tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
-      rm /tmp/actions-runner.tar.gz
-      cd /opt/actions-runner && ./bin/installdependencies.sh || true
-      chmod +x /opt/actions-runner/run.sh /opt/actions-runner/config.sh
-    user: root
+  tasks:
+    # GitHub Actions runner binary — pinned to the latest stable tag at build time
+    - cmd: |
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64) ;;
+          *) echo "Unsupported architecture: $ARCH" >&2; exit 1;;
+        esac
+        VERSION=$(curl -s https://api.github.com/repos/actions/runner/releases/latest | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+        curl -fsSL "https://github.com/actions/runner/releases/download/v${VERSION}/actions-runner-linux-x64-${VERSION}.tar.gz" -o /tmp/actions-runner.tar.gz
+        mkdir -p /opt/actions-runner
+        tar xzf /tmp/actions-runner.tar.gz -C /opt/actions-runner
+        rm /tmp/actions-runner.tar.gz
+        cd /opt/actions-runner && ./bin/installdependencies.sh || true
+        chmod +x /opt/actions-runner/run.sh /opt/actions-runner/config.sh
+      user: root
 
-  # cosign — pinned version
-  - download: "https://github.com/sigstore/cosign/releases/download/v3.0.2/cosign-linux-${ARCH}"
-    extract: none
-    to: /usr/local/bin/cosign
-    mode: "0755"
-    user: root
+    # cosign — pinned version
+    - download: "https://github.com/sigstore/cosign/releases/download/v3.0.2/cosign-linux-${ARCH}"
+      extract: none
+      to: /usr/local/bin/cosign
+      mode: "0755"
+      user: root
 
-  # File capabilities for rootless container support
-  - setcap: /usr/bin/newuidmap
-    caps: "cap_setuid=ep"
-  - setcap: /usr/bin/newgidmap
-    caps: "cap_setgid=ep"
+    # File capabilities for rootless container support
+    - setcap: /usr/bin/newuidmap
+      caps: "cap_setuid=ep"
+    - setcap: /usr/bin/newgidmap
+      caps: "cap_setgid=ep"
 
-  # subuid/subgid for rootless podman inside the runner container
-  - cmd: |
-      echo "root:100000:65536" >> /etc/subuid
-      echo "root:100000:65536" >> /etc/subgid
-    user: root
+    # subuid/subgid for rootless podman inside the runner container
+    - cmd: |
+        echo "root:100000:65536" >> /etc/subuid
+        echo "root:100000:65536" >> /etc/subgid
+      user: root
 
-  # Registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
-  - mkdir: /etc/containers/registries.conf.d
-    user: root
-  - write: /etc/containers/registries.conf.d/ghcr-mirror.conf
-    user: root
-    mode: "0644"
-    content: |
-      [[registry]]
-      prefix = "ghcr.io"
-      location = "ghcr.io"
-      [[registry.mirror]]
-      location = "127.0.0.1:5000"
-      insecure = true
+    # Registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
+    - mkdir: /etc/containers/registries.conf.d
+      user: root
+    - write: /etc/containers/registries.conf.d/ghcr-mirror.conf
+      user: root
+      mode: "0644"
+      content: |
+        [[registry]]
+        prefix = "ghcr.io"
+        location = "ghcr.io"
+        [[registry.mirror]]
+        location = "127.0.0.1:5000"
+        insecure = true
 
-services:
-  - name: github-runner
-    exec: /opt/actions-runner/run.sh
-    restart: always
-    working_directory: /opt/actions-runner
-    enable: true
-    scope: system
+  service:
+    - name: github-runner
+      exec: /opt/actions-runner/run.sh
+      restart: always
+      working_directory: /opt/actions-runner
+      enable: true
+      scope: system
+
 

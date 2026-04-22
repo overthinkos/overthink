@@ -1,11 +1,14 @@
-rpm:
-  packages:
-    - xterm
+layer:
+  name: xterm
+  rpm:
+    packages:
+      - xterm
 
-tests:
-  - id: xterm-binary
-    file: /usr/bin/xterm
-    exists: true
-  - id: xterm-package
-    package: xterm
-    installed: true
+  tests:
+    - id: xterm-binary
+      file: /usr/bin/xterm
+      exists: true
+    - id: xterm-package
+      package: xterm
+      installed: true
+

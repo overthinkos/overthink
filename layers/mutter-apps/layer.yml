@@ -1,40 +1,45 @@
-depends:
-  - mutter
-  - supervisord
+layer:
+  name: mutter-apps
+  depends:
+    - mutter
+    - supervisord
 
-rpm:
-  packages:
-    - gnome-terminal
-    - nautilus
+  rpm:
+    packages:
+      - gnome-terminal
+      - nautilus
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: mutter-app-wrapper
-    to: "${HOME}/.local/bin/mutter-app-wrapper"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: mutter-app-wrapper
+      to: "${HOME}/.local/bin/mutter-app-wrapper"
+      mode: "0755"
+      user: "${USER}"
 
-services:
-  - name: gnome-terminal
-    exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait"
-    env:
-      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
-      WAYLAND_DISPLAY: wayland-0
-      XDG_RUNTIME_DIR: /tmp
-    restart: no
-    priority: 16
-    enable: true
-    scope: system
+  service:
+    - name: gnome-terminal
+      exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait"
+      env:
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+        WAYLAND_DISPLAY: wayland-0
+        XDG_RUNTIME_DIR: /tmp
+      restart: no
+      priority: 16
+      start_secs: 0
+      enable: true
+      scope: system
 
-  - name: nautilus
-    exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus"
-    env:
-      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
-      WAYLAND_DISPLAY: wayland-0
-      XDG_RUNTIME_DIR: /tmp
-    restart: no
-    priority: 16
-    enable: true
-    scope: system
+    - name: nautilus
+      exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus"
+      env:
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+        WAYLAND_DISPLAY: wayland-0
+        XDG_RUNTIME_DIR: /tmp
+      restart: no
+      priority: 16
+      start_secs: 0
+      enable: true
+      scope: system
+
 

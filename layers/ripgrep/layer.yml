@@ -1,5 +1,8 @@
-description: Fast recursive text search (rg)
+layer:
+  name: ripgrep
+  description: Fast recursive text search (rg)
 
-rpm:
-  packages:
-    - ripgrep
+  rpm:
+    packages:
+      - ripgrep
+

@@ -1,41 +1,44 @@
-depends:
-  - supervisord
+layer:
+  name: traefik
+  depends:
+    - supervisord
 
-vars:
-  TRAEFIK_VERSION: v3.4.0
+  vars:
+    TRAEFIK_VERSION: v3.4.0
 
-ports:
-  - 8000
-  - 8080
-  - 443
+  ports:
+    - 8000
+    - 8080
+    - 443
 
-volumes:
-  - name: certs
-    path: "~/.traefik/acme"
+  volumes:
+    - name: certs
+      path: "~/.traefik/acme"
 
-tasks:
-  # Download the traefik binary for the target platform. ${ARCH} is the
-  # BuildKit TARGETARCH value (amd64/arm64) emitted via ENV at the top of
-  # this layer's section; Docker substitutes it in the RUN that emitDownload
-  # produces at build time.
-  - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
-    extract: tar.gz
-    to: /usr/local/bin
-    include: [traefik]
-    user: root
+  tasks:
+    # Download the traefik binary for the target platform. ${ARCH} is the
+    # BuildKit TARGETARCH value (amd64/arm64) emitted via ENV at the top of
+    # this layer's section; Docker substitutes it in the RUN that emitDownload
+    # produces at build time.
+    - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+      extract: tar.gz
+      to: /usr/local/bin
+      include: [traefik]
+      user: root
 
-  - mkdir: /etc/traefik/dynamic
-    user: root
+    - mkdir: /etc/traefik/dynamic
+      user: root
 
-  - copy: traefik.yml
-    to: /etc/traefik/traefik.yml
-    mode: "0644"
-    user: root
+    - copy: traefik.yml
+      to: /etc/traefik/traefik.yml
+      mode: "0644"
+      user: root
 
-services:
-  - name: traefik
-    exec: "/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yml"
-    restart: always
-    enable: true
-    scope: system
+  service:
+    - name: traefik
+      exec: "/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yml"
+      restart: always
+      enable: true
+      scope: system
+
 

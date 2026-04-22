@@ -1,4 +1,7 @@
-description: Playwright browser automation (OpenClaw AI snapshots)
+layer:
+  name: playwright
+  description: Playwright browser automation (OpenClaw AI snapshots)
 
-depends:
-  - nodejs
+  depends:
+    - nodejs
+

@@ -1,11 +1,14 @@
-rpm:
-  packages:
-    - grim
+layer:
+  name: wl-screenshot-grim
+  rpm:
+    packages:
+      - grim
 
-tests:
-  - id: grim-binary
-    file: /usr/bin/grim
-    exists: true
-  - id: grim-package
-    package: grim
-    installed: true
+  tests:
+    - id: grim-binary
+      file: /usr/bin/grim
+      exists: true
+    - id: grim-package
+      package: grim
+      installed: true
+

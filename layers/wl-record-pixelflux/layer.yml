@@ -1,19 +1,22 @@
-description: Desktop video recorder via pixelflux H.264 pipeline
+layer:
+  name: wl-record-pixelflux
+  description: Desktop video recorder via pixelflux H.264 pipeline
 
-depends:
-  - selkies
-  - ffmpeg
+  depends:
+    - selkies
+    - ffmpeg
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: pixelflux-record
-    to: "${HOME}/.local/bin/pixelflux-record"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: pixelflux-record
+      to: "${HOME}/.local/bin/pixelflux-record"
+      mode: "0755"
+      user: "${USER}"
 
-tests:
-  - id: pixelflux-record-script
-    file: ${HOME}/.local/bin/pixelflux-record
-    exists: true
-    mode: "0755"
+  tests:
+    - id: pixelflux-record-script
+      file: ${HOME}/.local/bin/pixelflux-record
+      exists: true
+      mode: "0755"
+

@@ -1,6 +1,9 @@
-depends:
-  - dbus
+layer:
+  name: libnotify
+  depends:
+    - dbus
 
-rpm:
-  packages:
-    - libnotify
+  rpm:
+    packages:
+      - libnotify
+

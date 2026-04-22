@@ -1,6 +1,9 @@
-info: "Unsloth fine-tuning notebook collection"
+layer:
+  name: notebook-finetuning
+  info: "Unsloth fine-tuning notebook collection"
 
-data:
-  - src: data/finetuning
-    volume: workspace
-    dest: finetuning
+  data:
+    - src: data/finetuning
+      volume: workspace
+      dest: finetuning
+

@@ -1,101 +1,105 @@
-env_accepts:
-  - name: SSH_AUTHORIZED_KEYS
-    description: "SSH public key(s) for authorized access (one per line). Set via: ov config <image> --ssh-key auto"
+layer:
+  name: sshd
+  env_accepts:
+    - name: SSH_AUTHORIZED_KEYS
+      description: "SSH public key(s) for authorized access (one per line). Set via: ov config <image> --ssh-key auto"
 
-rpm:
-  packages:
-    - openssh-server
-    - openssh-clients
-    - sudo
+  rpm:
+    packages:
+      - openssh-server
+      - openssh-clients
+      - sudo
 
-pac:
-  packages:
-    - openssh
-    - sudo
+  pac:
+    packages:
+      - openssh
+      - sudo
 
-deb:
-  packages:
-    - openssh-server
-    - openssh-client
-    - sudo
+  deb:
+    packages:
+      - openssh-server
+      - openssh-client
+      - sudo
 
-ports:
-  - tcp:2222
+  ports:
+    - tcp:2222
 
-# Supervisord service (containers)
+  # Supervisord service (containers)
 
-tasks:
-  - copy: sshd-wrapper
-    to: /usr/local/bin/sshd-wrapper
-    mode: "0755"
-    user: root
+  tasks:
+    - copy: sshd-wrapper
+      to: /usr/local/bin/sshd-wrapper
+      mode: "0755"
+      user: root
 
-  # Sudoers file targets the ACTUAL uid-1000 account, not a hardcoded
-  # literal. System-discovery via `getent passwd 1000` works uniformly
-  # across both paths: create mode (Fedora/Arch/plain Debian — the account
-  # is named "user") and adopt mode (Ubuntu — the account is named
-  # "ubuntu" per the base_user declaration in build.yml). Note: we can't
-  # use ${USER} here because the generator doesn't substitute in cmd: body
-  # (per layer-authoring docs) and RUN shells don't have $USER set by
-  # default. getent is the reliable path.
-  - cmd: |
-      account=$(getent passwd 1000 | cut -d: -f1)
-      if [ -z "$account" ]; then
-        echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
-        exit 1
-      fi
-      printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/ov-user
-      chmod 0440 /etc/sudoers.d/ov-user
-    user: root
+    # Sudoers file targets the ACTUAL uid-1000 account, not a hardcoded
+    # literal. System-discovery via `getent passwd 1000` works uniformly
+    # across both paths: create mode (Fedora/Arch/plain Debian — the account
+    # is named "user") and adopt mode (Ubuntu — the account is named
+    # "ubuntu" per the base_user declaration in build.yml). Note: we can't
+    # use ${USER} here because the generator doesn't substitute in cmd: body
+    # (per layer-authoring docs) and RUN shells don't have $USER set by
+    # default. getent is the reliable path.
+    - cmd: |
+        account=$(getent passwd 1000 | cut -d: -f1)
+        if [ -z "$account" ]; then
+          echo "sshd layer: no uid-1000 account found — refusing to write sudoers" >&2
+          exit 1
+        fi
+        printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/ov-user
+        chmod 0440 /etc/sudoers.d/ov-user
+      user: root
 
-# Systemd service (bootc images)
+  # Systemd service (bootc images)
 
-tests:
-  - id: sshd-binary
-    file: /usr/sbin/sshd
-    exists: true
-  - id: sshd-wrapper
-    file: /usr/local/bin/sshd-wrapper
-    exists: true
-    mode: "0755"
-  - id: openssh-server-package
-    package: openssh-server
-    package_map:
-      archlinux: openssh
-      fedora: openssh-server
-      fedora:43: openssh-server
-    installed: true
-  # /etc/sudoers.d/* is root:root 0750 — unreadable to the non-root user the
-  # disposable test runs as. Verify via `sudo -n -l` instead, which exercises
-  # the rule's effect without needing to stat the file directly. Bootc images
-  # keep USER=root (systemd handles user sessions), so drop to `user` first
-  # when running as root so we always probe the uid=1000 sudoers entry.
-  - id: sudoers-ov-user
-    command: |
-      if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
-    exit_status: 0
-    stdout:
-      - contains: "NOPASSWD"
-  - id: sshd-service-running
-    scope: deploy
-    service: sshd
-    running: true
-  - id: sshd-port-reachable
-    scope: deploy
-    addr: 127.0.0.1:${HOST_PORT:2222}
-    reachable: true
-    timeout: 5s
+  tests:
+    - id: sshd-binary
+      file: /usr/sbin/sshd
+      exists: true
+    - id: sshd-wrapper
+      file: /usr/local/bin/sshd-wrapper
+      exists: true
+      mode: "0755"
+    - id: openssh-server-package
+      package: openssh-server
+      package_map:
+        archlinux: openssh
+        fedora: openssh-server
+        fedora:43: openssh-server
+      installed: true
+    # /etc/sudoers.d/* is root:root 0750 — unreadable to the non-root user the
+    # disposable test runs as. Verify via `sudo -n -l` instead, which exercises
+    # the rule's effect without needing to stat the file directly. Bootc images
+    # keep USER=root (systemd handles user sessions), so drop to `user` first
+    # when running as root so we always probe the uid=1000 sudoers entry.
+    - id: sudoers-ov-user
+      command: |
+        if [ "$(id -u)" = "0" ]; then runuser -u user -- sudo -n -l; else sudo -n -l; fi
+      exit_status: 0
+      stdout:
+        - contains: "NOPASSWD"
+    - id: sshd-service-running
+      scope: deploy
+      service: sshd
+      running: true
+    - id: sshd-port-reachable
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:2222}
+      reachable: true
+      timeout: 5s
 
-services:
-  - name: sshd
-    use_packaged: sshd.service
-    enable: true
-    scope: system
+  service:
+    - name: sshd
+      use_packaged: sshd.service
+      enable: true
+      scope: system
 
-  - name: sshd
-    exec: /usr/local/bin/sshd-wrapper
-    restart: always
-    priority: 3
-    enable: true
-    scope: system
+    - name: sshd
+      exec: /usr/local/bin/sshd-wrapper
+      restart: always
+      priority: 3
+      start_secs: 1
+      enable: true
+      scope: system
+
 

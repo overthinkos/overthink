@@ -1,145 +1,148 @@
-env:
-  CCACHE_DISABLE: "1"
+layer:
+  name: build-toolchain
+  env:
+    CCACHE_DISABLE: "1"
 
-rpm:
-  packages:
-    - autoconf
-    - automake
-    - binutils
-    - bison
-    - cargo
-    - ccache
-    - clang-devel          # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
-    - cli11-devel
-    - cmake
-    - ffmpeg-devel         # ffmpeg-sys-next (RPM Fusion free)
-    - flex
-    - gcc
-    - gcc-c++
-    - gdb
-    - git
-    - glibc-devel
-    - libdrm-devel         # gbm / drm transitive
-    - libinput-devel       # smithay backend_libinput
-    - libjpeg-turbo-devel  # turbojpeg-sys (system path)
-    - libseat-devel        # smithay session handling
-    - libtool
-    - libudev-devel        # smithay backend_udev
-    - libva-devel          # libva-sys (VA-API)
-    - libxkbcommon-devel   # keyboard backend
-    - make
-    - mesa-libgbm-devel    # smithay backend_gbm
-    - nasm                 # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
-    - ninja-build
-    - patch                # for source patching in cargo/pip build stages
-    - pixman-devel         # smithay renderer_pixman feature
-    - pkgconf
-    - pkgconf-m4
-    - pkgconf-pkg-config
-    - redhat-rpm-config
-    - rpm-build
-    - rpm-sign
-    - rust                 # rustc + cargo for setuptools-rust (pixelflux_wayland)
-    - systemd-devel        # smithay backend_udev via libudev
-    - wayland-devel        # smithay wayland_frontend / backend_* features
-    - x264-devel           # x264-sys (RPM Fusion free)
+  rpm:
+    packages:
+      - autoconf
+      - automake
+      - binutils
+      - bison
+      - cargo
+      - ccache
+      - clang-devel          # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
+      - cli11-devel
+      - cmake
+      - ffmpeg-devel         # ffmpeg-sys-next (RPM Fusion free)
+      - flex
+      - gcc
+      - gcc-c++
+      - gdb
+      - git
+      - glibc-devel
+      - libdrm-devel         # gbm / drm transitive
+      - libinput-devel       # smithay backend_libinput
+      - libjpeg-turbo-devel  # turbojpeg-sys (system path)
+      - libseat-devel        # smithay session handling
+      - libtool
+      - libudev-devel        # smithay backend_udev
+      - libva-devel          # libva-sys (VA-API)
+      - libxkbcommon-devel   # keyboard backend
+      - make
+      - mesa-libgbm-devel    # smithay backend_gbm
+      - nasm                 # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
+      - ninja-build
+      - patch                # for source patching in cargo/pip build stages
+      - pixman-devel         # smithay renderer_pixman feature
+      - pkgconf
+      - pkgconf-m4
+      - pkgconf-pkg-config
+      - redhat-rpm-config
+      - rpm-build
+      - rpm-sign
+      - rust                 # rustc + cargo for setuptools-rust (pixelflux_wayland)
+      - systemd-devel        # smithay backend_udev via libudev
+      - wayland-devel        # smithay wayland_frontend / backend_* features
+      - x264-devel           # x264-sys (RPM Fusion free)
 
-pac:
-  packages:
-    - autoconf
-    - automake
-    - binutils
-    - bison
-    - ccache
-    - clang             # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
-    - cmake
-    - ffmpeg            # provides ffmpeg + dev headers (Arch doesn't split -devel)
-    - flex
-    - gcc
-    - gdb
-    - git
-    - glibc
-    - libdrm            # gbm / drm transitive
-    - libinput          # smithay backend_libinput
-    - libjpeg-turbo     # turbojpeg-sys (headers bundled on Arch)
-    - seatd             # smithay session handling (Arch ships libseat inside seatd)
-    - libtool
-    - libva             # libva-sys (VA-API)
-    - libxkbcommon      # keyboard backend
-    - make
-    - mesa              # smithay backend_gbm (provides libgbm)
-    - nasm              # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
-    - ninja
-    - patch             # for source patching in cargo/pip build stages
-    - pixman            # smithay renderer_pixman feature
-    - pkgconf
-    - rust              # rustc + cargo for setuptools-rust (pixelflux_wayland)
-    - systemd           # smithay backend_udev via libudev
-    - wayland           # smithay wayland_frontend / backend_* features
-    - x264              # x264-sys
+  pac:
+    packages:
+      - autoconf
+      - automake
+      - binutils
+      - bison
+      - ccache
+      - clang             # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
+      - cmake
+      - ffmpeg            # provides ffmpeg + dev headers (Arch doesn't split -devel)
+      - flex
+      - gcc
+      - gdb
+      - git
+      - glibc
+      - libdrm            # gbm / drm transitive
+      - libinput          # smithay backend_libinput
+      - libjpeg-turbo     # turbojpeg-sys (headers bundled on Arch)
+      - seatd             # smithay session handling (Arch ships libseat inside seatd)
+      - libtool
+      - libva             # libva-sys (VA-API)
+      - libxkbcommon      # keyboard backend
+      - make
+      - mesa              # smithay backend_gbm (provides libgbm)
+      - nasm              # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
+      - ninja
+      - patch             # for source patching in cargo/pip build stages
+      - pixman            # smithay renderer_pixman feature
+      - pkgconf
+      - rust              # rustc + cargo for setuptools-rust (pixelflux_wayland)
+      - systemd           # smithay backend_udev via libudev
+      - wayland           # smithay wayland_frontend / backend_* features
+      - x264              # x264-sys
 
-# Debian / Ubuntu equivalents. Naming conventions:
-#   *-devel (Fedora) → lib*-dev / *-dev (Debian)
-#   build-essential bundles gcc/g++/make/libc6-dev (Debian meta-package)
-#   ffmpeg-devel is split across libav{codec,format,util,swscale}-dev on Debian
-#   ninja-build is Debian's package name for ninja
-# Drops (RPM-specific or unpackaged): redhat-rpm-config, rpm-build, rpm-sign,
-# pkgconf-m4, pkgconf-pkg-config (absorbed into pkg-config), cli11-devel
-# (header-only; install via cmake FetchContent if actually needed).
-deb:
-  packages:
-    - autoconf
-    - automake
-    - binutils
-    - bison
-    - build-essential
-    - cargo
-    - ccache
-    - clang
-    - cmake
-    - flex
-    - gdb
-    - git
-    - libavcodec-dev
-    - libavformat-dev
-    - libavutil-dev
-    - libclang-dev
-    - libdrm-dev
-    - libgbm-dev
-    - libinput-dev
-    - libturbojpeg0-dev
-    - libpixman-1-dev
-    - libseat-dev
-    - libsystemd-dev
-    - libswscale-dev
-    - libtool
-    - libudev-dev
-    - libva-dev
-    - libwayland-dev
-    - libx264-dev
-    - libxkbcommon-dev
-    - nasm
-    - ninja-build
-    - patch
-    - pkg-config
-    - rustc
+  # Debian / Ubuntu equivalents. Naming conventions:
+  #   *-devel (Fedora) → lib*-dev / *-dev (Debian)
+  #   build-essential bundles gcc/g++/make/libc6-dev (Debian meta-package)
+  #   ffmpeg-devel is split across libav{codec,format,util,swscale}-dev on Debian
+  #   ninja-build is Debian's package name for ninja
+  # Drops (RPM-specific or unpackaged): redhat-rpm-config, rpm-build, rpm-sign,
+  # pkgconf-m4, pkgconf-pkg-config (absorbed into pkg-config), cli11-devel
+  # (header-only; install via cmake FetchContent if actually needed).
+  deb:
+    packages:
+      - autoconf
+      - automake
+      - binutils
+      - bison
+      - build-essential
+      - cargo
+      - ccache
+      - clang
+      - cmake
+      - flex
+      - gdb
+      - git
+      - libavcodec-dev
+      - libavformat-dev
+      - libavutil-dev
+      - libclang-dev
+      - libdrm-dev
+      - libgbm-dev
+      - libinput-dev
+      - libturbojpeg0-dev
+      - libpixman-1-dev
+      - libseat-dev
+      - libsystemd-dev
+      - libswscale-dev
+      - libtool
+      - libudev-dev
+      - libva-dev
+      - libwayland-dev
+      - libx264-dev
+      - libxkbcommon-dev
+      - nasm
+      - ninja-build
+      - patch
+      - pkg-config
+      - rustc
 
-tests:
-  - id: gcc-binary
-    file: /usr/bin/gcc
-    exists: true
-  - id: gcc-version
-    command: /usr/bin/gcc --version
-    exit_status: 0
-  - id: make-binary
-    file: /usr/bin/make
-    exists: true
-  - id: make-version
-    command: /usr/bin/make --version
-    exit_status: 0
-  - id: cmake-binary
-    file: /usr/bin/cmake
-    exists: true
-  - id: cmake-version
-    command: /usr/bin/cmake --version
-    exit_status: 0
+  tests:
+    - id: gcc-binary
+      file: /usr/bin/gcc
+      exists: true
+    - id: gcc-version
+      command: /usr/bin/gcc --version
+      exit_status: 0
+    - id: make-binary
+      file: /usr/bin/make
+      exists: true
+    - id: make-version
+      command: /usr/bin/make --version
+      exit_status: 0
+    - id: cmake-binary
+      file: /usr/bin/cmake
+      exists: true
+    - id: cmake-version
+      command: /usr/bin/cmake --version
+      exit_status: 0
+

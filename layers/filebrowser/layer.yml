@@ -1,69 +1,72 @@
-depends:
-  - supervisord
+layer:
+  name: filebrowser
+  depends:
+    - supervisord
 
-env:
-  FILEBROWSER_CONFIG: "/etc/filebrowser/config.yaml"
+  env:
+    FILEBROWSER_CONFIG: "/etc/filebrowser/config.yaml"
 
-ports:
-  - 8080
+  ports:
+    - 8080
 
-volumes:
-  - name: data
-    path: "~/.filebrowser/data"
-  - name: files
-    path: "~/.filebrowser/files"
+  volumes:
+    - name: data
+      path: "~/.filebrowser/data"
+    - name: files
+      path: "~/.filebrowser/files"
 
-aliases:
-  - name: filebrowser
-    command: filebrowser
+  aliases:
+    - name: filebrowser
+      command: filebrowser
 
-vars:
-  FILEBROWSER_VERSION: v1.2.4-stable
+  vars:
+    FILEBROWSER_VERSION: v1.2.4-stable
 
-tasks:
-  - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
-    extract: none
-    to: /usr/local/bin/filebrowser
-    mode: "0755"
-    user: root
+  tasks:
+    - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
+      extract: none
+      to: /usr/local/bin/filebrowser
+      mode: "0755"
+      user: root
 
-  - mkdir: /etc/filebrowser
-    user: root
-  - copy: config.yaml
-    to: /etc/filebrowser/config.yaml
-    mode: "0644"
-    user: root
+    - mkdir: /etc/filebrowser
+      user: root
+    - copy: config.yaml
+      to: /etc/filebrowser/config.yaml
+      mode: "0644"
+      user: root
 
 
-tests:
-  - id: filebrowser-binary
-    file: /usr/local/bin/filebrowser
-    exists: true
-    mode: "0755"
-  - id: filebrowser-config
-    file: /etc/filebrowser/config.yaml
-    exists: true
-  - id: filebrowser-service
-    scope: deploy
-    service: filebrowser
-    running: true
-  - id: filebrowser-port
-    scope: deploy
-    addr: 127.0.0.1:${HOST_PORT:8080}
-    reachable: true
-    timeout: 5s
-  - id: filebrowser-http
-    scope: deploy
-    http: http://127.0.0.1:${HOST_PORT:8080}/
-    status: 200
-    timeout: 5s
+  tests:
+    - id: filebrowser-binary
+      file: /usr/local/bin/filebrowser
+      exists: true
+      mode: "0755"
+    - id: filebrowser-config
+      file: /etc/filebrowser/config.yaml
+      exists: true
+    - id: filebrowser-service
+      scope: deploy
+      service: filebrowser
+      running: true
+    - id: filebrowser-port
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:8080}
+      reachable: true
+      timeout: 5s
+    - id: filebrowser-http
+      scope: deploy
+      http: http://127.0.0.1:${HOST_PORT:8080}/
+      status: 200
+      timeout: 5s
 
-services:
-  - name: filebrowser
-    exec: /usr/local/bin/filebrowser
-    env:
-      FILEBROWSER_CONFIG: /etc/filebrowser/config.yaml
-    restart: always
-    enable: true
-    scope: system
+  service:
+    - name: filebrowser
+      exec: /usr/local/bin/filebrowser
+      env:
+        FILEBROWSER_CONFIG: /etc/filebrowser/config.yaml
+      restart: always
+      enable: true
+      scope: system
+
 

@@ -1,13 +1,16 @@
-env:
-  ROCM_PATH: "/usr"
+layer:
+  name: rocm
+  env:
+    ROCM_PATH: "/usr"
 
-security:
-  group_add:
-    - keep-groups
+  security:
+    group_add:
+      - keep-groups
 
-rpm:
-  packages:
-    - rocm-hip-runtime
-    - rocm-opencl
-    - rocm-clinfo
-    - rocm-smi
+  rpm:
+    packages:
+      - rocm-hip-runtime
+      - rocm-opencl
+      - rocm-clinfo
+      - rocm-smi
+

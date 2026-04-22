@@ -1,18 +1,21 @@
-depends:
-  - sway
+layer:
+  name: chrome-sway
+  depends:
+    - sway
 
-layers:
-  - chrome
+  layers:
+    - chrome
 
-tasks:
-  - mkdir: "${HOME}/.config/sway/config.d"
-    user: "${USER}"
-  - copy: chrome-sway.conf
-    to: "${HOME}/.config/sway/config.d/chrome-sway.conf"
-    mode: "0644"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.config/sway/config.d"
+      user: "${USER}"
+    - copy: chrome-sway.conf
+      to: "${HOME}/.config/sway/config.d/chrome-sway.conf"
+      mode: "0644"
+      user: "${USER}"
 
-tests:
-  - id: chrome-sway-config
-    file: ${HOME}/.config/sway/config.d/chrome-sway.conf
-    exists: true
+  tests:
+    - id: chrome-sway-config
+      file: ${HOME}/.config/sway/config.d/chrome-sway.conf
+      exists: true
+

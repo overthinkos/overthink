@@ -1,4 +1,7 @@
-description: Summarize CLI for extracting text/transcripts from URLs and files
+layer:
+  name: summarize
+  description: Summarize CLI for extracting text/transcripts from URLs and files
 
-depends:
-  - nodejs
+  depends:
+    - nodejs
+

@@ -1,16 +1,19 @@
-depends:
-  - selkies
+layer:
+  name: wl-screenshot-pixelflux
+  depends:
+    - selkies
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: pixelflux-screenshot
-    to: "${HOME}/.local/bin/pixelflux-screenshot"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: pixelflux-screenshot
+      to: "${HOME}/.local/bin/pixelflux-screenshot"
+      mode: "0755"
+      user: "${USER}"
 
-tests:
-  - id: pixelflux-screenshot-script
-    file: ${HOME}/.local/bin/pixelflux-screenshot
-    exists: true
-    mode: "0755"
+  tests:
+    - id: pixelflux-screenshot-script
+      file: ${HOME}/.local/bin/pixelflux-screenshot
+      exists: true
+      mode: "0755"
+

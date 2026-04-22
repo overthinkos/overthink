@@ -1,27 +1,31 @@
-depends:
-  - mutter
-  - supervisord
+layer:
+  name: chrome-mutter
+  depends:
+    - mutter
+    - supervisord
 
-layers:
-  - chrome
+  layers:
+    - chrome
 
-tasks:
-  - mkdir: "${HOME}/.local/bin"
-    user: "${USER}"
-  - copy: chrome-mutter-wrapper
-    to: "${HOME}/.local/bin/chrome-mutter-wrapper"
-    mode: "0755"
-    user: "${USER}"
+  tasks:
+    - mkdir: "${HOME}/.local/bin"
+      user: "${USER}"
+    - copy: chrome-mutter-wrapper
+      to: "${HOME}/.local/bin/chrome-mutter-wrapper"
+      mode: "0755"
+      user: "${USER}"
 
-services:
-  - name: chrome
-    exec: "%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper"
-    env:
-      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
-      WAYLAND_DISPLAY: wayland-0
-      XDG_RUNTIME_DIR: /tmp
-    restart: no
-    priority: 15
-    enable: true
-    scope: system
+  service:
+    - name: chrome
+      exec: "%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper"
+      env:
+        DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
+        WAYLAND_DISPLAY: wayland-0
+        XDG_RUNTIME_DIR: /tmp
+      restart: no
+      priority: 15
+      start_secs: 0
+      enable: true
+      scope: system
+
 

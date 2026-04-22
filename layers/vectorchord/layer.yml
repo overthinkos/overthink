@@ -1,75 +1,78 @@
-depends:
-  - postgresql
+layer:
+  name: vectorchord
+  depends:
+    - postgresql
 
-rpm:
-  packages:
-    - unzip
+  rpm:
+    packages:
+      - unzip
 
-env:
-  VECTORCHORD_VERSION: "1.1.1"
-  POSTGRES_SHARED_PRELOAD_LIBRARIES: "vchord.so"
+  env:
+    VECTORCHORD_VERSION: "1.1.1"
+    POSTGRES_SHARED_PRELOAD_LIBRARIES: "vchord.so"
 
-vars:
-  # Also expose the version as a task-context var so the URL template below
-  # reads naturally. Keep in sync with env.VECTORCHORD_VERSION above — this
-  # duplication is unfortunate but separates build-time (vars:) from
-  # runtime (env:). A future enhancement could unify them.
-  VCHORD_VERSION: "1.1.1"
+  vars:
+    # Also expose the version as a task-context var so the URL template below
+    # reads naturally. Keep in sync with env.VECTORCHORD_VERSION above — this
+    # duplication is unfortunate but separates build-time (vars:) from
+    # runtime (env:). A future enhancement could unify them.
+    VCHORD_VERSION: "1.1.1"
 
-tasks:
-  # VectorChord ships per-PostgreSQL-major zipped builds. We detect the
-  # installed Postgres major + extension dirs dynamically because the parent
-  # postgresql layer doesn't pin a fixed version and Fedora's pkglibdir path
-  # is arch-dependent (/usr/lib64/pgsql on x86_64/aarch64, different on 32-bit).
-  - cmd: |
-      PG_MAJOR=$(postgres --version | awk '{print $NF}' | cut -d. -f1)
-      PKGLIBDIR=$(dirname "$(find /usr/lib*/pgsql -name plpgsql.so -print -quit 2>/dev/null)")
-      SHAREDIR=/usr/share/pgsql
+  tasks:
+    # VectorChord ships per-PostgreSQL-major zipped builds. We detect the
+    # installed Postgres major + extension dirs dynamically because the parent
+    # postgresql layer doesn't pin a fixed version and Fedora's pkglibdir path
+    # is arch-dependent (/usr/lib64/pgsql on x86_64/aarch64, different on 32-bit).
+    - cmd: |
+        PG_MAJOR=$(postgres --version | awk '{print $NF}' | cut -d. -f1)
+        PKGLIBDIR=$(dirname "$(find /usr/lib*/pgsql -name plpgsql.so -print -quit 2>/dev/null)")
+        SHAREDIR=/usr/share/pgsql
 
-      if [ -z "$PKGLIBDIR" ] || [ ! -d "$PKGLIBDIR" ]; then
-          echo "Error: Could not detect PostgreSQL pkglibdir (plpgsql.so not found)" >&2
-          exit 1
-      fi
-      if [ ! -d "$SHAREDIR/extension" ]; then
-          echo "Error: PostgreSQL sharedir not found at $SHAREDIR/extension" >&2
-          exit 1
-      fi
+        if [ -z "$PKGLIBDIR" ] || [ ! -d "$PKGLIBDIR" ]; then
+            echo "Error: Could not detect PostgreSQL pkglibdir (plpgsql.so not found)" >&2
+            exit 1
+        fi
+        if [ ! -d "$SHAREDIR/extension" ]; then
+            echo "Error: PostgreSQL sharedir not found at $SHAREDIR/extension" >&2
+            exit 1
+        fi
 
-      echo "Detected PostgreSQL ${PG_MAJOR}: pkglibdir=${PKGLIBDIR}, sharedir=${SHAREDIR}"
+        echo "Detected PostgreSQL ${PG_MAJOR}: pkglibdir=${PKGLIBDIR}, sharedir=${SHAREDIR}"
 
-      VCHORD_URL="https://github.com/tensorchord/VectorChord/releases/download/${VCHORD_VERSION}/postgresql-${PG_MAJOR}-vchord_${VCHORD_VERSION}_${BUILD_ARCH}-linux-gnu.zip"
-      echo "Downloading VectorChord ${VCHORD_VERSION} for PostgreSQL ${PG_MAJOR} (${BUILD_ARCH})..."
-      curl -fsSL "$VCHORD_URL" -o /tmp/vchord.zip
+        VCHORD_URL="https://github.com/tensorchord/VectorChord/releases/download/${VCHORD_VERSION}/postgresql-${PG_MAJOR}-vchord_${VCHORD_VERSION}_${BUILD_ARCH}-linux-gnu.zip"
+        echo "Downloading VectorChord ${VCHORD_VERSION} for PostgreSQL ${PG_MAJOR} (${BUILD_ARCH})..."
+        curl -fsSL "$VCHORD_URL" -o /tmp/vchord.zip
 
-      cd /tmp
-      unzip -q vchord.zip
+        cd /tmp
+        unzip -q vchord.zip
 
-      cp /tmp/pkglibdir/vchord.so "$PKGLIBDIR/"
-      chmod 755 "$PKGLIBDIR/vchord.so"
+        cp /tmp/pkglibdir/vchord.so "$PKGLIBDIR/"
+        chmod 755 "$PKGLIBDIR/vchord.so"
 
-      cp /tmp/sharedir/extension/vchord.control "$SHAREDIR/extension/"
-      cp /tmp/sharedir/extension/vchord--*.sql "$SHAREDIR/extension/"
+        cp /tmp/sharedir/extension/vchord.control "$SHAREDIR/extension/"
+        cp /tmp/sharedir/extension/vchord--*.sql "$SHAREDIR/extension/"
 
-      rm -rf /tmp/vchord.zip /tmp/pkglibdir /tmp/sharedir
+        rm -rf /tmp/vchord.zip /tmp/pkglibdir /tmp/sharedir
 
-      echo "VectorChord ${VCHORD_VERSION} installed:"
-      ls -la "$PKGLIBDIR/vchord.so"
-      ls "$SHAREDIR/extension/vchord.control"
-    user: root
+        echo "VectorChord ${VCHORD_VERSION} installed:"
+        ls -la "$PKGLIBDIR/vchord.so"
+        ls "$SHAREDIR/extension/vchord.control"
+      user: root
 
-tests:
-  - id: vchord-control-file
-    file: /usr/share/pgsql/extension/vchord.control
-    exists: true
-  - id: vchord-shared-preload-env
-    scope: deploy
-    command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES
-    exit_status: 0
-    stdout:
-      - contains: "vchord.so"
-  # No deploy-scope psql probe — the superuser name depends on the
-  # POSTGRES_USER env var, and ov's ${VAR} resolver can't pick up arbitrary
-  # container-env vars. Presence of vchord.control + the shared_preload_libraries
-  # env var are together sufficient to prove the extension is installed and
-  # registered. A functional "CREATE EXTENSION vchord" probe lives in the
-  # image-level supervisorctl status check (immich-db-init runs it).
+  tests:
+    - id: vchord-control-file
+      file: /usr/share/pgsql/extension/vchord.control
+      exists: true
+    - id: vchord-shared-preload-env
+      scope: deploy
+      command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES
+      exit_status: 0
+      stdout:
+        - contains: "vchord.so"
+    # No deploy-scope psql probe — the superuser name depends on the
+    # POSTGRES_USER env var, and ov's ${VAR} resolver can't pick up arbitrary
+    # container-env vars. Presence of vchord.control + the shared_preload_libraries
+    # env var are together sufficient to prove the extension is installed and
+    # registered. A functional "CREATE EXTENSION vchord" probe lives in the
+    # image-level supervisorctl status check (immich-db-init runs it).
+

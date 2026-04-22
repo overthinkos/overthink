@@ -1,21 +1,24 @@
-description: Go programming language compiler
+layer:
+  name: golang
+  description: Go programming language compiler
 
-rpm:
-  packages:
-    - golang-bin
+  rpm:
+    packages:
+      - golang-bin
 
-pac:
-  packages:
-    - go
+  pac:
+    packages:
+      - go
 
-deb:
-  packages:
-    - golang-go
+  deb:
+    packages:
+      - golang-go
 
-tests:
-  - id: go-binary
-    file: /usr/bin/go
-    exists: true
-  - id: go-version
-    command: /usr/bin/go version
-    exit_status: 0
+  tests:
+    - id: go-binary
+      file: /usr/bin/go
+      exists: true
+    - id: go-version
+      command: /usr/bin/go version
+      exit_status: 0
+

@@ -1,7 +1,10 @@
-depends:
-  - xorg-headless
+layer:
+  name: x11-apps
+  depends:
+    - xorg-headless
 
-rpm:
-  packages:
-    - xfce4-terminal
-    - thunar
+  rpm:
+    packages:
+      - xfce4-terminal
+      - thunar
+

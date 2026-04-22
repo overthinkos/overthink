@@ -117,11 +117,9 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		return nil, err
 	}
 
-	// Load default build config early — needed for SetFormatNames before layer scanning
-	if cfg.Defaults.FormatConfig == "" {
-		return nil, fmt.Errorf("defaults.format_config is required in image.yml")
-	}
-	defaultDistroCfg, _, defaultInitCfg, err := LoadDefaultBuildConfig(cfg.Defaults.FormatConfig, dir)
+	// Load default build config early — needed for SetFormatNames before layer scanning.
+	// Post-unified-cutover this reads overthink.yml directly (no format_config: pointer).
+	defaultDistroCfg, _, defaultInitCfg, err := LoadDefaultBuildConfig(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading default build config: %w", err)
 	}
@@ -582,11 +580,18 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			}
 		}
 
-		// System-level service enablement (e.g., systemctl enable sshd)
+		// System-level service enablement (e.g., systemctl enable sshd).
+		// Collect every use_packaged: entry across the layer chain — these
+		// are the distro-shipped systemd units the init system must enable.
 		var systemUnits []string
 		for _, layerName := range layerOrder {
 			layer := g.Layers[layerName]
-			systemUnits = append(systemUnits, layer.SystemServiceUnits()...)
+			for i := range layer.Service() {
+				entry := &layer.Service()[i]
+				if entry.IsPackaged() && entry.EffectiveScope() == "system" {
+					systemUnits = append(systemUnits, entry.UsePackaged)
+				}
+			}
 		}
 		sysEnable, err := def.RenderSystemEnableTemplate(systemUnits)
 		if err != nil {
@@ -1013,8 +1018,11 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	return os.WriteFile(filepath.Join(imageDir, "traefik-routes.yml"), []byte(b.String()), 0644)
 }
 
-// generateInitFragments writes init system config fragments to .build/<image>/<fragmentDir>/
-// Handles both fragment_assembly (supervisord) and file_copy (systemd) models.
+// generateInitFragments writes init system config fragments to
+// .build/<image>/<fragmentDir>/. Schema-driven: iterates each layer's
+// service: list and renders every entry that binds to this init via
+// per-entry routing (use_packaged → systemd; custom exec → any init with
+// a service_template). No legacy raw-INI path.
 func (g *Generator) generateInitFragments(imageName, initName string, def *InitDef, layerOrder []string) error {
 	fragDir := filepath.Join(g.BuildDir, imageName, def.FragmentDir)
 	if err := os.MkdirAll(fragDir, 0755); err != nil {
@@ -1023,27 +1031,79 @@ func (g *Generator) generateInitFragments(imageName, initName string, def *InitD
 
 	for i, layerName := range layerOrder {
 		layer := g.Layers[layerName]
+		idx := i + 1
 
-		// Fragment assembly model: render service content via template
-		if def.Model == "fragment_assembly" && layer.HasInit(initName) {
-			content, err := def.RenderFragmentTemplate(layer.ServiceConf(), layerName, i+1)
-			if err != nil {
-				return fmt.Errorf("rendering fragment for %s/%s: %w", initName, layerName, err)
+		if def.Model == "fragment_assembly" {
+			// Concatenate every service entry in this layer that binds to this init
+			// into ONE fragment file per layer, matching the Containerfile's
+			// stage_fragment_copy naming convention (NN-<layer>.conf).
+			var layerBuf strings.Builder
+			for j := range layer.Service() {
+				entry := &layer.Service()[j]
+				// Per-entry routing: only render entries this init can handle.
+				if entry.IsPackaged() {
+					if def.ServiceSchema == nil || !def.ServiceSchema.SupportsPackaged {
+						continue
+					}
+				} else {
+					if def.ServiceSchema == nil || def.ServiceSchema.ServiceTemplate == "" {
+						continue
+					}
+				}
+				ctx := ServiceRenderContext{
+					Name:             entry.Name,
+					Layer:            layerName,
+					Exec:             entry.Exec,
+					Env:              entry.Env,
+					EnvList:          mapToKeyValueSlice(entry.Env),
+					Restart:          entry.Restart,
+					WorkingDirectory: entry.WorkingDirectory,
+					User:             entry.User,
+					After:            entry.After,
+					Before:           entry.Before,
+					Stdout:           entry.Stdout,
+					StopTimeout:      entry.StopTimeout,
+					Scope:            entry.EffectiveScope(),
+				}
+				rendered, err := RenderService(entry, def, ctx)
+				if err != nil {
+					return fmt.Errorf("rendering service %s/%s/%s: %w", initName, layerName, entry.Name, err)
+				}
+				content := rendered.UnitText
+				if content == "" {
+					content = rendered.DropinText
+				}
+				if content == "" {
+					continue
+				}
+				if layerBuf.Len() > 0 && !strings.HasSuffix(layerBuf.String(), "\n\n") {
+					if !strings.HasSuffix(layerBuf.String(), "\n") {
+						layerBuf.WriteString("\n")
+					}
+					layerBuf.WriteString("\n")
+				}
+				layerBuf.WriteString(content)
+				if !strings.HasSuffix(content, "\n") {
+					layerBuf.WriteString("\n")
+				}
 			}
-			fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", i+1, layerName))
-			if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
-				return err
+			if layerBuf.Len() > 0 {
+				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layerName))
+				if err := os.WriteFile(fragFile, []byte(layerBuf.String()), 0644); err != nil {
+					return err
+				}
 			}
 		}
 
-		// Port relay fragments (via relay_template)
+		// Port relay fragments (unchanged — use layer position in filename to
+		// match Containerfile's stage_fragment_copy naming).
 		if def.HasRelayTemplate() && len(layer.PortRelayPorts) > 0 {
 			for _, port := range layer.PortRelayPorts {
-				content, err := def.RenderRelayTemplate(port, layerName, i+1)
+				content, err := def.RenderRelayTemplate(port, layerName, idx)
 				if err != nil {
 					return fmt.Errorf("rendering relay for %s/%s port %d: %w", initName, layerName, port, err)
 				}
-				confName := fmt.Sprintf("%02d-relay-%d.conf", i+1, port)
+				confName := fmt.Sprintf("%02d-relay-%d.conf", idx, port)
 				fragFile := filepath.Join(fragDir, confName)
 				if err := os.WriteFile(fragFile, []byte(content), 0644); err != nil {
 					return err
@@ -1051,7 +1111,7 @@ func (g *Generator) generateInitFragments(imageName, initName string, def *InitD
 			}
 		}
 
-		// File copy model: copy detected service files
+		// File copy model: copy detected service files (systemd *.service globs).
 		if def.Model == "file_copy" {
 			for _, svcPath := range layer.ServiceFiles() {
 				content, err := os.ReadFile(svcPath)
@@ -1066,6 +1126,24 @@ func (g *Generator) generateInitFragments(imageName, initName string, def *InitD
 		}
 	}
 	return nil
+}
+
+// mapToKeyValueSlice deterministically sorts a map into []KeyValue for
+// template iteration. Matches the existing ServiceRenderContext contract.
+func mapToKeyValueSlice(m map[string]string) []KeyValue {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make([]KeyValue, 0, len(m))
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		out = append(out, KeyValue{Key: k, Value: m[k]})
+	}
+	return out
 }
 
 // writeLayerSteps writes the RUN steps for a single layer.
@@ -1258,7 +1336,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 			}
 		}
 		ctx.Manifest = manifest
-		ctx.HasLockFile = fileExists(filepath.Join(layer.Path, manifest+".lock")) ||
+		ctx.HasLockFile = fileExists(filepath.Join(layer.SourceDir, manifest+".lock")) ||
 			(manifest == "pixi.toml" && layer.HasPixiLock)
 
 		// Select install command from builder config
@@ -1436,7 +1514,8 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, img.Bootc, "")
 		if labelInitSystem != "" && labelInitDef != nil {
 			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
-			// Collect service names for this init system
+			// Per-init service-name list (legacy layer-name summary; kept for
+			// `ov service status/restart` CLI ergonomics).
 			var serviceNames []string
 			for _, layerName := range layerOrder {
 				layer := g.Layers[layerName]
@@ -1446,6 +1525,43 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			}
 			if labelInitDef.LabelKey != "" {
 				writeJSONLabel(b, labelInitDef.LabelKey, serviceNames)
+			}
+			// Structured per-entry service spec — source-less deploy reads
+			// this instead of relying on layer-yml access at deploy time.
+			var capServices []CapabilityService
+			for _, layerName := range layerOrder {
+				layer := g.Layers[layerName]
+				for i := range layer.Service() {
+					e := &layer.Service()[i]
+					capServices = append(capServices, CapabilityService{
+						Name:             e.Name,
+						Scope:            e.EffectiveScope(),
+						Enable:           e.Enable,
+						UsePackaged:      e.UsePackaged,
+						Exec:             e.Exec,
+						Env:              e.Env,
+						Restart:          e.Restart,
+						WorkingDirectory: e.WorkingDirectory,
+						User:             e.User,
+						After:            e.After,
+						Before:           e.Before,
+						Stdout:           e.Stdout,
+						StopTimeout:      e.StopTimeout,
+						Kind:             e.Kind,
+						Events:           e.Events,
+						AutoStart:        e.AutoStart,
+						StartRetries:     e.StartRetries,
+						StartSecs:        e.StartSecs,
+						StopSignal:       e.StopSignal,
+						ExitCodes:        e.ExitCodes,
+						Priority:         e.Priority,
+						Init:             labelInitSystem,
+						Layer:            layerName,
+					})
+				}
+			}
+			if len(capServices) > 0 {
+				writeJSONLabel(b, LabelServices, capServices)
 			}
 		}
 	}
@@ -1817,13 +1933,35 @@ func (g *Generator) createRemoteLayerCopies() error {
 	return nil
 }
 
-// layerCopySource returns the COPY source path for a layer in the Containerfile.
-// Local layers use "layers/<name>/", remote layers use ".build/_layers/<name>/".
+// layerCopySource returns the COPY source path for a layer in the Containerfile,
+// relative to the build context root (g.Dir).
+//
+// For the common case (no `directory:` override in layer.yml), this returns
+// "layers/<layerRef>/" for local layers and ".build/_layers/<name>/" for remote
+// layers — identical to the legacy behavior.
+//
+// When the layer declares `directory:` and points SourceDir outside the default
+// layers/<name>/ location, the result is the build-root-relative path to
+// SourceDir so that Containerfile COPY directives pick up files from the author's
+// chosen config directory.
 func (g *Generator) layerCopySource(layerRef string) string {
 	layer := g.Layers[layerRef]
 	if layer.Remote {
 		return ".build/_layers/" + layer.Name
 	}
-	return "layers/" + layerRef
+	// If SourceDir matches the default layers/<layerRef>/ location, preserve
+	// the legacy path format (cheap, avoids filepath.Rel calls on hot path).
+	defaultDir := filepath.Join(g.Dir, "layers", layerRef)
+	if layer.SourceDir == "" || layer.SourceDir == defaultDir {
+		return "layers/" + layerRef
+	}
+	// `directory:` override — resolve SourceDir relative to the build root.
+	rel, err := filepath.Rel(g.Dir, layer.SourceDir)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		// Falling back to the default means the Containerfile will miss files
+		// from an out-of-tree SourceDir — validation should have caught this.
+		return "layers/" + layerRef
+	}
+	return rel
 }
 

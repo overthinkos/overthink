@@ -1,13 +1,16 @@
-depends:
-  - nodejs
+layer:
+  name: claude-code
+  depends:
+    - nodejs
 
-path_append:
-  - "~/.local/bin"
+  path_append:
+    - "~/.local/bin"
 
-tests:
-  - id: claude-binary
-    file: ${HOME}/.npm-global/bin/claude
-    exists: true
-  - id: claude-version
-    command: ${HOME}/.npm-global/bin/claude --version
-    exit_status: 0
+  tests:
+    - id: claude-binary
+      file: ${HOME}/.npm-global/bin/claude
+      exists: true
+    - id: claude-version
+      command: ${HOME}/.npm-global/bin/claude --version
+      exit_status: 0
+

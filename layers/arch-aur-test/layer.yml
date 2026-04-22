@@ -1,3 +1,6 @@
-aur:
-  packages:
-    - yay-bin
+layer:
+  name: arch-aur-test
+  aur:
+    packages:
+      - yay-bin
+

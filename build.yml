@@ -1,404 +1,389 @@
-# build.yml — Unified build-time configuration
-#
-# Merges the former distro.yml, builder.yml, and init.yml.
-# Three top-level sections: distro (bootstrap + package formats),
-# builder (multi-stage builder definitions), init (init-system definitions).
-#
-# Template functions (all sections): cacheMounts, cacheMountsOwned, quote,
-# default, splitFirst, replace, join, printf.
-
-# --- Distro: identity, bootstrap, and package format configuration ---
-#
-# Each distro defines how to bootstrap a base image and how to install packages.
-# Key = distro name matched from image's distro: tags.
-# inherits: allows sharing config (e.g., ubuntu inherits debian) — inherits
-# bootstrap, workarounds, AND formats from parent.
-#
-# formats: defines package format install templates per distro.
-# Template context: all section_fields are accessible by name.
-
-distro:
-  fedora:
-    bootstrap:
-      install_cmd: "dnf install -y --setopt=install_weak_deps=False"
-      packages: [curl, ca-certificates]
-      cache_mounts:
-        - dst: /var/cache/libdnf5
-          sharing: locked
-    workarounds:
-      - "rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true"
-    formats:
-      rpm:
+distros:
+    archlinux:
+        bootstrap:
+            install_cmd: pacman -Syu --noconfirm
+            packages:
+                - curl
+                - ca-certificates
+            cache_mounts:
+                - dst: /var/cache/pacman/pkg
+                  sharing: locked
+        formats:
+            aur:
+                cache_mounts:
+                    - dst: /var/cache/pacman/pkg
+                      sharing: locked
+                section_fields:
+                    options: list
+                    packages: list
+                install_template: |
+                    COPY --from={{.StageName}} /tmp/aur-pkgs/ /tmp/aur-pkgs/
+                    RUN {{cacheMounts .CacheMounts}} \
+                        pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst && \
+                        rm -rf /tmp/aur-pkgs
+            pac:
+                cache_mounts:
+                    - dst: /var/cache/pacman/pkg
+                      sharing: locked
+                section_fields:
+                    keys: list
+                    options: list
+                    packages: list
+                    repos: list_of_maps
+                install_template: |
+                    RUN {{cacheMounts .CacheMounts}} \
+                    {{- range .Keys}}
+                        pacman-key --recv-keys {{.}} && pacman-key --lsign-key {{.}} && \
+                    {{- end}}
+                    {{- range .Repos}}
+                        printf '[{{.name}}]\nServer = {{.server}}\nSigLevel = {{default .siglevel "Optional TrustAll"}}\n' >> /etc/pacman.conf && \
+                    {{- if .key}}
+                        pacman-key --recv-keys {{.key}} && pacman-key --lsign-key {{.key}} && \
+                    {{- end}}
+                    {{- end}}
+                        pacman -Syu --noconfirm
+                    {{- range .Options}} {{.}}{{end}}
+                    {{- range .Packages}} \
+                          {{.}}{{end}}
+    debian:
+        bootstrap:
+            install_cmd: apt-get update && apt-get install -y --no-install-recommends
+            packages:
+                - curl
+                - ca-certificates
+                - gnupg
+            cache_mounts:
+                - dst: /var/cache/apt
+                  sharing: locked
+                - dst: /var/lib/apt
+                  sharing: locked
+        formats:
+            deb:
+                cache_mounts:
+                    - dst: /var/cache/apt
+                      sharing: locked
+                    - dst: /var/lib/apt
+                      sharing: locked
+                section_fields:
+                    options: list
+                    packages: list
+                    repos: list_of_maps
+                install_template: |
+                    RUN {{cacheMounts .CacheMounts}} \
+                    {{- range .Repos}}
+                    {{- if .key}}
+                        curl -fsSL {{quote .key}} | gpg --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
+                    {{- end}}
+                    {{- if .url}}
+                        echo "deb [{{if or .key .signed_by}}signed-by={{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}}{{end}}] {{.url}} {{default .suite "stable"}}{{if eq (default .suite "stable") "/"}}{{else}} {{default .components "main"}}{{end}}" > /etc/apt/sources.list.d/{{.name}}.list && \
+                    {{- end}}
+                    {{- if .ppa}}
+                        add-apt-repository -y ppa:{{.ppa}} && \
+                    {{- end}}
+                    {{- end}}
+                        apt-get update && apt-get install -y --no-install-recommends
+                    {{- range .Options}} {{.}}{{end}}
+                    {{- range .Packages}} \
+                          {{.}}{{end}}
+    fedora:
+        bootstrap:
+            install_cmd: dnf install -y --setopt=install_weak_deps=False
+            packages:
+                - curl
+                - ca-certificates
+            cache_mounts:
+                - dst: /var/cache/libdnf5
+                  sharing: locked
+        workarounds:
+            - rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true
+        formats:
+            rpm:
+                cache_mounts:
+                    - dst: /var/cache/libdnf5
+                      sharing: locked
+                section_fields:
+                    copr: list
+                    exclude: list
+                    modules: list
+                    options: list
+                    packages: list
+                    repos: list_of_maps
+                install_template: |
+                    RUN {{cacheMounts .CacheMounts}} \
+                    {{- range .Repos}}{{if .rpm}}
+                        dnf install -y {{quote .rpm}} && \
+                    {{- end}}{{end}}
+                    {{- if or (anyRepoHasURL .Repos) .Copr}}
+                        dnf install -y dnf5-plugins && \
+                    {{- end}}
+                    {{- range .Repos}}{{if .url}}
+                        dnf5 config-manager addrepo --from-repofile={{quote .url}} 2>/dev/null || true && \
+                        dnf5 config-manager setopt {{quote (printf "%s.enabled=0" .name)}} && \
+                    {{- if .gpgkey}}
+                        rpm --import {{.gpgkey}} || true && \
+                    {{- end}}
+                    {{- if eq (default .gpgcheck "true") "false"}}
+                        dnf5 config-manager setopt {{quote (printf "%s.gpgcheck=0" .name)}} && \
+                    {{- end}}{{end}}{{end}}
+                    {{- range .Copr}}
+                        dnf5 copr enable -y {{.}} && \
+                    {{- end}}
+                    {{- range .Modules}}
+                        dnf module reset -y {{splitFirst . ":"}} && \
+                        dnf module enable -y {{.}} && \
+                    {{- end}}
+                        dnf install -y{{range .Options}} {{.}}{{end}}
+                    {{- range .Repos}}{{if .url}} --enable-repo={{quote .name}}{{end}}{{end}}
+                    {{- range .Exclude}} --exclude='{{.}}'{{end}}
+                    {{- range .Packages}} \
+                          {{.}}{{end}}
+                    {{- range .Copr}} && \
+                        dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:{{replace . "/" ":"}}.enabled=0"
+                    {{- end}}
+    ubuntu:
+        inherits: debian
+        bootstrap:
+            install_cmd: ""
+            packages: []
+            cache_mounts: []
+        base_user:
+            name: ubuntu
+            uid: 1000
+            gid: 1000
+            home: /home/ubuntu
+builders:
+    aur:
+        detect_config: aur
         cache_mounts:
-          - dst: /var/cache/libdnf5
-            sharing: locked
-        section_fields:
-          packages: list
-          repos: list_of_maps
-          copr: list
-          modules: list
-          exclude: list
-          options: list
-        install_template: |
-          RUN {{cacheMounts .CacheMounts}} \
-          {{- range .Repos}}{{if .rpm}}
-              dnf install -y {{quote .rpm}} && \
-          {{- end}}{{end}}
-          {{- if or (anyRepoHasURL .Repos) .Copr}}
-              dnf install -y dnf5-plugins && \
-          {{- end}}
-          {{- range .Repos}}{{if .url}}
-              dnf5 config-manager addrepo --from-repofile={{quote .url}} 2>/dev/null || true && \
-              dnf5 config-manager setopt {{quote (printf "%s.enabled=0" .name)}} && \
-          {{- if .gpgkey}}
-              rpm --import {{.gpgkey}} || true && \
-          {{- end}}
-          {{- if eq (default .gpgcheck "true") "false"}}
-              dnf5 config-manager setopt {{quote (printf "%s.gpgcheck=0" .name)}} && \
-          {{- end}}{{end}}{{end}}
-          {{- range .Copr}}
-              dnf5 copr enable -y {{.}} && \
-          {{- end}}
-          {{- range .Modules}}
-              dnf module reset -y {{splitFirst . ":"}} && \
-              dnf module enable -y {{.}} && \
-          {{- end}}
-              dnf install -y{{range .Options}} {{.}}{{end}}
-          {{- range .Repos}}{{if .url}} --enable-repo={{quote .name}}{{end}}{{end}}
-          {{- range .Exclude}} --exclude='{{.}}'{{end}}
-          {{- range .Packages}} \
-                {{.}}{{end}}
-          {{- range .Copr}} && \
-              dnf5 config-manager setopt "copr:copr.fedorainfracloud.org:{{replace . "/" ":"}}.enabled=0"
-          {{- end}}
-
-  debian:
-    bootstrap:
-      install_cmd: "apt-get update && apt-get install -y --no-install-recommends"
-      # gnupg is required so third-party apt repos (NodeSource, Docker,
-      # Tailscale, etc.) can call `gpg --dearmor` when the layer's
-      # `deb.repos[].key` pipeline runs. Without it, any layer that adds an
-      # apt repo with a signing key fails with "/bin/sh: gpg: not found".
-      packages: [curl, ca-certificates, gnupg]
-      cache_mounts:
-        - dst: /var/cache/apt
-          sharing: locked
-        - dst: /var/lib/apt
-          sharing: locked
-    formats:
-      deb:
+            - dst: /var/cache/pacman/pkg
+              sharing: locked
+        stage_template: |
+            FROM {{.BuilderRef}} AS {{.StageName}}
+            USER root
+            RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+            USER {{.UID}}
+            WORKDIR {{.Home}}
+            RUN {{cacheMounts .CacheMounts}} \
+                mkdir -p /tmp/aur-build && \
+                cp /etc/makepkg.conf /tmp/makepkg.conf && \
+                sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
+                yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
+            {{- range .Options}} {{.}}{{end}}
+            {{- range .Packages}} \
+                  {{.}}{{end}} && \
+                mkdir -p /tmp/aur-pkgs && \
+                find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
+        copy_artifacts:
+            - src: /tmp/aur-pkgs/
+              dst: /tmp/aur-pkgs/
+    cargo:
+        detect_files:
+            - Cargo.toml
+        requires_src_dir: true
+        inline: true
         cache_mounts:
-          - dst: /var/cache/apt
-            sharing: locked
-          - dst: /var/lib/apt
-            sharing: locked
-        section_fields:
-          packages: list
-          repos: list_of_maps
-          options: list
+            - dst: /tmp/cargo-cache
         install_template: |
-          RUN {{cacheMounts .CacheMounts}} \
-          {{- range .Repos}}
-          {{- if .key}}
-              curl -fsSL {{quote .key}} | gpg --dearmor -o {{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}} && \
-          {{- end}}
-          {{- if .url}}
-              echo "deb [{{if or .key .signed_by}}signed-by={{default .signed_by (printf "/etc/apt/keyrings/%s.gpg" .name)}}{{end}}] {{.url}} {{default .suite "stable"}}{{if eq (default .suite "stable") "/"}}{{else}} {{default .components "main"}}{{end}}" > /etc/apt/sources.list.d/{{.name}}.list && \
-          {{- end}}
-          {{- if .ppa}}
-              add-apt-repository -y ppa:{{.ppa}} && \
-          {{- end}}
-          {{- end}}
-              apt-get update && apt-get install -y --no-install-recommends
-          {{- range .Options}} {{.}}{{end}}
-          {{- range .Packages}} \
-                {{.}}{{end}}
-
-  ubuntu:
-    inherits: debian
-    # The upstream ubuntu:24.04 base image ships a pre-existing ubuntu:ubuntu
-    # account at uid 1000 with /home/ubuntu. Declaring it here lets images
-    # with `user_policy: auto` (the default) adopt this account instead of
-    # fighting it — no useradd, no renames, no sudoers collisions. Images
-    # that explicitly set `user:` in image.yml keep their chosen name.
-    base_user:
-      name: ubuntu
-      uid: 1000
-      gid: 1000
-      home: /home/ubuntu
-
-  archlinux:
-    bootstrap:
-      install_cmd: "pacman -Syu --noconfirm"
-      packages: [curl, ca-certificates]
-      cache_mounts:
-        - dst: /var/cache/pacman/pkg
-          sharing: locked
-    formats:
-      pac:
+            RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
+                {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
+    npm:
+        detect_files:
+            - package.json
         cache_mounts:
-          - dst: /var/cache/pacman/pkg
-            sharing: locked
-        section_fields:
-          packages: list
-          repos: list_of_maps
-          options: list
-          keys: list
-        install_template: |
-          RUN {{cacheMounts .CacheMounts}} \
-          {{- range .Keys}}
-              pacman-key --recv-keys {{.}} && pacman-key --lsign-key {{.}} && \
-          {{- end}}
-          {{- range .Repos}}
-              printf '[{{.name}}]\nServer = {{.server}}\nSigLevel = {{default .siglevel "Optional TrustAll"}}\n' >> /etc/pacman.conf && \
-          {{- if .key}}
-              pacman-key --recv-keys {{.key}} && pacman-key --lsign-key {{.key}} && \
-          {{- end}}
-          {{- end}}
-              pacman -Syu --noconfirm
-          {{- range .Options}} {{.}}{{end}}
-          {{- range .Packages}} \
-                {{.}}{{end}}
-      aur:
+            - dst: /tmp/npm-cache
+        stage_template: |
+            FROM {{.BuilderRef}} AS {{.StageName}}
+            USER {{.UID}}
+            WORKDIR {{.Home}}
+            # Override NPM_CONFIG_PREFIX from the builder image so npm writes to
+            # the TARGET image's HOME (not the builder's /home/user). Without this,
+            # uid=0 target images silently get empty copy_artifacts.
+            ENV NPM_CONFIG_PREFIX={{.Home}}/.npm-global
+            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
+            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
+        copy_artifacts:
+            - src: '{{.Home}}'
+              dst: '{{.Home}}'
+              chown: true
+    pixi:
+        detect_files:
+            - pixi.toml
+            - pyproject.toml
+            - environment.yml
         cache_mounts:
-          - dst: /var/cache/pacman/pkg
-            sharing: locked
-        section_fields:
-          packages: list
-          options: list
-        # AUR install step: copies pre-built packages from builder stage and installs
-        install_template: |
-          COPY --from={{.StageName}} /tmp/aur-pkgs/ /tmp/aur-pkgs/
-          RUN {{cacheMounts .CacheMounts}} \
-              pacman -U --noconfirm /tmp/aur-pkgs/*.pkg.tar.zst && \
-              rm -rf /tmp/aur-pkgs
-
-# --- Builder: multi-stage build definitions ---
-#
-# Each builder detects its trigger (files or config sections),
-# generates a build stage, and copies artifacts back.
-#
-# Detection:
-#   detect_files: triggered when layer has any of these files
-#   detect_config: triggered when layer has this format section with packages
-#
-# Execution:
-#   inline: true — no multi-stage, runs in main image (e.g., cargo)
-#   stage_template — multi-stage FROM builder, builds in separate stage
-#   install_template — inline RUN in main image
-
-builder:
-  pixi:
-    detect_files: [pixi.toml, pyproject.toml, environment.yml]
-    build_script: build.sh
-    cache_mounts:
-      - dst: /tmp/pixi-cache
-      - dst: /tmp/rattler-cache
-    env:
-      PIXI_CACHE_DIR: /tmp/pixi-cache
-      RATTLER_CACHE_DIR: /tmp/rattler-cache
-    install_commands:
-      pixi.toml: "pixi install"
-      pixi.toml+lock: "pixi install --frozen"
-      pyproject.toml: "pixi install --manifest-path pyproject.toml"
-      environment.yml: "pixi project import environment.yml && pixi install"
-    manylinux_fix: |
-      RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
-    stage_template: |
-      FROM {{.BuilderRef}} AS {{.StageName}}
-      USER {{.UID}}
-      WORKDIR {{.Home}}
-      {{- if .HasLockFile}}
-      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/pixi.lock pixi.lock
-      {{- end}}
-      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
-      {{.ManylinuxFix}}
-      ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
-      {{- if .HasBuildScript}}
-      RUN --mount=type=bind,from={{.LayerStage}},source=/{{.BuildScript}},target=/tmp/{{.BuildScript}} \
-          {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
-      {{- else}}
-      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
-      {{- end}}
-    copy_artifacts:
-      - src: "{{.Home}}"
-        dst: "{{.Home}}"
-        chown: true
-    copy_binary:
-      src: /usr/local/bin/pixi
-      dst: /usr/local/bin/pixi
-
-  npm:
-    detect_files: [package.json]
-    cache_mounts:
-      - dst: /tmp/npm-cache
-    stage_template: |
-      FROM {{.BuilderRef}} AS {{.StageName}}
-      USER {{.UID}}
-      WORKDIR {{.Home}}
-      # Override NPM_CONFIG_PREFIX from the builder image so npm writes to
-      # the TARGET image's HOME (not the builder's /home/user). Without this,
-      # uid=0 target images silently get empty copy_artifacts.
-      ENV NPM_CONFIG_PREFIX={{.Home}}/.npm-global
-      COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
-      RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
-    copy_artifacts:
-      - src: "{{.Home}}"
-        dst: "{{.Home}}"
-        chown: true
-
-  cargo:
-    detect_files: [Cargo.toml]
-    requires_src_dir: true
-    inline: true
-    cache_mounts:
-      - dst: /tmp/cargo-cache
-    install_template: |
-      RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
-          {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
-
-  aur:
-    detect_config: aur
-    cache_mounts:
-      - dst: /var/cache/pacman/pkg
-        sharing: locked
-    stage_template: |
-      FROM {{.BuilderRef}} AS {{.StageName}}
-      USER root
-      RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
-      USER {{.UID}}
-      WORKDIR {{.Home}}
-      RUN {{cacheMounts .CacheMounts}} \
-          mkdir -p /tmp/aur-build && \
-          cp /etc/makepkg.conf /tmp/makepkg.conf && \
-          sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
-          yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
-      {{- range .Options}} {{.}}{{end}}
-      {{- range .Packages}} \
-            {{.}}{{end}} && \
-          mkdir -p /tmp/aur-pkgs && \
-          find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
-    copy_artifacts:
-      - src: /tmp/aur-pkgs/
-        dst: /tmp/aur-pkgs/
-        chown: false
-
-# --- Init: init-system definitions ---
-#
-# Each init system defines how to detect, build, assemble, and manage services.
-# Key = init system name used in image.yml init: field and auto-detection.
-#
-# Detection:
-#   layer_fields: which layer.yml fields trigger this init system
-#   layer_files: which files in layer directories trigger this init system
-#
-# Build models:
-#   fragment_assembly — numbered fragments concatenated into single config (supervisord)
-#   file_copy — service files copied to system path and enabled (systemd)
-#
-# Template context varies by field — see init_config.go for context struct definitions.
-
-init:
-  supervisord:
-    # Detection: which layer.yml fields / file patterns trigger this init system
-    layer_fields: [service]
-    layer_files: []
-    depends_layer: supervisord
-
-    # Build model: numbered fragments → cat into single config file
-    model: fragment_assembly
-
-    # Fragment generation
-    header_file: templates/supervisord.header.conf
-    fragment_dir: supervisor
-    # Context: .Content (raw service: field), .LayerName, .Index
-    fragment_template: |
-      {{.Content}}
-    # Context: .Port (int), .LayerName, .Index
-    relay_template: |
-      [program:relay-{{.Port}}]
-      command=/usr/local/bin/relay-wrapper {{.Port}}
-      autostart=true
-      autorestart=true
-      priority=1
-      startsecs=0
-      stdout_logfile=/dev/fd/1
-      stdout_logfile_maxbytes=0
-      redirect_stderr=true
-
-    # Containerfile scratch stage
-    stage_name: supervisord-conf
-    stage_header_copy: "COPY templates/supervisord.header.conf /supervisor/00-header.conf"
-    # Context: .ImageName, .FragmentDir, .FileName
-    stage_fragment_copy: "COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}"
-
-    # Containerfile assembly step (runs as root)
-    assembly_template: |
-      # Assemble supervisord.conf
-      # chmod 0644 explicitly — relying on umask yields 0600 on Arch (breaks
-      # supervisord when run as uid 1000) vs 0644 on Fedora. Uniform perms
-      # across distros.
-      RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \
-          cat /supervisor/*.conf > /etc/supervisord.conf && \
-          chmod 0644 /etc/supervisord.conf
-
-    # Runtime entrypoint
-    entrypoint: ["supervisord", "-n", "-c", "/etc/supervisord.conf"]
-    fallback_entrypoint: ["sleep", "infinity"]
-
-    # Service management (ov service start/stop/status/restart)
-    management_tool: supervisorctl
-    management_commands:
-      status: "status"
-      start: "start {{.Service}}"
-      stop: "stop {{.Service}}"
-      restart: "restart {{.Service}}"
-
-    # OCI label for service list
-    label_key: org.overthinkos.services.supervisord
-
-  systemd:
-    layer_fields: [system_services]
-    layer_files: ["*.service"]
-    depends_layer: ""
-    requires_bootc: true
-
-    # Build model: copy service files to system path and enable
-    model: file_copy
-    fragment_dir: systemd
-
-    # Containerfile scratch stage
-    stage_name: systemd-services
-    stage_fragment_copy: "COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}"
-
-    # Install user-level service files + enable globally
-    assembly_template: |
-      # Install systemd user services
-      RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \
-          cp /systemd/*.service /usr/lib/systemd/user/ && \
-          for svc in /systemd/*.service; do systemctl --global enable "$(basename "$svc")"; done
-
-    # System-level service enablement (for system_services: field)
-    # Context: .Units ([]string)
-    system_enable_template: |
-      # Enable system-level services
-      RUN{{range $i, $unit := .Units}}{{if $i}} && \
-         {{else}} {{end}}systemctl enable {{$unit}}{{end}}
-
-    # Post-assembly step (bootc lint)
-    post_assembly_template: |
-      RUN bootc container lint
-
-    # No entrypoint — systemd is PID 1 via bootc
-    entrypoint: []
-    fallback_entrypoint: ["sleep", "infinity"]
-
-    # Service management
-    management_tool: systemctl
-    management_commands:
-      status: "--user status {{.Service}}"
-      start: "--user start {{.Service}}"
-      stop: "--user stop {{.Service}}"
-      restart: "--user restart {{.Service}}"
-
-    label_key: org.overthinkos.services.systemd
+            - dst: /tmp/pixi-cache
+            - dst: /tmp/rattler-cache
+        env:
+            PIXI_CACHE_DIR: /tmp/pixi-cache
+            RATTLER_CACHE_DIR: /tmp/rattler-cache
+        stage_template: |
+            FROM {{.BuilderRef}} AS {{.StageName}}
+            USER {{.UID}}
+            WORKDIR {{.Home}}
+            {{- if .HasLockFile}}
+            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/pixi.lock pixi.lock
+            {{- end}}
+            COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/{{.Manifest}} {{.Manifest}}
+            {{.ManylinuxFix}}
+            ENV PIXI_CACHE_DIR=/tmp/pixi-cache RATTLER_CACHE_DIR=/tmp/rattler-cache
+            {{- if .HasBuildScript}}
+            RUN --mount=type=bind,from={{.LayerStage}},source=/{{.BuildScript}},target=/tmp/{{.BuildScript}} \
+                {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && bash /tmp/{{.BuildScript}} && rm -f {{.Manifest}} pixi.lock
+            {{- else}}
+            RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
+            {{- end}}
+        install_commands:
+            environment.yml: pixi project import environment.yml && pixi install
+            pixi.toml: pixi install
+            pixi.toml+lock: pixi install --frozen
+            pyproject.toml: pixi install --manifest-path pyproject.toml
+        manylinux_fix: |
+            RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
+        build_script: build.sh
+        copy_artifacts:
+            - src: '{{.Home}}'
+              dst: '{{.Home}}'
+              chown: true
+        copy_binary:
+            src: /usr/local/bin/pixi
+            dst: /usr/local/bin/pixi
+inits:
+    supervisord:
+        layer_fields:
+            - service
+        depends_layer: supervisord
+        model: fragment_assembly
+        header_file: templates/supervisord.header.conf
+        fragment_dir: supervisor
+        # fragment_template removed — per-entry rendering via service_schema.service_template
+        relay_template: |
+            [program:relay-{{.Port}}]
+            command=/usr/local/bin/relay-wrapper {{.Port}}
+            autostart=true
+            autorestart=true
+            priority=1
+            startsecs=0
+            stdout_logfile=/dev/fd/1
+            stdout_logfile_maxbytes=0
+            redirect_stderr=true
+        stage_name: supervisord-conf
+        stage_header_copy: COPY templates/supervisord.header.conf /supervisor/00-header.conf
+        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}
+        assembly_template: |
+            # Assemble supervisord.conf
+            # chmod 0644 explicitly — relying on umask yields 0600 on Arch (breaks
+            # supervisord when run as uid 1000) vs 0644 on Fedora. Uniform perms
+            # across distros.
+            RUN --mount=type=bind,from=supervisord-conf,source=/supervisor,target=/supervisor \
+                cat /supervisor/*.conf > /etc/supervisord.conf && \
+                chmod 0644 /etc/supervisord.conf
+        entrypoint:
+            - supervisord
+            - -n
+            - -c
+            - /etc/supervisord.conf
+        fallback_entrypoint:
+            - sleep
+            - infinity
+        management_tool: supervisorctl
+        management_commands:
+            restart: restart {{.Service}}
+            start: start {{.Service}}
+            status: status
+            stop: stop {{.Service}}
+        label_key: org.overthinkos.services.supervisord
+        service_schema:
+            supports_packaged: false
+            # Supervisord program/eventlistener template. Emits
+            # [program:NAME] by default, [eventlistener:NAME] when kind:
+            # eventlistener. All optional directives render only when set;
+            # missing fields fall through to supervisord defaults. The
+            # AutoStart *bool triStates as nil→default true, *true→true,
+            # *false→false (use `auto_start: false` for manually-started
+            # programs like chrome that wait for Wayland).
+            service_template: |
+                {{- if eq .Kind "eventlistener" -}}
+                [eventlistener:{{.Name}}]
+                {{- else -}}
+                [program:{{.Name}}]
+                {{- end}}
+                command={{.Exec}}
+                {{- if eq .Kind "eventlistener" -}}
+                {{- if .Events}}
+                events={{.Events}}
+                {{- end -}}
+                {{- end}}
+                {{- if .AutoStart}}
+                autostart={{if derefBool .AutoStart}}true{{else}}false{{end}}
+                {{- else if not (eq .Kind "eventlistener")}}
+                autostart=true
+                {{- end}}
+                {{- if not (eq .Kind "eventlistener")}}
+                autorestart={{if eq .Restart "no"}}false{{else}}true{{end}}
+                {{- end}}
+                {{- if .StartRetries}}
+                startretries={{.StartRetries}}
+                {{- end}}
+                {{- if .StartSecs}}
+                startsecs={{.StartSecs}}
+                {{- end}}
+                {{- if .ExitCodes}}
+                exitcodes={{.ExitCodes}}
+                {{- end}}
+                {{- if .StopSignal}}
+                stopsignal={{.StopSignal}}
+                {{- end}}
+                {{- if .StopTimeout}}
+                stopwaitsecs={{.StopTimeout}}
+                {{- end}}
+                {{- if .Priority}}
+                priority={{.Priority}}
+                {{- end}}
+                {{- if .WorkingDirectory}}
+                directory={{.WorkingDirectory}}
+                {{- end}}
+                {{- if .User}}
+                user={{.User}}
+                {{- end}}
+                {{- if .EnvList}}
+                environment={{range $i, $kv := .EnvList}}{{if $i}},{{end}}{{$kv.Key}}="{{$kv.Value}}"{{end}}
+                {{- end}}
+                stdout_logfile=/dev/fd/1
+                stdout_logfile_maxbytes=0
+                {{- if not (eq .Kind "eventlistener")}}
+                redirect_stderr=true
+                {{- else}}
+                stderr_logfile=/dev/fd/2
+                stderr_logfile_maxbytes=0
+                {{- end}}
+    systemd:
+        layer_fields:
+            - service
+        layer_files:
+            - '*.service'
+        requires_bootc: true
+        model: file_copy
+        fragment_dir: systemd
+        stage_name: systemd-services
+        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}
+        assembly_template: |
+            # Install systemd user services
+            RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \
+                cp /systemd/*.service /usr/lib/systemd/user/ && \
+                for svc in /systemd/*.service; do systemctl --global enable "$(basename "$svc")"; done
+        system_enable_template: |
+            # Enable system-level services
+            RUN{{range $i, $unit := .Units}}{{if $i}} && \
+               {{else}} {{end}}systemctl enable {{$unit}}{{end}}
+        post_assembly_template: |
+            RUN bootc container lint
+        fallback_entrypoint:
+            - sleep
+            - infinity
+        management_tool: systemctl
+        management_commands:
+            restart: --user restart {{.Service}}
+            start: --user start {{.Service}}
+            status: --user status {{.Service}}
+            stop: --user stop {{.Service}}
+        label_key: org.overthinkos.services.systemd

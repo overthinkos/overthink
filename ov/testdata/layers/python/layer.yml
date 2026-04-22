@@ -1,2 +1,5 @@
-depends:
-  - pixi
+layer:
+  name: python
+  depends:
+    - pixi
+

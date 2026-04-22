@@ -1,43 +1,46 @@
-depends: []
+layer:
+  name: nodejs24
+  depends: []
 
-env:
-  NPM_CONFIG_PREFIX: "~/.npm-global"
-  npm_config_cache: "~/.cache/npm"
+  env:
+    NPM_CONFIG_PREFIX: "~/.npm-global"
+    npm_config_cache: "~/.cache/npm"
 
-path_append:
-  - "~/.npm-global/bin"
+  path_append:
+    - "~/.npm-global/bin"
 
-rpm:
-  packages:
-    - nodejs24
-    - nodejs24-npm
+  rpm:
+    packages:
+      - nodejs24
+      - nodejs24-npm
 
-tasks:
-  - link: /usr/local/bin/node
-    target: /usr/bin/node-24
-    user: root
-  - link: /usr/local/bin/npm
-    target: /usr/bin/npm-24
-    user: root
-  - link: /usr/local/bin/npx
-    target: /usr/bin/npx-24
-    user: root
+  tasks:
+    - link: /usr/local/bin/node
+      target: /usr/bin/node-24
+      user: root
+    - link: /usr/local/bin/npm
+      target: /usr/bin/npm-24
+      user: root
+    - link: /usr/local/bin/npx
+      target: /usr/bin/npx-24
+      user: root
 
-tests:
-  - id: node24-binary
-    file: /usr/local/bin/node
-    exists: true
-  - id: npm24-binary
-    file: /usr/local/bin/npm
-    exists: true
-  - id: npx24-binary
-    file: /usr/local/bin/npx
-    exists: true
-  - id: node24-version
-    command: /usr/local/bin/node --version
-    exit_status: 0
-    stdout:
-      - matches: "^v24\\."
-  - id: nodejs24-package
-    package: nodejs24
-    installed: true
+  tests:
+    - id: node24-binary
+      file: /usr/local/bin/node
+      exists: true
+    - id: npm24-binary
+      file: /usr/local/bin/npm
+      exists: true
+    - id: npx24-binary
+      file: /usr/local/bin/npx
+      exists: true
+    - id: node24-version
+      command: /usr/local/bin/node --version
+      exit_status: 0
+      stdout:
+        - matches: "^v24\\."
+    - id: nodejs24-package
+      package: nodejs24
+      installed: true
+

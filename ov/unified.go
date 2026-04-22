@@ -377,7 +377,7 @@ const (
 var rootShapeKeys = map[string]bool{
 	"version": true, "includes": true, "discover": true, "defaults": true,
 	"distros": true, "builders": true, "inits": true,
-	"images": true, "layers": true, "deployments": true,
+	"images": true, "layers": true, "vms": true, "deployments": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.

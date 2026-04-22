@@ -1,0 +1,90 @@
+# vms.yml — kind:vm entity definitions for the repo.
+#
+# Each entry describes a VM artifact (like kind:image describes a
+# container artifact). Deployment-time overrides live in deploy.yml
+# under `deployments.images.vm:<name>:`.
+#
+# Resolved through overthink.yml includes: alongside images.yml.
+
+vms:
+  # --- Upstream Arch Linux cloud image ---
+  #
+  # Fetches the cloud-init enabled qcow2 from fastly.mirror.pkgbuild.com,
+  # boots under UEFI with SPICE + virt-manager-compatible graphics, and
+  # adopts the upstream `arch` user (NOPASSWD sudo via Arch's shipped
+  # /etc/sudoers.d/10-default) rather than creating a new account.
+  #
+  # Usage:
+  #   ov vm build arch-cloud-base           # fetch qcow2 + seed ISO
+  #   ov vm create arch-cloud-base          # define + start domain
+  #   ov vm ssh arch-cloud-base -l arch     # shell in
+  #   virt-manager                          # open SPICE console
+  arch-cloud-base:
+    source:
+      kind: cloud_image
+      url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+      checksum: {type: sha256, value: ""}
+      # Adopt upstream's pre-existing account instead of creating one
+      # (mirrors container-side `base_user:` + `user_policy: adopt`).
+      base_user: arch
+
+    # --- Hardware ---
+    disk_size: 20G
+    ram: 2G
+    cpus: 2
+    machine: q35
+    firmware: uefi-insecure           # UEFI via /usr/share/edk2/x64/OVMF_CODE.4m.fd
+
+    # --- Network (user-mode NAT via passt — libvirt requires passt for
+    # <portForward> elements to be honored on user-mode interfaces) ---
+    network:
+      mode: user
+      # port_forwards: []             # declare host:guest extras here
+
+    # --- SSH ---
+    ssh:
+      # user: unset → defaults to source.base_user ('arch')
+      port: 2224                      # 2222/2223 may collide with rootlessport
+      key_source: generate            # per-VM keypair under ~/.local/share/ov/vm/<vm>/
+
+    # --- cloud-init intent (rendered at runtime to a NoCloud cidata
+    # seed ISO; never hand-written user_data YAML) ---
+    cloud_init:
+      timezone: UTC
+      packages:                       # extras on top of {openssh,curl,tar}
+        - sudo
+        - spice-vdagent              # clipboard + resize in virt-manager SPICE console
+      runcmd:
+        - pacman-key --init
+        - pacman-key --populate archlinux
+        - systemctl enable --now spice-vdagentd
+      ov_install:
+        strategy: auto                # ov binary scp'd post-boot by VmDeployTarget
+
+    # --- libvirt domain (structured; rendered to <domain>...</domain> XML) ---
+    libvirt:
+      devices:
+        # Random source for /dev/hwrng in guest.
+        rng:
+          - {model: virtio, backend: /dev/urandom}
+
+        # Memory balloon for host ↔ guest RAM pressure signaling.
+        memballoon:
+          model: virtio
+
+        # SPICE graphics: virt-manager reads the autoport-chosen TCP
+        # port from the domain XML after start. listen=127.0.0.1 is
+        # loopback-only (add a reverse tunnel for remote access).
+        graphics:
+          - {type: spice, autoport: "yes", listen: 127.0.0.1}
+
+        # QXL video — best SPICE integration (HW cursor, 2D accel,
+        # multi-head). 64 MiB VRAM suits text + browser workloads.
+        video:
+          - {model: qxl, vram: 65536, heads: 1}
+
+        # SPICE VMC virtio channel — spice-vdagent in the guest talks
+        # to the host over this for clipboard share, folder share, and
+        # resolution-aware resizing.
+        channels:
+          - {type: spicevmc, name: com.redhat.spice.0}

@@ -5,3 +5,50 @@ deployments:
                 - 18790:18789
                 - 5901:5900
                 - 9223:9222
+
+        # --- VM deploy: upstream Arch Linux cloud image ---
+        #
+        # Pairs with the kind:vm entity in vms.yml (vm_source: arch-cloud-base).
+        # Deploy name prefixed with `vm:` routes dispatch to VmDeployTarget,
+        # which SSH's into the guest via the key in
+        # ~/.local/share/ov/vm/ov-arch-cloud-base/id_ed25519 and applies
+        # layers inside the VM via the same InstallPlan IR HostDeployTarget
+        # uses (ledger at guest's ~/.config/overthink/installed/).
+        #
+        # Lifecycle:
+        #   ov vm build arch-cloud-base        # fetch qcow2 + seed ISO
+        #   ov vm create arch-cloud-base       # define libvirt domain + start
+        #   ov deploy add vm:arch-cloud-base   # apply layers inside guest
+        #   ov deploy del vm:arch-cloud-base   # reverse layers in guest
+        #   ov vm destroy arch-cloud-base --disk  # tear down VM + qcow2
+        "vm:arch-cloud-base":
+            target: vm
+            vm_source: arch-cloud-base
+
+            # --- Layers applied inside the VM via `ov deploy host` on the
+            # guest (VmDeployTarget routes each InstallStep to the right
+            # DeployExecutor method wrapped around SSH) ---
+            add_layers:
+                - ripgrep
+                - uv
+                - pre-commit
+
+            # --- Host-target install knobs honored by the in-guest apply ---
+            install_opts:
+                with_services: true
+                allow_repo_changes: true       # Arch pacman-key + repo tweaks need this
+                skip_incompatible: true        # skip rpm:/deb:-only layer sections on Arch
+                verify: true                    # re-run layer tests: post-install
+
+            # --- Guest environment overlay ---
+            env:
+                - OVERTHINK_DEV=true
+
+            # --- Deploy-level probes: VmDeployTarget runs these via SSH
+            # after layer apply completes ---
+            tests:
+                - {id: guest-ripgrep-installed, scope: deploy, cmd: rg --version}
+                - {id: guest-uv-on-path,        scope: deploy, cmd: uv --version}
+                - {id: guest-arch-user,         scope: deploy, cmd: 'id | grep -q wheel'}
+                - {id: guest-sudo-passwordless, scope: deploy, cmd: 'sudo -n whoami | grep -q root'}
+                - {id: guest-spice-agent,       scope: deploy, cmd: systemctl is-active spice-vdagentd}

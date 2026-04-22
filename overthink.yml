@@ -2,6 +2,7 @@ version: 1
 includes:
     - build.yml
     - images.yml
+    - vms.yml
     - deploy.yml
 discover:
     layers:

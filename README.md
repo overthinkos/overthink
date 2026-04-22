@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-164 layers. 49 image definitions (41 enabled by default, as of 2026-04-20). Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu, and Arch Linux. One CLI: `ov`. Every layer, image, and command has a dedicated skill — 250+ skills across 5 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`).
+164 layers. 49 image definitions (41 enabled by default, as of 2026-04-20). 5 VM definitions (1 cloud_image + 4 bootc, in `vms.yml`). Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu, and Arch Linux. One CLI: `ov`. Every layer, image, VM, and command has a dedicated skill — 275+ skills across 6 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-vms`, `ov-jupyter`).
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -83,6 +83,7 @@ version: 1
 includes:
   - build.yml                           # distro/builder/init vocabulary (kind: build)
   - image.yml                           # image definitions (kind: image)
+  - vms.yml                             # VM definitions (kind: vm)
 discover:
   - layers                              # scan layers/*/layer.yml for kind: layer
   - "@github.com/team/private/layers"   # remote repo (any ref form)
@@ -206,6 +207,50 @@ This is where it all comes together. Take a bootc-based image, and `ov vm build`
 
 VM creation also works **rootless** via `qemu:///session` and a supervisord-managed `virtqemud` daemon, so `ov vm create` runs from inside a rootless container (e.g., `/ov-images:selkies-desktop-ov`) as uid 1000 with only `/dev/kvm` passthrough — no root, no `--privileged`, no `CAP_SYS_ADMIN`. See `/ov-layers:virtualization` for the supervisord program definitions and the session-mode setup.
 
+### VMs: `kind: vm` entities in `vms.yml`
+
+VMs are a first-class authoring surface alongside container images. `vms.yml` declares `kind: vm` entities with a discriminated-union `source:` block — either `source.kind: cloud_image` (external qcow2 + cloud-init) or `source.kind: bootc` (pairs with a `bootc: true` container image in the repo). Resolved through `overthink.yml includes:` into `VmSpec` Go types, then consumed by `ov vm build/create` and the `ov deploy add vm:<name>` target.
+
+```yaml
+# vms.yml
+vms:
+  arch-cloud-base:                                 # cloud_image source
+    source:
+      kind: cloud_image
+      url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+      checksum: {type: sha256}                     # value auto-resolves from <url>.SHA256 sidecar
+      base_user: arch                              # adopt-user pattern: no useradd, just append pubkey
+    disk_size: 40G
+    ram: 8G
+    cpus: 4
+    firmware: bios                                 # BIOS preferred for cloud images — see /ov-vms:arch-cloud-base
+    ssh: {port: 2224, key_source: generate}
+    cloud_init:
+      packages: [sudo, spice-vdagent]
+      ov_install: {strategy: auto}                 # auto-install ov inside the guest
+
+  selkies-desktop-bootc-bootc:                     # bootc source
+    source:
+      kind: bootc
+      image: selkies-desktop-bootc                 # references kind:image entry in image.yml
+    disk_size: 40 GiB
+    ram: 8G
+```
+
+The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fields are **removed** from `kind: image` entries in the hard cutover. Projects predating this schema convert in one shot with `ov migrate vm-spec` — idempotent, preserves any hand-authored `vms:` keys. See `/ov:migrate` for the command and `/ov-dev:cutover-policy` for the policy.
+
+`ov deploy add vm:<name> <ref>` applies host-deploy-style layer recipes **inside** a provisioned VM over SSH. The same `InstallPlan` IR drives container, host, VM, and K8s deploys — write a layer once, deploy it anywhere. See `/ov-dev:vm-deploy-target` for the SSH-executor model and `/ov-vms:vms` for the full authoring reference.
+
+```bash
+ov vm create arch-cloud-base                              # provision VM
+ov deploy add vm:arch-cloud-base fedora-coder \           # apply kitchen-sink layers in the guest
+    --add-layer team-extras \
+    --add-layer github.com/team/configs/layers/sshkeys
+ov deploy del vm:arch-cloud-base                          # reverse applied layers; VM stays up
+```
+
+See `/ov-vms:arch-cloud-base` for the canonical cloud_image VM with BIOS-firmware + virtio-gpu + resource-sizing RCA write-up, and `/ov-vms:selkies-desktop-bootc-bootc` (+ paired `/ov-images:selkies-desktop-bootc`) for the canonical bootc VM.
+
 ## Install
 
 **Recommended — Go install** (requires Go 1.25.3+):
@@ -262,10 +307,15 @@ ov start jupyter
 ov config jupyter
 
 # Build a bootable VM disk image (selkies-desktop-bootc is the canonical bootc example)
-ov image build selkies-desktop-bootc
-ov vm build selkies-desktop-bootc --type qcow2
-ov vm create selkies-desktop-bootc
-ov vm start selkies-desktop-bootc
+ov image build selkies-desktop-bootc                 # build the kind:image first
+ov vm build selkies-desktop-bootc-bootc --type qcow2 # kind:vm entity in vms.yml
+ov vm create selkies-desktop-bootc-bootc
+ov vm start selkies-desktop-bootc-bootc
+
+# Build and run a cloud_image VM (Arch Linux + cloud-init, canonical /ov-vms:arch-cloud-base example)
+ov vm build arch-cloud-base                          # fetches qcow2, resizes, renders seed ISO
+ov vm create arch-cloud-base                         # BIOS firmware + virtio-gpu + passt portForward
+ssh -p 2224 -i ~/.local/share/ov/vm/ov-arch-cloud-base/id_ed25519 arch@127.0.0.1
 
 # Apply layers directly to the local filesystem (no container)
 ov deploy add host ripgrep
@@ -333,14 +383,14 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 |---|---|---|
 | **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
 | **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov:image` "Authoring" table + `/ov:new`, `/ov:layer` |
-| **Deployment** | `deploy add`/`del` (unified verb; `host` targets local filesystem, `kubernetes` emits a Kustomize tree, any other name is a container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove` |
-| **Schema migration** | `migrate unified` — convert legacy `image.yml`/`build.yml`/flat-form `layer.yml` into unified `overthink.yml` with kind-keyed layer wrappers; idempotent; auto-invoked on remote-cache downloads | `/ov:migrate` |
+| **Deployment** | `deploy add`/`del` (unified verb; four targets: `host` → local filesystem, `vm:<name>` → VM via SSH, `kubernetes` → Kustomize tree, any other name → container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove`, `/ov-dev:vm-deploy-target` |
+| **Schema migration** | `migrate unified` (legacy `image.yml`/`build.yml`/flat-form `layer.yml` → unified `overthink.yml`); `migrate vm-spec` (legacy `image.bootc`/`image.vm:`/`image.libvirt:` → `vms.yml` `kind: vm` entities). Both idempotent; auto-invoked on remote-cache downloads | `/ov:migrate` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
 | **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov:mcp` + `/ov-layers:ov-mcp` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
-| **Host & VM** | `doctor`, `udev`, `vm` | `/ov:doctor`, `/ov:udev`, `/ov:vm` |
+| **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov:doctor`, `/ov:udev`, `/ov:vm`, `/ov-vms:vms` |
 | **Misc** | `version` | `/ov:version` |
 
 **Global flags** (apply to every command):
@@ -420,6 +470,10 @@ Each entry points to the canonical skill — details belong there, not here.
 | Build cache stale | `ov image build --no-cache <image>` (`/ov:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
 | Service built fine but broken in production | `ov test <image>` runs the baked layer + image + deploy checks against the live container; `ov image test <image>` checks the disposable build (`/ov:test`) |
+| `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vms:vms`, `/ov:migrate`) |
+| SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vms:arch-cloud-base` Finding B) |
+| `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov:vm` Backend matrix) |
+| `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov:deploy` "VM target") |
 
 ## Adding a Layer
 
@@ -451,7 +505,8 @@ Overthink is designed to work hand-in-hand with [Claude Code](https://claude.com
     "ov-dev@ov-plugins": true,
     "ov-jupyter@ov-plugins": true,
     "ov-layers@ov-plugins": true,
-    "ov-images@ov-plugins": true
+    "ov-images@ov-plugins": true,
+    "ov-vms@ov-plugins": true
   },
   "extraKnownMarketplaces": {
     "ov-plugins": {

@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -60,164 +59,23 @@ func (c *VmBuildCmd) Run() error {
 		}
 	}
 
-	var vmCfg *VmConfig
-	var imageRef string
-
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr == nil {
-		resolved, err := cfg.ResolveImage(imageName, calverTag, dir)
-		if err != nil {
-			return err
-		}
-		if !resolved.Bootc {
-			return fmt.Errorf("image %q is not a bootc image (bootc: true required)", imageName)
-		}
-		vmCfg = resolved.Vm
-		imageRef = resolved.FullTag
-	} else {
-		// Label path
-		ref := fmt.Sprintf("%s:%s", imageName, calverTag)
-		meta, metaErr := ExtractMetadata(ResolveImageEngineFromDir(dir, imageName, rt.RunEngine), ref)
-		if metaErr != nil {
-			return metaErr
-		}
-		if meta == nil {
-			return fmt.Errorf("image %s has no embedded metadata; rebuild with latest ov", ref)
-		}
-		if !meta.Bootc {
-			return fmt.Errorf("image %q is not a bootc image (bootc: true required)", imageName)
-		}
-		vmCfg = meta.Vm
-		if meta.Registry != "" {
-			imageRef = fmt.Sprintf("%s/%s:%s", meta.Registry, imageName, calverTag)
-		} else {
-			imageRef = ref
-		}
-	}
-
-	if vmCfg == nil {
-		vmCfg = &VmConfig{}
-	}
-
-	engine := ResolveImageEngineFromDir(dir, imageName, rt.RunEngine)
-
-	// CLI --size overrides config
-	diskSize := normalizeSize(vmCfg.DiskSize)
-	if diskSize == "" {
-		diskSize = "10G"
-	}
-	if c.Size != "" {
-		diskSize = normalizeSize(c.Size)
-	}
-
-	// CLI --root-size overrides config
-	rootSize := normalizeSize(vmCfg.RootSize)
-	if c.RootSize != "" {
-		rootSize = normalizeSize(c.RootSize)
-	}
-
-	// CLI --transport overrides config
-	transport := vmCfg.Transport
-	if c.Transport != "" {
-		transport = c.Transport
-	}
-
-	fmt.Fprintf(os.Stderr, "Building %s for %s\n", c.Type, imageRef)
-
-	// Always build as raw first, convert to qcow2 after if needed
-	rawOutputDir, err := filepath.Abs(filepath.Join("output", "raw"))
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(rawOutputDir, 0755); err != nil {
-		return fmt.Errorf("creating output directory: %w", err)
-	}
-	rawDiskPath := filepath.Join(rawOutputDir, "disk.raw")
-
-	// Build bootc install to-disk args inside the container
-	bootcArgs := []string{"bootc", "install", "to-disk", "--generic-image", "--via-loopback"}
-	if rootSize != "" {
-		bootcArgs = append(bootcArgs, "--root-size", rootSize)
-	}
-	if vmCfg.Rootfs != "" {
-		bootcArgs = append(bootcArgs, "--filesystem", vmCfg.Rootfs)
-	}
-	if vmCfg.KernelArgs != "" {
-		for _, karg := range strings.Fields(vmCfg.KernelArgs) {
-			bootcArgs = append(bootcArgs, "--karg", karg)
-		}
-	}
-	if transport != "" {
-		bootcArgs = append(bootcArgs, "--target-imgref", transport+"://"+imageRef)
-	}
-	bootcArgs = append(bootcArgs, "/output/disk.raw")
-
-	// Create a sparse raw disk image of the requested size
-	if err := createSparseFile(rawDiskPath, diskSize); err != nil {
-		return fmt.Errorf("creating disk image: %w", err)
-	}
-
-	// Resolve rootful engine (podman machine, sudo, or native)
-	engineCmd, err := RootfulEngine(engine, rt.Rootful)
-	if err != nil {
-		return fmt.Errorf("resolving rootful engine: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "Running bootc install to-disk via %s...\n", strings.Join(engineCmd, " "))
-
-	// Build container run args. `-v /dev:/dev` is required so that the
-	// privileged container shares the host's /dev namespace — `bootc install
-	// to-disk --via-loopback` calls `losetup` which needs to create new
-	// `/dev/loopN` device nodes via `/dev/loop-control`. Without the host
-	// /dev mount, the container's default tmpfs /dev has `/dev/loop-control`
-	// but new loop devices created by the kernel are invisible to the
-	// container (different mount namespace), producing
-	// `losetup: failed to set up loop device: No such file or directory`.
-	args := []string{
-		"run", "--rm", "--privileged",
-		"--pid=host",
-		"--security-opt", "label=type:unconfined_t",
-		"-v", "/dev:/dev",
-		"-v", rawDiskPath + ":/output/disk.raw",
-		"-v", "/var/lib/containers:/var/lib/containers",
-	}
-
-	args = append(args, imageRef)
-	args = append(args, bootcArgs...)
-
-	cmdArgs := append(engineCmd[1:], args...)
-	cmd := exec.Command(engineCmd[0], cmdArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if !c.Console {
-		cmd.Stdout = nil
-	}
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("bootc install to-disk failed: %w", err)
-	}
-
-	// Convert raw → qcow2 if requested
-	outputPath := filepath.Join("output", c.Type, "disk."+c.Type)
-	if c.Type == "qcow2" {
-		qcow2Dir := filepath.Join("output", "qcow2")
-		if err := os.MkdirAll(qcow2Dir, 0755); err != nil {
-			return fmt.Errorf("creating qcow2 output directory: %w", err)
-		}
-		absQcow2, _ := filepath.Abs(outputPath)
-		os.Remove(absQcow2) // remove any existing file to avoid lock conflicts
-
-		fmt.Fprintf(os.Stderr, "Converting raw → qcow2...\n")
-		convertCmd := exec.Command("qemu-img", "convert", "-f", "raw", "-O", "qcow2", rawDiskPath, absQcow2)
-		convertCmd.Stderr = os.Stderr
-		if err := convertCmd.Run(); err != nil {
-			return fmt.Errorf("qemu-img convert failed: %w", err)
-		}
-
-		// Clean up raw intermediate
-		os.Remove(rawDiskPath)
-	}
-
-	fmt.Fprintf(os.Stderr, "%s written to %s\n", strings.ToUpper(c.Type), outputPath)
-	return nil
+	// Reached here = no `kind: vm` entity matched imageName. The legacy
+	// ImageConfig.Vm / ImageConfig.Bootc fallback for VM builds was
+	// removed in the VM hard-cutover. Users must declare a `kind: vm`
+	// entity in vms.yml — paired with the bootc image if applicable.
+	_ = calverTag
+	return fmt.Errorf(
+		"VM %q has no kind:vm entity in vms.yml.\n"+
+			"  For a bootc VM, declare one in vms.yml:\n"+
+			"      vms:\n"+
+			"        %s-bootc:\n"+
+			"          source:\n"+
+			"            kind: bootc\n"+
+			"            image: %s\n"+
+			"          disk_size: 20G\n"+
+			"  Or auto-generate paired entries for bootc:true images:\n"+
+			"      ov migrate vm-spec",
+		imageName, imageName, imageName)
 }
 
 // createSparseFile creates a sparse file of the given size (e.g. "10G", "20G").

@@ -53,11 +53,14 @@ func TestIsDeviceElement(t *testing.T) {
 }
 
 func TestCollectLibvirtSnippets(t *testing.T) {
+	// Post-cutover, CollectLibvirtSnippets only harvests layer-level
+	// `libvirt:` fields (image-level `libvirt:` was deleted in the VM
+	// hard-cutover; image-level raw snippets now live on the paired
+	// kind:vm entity's spec.libvirt.snippets:).
 	cfg := &Config{
 		Images: map[string]ImageConfig{
 			"test-image": {
-				Layers:  []string{"layer-a", "layer-b"},
-				Libvirt: []string{"<graphics type='spice' autoport='yes'/>"},
+				Layers: []string{"layer-a", "layer-b"},
 			},
 		},
 	}
@@ -74,18 +77,8 @@ func TestCollectLibvirtSnippets(t *testing.T) {
 	}
 
 	snippets := CollectLibvirtSnippets(cfg, layers, "test-image")
-	if len(snippets) != 2 {
-		t.Fatalf("expected 2 snippets, got %d: %v", len(snippets), snippets)
-	}
-
-	// Verify dedup
-	cfg.Images["test-image"] = ImageConfig{
-		Layers:  []string{"layer-a"},
-		Libvirt: []string{"<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"},
-	}
-	snippets = CollectLibvirtSnippets(cfg, layers, "test-image")
 	if len(snippets) != 1 {
-		t.Fatalf("expected 1 snippet after dedup, got %d", len(snippets))
+		t.Fatalf("expected 1 snippet (layer-a only, image-level removed), got %d: %v", len(snippets), snippets)
 	}
 }
 

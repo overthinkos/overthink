@@ -51,20 +51,6 @@ type AliasConfig struct {
 	Command string `yaml:"command,omitempty"` // defaults to Name if empty
 }
 
-// VmConfig configures virtual machine settings for bootc images
-type VmConfig struct {
-	DiskSize   string `yaml:"disk_size,omitempty" json:"disk_size,omitempty"`     // e.g. "10 GiB"
-	RootSize   string `yaml:"root_size,omitempty" json:"root_size,omitempty"`     // root partition size (e.g. "10G")
-	Ram        string `yaml:"ram,omitempty" json:"ram,omitempty"`                 // e.g. "4G"
-	Cpus       int    `yaml:"cpus,omitempty" json:"cpus,omitempty"`              // e.g. 2
-	KernelArgs string `yaml:"kernel_args,omitempty" json:"kernel_args,omitempty"` // extra kernel cmdline
-	Rootfs     string `yaml:"rootfs,omitempty" json:"rootfs,omitempty"`          // root filesystem type (ext4, xfs, btrfs)
-	Transport  string `yaml:"transport,omitempty" json:"transport,omitempty"`     // image transport (registry, containers-storage)
-	SshPort    int    `yaml:"ssh_port,omitempty" json:"ssh_port,omitempty"`       // host SSH port (default: 2222)
-	Firmware   string `yaml:"firmware,omitempty" json:"firmware,omitempty"`       // uefi-secure, uefi-insecure, bios
-	Network    string `yaml:"network,omitempty" json:"network,omitempty"`         // network mode: user, bridge name
-}
-
 // SecurityConfig holds container security options (privileged, capabilities, devices).
 type SecurityConfig struct {
 	Privileged  bool     `yaml:"privileged,omitempty" json:"privileged,omitempty"`
@@ -141,8 +127,6 @@ type ImageConfig struct {
 	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
 	Network    string            `yaml:"network,omitempty"`      // container network mode (e.g. "host", "none", "slirp4netns")
 	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
-	Vm           *VmConfig         `yaml:"vm,omitempty"`            // virtual machine settings (bootc images)
-	Libvirt      []string          `yaml:"libvirt,omitempty"`       // raw libvirt XML snippets for VM configuration
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
 
@@ -216,9 +200,6 @@ type ResolvedImage struct {
 
 	// Tunnel configuration
 	Tunnel *TunnelConfig `json:",omitempty"` // resolved tunnel config (nil if no tunnel)
-
-	// VM configuration (bootc images)
-	Vm *VmConfig `json:",omitempty"` // resolved VM settings
 
 	// Container network mode (e.g. "host", "none")
 	Network string
@@ -463,10 +444,14 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	// Tunnel config is a deploy-time concern — resolved from deploy.yml only.
 	// image.yml tunnel: field is ignored (kept in struct for YAML compat).
 
-	// Resolve VM config: only for bootc images, and only when configured
-	if img.Bootc && (img.Vm != nil || c.Defaults.Vm != nil) {
-		resolved.Vm = resolveVmConfig(img.Vm, c.Defaults.Vm)
-	}
+	// VM configuration (disk_size, ram, cpus, firmware, libvirt, …) lives
+	// on `kind: vm` entities in vms.yml, NOT on image.yml entries. The
+	// legacy ImageConfig.Vm / .Libvirt fields were removed in the VM
+	// hard-cutover; `bootc: true` on an image now only declares that the
+	// container image is bootc-bootable (for `ov vm build` to produce a
+	// qcow2 via `bootc install to-disk`). To run that bootc image as a
+	// VM, declare a paired `kind: vm` entity with `source.kind: bootc`
+	// in vms.yml (see `ov migrate vm-spec`).
 
 	// Resolve network: image -> defaults -> ""
 	resolved.Network = img.Network
@@ -601,83 +586,9 @@ func intPtr(v int) *int {
 	return &v
 }
 
-// resolveVmConfig merges image-level and default-level VM config with hardcoded fallbacks.
-func resolveVmConfig(img, defaults *VmConfig) *VmConfig {
-	vm := &VmConfig{
-		DiskSize:   "10 GiB",
-		Ram:        "4G",
-		Cpus:       2,
-		KernelArgs: "console=ttyS0,115200n8",
-		Rootfs:     "ext4",
-	}
-	// Apply defaults first
-	if defaults != nil {
-		if defaults.DiskSize != "" {
-			vm.DiskSize = defaults.DiskSize
-		}
-		if defaults.RootSize != "" {
-			vm.RootSize = defaults.RootSize
-		}
-		if defaults.Ram != "" {
-			vm.Ram = defaults.Ram
-		}
-		if defaults.Cpus > 0 {
-			vm.Cpus = defaults.Cpus
-		}
-		if defaults.KernelArgs != "" {
-			vm.KernelArgs = defaults.KernelArgs
-		}
-		if defaults.Rootfs != "" {
-			vm.Rootfs = defaults.Rootfs
-		}
-		if defaults.Transport != "" {
-			vm.Transport = defaults.Transport
-		}
-		if defaults.SshPort > 0 {
-			vm.SshPort = defaults.SshPort
-		}
-		if defaults.Firmware != "" {
-			vm.Firmware = defaults.Firmware
-		}
-		if defaults.Network != "" {
-			vm.Network = defaults.Network
-		}
-	}
-	// Apply image-level overrides
-	if img != nil {
-		if img.DiskSize != "" {
-			vm.DiskSize = img.DiskSize
-		}
-		if img.RootSize != "" {
-			vm.RootSize = img.RootSize
-		}
-		if img.Ram != "" {
-			vm.Ram = img.Ram
-		}
-		if img.Cpus > 0 {
-			vm.Cpus = img.Cpus
-		}
-		if img.KernelArgs != "" {
-			vm.KernelArgs = img.KernelArgs
-		}
-		if img.Rootfs != "" {
-			vm.Rootfs = img.Rootfs
-		}
-		if img.Transport != "" {
-			vm.Transport = img.Transport
-		}
-		if img.SshPort > 0 {
-			vm.SshPort = img.SshPort
-		}
-		if img.Firmware != "" {
-			vm.Firmware = img.Firmware
-		}
-		if img.Network != "" {
-			vm.Network = img.Network
-		}
-	}
-	return vm
-}
+// resolveVmConfig was removed in the VM hard-cutover. VM configuration
+// now lives on `kind: vm` entities in vms.yml (VmSpec); image.yml
+// entries no longer carry vm: or libvirt: fields.
 
 // walkBaseChainDistro walks the base chain through image.yml entries to find
 // the first ancestor with a distro: field set. Returns nil if no ancestor

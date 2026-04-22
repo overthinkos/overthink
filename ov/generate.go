@@ -1499,15 +1499,10 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelTests, tests)
 	}
 
-	// Bootc-only labels: VM config, libvirt snippets
-	if img.Bootc {
-		if img.Vm != nil {
-			writeJSONLabel(b, LabelVm, img.Vm)
-		}
-
-		libvirtSnippets := CollectLibvirtSnippets(g.Config, g.Layers, imageName)
-		writeJSONLabel(b, LabelLibvirt, libvirtSnippets)
-	}
+	// VM config + libvirt snippets labels removed in the hard-cutover.
+	// VM definitions live in vms.yml (`kind: vm` entities) as a
+	// separate artifact from the container image; container image OCI
+	// labels no longer describe VM boot parameters.
 
 	// Init system label: active init system name + per-init service list
 	if img.InitConfig != nil {

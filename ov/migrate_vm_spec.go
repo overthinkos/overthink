@@ -133,70 +133,31 @@ func MigrateVmSpec(opts MigrateVmSpecOpts) ([]string, error) {
 	return []string{target}, nil
 }
 
-// isLegacyBootcImage returns true when an ImageConfig has fields that
-// should migrate into a kind:vm entity: bootc=true, a non-nil vm:, or
-// any libvirt: snippets.
+// isLegacyBootcImage returns true when an ImageConfig carries `bootc:
+// true` — marking it as a bootc-bootable container image that users
+// typically pair with a `kind: vm` entity. Post-cutover, `bootc:` is
+// the ONLY legacy VM-related field remaining on ImageConfig; `vm:`
+// and `libvirt:` were deleted.
 func isLegacyBootcImage(img *ImageConfig) bool {
-	if img.Bootc {
-		return true
-	}
-	if img.Vm != nil {
-		return true
-	}
-	if len(img.Libvirt) > 0 {
-		return true
-	}
-	return false
+	return img.Bootc
 }
 
-// synthesizeBootcVmSpec converts legacy ImageConfig fields into a new
-// VmSpec (bootc source branch). The mapping mirrors the plan's
-// "Hard Cutover & Config Migration" table.
+// synthesizeBootcVmSpec generates a minimal `kind: vm` entity (bootc
+// source branch) paired with a `bootc: true` image. Users can edit
+// the synthesized entry in vms.yml to add VM-specific hardware sizing,
+// firmware choice, libvirt devices, etc.
 func synthesizeBootcVmSpec(imageName string, img *ImageConfig) *VmSpec {
-	spec := &VmSpec{
+	_ = img // kept for future extension (e.g. reading image-level hints)
+	return &VmSpec{
 		Source: VmSource{
 			Kind:  "bootc",
 			Image: imageName,
 		},
+		// All hardware defaults (disk_size, ram, cpus, firmware, network,
+		// ssh, libvirt devices) left blank so downstream VM builds fall
+		// back to VmSpec's runtime defaults. Users tighten these by
+		// hand-editing vms.yml post-migration.
 	}
-
-	if img.Vm != nil {
-		v := img.Vm
-		spec.DiskSize = v.DiskSize
-		spec.Ram = v.Ram
-		spec.Cpus = v.Cpus
-		spec.Firmware = v.Firmware
-
-		spec.Source.Rootfs = v.Rootfs
-		spec.Source.RootSize = v.RootSize
-		spec.Source.KernelArgs = v.KernelArgs
-		spec.Source.Transport = v.Transport
-
-		// Network: old string form → structured. Unknown values map
-		// through unchanged as a bridge name when not "user".
-		if v.Network != "" {
-			if v.Network == "user" {
-				spec.Network = &VmNetwork{Mode: "user"}
-			} else {
-				spec.Network = &VmNetwork{Mode: "bridge", Bridge: v.Network}
-			}
-		}
-
-		// SSH port.
-		if v.SshPort != 0 {
-			spec.SSH = &VmSSH{Port: v.SshPort, User: "root"}
-		}
-	}
-
-	// libvirt: [<xml>, …] (list of strings) → libvirt.snippets: [<xml>, …]
-	if len(img.Libvirt) > 0 {
-		if spec.Libvirt == nil {
-			spec.Libvirt = &LibvirtConfig{}
-		}
-		spec.Libvirt.Snippets = append([]string{}, img.Libvirt...)
-	}
-
-	return spec
 }
 
 // renderVmsYaml serializes the vm map into a vms.yml body with a

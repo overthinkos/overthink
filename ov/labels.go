@@ -35,8 +35,9 @@ const (
 	LabelAcmeEmail      = "org.overthinkos.acme_email"
 	LabelEnv            = "org.overthinkos.env"
 	LabelHooks          = "org.overthinkos.hooks"
-	LabelVm             = "org.overthinkos.vm"
-	LabelLibvirt        = "org.overthinkos.libvirt"
+	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
+	// now live in vms.yml as `kind: vm` entities; no longer embedded
+	// in container image OCI labels.
 	LabelRoutes         = "org.overthinkos.routes"
 	LabelInit           = "org.overthinkos.init"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
@@ -142,8 +143,9 @@ type ImageMetadata struct {
 	AcmeEmail      string
 	Env            []string
 	Hooks          *HooksConfig
-	Vm             *VmConfig
-	Libvirt        []string
+	// Vm / Libvirt: removed in the VM hard-cutover. VM config lives on
+	// `kind: vm` entities in vms.yml (VmSpec / LibvirtConfig), not on
+	// container image OCI labels.
 	Routes         []LabelRoute
 	Init           string            // active init system name ("supervisord", "systemd", "")
 	Services       []CapabilityService // structured per-entry service specs (LabelServices); source-less deploy reads these
@@ -304,21 +306,9 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		meta.Hooks = &hooks
 	}
 
-	// VM config
-	if v := labels[LabelVm]; v != "" {
-		var vm VmConfig
-		if err := json.Unmarshal([]byte(v), &vm); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelVm, err)
-		}
-		meta.Vm = &vm
-	}
-
-	// Libvirt
-	if v := labels[LabelLibvirt]; v != "" {
-		if err := json.Unmarshal([]byte(v), &meta.Libvirt); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelLibvirt, err)
-		}
-	}
+	// VM config + libvirt snippets: removed in the VM hard-cutover. No
+	// longer emitted as OCI labels; VM definitions live in vms.yml as
+	// `kind: vm` entities.
 
 	// Routes
 	if v := labels[LabelRoutes]; v != "" {

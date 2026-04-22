@@ -30,8 +30,7 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 			LabelAcmeEmail: "admin@example.com",
 			LabelEnv:       `["API_KEY=secret"]`,
 			LabelHooks:     `{"post_enable":"echo started","pre_remove":"echo stopping"}`,
-			LabelVm:        `{"disk_size":"20 GiB","ram":"8G","cpus":4,"ssh_port":2222}`,
-			LabelLibvirt:   `["<devices><channel/></devices>"]`,
+			// LabelVm / LabelLibvirt removed in the VM hard-cutover.
 			LabelRoutes:    `[{"host":"openclaw.localhost","port":18789}]`,
 			LabelInit:                              "supervisord",
 			"org.overthinkos.services.supervisord": `["traefik","testapi"]`,
@@ -130,28 +129,8 @@ func TestExtractMetadataFromLabels(t *testing.T) {
 		t.Errorf("Hooks.PreRemove = %q, want %q", meta.Hooks.PreRemove, "echo stopping")
 	}
 
-	// VM config
-	if meta.Vm == nil {
-		t.Fatal("Vm = nil, want non-nil")
-	}
-	if meta.Vm.DiskSize != "20 GiB" {
-		t.Errorf("Vm.DiskSize = %q, want %q", meta.Vm.DiskSize, "20 GiB")
-	}
-	if meta.Vm.Ram != "8G" {
-		t.Errorf("Vm.Ram = %q, want %q", meta.Vm.Ram, "8G")
-	}
-	if meta.Vm.Cpus != 4 {
-		t.Errorf("Vm.Cpus = %d, want 4", meta.Vm.Cpus)
-	}
-	if meta.Vm.SshPort != 2222 {
-		t.Errorf("Vm.SshPort = %d, want 2222", meta.Vm.SshPort)
-	}
-
-	// Libvirt
-	wantLibvirt := []string{"<devices><channel/></devices>"}
-	if !reflect.DeepEqual(meta.Libvirt, wantLibvirt) {
-		t.Errorf("Libvirt = %v, want %v", meta.Libvirt, wantLibvirt)
-	}
+	// VM config + libvirt snippets assertions removed in the
+	// VM hard-cutover (no longer on ImageMetadata).
 
 	// Routes
 	wantRoutes := []LabelRoute{{Host: "openclaw.localhost", Port: 18789}}
@@ -275,9 +254,7 @@ func TestExtractMetadataMinimalLabels(t *testing.T) {
 	if meta.Hooks != nil {
 		t.Errorf("Hooks = %v, want nil", meta.Hooks)
 	}
-	if meta.Vm != nil {
-		t.Errorf("Vm = %v, want nil", meta.Vm)
-	}
+	// Vm assertion removed (field no longer exists post-cutover).
 }
 
 func TestExtractMetadataPortRelay(t *testing.T) {
@@ -396,7 +373,6 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		Network:  "host",
 		DNS:     "myapp.example.com",
 		AcmeEmail: "admin@example.com",
-		Vm:       &VmConfig{Ram: "4G", Cpus: 2},
 		InitConfig: &InitConfig{
 			Init: map[string]*InitDef{
 				"supervisord": {
@@ -446,7 +422,6 @@ func TestWriteLabelsEmitsLabels(t *testing.T) {
 		{LabelAliases, `[{"name":"myapp-cli","command":"myapp"}]`},
 		{LabelEnv, `["KEY=val"]`},
 		{LabelRoutes, `[{"host":"myapp.localhost","port":8080}]`},
-		{LabelVm, `"ram":"4G"`},
 		{LabelEnvLayers, `"APP_ENV":"prod"`},
 		{LabelPathAppend, `["/opt/myapp/bin"]`},
 		{"org.overthinkos.services.supervisord", `["svc"]`},
@@ -496,7 +471,7 @@ func TestWriteLabelsOmitsEmptyArrays(t *testing.T) {
 		LabelPorts, LabelVolumes, LabelAliases, LabelRegistry,
 		LabelBootc, LabelSecurity, LabelNetwork,
 		LabelTunnel, LabelDNS, LabelAcmeEmail, LabelEnv,
-		LabelHooks, LabelVm, LabelLibvirt, LabelRoutes,
+		LabelHooks, LabelRoutes,
 		LabelInit, LabelEnvLayers, LabelPathAppend,
 		LabelPortRelay, LabelSkills,
 	}
@@ -562,7 +537,6 @@ func TestLabelRoundTrip(t *testing.T) {
 		Network:   "host",
 		DNS:      "roundtrip.example.com",
 		AcmeEmail: "test@example.com",
-		Vm:        &VmConfig{Ram: "8G", Cpus: 4, SshPort: 2222, DiskSize: "30 GiB"},
 		InitConfig: &InitConfig{
 			Init: map[string]*InitDef{
 				"supervisord": {
@@ -665,16 +639,8 @@ func TestLabelRoundTrip(t *testing.T) {
 		t.Errorf("Hooks.PostEnable = %q, want %q", meta.Hooks.PostEnable, "echo hello")
 	}
 
-	// VM
-	if meta.Vm == nil {
-		t.Fatal("Vm = nil, want non-nil")
-	}
-	if meta.Vm.Ram != "8G" {
-		t.Errorf("Vm.Ram = %q, want %q", meta.Vm.Ram, "8G")
-	}
-	if meta.Vm.Cpus != 4 {
-		t.Errorf("Vm.Cpus = %d, want 4", meta.Vm.Cpus)
-	}
+	// VM assertions removed: ImageMetadata.Vm field was deleted in the
+	// VM hard-cutover (VM definitions live in vms.yml now).
 
 	// Routes
 	wantRoutes := []LabelRoute{{Host: "svc.localhost", Port: 9090}}

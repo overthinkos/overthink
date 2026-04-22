@@ -1314,35 +1314,12 @@ func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 		}
 	}
 
-	// Validate image-level snippets
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		for i, snippet := range img.Libvirt {
-			if err := ValidateLibvirtSnippet(snippet); err != nil {
-				errs.Add("image %q libvirt[%d]: %v", imageName, i, err)
-			}
-		}
-
-		// Warn if libvirt snippets used in non-bootc images
-		if !img.Bootc {
-			hasLibvirt := len(img.Libvirt) > 0
-			if !hasLibvirt {
-				for _, layerRef := range img.Layers {
-					bare := BareRef(layerRef)
-					layer, ok := layers[bare]
-					if ok && layer.HasLibvirt {
-						hasLibvirt = true
-						break
-					}
-				}
-			}
-			if hasLibvirt {
-				fmt.Fprintf(os.Stderr, "Warning: image %q has libvirt snippets but is not a bootc image (snippets will be ignored)\n", imageName)
-			}
-		}
-	}
+	// Image-level `libvirt:` field was removed in the VM hard-cutover.
+	// Raw XML snippets live on layer `libvirt:` fields (validated above)
+	// and on `kind: vm` entity `spec.libvirt.snippets:` lists (validated
+	// by ValidateLibvirtConfig in libvirt_validate.go).
+	_ = cfg
+	_ = layers
 }
 
 // validateEngineConfig validates engine declarations in layers and images

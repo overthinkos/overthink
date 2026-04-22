@@ -141,80 +141,20 @@ func (c *VmCreateCmd) Run() error {
 		}
 	}
 
-	// Resolve VM settings from image labels (+ deploy.yml overlay).
-	ram := "4G"
-	cpus := 2
-	sshPort := 2222
-	var ports []string
-	var libvirtSnippets []string
-
-	engine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
-	ref := fmt.Sprintf("%s:latest", c.Image)
-	meta, metaErr := ExtractMetadata(engine, ref)
-	if metaErr == nil && meta != nil {
-		dc, _ := LoadDeployConfig()
-		MergeDeployOntoMetadata(meta, dc, c.Instance)
-		if meta.Vm != nil {
-			ram = meta.Vm.Ram
-			cpus = meta.Vm.Cpus
-			if meta.Vm.SshPort != 0 {
-				sshPort = meta.Vm.SshPort
-			}
-		}
-		ports = meta.Ports
-		libvirtSnippets = meta.Libvirt
-	} else if metaErr != nil {
-		return metaErr
-	}
-
-	// CLI flags override config
-	if c.Ram != "" {
-		ram = c.Ram
-	}
-	if c.Cpus > 0 {
-		cpus = c.Cpus
-	}
-
-	name := vmName(c.Image, c.Instance)
-
-	// Resolve SSH public key for SMBIOS credential injection
-	sshKeyDir, err := vmSSHKeyDir(name)
-	if err != nil {
-		return err
-	}
-	sshPubKey, err := resolveSSHPubKey(c.SshKey, sshKeyDir)
-	if err != nil {
-		return err
-	}
-
-	switch backend {
-	case "libvirt":
-		qcow2, err := resolveQcow2Path(c.Image)
-		if err != nil {
-			return err
-		}
-		if err := c.createLibvirt(name, qcow2, ram, cpus, sshPort, ports, sshPubKey); err != nil {
-			return err
-		}
-	case "qemu":
-		qcow2, err := resolveQcow2Path(c.Image)
-		if err != nil {
-			return err
-		}
-		if len(libvirtSnippets) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: libvirt snippets are not supported with the QEMU backend (skipping %d snippet(s))\n", len(libvirtSnippets))
-		}
-		return c.createQemu(name, qcow2, ram, cpus, sshPort, ports, sshPubKey)
-	}
-
-	// Inject libvirt XML snippets for libvirt backend
-	if len(libvirtSnippets) > 0 {
-		if err := InjectLibvirtXML(name, libvirtSnippets); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to inject libvirt config: %v\n", err)
-		}
-	}
-
-	return nil
+	// Reached here = image is not a `kind: vm` entity, AND the legacy
+	// ImageConfig.Vm / OCI LabelVm fallback was removed in the VM
+	// hard-cutover. Tell the user what to do.
+	_ = rt
+	_ = backend
+	return fmt.Errorf(
+		"VM %q has no kind:vm entity in vms.yml.\n"+
+			"  Declare one (optionally paired with a bootc image), e.g.:\n"+
+			"      vms:\n"+
+			"        %s-bootc:\n"+
+			"          source: {kind: bootc, image: %s}\n"+
+			"  Or auto-generate paired entries from bootc:true images with:\n"+
+			"      ov migrate vm-spec",
+		c.Image, c.Image, c.Image)
 }
 
 func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, ports []string, sshPubKey string) error {
@@ -815,17 +755,13 @@ type VmSshCmd struct {
 }
 
 func (c *VmSshCmd) Run() error {
-	// Resolve SSH port from image labels (+ deploy.yml overlay).
+	// Resolve SSH port from the kind:vm entity in vms.yml.
+	// (Legacy OCI LabelVm lookup was removed in the VM hard-cutover.)
 	if c.Port == 2222 {
-		rt, rtErr := ResolveRuntime()
-		if rtErr == nil {
-			engine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
-			ref := fmt.Sprintf("%s:latest", c.Image)
-			if meta, err := ExtractMetadata(engine, ref); err == nil && meta != nil {
-				dc, _ := LoadDeployConfig()
-				MergeDeployOntoMetadata(meta, dc, c.Instance)
-				if meta.Vm != nil && meta.Vm.SshPort != 0 {
-					c.Port = meta.Vm.SshPort
+		if dir, derr := os.Getwd(); derr == nil {
+			if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
+				if spec, hit := uf.VMs[c.Image]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
+					c.Port = spec.SSH.Port
 				}
 			}
 		}

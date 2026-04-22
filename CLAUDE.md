@@ -44,6 +44,40 @@ See `/ov:test` "DO NOT fake success" section for the mandatory sequence applied 
 Always pick the cleanest long-term approach and prioritize having a clean codebase with any deprecated code fully removed above everything.
 You have all the time in the world and taking the time to get things properly done is ALWAYS worth the effort.
 
+## Hard Cutover by Default
+
+Every schema change, API rename, or deprecation MUST be delivered as a single
+hard-cutover PR unless the user explicitly requests a phased migration. This
+applies to BOTH code (Go types, exported functions, CLI flags, OCI labels) AND
+config (overthink.yml / deploy.yml / layer.yml field names and shapes).
+
+Forbidden by default:
+- Backcompat unmarshalers that accept both old and new YAML forms.
+- `deprecated.go` shims or type aliases that re-export removed identifiers.
+- Silent upconverters that rewrite stale configs at load time.
+- Dual-mode code paths where both the old and new surface work simultaneously.
+- "Phase 2 cleanup" comments or TODOs for work that the cutover PR was supposed
+  to complete.
+
+Required for every breaking change:
+- A one-shot `ov migrate <name>` command that transforms legacy configs in-place.
+  Migration commands are idempotent — running twice is a no-op.
+- Hard load-time errors for any residual legacy field, with a one-line remediation
+  hint pointing at the migration command.
+- Deletion — in the same PR — of every Go type, function, CLI flag, OCI label,
+  YAML field, skill doc paragraph, and test fixture that references the removed
+  surface.
+
+Rationale: phased migrations accumulate mid-state complexity that in practice
+rarely gets removed. "We'll clean up in Phase 2" is the anti-pattern that R6
+already forbids on a per-plan basis. Making hard cutover the default across the
+project closes the loophole where this behavior sneaks in via PRs whose plans
+didn't explicitly call for a clean cutover.
+
+Exception: explicit user instruction ("keep the old API for a grace period",
+"phase the cutover across two releases"). The exception must be recorded in the
+plan file; when the plan is silent, hard cutover is the default.
+
 ## Where things are documented
 
 See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-jupyter`). README.md carries the user-facing intro. All architecture / mode split / subsystem detail lives in skills — do not duplicate here.
@@ -55,7 +89,9 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Skills first** — invoke matching skills BEFORE reading source, launching Explore agents, or grepping. Order: skills → CLAUDE.md → memory → explore (last resort). See `/ov-dev:skills`.
 - **Lowercase-hyphenated names** for layers and images.
 - **Tests ship with the image** — every layer that installs a service has a `tests:` block. See `/ov:test`.
-- **Unified YAML** — `overthink.yml` is the single project entry point with kind-keyed `build:` / `image:` / `layer:` entries, `includes:`, `discover:`, and `@host/org/repo:version` remote refs. Legacy `image.yml`/scattered `layer.yml` flat-form are rejected — convert with `ov migrate unified`. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
+- **Unified YAML** — `overthink.yml` is the single project entry point with kind-keyed `build:` / `image:` / `layer:` / `vm:` entries, `includes:`, `discover:`, and `@host/org/repo:version` remote refs. Legacy `image.yml`/scattered `layer.yml` flat-form are rejected — convert with `ov migrate unified`. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
+- **VMs are `kind: vm` entities** — repo-declarable VM primitives with `source.kind: cloud_image | bootc`, structured libvirt + cloud-init, and `vm:<name>` deploy targets. Legacy `image.bootc: true` + `image.vm:` + `image.libvirt:` fields are removed; convert with `ov migrate vm-spec`. See `/ov:vm`, `/ov:migrate`.
+- **Hard cutover by default** — schema/API changes ship as single-PR cutovers with a matching `ov migrate <name>` command; no backcompat shims or upconverters unless the user explicitly requests a phased migration. See "Hard Cutover by Default" section.
 - **Mode purity** — `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
 - **Project directory resolution** — `-C`/`--dir`/`OV_PROJECT_DIR` (local) or `--repo`/`OV_PROJECT_REPO` (remote). See `/ov:image` "Project directory resolution".
 - **User policy: adopt over rename** — declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov:image` "user_policy" and `/ov:build` "base_user:".

@@ -8,6 +8,7 @@ import (
 // MigrateCmdGroup groups `ov migrate` subcommands.
 type MigrateCmdGroup struct {
 	Unified MigrateUnifiedCmd `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
+	VmSpec  MigrateVmSpecCmd  `cmd:"vm-spec" help:"Migrate legacy bootc:true + image.vm: + image.libvirt: fields to kind:vm entities"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

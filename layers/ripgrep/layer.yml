@@ -6,3 +6,11 @@ layer:
     packages:
       - ripgrep
 
+  pac:
+    packages:
+      - ripgrep
+
+  deb:
+    packages:
+      - ripgrep
+

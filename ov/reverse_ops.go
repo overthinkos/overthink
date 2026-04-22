@@ -19,10 +19,27 @@ import (
 
 // ReverseExecutor is the interface ReverseOp handlers expect. Allows
 // us to pass either DeployDelCmd (for real teardown) or a test mock.
+//
+// reverseRunner returns the shell-runner used to execute reversal
+// commands. When non-nil, handlers dispatch through it (so VM teardown
+// runs commands over SSH instead of locally); when nil, handlers fall
+// back to local `exec.Command` — the long-standing host-teardown path.
 type ReverseExecutor interface {
 	reverseDryRun() bool
 	reverseKeepRepoChanges() bool
 	reverseKeepServices() bool
+	reverseRunner() ReverseRunner
+}
+
+// ReverseRunner executes reversal shell scripts at the requested
+// privilege level. Implemented by both the local-exec host runner and
+// the SSH-based VM runner (deploy_target_vm.go :: SSHReverseRunner).
+type ReverseRunner interface {
+	// RunSystem runs a bash script as root (wraps with sudo on host
+	// runners; uses `ssh sudo bash -s` on VM runners).
+	RunSystem(script string) error
+	// RunUser runs a bash script as the deploy user (no sudo).
+	RunUser(script string) error
 }
 
 // DeployDelCmd satisfies ReverseExecutor via thin wrappers — keeps
@@ -30,6 +47,7 @@ type ReverseExecutor interface {
 func (c *DeployDelCmd) reverseDryRun() bool          { return c.DryRun }
 func (c *DeployDelCmd) reverseKeepRepoChanges() bool { return c.KeepRepoChanges }
 func (c *DeployDelCmd) reverseKeepServices() bool    { return c.KeepServices }
+func (c *DeployDelCmd) reverseRunner() ReverseRunner { return c.Runner }
 
 // runReverseOps executes ops in REVERSE order (last-installed, first-
 // removed). Idempotent where possible: a missing file is treated as
@@ -112,6 +130,13 @@ func reversePixiEnvRemove(op ReverseOp, re ReverseExecutor) error {
 			fmt.Fprintf(os.Stderr, "[dry-run] rm -rf %s\n", path)
 			continue
 		}
+		if runner := re.reverseRunner(); runner != nil {
+			// Remote: $HOME resolves on the guest.
+			if err := runner.RunUser(fmt.Sprintf("rm -rf %q", "$HOME/.pixi/envs/"+envName)); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := os.RemoveAll(path); err != nil {
 			return err
 		}
@@ -128,10 +153,7 @@ func reverseCargoUninstall(op ReverseOp, re ReverseExecutor) error {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s\n", strings.Join(argv, " "))
 		return nil
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runUserShellReverse(strings.Join(argv, " "), re)
 }
 
 func reverseNpmUninstallG(op ReverseOp, re ReverseExecutor) error {
@@ -143,10 +165,7 @@ func reverseNpmUninstallG(op ReverseOp, re ReverseExecutor) error {
 		fmt.Fprintf(os.Stderr, "[dry-run] %s\n", strings.Join(argv, " "))
 		return nil
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return runUserShellReverse(strings.Join(argv, " "), re)
 }
 
 func reverseRmFileSystem(op ReverseOp, re ReverseExecutor) error {
@@ -168,6 +187,12 @@ func reverseRmFileUser(op ReverseOp, re ReverseExecutor) error {
 			fmt.Fprintf(os.Stderr, "[dry-run] rm -f %s\n", path)
 			continue
 		}
+		if runner := re.reverseRunner(); runner != nil {
+			if err := runner.RunUser(fmt.Sprintf("rm -f %s", shellQuoteSimple(path))); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
 		}
@@ -179,6 +204,12 @@ func reverseRmDir(op ReverseOp, re ReverseExecutor) error {
 	for _, path := range op.Targets {
 		if re.reverseDryRun() {
 			fmt.Fprintf(os.Stderr, "[dry-run] rm -rf %s\n", path)
+			continue
+		}
+		if runner := re.reverseRunner(); runner != nil {
+			if err := runner.RunUser(fmt.Sprintf("rm -rf %s", shellQuoteSimple(path))); err != nil {
+				return err
+			}
 			continue
 		}
 		if err := os.RemoveAll(path); err != nil {
@@ -200,10 +231,7 @@ func reverseServiceDisable(op ReverseOp, re ReverseExecutor) error {
 				fmt.Fprintf(os.Stderr, "[dry-run] %s\n", strings.Join(argv, " "))
 				continue
 			}
-			cmd := exec.Command(argv[0], argv[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			_ = cmd.Run()
+			_ = runUserShellReverse(strings.Join(argv, " "), re)
 			continue
 		}
 		_ = runSudoArgvReverse(argv, re)
@@ -219,6 +247,10 @@ func reverseServiceRemove(op ReverseOp, re ReverseExecutor) error {
 		if op.Scope == ScopeUser {
 			if re.reverseDryRun() {
 				fmt.Fprintf(os.Stderr, "[dry-run] rm -f %s\n", path)
+				continue
+			}
+			if runner := re.reverseRunner(); runner != nil {
+				_ = runner.RunUser(fmt.Sprintf("rm -f %s", shellQuoteSimple(path)))
 				continue
 			}
 			_ = os.Remove(path)
@@ -237,6 +269,11 @@ func reverseRemoveDropin(op ReverseOp, re ReverseExecutor) error {
 		if op.Scope == ScopeUser {
 			if re.reverseDryRun() {
 				fmt.Fprintf(os.Stderr, "[dry-run] rm -f %s\n", path)
+				continue
+			}
+			if runner := re.reverseRunner(); runner != nil {
+				_ = runner.RunUser(fmt.Sprintf("rm -f %s && rmdir --ignore-fail-on-non-empty %s",
+					shellQuoteSimple(path), shellQuoteSimple(filepath.Dir(path))))
 				continue
 			}
 			_ = os.Remove(path)
@@ -266,10 +303,7 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 				fmt.Fprintf(os.Stderr, "[dry-run] %s\n", strings.Join(argv, " "))
 				continue
 			}
-			cmd := exec.Command(argv[0], argv[1:]...)
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			_ = cmd.Run()
+			_ = runUserShellReverse(strings.Join(argv, " "), re)
 			continue
 		}
 		_ = runSudoArgvReverse(argv, re)
@@ -289,6 +323,10 @@ func reverseRemoveEnvdFile(op ReverseOp, re ReverseExecutor) error {
 	for _, path := range op.Targets {
 		if re.reverseDryRun() {
 			fmt.Fprintf(os.Stderr, "[dry-run] rm -f %s\n", path)
+			continue
+		}
+		if runner := re.reverseRunner(); runner != nil {
+			_ = runner.RunUser(fmt.Sprintf("rm -f %s", shellQuoteSimple(path)))
 			continue
 		}
 		_ = os.Remove(path)
@@ -322,12 +360,16 @@ func reverseCoprDisable(op ReverseOp, re ReverseExecutor) error {
 // runSudoArgvReverse is the reverse-side analog of runSudoArgs. Accepts
 // a possibly DEBIAN_FRONTEND-prefixed argv (we strip the prefix and
 // set it as env instead).
+//
+// Dispatch: when re.reverseRunner() is non-nil (set by runVmDel,
+// potentially others in the future), delegates the command to the
+// runner so it executes in the right context (remote VM over SSH,
+// etc.). Otherwise falls back to local `sudo <argv>`.
 func runSudoArgvReverse(argv []string, re ReverseExecutor) error {
 	if re.reverseDryRun() {
 		fmt.Fprintln(os.Stderr, "[dry-run] sudo "+strings.Join(argv, " "))
 		return nil
 	}
-	// Check for an env-var prefix like DEBIAN_FRONTEND=noninteractive.
 	envPrefix := []string{}
 	for len(argv) > 0 && strings.Contains(argv[0], "=") {
 		envPrefix = append(envPrefix, argv[0])
@@ -336,12 +378,55 @@ func runSudoArgvReverse(argv []string, re ReverseExecutor) error {
 	if len(argv) == 0 {
 		return nil
 	}
+	if runner := re.reverseRunner(); runner != nil {
+		// Build a bash -lc compatible script. Env prefixes are rendered
+		// as `VAR=value VAR2=value2 cmd …` so the runner's bash sees them
+		// as command-scoped env.
+		var parts []string
+		for _, e := range envPrefix {
+			parts = append(parts, e)
+		}
+		for _, a := range argv {
+			parts = append(parts, shellQuoteSimple(a))
+		}
+		return runner.RunSystem(strings.Join(parts, " "))
+	}
 	fullArgv := append([]string{}, argv...)
 	if len(envPrefix) > 0 {
 		fullArgv = append([]string{"env"}, envPrefix...)
 		fullArgv = append(fullArgv, argv...)
 	}
 	cmd := exec.Command("sudo", fullArgv...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// shellQuoteSimple single-quotes a token for inclusion in a shell
+// command line. `sudo pacman -Rs foo` is trivial; but package names
+// can contain dashes/plus/dots which benefit from quoting anyway.
+func shellQuoteSimple(s string) string {
+	if s == "" {
+		return "''"
+	}
+	if !strings.ContainsAny(s, " \t\n\"'$*?[](){}<>|&;`\\!") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+// runUserShellReverse runs a bash snippet as the deploy user (no sudo).
+// Dispatches through the ReverseRunner when present (VM teardown over
+// SSH); otherwise executes locally as the current process user.
+func runUserShellReverse(script string, re ReverseExecutor) error {
+	if re.reverseDryRun() {
+		fmt.Fprintln(os.Stderr, "[dry-run] "+script)
+		return nil
+	}
+	if runner := re.reverseRunner(); runner != nil {
+		return runner.RunUser(script)
+	}
+	cmd := exec.Command("bash", "-lc", script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

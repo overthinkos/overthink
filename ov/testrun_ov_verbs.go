@@ -177,6 +177,88 @@ var mcpMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
+// record methods — `ov test record <method>` drives in-container recording
+// sessions (asciinema terminal / pixelflux-record / wf-recorder desktop).
+// Container-only: resolveContainer does not know about VMs, so a `record:`
+// check on a `vm:<name>` deploy will fail at subprocess dispatch. Documented
+// in /ov:record; validator does not pre-filter by deploy kind.
+// ---------------------------------------------------------------------------
+
+var recordMethods = map[string]methodSpec{
+	"list":  {path: []string{"record", "list"}},
+	"start": {path: []string{"record", "start"}, posArgs: posRecordStart},
+	// stop's artifact: true asserts the recording was copied out AND (when
+	// ArtifactMinBytes is set) that the file is at least N bytes — a strong
+	// "the recorder actually produced output" invariant.
+	"stop": {path: []string{"record", "stop"}, required: []string{"Artifact"}, posArgs: posRecordStop, artifact: true},
+	// `record: cmd` sends a text line into the recording's tmux session.
+	// Text (not Command) is used because Command is itself a verb
+	// discriminator — setting both would trip the Kind() uniqueness check.
+	"cmd": {path: []string{"record", "cmd"}, required: []string{"Text"}, posArgs: posRecordCmd},
+}
+
+// ---------------------------------------------------------------------------
+// spice methods — `ov test spice <method>` speaks the SPICE wire protocol
+// (github.com/Shells-com/spice) to a running VM's SPICE port. Host-side;
+// only applicable to `vm:<name>` deploys that expose SPICE graphics.
+// ---------------------------------------------------------------------------
+
+var spiceMethods = map[string]methodSpec{
+	"status":     {path: []string{"spice", "status"}},
+	"screenshot": {path: []string{"spice", "screenshot"}, posArgs: posArtifact, artifact: true},
+	"cursor":     {path: []string{"spice", "cursor"}, posArgs: posArtifact, artifact: true},
+	"click":      {path: []string{"spice", "click"}, posArgs: posXY},
+	"mouse":      {path: []string{"spice", "mouse"}, posArgs: posXY},
+	"type":       {path: []string{"spice", "type"}, required: []string{"Text"}, posArgs: posText},
+	"key":        {path: []string{"spice", "key"}, required: []string{"KeyName"}, posArgs: posKeyName},
+}
+
+// ---------------------------------------------------------------------------
+// libvirt methods — `ov test libvirt <method>` uses go-libvirt RPC against
+// a running VM. Host-side; only applicable to `vm:<name>` deploys. Nested
+// subgroups (guest/*, snapshot/*) are flattened via slash-separated method
+// names so authors write `libvirt: guest/ping` or `libvirt: snapshot/list`.
+// ---------------------------------------------------------------------------
+
+var libvirtMethods = map[string]methodSpec{
+	// Top-level verbs
+	"list":       {path: []string{"libvirt", "list"}},
+	"info":       {path: []string{"libvirt", "info"}},
+	"screenshot": {path: []string{"libvirt", "screenshot"}, posArgs: posArtifact, artifact: true},
+	"send-key":   {path: []string{"libvirt", "send-key"}, required: []string{"KeyName"}, posArgs: posKeyNameSplit},
+	"passwd":     {path: []string{"libvirt", "passwd"}, required: []string{"Text"}, posArgs: posText},
+	// qmp takes a QMP method name + optional JSON args. Text holds the
+	// method name (Command would collide with the command: verb).
+	"qmp": {path: []string{"libvirt", "qmp"}, required: []string{"Text"}, posArgs: posLibvirtQmp},
+	"domain-xml": {path: []string{"libvirt", "domain-xml"}},
+	"console":    {path: []string{"libvirt", "console"}},
+	"events":     {path: []string{"libvirt", "events"}},
+
+	// qemu-guest-agent subgroup
+	"guest/ping":       {path: []string{"libvirt", "guest", "ping"}},
+	"guest/info":       {path: []string{"libvirt", "guest", "info"}},
+	"guest/os-info":    {path: []string{"libvirt", "guest", "os-info"}},
+	"guest/time":       {path: []string{"libvirt", "guest", "time"}},
+	"guest/hostname":   {path: []string{"libvirt", "guest", "hostname"}},
+	"guest/users":      {path: []string{"libvirt", "guest", "users"}},
+	"guest/interfaces": {path: []string{"libvirt", "guest", "interfaces"}},
+	"guest/disks":      {path: []string{"libvirt", "guest", "disks"}},
+	"guest/fsinfo":     {path: []string{"libvirt", "guest", "fsinfo"}},
+	"guest/vcpus":      {path: []string{"libvirt", "guest", "vcpus"}},
+	// guest/exec runs a command via qemu-guest-agent inside the VM. Text holds
+	// the full command line (Command would collide with the command: verb).
+	"guest/exec": {path: []string{"libvirt", "guest", "exec"}, required: []string{"Text"}, posArgs: posText},
+	"guest/fstrim":     {path: []string{"libvirt", "guest", "fstrim"}},
+
+	// Snapshot subgroup — Target holds the snapshot name.
+	"snapshot/list":   {path: []string{"libvirt", "snapshot", "list"}},
+	"snapshot/create": {path: []string{"libvirt", "snapshot", "create"}, required: []string{"Target"}, posArgs: posTarget},
+	"snapshot/info":   {path: []string{"libvirt", "snapshot", "info"}, required: []string{"Target"}, posArgs: posTarget},
+	"snapshot/revert": {path: []string{"libvirt", "snapshot", "revert"}, required: []string{"Target"}, posArgs: posTarget},
+	"snapshot/delete": {path: []string{"libvirt", "snapshot", "delete"}, required: []string{"Target"}, posArgs: posTarget},
+}
+
+// ---------------------------------------------------------------------------
 // positional-arg builders — reused across verbs.
 // Each returns the positional args to insert AFTER the image name,
 // BEFORE any -i instance flag. They never fail: required-modifier checks
@@ -299,6 +381,64 @@ func posMcpRead(c *Check) []string {
 	return args
 }
 
+// record positional builders. The subprocess already defaults -n to "default"
+// when RecordName is empty, so omit the flag in that case.
+func posRecordStart(c *Check) []string {
+	var args []string
+	if c.RecordName != "" {
+		args = append(args, "-n", c.RecordName)
+	}
+	if c.RecordMode != "" {
+		args = append(args, "-m", c.RecordMode)
+	}
+	if c.RecordFps > 0 {
+		args = append(args, "--fps", strconv.Itoa(c.RecordFps))
+	}
+	if c.RecordAudio {
+		args = append(args, "--audio")
+	}
+	return args
+}
+
+func posRecordStop(c *Check) []string {
+	var args []string
+	if c.RecordName != "" {
+		args = append(args, "-n", c.RecordName)
+	}
+	// Artifact is required (methodSpec artifact:true) and becomes -o <path>
+	// so the recording ends up on the host filesystem for the size check.
+	if c.Artifact != "" {
+		args = append(args, "-o", c.Artifact)
+	}
+	return args
+}
+
+func posRecordCmd(c *Check) []string {
+	args := []string{c.Text}
+	if c.RecordName != "" {
+		args = append(args, "-n", c.RecordName)
+	}
+	return args
+}
+
+// libvirt positional builders.
+//
+// LibvirtSendKey takes a variadic `Keys []string` positional so
+// "ctrl alt F2" maps to three separate argv slots.
+func posKeyNameSplit(c *Check) []string {
+	return strings.Fields(c.KeyName)
+}
+
+// LibvirtQmp takes a method name + optional JSON args string. Text holds the
+// QMP method name (e.g. "query-status"); Input the JSON arg payload.
+func posLibvirtQmp(c *Check) []string {
+	args := []string{c.Text}
+	if c.Input != "" {
+		args = append(args, c.Input)
+	}
+	return args
+}
+
 // ---------------------------------------------------------------------------
 // Verb dispatchers
 // ---------------------------------------------------------------------------
@@ -321,6 +461,18 @@ func (r *Runner) runVnc(ctx context.Context, c *Check) TestResult {
 
 func (r *Runner) runMcp(ctx context.Context, c *Check) TestResult {
 	return r.runOvVerb(ctx, c, "mcp", c.Mcp, mcpMethods)
+}
+
+func (r *Runner) runRecord(ctx context.Context, c *Check) TestResult {
+	return r.runOvVerb(ctx, c, "record", c.Record, recordMethods)
+}
+
+func (r *Runner) runSpice(ctx context.Context, c *Check) TestResult {
+	return r.runOvVerb(ctx, c, "spice", c.Spice, spiceMethods)
+}
+
+func (r *Runner) runLibvirt(ctx context.Context, c *Check) TestResult {
+	return r.runOvVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
 }
 
 // runOvVerb is the shared dispatch path: skip checks, method lookup,
@@ -466,6 +618,14 @@ func isZeroField(c *Check, name string) bool {
 		return c.Input == ""
 	case "McpName":
 		return c.McpName == ""
+	case "Record":
+		return c.Record == ""
+	case "RecordName":
+		return c.RecordName == ""
+	case "Spice":
+		return c.Spice == ""
+	case "Libvirt":
+		return c.Libvirt == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

@@ -101,13 +101,17 @@ func installOvViaSCP(ctx context.Context, exec DeployExecutor, opts EmitOpts) (s
 // implementations for "url" (cloud-init did the download) and "skip"
 // (user-managed).
 func verifyOvPresent(ctx context.Context, exec DeployExecutor, opts EmitOpts, strategy string) (string, error) {
+	// `ov version` (subcommand), not `ov --version`. Kong returns exit 80
+	// for unknown flags, which this check otherwise surfaces as a false
+	// "ov not present" error. The PKGBUILD installs to /usr/bin/ov, not
+	// /usr/local/bin/ov — rely on PATH rather than hard-coding either.
 	script := `
 set -e
 if ! command -v ov >/dev/null 2>&1; then
     echo "ov binary not present in guest (ov_install.strategy: ` + strategy + `)"
     exit 1
 fi
-/usr/local/bin/ov --version 2>/dev/null || ov --version 2>/dev/null
+ov version
 `
 	if err := exec.RunSystem(ctx, script, opts); err != nil {
 		return "", fmt.Errorf("ov presence check (strategy=%s): %w", strategy, err)

@@ -213,6 +213,164 @@ func TestValidateTests_McpClean(t *testing.T) {
 	}
 }
 
+// record/spice/libvirt verbs: deploy-scope-only, method allowlist, required
+// modifiers mirror the cdp/wl/dbus/vnc/mcp rules.
+
+func TestValidateTests_RecordRejectedInBuildScope(t *testing.T) {
+	layers := map[string]*Layer{
+		"asciinema": {Name: "asciinema", tests: []Check{
+			{Record: "list"}, // default build scope
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "record:") || !strings.Contains(got, `scope:"deploy"`) {
+		t.Errorf("expected deploy-scope error for record: %s", got)
+	}
+}
+
+func TestValidateTests_RecordStopRequiresArtifact(t *testing.T) {
+	layers := map[string]*Layer{
+		"asciinema": {Name: "asciinema", tests: []Check{
+			{Record: "stop", Scope: "deploy"}, // missing artifact
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "record") || !strings.Contains(got, "artifact") {
+		t.Errorf("expected record: stop artifact-required error: %s", got)
+	}
+}
+
+func TestValidateTests_RecordCmdRequiresText(t *testing.T) {
+	layers := map[string]*Layer{
+		"asciinema": {Name: "asciinema", tests: []Check{
+			{Record: "cmd", Scope: "deploy"}, // missing text
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "record") || !strings.Contains(got, "text") {
+		t.Errorf("expected record: cmd text-required error: %s", got)
+	}
+}
+
+func TestValidateTests_RecordClean(t *testing.T) {
+	layers := map[string]*Layer{
+		"asciinema": {Name: "asciinema", tests: []Check{
+			{Record: "list", Scope: "deploy"},
+			{Record: "start", RecordMode: "terminal", Scope: "deploy"},
+			{Record: "cmd", Text: "echo hi", Scope: "deploy"},
+			{Record: "stop", Artifact: "/tmp/demo.cast", ArtifactMinBytes: 100, Scope: "deploy"},
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if got != "" {
+		t.Errorf("clean record fixture produced errors: %s", got)
+	}
+}
+
+func TestValidateTests_SpiceRejectedInBuildScope(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Spice: "status"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "spice:") || !strings.Contains(got, `scope:"deploy"`) {
+		t.Errorf("expected deploy-scope error for spice: %s", got)
+	}
+}
+
+func TestValidateTests_SpiceTypeRequiresText(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Spice: "type", Scope: "deploy"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "spice") || !strings.Contains(got, "text") {
+		t.Errorf("expected spice: type text-required error: %s", got)
+	}
+}
+
+func TestValidateTests_SpiceUnknownMethod(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Spice: "bogus", Scope: "deploy"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "spice: unknown method") {
+		t.Errorf("expected spice unknown-method error: %s", got)
+	}
+}
+
+func TestValidateTests_SpiceClean(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{
+			{Spice: "status", Scope: "deploy"},
+			{Spice: "screenshot", Artifact: "/tmp/s.png", Scope: "deploy"},
+			{Spice: "type", Text: "hi", Scope: "deploy"},
+			{Spice: "key", KeyName: "Return", Scope: "deploy"},
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if got != "" {
+		t.Errorf("clean spice fixture produced errors: %s", got)
+	}
+}
+
+func TestValidateTests_LibvirtRejectedInBuildScope(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Libvirt: "info"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "libvirt:") || !strings.Contains(got, `scope:"deploy"`) {
+		t.Errorf("expected deploy-scope error for libvirt: %s", got)
+	}
+}
+
+func TestValidateTests_LibvirtGuestExecRequiresText(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Libvirt: "guest/exec", Scope: "deploy"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "text") {
+		t.Errorf("expected libvirt: guest/exec text-required error: %s", got)
+	}
+}
+
+func TestValidateTests_LibvirtSnapshotCreateRequiresTarget(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Libvirt: "snapshot/create", Scope: "deploy"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "target") {
+		t.Errorf("expected libvirt: snapshot/create target-required error: %s", got)
+	}
+}
+
+func TestValidateTests_LibvirtUnknownMethod(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{{Libvirt: "bogus", Scope: "deploy"}}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if !strings.Contains(got, "libvirt: unknown method") {
+		t.Errorf("expected libvirt unknown-method error: %s", got)
+	}
+}
+
+func TestValidateTests_LibvirtClean(t *testing.T) {
+	layers := map[string]*Layer{
+		"vm": {Name: "vm", tests: []Check{
+			{Libvirt: "list", Scope: "deploy"},
+			{Libvirt: "info", Scope: "deploy"},
+			{Libvirt: "screenshot", Artifact: "/tmp/v.png", Scope: "deploy"},
+			{Libvirt: "guest/ping", Scope: "deploy"},
+			{Libvirt: "guest/exec", Text: "uname -r", Scope: "deploy"},
+			{Libvirt: "snapshot/create", Target: "pre-upgrade", Scope: "deploy"},
+			{Libvirt: "qmp", Text: "query-status", Scope: "deploy"},
+			{Libvirt: "send-key", KeyName: "ctrl alt F2", Scope: "deploy"},
+		}},
+	}
+	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
+	if got != "" {
+		t.Errorf("clean libvirt fixture produced errors: %s", got)
+	}
+}
+
 // Full valid fixture — should produce no errors.
 func TestValidateTests_Clean(t *testing.T) {
 	layers := map[string]*Layer{

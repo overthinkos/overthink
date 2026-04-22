@@ -476,10 +476,21 @@ func renderDownloadScript(task *Task) string {
 
 	var b strings.Builder
 	b.WriteString("set -e\n")
+	// BUILD_ARCH=$(uname -m) so download URLs can template the arch in
+	// shell-expansion form (e.g. `uv-${BUILD_ARCH}-unknown-linux-gnu.tar.gz`).
+	// Must match the container-build renderer in tasks.go which exports the
+	// same var — otherwise the same layer.yml download works at build time
+	// but fails under `ov deploy add host/vm:<name>`.
+	b.WriteString("BUILD_ARCH=$(uname -m)\n")
 	b.WriteString(envPrefix.String())
 	// tmp location deterministic per-task so retries don't leak.
 	b.WriteString("ovtmp=\"$(mktemp -d)\"\n")
 	b.WriteString("trap 'rm -rf \"$ovtmp\"' EXIT\n")
+
+	// URLs are emitted in double-quoted form so ${BUILD_ARCH} (and any
+	// other shell-level vars authors rely on) expand at runtime. Escape
+	// the set of chars that have special meaning inside double-quotes.
+	quotedURL := shDoubleQuote(url)
 
 	if extract == "none" {
 		// Download directly to the target path.
@@ -488,13 +499,13 @@ func renderDownloadScript(task *Task) string {
 			mode = "0755"
 		}
 		fmt.Fprintf(&b, "install -d -m0755 %s\n", shQuoteArg(filepath.Dir(to)))
-		fmt.Fprintf(&b, "curl -fL --retry 3 -o %s %s\n", shQuoteArg(to), shQuoteArg(url))
+		fmt.Fprintf(&b, "curl -fL --retry 3 -o %s %s\n", shQuoteArg(to), quotedURL)
 		fmt.Fprintf(&b, "chmod %s %s\n", mode, shQuoteArg(to))
 		return b.String()
 	}
 
 	// Fetch to the tmpdir first, then extract.
-	fmt.Fprintf(&b, "curl -fL --retry 3 -o \"$ovtmp/archive\" %s\n", shQuoteArg(url))
+	fmt.Fprintf(&b, "curl -fL --retry 3 -o \"$ovtmp/archive\" %s\n", quotedURL)
 	fmt.Fprintf(&b, "install -d -m0755 %s\n", shQuoteArg(to))
 
 	strip := ""
@@ -798,6 +809,19 @@ func shQuoteArg(v string) string {
 		return v
 	}
 	return "'" + strings.ReplaceAll(v, "'", `'\''`) + "'"
+}
+
+// shDoubleQuote wraps a string in double quotes for a shell context where
+// variable expansion MUST still happen (e.g. download URLs that template
+// ${BUILD_ARCH}). Escapes the four metachars that break out of a double-
+// quoted string: backslash, backtick, double-quote, and dollar-sign —
+// but $-escaping is selective: only escape bare `$` not followed by a
+// valid var-reference character so authored `${FOO}` / `$FOO` still expand.
+func shDoubleQuote(v string) string {
+	v = strings.ReplaceAll(v, `\`, `\\`)
+	v = strings.ReplaceAll(v, "`", "\\`")
+	v = strings.ReplaceAll(v, `"`, `\"`)
+	return `"` + v + `"`
 }
 
 // ContextOrDefault returns opts' context if one's attached, or a

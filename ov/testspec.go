@@ -48,14 +48,18 @@ type Check struct {
 
 	// Test-mode live-container verbs — each is a method-name discriminator
 	// validated against the CLI's subcommand surface. Dispatched by runCdp/
-	// runWl/runDbus/runVnc in testrun_ov_verbs.go via subprocess delegation
-	// to `ov test <verb> <method>`. See /ov:test for authoring, /ov:cdp,
-	// /ov:wl, /ov:dbus, /ov:vnc for per-verb method semantics.
-	Cdp  string `yaml:"cdp,omitempty"  json:"cdp,omitempty"`
-	Wl   string `yaml:"wl,omitempty"   json:"wl,omitempty"`
-	Dbus string `yaml:"dbus,omitempty" json:"dbus,omitempty"`
-	Vnc  string `yaml:"vnc,omitempty"  json:"vnc,omitempty"`
-	Mcp  string `yaml:"mcp,omitempty"  json:"mcp,omitempty"`
+	// runWl/runDbus/runVnc/runMcp/runRecord/runSpice/runLibvirt in
+	// testrun_ov_verbs.go via subprocess delegation to `ov test <verb> <method>`.
+	// See /ov:test for authoring, /ov:cdp, /ov:wl, /ov:dbus, /ov:vnc, /ov:mcp,
+	// /ov:record, /ov:spice, /ov:libvirt for per-verb method semantics.
+	Cdp     string `yaml:"cdp,omitempty"     json:"cdp,omitempty"`
+	Wl      string `yaml:"wl,omitempty"      json:"wl,omitempty"`
+	Dbus    string `yaml:"dbus,omitempty"    json:"dbus,omitempty"`
+	Vnc     string `yaml:"vnc,omitempty"     json:"vnc,omitempty"`
+	Mcp     string `yaml:"mcp,omitempty"     json:"mcp,omitempty"`
+	Record  string `yaml:"record,omitempty"  json:"record,omitempty"`
+	Spice   string `yaml:"spice,omitempty"   json:"spice,omitempty"`
+	Libvirt string `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 
 	// Shared modifiers
 	ID          string `yaml:"id,omitempty"           json:"id,omitempty"`
@@ -182,6 +186,16 @@ type Check struct {
 	Tool    string `yaml:"tool,omitempty"     json:"tool,omitempty"`     // mcp: tool name for the `call` method
 	URI     string `yaml:"uri,omitempty"      json:"uri,omitempty"`      // mcp: resource URI for the `read` method
 	Input   string `yaml:"input,omitempty"    json:"input,omitempty"`    // mcp: JSON argument blob for the `call` method (e.g. '{"path":"x.ipynb"}')
+
+	// record-specific modifiers — record: verb wraps `ov test record <method>`.
+	// The Artifact + ArtifactMinBytes modifiers are reused: for `record: stop`
+	// Artifact is the host-side file path (-o flag) and ArtifactMinBytes
+	// enforces the post-copy size assertion. Command is reused for
+	// `record: cmd` (the text typed into the recording).
+	RecordName  string `yaml:"record_name,omitempty"  json:"record_name,omitempty"`  // -n/--name (defaults to "default" in the CLI)
+	RecordMode  string `yaml:"record_mode,omitempty"  json:"record_mode,omitempty"`  // -m/--mode: terminal|desktop|auto (start only)
+	RecordFps   int    `yaml:"record_fps,omitempty"   json:"record_fps,omitempty"`   // --fps (desktop mode, start only)
+	RecordAudio bool   `yaml:"record_audio,omitempty" json:"record_audio,omitempty"` // --audio (desktop mode, start only)
 }
 
 // CheckVerbs lists valid discriminator keys in stable order (used for
@@ -191,6 +205,7 @@ var CheckVerbs = []string{
 	"http", "dns", "user", "group", "interface", "kernel-param",
 	"mount", "addr", "matching",
 	"cdp", "wl", "dbus", "vnc", "mcp",
+	"record", "spice", "libvirt",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -268,6 +283,15 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.Mcp != "" {
 		set = append(set, "mcp")
+	}
+	if c.Record != "" {
+		set = append(set, "record")
+	}
+	if c.Spice != "" {
+		set = append(set, "spice")
+	}
+	if c.Libvirt != "" {
+		set = append(set, "libvirt")
 	}
 	return set
 }
@@ -559,12 +583,15 @@ func (c *Check) StringFields() []*string {
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
+		&c.Record, &c.Spice, &c.Libvirt,
 		&c.Tab, &c.Expression, &c.URL, &c.Selector,
 		&c.Dest, &c.Path, &c.Artifact,
 		&c.Button, &c.Text, &c.KeyName, &c.Combo,
 		&c.Direction, &c.Target, &c.Action, &c.Query,
 		// mcp-specific modifiers
 		&c.McpName, &c.Tool, &c.URI, &c.Input,
+		// record-specific modifiers
+		&c.RecordName, &c.RecordMode,
 	}
 }
 

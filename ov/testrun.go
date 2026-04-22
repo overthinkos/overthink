@@ -99,6 +99,37 @@ func (i *ImageExecutor) Exec(ctx context.Context, cmd string) (string, string, i
 	return runCapture(ecmd)
 }
 
+// VmTestExecutor runs command: checks inside a VM guest over SSH.
+// Mirrors the container-side ContainerExecutor but dials sshd instead of
+// podman's exec socket. Fields are populated from the deploy.yml VmDeployState
+// (written by VmDeployTarget on first apply).
+//
+// Invariant: scripts execute as the SSH user (typically `arch` on cloud-image
+// VMs); tests that need root should prefix `sudo -n`.
+type VmTestExecutor struct {
+	User, Host, KeyPath string
+	Port                int
+}
+
+func (v *VmTestExecutor) Kind() string { return "vm" }
+
+func (v *VmTestExecutor) Exec(ctx context.Context, script string) (string, string, int, error) {
+	args := []string{
+		"-i", v.KeyPath,
+		"-p", strconv.Itoa(v.Port),
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		"-o", "ConnectTimeout=10",
+		"-o", "BatchMode=yes",
+		v.User + "@" + v.Host,
+		"bash", "-s",
+	}
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdin = strings.NewReader(script)
+	return runCapture(cmd)
+}
+
 // runCapture executes cmd, returning stdout, stderr, exit status, and any
 // non-exit error (e.g. the binary could not be started).
 func runCapture(cmd *exec.Cmd) (string, string, int, error) {
@@ -266,6 +297,12 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result = r.runVnc(ctx, &expanded)
 	case "mcp":
 		result = r.runMcp(ctx, &expanded)
+	case "record":
+		result = r.runRecord(ctx, &expanded)
+	case "spice":
+		result = r.runSpice(ctx, &expanded)
+	case "libvirt":
+		result = r.runLibvirt(ctx, &expanded)
 	default:
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("unknown verb %q", kind)

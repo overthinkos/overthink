@@ -57,6 +57,11 @@ type DeployDelCmd struct {
 	KeepServices     bool `long:"keep-services" help:"Don't disable systemd units (just stop tracking)"`
 	KeepImage        bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
 	DryRun           bool `long:"dry-run" help:"Print the teardown plan without executing"`
+
+	// Runner is populated by runVmDel / runHostDel etc. to route reverse
+	// ops to the right privilege context. Nil falls back to the local-exec
+	// path in reverse_ops.go. Not exposed as a Kong flag.
+	Runner ReverseRunner `kong:"-"`
 }
 
 // Run executes `ov deploy add`.
@@ -71,24 +76,31 @@ func (c *DeployAddCmd) Run() error {
 	// fall back to the matching entry in deploy.yml (keyed by deploy
 	// name). This lets users pre-populate deploy.yml and then run
 	// `ov deploy add host` (or `ov deploy add my-dev`) with no args.
+	//
+	// Two-tier deploy-config lookup: project deploy.yml (authored in the
+	// repo, shipped via `overthink.yml deployments:`) provides the
+	// canonical declaration — target, vm_source, add_layers, tests.
+	// Per-machine ~/.config/ov/deploy.yml overlays machine-specific state
+	// — ports, secrets, VmDeployState, host-local tests. MergeDeployConfigs
+	// is left-to-right: local wins on field overlap.
 	refStr := c.Ref
 	var deployEntry *DeployImageConfig
 	if refStr == "" {
-		dc, _ := LoadDeployConfig()
-		if dc != nil {
-			if entry, ok := dc.Images[c.Name]; ok {
+		var projectDC *DeployConfig
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+			projectDC = uf.ProjectDeployConfig()
+		}
+		localDC, _ := LoadDeployConfig()
+		merged := MergeDeployConfigs(projectDC, localDC)
+		if merged != nil {
+			if entry, ok := merged.Images[c.Name]; ok {
 				deployEntry = &entry
-				// For host deploys, the entry's "version" serves as the
-				// image tag when resolving. When Version is empty we
-				// keep c.Tag's default.
 				if entry.Version != "" {
 					c.Tag = entry.Version
 				}
-				// Inherit install_opts defaults from deploy.yml (CLI wins).
 				if entry.InstallOpts != nil {
 					opts = entry.InstallOpts.ApplyTo(opts)
 				}
-				// Pull add_layers from deploy.yml if not overridden on CLI.
 				if len(c.AddLayer) == 0 && len(entry.AddLayers) > 0 {
 					c.AddLayer = append([]string(nil), entry.AddLayers...)
 				}
@@ -103,10 +115,6 @@ func (c *DeployAddCmd) Run() error {
 		// explicit image pointer — for now we use the deploy key).
 		refStr = c.Name
 	}
-	ref, err := ResolveDeployRef(refStr, dir)
-	if err != nil {
-		return fmt.Errorf("resolving ref %q: %w", refStr, err)
-	}
 
 	// Load the project config so we can compile plans against resolved
 	// distro/builder definitions.
@@ -115,12 +123,29 @@ func (c *DeployAddCmd) Run() error {
 		return err
 	}
 
-	// Compile per-layer plans. The strategy differs by ref kind: an
-	// image ref produces a plan per layer in the image; a layer ref
-	// produces a single plan.
-	plans, base, layerSet, err := c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
-	if err != nil {
-		return err
+	var plans []*InstallPlan
+	var base string
+	var layerSet []string
+
+	// Compile per-layer plans. The strategy differs by ref kind:
+	//   - image ref                → one plan per layer in the image
+	//   - layer ref                → a single plan
+	//   - `host` / `vm:<name>`     → no primary plan; all layers come from
+	//                                 add_layers (compiled in the loop below)
+	if c.Name == "host" || strings.HasPrefix(c.Name, "vm:") {
+		// Target-only deploy: no primary image/layer ref. The entry's
+		// add_layers (merged from project + local deploy.yml) carries the
+		// full install payload.
+		base = c.Name
+	} else {
+		ref, err := ResolveDeployRef(refStr, dir)
+		if err != nil {
+			return fmt.Errorf("resolving ref %q: %w", refStr, err)
+		}
+		plans, base, layerSet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Merge add_layers: on top (if any). Each --add-layer is resolved
@@ -422,15 +447,37 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if err != nil {
 		return nil, "", nil, err
 	}
-	layer := layers[ref.Name]
-	if layer == nil {
+	if _, ok := layers[ref.Name]; !ok {
 		return nil, "", nil, fmt.Errorf("layer %q not found", ref.Name)
 	}
-	// For a single-layer deploy on host, we synthesize a minimal
-	// ResolvedImage from the host distro so system package sections
-	// resolve. The DistroDef comes from distroCfg so format lookups
-	// (img.DistroDef.Formats[img.Pkg]) succeed on the compiler side.
-	img := syntheticHostImage()
+	// Expand transitive deps — a layer deploy (either a bare
+	// `ov deploy add <layer>` or a `--add-layer <name>`) MUST pull in
+	// the layer's `depends:` graph in topological order. Without this,
+	// layers whose build-time tasks rely on upstream binaries (e.g.
+	// `pre-commit`'s `cargo install` requiring `rust`) fail at first
+	// execution with "command not found" errors. Feeding the requested
+	// layer through ResolveLayerOrder matches what compileImagePlans
+	// does for image-level deploys.
+	order, err := ResolveLayerOrder([]string{ref.Name}, layers, nil)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
+	}
+	// Pick the synthetic image template that matches the deploy target
+	// so `${USER}` in layer tasks resolves correctly: guest user for
+	// vm:<name>, host user for host/other targets.
+	var img *ResolvedImage
+	if strings.HasPrefix(c.Name, "vm:") {
+		if vmName, _, perr := parseVmDeployName(c.Name); perr == nil {
+			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VMs != nil {
+				if spec, present := uf.VMs[vmName]; present {
+					img = syntheticVmImage(spec)
+				}
+			}
+		}
+	}
+	if img == nil {
+		img = syntheticHostImage()
+	}
 	hostCtx := detectHostContext()
 	if distroCfg != nil {
 		img.DistroDef = distroCfg.ResolveDistro(img.Distro)
@@ -438,11 +485,15 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if builderCfg != nil {
 		img.BuilderConfig = builderCfg
 	}
-	p, err := BuildDeployPlan(layer, img, hostCtx)
-	if err != nil {
-		return nil, "", nil, err
+	var plans []*InstallPlan
+	for _, name := range order {
+		p, err := BuildDeployPlan(layers[name], img, hostCtx)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("compiling %s: %w", name, err)
+		}
+		plans = append(plans, p)
 	}
-	return []*InstallPlan{p}, ref.Name, []string{ref.Name}, nil
+	return plans, ref.Name, order, nil
 }
 
 func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
@@ -521,6 +572,41 @@ func syntheticHostImage() *ResolvedImage {
 			img.Pkg = hint
 			img.BuildFormats = []string{hint}
 		}
+	}
+	return img
+}
+
+// syntheticVmImage returns a ResolvedImage tuned for `ov deploy add
+// vm:<name>` — the User/UID/GID/Home fields come from the VM spec's SSH
+// config (not the host's env), so `${USER}` in a layer's `user:` field
+// resolves to the GUEST user (e.g. `arch`) and task scope classification
+// dispatches user-scoped tasks to RunUser (bare ssh bash -s) instead of
+// RunSystem (ssh sudo bash -s). Without this, `cargo install taplo-cli`
+// under the pre-commit layer ends up in /root/.cargo/bin/ instead of
+// /home/<user>/.cargo/bin/, and $HOME-anchored layer tests fail.
+//
+// Cloud-image VMs conventionally use uid/gid 1000 for the first non-root
+// user (cloud-init's adopt path respects that). bootc VMs default to
+// root, in which case we fall back to the same syntheticHostImage()
+// semantics (System scope, no per-user path).
+func syntheticVmImage(spec *VmSpec) *ResolvedImage {
+	user := resolveVmSshUser(spec)
+	if user == "" || user == "root" {
+		img := syntheticHostImage()
+		img.Name = "vm-adhoc"
+		img.User = "root"
+		img.Home = "/root"
+		return img
+	}
+	img := &ResolvedImage{
+		Name:         "vm-adhoc",
+		User:         user,
+		UID:          1000,
+		GID:          1000,
+		Home:         "/home/" + user,
+		Distro:       []string{"archlinux"}, // cloud_image today is arch-cloud-base; extend when more VM distros land.
+		Pkg:          "pac",
+		BuildFormats: []string{"pac"},
 	}
 	return img
 }

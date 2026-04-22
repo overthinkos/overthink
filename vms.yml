@@ -30,12 +30,44 @@ vms:
             packages:
                 - sudo
                 - spice-vdagent
+                - qemu-guest-agent       # qemu-ga speaks on the virtio-serial channel below
+                # ov-git build-time deps installed by cloud-init's packages:
+                # stage (which handles the pacman-init.service race for us).
+                # The runcmd below assumes these are already on disk.
+                - git
+                - go
+                - base-devel
             runcmd:
-                - pacman-key --init
-                - pacman-key --populate archlinux
                 - systemctl enable --now spice-vdagentd
+                - systemctl enable --now qemu-guest-agent
+                # --- Auto-install ov from the GitHub source tree via the
+                # Arch PKGBUILD (overthinkos/overthink-arch submodule under
+                # pkg/arch/). One atomic bash -lc with set -euo pipefail so
+                # any failure aborts the install cleanly and leaves a clear
+                # marker in /var/log/cloud-init-output.log.
+                #
+                # --recurse-submodules is required because pkg/arch/ is a
+                # git submodule; a plain --depth 1 leaves the submodule
+                # empty and makepkg fails with "PKGBUILD does not exist".
+                #
+                # rm -rf on ov-src guards against re-runs over a dirty disk
+                # where the previous cloud-init attempt left a partial
+                # checkout behind (git clone refuses to clobber).
+                - |
+                  bash -lc '
+                  set -euxo pipefail
+                  rm -rf /home/arch/ov-src
+                  sudo -u arch -H git clone --depth 1 --recurse-submodules --shallow-submodules \
+                      https://github.com/overthinkos/overthink.git /home/arch/ov-src
+                  sudo -u arch -H bash -lc "cd /home/arch/ov-src/pkg/arch && makepkg -s --noconfirm --needed"
+                  cd /home/arch/ov-src/pkg/arch && pacman -U --noconfirm ov-git-*-x86_64.pkg.tar.zst
+                  '
             ov_install:
-                strategy: auto
+                # strategy: skip — the runcmd above handles the install.
+                # "skip" tells VmDeployTarget not to scp the host binary
+                # post-boot (the default "auto" behavior) and not to add
+                # any URL-download runcmd.
+                strategy: skip
         libvirt:
             devices:
                 channels:
@@ -55,6 +87,14 @@ vms:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
+            # qemu-guest-agent virtio-serial channel. The structured channels:
+            # entry above handles spicevmc; the unix/virtio form needed for
+            # org.qemu.guest_agent.0 is injected via a raw snippet so libvirt
+            # auto-allocates the host-side socket path (`<channel type='unix'>`
+            # with an empty source lets virtqemud pick the path — matches the
+            # behavior of layers/qemu-guest-agent/layer.yml for container VMs).
+            snippets:
+                - "<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"
     aurora-bootc:
         source:
             kind: bootc

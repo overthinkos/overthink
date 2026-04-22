@@ -40,7 +40,6 @@ type CLI struct {
 	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate  MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
-	Record   RecordCmd       `cmd:"" help:"Record terminal sessions or desktop video"`
 	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Service  ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
@@ -49,7 +48,7 @@ type CLI struct {
 	Start    StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
-	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp)"`
+	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
 	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`

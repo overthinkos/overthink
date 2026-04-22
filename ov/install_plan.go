@@ -493,9 +493,17 @@ func (s *TaskStep) Reverse() []ReverseOp {
 			Scope:   s.Scope(),
 		}}
 	case s.Task.Download != "":
+		// When the layer author declared an explicit uninstall list,
+		// use it — that's the correct target set for extract-into-a-
+		// shared-dir tasks (e.g. tarballs that land multiple binaries
+		// in /usr/local/bin/). Otherwise fall back to task.To.
+		targets := []string{s.Task.To}
+		if len(s.Task.Uninstall) > 0 {
+			targets = append([]string(nil), s.Task.Uninstall...)
+		}
 		return []ReverseOp{{
 			Kind:    reverseFileKindFor(s.Scope()),
-			Targets: []string{s.Task.To},
+			Targets: targets,
 			Scope:   s.Scope(),
 		}}
 	case s.Task.Link != "":

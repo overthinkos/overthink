@@ -44,11 +44,84 @@ deployments:
             env:
                 - OVERTHINK_DEV=true
 
-            # --- Deploy-level probes: VmDeployTarget runs these via SSH
-            # after layer apply completes ---
+            # --- Deploy-level probes: VmDeployTarget runs these via SSH for
+            # `command:` verbs; host-side for `libvirt:` and `spice:` verbs.
+            # Organised by subsystem so a red square in the output points
+            # straight at the broken layer of the stack. ---
             tests:
-                - {id: guest-ripgrep-installed, scope: deploy, cmd: rg --version}
-                - {id: guest-uv-on-path,        scope: deploy, cmd: uv --version}
-                - {id: guest-arch-user,         scope: deploy, cmd: 'id | grep -q wheel'}
-                - {id: guest-sudo-passwordless, scope: deploy, cmd: 'sudo -n whoami | grep -q root'}
-                - {id: guest-spice-agent,       scope: deploy, cmd: systemctl is-active spice-vdagentd}
+                # --- C.1  SSH connectivity & guest identity ---------------------
+                - {id: guest-identity-uid,      scope: deploy, command: id,                  stdout: {contains: "uid=1000(arch)"}}
+                - {id: guest-identity-wheel,    scope: deploy, command: id,                  stdout: {contains: wheel}}
+                - {id: guest-hostname-nonempty, scope: deploy, command: "cat /etc/hostname", stdout: {matches: ".+"}}
+                - {id: guest-os-release-arch,  scope: deploy, command: cat /etc/os-release, stdout: {contains: "ID=arch"}}
+                - {id: guest-sudo-nopasswd,     scope: deploy, command: sudo -n whoami,      stdout: {equals: root}}
+                - {id: guest-kernel-release,    scope: deploy, command: uname -r,            stdout: {matches: "[0-9]+\\.[0-9]+"}}
+
+                # --- C.2  Cloud-init completion --------------------------------
+                - {id: cloud-init-status-done,  scope: deploy, command: "cloud-init status --wait --long", stdout: {contains: "status: done"}}
+                - {id: cloud-init-instance-dir, scope: deploy, command: "test -d /var/lib/cloud/instance"}
+                - {id: cloud-init-no-errors,    scope: deploy, command: "cat /var/lib/cloud/data/result.json", stdout: {contains: "\"errors\": []"}}
+
+                # --- C.3  spice-vdagent service (in-guest) ---------------------
+                - {id: spice-vdagentd-active,   scope: deploy, command: "systemctl is-active spice-vdagentd",  stdout: {equals: active}}
+                # "static" means enabled-by-default unit file (no [Install] section); equivalent to enabled for our purpose.
+                - {id: spice-vdagentd-enabled,  scope: deploy, command: "systemctl is-enabled spice-vdagentd", stdout: {matches: "^(enabled|static)"}}
+                - {id: spice-vdagent-process,   scope: deploy, command: "pgrep -x spice-vdagent || pgrep -f spice-vdagent"}
+
+                # --- C.4  virtio-gpu driver / DRI node -------------------------
+                - {id: virtio-gpu-module,       scope: deploy, command: "lsmod | grep -q virtio_gpu"}
+                - {id: dri-card0-present,       scope: deploy, command: "test -e /dev/dri/card0"}
+                - {id: virtio-pci-display,      scope: deploy, command: "lspci | grep -Ei 'virtio.*(gpu|display|vga)'"}
+
+                # --- C.5  SPICE channel (host-side, via spice: verb) -----------
+                - {id: spice-status-main,       scope: deploy, spice: status,     stdout: {contains: display}}
+                - id: spice-framebuffer-nonzero
+                  scope: deploy
+                  spice: screenshot
+                  artifact: /tmp/arch-cloud-base-spice.png
+                  artifact_min_bytes: 1024
+
+                # --- C.6  libvirt domain (host-side, via libvirt: verb) --------
+                # Note: libvirt: list takes no VM arg; covered by libvirt: info.
+                # qemu-guest-agent is wired up via vms.yml's libvirt.snippets
+                # (channel type='unix' → target virtio 'org.qemu.guest_agent.0')
+                # plus cloud-init packages: [qemu-guest-agent] + service enable.
+                - {id: libvirt-domain-running,   scope: deploy, libvirt: info, stdout: {contains: running}}
+                - {id: libvirt-domain-xml-q35,   scope: deploy, libvirt: "domain-xml", stdout: {contains: q35}}
+                - {id: libvirt-domain-xml-virtio, scope: deploy, libvirt: "domain-xml", stdout: {contains: "type='virtio'"}}
+                - {id: libvirt-qmp-query-status, scope: deploy, libvirt: qmp, text: query-status, stdout: {contains: running}}
+                # guest/ping writes its "agent responsive" to stderr (libvirt RPC convention).
+                - {id: libvirt-guest-agent-ping, scope: deploy, libvirt: "guest/ping",     stderr: {contains: responsive}}
+                - {id: libvirt-guest-hostname,   scope: deploy, libvirt: "guest/hostname", stdout: {matches: ".+"}}
+                - {id: libvirt-guest-os-info,    scope: deploy, libvirt: "guest/os-info",  stdout: {contains: arch}}
+                - {id: libvirt-guest-interfaces, scope: deploy, libvirt: "guest/interfaces", stdout: {contains: lo}}
+
+                # --- C.7  pacman-key + repo health -----------------------------
+                - {id: pacman-key-populated,    scope: deploy, command: "pacman-key --list-keys archlinux 2>&1 | grep -q pub"}
+                - {id: pacman-repos-reachable,  scope: deploy, command: "sudo pacman -Sy --noconfirm"}
+
+                # --- C.8  ed25519 SSH key injection ----------------------------
+                - {id: ssh-authorized-keys,     scope: deploy, command: "test -f /home/arch/.ssh/authorized_keys"}
+                - {id: ssh-ed25519-key-count,   scope: deploy, command: "grep -c ssh-ed25519 /home/arch/.ssh/authorized_keys", stdout: {matches: "[1-9]"}}
+
+                # --- C.9  Resource sizing (vm_spec: 4 cpus, 8 GiB, 40 GiB) -----
+                # $-anchors dropped per /ov:test Gotcha #6 — command stdout carries a trailing newline.
+                - {id: cpu-count-4,             scope: deploy, command: nproc,                 stdout: {matches: "^4"}}
+                - {id: mem-8g-ballpark,         scope: deploy, command: "awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo", stdout: {matches: "^[78]"}}
+                # Arch cloud image ships at 2 GiB; growpart expands to ~40 GiB on first boot.
+                # Accept any size ≥ 10 to tolerate fresh-create windows before growpart finishes.
+                - {id: disk-ballpark,           scope: deploy, command: "df -BG / | awk 'NR==2 {gsub(\"G\",\"\",$2); print int($2)}'", stdout: {matches: "^([1-9][0-9]|[1-9][0-9][0-9])"}}
+
+                # --- C.10 Layer-applied tooling (ripgrep / uv / pre-commit) ----
+                # Plus ov itself — installed at cloud-init time via the
+                # Arch PKGBUILD + pacman -U path authored in vms.yml.
+                - {id: ov-binary-present,       scope: deploy, command: "command -v ov"}
+                - {id: ov-version,              scope: deploy, command: "ov version",           stdout: {matches: "[0-9]{4}\\.[0-9]+"}}
+                - {id: ripgrep-version,         scope: deploy, command: "rg --version",         stdout: {contains: ripgrep}}
+                - {id: uv-version,              scope: deploy, command: "uv --version",         stdout: {contains: "uv "}}
+                - {id: pre-commit-version,      scope: deploy, command: "pre-commit --version", stdout: {contains: pre-commit}}
+                - {id: tooling-on-path,         scope: deploy, command: "command -v rg uv pre-commit"}
+
+                # --- C.11 Network / DNS ---------------------------------------
+                - {id: dns-archlinux-org,       scope: deploy, command: "getent hosts archlinux.org"}
+                - {id: https-archlinux-org,     scope: deploy, command: "curl -sfo /dev/null -w '%{http_code}' https://archlinux.org/", stdout: {matches: "^(20[0-9]|30[0-9])"}}

@@ -146,6 +146,56 @@ func BuildCloudImage(
 	}, nil
 }
 
+// RegenerateSeedISO re-renders cloud-init user-data/meta-data/network-config
+// from the current VmSpec and overwrites the seed ISO in place. Used by
+// `ov vm create` to pick up vms.yml edits (new runcmd entries, packages,
+// network config, etc.) without requiring a full `ov vm build` rerun.
+//
+// The qcow2 disk is left untouched — only the 180-sector seed ISO is
+// regenerated, which is cheap (xorriso is fast). Reuses the stored
+// VmDeployState.InstanceID when supplied so cloud-init still treats the
+// VM as the same instance (first-boot directives re-fire per instance-id
+// change, which callers may or may not want).
+func RegenerateSeedISO(spec *VmSpec, seedPath, vmStateDir string, existingState *VmDeployState) error {
+	if spec.Source.Kind != "cloud_image" {
+		return nil // bootc VMs have no seed ISO
+	}
+
+	instanceID := ""
+	if existingState != nil && existingState.InstanceID != "" {
+		instanceID = existingState.InstanceID
+	} else {
+		instanceID = newUUID4()
+	}
+	_, cloudInitEnabled := ResolveKeyInjectionChannels(spec)
+	pubKey, err := resolveSSHPubKeyForSpec(spec, vmStateDir)
+	if err != nil {
+		return fmt.Errorf("resolving ssh pubkey: %w", err)
+	}
+	hostname := ""
+	if spec.CloudInit != nil {
+		hostname = spec.CloudInit.Hostname
+	}
+	rt := CloudInitRuntimeParams{
+		SSHPublicKey:          pubKey,
+		InstanceID:            instanceID,
+		Hostname:              hostname,
+		InjectKeyViaCloudInit: cloudInitEnabled,
+	}
+	if spec.CloudInit != nil && spec.CloudInit.OvInstall != nil {
+		rt.OvBinaryURL = spec.CloudInit.OvInstall.URL
+		rt.OvBinaryChecksum = spec.CloudInit.OvInstall.Checksum
+	}
+	userData, metaData, networkConfig, err := RenderCloudInit(spec, rt)
+	if err != nil {
+		return fmt.Errorf("rendering cloud-init: %w", err)
+	}
+	if err := WriteSeedISO(seedPath, userData, metaData, networkConfig); err != nil {
+		return fmt.Errorf("writing seed iso: %w", err)
+	}
+	return nil
+}
+
 // qemuImgCreateOverlay runs `qemu-img create -f qcow2 -F qcow2 -b
 // <base> <overlay>` to produce a copy-on-write overlay.
 func qemuImgCreateOverlay(basePath, overlayPath string) error {

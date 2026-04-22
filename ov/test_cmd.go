@@ -5,23 +5,25 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
 // TestCmd groups the deploy-time test runner with the live-container
-// interaction verbs (cdp, wl, dbus, vnc). The default subcommand is `run`
-// (tagged default:"withargs"), so `ov test <image>` still dispatches to the
-// test runner; explicit subcommand names (cdp/wl/dbus/vnc) take over when
-// matched.
+// interaction verbs (cdp, wl, dbus, vnc, mcp, spice, libvirt, record). The
+// default subcommand is `run` (tagged default:"withargs"), so
+// `ov test <image>` still dispatches to the test runner; explicit subcommand
+// names take over when matched.
 type TestCmd struct {
-	Run     TestRunCmd  `cmd:"" default:"withargs" help:"Run declarative tests against a running service"`
-	Cdp     CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Dbus    DbusCmd     `cmd:"" help:"Interact with D-Bus services inside containers"`
-	Libvirt LibvirtCmd  `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
-	Mcp     McpCmd      `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
-	Spice   SpiceCmd    `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
-	Vnc     VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl      WlCmd       `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Run     TestRunCmd `cmd:"" default:"withargs" help:"Run declarative tests against a running service"`
+	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
+	Dbus    DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Libvirt LibvirtCmd `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
+	Mcp     McpCmd     `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
+	Record  RecordCmd  `cmd:"" help:"Record terminal sessions or desktop video inside running containers"`
+	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
+	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 }
 
 // TestRunCmd runs tests against a running service — the deploy-time entry point.
@@ -44,6 +46,16 @@ type TestRunCmd struct {
 }
 
 func (c *TestRunCmd) Run() error {
+	// VM dispatch: if the name matches a vms.yml entity, route the test run
+	// through SSH instead of podman exec. VM deploys don't have an OCI image
+	// to pull labels from, so tests come exclusively from the deploy.yml
+	// overlay. This keeps the same declarative `tests:` authoring surface
+	// working for `ov deploy add vm:<name>` flows, and also works for bare VMs
+	// created via `ov vm create` before `ov deploy add` has been run.
+	if c.isVmTarget() {
+		return c.runVm()
+	}
+
 	engine, containerName, err := resolveContainer(c.Image, c.Instance)
 	if err != nil {
 		return err
@@ -98,6 +110,116 @@ func (c *TestRunCmd) Run() error {
 	results := runner.Run(context.Background(), checks)
 
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
+	fails := formatResults(results, c.Format)
+	if fails > 0 {
+		return fmt.Errorf("%d check(s) failed", fails)
+	}
+	return nil
+}
+
+// isVmTarget returns true when c.Image names a `kind: vm` entity in vms.yml.
+// Cheap check — a missing/unreadable overthink.yml returns false and the
+// caller falls through to the container dispatch path.
+func (c *TestRunCmd) isVmTarget() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	uf, ok, err := LoadUnified(dir)
+	if err != nil || !ok || uf.VMs == nil {
+		return false
+	}
+	_, present := uf.VMs[c.Image]
+	return present
+}
+
+// runVm executes deploy-scope tests against a VM guest over SSH.
+//
+// Connection resolution order:
+//  1. Start from VmSpec defaults (resolveVmSshUser / resolveVmSshPort / the
+//     conventional key path under ~/.local/share/ov/vm/ov-<name>/).
+//  2. Overlay any VmState-materialized fields from deploy.yml (user, port,
+//     key path) so VMs whose layers have been applied via `ov deploy add vm:`
+//     honor the exact state the deploy wrote.
+//
+// VMs have no OCI image labels, so no layer/image test section exists —
+// only the local deploy overlay's `tests:` list applies.
+func (c *TestRunCmd) runVm() error {
+	dir, _ := os.Getwd()
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+	spec := uf.VMs[c.Image]
+
+	user := resolveVmSshUser(spec)
+	port := resolveVmSshPort(spec)
+	home, _ := os.UserHomeDir()
+	keyPath := home + "/.local/share/ov/vm/ov-" + c.Image + "/id_ed25519"
+
+	// Two deploy sources for VMs:
+	//   - project-level: overthink.yml / deploy.yml `deployments.images["vm:<name>"]`
+	//     → holds the authored `tests:` list (part of the repo).
+	//   - per-machine:   ~/.config/ov/deploy.yml `images["vm:<name>"]`
+	//     → holds VmState written by `ov deploy add vm:<name>` and any local
+	//       overrides/additions.
+	// Merge by id (local replaces project), same rules as MergeDeployTests.
+	var projectTests, localTests []Check
+	if pc := uf.ProjectDeployConfig(); pc != nil {
+		if entry, ok := pc.Images["vm:"+c.Image]; ok {
+			projectTests = entry.Tests
+		}
+	}
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if entry, ok := dc.Images["vm:"+c.Image]; ok {
+			localTests = entry.Tests
+			if entry.VmState != nil {
+				if entry.VmState.SshUser != "" {
+					user = entry.VmState.SshUser
+				}
+				if entry.VmState.SshPort > 0 {
+					port = entry.VmState.SshPort
+				}
+				if entry.VmState.SshKeyPath != "" {
+					keyPath = entry.VmState.SshKeyPath
+				}
+			}
+		}
+	}
+	tests := MergeDeployTests(projectTests, localTests)
+
+	if user == "" || port == 0 || keyPath == "" {
+		return fmt.Errorf("vm:%s has incomplete SSH config (user=%q port=%d key=%q); run `ov vm create %s` first",
+			c.Image, user, port, keyPath, c.Image)
+	}
+
+	host := "127.0.0.1"
+	executor := &VmTestExecutor{User: user, Host: host, Port: port, KeyPath: keyPath}
+
+	env := map[string]string{
+		"IMAGE":          c.Image,
+		"INSTANCE":       c.Instance,
+		"HOST_PORT:22":   strconv.Itoa(port),
+		"CONTAINER_IP":   host,
+		"CONTAINER_NAME": "ov-" + c.Image,
+		"USER":           user,
+		"HOME":           "/home/" + user,
+	}
+	resolver := &TestVarResolver{Env: env, HasRuntime: true}
+
+	baked := &LabelTestSet{}
+	checks := collectChecksForRun(baked, tests, c.Section, c.Filter)
+	if len(checks) == 0 {
+		fmt.Fprintln(os.Stderr, "No checks to run after filtering.")
+		return nil
+	}
+
+	runner := NewRunner(executor, resolver, RunModeTest)
+	runner.Image = c.Image
+	runner.Instance = c.Instance
+	results := runner.Run(context.Background(), checks)
+
+	fmt.Fprintf(os.Stderr, "VM: ov-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
 		return fmt.Errorf("%d check(s) failed", fails)

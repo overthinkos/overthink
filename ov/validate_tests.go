@@ -144,6 +144,12 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 		method, allowlist = c.Vnc, vncMethods
 	case "mcp":
 		method, allowlist = c.Mcp, mcpMethods
+	case "record":
+		method, allowlist = c.Record, recordMethods
+	case "spice":
+		method, allowlist = c.Spice, spiceMethods
+	case "libvirt":
+		method, allowlist = c.Libvirt, libvirtMethods
 	default:
 		return
 	}

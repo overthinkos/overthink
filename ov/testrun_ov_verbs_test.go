@@ -208,6 +208,9 @@ func TestCheckKind_NewVerbsDispatched(t *testing.T) {
 		{"wl", Check{Wl: "screenshot", Artifact: "/tmp/x"}, "wl"},
 		{"dbus", Check{Dbus: "list"}, "dbus"},
 		{"vnc", Check{Vnc: "status"}, "vnc"},
+		{"record", Check{Record: "list"}, "record"},
+		{"spice", Check{Spice: "status"}, "spice"},
+		{"libvirt", Check{Libvirt: "info"}, "libvirt"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

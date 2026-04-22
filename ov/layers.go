@@ -263,6 +263,12 @@ type Task struct {
 	Extract         string   `yaml:"extract,omitempty"`          // archive format for download
 	Include         []string `yaml:"include,omitempty"`          // path filter for download
 	StripComponents int      `yaml:"strip_components,omitempty"` // strip N leading path components from tar entries
+	// Uninstall lists file paths that `ov deploy del` should remove when
+	// reversing this task. Needed for download tasks that extract into a
+	// shared directory (e.g. /usr/local/bin): the default reverse uses
+	// task.To which would be the whole dir; authors declare the actual
+	// files here so teardown is clean without wiping unrelated binaries.
+	Uninstall []string `yaml:"uninstall,omitempty"`
 	Env     map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
 	Caps    string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
 	Comment string            `yaml:"comment,omitempty"` // optional Containerfile comment

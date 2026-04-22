@@ -688,6 +688,37 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Engine != "" {
 				existing.Engine = overlay.Engine
 			}
+			if overlay.Version != "" {
+				existing.Version = overlay.Version
+			}
+			// Declarative fields authored in the project deploy.yml:
+			// target, vm_source, add_layers, tests, install_opts. The
+			// local deploy.yml overlays via field-level replace — so a
+			// per-machine add_layers list fully replaces the project list,
+			// and per-machine tests replace project tests. For tests the
+			// caller (ov test) can run MergeDeployTests to merge by id.
+			if overlay.Target != "" {
+				existing.Target = overlay.Target
+			}
+			if overlay.VmSource != "" {
+				existing.VmSource = overlay.VmSource
+			}
+			if overlay.AddLayers != nil {
+				existing.AddLayers = overlay.AddLayers
+			}
+			if overlay.Tests != nil {
+				existing.Tests = overlay.Tests
+			}
+			if overlay.InstallOpts != nil {
+				existing.InstallOpts = overlay.InstallOpts
+			}
+			// VmState is per-machine state written by VmDeployTarget; it
+			// only ever lives in the local deploy.yml, never in the
+			// project file — so this simple "later wins" propagation is
+			// the correct behavior.
+			if overlay.VmState != nil {
+				existing.VmState = overlay.VmState
+			}
 			result.Images[name] = existing
 		}
 	}

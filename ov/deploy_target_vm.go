@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -108,14 +109,74 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		return fmt.Errorf("VmDeployTarget: ensure guest ledger dirs: %w", err)
 	}
 
-	// 5. Iterate plans.
+	// 5. Iterate plans, writing per-layer ledger records to the HOST
+	//    (same as container deploys — the ledger is host-side regardless
+	//    of where the work executes). DeployRecord is written at the end.
+	paths, err := DefaultLedgerPaths()
+	if err != nil {
+		return fmt.Errorf("VmDeployTarget: ledger paths: %w", err)
+	}
+
+	deployRec := &DeployRecord{
+		DeployID:   firstDeployID(plans),
+		Target:     t.targetName(),
+		DeployedAt: time.Now().UTC().Format(time.RFC3339),
+	}
+
 	for _, plan := range plans {
-		if err := t.emitPlan(ctx, plan, opts); err != nil {
+		layerRec, err := t.emitPlan(ctx, plan, opts)
+		if err != nil {
+			// Persist what we have so far before returning.
+			if layerRec != nil {
+				_ = t.recordLayer(paths, layerRec, plan, opts)
+			}
+			_ = WriteDeployRecord(paths, deployRec)
 			return fmt.Errorf("VmDeployTarget: plan %s: %w", plan.Layer, err)
+		}
+		if err := t.recordLayer(paths, layerRec, plan, opts); err != nil {
+			return fmt.Errorf("VmDeployTarget: recording layer %s: %w", plan.Layer, err)
+		}
+		deployRec.Layers = append(deployRec.Layers, plan.Layer)
+		if deployRec.Image == "" && plan.Layer != "" {
+			// For pure-add_layers vm deploys the deploy-id's "image" slot
+			// stays as the vm: target name so `ov deploy del` can find it.
+			deployRec.Image = t.targetName()
 		}
 	}
 
+	deployRec.AddLayers = append(deployRec.AddLayers, deployRec.Layers...)
+	if !opts.DryRun {
+		if err := WriteDeployRecord(paths, deployRec); err != nil {
+			return fmt.Errorf("VmDeployTarget: writing deploy record: %w", err)
+		}
+	}
 	return nil
+}
+
+// firstDeployID returns the DeployID of the first non-nil plan. All
+// plans in one `ov deploy add` pass share the same DeployID (stamped in
+// Run()), so any non-nil plan's ID is the one to persist.
+func firstDeployID(plans []*InstallPlan) string {
+	for _, p := range plans {
+		if p != nil && p.DeployID != "" {
+			return p.DeployID
+		}
+	}
+	return ""
+}
+
+// recordLayer writes the per-layer ledger entry on the host. Mirrors
+// HostDeployTarget.recordLayer; keeps the VM deploy's ledger writes in
+// the same spot as host/container deploys so `ov deploy del` finds them.
+func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
+	if opts.DryRun || plan.DeployID == "" || rec == nil {
+		return nil
+	}
+	return AddLayerDeployment(paths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
+		existing.Version = rec.Version
+		existing.Steps = append(existing.Steps, rec.Steps...)
+		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
+	})
 }
 
 // ensureGuestLedgerDirs makes sure ~/.config/overthink/installed/ and
@@ -133,62 +194,73 @@ mkdir -p "$HOME/.config/overthink/env.d"
 
 // emitPlan walks a single InstallPlan and routes each step to the
 // appropriate DeployExecutor method. Mirrors HostDeployTarget.emitPlan's
-// step-dispatch table but with SSH-wrapped execution.
-func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) error {
+// step-dispatch table but with SSH-wrapped execution. Collects
+// ReverseOps from each executed step so `ov deploy del vm:<name>` can
+// replay them in reverse order at teardown time.
+func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts EmitOpts) (*LayerRecord, error) {
 	fmt.Fprintf(os.Stderr, "\n--- plan: %s (layer=%s) ---\n", plan.DeployID, plan.Layer)
+	rec := &LayerRecord{
+		Layer:      plan.Layer,
+		Version:    plan.Version,
+		DeployedAt: time.Now().UTC().Format(time.RFC3339),
+	}
 
 	for _, step := range plan.Steps {
-		start := time.Now()
-		_ = start
-
 		switch s := step.(type) {
 		case *SystemPackagesStep:
 			if err := t.execSystemPackages(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *TaskStep:
 			if err := t.execTask(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *FileStep:
 			if err := t.execFile(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *ShellHookStep:
 			if err := t.execShellHook(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *RepoChangeStep:
 			if !opts.AllowRepoChanges {
-				return fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Layer)
+				return rec, fmt.Errorf("repo change in plan %s requires --allow-repo-changes", plan.Layer)
 			}
 			if err := t.execRepoChange(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *ServicePackagedStep:
 			if !opts.WithServices {
 				continue // gate silent when not enabled
 			}
 			if err := t.execServicePackaged(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *ServiceCustomStep:
 			if !opts.WithServices {
 				continue
 			}
 			if err := t.execServiceCustom(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
 
 		case *BuilderStep:
 			if err := t.execBuilder(ctx, s, plan, opts); err != nil {
-				return err
+				return rec, err
 			}
 
 		default:
@@ -196,7 +268,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 		}
 	}
 
-	return nil
+	return rec, nil
 }
 
 // execSystemPackages runs the distro's package install command on the
@@ -337,10 +409,14 @@ func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
 	return ""
 }
 
-// renderVmTaskCommand is a minimal task-command renderer covering the
-// most common verbs (cmd, mkdir, link, copy, write, setcap). Mirrors
-// HostDeployTarget.renderTaskCommand; kept separate to avoid coupling
-// VmDeployTarget to HostDeployTarget's method set.
+// renderVmTaskCommand renders the same task verbs as HostDeployTarget
+// (cmd/mkdir/link/setcap/copy/write/download). Kept a separate function
+// so VmDeployTarget doesn't depend on HostDeployTarget's receiver, but
+// the supported verb set MUST stay in lock-step with the host version —
+// any verb the host supports needs a parallel branch here, otherwise
+// task steps silently no-op on VMs (observed live 2026-04-22: uv
+// layer's `download:` task was silently skipped under VmDeployTarget,
+// leaving /usr/local/bin/uv missing).
 func renderVmTaskCommand(s *TaskStep) string {
 	task := s.Task
 	ctxPath := s.CtxPath
@@ -366,6 +442,29 @@ func renderVmTaskCommand(s *TaskStep) string {
 		return fmt.Sprintf("ln -sfn %s %s", deployShellQuote(target), deployShellQuote(task.Link))
 	case task.Setcap != "":
 		return fmt.Sprintf("setcap %s %s", deployShellQuote(task.Caps), deployShellQuote(task.Setcap))
+	case task.Copy != "":
+		src := task.Copy
+		if s.LayerDir != "" {
+			src = filepath.Join(s.LayerDir, task.Copy)
+		}
+		dst := task.To
+		if dst == "" {
+			dst = task.Copy
+		}
+		mode := task.Mode
+		if mode == "" {
+			mode = "0644"
+		}
+		return fmt.Sprintf("install -m%s %s %s", mode, deployShellQuote(src), deployShellQuote(dst))
+	case task.Write != "":
+		mode := task.Mode
+		if mode == "" {
+			mode = "0644"
+		}
+		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
+			mode, deployShellQuote(task.Write), task.Content)
+	case task.Download != "":
+		return renderDownloadScript(task)
 	}
 	return ""
 }

@@ -2,6 +2,19 @@ layer:
   name: pre-commit
   depends:
     - nodejs
+    - rust    # cargo install taplo-cli below requires cargo on PATH.
+    # (nodejs is retained for completeness; pre-commit itself needs node for some hooks.)
+
+  # Arch ships pre-commit in [extra]; the pixi-based path is only used on
+  # distros that don't have a native package. Debian/Ubuntu also ship it
+  # as pre-commit (main/universe).
+  pac:
+    packages:
+      - pre-commit
+
+  deb:
+    packages:
+      - pre-commit
 
   tasks:
     - cmd: cargo install taplo-cli --locked

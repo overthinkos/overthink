@@ -1,22 +1,44 @@
 package main
 
-// LibvirtConfig is the structured declarative configuration for the
-// libvirt domain XML (and its applicable-subset QEMU argv). Structured
-// first, raw-XML escape hatch via Snippets as last resort.
+// LibvirtDomain is the overthink YAML-facing shape for the libvirt
+// <domain> configuration (and the applicable-subset QEMU argv).
 //
-// No backcompat unmarshaler — the legacy `libvirt: ["<xml>", "<xml>"]`
-// list-of-strings form on kind:image entries is rejected by the loader
-// per the Hard Cutover policy. Raw XML lives here in Snippets and on
-// layer-level `libvirt.snippets:` fields; both paths are post-processed
-// by the existing InjectLibvirtXML machinery after domain define.
+// vms.yml authors write this struct as the `libvirt:` stanza under a
+// kind:vm entity. At render time it converts to a libvirtxml.Domain
+// via ToLibvirtXML (see libvirt_yaml_bridge.go) and is marshaled to
+// the XML libvirt actually consumes.
 //
-// See the approved plan D14.
-type LibvirtConfig struct {
+// The YAML shape is preserved verbatim from the prior LibvirtConfig
+// type — existing vms.yml files load unchanged. The rename reflects
+// the post-cutover architecture: the overthink YAML layer is a
+// translation facade over libvirtxml, not an independent schema.
+//
+// Raw-XML escape hatches:
+//   - Snippets: runtime-injected via InjectLibvirtXML (post-define).
+//     Preserved from the prior design for layer-level `libvirt:`
+//     composition — layers contribute XML fragments that are not
+//     known until the image is composed.
+//   - XMLPassthrough: declarative verbatim libvirt XML fragments
+//     merged into the rendered domain at ToLibvirtXML time (Rule 6
+//     of the YAML↔XML mapping table). Read directly from vms.yml
+//     and baked into the domain XML before libvirtxml.Marshal.
+type LibvirtDomain struct {
 	// Snippets are raw XML strings classified by the existing
 	// isDeviceElement helper: device-scoped elements are injected
 	// into <devices>, domain-scoped elements before </domain>.
-	// Deduplicated by exact string match.
+	// Deduplicated by exact string match. Composed by the layer
+	// machinery (CollectLibvirtSnippets); NOT a user-authored
+	// vms.yml field.
 	Snippets []string `yaml:"snippets,omitempty"`
+
+	// XMLPassthrough accepts one or more verbatim libvirt XML
+	// fragments. Each fragment is parsed by libvirtxml.Unmarshal
+	// at render time and merged into the canonical domain XML at
+	// the correct parent element (determined by the fragment's
+	// root element: <launchSecurity> into <domain>, <vsock> into
+	// <devices>, etc.). Lets users reach every libvirt feature
+	// without waiting for a first-class YAML field to land.
+	XMLPassthrough string `yaml:"xml_passthrough,omitempty"`
 
 	// --- Structured declarative fields ---
 

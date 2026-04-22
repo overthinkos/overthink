@@ -1,3 +1,5 @@
+github.com/Shells-com/spice v0.0.6 h1:AjzijAiNS2L2DxyhgRXNtmrd2y6H5KVOgYxW2I8MmnU=
+github.com/Shells-com/spice v0.0.6/go.mod h1:i5GHrbFbUA5do2ChxoYQz5cIKpmPdr5/nj+5Ks0Qf9w=
 github.com/alecthomas/assert/v2 v2.11.0 h1:2Q9r3ki8+JYXvGsDyBXwH3LcJ+WK5D0gc5E8vS6K3D0=
 github.com/alecthomas/assert/v2 v2.11.0/go.mod h1:Bze95FyfUr7x34QZrjL+XP+0qgp/zg8yS+TtBj1WA3k=
 github.com/alecthomas/kong v1.14.0 h1:gFgEUZWu2ZmZ+UhyZ1bDhuutbKN1nTtJTwh19Wsn21s=
@@ -29,8 +31,12 @@ github.com/google/go-containerregistry v0.20.7 h1:24VGNpS0IwrOZ2ms2P1QE3Xa5X9p4p
 github.com/google/go-containerregistry v0.20.7/go.mod h1:Lx5LCZQjLH1QBaMPeGwsME9biPeo1lPx6lbGj/UmzgM=
 github.com/google/jsonschema-go v0.4.2 h1:tmrUohrwoLZZS/P3x7ex0WAVknEkBZM46iALbcqoRA8=
 github.com/google/jsonschema-go v0.4.2/go.mod h1:r5quNTdLOYEz95Ru18zA0ydNbBuYoo9tgaYcxEYhJVE=
+github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641 h1:B7ADnac3Yy6Vtcp2mstnsjUtarYcjy4AL0R6eNEhZAk=
+github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641/go.mod h1:HfYnZi/ARQKG0dwH5HNDmPCHdLiFiBf+SI7DbhW7et4=
 github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
+github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813 h1:kJ//kFxpLIkSAqPzCwrEFWXKxnR9/TqL2+ViyBeLKJc=
+github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813/go.mod h1:YQQXrWHN3JEvCtw5ImyTCcPeU/ZLo/YMA+TpB64XdrU=
 github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd h1:KHXrWDYVqFpUJthFQ1XRGLipiyZEgoN75ryOxPKJQ98=
 github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd/go.mod h1:A6QaNB6N6PRQ9mTRpFtUxiF5T5CJpzLALjxBrUQPlFI=
 github.com/klauspost/compress v1.18.1 h1:bcSGx7UbpBqMChDtsF28Lw6v/G94LPrrbMbdC3JH2co=
@@ -91,3 +97,5 @@ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
 gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gotest.tools/v3 v3.0.3 h1:4AuOwCGf4lLR9u3YOe2awrHygurzhO/HeQ6laiA6Sx0=
 gotest.tools/v3 v3.0.3/go.mod h1:Z7Lb0S5l+klDB31fvDQX8ss/FlKDxtlFlw3Oa8Ymbl8=
+libvirt.org/go/libvirtxml v1.12002.0 h1:NbEHw+R3IZE0vZF1deCQt+6tA+6Io4pAw9RjS7tM4fs=
+libvirt.org/go/libvirtxml v1.12002.0/go.mod h1:7Oq2BLDstLr/XtoQD8Fr3mfDNrzlI3utYKySXF2xkng=

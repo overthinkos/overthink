@@ -3,6 +3,7 @@ module github.com/overthinkos/overthink/ov
 go 1.25.3
 
 require (
+	github.com/Shells-com/spice v0.0.6
 	github.com/alecthomas/kong v1.14.0
 	github.com/digitalocean/go-libvirt v0.0.0-20260217163227-273eaa321819
 	github.com/godbus/dbus/v5 v5.2.2
@@ -26,6 +27,8 @@ require (
 	github.com/docker/distribution v2.8.3+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.9.3 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
+	github.com/gordonklaus/portaudio v0.0.0-20200911161147-bb74aa485641 // indirect
+	github.com/hraban/opus v0.0.0-20210415224706-ab1467d63813 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
@@ -37,4 +40,5 @@ require (
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/oauth2 v0.35.0 // indirect
+	libvirt.org/go/libvirtxml v1.12002.0 // indirect
 )

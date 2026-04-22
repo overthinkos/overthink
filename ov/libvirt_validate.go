@@ -22,7 +22,7 @@ func ValidateVmSpec(name string, spec *VmSpec, errs *ValidationError) {
 	validateVmSSH(name, spec, errs)
 	validateVmNetwork(name, spec, errs)
 	if spec.Libvirt != nil {
-		ValidateLibvirtConfig(name, spec, errs)
+		ValidateLibvirtDomain(name, spec, errs)
 	}
 	if spec.CloudInit != nil {
 		validateVmCloudInit(name, spec, errs)
@@ -215,9 +215,9 @@ func validateVmCloudInit(name string, spec *VmSpec, errs *ValidationError) {
 	}
 }
 
-// ValidateLibvirtConfig covers the structured libvirt config coherence
+// ValidateLibvirtDomain covers the structured libvirt-domain coherence
 // checks. Called from ValidateVmSpec.
-func ValidateLibvirtConfig(name string, spec *VmSpec, errs *ValidationError) {
+func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 	lv := spec.Libvirt
 	if lv == nil {
 		return

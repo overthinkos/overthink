@@ -14,12 +14,14 @@ import (
 // test runner; explicit subcommand names (cdp/wl/dbus/vnc) take over when
 // matched.
 type TestCmd struct {
-	Run  TestRunCmd `cmd:"" default:"withargs" help:"Run declarative tests against a running service"`
-	Cdp  CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
-	Dbus DbusCmd    `cmd:"" help:"Interact with D-Bus services inside containers"`
-	Mcp  McpCmd     `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
-	Vnc  VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
-	Wl   WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	Run     TestRunCmd  `cmd:"" default:"withargs" help:"Run declarative tests against a running service"`
+	Cdp     CdpCmd      `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
+	Dbus    DbusCmd     `cmd:"" help:"Interact with D-Bus services inside containers"`
+	Libvirt LibvirtCmd  `cmd:"" help:"VM management via libvirt API (info, screenshot, send-key, QMP, guest-agent, snapshots, events)"`
+	Mcp     McpCmd      `cmd:"" help:"Probe MCP servers declared via mcp_provides"`
+	Spice   SpiceCmd    `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
+	Vnc     VncCmd      `cmd:"" help:"Control VNC desktop in running containers"`
+	Wl      WlCmd       `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 }
 
 // TestRunCmd runs tests against a running service — the deploy-time entry point.

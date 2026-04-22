@@ -38,7 +38,7 @@ type VmSpec struct {
 
 	// --- Fully-generic libvirt / qemu configuration ---
 
-	Libvirt *LibvirtConfig `yaml:"libvirt,omitempty"`
+	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
 }
 
 // VmSource is the discriminated-union source for a VM disk image.

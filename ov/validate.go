@@ -1317,7 +1317,7 @@ func validateLibvirt(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	// Image-level `libvirt:` field was removed in the VM hard-cutover.
 	// Raw XML snippets live on layer `libvirt:` fields (validated above)
 	// and on `kind: vm` entity `spec.libvirt.snippets:` lists (validated
-	// by ValidateLibvirtConfig in libvirt_validate.go).
+	// by ValidateLibvirtDomain in libvirt_validate.go).
 	_ = cfg
 	_ = layers
 }

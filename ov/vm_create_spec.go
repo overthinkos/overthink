@@ -83,7 +83,10 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	// Backend dispatch.
 	switch backend {
 	case "libvirt":
-		xmlStr := RenderDomain(spec, rt)
+		xmlStr, err := RenderDomainXML(spec, rt)
+		if err != nil {
+			return fmt.Errorf("rendering domain XML for %s: %w", vmDomainName, err)
+		}
 		conn, err := connectLibvirt()
 		if err != nil {
 			return fmt.Errorf("connecting to libvirt: %w", err)

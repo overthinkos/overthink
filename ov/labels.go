@@ -144,7 +144,7 @@ type ImageMetadata struct {
 	Env            []string
 	Hooks          *HooksConfig
 	// Vm / Libvirt: removed in the VM hard-cutover. VM config lives on
-	// `kind: vm` entities in vms.yml (VmSpec / LibvirtConfig), not on
+	// `kind: vm` entities in vms.yml (VmSpec / LibvirtDomain), not on
 	// container image OCI labels.
 	Routes         []LabelRoute
 	Init           string            // active init system name ("supervisord", "systemd", "")

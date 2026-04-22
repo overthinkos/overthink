@@ -63,3 +63,15 @@ output/
 # refactor to verify byte-identical output after IR lift)
 /.regression-snapshot/
 /.regression-snapshot-checksums.txt
+
+# ML model weights and training state (reproducible from notebooks)
+*.safetensors
+optimizer.pt
+scheduler.pt
+rng_state.pth
+scaler.pt
+pytorch_model*.bin
+*.gguf
+*.ckpt
+*.onnx
+*.h5

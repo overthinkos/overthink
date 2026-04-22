@@ -63,6 +63,23 @@ type VmSource struct {
 	// Default: ~/.cache/ov/vm-images/
 	Cache string `yaml:"cache,omitempty"`
 
+	// BaseUser is the upstream cloud image's pre-existing user account
+	// that ov adopts (mirrors the container-side `base_user:` +
+	// `user_policy: adopt` pattern). When set:
+	//   - The cloud-init renderer emits a merge-by-name entry
+	//     (`users: [default, {name: <base_user>, ssh_authorized_keys:
+	//     […]}]`) so cloud-init appends the SSH pubkey to the existing
+	//     account's authorized_keys WITHOUT recreating the user,
+	//     touching its shell, or rewriting /etc/sudoers.
+	//   - spec.ssh.user defaults to this value, so `ov vm ssh <vm>`
+	//     connects as the upstream's account.
+	// Common values: "arch" (Arch cloud image), "ubuntu" (Ubuntu),
+	// "fedora" (Fedora cloud), "debian" (Debian), "cloud-user" (CentOS).
+	// Leave empty only if the image has no default account — then
+	// you MUST declare a custom user in spec.cloud_init.users with
+	// full sudo/groups/shell fields.
+	BaseUser string `yaml:"base_user,omitempty"`
+
 	// --- Bootc branch ---
 
 	// Image is the kind:image entry name (or full OCI tag) that this

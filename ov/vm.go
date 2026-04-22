@@ -768,8 +768,16 @@ func containerSSHKeyDir(name string) (string, error) {
 }
 
 // generateSSHKeypair creates an ed25519 keypair in the given directory.
-// Returns the public key in authorized_keys format.
+// Returns the public key in authorized_keys format. Idempotent: when
+// the .pub file already exists in dir, the existing public key is
+// read and returned without generating a new pair (so multiple VM
+// lifecycle calls — build, create, start — use the same identity).
 func generateSSHKeypair(dir string) (string, error) {
+	pubPath := filepath.Join(dir, "id_ed25519.pub")
+	if existing, err := os.ReadFile(pubPath); err == nil {
+		return strings.TrimSpace(string(existing)), nil
+	}
+
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return "", fmt.Errorf("generating ed25519 key: %w", err)

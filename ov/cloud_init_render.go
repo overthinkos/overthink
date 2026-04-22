@@ -163,17 +163,29 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 	return userData, metaData, networkConfig, nil
 }
 
-// composeUsers builds the cloud-init users: list. Always includes
-// VmSSH.User with sudo + key (when key injection enabled). User-declared
-// entries are appended, and if a user-declared entry's Name matches
-// VmSSH.User, the renderer *merges* (giving the key to the user entry)
-// instead of emitting two entries.
-func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []map[string]interface{} {
+// composeUsers builds the cloud-init users: list. Mirrors the
+// container-side user_policy pattern — adopt the upstream's
+// pre-existing account when spec.Source.BaseUser is set (emit
+// merge-by-name entry with only ssh_authorized_keys), otherwise
+// create a new user with sudo+groups+shell.
+//
+// The rendered list ALWAYS starts with `- default` so cloud-init
+// preserves the distro's default-user semantics (including its
+// existing sudoers membership). Merge-by-name semantics mean no user
+// is recreated: if an entry's Name matches an already-existing
+// account, cloud-init just appends ssh_authorized_keys.
+func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []interface{} {
 	sshUser := resolveCloudInitSSHUser(spec)
+	baseUser := ""
+	if spec != nil {
+		baseUser = spec.Source.BaseUser
+	}
 
-	var out []map[string]interface{}
+	// Start with the distro default so cloud-init doesn't disable it.
+	out := []interface{}{"default"}
+
+	// User-declared custom users are emitted as-is.
 	mergedSSH := false
-
 	for _, u := range ci.Users {
 		entry := userEntryToMap(u)
 		if u.Name == sshUser {
@@ -183,29 +195,56 @@ func composeUsers(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []ma
 		out = append(out, entry)
 	}
 
-	if !mergedSSH && sshUser != "" {
-		entry := map[string]interface{}{
-			"name":   sshUser,
-			"sudo":   "ALL=(ALL) NOPASSWD:ALL",
-			"groups": []string{"wheel"},
-			"shell":  "/bin/bash",
-		}
-		applySSHDefaults(entry, rt)
-		out = append([]map[string]interface{}{entry}, out...)
+	if mergedSSH || sshUser == "" {
+		return out
 	}
 
+	// Adopt path: the sshUser matches the upstream's pre-existing
+	// account (BaseUser). Emit a minimal merge-by-name entry that only
+	// appends ssh_authorized_keys. DO NOT set sudo/groups/shell —
+	// trust upstream's sudoers config (Arch's arch user is in wheel
+	// with NOPASSWD via /etc/sudoers.d/10-default, Ubuntu's ubuntu
+	// user has equivalent, etc.).
+	if baseUser != "" && sshUser == baseUser {
+		entry := map[string]interface{}{"name": sshUser}
+		applySSHDefaults(entry, rt)
+		out = append(out, entry)
+		return out
+	}
+
+	// Create path: the sshUser is a NEW user the upstream didn't
+	// ship. Emit full create-user entry with sudo, wheel membership,
+	// and bash shell.
+	entry := map[string]interface{}{
+		"name":   sshUser,
+		"sudo":   "ALL=(ALL) NOPASSWD:ALL",
+		"groups": []string{"wheel"},
+		"shell":  "/bin/bash",
+	}
+	applySSHDefaults(entry, rt)
+	out = append(out, entry)
 	return out
 }
 
+// resolveCloudInitSSHUser picks the ssh user for cloud-init rendering.
+// Precedence:
+//  1. Explicit spec.ssh.user
+//  2. spec.source.base_user (adopt path — cloud_image sources with a
+//     declared upstream account)
+//  3. Source-kind fallback ("root" for bootc, "arch" for cloud_image —
+//     the latter works for Arch cloud images out of the box; for
+//     other distros users MUST set base_user or ssh.user explicitly)
 func resolveCloudInitSSHUser(spec *VmSpec) string {
 	if spec.SSH != nil && spec.SSH.User != "" {
 		return spec.SSH.User
 	}
-	// Source-kind-appropriate default.
+	if spec.Source.BaseUser != "" {
+		return spec.Source.BaseUser
+	}
 	if spec.Source.Kind == "bootc" {
 		return "root"
 	}
-	return "ov"
+	return ""
 }
 
 func userEntryToMap(u VmCloudInitUser) map[string]interface{} {

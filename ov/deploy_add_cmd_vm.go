@@ -150,16 +150,23 @@ func parseVmDeployName(deployName string) (vmName, instance string, err error) {
 	return rest, "", nil
 }
 
-// resolveVmSshUser picks the SSH user for a spec. cloud_image sources
-// default to "ov"; bootc sources default to "root".
+// resolveVmSshUser picks the SSH user for a spec. Precedence mirrors
+// resolveCloudInitSSHUser: explicit spec.ssh.user → spec.source.base_user
+// (adopt path for cloud images) → source-kind default ("root" for bootc).
+// cloud_image sources with no base_user declared have no sensible
+// default — callers treat "" as "user must supply --ssh-key none and
+// manage identity out-of-band, or declare base_user in the spec".
 func resolveVmSshUser(spec *VmSpec) string {
 	if spec.SSH != nil && spec.SSH.User != "" {
 		return spec.SSH.User
 	}
+	if spec.Source.BaseUser != "" {
+		return spec.Source.BaseUser
+	}
 	if spec.Source.Kind == "bootc" {
 		return "root"
 	}
-	return "ov"
+	return ""
 }
 
 // resolveVmSshPort picks the host-side SSH port forward. Default 2222.

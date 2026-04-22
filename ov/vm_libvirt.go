@@ -20,6 +20,12 @@ type libvirtConn struct {
 }
 
 // connectLibvirt connects to the user's libvirt session socket.
+//
+// Uses ConnectToURI(qemu:///session) rather than the default Connect()
+// which targets qemu:///system. That matters because modern libvirt
+// ships per-driver modular daemons (virtqemud, virtnetworkd, …) and
+// the session-scoped virtqemud only accepts session URIs — a /system
+// connect attempt fails with "unexpected qemu URI path '/system'".
 func connectLibvirt() (*libvirtConn, error) {
 	sockPath := libvirtSessionSocket()
 	c, err := net.DialTimeout("unix", sockPath, 5*time.Second)
@@ -27,7 +33,7 @@ func connectLibvirt() (*libvirtConn, error) {
 		return nil, fmt.Errorf("connecting to libvirt session socket %s: %w", sockPath, err)
 	}
 	l := libvirt.New(c)
-	if err := l.Connect(); err != nil {
+	if err := l.ConnectToURI(libvirt.QEMUSession); err != nil {
 		c.Close()
 		return nil, fmt.Errorf("libvirt handshake failed: %w", err)
 	}
@@ -146,12 +152,26 @@ func domainStateString(state libvirt.DomainState) string {
 	}
 }
 
-// libvirtSessionSocket returns the path to the user's libvirt session socket.
+// libvirtSessionSocket returns the path to the user's libvirt session
+// socket. Modern libvirt (≥ 8.0) uses per-driver modular daemons with
+// separate sockets (virtqemud-sock); legacy libvirt (< 8.0) uses the
+// monolithic libvirt-sock. Probe the modular socket first because
+// that's what every current distro ships; fall back to the legacy
+// path on older systems.
 func libvirtSessionSocket() string {
-	if runtimeDir := os.Getenv("XDG_RUNTIME_DIR"); runtimeDir != "" {
-		return filepath.Join(runtimeDir, "libvirt", "libvirt-sock")
+	dir := os.Getenv("XDG_RUNTIME_DIR")
+	if dir == "" {
+		dir = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
-	return fmt.Sprintf("/run/user/%d/libvirt/libvirt-sock", os.Getuid())
+	libvirtDir := filepath.Join(dir, "libvirt")
+
+	// Try modular (virtqemud) first — standard on libvirt ≥ 8.0.
+	modular := filepath.Join(libvirtDir, "virtqemud-sock")
+	if _, err := os.Stat(modular); err == nil {
+		return modular
+	}
+	// Fallback to legacy monolithic socket.
+	return filepath.Join(libvirtDir, "libvirt-sock")
 }
 
 // buildDomainXML constructs a minimal libvirt domain XML for a VM.

@@ -164,6 +164,15 @@ func renderDefaultInterface(b *strings.Builder, spec *VmSpec, rt VmRuntimeParams
 		fmt.Fprintf(b, "      <source network='%s'/>\n", escapeXMLAttr(source))
 	default: // user
 		b.WriteString("    <interface type='user'>\n")
+		// libvirt's <portForward> element requires either the 'passt'
+		// backend (user-mode) or the 'vhostuser' backend. Plain SLIRP
+		// ignores it. We always emit backend='passt' for user-mode
+		// interfaces so SSH + extra port forwards are actually honored;
+		// passt is shipped by libvirt's standard deps on every modern
+		// distro.
+		if rt.SshPort > 0 || len(net.PortForwards) > 0 || len(rt.ExtraPortForwards) > 0 {
+			b.WriteString("      <backend type='passt'/>\n")
+		}
 	}
 
 	fmt.Fprintf(b, "      <model type='%s'/>\n", escapeXMLAttr(net.Model))
@@ -172,21 +181,26 @@ func renderDefaultInterface(b *strings.Builder, spec *VmSpec, rt VmRuntimeParams
 	}
 
 	// Port forwards (user-mode only in libvirt's schema).
+	// libvirt's <range> semantics: `start` is the HOST-side port,
+	// `to` is the GUEST-side port it maps to (only required when the
+	// host and guest port differ). Reversing these causes passt to
+	// try to bind the wrong port and fail with "Permission denied"
+	// when start ≤ 1024.
 	if net.Mode == "user" || net.Mode == "" {
 		b.WriteString("      <portForward proto='tcp'>\n")
 		if rt.SshPort > 0 {
-			fmt.Fprintf(b, "        <range start='22' to='%d'/>\n", rt.SshPort)
+			fmt.Fprintf(b, "        <range start='%d' to='22'/>\n", rt.SshPort)
 		}
 		for _, pf := range net.PortForwards {
 			host, guest := splitPortForward(pf)
 			if host != "" && guest != "" {
-				fmt.Fprintf(b, "        <range start='%s' to='%s'/>\n", escapeXMLAttr(guest), escapeXMLAttr(host))
+				fmt.Fprintf(b, "        <range start='%s' to='%s'/>\n", escapeXMLAttr(host), escapeXMLAttr(guest))
 			}
 		}
 		for _, pf := range rt.ExtraPortForwards {
 			host, guest := splitPortForward(pf)
 			if host != "" && guest != "" {
-				fmt.Fprintf(b, "        <range start='%s' to='%s'/>\n", escapeXMLAttr(guest), escapeXMLAttr(host))
+				fmt.Fprintf(b, "        <range start='%s' to='%s'/>\n", escapeXMLAttr(host), escapeXMLAttr(guest))
 			}
 		}
 		b.WriteString("      </portForward>\n")

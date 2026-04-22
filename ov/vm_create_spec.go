@@ -76,9 +76,9 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		Cpus:              resolveVmCpus(spec),
 		SshPort:           resolveVmSshPort(spec),
 	}
-	if spec.Network != nil {
-		rt.ExtraPortForwards = spec.Network.PortForwards
-	}
+	// ExtraPortForwards intentionally empty — spec.Network.PortForwards is
+	// already read by the renderers directly. Populating rt here would
+	// duplicate every entry.
 
 	// Backend dispatch.
 	switch backend {

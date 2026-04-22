@@ -105,6 +105,85 @@ type DeployImageConfig struct {
 	// InstallOpts carries host-target-specific flags that would
 	// otherwise have to be passed on every command invocation.
 	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
+
+	// --- VM-target fields (D9) ---
+
+	// VmSource references a kind:vm entity by name. Only meaningful when
+	// this entry represents a VM deploy (deploy name starts with "vm:"
+	// or Target == "vm"). Resolves through the same unified-schema
+	// loader that handles kind:image and kind:layer refs.
+	VmSource string `yaml:"vm_source,omitempty"`
+
+	// VmState is the runtime state written by VmDeployTarget on first
+	// apply. Preserved across reboots so ov deploy del can reverse the
+	// deploy, and so re-apply is idempotent (instance-id stays stable,
+	// disk path points at the same qcow2, etc.).
+	VmState *VmDeployState `yaml:"vm_state,omitempty"`
+}
+
+// VmDeployState is the auto-managed runtime state for a vm: deploy.
+// Written by VmDeployTarget on first apply; preserved across ov deploy
+// add/del cycles so VM lifecycle is reversible and idempotent.
+type VmDeployState struct {
+	// InstanceID is the stable UUIDv4 cloud-init instance-id. Generated
+	// once on first apply and persisted; re-renders produce the same
+	// user-data (cloud-init treats an instance-id change as a new
+	// instance, which breaks idempotency — so we pin it).
+	InstanceID string `yaml:"instance_id,omitempty"`
+
+	// DiskPath is the absolute path to the VM's qcow2 (may be a
+	// copy-on-write overlay on top of a cached base image for
+	// cloud_image sources).
+	DiskPath string `yaml:"disk_path,omitempty"`
+
+	// SeedIso is the absolute path to the NoCloud cidata ISO. Empty
+	// when the source kind is bootc and cloud-init injection is
+	// disabled (no seed ISO emitted).
+	SeedIso string `yaml:"seed_iso,omitempty"`
+
+	// SshPort is the host port forwarded to the guest's :22.
+	SshPort int `yaml:"ssh_port,omitempty"`
+
+	// SshUser is the guest account VmDeployTarget SSHes in as
+	// (distinct from the host user running ov).
+	SshUser string `yaml:"ssh_user,omitempty"`
+
+	// SshKeyPath is the absolute path to the private key used for
+	// VmDeployTarget's SSH sessions. May be auto-generated at first
+	// apply (into ~/.local/share/ov/vm/<vm>/id_ed25519) when
+	// VmSSH.KeySource == "generate", or a pre-existing user key when
+	// KeySource == "auto".
+	SshKeyPath string `yaml:"ssh_key_path,omitempty"`
+
+	// Backend is the VM backend used to boot this VM: "qemu" or
+	// "libvirt". Pinned at first apply so subsequent operations don't
+	// thrash between backends if the user's vm.backend setting
+	// changes underneath them.
+	Backend string `yaml:"backend,omitempty"`
+
+	// KeyInjectionResolved is the effective D13 state after auto
+	// defaults + explicit overrides resolved. Two booleans (one per
+	// channel). Informational; used by ov deploy show and for audit
+	// purposes.
+	KeyInjectionResolved *VmKeyInjectionResolved `yaml:"key_injection_resolved,omitempty"`
+
+	// OvInstallStrategy is the VmOvInstall.Strategy chosen at first
+	// apply: "auto", "scp", "url", or "skip". Informational.
+	OvInstallStrategy string `yaml:"ov_install_strategy,omitempty"`
+
+	// CloudInitRenderedDigest is the sha256 of the last rendered
+	// user-data (structured intent + applied defaults). Lets VmDeployTarget
+	// detect drift — if the current rendered user-data doesn't match
+	// the recorded digest, the user changed the kind:vm entity and
+	// the seed ISO needs to be regenerated before re-apply.
+	CloudInitRenderedDigest string `yaml:"cloud_init_rendered_digest,omitempty"`
+}
+
+// VmKeyInjectionResolved is the effective per-channel toggle state
+// after D13 auto-default resolution + explicit-wins merging.
+type VmKeyInjectionResolved struct {
+	SMBIOS    bool `yaml:"smbios"`
+	CloudInit bool `yaml:"cloud_init"`
 }
 
 // InstallOptsConfig holds deploy.yml install_opts settings for a host

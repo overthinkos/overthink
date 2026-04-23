@@ -15,6 +15,14 @@ vms:
             checksum:
                 type: sha256
             base_user: arch
+        # Classification (see /ov-dev:disposable):
+        #   disposable=true is LOAD-BEARING — authorizes `ov rebuild
+        #   arch-cloud-base` to run unattended. This VM exists for
+        #   verification and rebuild-at-will.
+        #   lifecycle=dev is a human-facing tier tag — INFORMATIONAL
+        #   ONLY. It has zero effect on disposability.
+        disposable: true
+        lifecycle: dev
         disk_size: 40G
         ram: 8G
         cpus: 4
@@ -74,9 +82,32 @@ vms:
                     - type: spicevmc
                       name: com.redhat.spice.0
                 graphics:
+                    # SPICE on a UNIX socket.
+                    #
+                    # QEMU allows only ONE <listen> per <graphics>
+                    # element (libvirt returns "QEMU does not support
+                    # multiple listens" otherwise), so we pick socket:
+                    # no TCP port, no network exposure, same config
+                    # whether the host is local or remote.
+                    #
+                    # Remote GUI access works out of the box via:
+                    #
+                    #   virt-manager --connect qemu+ssh://host/session
+                    #   virt-viewer  --connect qemu+ssh://host/session --attach <vm>
+                    #   remote-viewer spice+unix:///...  (after ov ssh tunnel)
+                    #
+                    # virt-manager/virt-viewer auto-tunnel by spawning
+                    # `ssh host nc -U <socket>` on the libvirt host —
+                    # this requires `nc` (openbsd-netcat / netcat-
+                    # openbsd / nmap-ncat) to be installed there.
+                    # ov's setup.sh + pkg/arch/PKGBUILD install it
+                    # automatically. If you see virt-manager hang at
+                    # "Connecting to graphical console for guest",
+                    # check that `ssh <host> which nc` returns a
+                    # path — that's almost always the cause.
                     - type: spice
-                      autoport: "yes"
-                      listen: 127.0.0.1
+                      listen:
+                          - type: socket
                 video:
                     - model: virtio
                       vram: 65536

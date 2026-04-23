@@ -46,6 +46,14 @@ type DeployAddCmd struct {
 	SkipIncompatible   bool   `long:"skip-incompatible" help:"Skip layers without host-matching format (host target only)"`
 	BuilderImage       string `long:"builder-image" help:"Override the compile builder image"`
 	AssumeYes          bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
+
+	// Disposable + lifecycle classification (see /ov-dev:disposable).
+	// --disposable writes `disposable: true` into the deploy.yml
+	// entry and authorizes autonomous `ov rebuild`. --lifecycle writes
+	// the informational tier tag; it has NO effect on disposability
+	// (no derivation).
+	Disposable bool   `long:"disposable" help:"Mark this deploy disposable (authorizes autonomous ov rebuild; writes disposable: true into deploy.yml)"`
+	Lifecycle  string `long:"lifecycle" help:"Informational tier tag (scratch|dev|test|qa|staging|prod|custom). NO effect on disposability — use --disposable for that."`
 }
 
 // DeployDelCmd implements `ov deploy del <name>`.
@@ -529,6 +537,22 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	}
 	if err := tgt.Emit(plans, opts); err != nil {
 		return err
+	}
+	// Persist classification flags into deploy.yml when the user
+	// passed --disposable / --lifecycle. saveDeployState merges onto
+	// any existing entry; SetDisposable / SetLifecycle gate whether
+	// we actually write each field (so an unrelated code path can't
+	// silently clear a prior explicit opt-in).
+	if c.Disposable || c.Lifecycle != "" {
+		saveDeployState(c.Name, "", SaveDeployStateInput{
+			SetDisposable: c.Disposable,
+			Disposable:    c.Disposable,
+			SetLifecycle:  c.Lifecycle != "",
+			Lifecycle:     c.Lifecycle,
+		})
+		if c.Disposable {
+			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov rebuild` will act unattended on this deploy.")
+		}
 	}
 	fmt.Printf("Overlay image ready: %s\n", tgt.OverlayImageRef())
 	fmt.Println("To start the container, run: ov start " + c.Name)

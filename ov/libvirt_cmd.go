@@ -23,6 +23,16 @@ import (
 	libvirtxml "libvirt.org/go/libvirtxml"
 )
 
+// libvirtURIFlag carries the --uri flag shared by every Libvirt
+// subcommand. Empty string means the local qemu:///session (default
+// behavior); qemu+ssh://[user@]host[:port]/session connects over SSH
+// via the SSH tunnel machinery in ov/ssh_tunnel.go.
+//
+// Also honored as the OV_LIBVIRT_URI environment variable.
+type libvirtURIFlag struct {
+	Uri string `name:"uri" env:"OV_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors."`
+}
+
 // LibvirtCmd groups all libvirt-RPC test verbs.
 type LibvirtCmd struct {
 	// Top-level verbs
@@ -45,10 +55,11 @@ type LibvirtCmd struct {
 
 type LibvirtListCmd struct {
 	Format string `long:"format" default:"text" help:"Output format: text, json"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtListCmd) Run() error {
-	conn, err := connectLibvirt()
+	conn, err := connectLibvirt(c.Uri)
 	if err != nil {
 		return err
 	}
@@ -93,10 +104,11 @@ func (c *LibvirtListCmd) Run() error {
 type LibvirtInfoCmd struct {
 	Vm     string `arg:"" help:"VM name (vms.yml entity)"`
 	Format string `long:"format" default:"text" help:"Output format: text, json"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtInfoCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -128,9 +140,7 @@ func (c *LibvirtInfoCmd) Run() error {
 					AutoPort: g.Spice.AutoPort,
 					Passwd:   g.Spice.Passwd != "",
 				}
-				if len(g.Spice.Listeners) > 0 && g.Spice.Listeners[0].Address != nil {
-					gi.Listen = g.Spice.Listeners[0].Address.Address
-				}
+				gi.Listen = formatGraphicsListen(g.Spice.Listeners)
 				graphics = append(graphics, gi)
 			}
 			if g.VNC != nil {
@@ -140,7 +150,8 @@ func (c *LibvirtInfoCmd) Run() error {
 					AutoPort: g.VNC.AutoPort,
 					Passwd:   g.VNC.Passwd != "",
 				}
-				if g.VNC.Listen != "" {
+				gi.Listen = formatGraphicsListen(g.VNC.Listeners)
+				if gi.Listen == "" && g.VNC.Listen != "" {
 					gi.Listen = g.VNC.Listen
 				}
 				graphics = append(graphics, gi)
@@ -186,12 +197,13 @@ func (c *LibvirtInfoCmd) Run() error {
 
 type LibvirtScreenshotCmd struct {
 	Vm     string `arg:"" help:"VM name"`
-	File   string `arg:"" optional:"" default:"screenshot.png" help:"Output file path (PNG)"`
+	File   string `arg:"" optional:"" default:"screenshot.png" help:"Output file path (use '-' for stdout)"`
 	Screen int    `long:"screen" default:"0" help:"Display index for multi-head VMs"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtScreenshotCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -204,17 +216,24 @@ func (c *LibvirtScreenshotCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("screenshot: %w", err)
 	}
-	f, err := os.Create(c.File)
+	w, closeFn, err := openOutputPath(c.File)
 	if err != nil {
 		return fmt.Errorf("creating %s: %w", c.File, err)
 	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
+	if err := png.Encode(w, img); err != nil {
+		_ = closeFn()
 		return fmt.Errorf("encoding PNG: %w", err)
 	}
+	if err := closeFn(); err != nil {
+		return err
+	}
 	b := img.Bounds()
+	dest := c.File
+	if dest == "-" {
+		dest = "stdout"
+	}
 	fmt.Fprintf(os.Stderr, "Screenshot saved to %s (%dx%d, via libvirt DomainScreenshot)\n",
-		c.File, b.Dx(), b.Dy())
+		dest, b.Dx(), b.Dy())
 	return nil
 }
 
@@ -224,10 +243,11 @@ type LibvirtSendKeyCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Keys []string `arg:"" help:"Key names (space-separated, e.g. 'ctrl alt F2')"`
 	Hold int    `long:"hold" default:"50" help:"Hold duration in ms"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSendKeyCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -254,10 +274,11 @@ type LibvirtPasswdCmd struct {
 	Password string `arg:"" optional:"" help:"Password (empty = prompt or stdin)"`
 	Type     string `long:"type" default:"spice" help:"Graphics type: spice or vnc"`
 	Persist  bool   `long:"persistent" help:"Also persist to inactive config (default: live only)"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtPasswdCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -312,16 +333,43 @@ func persistStr(persist bool) string {
 	return ""
 }
 
+// formatGraphicsListen renders a list of libvirt <listen> children
+// into a single human-readable string for `ov test libvirt info`.
+// Address listeners show as "1.2.3.4"; socket listeners show as
+// "unix://<path>"; multiple listeners are comma-separated.
+func formatGraphicsListen(listeners []libvirtxml.DomainGraphicListener) string {
+	if len(listeners) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(listeners))
+	for _, l := range listeners {
+		switch {
+		case l.Address != nil && l.Address.Address != "":
+			parts = append(parts, l.Address.Address)
+		case l.Socket != nil:
+			if l.Socket.Socket != "" {
+				parts = append(parts, "unix://"+l.Socket.Socket)
+			} else {
+				parts = append(parts, "unix://(auto)")
+			}
+		case l.Network != nil:
+			parts = append(parts, "network:"+l.Network.Network)
+		}
+	}
+	return strings.Join(parts, ",")
+}
+
 // ---------------- qmp ----------------
 
 type LibvirtQmpCmd struct {
 	Vm      string `arg:"" help:"VM name"`
 	Command string `arg:"" help:"QMP command name (e.g. query-status)"`
 	Args    string `arg:"" optional:"" help:"JSON args (optional)"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtQmpCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -364,10 +412,11 @@ func (c *LibvirtQmpCmd) Run() error {
 type LibvirtDomainXMLCmd struct {
 	Vm     string `arg:"" help:"VM name"`
 	Config bool   `long:"config" help:"Get inactive (on-disk) config instead of live"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtDomainXMLCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -389,10 +438,11 @@ func (c *LibvirtDomainXMLCmd) Run() error {
 type LibvirtConsoleCmd struct {
 	Vm       string `arg:"" help:"VM name"`
 	Duration time.Duration `long:"duration" default:"5s" help:"Stream for this duration, then exit"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtConsoleCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -409,10 +459,11 @@ func (c *LibvirtConsoleCmd) Run() error {
 type LibvirtEventsCmd struct {
 	Vm       string `arg:"" optional:"" help:"VM name (empty = all domains)"`
 	Duration time.Duration `long:"duration" default:"10s" help:"Watch for this long"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtEventsCmd) Run() error {
-	conn, err := connectLibvirt()
+	conn, err := connectLibvirt(c.Uri)
 	if err != nil {
 		return err
 	}
@@ -476,10 +527,11 @@ type LibvirtGuestGroup struct {
 type LibvirtGuestPingCmd struct {
 	Vm      string        `arg:"" help:"VM name"`
 	Timeout time.Duration `long:"timeout" default:"5s" help:"Max wait"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestPingCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -494,10 +546,11 @@ func (c *LibvirtGuestPingCmd) Run() error {
 
 type LibvirtGuestInfoCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestInfoCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -512,10 +565,11 @@ func (c *LibvirtGuestInfoCmd) Run() error {
 
 type LibvirtGuestOsInfoCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestOsInfoCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -530,10 +584,11 @@ func (c *LibvirtGuestOsInfoCmd) Run() error {
 
 type LibvirtGuestTimeCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestTimeCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -550,10 +605,11 @@ func (c *LibvirtGuestTimeCmd) Run() error {
 
 type LibvirtGuestHostnameCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestHostnameCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -569,10 +625,11 @@ func (c *LibvirtGuestHostnameCmd) Run() error {
 
 type LibvirtGuestUsersCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestUsersCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -587,10 +644,11 @@ func (c *LibvirtGuestUsersCmd) Run() error {
 
 type LibvirtGuestInterfacesCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestInterfacesCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -605,10 +663,11 @@ func (c *LibvirtGuestInterfacesCmd) Run() error {
 
 type LibvirtGuestDisksCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestDisksCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -623,10 +682,11 @@ func (c *LibvirtGuestDisksCmd) Run() error {
 
 type LibvirtGuestFsinfoCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFsinfoCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -641,10 +701,11 @@ func (c *LibvirtGuestFsinfoCmd) Run() error {
 
 type LibvirtGuestVcpusCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestVcpusCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -662,10 +723,11 @@ type LibvirtGuestExecCmd struct {
 	Argv    []string      `arg:"" help:"Command and arguments (e.g. 'uname -a')"`
 	Capture bool          `long:"capture" default:"true" help:"Capture stdout/stderr"`
 	Wait    time.Duration `long:"wait" default:"60s" help:"Max wait for command to complete"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestExecCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -700,10 +762,11 @@ type LibvirtGuestFileGroup struct {
 type LibvirtGuestFileReadCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Path string `arg:"" help:"Absolute path in guest"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFileReadCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -720,10 +783,11 @@ func (c *LibvirtGuestFileReadCmd) Run() error {
 type LibvirtGuestFileWriteCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Path string `arg:"" help:"Absolute path in guest"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFileWriteCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -748,10 +812,11 @@ type LibvirtGuestFsfreezeGroup struct {
 
 type LibvirtGuestFsfreezeStatusCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFsfreezeStatusCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -767,10 +832,11 @@ func (c *LibvirtGuestFsfreezeStatusCmd) Run() error {
 
 type LibvirtGuestFsfreezeFreezeCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFsfreezeFreezeCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -786,10 +852,11 @@ func (c *LibvirtGuestFsfreezeFreezeCmd) Run() error {
 
 type LibvirtGuestFsfreezeThawCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFsfreezeThawCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -806,10 +873,11 @@ func (c *LibvirtGuestFsfreezeThawCmd) Run() error {
 type LibvirtGuestFstrimCmd struct {
 	Vm      string `arg:"" help:"VM name"`
 	Minimum int    `long:"minimum" default:"0" help:"Minimum extent size in bytes"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtGuestFstrimCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -834,10 +902,11 @@ type LibvirtSnapshotGroup struct {
 
 type LibvirtSnapshotListCmd struct {
 	Vm string `arg:"" help:"VM name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSnapshotListCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -858,10 +927,11 @@ type LibvirtSnapshotCreateCmd struct {
 	Name     string `arg:"" help:"Snapshot name"`
 	Desc     string `long:"desc" help:"Description"`
 	DiskOnly bool   `long:"disk-only" help:"Disk-only snapshot (skip memory)"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSnapshotCreateCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -889,10 +959,11 @@ func (c *LibvirtSnapshotCreateCmd) Run() error {
 type LibvirtSnapshotInfoCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Name string `arg:"" help:"Snapshot name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSnapshotInfoCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -912,10 +983,11 @@ func (c *LibvirtSnapshotInfoCmd) Run() error {
 type LibvirtSnapshotRevertCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Name string `arg:"" help:"Snapshot name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSnapshotRevertCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}
@@ -934,10 +1006,11 @@ func (c *LibvirtSnapshotRevertCmd) Run() error {
 type LibvirtSnapshotDeleteCmd struct {
 	Vm   string `arg:"" help:"VM name"`
 	Name string `arg:"" help:"Snapshot name"`
+	libvirtURIFlag
 }
 
 func (c *LibvirtSnapshotDeleteCmd) Run() error {
-	t, err := ResolveVmTarget(c.Vm)
+	t, err := ResolveVmTarget(c.Vm, c.Uri)
 	if err != nil {
 		return err
 	}

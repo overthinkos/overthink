@@ -100,7 +100,7 @@ func InjectLibvirtXML(vmName string, snippets []string) error {
 		return nil
 	}
 
-	conn, err := connectLibvirt()
+	conn, err := connectLibvirt("")
 	if err != nil {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}

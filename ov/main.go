@@ -11,6 +11,17 @@ import (
 
 // CLI defines the command-line interface structure
 type CLI struct {
+	// Host enables "run this command on a remote machine" semantics.
+	// When set, ov re-execs itself over SSH on the target host:
+	//
+	//   ov --host o.atrawog.org status        # runs `ov status` on o.atrawog.org
+	//   ov --host o vm list                   # alias lookup via `ov settings set hosts.o …`
+	//
+	// Commands marked LocalOnly (settings, version, ssh tunnel) are
+	// not re-execed — they always run on the local machine. See
+	// ov/host_exec.go for the exec dispatch.
+	Host string `long:"host" env:"OV_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
+
 	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
 	// Dir is the project directory that every build-mode command resolves
 	// image.yml / layers/ / build.yml relative to. Default is the process
@@ -40,11 +51,13 @@ type CLI struct {
 	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate  MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
+	Rebuild  RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
 	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
 	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Service  ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
 	Settings SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	Shell    ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
+	Ssh      SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
 	Start    StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
@@ -576,6 +589,17 @@ func (c *SettingsGetCmd) Run() error {
 			return nil
 		}
 	}
+	// Fall back to GetConfigValue for dynamic keys (hosts.<alias>,
+	// vnc.password.<image>) that don't appear in ListConfigValues
+	// unless they're set.
+	if strings.HasPrefix(c.Key, "hosts.") || strings.HasPrefix(c.Key, "vnc.password.") {
+		v, err := GetConfigValue(c.Key)
+		if err != nil {
+			return err
+		}
+		fmt.Println(v)
+		return nil
+	}
 	return fmt.Errorf("unknown config key %q (run 'ov settings list' to see valid keys)", c.Key)
 }
 
@@ -659,6 +683,15 @@ func main() {
 		kong.Description("Overthink - the container management experience for you and your AI"),
 		kong.UsageOnError(),
 	)
+
+	// --host: re-exec over SSH (unless we're running a LocalOnly
+	// command like `settings`, `version`, or `ssh tunnel`). Doing
+	// this AFTER Kong parse ensures --help / invalid-flag cases print
+	// locally; doing it BEFORE ctx.Run() ensures no local state is
+	// touched when we're about to forward the command.
+	if shouldReexecForHost(&cli, ctx.Command()) {
+		os.Exit(ReexecOverSSH(&cli))
+	}
 
 	// Set global --kdbx flag into env so resolveKdbxPaths() picks it up everywhere
 	if cli.Kdbx != "" {

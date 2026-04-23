@@ -327,13 +327,13 @@ type LibvirtParallel struct {
 }
 
 type LibvirtGraphics struct {
-	Type     string `yaml:"type"`                  // vnc | spice | rdp | sdl
-	Port     int    `yaml:"port,omitempty"`        // -1 → autoport
-	AutoPort string `yaml:"autoport,omitempty"`    // "yes" | "no"
-	Listen   string `yaml:"listen,omitempty"`      // bind IP
-	Passwd   string `yaml:"passwd,omitempty"`
-	Keymap   string `yaml:"keymap,omitempty"`
-	GL       string `yaml:"gl,omitempty"`          // "yes" | "no" (for 3D accel)
+	Type     string                   `yaml:"type"`                // vnc | spice | rdp | sdl
+	Port     int                      `yaml:"port,omitempty"`      // -1 → autoport
+	AutoPort string                   `yaml:"autoport,omitempty"`  // "yes" | "no"
+	Listen   LibvirtGraphicsListeners `yaml:"listen,omitempty"`    // scalar / map / list — see libvirt_yaml_listen.go
+	Passwd   string                   `yaml:"passwd,omitempty"`
+	Keymap   string                   `yaml:"keymap,omitempty"`
+	GL       string                   `yaml:"gl,omitempty"` // "yes" | "no" (for 3D accel)
 }
 
 type LibvirtVideo struct {

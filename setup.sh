@@ -61,6 +61,12 @@ install_arch_deps() {
         tailscale
         # Already in base but ensure present
         openssh util-linux
+        # netcat (nc) — required by virt-viewer / virt-manager's
+        # auto SSH tunnel for SPICE UNIX-socket listeners. Without
+        # it, `virt-manager --connect qemu+ssh://host/session`
+        # silently fails to open the console for any VM using
+        # <listen type='socket'/>. openbsd-netcat provides `nc`.
+        openbsd-netcat
     )
 
     echo "Installing ov dependencies (Arch Linux)..."
@@ -144,6 +150,13 @@ install_dnf_deps() {
     if ! command -v virtiofsd &>/dev/null; then
         MISSING_PKGS+=(virtiofsd)
     fi
+    # netcat (nc) — required by virt-viewer/virt-manager auto SSH
+    # tunnel for SPICE UNIX-socket listeners (<listen type='socket'/>).
+    # Without it, remote `virt-manager --connect qemu+ssh://host/session`
+    # silently fails to open the console.
+    if ! command -v nc &>/dev/null; then
+        MISSING_PKGS+=(nmap-ncat)
+    fi
 
     if [ ${#MISSING_PKGS[@]} -gt 0 ]; then
         echo "Installing VM dependencies: ${MISSING_PKGS[*]}..."
@@ -178,6 +191,11 @@ install_apt_deps() {
     fi
     if ! command -v virtiofsd &>/dev/null; then
         MISSING_PKGS+=(virtiofsd)
+    fi
+    # netcat (nc) — required by virt-viewer/virt-manager auto SSH
+    # tunnel for SPICE UNIX-socket listeners. See Fedora block above.
+    if ! command -v nc &>/dev/null; then
+        MISSING_PKGS+=(netcat-openbsd)
     fi
 
     if [ ${#MISSING_PKGS[@]} -gt 0 ]; then

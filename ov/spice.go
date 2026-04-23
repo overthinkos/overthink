@@ -7,6 +7,7 @@ package main
 // screenshots, input channel clicks/keys, status reporting.
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"image/png"
@@ -32,10 +33,22 @@ type SpiceCmd struct {
 
 type spiceConnectFlags struct {
 	Address  string `long:"address" help:"Bypass vms.yml lookup; host:port"`
+	Socket   string `long:"socket" help:"Bypass vms.yml lookup; UNIX socket path (spice+unix://)"`
 	Password string `long:"password" help:"SPICE password (for --address); empty = none"`
+	Uri      string `name:"uri" env:"OV_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors (auto-tunnels the display socket)."`
 }
 
+// open resolves the SPICE endpoint for a VM and returns a connected
+// session. Handles:
+//   - --address host:port (direct TCP, no libvirt involvement)
+//   - --socket /path     (direct UNIX socket, no libvirt involvement)
+//   - --uri qemu+ssh://… (remote libvirt + auto SSH tunnel)
+//   - default            (local qemu:///session)
+//
+// The returned session carries any tunnel-cleanup closure — callers
+// must invoke Close() to tear it down.
 func (f *spiceConnectFlags) open(vmName string) (*SpiceSession, error) {
+	// Direct --address bypass (TCP).
 	if f.Address != "" {
 		parts := strings.SplitN(f.Address, ":", 2)
 		if len(parts) != 2 {
@@ -45,18 +58,79 @@ func (f *spiceConnectFlags) open(vmName string) (*SpiceSession, error) {
 		if _, err := fmt.Sscanf(parts[1], "%d", &port); err != nil {
 			return nil, fmt.Errorf("invalid port in --address: %v", err)
 		}
-		return DialSpiceSession(parts[0], port, f.Password)
+		return DialSpiceTCP(parts[0], port, f.Password)
 	}
-	t, err := ResolveVmTarget(vmName)
+	// Direct --socket bypass (UNIX).
+	if f.Socket != "" {
+		return DialSpiceUnix(f.Socket, f.Password)
+	}
+	// vms.yml path.
+	t, err := ResolveVmTarget(vmName, f.Uri)
 	if err != nil {
 		return nil, err
 	}
-	host, port, passwd, err := t.SpiceAddress()
+	ep, err := t.SpiceEndpoint()
+	// Keep VmTarget's libvirt connection open only long enough to
+	// read the endpoint; the SSH client inside VmTarget is closed
+	// here too, so we must open a fresh one for tunneling when
+	// remote. This separation makes the session independent.
+	tunnelTarget := t.Uri
 	t.Close()
 	if err != nil {
 		return nil, err
 	}
-	return DialSpiceSession(host, port, passwd)
+	return dialSpiceEndpoint(ep, tunnelTarget)
+}
+
+// dialSpiceEndpoint opens a SpiceSession against a resolved
+// DisplayEndpoint, setting up an SSH forward first when the endpoint
+// is on a remote libvirt (uri is qemu+ssh://…).
+func dialSpiceEndpoint(ep DisplayEndpoint, uri string) (*SpiceSession, error) {
+	if !ep.TunnelNeeded {
+		if ep.IsSocket {
+			return DialSpiceUnix(ep.SocketPath, ep.Password)
+		}
+		return DialSpiceTCP(ep.Host, ep.Port, ep.Password)
+	}
+	// Remote — open an SSH tunnel forwarding the remote socket/TCP
+	// endpoint to a local address, then dial that.
+	parsed, err := ParseLibvirtURI(uri)
+	if err != nil {
+		return nil, err
+	}
+	tunnel, err := NewSSHTunnel(parsed.Remote)
+	if err != nil {
+		return nil, fmt.Errorf("ssh tunnel to %s: %w", parsed.Remote, err)
+	}
+	if ep.IsSocket {
+		localSock, _, err := tunnel.ForwardUnix(context.Background(), ep.SocketPath)
+		if err != nil {
+			_ = tunnel.Close()
+			return nil, fmt.Errorf("forwarding remote socket %s: %w", ep.SocketPath, err)
+		}
+		s, err := DialSpiceUnix(localSock, ep.Password)
+		if err != nil {
+			_ = tunnel.Close()
+			return nil, err
+		}
+		s.tunnel = tunnel
+		return s, nil
+	}
+	localAddr, _, err := tunnel.ForwardTCP(context.Background(), ep.Host, ep.Port)
+	if err != nil {
+		_ = tunnel.Close()
+		return nil, fmt.Errorf("forwarding remote TCP %s:%d: %w", ep.Host, ep.Port, err)
+	}
+	parts := strings.SplitN(localAddr, ":", 2)
+	port := 0
+	fmt.Sscanf(parts[1], "%d", &port)
+	s, err := DialSpiceTCP(parts[0], port, ep.Password)
+	if err != nil {
+		_ = tunnel.Close()
+		return nil, err
+	}
+	s.tunnel = tunnel
+	return s, nil
 }
 
 // ---------------- status ----------------
@@ -98,8 +172,8 @@ func (c *SpiceStatusCmd) Run() error {
 // ---------------- screenshot ----------------
 
 type SpiceScreenshotCmd struct {
-	Vm string `arg:"" help:"VM name"`
-	File string `arg:"" optional:"" default:"spice-screenshot.png" help:"Output file path (PNG)"`
+	Vm   string        `arg:"" help:"VM name"`
+	File string        `arg:"" optional:"" default:"spice-screenshot.png" help:"Output file path (use '-' for stdout)"`
 	Wait time.Duration `long:"wait" default:"5s" help:"Wait up to this for the first frame"`
 	spiceConnectFlags
 }
@@ -117,17 +191,24 @@ func (c *SpiceScreenshotCmd) Run() error {
 	if img == nil {
 		return fmt.Errorf("no display frame available")
 	}
-	f, err := os.Create(c.File)
+	w, closeFn, err := openOutputPath(c.File)
 	if err != nil {
 		return fmt.Errorf("creating %s: %w", c.File, err)
 	}
-	defer f.Close()
-	if err := png.Encode(f, img); err != nil {
+	if err := png.Encode(w, img); err != nil {
+		_ = closeFn()
 		return fmt.Errorf("encoding PNG: %w", err)
 	}
+	if err := closeFn(); err != nil {
+		return err
+	}
 	b := img.Bounds()
+	dest := c.File
+	if dest == "-" {
+		dest = "stdout"
+	}
 	fmt.Fprintf(os.Stderr, "Screenshot saved to %s (%dx%d, native SPICE display decode)\n",
-		c.File, b.Dx(), b.Dy())
+		dest, b.Dx(), b.Dy())
 	return nil
 }
 
@@ -247,8 +328,8 @@ func (c *SpiceKeyCmd) Run() error {
 // ---------------- cursor ----------------
 
 type SpiceCursorCmd struct {
-	Vm string `arg:"" help:"VM name"`
-	File string `arg:"" optional:"" default:"spice-cursor.png" help:"Output file path"`
+	Vm   string        `arg:"" help:"VM name"`
+	File string        `arg:"" optional:"" default:"spice-cursor.png" help:"Output file path (use '-' for stdout)"`
 	Wait time.Duration `long:"wait" default:"5s" help:"Wait up to this for cursor data"`
 	spiceConnectFlags
 }
@@ -262,17 +343,24 @@ func (c *SpiceCursorCmd) Run() error {
 	deadline := time.Now().Add(c.Wait)
 	for time.Now().Before(deadline) {
 		if img, x, y := s.Cursor(); img != nil {
-			f, err := os.Create(c.File)
+			w, closeFn, err := openOutputPath(c.File)
 			if err != nil {
 				return err
 			}
-			defer f.Close()
-			if err := png.Encode(f, img); err != nil {
+			if err := png.Encode(w, img); err != nil {
+				_ = closeFn()
+				return err
+			}
+			if err := closeFn(); err != nil {
 				return err
 			}
 			b := img.Bounds()
+			dest := c.File
+			if dest == "-" {
+				dest = "stdout"
+			}
 			fmt.Fprintf(os.Stderr, "Cursor saved to %s (%dx%d at position %d,%d)\n",
-				c.File, b.Dx(), b.Dy(), x, y)
+				dest, b.Dx(), b.Dy(), x, y)
 			return nil
 		}
 		time.Sleep(200 * time.Millisecond)

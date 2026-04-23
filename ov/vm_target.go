@@ -35,22 +35,23 @@ import (
 // VmTarget holds an open libvirt connection to a running VM plus its
 // parsed runtime XML. Callers are responsible for calling Close.
 type VmTarget struct {
-	Conn    *libvirtConn      // shared connection wrapper
-	Domain  libvirt.Domain    // libvirt handle
+	Conn    *libvirtConn       // shared connection wrapper
+	Domain  libvirt.Domain     // libvirt handle
 	XML     *libvirtxml.Domain // parsed live XML
-	Spec    *VmSpec           // vms.yml entity
-	VmName  string            // vms.yml key
-	DomName string            // libvirt domain name (typically "ov-<vmName>")
+	Spec    *VmSpec            // vms.yml entity
+	VmName  string             // vms.yml key
+	DomName string             // libvirt domain name (typically "ov-<vmName>")
+	Uri     string             // libvirt URI used to resolve this target (empty = local)
 }
 
-// ResolveVmTarget opens a libvirt session connection and resolves the
-// running domain for a vms.yml entity. The caller must call Close()
-// on the returned target.
+// ResolveVmTarget opens a libvirt connection (local by default or
+// remote when uri is qemu+ssh://…) and resolves the running domain
+// for a vms.yml entity. Caller must Close() the returned target.
 //
 // The domain-name convention matches `ov vm start`: "ov-<vmName>".
 // For entity names already prefixed with "ov-" (rare), the prefix is
-// not doubled.
-func ResolveVmTarget(vmName string) (*VmTarget, error) {
+// not doubled. Pass uri == "" for the default local qemu:///session.
+func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	dir, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getting working directory: %w", err)
@@ -74,8 +75,8 @@ func ResolveVmTarget(vmName string) (*VmTarget, error) {
 		return nil, fmt.Errorf("no vms.yml entity named %q; known: %s", vmName, strings.Join(known, ", "))
 	}
 
-	// Open libvirt.
-	conn, err := connectLibvirt()
+	// Open libvirt (local or remote per uri).
+	conn, err := connectLibvirt(uri)
 	if err != nil {
 		return nil, fmt.Errorf("connecting to libvirt: %w", err)
 	}
@@ -107,6 +108,7 @@ func ResolveVmTarget(vmName string) (*VmTarget, error) {
 		Spec:    spec,
 		VmName:  vmName,
 		DomName: domName,
+		Uri:     uri,
 	}, nil
 }
 
@@ -139,69 +141,143 @@ func (t *VmTarget) EnsureRunning() error {
 	return nil
 }
 
-// SpiceAddress extracts the SPICE listen host, port, and password
-// from the runtime domain XML. autoport=yes is transparent — running
-// XML always has the assigned port inline.
+// DisplayEndpoint describes how to reach one graphics channel
+// (SPICE or VNC) of a running VM. Callers that want a raw net.Conn
+// should pass this to Dial().
+//
+// IsSocket / SocketPath are set when the resolved <listen> element
+// is `<listen type='socket'/>`. Host / Port are set for TCP-exposed
+// listeners. The two are mutually exclusive — libvirt picks the
+// first listener when there are several on one <graphics>, but ov
+// always prefers the socket when present (matches virt-manager's
+// auto-forwarding behavior).
+//
+// TunnelNeeded is true when the VmTarget was resolved over a remote
+// libvirt URI (qemu+ssh://…); callers must open an SSH-forwarded
+// local endpoint via ov/ssh_tunnel.go before dialing.
+type DisplayEndpoint struct {
+	Kind         string // "spice" | "vnc"
+	IsSocket     bool
+	SocketPath   string
+	Host         string
+	Port         int
+	Password     string
+	TunnelNeeded bool
+}
+
+// SpiceEndpoint walks the domain XML and returns the SPICE graphics
+// endpoint (socket or TCP) with tunneling requirements annotated.
 //
 // Errors:
-//   - no <graphics type='spice'/> in domain: "no SPICE graphics device
-//     declared"
-//   - graphics present but autoport unresolved (port==0): "SPICE port
-//     not yet assigned; domain may still be starting up"
-func (t *VmTarget) SpiceAddress() (host string, port int, passwd string, err error) {
+//   - no <graphics type='spice'/> in domain
+//   - graphics present but no listener has resolved (port==0 for TCP,
+//     or libvirt hasn't populated a socket= attribute yet)
+func (t *VmTarget) SpiceEndpoint() (DisplayEndpoint, error) {
 	if t.XML == nil || t.XML.Devices == nil {
-		return "", 0, "", fmt.Errorf("no devices in domain XML for %s", t.DomName)
+		return DisplayEndpoint{}, fmt.Errorf("no devices in domain XML for %s", t.DomName)
 	}
 	for _, g := range t.XML.Devices.Graphics {
 		if g.Spice == nil {
 			continue
 		}
 		s := g.Spice
-		port = s.Port
-		passwd = s.Passwd
-		host = "127.0.0.1"
-		if len(s.Listeners) > 0 && s.Listeners[0].Address != nil {
-			if a := s.Listeners[0].Address.Address; a != "" {
-				host = a
+		ep := DisplayEndpoint{
+			Kind:         "spice",
+			Password:     s.Passwd,
+			TunnelNeeded: t.Uri != "",
+		}
+		// Prefer socket listeners — that's what virt-manager and our
+		// CLI want on remote hypervisors.
+		for _, l := range s.Listeners {
+			if l.Socket != nil && l.Socket.Socket != "" {
+				ep.IsSocket = true
+				ep.SocketPath = l.Socket.Socket
+				return ep, nil
 			}
 		}
-		if port == 0 {
-			return "", 0, "", fmt.Errorf("SPICE port not yet assigned for %s; domain may still be starting up", t.DomName)
+		// Fall back to TCP listener.
+		ep.Port = s.Port
+		ep.Host = "127.0.0.1"
+		for _, l := range s.Listeners {
+			if l.Address != nil && l.Address.Address != "" {
+				ep.Host = l.Address.Address
+				break
+			}
 		}
-		return host, port, passwd, nil
+		if ep.Port == 0 {
+			return DisplayEndpoint{}, fmt.Errorf("SPICE port not yet assigned for %s; domain may still be starting up (or socket listener has no resolved path yet)", t.DomName)
+		}
+		return ep, nil
 	}
-	return "", 0, "", fmt.Errorf("VM %s has no SPICE graphics device declared in vms.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no SPICE graphics device declared in vms.yml", t.VmName)
 }
 
-// VncAddress extracts the VNC listen host, port, and password from
-// the runtime domain XML — mirror of SpiceAddress for VMs that use
-// VNC graphics instead.
-func (t *VmTarget) VncAddress() (host string, port int, passwd string, err error) {
+// VncEndpoint is the VNC counterpart of SpiceEndpoint.
+func (t *VmTarget) VncEndpoint() (DisplayEndpoint, error) {
 	if t.XML == nil || t.XML.Devices == nil {
-		return "", 0, "", fmt.Errorf("no devices in domain XML for %s", t.DomName)
+		return DisplayEndpoint{}, fmt.Errorf("no devices in domain XML for %s", t.DomName)
 	}
 	for _, g := range t.XML.Devices.Graphics {
 		if g.VNC == nil {
 			continue
 		}
 		v := g.VNC
-		port = v.Port
-		passwd = v.Passwd
-		host = "127.0.0.1"
-		if len(v.Listeners) > 0 && v.Listeners[0].Address != nil {
-			if a := v.Listeners[0].Address.Address; a != "" {
-				host = a
+		ep := DisplayEndpoint{
+			Kind:         "vnc",
+			Password:     v.Passwd,
+			TunnelNeeded: t.Uri != "",
+		}
+		for _, l := range v.Listeners {
+			if l.Socket != nil && l.Socket.Socket != "" {
+				ep.IsSocket = true
+				ep.SocketPath = l.Socket.Socket
+				return ep, nil
 			}
 		}
-		if v.Listen != "" {
-			host = v.Listen
+		ep.Port = v.Port
+		ep.Host = "127.0.0.1"
+		for _, l := range v.Listeners {
+			if l.Address != nil && l.Address.Address != "" {
+				ep.Host = l.Address.Address
+				break
+			}
 		}
-		if port == 0 {
-			return "", 0, "", fmt.Errorf("VNC port not yet assigned for %s", t.DomName)
+		if ep.Host == "127.0.0.1" && v.Listen != "" {
+			ep.Host = v.Listen
 		}
-		return host, port, passwd, nil
+		if ep.Port == 0 {
+			return DisplayEndpoint{}, fmt.Errorf("VNC port not yet assigned for %s", t.DomName)
+		}
+		return ep, nil
 	}
-	return "", 0, "", fmt.Errorf("VM %s has no VNC graphics device declared in vms.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no VNC graphics device declared in vms.yml", t.VmName)
+}
+
+// SpiceAddress returns the TCP form of the SPICE endpoint — provided
+// for existing callers that don't understand socket listeners. Use
+// SpiceEndpoint() for new code. Returns an error if the endpoint is
+// socket-only (no TCP fallback).
+func (t *VmTarget) SpiceAddress() (host string, port int, passwd string, err error) {
+	ep, err := t.SpiceEndpoint()
+	if err != nil {
+		return "", 0, "", err
+	}
+	if ep.IsSocket {
+		return "", 0, "", fmt.Errorf("VM %s SPICE listens on UNIX socket %s; TCP address not available — use SpiceEndpoint()", t.VmName, ep.SocketPath)
+	}
+	return ep.Host, ep.Port, ep.Password, nil
+}
+
+// VncAddress is the TCP-only counterpart of SpiceAddress.
+func (t *VmTarget) VncAddress() (host string, port int, passwd string, err error) {
+	ep, err := t.VncEndpoint()
+	if err != nil {
+		return "", 0, "", err
+	}
+	if ep.IsSocket {
+		return "", 0, "", fmt.Errorf("VM %s VNC listens on UNIX socket %s; TCP address not available — use VncEndpoint()", t.VmName, ep.SocketPath)
+	}
+	return ep.Host, ep.Port, ep.Password, nil
 }
 
 // AgentReachable probes qemu-guest-agent with a guest-ping command.

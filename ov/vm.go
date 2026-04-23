@@ -177,7 +177,7 @@ func (c *VmCreateCmd) createLibvirt(name, qcow2, ram string, cpus, sshPort int, 
 
 	xmlStr := buildDomainXML(name, qcow2, ramMB, cpus, sshPort, ports, gpu, smbiosCreds...)
 
-	conn, err := connectLibvirt()
+	conn, err := connectLibvirt("")
 	if err != nil {
 		return fmt.Errorf("connecting to libvirt: %w", err)
 	}
@@ -306,7 +306,7 @@ func (c *VmStartCmd) Run() error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt()
+		conn, err := connectLibvirt("")
 		if err != nil {
 			return err
 		}
@@ -369,7 +369,7 @@ func (c *VmStopCmd) Run() error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt()
+		conn, err := connectLibvirt("")
 		if err != nil {
 			return err
 		}
@@ -441,7 +441,7 @@ func (c *VmDestroyCmd) Run() error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt()
+		conn, err := connectLibvirt("")
 		if err != nil {
 			return err
 		}
@@ -510,7 +510,7 @@ func (c *VmListCmd) Run() error {
 
 	switch backend {
 	case "libvirt":
-		conn, err := connectLibvirt()
+		conn, err := connectLibvirt("")
 		if err != nil {
 			return err
 		}

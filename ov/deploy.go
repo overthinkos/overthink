@@ -119,6 +119,32 @@ type DeployImageConfig struct {
 	// deploy, and so re-apply is idempotent (instance-id stays stable,
 	// disk path points at the same qcow2, etc.).
 	VmState *VmDeployState `yaml:"vm_state,omitempty"`
+
+	// --- Disposable / lifecycle classification (see /ov-dev:disposable) ---
+
+	// Disposable, when true, authorizes `ov rebuild <name>` to
+	// destroy + rebuild + restart this deploy unattended. Default
+	// is false (conservative; explicit opt-in). There is NO
+	// derivation from Lifecycle. See CLAUDE.md R10.
+	Disposable bool `yaml:"disposable,omitempty"`
+
+	// Lifecycle is a free-form human-facing tier tag (scratch | dev |
+	// test | qa | staging | prod | custom). Informational only — has
+	// ZERO effect on disposability. Consumed by `ov status
+	// --lifecycle <tier>` filters and display columns.
+	Lifecycle string `yaml:"lifecycle,omitempty"`
+}
+
+// IsDisposable returns the literal Disposable field. Implements the
+// Classified interface.
+func (c DeployImageConfig) IsDisposable() bool {
+	return IsDisposableFields(c.Disposable, c.Lifecycle)
+}
+
+// LifecycleTag returns the literal Lifecycle field. Implements the
+// Classified interface.
+func (c DeployImageConfig) LifecycleTag() string {
+	return c.Lifecycle
 }
 
 // VmDeployState is the auto-managed runtime state for a vm: deploy.
@@ -862,6 +888,15 @@ type SaveDeployStateInput struct {
 	// scrubSecretCLIEnv are the primary gates). Populated by the Run()
 	// call site from meta.SecretAccepts/SecretRequires.
 	SecretNames []string
+
+	// Disposable + Lifecycle — the classification fields
+	// (see /ov-dev:disposable). SetDisposable toggles whether the
+	// Disposable field is written at all: when false, saveDeployState
+	// leaves any pre-existing value untouched. Same idiom for lifecycle.
+	SetDisposable bool
+	Disposable    bool
+	SetLifecycle  bool
+	Lifecycle     string
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
@@ -913,6 +948,16 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	}
 	if input.Tunnel != nil {
 		entry.Tunnel = input.Tunnel
+	}
+	// Classification fields: only written when the caller explicitly
+	// opts in via SetDisposable / SetLifecycle. This lets repeated
+	// saveDeployState calls from unrelated code paths (ov start, ov
+	// config) leave a user-authored `disposable: true` in place.
+	if input.SetDisposable {
+		entry.Disposable = input.Disposable
+	}
+	if input.SetLifecycle {
+		entry.Lifecycle = input.Lifecycle
 	}
 	dc.Images[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {

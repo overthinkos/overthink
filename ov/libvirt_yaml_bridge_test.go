@@ -57,7 +57,8 @@ func TestRenderDomainXML_Skeleton(t *testing.T) {
 }
 
 func TestRenderDomainXML_ArchCloudBase(t *testing.T) {
-	// Mirror the vms.yml arch-cloud-base `libvirt:` stanza exactly.
+	// Mirror the vms.yml arch-cloud-base `libvirt:` stanza (post hard
+	// cutover to socket-only SPICE — see libvirt_yaml_listen.go).
 	yamlStr := `
 devices:
   channels:
@@ -65,8 +66,8 @@ devices:
       name: com.redhat.spice.0
   graphics:
     - type: spice
-      autoport: "yes"
-      listen: 127.0.0.1
+      listen:
+        - type: socket
   video:
     - model: virtio
       vram: 65536
@@ -97,9 +98,11 @@ devices:
 		t.Fatalf("render: %v", err)
 	}
 	want := []string{
-		// Graphics: divergence #3 (listen scalar → <listen>)
-		`<graphics type="spice" autoport="yes">`,
-		`<listen type="address" address="127.0.0.1">`,
+		// Graphics: socket-only listener. virt-manager and
+		// `remote-viewer --connect qemu+ssh://…` auto-forward UNIX
+		// sockets; no TCP exposure.
+		`<graphics type="spice">`,
+		`<listen type="socket">`,
 		// Channel with spicevmc source + target virtio named.
 		`<channel type="spicevmc">`,
 		`<target type="virtio" name="com.redhat.spice.0">`,
@@ -119,6 +122,93 @@ devices:
 		if !strings.Contains(out, frag) {
 			t.Errorf("missing fragment: %s\n--- output ---\n%s", frag, out)
 		}
+	}
+	// Explicit negative: no TCP listener for SPICE.
+	if strings.Contains(out, `<listen type="address"`) {
+		t.Errorf("expected no TCP <listen> for SPICE, got one in:\n%s", out)
+	}
+}
+
+// TestRenderDomainXML_GraphicsListen_AllForms covers the three
+// accepted YAML shapes for the `listen:` field on a <graphics>
+// element: scalar, single mapping, and sequence.
+func TestRenderDomainXML_GraphicsListen_AllForms(t *testing.T) {
+	cases := []struct {
+		name    string
+		yamlStr string
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "scalar address",
+			yamlStr: `
+devices:
+  graphics:
+    - type: vnc
+      listen: 127.0.0.1
+`,
+			want: []string{
+				`<graphics type="vnc"`,
+				`<listen type="address" address="127.0.0.1">`,
+			},
+		},
+		{
+			name: "socket-only mapping",
+			yamlStr: `
+devices:
+  graphics:
+    - type: spice
+      listen:
+        type: socket
+`,
+			want: []string{
+				`<graphics type="spice">`,
+				`<listen type="socket">`,
+			},
+			notWant: []string{
+				`<listen type="address"`,
+			},
+		},
+		{
+			name: "list of socket + address",
+			yamlStr: `
+devices:
+  graphics:
+    - type: spice
+      listen:
+        - type: socket
+        - type: address
+          address: 127.0.0.1
+`,
+			want: []string{
+				`<graphics type="spice">`,
+				`<listen type="socket">`,
+				`<listen type="address" address="127.0.0.1">`,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var lv LibvirtDomain
+			if err := yaml.Unmarshal([]byte(tc.yamlStr), &lv); err != nil {
+				t.Fatalf("yaml unmarshal: %v", err)
+			}
+			out, err := RenderDomainXML(&VmSpec{Libvirt: &lv},
+				VmRuntimeParams{Name: "ov-listen-test", RamMB: 512, Cpus: 1, HostArch: "x86_64"})
+			if err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			for _, frag := range tc.want {
+				if !strings.Contains(out, frag) {
+					t.Errorf("missing fragment %q in:\n%s", frag, out)
+				}
+			}
+			for _, frag := range tc.notWant {
+				if strings.Contains(out, frag) {
+					t.Errorf("unexpected fragment %q present in:\n%s", frag, out)
+				}
+			}
+		})
 	}
 }
 

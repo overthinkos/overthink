@@ -22,16 +22,19 @@ import (
 	spice "github.com/Shells-com/spice"
 )
 
-// spiceConnector satisfies spice.Connector by dialing a fixed TCP
-// endpoint. Compress is passed through as a hint to the library
-// (used for display channel feature negotiation).
+// spiceConnector satisfies spice.Connector by dialing a fixed SPICE
+// endpoint. The endpoint can be a TCP host:port (classic) or a UNIX
+// socket path (modern default for ov-managed VMs after the hard
+// cutover — see vms.yml arch-cloud-base). Compress is passed through
+// as a hint to the library.
 type spiceConnector struct {
-	addr string
+	network string // "tcp" | "unix"
+	addr    string
 }
 
 func (c *spiceConnector) SpiceConnect(compress bool) (net.Conn, error) {
 	_ = compress
-	return net.DialTimeout("tcp", c.addr, 10*time.Second)
+	return net.DialTimeout(c.network, c.addr, 10*time.Second)
 }
 
 // spiceDriver captures display/cursor updates into concurrent-safe
@@ -100,21 +103,25 @@ func (d *spiceDriver) ClipboardRelease(sel spice.SpiceClipboardSelection) {
 }
 
 // SpiceSession holds an open SPICE connection and provides the
-// high-level verbs the CLI uses.
+// high-level verbs the CLI uses. When the session was established
+// through an auto-opened SSH tunnel, `tunnel` is non-nil and Close()
+// tears it down.
 type SpiceSession struct {
 	client *spice.Client
 	driver *spiceDriver
 	addr   string
+
+	// tunnel is the optional SSH tunnel under the connection. nil
+	// for local sessions (no forward needed).
+	tunnel *SSHTunnel
 }
 
-// DialSpiceSession opens a SPICE connection to host:port with the
-// given password. Password empty = AUTH_NONE; non-empty = SPICE_TICKET.
-//
-// Blocks on main-channel handshake + auth. Returns once channels are
-// set up (other channels connect asynchronously inside the library).
-func DialSpiceSession(host string, port int, passwd string) (*SpiceSession, error) {
+// DialSpiceTCP opens a SPICE connection over TCP. Password empty =
+// AUTH_NONE; non-empty = SPICE_TICKET. Blocks on main-channel
+// handshake + auth.
+func DialSpiceTCP(host string, port int, passwd string) (*SpiceSession, error) {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	conn := &spiceConnector{addr: addr}
+	conn := &spiceConnector{network: "tcp", addr: addr}
 	drv := newSpiceDriver()
 	cli, err := spice.New(conn, drv, passwd)
 	if err != nil {
@@ -123,12 +130,37 @@ func DialSpiceSession(host string, port int, passwd string) (*SpiceSession, erro
 	return &SpiceSession{client: cli, driver: drv, addr: addr}, nil
 }
 
-// Close — Shells-com/spice has no explicit Close; rely on GC. We add
-// this method to satisfy callers that expect cleanup, and to close
-// stdlib resources if the driver gained any.
+// DialSpiceUnix opens a SPICE connection over a UNIX socket. This is
+// the default for ov-managed VMs after the socket-listen cutover;
+// virt-manager and remote-viewer auto-forward these over qemu+ssh://.
+func DialSpiceUnix(path, passwd string) (*SpiceSession, error) {
+	conn := &spiceConnector{network: "unix", addr: path}
+	drv := newSpiceDriver()
+	cli, err := spice.New(conn, drv, passwd)
+	if err != nil {
+		return nil, fmt.Errorf("spice handshake with unix://%s: %w", path, err)
+	}
+	return &SpiceSession{client: cli, driver: drv, addr: "unix://" + path}, nil
+}
+
+// DialSpiceSession is retained as a thin wrapper over DialSpiceTCP
+// for any external callers — existing internal callers have been
+// migrated to the explicit TCP/Unix constructors.
+//
+// Deprecated: use DialSpiceTCP or DialSpiceUnix directly.
+func DialSpiceSession(host string, port int, passwd string) (*SpiceSession, error) {
+	return DialSpiceTCP(host, port, passwd)
+}
+
+// Close tears down any auto-opened SSH tunnel. Shells-com/spice has
+// no explicit Close for its channels; they rely on GC.
 func (s *SpiceSession) Close() error {
-	// Shells-com/spice doesn't expose Close; channels are backed by
-	// net.Conn created inside SpiceConnect. Driver cleanup is GC.
+	if s == nil {
+		return nil
+	}
+	if s.tunnel != nil {
+		return s.tunnel.Close()
+	}
 	return nil
 }
 

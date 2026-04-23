@@ -14,7 +14,9 @@ import (
 	"time"
 )
 
-// VncCmd manages VNC desktop interaction in running containers.
+// VncCmd manages VNC desktop interaction in running containers and VMs.
+// The top-level verbs (Click/Key/Mouse/etc.) target containers; the `Vm`
+// subcommand group targets kind:vm entities declared in vms.yml.
 type VncCmd struct {
 	Click      VncClickCmd      `cmd:"" help:"Click at x,y coordinates"`
 	Key        VncKeyCmd        `cmd:"" help:"Send a key press/release event"`
@@ -24,6 +26,11 @@ type VncCmd struct {
 	Screenshot VncScreenshotCmd `cmd:"" help:"Capture VNC framebuffer as PNG"`
 	Status     VncStatusCmd     `cmd:"" help:"Show VNC server status and display info"`
 	Type       VncTypeCmd       `cmd:"" help:"Type text as keyboard input"`
+
+	// VM-targeted verbs mirror the SPICE command shape. Resolves the
+	// VM via vms.yml + libvirt, discovers the VNC listener, and
+	// auto-tunnels it if the libvirt URI is remote.
+	Vm VncVmCmd `cmd:"" help:"VM-targeted VNC verbs (status/screenshot/click/key/type/mouse)"`
 }
 
 // VncScreenshotCmd captures the VNC framebuffer as a PNG image.

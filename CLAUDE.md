@@ -44,6 +44,55 @@ See `/ov:test` "DO NOT fake success" section for the mandatory sequence applied 
 Always pick the cleanest long-term approach and prioritize having a clean codebase with any deprecated code fully removed above everything.
 You have all the time in the world and taking the time to get things properly done is ALWAYS worth the effort.
 
+## Disposable-Only Autonomy + Mandatory Live-Deploy Verification
+
+**`disposable: true` is the ONE and ONLY authorization for autonomous destroy + rebuild.** Default is `false` (explicit opt-in only; see `/ov-dev:disposable`). No derivation from other fields. No "this looks like a test bed" heuristic. No hostname-based assumptions. A deploy is either explicitly marked `disposable: true` in vms.yml / deploy.yml or it is NOT rebuildable unattended — even if its name contains "test", even if it's a project on a shared host where unrelated production services also run. Explicit-only is what makes this rule safe on shared infrastructure with live users on other resources.
+
+On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
+
+**Every change is proved on a freshly built binary on the target host** (the 10 testing standards in `/ov:test`):
+
+1. Build the artifact from the changed source, on the target host.
+2. Verify the deployed binary's version matches what you built (R8).
+3. Verify runtime deps are installed via package management (R9).
+4. For a target with `disposable: true`: `ov rebuild <name>` — unattended. For any other resource: confirm with the user before any destroy.
+5. Exercise the feature end-to-end.
+6. Paste the runtime output back into the conversation.
+7. Leave the target healthy (running, not paused, not crashed).
+8. **After committing the source-level fix, `ov rebuild` the disposable target from clean and re-run the full sequence. This fresh-rebuild re-verification is the acceptance gate** (R10).
+
+### R8 — "Binary ≠ source"
+
+Syncthing / git / rsync move *source* between hosts. They don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov test spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built.
+
+### R9 — "Runtime deps are part of the contract"
+
+A change that relies on an OS package at runtime (`nc`, `socat`, `xorriso`, `qemu-guest-agent` …) MUST add that package to `setup.sh` (per-distro blocks) AND to `pkg/arch/PKGBUILD` `depends=`. A manual install on one host is a bug report disguised as a fix. Live war-story: virt-manager needed `nc` on the libvirt host; a manual install would have silently broken virt-manager on the next freshly-installed synced host.
+
+### R10 — "Verify on a `disposable: true` target; prove it on a fresh rebuild"
+
+The verification loop has three rules:
+
+1. **Always test on a target that carries an explicit `disposable: true`.** Never experiment on a resource without the flag. If no suitable disposable target exists, create one first (`ov deploy add <name> <ref> --disposable` or mark a VM in vms.yml and `ov vm create`). The opt-in is explicit; never assume disposability because of a name, lifecycle tag, hostname, or any other heuristic.
+2. **If a test breaks the target, `ov rebuild` it back to the committed config before doing anything else.** Never layer experiments on broken state.
+3. **After committing the real fix in source, re-verify on a FRESH `ov rebuild` of the disposable target.** A fix that passes only on a hand-patched target is not a real fix — it's a regression waiting for the next rebuild. Pasteable proof of the fresh-rebuild re-verification is the acceptance gate.
+
+### End-of-turn checklist
+
+Before saying "done" answer YES to all of these:
+
+- Built a real artifact from the changed source, on the target host?
+- Verified the deployed binary's version matches what you built (R8)?
+- Exercised the feature end-to-end on the live target?
+- Verified every runtime dep is installed via package management (R9)?
+- Did verification run on a target explicitly marked `disposable: true` (never on anything else)?
+- If you broke the target during exploration, did you `ov rebuild` it back to clean before continuing?
+- After committing the source-level fix, did you `ov rebuild` the disposable target from clean and re-run the full verification against the fresh rebuild (R10)?
+- Post-action state of every target is healthy?
+- Pasted BOTH the exploratory verification output AND the fresh-rebuild re-verification output into the conversation?
+
+See `/ov:test` for the 10 testing standards and `/ov-dev:disposable` for the classification schema.
+
 ## Hard Cutover by Default
 
 Every schema change, API rename, or deprecation ships as a single hard-cutover
@@ -85,7 +134,7 @@ Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council
 
 | Confidence | When to Use |
 |-----------|-------------|
-| `fully tested and validated` | Overlay testing + all 9 testing standards met |
+| `fully tested and validated` | Overlay testing + all 10 testing standards met (see `/ov:test`) + fresh-rebuild re-verification on a `disposable: true` target (R10) |
 | `analysed on a live system` | Observed live system behavior, logs checked |
 | `syntax check only` | Pre-commit hooks passed, no functional testing |
 | `theoretical suggestion` | No validation performed — AVOID |

@@ -33,6 +33,11 @@ type RuntimeConfig struct {
 	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`             // VNC passwords keyed by image[-instance]
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`              // Shadow index: names of keys stored in keyring (no values)
 	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"`  // Preferred Secret Service collection label; empty means use default alias then iterate.
+	// HostAliases maps short names (e.g. "o") to SSH targets (e.g.
+	// "atrawog@o.atrawog.org"). Consulted by ov's --host flag when
+	// re-execing commands on remote machines. Set via
+	// `ov settings set hosts.<alias> <ssh-target>`.
+	HostAliases map[string]string `yaml:"host_aliases,omitempty"`
 }
 
 // RuntimeVmConfig holds user-level VM defaults
@@ -383,6 +388,16 @@ func GetConfigValue(key string) (string, error) {
 	case "vm.transport":
 		return cfg.Vm.Transport, nil
 	default:
+		if strings.HasPrefix(key, "hosts.") {
+			alias := strings.TrimPrefix(key, "hosts.")
+			if alias == "" {
+				return "", fmt.Errorf("hosts. key requires an alias name")
+			}
+			if cfg.HostAliases == nil {
+				return "", nil
+			}
+			return cfg.HostAliases[alias], nil
+		}
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			val, source := ResolveCredential("", CredServiceVNC, name, "")
@@ -485,11 +500,16 @@ func SetConfigValue(key, value string) error {
 			return fmt.Errorf("vm.transport must be \"registry\", \"containers-storage\", \"oci\", or \"oci-archive\", got %q", value)
 		}
 	default:
+		if strings.HasPrefix(key, "hosts.") {
+			// hosts.<alias> — free-form SSH target; no validation
+			// (matches openssh's behavior).
+			break
+		}
 		if strings.HasPrefix(key, "vnc.password.") {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -553,6 +573,17 @@ func SetConfigValue(key, value string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = value
 	default:
+		if strings.HasPrefix(key, "hosts.") {
+			alias := strings.TrimPrefix(key, "hosts.")
+			if alias == "" {
+				return fmt.Errorf("hosts. key requires an alias name")
+			}
+			if cfg.HostAliases == nil {
+				cfg.HostAliases = map[string]string{}
+			}
+			cfg.HostAliases[alias] = value
+			break
+		}
 		// Credential keys go through the credential store
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
@@ -625,12 +656,19 @@ func ResetConfigValue(key string) error {
 	case "vm.transport":
 		cfg.Vm.Transport = ""
 	default:
+		if strings.HasPrefix(key, "hosts.") {
+			alias := strings.TrimPrefix(key, "hosts.")
+			if cfg.HostAliases != nil {
+				delete(cfg.HostAliases, alias)
+			}
+			break
+		}
 		// Credential keys: delete from credential store
 		if strings.HasPrefix(key, "vnc.password.") {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -771,7 +809,7 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: "3600", Source: "default"}
 	}
 
-	return []configKeySource{
+	out := []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
 		resolve("engine.rootful", "OV_ENGINE_ROOTFUL", cfg.Engine.Rootful, "auto"),
@@ -795,5 +833,14 @@ func ListConfigValues() ([]configKeySource, error) {
 		vmCpusEntry(),
 		resolve("vm.rootfs", "OV_VM_ROOTFS", cfg.Vm.Rootfs, "ext4"),
 		resolve("vm.transport", "OV_VM_TRANSPORT", cfg.Vm.Transport, ""),
-	}, nil
+	}
+	// Append host aliases (dynamic keys — one per map entry).
+	for name, target := range cfg.HostAliases {
+		out = append(out, configKeySource{
+			Key:    "hosts." + name,
+			Value:  target,
+			Source: "config",
+		})
+	}
+	return out, nil
 }

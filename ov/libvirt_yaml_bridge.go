@@ -122,7 +122,68 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 		}
 	}
 
+	// Classification metadata (see /ov-dev:disposable). Visible via
+	// `virsh dumpxml <domain> | grep ov:` without consulting vms.yml.
+	// Emitted only when disposable is explicitly true OR a lifecycle
+	// tag is set — omission = the spec has no opinion.
+	if spec.Disposable || spec.Lifecycle != "" {
+		d.Metadata = &libvirtxml.DomainMetadata{
+			XML: renderOvClassificationMetadata(spec.Disposable, spec.Lifecycle),
+		}
+	}
+
 	return d, nil
+}
+
+// renderOvClassificationMetadata builds the innerxml for the
+// <metadata> element. libvirt stores metadata per-namespace (one
+// element per xmlns), so both fields share a single root
+// <ov:classification> element with attributes for disposable and
+// lifecycle. Round-trips cleanly through libvirt's
+// DomainGetXMLDesc / DomainDefineXML cycle.
+func renderOvClassificationMetadata(disposable bool, lifecycle string) string {
+	var buf strings.Builder
+	buf.WriteString(`<ov:classification xmlns:ov="https://overthinkos.org/ns/ov/1.0"`)
+	buf.WriteString(` disposable="`)
+	if disposable {
+		buf.WriteString("true")
+	} else {
+		buf.WriteString("false")
+	}
+	buf.WriteString(`"`)
+	if lifecycle != "" {
+		buf.WriteString(` lifecycle="`)
+		buf.WriteString(xmlEscape(lifecycle))
+		buf.WriteString(`"`)
+	}
+	buf.WriteString(`/>`)
+	return buf.String()
+}
+
+// xmlEscape escapes the five XML predefined entities for the rendered
+// lifecycle tag. We use a local helper rather than encoding/xml's
+// EscapeString because we already have a strings.Builder primed and
+// this keeps the output deterministic.
+func xmlEscape(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch r {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&quot;")
+		case '\'':
+			b.WriteString("&apos;")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 // ---------------- OS ----------------
@@ -932,9 +993,12 @@ func mapChardevSource(typ string, src map[string]string) *libvirtxml.DomainChard
 	return &libvirtxml.DomainChardevSource{Pty: &libvirtxml.DomainChardevSourcePty{}}
 }
 
-// mapGraphics handles divergence #3 (listen scalar → <listen type="address" address="..."/>).
+// mapGraphics handles divergence #3 (listen scalar/map/list → one or
+// more <listen> children). The accepted YAML shapes are documented
+// on LibvirtGraphicsListeners in libvirt_yaml_listen.go.
 func mapGraphics(g LibvirtGraphics) libvirtxml.DomainGraphic {
 	out := libvirtxml.DomainGraphic{}
+	listeners := buildGraphicsListeners(g.Listen)
 	switch g.Type {
 	case "vnc":
 		vnc := &libvirtxml.DomainGraphicVNC{
@@ -943,11 +1007,13 @@ func mapGraphics(g LibvirtGraphics) libvirtxml.DomainGraphic {
 			Passwd:   g.Passwd,
 			Keymap:   g.Keymap,
 		}
-		if g.Listen != "" {
-			vnc.Listen = g.Listen
-			vnc.Listeners = []libvirtxml.DomainGraphicListener{{
-				Address: &libvirtxml.DomainGraphicListenerAddress{Address: g.Listen},
-			}}
+		if len(listeners) > 0 {
+			vnc.Listeners = listeners
+			// Populate the deprecated scalar attribute only for a
+			// single address-type listener; libvirt accepts both.
+			if len(listeners) == 1 && listeners[0].Address != nil {
+				vnc.Listen = listeners[0].Address.Address
+			}
 		}
 		out.VNC = vnc
 	case "spice":
@@ -957,10 +1023,8 @@ func mapGraphics(g LibvirtGraphics) libvirtxml.DomainGraphic {
 			Passwd:   g.Passwd,
 			Keymap:   g.Keymap,
 		}
-		if g.Listen != "" {
-			spice.Listeners = []libvirtxml.DomainGraphicListener{{
-				Address: &libvirtxml.DomainGraphicListenerAddress{Address: g.Listen},
-			}}
+		if len(listeners) > 0 {
+			spice.Listeners = listeners
 		}
 		if g.GL != "" {
 			spice.GL = &libvirtxml.DomainGraphicSpiceGL{Enable: g.GL}
@@ -975,6 +1039,34 @@ func mapGraphics(g LibvirtGraphics) libvirtxml.DomainGraphic {
 		out.SDL = &libvirtxml.DomainGraphicSDL{}
 	case "egl-headless":
 		out.EGLHeadless = &libvirtxml.DomainGraphicEGLHeadless{}
+	}
+	return out
+}
+
+// buildGraphicsListeners renders each LibvirtGraphicsListen into a
+// libvirtxml.DomainGraphicListener. Empty listener lists produce nil;
+// unknown types are skipped with no XML emission (the YAML unmarshaler
+// rejects them up front, so this branch is defensive).
+func buildGraphicsListeners(ll LibvirtGraphicsListeners) []libvirtxml.DomainGraphicListener {
+	if len(ll) == 0 {
+		return nil
+	}
+	out := make([]libvirtxml.DomainGraphicListener, 0, len(ll))
+	for _, l := range ll {
+		switch l.Type {
+		case "address", "":
+			out = append(out, libvirtxml.DomainGraphicListener{
+				Address: &libvirtxml.DomainGraphicListenerAddress{Address: l.Address},
+			})
+		case "socket":
+			out = append(out, libvirtxml.DomainGraphicListener{
+				Socket: &libvirtxml.DomainGraphicListenerSocket{Socket: l.Socket},
+			})
+		case "network":
+			out = append(out, libvirtxml.DomainGraphicListener{
+				Network: &libvirtxml.DomainGraphicListenerNetwork{Network: l.Network},
+			})
+		}
 	}
 	return out
 }

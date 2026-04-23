@@ -57,12 +57,29 @@ type ContainerDeployTarget struct {
 	// context lives. Defaults to .build/overlay-<deploy-name>/.
 	OverlayBuildDir string
 
+	// Executor is the DeployExecutor used for the `podman build`
+	// invocation. Defaults to LocalDeployExecutor when nil — matching
+	// the pre-tree-schema behavior of building overlays on the
+	// invoking host. When set to a NestedExecutor (the tree walker
+	// does this for nested container nodes), the build runs in the
+	// parent venue. Build context files are shipped via
+	// Executor.PutFile before the build runs.
+	Executor DeployExecutor
+
 	// DryRunWriter receives dry-run text. Nil means os.Stderr.
 	DryRunWriter *os.File
 
 	// overlayImageRef is populated by Emit when an overlay was built;
 	// read via OverlayImageRef() after Emit returns.
 	overlayImageRef string
+}
+
+// exec returns the configured executor, defaulting to the local one.
+func (t *ContainerDeployTarget) exec() DeployExecutor {
+	if t.Executor == nil {
+		return LocalDeployExecutor{}
+	}
+	return t.Executor
 }
 
 // Name identifies this target.
@@ -162,10 +179,19 @@ func (t *ContainerDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers
 		return nil
 	}
 
-	cmd := exec.CommandContext(opts.ContextOrDefault(), t.Engine, "build", "-f", cfPath, "-t", t.overlayImageRef, dir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// Route the podman build via the configured executor. On the root
+	// (LocalDeployExecutor) this is equivalent to the prior direct
+	// exec.CommandContext call. On a NestedExecutor the command runs
+	// in the parent venue — the caller is responsible for ensuring the
+	// build context is reachable there (today this is only true when
+	// the build dir is on a shared filesystem the parent can see; we
+	// error loudly otherwise).
+	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
+		return fmt.Errorf("ContainerDeployTarget: nested container overlay builds inside %s are not yet wired — build the base image locally, then `ov deploy add` with a pre-built ref", nested.Venue())
+	}
+	buildScript := fmt.Sprintf("%s build -f %s -t %s %s",
+		t.Engine, deployShellQuote(cfPath), deployShellQuote(t.overlayImageRef), deployShellQuote(dir))
+	if err := t.exec().RunUser(opts.ContextOrDefault(), buildScript, opts); err != nil {
 		return fmt.Errorf("overlay build: %w", err)
 	}
 	return nil

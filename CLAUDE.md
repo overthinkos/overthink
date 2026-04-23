@@ -5,15 +5,6 @@ Compose, build, deploy, and manage container images from a library of fully conf
 See `README.md` for the user-facing feature overview and command reference, `plugins/README.md` for the full skill index. This file carries only **project-specific rules and mandates** — architectural descriptions belong in skills (the single source of truth).
 
 ---
-
-## Five Cornerstones of AI Scut Testing
-
-1. **Your Assumptions Are the Enemy** — The thing you didn't think to test is the thing that will break.
-2. **Small Bugs Have Big Friends** — Every issue you dismissed as nonessential is tomorrow's catastrophe.
-3. **It's Broken Until It Runs Live** — Localhost and mocks are deceptive liars.
-4. **Check Every Damn Thing** — Methodically. Tediously. No shortcuts.
-5. **Then Check It Again** — Because you missed something. You always do.
-
 ## Ground Truth Rules — NEVER claim success without these (HARD RULES)
 
 These rules exist because an agent has claimed "tests pass" / "cutover complete" / "ready to merge" based on green unit tests while the actual image failed to start. Unit tests do NOT prove a feature works. Apply BEFORE declaring any task done:
@@ -25,7 +16,7 @@ These rules exist because an agent has claimed "tests pass" / "cutover complete"
   2. `ov image test <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R3).
   3. `ov start <image>` (or `ov deploy add <image> <image>` / `ov update <image>` for an existing deploy) — container must reach `Active: active (running)`.
   4. `ov test <image>` — full three-section run including deploy probes must pass.
-  5. If any step fails, the task is NOT done. Roll back to a known-good state before continuing.
+  5. If any step fails, the task is NOT done.
 
 - **R3. "Generated Containerfile contains X" is a testable invariant.** When a refactor touches generation, assert the presence of every critical section in the emitted Containerfile (e.g. `grep supervisord-conf .build/<image>/Containerfile`). A Containerfile that compiles but silently drops the init-system stage produces an image with the **stock RPM config**, not the overthink config — and the stock config almost always breaks at runtime. The emitted file is the source of truth; check it.
 
@@ -46,7 +37,7 @@ You have all the time in the world and taking the time to get things properly do
 
 ## Disposable-Only Autonomy + Mandatory Live-Deploy Verification
 
-**`disposable: true` is the ONE and ONLY authorization for autonomous destroy + rebuild.** Default is `false` (explicit opt-in only; see `/ov-dev:disposable`). No derivation from other fields. No "this looks like a test bed" heuristic. No hostname-based assumptions. A deploy is either explicitly marked `disposable: true` in vms.yml / deploy.yml or it is NOT rebuildable unattended — even if its name contains "test", even if it's a project on a shared host where unrelated production services also run. Explicit-only is what makes this rule safe on shared infrastructure with live users on other resources.
+**`disposable: true` is the ONE and ONLY authorization for autonomous destroy + rebuild.** Default is `false` (explicit opt-in only; see `/ov-dev:disposable`). No derivation from other fields. No "this looks like a test bed" heuristic. No hostname-based assumptions. A deploy is either explicitly marked `disposable: true` in deploy.yml or it is NOT rebuildable unattended — even if its name contains "test", even if it's a project on a shared host where unrelated production services also run. Explicit-only is what makes this rule safe on shared infrastructure with live users on other resources.
 
 On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
 
@@ -73,7 +64,7 @@ A change that relies on an OS package at runtime (`nc`, `socat`, `xorriso`, `qem
 
 The verification loop has three rules:
 
-1. **Always test on a target that carries an explicit `disposable: true`.** Never experiment on a resource without the flag. If no suitable disposable target exists, create one first (`ov deploy add <name> <ref> --disposable` or mark a VM in vms.yml and `ov vm create`). The opt-in is explicit; never assume disposability because of a name, lifecycle tag, hostname, or any other heuristic.
+1. **Always test on a target that carries an explicit `disposable: true`.** Never experiment on a resource without the flag. If no suitable disposable target exists, create one first (`ov deploy add <name> <ref> --disposable` or mark a VM entry under `vm:` in deploy.yml and `ov vm create`). The opt-in is explicit; never assume disposability because of a name, lifecycle tag, hostname, or any other heuristic.
 2. **If a test breaks the target, `ov rebuild` it back to the committed config before doing anything else.** Never layer experiments on broken state.
 3. **After committing the real fix in source, re-verify on a FRESH `ov rebuild` of the disposable target.** A fix that passes only on a hand-patched target is not a real fix — it's a regression waiting for the next rebuild. Pasteable proof of the fresh-rebuild re-verification is the acceptance gate.
 
@@ -117,7 +108,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Lowercase-hyphenated names** for layers and images.
 - **Tests ship with the image.** See `/ov:test`.
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
-- **VMs are `kind: vm` entities** in `vms.yml`. See `/ov-vms:vms`, `/ov:vm`, `/ov:migrate`.
+- **VMs are `kind: vm` entities** under the top-level `vm:` key in `deploy.yml` (schema v2; legacy `vms.yml` migrated via `ov migrate merge-vms`). See `/ov-vms:vms`, `/ov:vm`, `/ov:migrate`.
 - **Hard cutover by default.** See `/ov-dev:cutover-policy` and the "Hard Cutover by Default" section above.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
 - **Project directory resolution.** See `/ov:image` "Project directory resolution".

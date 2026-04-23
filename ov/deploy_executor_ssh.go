@@ -46,6 +46,13 @@ type SSHExecutor struct {
 	KnownHostsFile string
 }
 
+// Venue returns a stable "ssh://<user>@<host>:<port>" identifier so
+// install_ledger.go can scope per-VM ledgers without colliding with
+// the local-host ledger or other VMs.
+func (e *SSHExecutor) Venue() string {
+	return fmt.Sprintf("ssh://%s@%s:%d", e.User, e.Host, e.Port)
+}
+
 // RunSystem executes a bash script as root on the guest.
 // Wraps as `ssh vm 'sudo bash -s'` with the script fed on stdin.
 func (e *SSHExecutor) RunSystem(ctx context.Context, script string, opts EmitOpts) error {

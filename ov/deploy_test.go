@@ -91,7 +91,7 @@ func TestMergeDeployOverlay(t *testing.T) {
 		},
 	}
 	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"myapp": {
 				DNS:      "new.example.com",
 				AcmeEmail: "admin@example.com",
@@ -125,7 +125,7 @@ func TestMergeDeployOverlayUnknownImage(t *testing.T) {
 		},
 	}
 	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"unknown": {DNS: "test.example.com"},
 		},
 	}
@@ -163,7 +163,7 @@ func TestMergeDeployOverlayTunnel(t *testing.T) {
 		},
 	}
 	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"myapp": {
 				Tunnel: &TunnelYAML{Provider: "cloudflare", Public: PortScope{Ports: []int{8080}}},
 			},
@@ -385,7 +385,7 @@ func TestDeployConfigProvidesRoundTrip(t *testing.T) {
 				{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 			},
 		},
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"ollama": {Ports: []string{"11434:11434"}},
 		},
 	}
@@ -425,7 +425,7 @@ func TestCleanDeployEntryRemovesProvides(t *testing.T) {
 				{Name: "jupyter", URL: "http://ov-jupyter:8888/mcp", Transport: "http", Source: "jupyter"},
 			},
 		},
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"ollama":     {Ports: []string{"11434:11434"}},
 			"postgresql": {Ports: []string{"5432:5432"}},
 			"jupyter":    {Ports: []string{"8888:8888"}},
@@ -612,7 +612,7 @@ func TestCleanDeployEntryInstance(t *testing.T) {
 
 	// Set up both base and instance
 	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			"selkies-desktop":           {Ports: []string{"3000:3000"}},
 			"selkies-desktop/31.58.9.4": {Ports: []string{"3001:3000"}, Env: []string{"HTTP_PROXY=x"}},
 		},

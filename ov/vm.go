@@ -135,8 +135,8 @@ func (c *VmCreateCmd) Run() error {
 	// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed}.qcow2/iso
 	// produced by `ov vm build` (the cloud_image branch of vm_build.go).
 	dir, _ := os.Getwd()
-	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
-		if spec, hit := uf.VMs[c.Image]; hit {
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
+		if spec, hit := uf.VM[c.Image]; hit {
 			return c.runVmSpecCreate(c.Image, spec, backend)
 		}
 	}
@@ -759,8 +759,8 @@ func (c *VmSshCmd) Run() error {
 	// (Legacy OCI LabelVm lookup was removed in the VM hard-cutover.)
 	if c.Port == 2222 {
 		if dir, derr := os.Getwd(); derr == nil {
-			if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
-				if spec, hit := uf.VMs[c.Image]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
+			if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
+				if spec, hit := uf.VM[c.Image]; hit && spec.SSH != nil && spec.SSH.Port != 0 {
 					c.Port = spec.SSH.Port
 				}
 			}

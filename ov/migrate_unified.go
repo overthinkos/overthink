@@ -202,7 +202,7 @@ func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
 // -----------------------------------------------------------------------------
 
 func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) (string, error) {
-	uf := &UnifiedFile{Version: 1}
+	uf := &UnifiedFile{Version: schemaVersion}
 	if bs != nil {
 		uf.Distros = bs.Distros
 		uf.Builders = bs.Builders
@@ -228,7 +228,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) ([]string, error) {
 	var written []string
 
-	root := &UnifiedFile{Version: 1}
+	root := &UnifiedFile{Version: schemaVersion}
 	includes := []string{}
 
 	// build.yml → unified plural keys. Write when we have data to migrate; on

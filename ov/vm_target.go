@@ -62,13 +62,13 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
-	if !ok || uf.VMs == nil {
+	if !ok || uf.VM == nil {
 		return nil, fmt.Errorf("no kind:vm entities declared in overthink.yml")
 	}
-	spec, present := uf.VMs[vmName]
+	spec, present := uf.VM[vmName]
 	if !present {
-		known := make([]string, 0, len(uf.VMs))
-		for k := range uf.VMs {
+		known := make([]string, 0, len(uf.VM))
+		for k := range uf.VM {
 			known = append(known, k)
 		}
 		sort.Strings(known)

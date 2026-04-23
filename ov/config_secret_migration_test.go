@@ -30,7 +30,7 @@ func withDeployConfigTempPath(t *testing.T) string {
 func seedDeployConfig(t *testing.T, image, instance string, env []string) {
 	t.Helper()
 	dc := &DeployConfig{
-		Images: map[string]DeployImageConfig{
+		Images: map[string]DeploymentNode{
 			deployKey(image, instance): {
 				Env: env,
 			},
@@ -211,7 +211,7 @@ func TestMigratePlaintextEnvSecretsInstanceScoped(t *testing.T) {
 	withDeployConfigTempPath(t)
 	withIsolatedCredentialStore(t)
 
-	dc := &DeployConfig{Images: map[string]DeployImageConfig{
+	dc := &DeployConfig{Images: map[string]DeploymentNode{
 		"openwebui":      {Env: []string{"TEST_OV_CRED_ROUTEA=base-value"}},
 		"openwebui/test": {Env: []string{"TEST_OV_CRED_ROUTEA=test-value"}},
 	}}

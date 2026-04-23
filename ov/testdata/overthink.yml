@@ -1,4 +1,4 @@
-version: 1
+version: 2
 includes:
     - build.yml
     - images.yml

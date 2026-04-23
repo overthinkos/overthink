@@ -98,12 +98,12 @@ func TestDeployImageConfig_DisposableRoundTrip(t *testing.T) {
 disposable: true
 lifecycle: dev
 `
-	var c DeployImageConfig
+	var c DeploymentNode
 	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if !c.IsDisposable() {
-		t.Error("DeployImageConfig.IsDisposable() = false; want true")
+		t.Error("DeploymentNode.IsDisposable() = false; want true")
 	}
 	if got := c.LifecycleTag(); got != "dev" {
 		t.Errorf("LifecycleTag = %q; want dev", got)
@@ -114,12 +114,12 @@ lifecycle: dev
 // mirror of the critical anti-derivation test.
 func TestDeployImageConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 	yamlStr := `lifecycle: dev`
-	var c DeployImageConfig
+	var c DeploymentNode
 	if err := yaml.Unmarshal([]byte(yamlStr), &c); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if c.IsDisposable() {
-		t.Fatal("DeployImageConfig{Lifecycle: dev}.IsDisposable() = true; want false.")
+		t.Fatal("DeploymentNode{Lifecycle: dev}.IsDisposable() = true; want false.")
 	}
 }
 

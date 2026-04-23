@@ -53,8 +53,8 @@ func (c *VmBuildCmd) Run() error {
 	// into the VmSpec-driven build pipeline: cloud_image → fetch+
 	// resize+seed ISO; bootc → bootc install reading the bootc-branch
 	// fields from VmSpec.Source.
-	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VMs != nil {
-		if spec, hit := uf.VMs[imageName]; hit {
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
+		if spec, hit := uf.VM[imageName]; hit {
 			return c.runVmSpecBuild(imageName, spec, rt)
 		}
 	}

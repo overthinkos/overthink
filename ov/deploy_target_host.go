@@ -55,8 +55,44 @@ type HostDeployTarget struct {
 	// by default). Drives env.d managed-block insertion.
 	Shell ShellKind
 
+	// Executor is the DeployExecutor used for every shell primitive.
+	// Defaults to LocalDeployExecutor{} when nil — which matches the
+	// pre-tree-schema behavior of spawning bash on the invoking host.
+	//
+	// When non-nil (set by the tree-walking dispatcher for nested
+	// `target: host` children), the executor may be a NestedExecutor
+	// wrapping the parent container / VM / nested-host venue. All
+	// RunSystem / RunUser / PutFile calls route through this executor,
+	// so a "host deploy inside a container" runs the same InstallPlan
+	// IR but lands in the nested venue's rootfs + ledger dir.
+	Executor DeployExecutor
+
 	// DryRunWriter receives dry-run output. Nil defaults to os.Stderr.
 	DryRunWriter *os.File
+}
+
+// exec returns the configured executor, defaulting to a local one
+// when unset. Centralized so the emit path doesn't sprinkle nil
+// checks at every call site.
+func (t *HostDeployTarget) exec() DeployExecutor {
+	if t.Executor == nil {
+		return LocalDeployExecutor{}
+	}
+	return t.Executor
+}
+
+// runSystem runs a bash script as root through the target's
+// executor. Replaces direct calls to the package-level runSudoShell
+// so nested host deploys (executor = NestedExecutor) land in the
+// right venue.
+func (t *HostDeployTarget) runSystem(script string, opts EmitOpts) error {
+	return t.exec().RunSystem(opts.ContextOrDefault(), script, opts)
+}
+
+// runUser runs a bash script as the invoking user through the
+// target's executor.
+func (t *HostDeployTarget) runUser(script string, opts EmitOpts) error {
+	return t.exec().RunUser(opts.ContextOrDefault(), script, opts)
 }
 
 // Name identifies this target.
@@ -216,7 +252,7 @@ func (t *HostDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *Insta
 		// container: blocks are container-only). Quietly skip.
 		return nil
 	}
-	if err := runSudoShell(cmd, opts); err != nil {
+	if err := t.runSystem(cmd, opts); err != nil {
 		return fmt.Errorf("system packages %s: %w", s.Format, err)
 	}
 	t.noteStep(rec, StepKindSystemPackages, s.Scope(), s.Venue(),
@@ -357,11 +393,11 @@ func (t *HostDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpt
 		return nil
 	}
 	if s.Scope() == ScopeSystem {
-		if err := runSudoShell(cmd, opts); err != nil {
+		if err := t.runSystem(cmd, opts); err != nil {
 			return err
 		}
 	} else {
-		if err := runUserShell(cmd, opts); err != nil {
+		if err := t.runUser(cmd, opts); err != nil {
 			return err
 		}
 	}
@@ -559,11 +595,11 @@ func (t *HostDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpt
 	}
 	cmd := fmt.Sprintf("install -m%s%s %s %s", mode, owner, shQuoteArg(s.Source), shQuoteArg(s.Dest))
 	if s.Scope() == ScopeSystem {
-		if err := runSudoShell(cmd, opts); err != nil {
+		if err := t.runSystem(cmd, opts); err != nil {
 			return err
 		}
 	} else {
-		if err := runUserShell(cmd, opts); err != nil {
+		if err := t.runUser(cmd, opts); err != nil {
 			return err
 		}
 	}
@@ -616,7 +652,7 @@ func (t *HostDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Install
 func (t *HostDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_REPO'\n%s\nOV_REPO",
 		shQuoteArg(filepath.Dir(s.File)), shQuoteArg(s.File), s.Content)
-	if err := runSudoShell(cmd, opts); err != nil {
+	if err := t.runSystem(cmd, opts); err != nil {
 		return err
 	}
 	t.noteStep(rec, StepKindRepoChange, s.Scope(), s.Venue(), s.File, start)
@@ -735,7 +771,10 @@ func writeUnitLikeFile(path, content string, scope Scope, opts EmitOpts) error {
 		}
 		return nil
 	}
-	// System scope → sudo.
+	// System scope → sudo. This helper is a standalone function (not
+	// a HostDeployTarget method), so it uses the package-level
+	// runSudoShell directly — writing system-scope unit files is a
+	// local-host-only operation, never a nested-venue one.
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_UNIT'\n%s\nOV_UNIT",
 		shQuoteArg(filepath.Dir(path)), shQuoteArg(path), content)
 	return runSudoShell(cmd, opts)

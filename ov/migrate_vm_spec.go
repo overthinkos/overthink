@@ -84,9 +84,9 @@ func MigrateVmSpec(opts MigrateVmSpecOpts) ([]string, error) {
 
 	// Build the kind:vm entities.
 	vms := map[string]*VmSpec{}
-	if uf.VMs != nil {
+	if uf.VM != nil {
 		// Preserve any existing kind:vm entries so the rewrite is additive.
-		for k, v := range uf.VMs {
+		for k, v := range uf.VM {
 			vms[k] = v
 		}
 	}

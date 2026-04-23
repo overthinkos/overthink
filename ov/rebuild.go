@@ -75,35 +75,73 @@ func (c *RebuildCmd) Run() error {
 	return nil
 }
 
-// resolve looks up the target in vms.yml first (kind=vm), then
-// deploy.yml (kind=deploy). Returns the effective classification
-// fields so the caller can gate on disposable.
+// resolve looks up the target in overthink.yml's `vm:` section
+// (kind=vm) or the deployments tree (kind=deploy). Returns the
+// effective classification fields so the caller can gate on disposable.
+//
+// Accepts a dotted-path Name for nested deployments
+// (`stack.web.db`). Disposability is checked on the targeted node
+// ONLY — a parent's disposable: true does NOT cascade (per CLAUDE.md
+// R10). This lets operators mark an inner leaf as rebuildable while
+// the parent container/VM remains protected, and vice versa.
+//
+// Rebuild of a non-root node is currently only fully supported when
+// the node's target is "host" (applying layers in parent's venue).
+// For container/vm children a clear error points at the equivalent
+// workflow ("destroy + recreate the parent + redeploy the whole
+// subtree").
 func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, err error) {
 	dir, derr := os.Getwd()
 	if derr != nil {
 		return "", false, "", fmt.Errorf("getwd: %w", derr)
 	}
-	// vms.yml lookup.
+
+	// vms.yml (schema v2: `vm:` root key in deploy.yml via includes).
 	uf, ok, _ := LoadUnified(dir)
-	if ok && uf != nil && uf.VMs != nil {
-		if spec, present := uf.VMs[c.Name]; present && spec != nil {
+	if ok && uf != nil && uf.VM != nil {
+		if spec, present := uf.VM[c.Name]; present && spec != nil {
 			return "vm", spec.IsDisposable(), spec.LifecycleTag(), nil
 		}
 	}
-	// deploy.yml lookup.
+
+	// Deployments tree — accept dotted paths.
+	tree, _ := resolveTreeRoot(dir)
+	if tree != nil {
+		if node, _, nodeErr := ResolveNodePath(tree, c.Name); nodeErr == nil && node != nil {
+			// For nested nodes, only "host" targets can be rebuilt
+			// independently (they re-apply layers in the parent's
+			// venue, which stays up). Container / vm children need
+			// parent-subtree rebuild that is beyond this session.
+			if strings.Contains(c.Name, ".") && node.Target != "host" && node.Target != "" {
+				return "", false, "", fmt.Errorf(
+					"ov rebuild: nested rebuild of target=%q not yet supported for path %q. "+
+						"Rebuild the enclosing parent (e.g. `ov rebuild %s`), which recreates this child too.",
+					node.Target, c.Name, pathRoot(c.Name))
+			}
+			return "deploy", node.IsDisposable(), node.LifecycleTag(), nil
+		}
+	}
+
+	// Legacy per-machine deploy.yml fallback.
 	dc, _ := LoadDeployConfig()
 	if dc != nil && dc.Images != nil {
 		key := deployKey(c.Name, c.Instance)
 		if entry, present := dc.Images[key]; present {
 			return "deploy", entry.IsDisposable(), entry.LifecycleTag(), nil
 		}
-		// Fallback: try the bare name (some callers may pass the
-		// full key directly).
 		if entry, present := dc.Images[c.Name]; present {
 			return "deploy", entry.IsDisposable(), entry.LifecycleTag(), nil
 		}
 	}
-	return "", false, "", fmt.Errorf("ov rebuild: %q is neither a kind:vm entity in vms.yml nor a deploys entry in deploy.yml", c.Name)
+	return "", false, "", fmt.Errorf("ov rebuild: %q is neither a kind:vm entity nor a deployments entry in this project", c.Name)
+}
+
+// pathRoot returns the first segment of a dotted path. "foo.bar.baz" → "foo".
+func pathRoot(path string) string {
+	if idx := strings.IndexByte(path, '.'); idx >= 0 {
+		return path[:idx]
+	}
+	return path
 }
 
 // refuseMessage returns the explicit refusal error with remediation.

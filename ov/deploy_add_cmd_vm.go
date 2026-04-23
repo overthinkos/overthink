@@ -30,10 +30,10 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	if err != nil {
 		return fmt.Errorf("loading overthink.yml: %w", err)
 	}
-	if !ok || uf.VMs == nil {
+	if !ok || uf.VM == nil {
 		return fmt.Errorf("deploy %q: no overthink.yml or no kind:vm entities declared", c.Name)
 	}
-	spec, ok := uf.VMs[vmName]
+	spec, ok := uf.VM[vmName]
 	if !ok {
 		return fmt.Errorf("deploy %q: no kind:vm entity named %q in overthink.yml", c.Name, vmName)
 	}
@@ -68,13 +68,31 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Resolve key-injection state (persisted into VmDeployState for audit).
 	smbiosOn, cloudInitOn := ResolveKeyInjectionChannels(spec)
 
-	// Build SSHExecutor.
-	exec := &SSHExecutor{
+	// Build the DeployExecutor. At the root of a tree (no parent),
+	// this is a direct SSHExecutor from the invoking host to the VM
+	// over the forwarded port — today's behavior. When this VM is a
+	// child of a container (vm-in-container), the tree walker passes
+	// opts.ParentExec — we compose a NestedExecutor so SSH runs
+	// through the parent's venue.
+	var exec DeployExecutor = &SSHExecutor{
 		User:           sshUser,
 		Host:           "127.0.0.1",
 		Port:           sshPort,
 		KeyPath:        sshKeyPath,
 		ConnectTimeout: 10,
+	}
+	if opts.ParentExec != nil {
+		// Nested VM: the parent's executor runs commands in its venue,
+		// and from there we ssh into the guest.
+		sshTarget := fmt.Sprintf("%s@%s:%d", sshUser, "127.0.0.1", sshPort)
+		exec = &NestedExecutor{
+			Parent: opts.ParentExec,
+			Jump: NestedJump{
+				Kind:       JumpSSH,
+				Target:     sshTarget,
+				SSHKeyPath: sshKeyPath,
+			},
+		}
 	}
 
 	// Build VmDeployTarget.
@@ -240,10 +258,10 @@ func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !ok || uf.VMs == nil {
+	if !ok || uf.VM == nil {
 		return nil, fmt.Errorf("no vms.yml entity %q", vmName)
 	}
-	spec, ok := uf.VMs[vmName]
+	spec, ok := uf.VM[vmName]
 	if !ok {
 		return nil, fmt.Errorf("no vms.yml entity %q", vmName)
 	}
@@ -352,12 +370,12 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 		dc = &DeployConfig{}
 	}
 	if dc.Images == nil {
-		dc.Images = map[string]DeployImageConfig{}
+		dc.Images = map[string]DeploymentNode{}
 	}
 
 	entry, exists := dc.Images[deployName]
 	if !exists {
-		entry = DeployImageConfig{}
+		entry = DeploymentNode{}
 	}
 	entry.Target = "vm"
 	vmName, _, _ := parseVmDeployName(deployName)

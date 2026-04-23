@@ -26,7 +26,7 @@ func readYAML(t *testing.T, path string) map[string]any {
 // fixtureCluster returns a representative production-style cluster profile.
 func fixtureCluster(name string) *ClusterProfile {
 	return &ClusterProfile{
-		Version:           1,
+		Version:           2,
 		Kind:              "cluster-profile",
 		Name:              name,
 		KubeconfigContext: "gke_prod",
@@ -104,7 +104,7 @@ func TestK8sGenerate_StatefulSetWhenStorage(t *testing.T) {
 		DeploymentName: "pgbase",
 		ImageRef:       "quay.io/example/pgbase:v1",
 		Capabilities:   &Capabilities{Image: "pgbase", Ports: []string{"5432"}},
-		Deployment: DeployImageConfig{
+		Deployment: DeploymentNode{
 			Kind: "service",
 			Storage: []DeployStorage{
 				{Name: "data", Size: "20Gi", ClassHint: "fast", Access: "single-writer"},
@@ -150,7 +150,7 @@ func TestK8sGenerate_DaemonSetAndCronJob(t *testing.T) {
 			DeploymentName: tc.kind + "-test",
 			ImageRef:       "quay.io/example/x:v1",
 			Capabilities:   &Capabilities{},
-			Deployment:     DeployImageConfig{Kind: tc.kind},
+			Deployment:     DeploymentNode{Kind: tc.kind},
 			Cluster:        fixtureCluster("prod"),
 			OutputDir:      out,
 		}
@@ -168,7 +168,7 @@ func TestK8sGenerate_DaemonSetAndCronJob(t *testing.T) {
 		DeploymentName: "nightly-backup",
 		ImageRef:       "quay.io/example/backup:v1",
 		Capabilities:   &Capabilities{},
-		Deployment:     DeployImageConfig{Kind: "scheduled", Schedule: "0 3 * * *"},
+		Deployment:     DeploymentNode{Kind: "scheduled", Schedule: "0 3 * * *"},
 		Cluster:        fixtureCluster("prod"),
 		OutputDir:      out,
 	}
@@ -190,7 +190,7 @@ func TestK8sGenerate_IngressWhenExposeSet(t *testing.T) {
 		DeploymentName: "web",
 		ImageRef:       "quay.io/example/web:v1",
 		Capabilities:   &Capabilities{Ports: []string{"8080"}},
-		Deployment: DeployImageConfig{
+		Deployment: DeploymentNode{
 			Expose: &DeployExpose{Host: "web.example.com", TLS: true},
 		},
 		Cluster:   fixtureCluster("prod"),
@@ -245,7 +245,7 @@ func TestK8sGenerate_ResourcesFromSecurityAndRequests(t *testing.T) {
 		DeploymentName: "svc",
 		ImageRef:       "quay.io/example/svc:v1",
 		Capabilities:   &Capabilities{Ports: []string{"8080"}},
-		Deployment: DeployImageConfig{
+		Deployment: DeploymentNode{
 			Resources: &DeployResources{CPURequest: "250m", MemoryRequest: "256Mi"},
 			Security:  &SecurityConfig{Cpus: "1.5", MemoryMax: "1Gi"},
 		},

@@ -23,7 +23,7 @@ type DeployFromImageOpts struct {
 	Instance       string // optional "image/instance" suffix
 	ClusterName    string // cluster profile name (ClusterProfile.Name)
 	Namespace      string // optional override of cluster profile's default namespace
-	DeployOverlay  *DeployImageConfig // optional: merged from ~/.config/ov/deploy.yml
+	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/ov/deploy.yml
 	OutputDir      string // defaults to <cwd>/.overthink/k8s
 	ProjectDir     string // for looking up clusters/<name>.yaml
 }
@@ -66,7 +66,7 @@ func DeployFromImage(opts DeployFromImageOpts) (string, error) {
 	}
 
 	// 4. Build the deployment spec from the per-machine overlay if any.
-	dc := DeployImageConfig{
+	dc := DeploymentNode{
 		Target: "kubernetes",
 	}
 	if opts.DeployOverlay != nil {

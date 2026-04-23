@@ -26,7 +26,7 @@ func (c *CmdCmd) Run() error {
 	var agentEnv []string
 	if rtErr == nil {
 		dc, _ := LoadDeployConfig()
-		var deployImage *DeployImageConfig
+		var deployImage *DeploymentNode
 		if dc != nil {
 			if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 				deployImage = &overlay

@@ -8,7 +8,7 @@ package main
 //   - ForwardTCP  — local TCP listener on 127.0.0.1:0 → remote TCP
 //     endpoint. Used for legacy VNC / TCP-exposed SPICE deployments.
 //   - ForwardUnix — local UNIX socket under /tmp → remote UNIX
-//     socket. Used for SPICE sockets (the arch-cloud-base default
+//     socket. Used for SPICE sockets (the arch default
 //     after the Part 1 cutover).
 //
 // Each forward runs one goroutine per accepted connection that

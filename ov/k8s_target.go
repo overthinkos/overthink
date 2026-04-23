@@ -23,7 +23,7 @@ type K8sDeployTarget struct {
 
 	// Deployment — the merged deployment spec (overthink.yml:deployments.<name>
 	// + ~/.config/ov/deploy.yml overlay).
-	Deployment DeployImageConfig
+	Deployment DeploymentNode
 
 	// Instance — blank for the bare image name; otherwise the instance name
 	// after the "image/" prefix (e.g. "prod" for "openclaw/prod"). Used to

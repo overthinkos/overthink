@@ -73,59 +73,104 @@ type DeployDelCmd struct {
 }
 
 // Run executes `ov deploy add`.
+//
+// For a schema-v2 config, c.Name may be a dotted path (foo.bar.baz)
+// pointing into the deployments tree. The root segment (foo) is
+// dispatched first; each descendant is dispatched afterwards with
+// ParentExec threaded through via EmitOpts so nested targets execute
+// inside their parent's venue.
+//
+// For a flat name (no children, no dots) the behavior is unchanged —
+// exactly one target's Emit() call.
 func (c *DeployAddCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
 	}
-	opts := c.emitOpts()
 
-	// Resolve the primary ref. If none provided on the command line,
-	// fall back to the matching entry in deploy.yml (keyed by deploy
-	// name). This lets users pre-populate deploy.yml and then run
-	// `ov deploy add host` (or `ov deploy add my-dev`) with no args.
+	// Resolve the named root + any dotted-path subtree the user
+	// targeted. Supports three call shapes:
 	//
-	// Two-tier deploy-config lookup: project deploy.yml (authored in the
-	// repo, shipped via `overthink.yml deployments:`) provides the
-	// canonical declaration — target, vm_source, add_layers, tests.
-	// Per-machine ~/.config/ov/deploy.yml overlays machine-specific state
-	// — ports, secrets, VmDeployState, host-local tests. MergeDeployConfigs
-	// is left-to-right: local wins on field overlap.
-	refStr := c.Ref
-	var deployEntry *DeployImageConfig
-	if refStr == "" {
-		var projectDC *DeployConfig
-		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
-			projectDC = uf.ProjectDeployConfig()
+	//   ov deploy add host                   — legacy; root = "host"
+	//   ov deploy add openclaw-stack         — v2 root with children
+	//   ov deploy add openclaw-stack.web.db  — v2 subtree
+	targetPath := c.Name
+	tree, _ := resolveTreeRoot(dir)
+	var rootNode *DeploymentNode
+	var resolvedPath string
+	if tree != nil {
+		if n, _, nodeErr := ResolveNodePath(tree, targetPath); nodeErr == nil {
+			rootNode = n
+			resolvedPath = targetPath
 		}
-		localDC, _ := LoadDeployConfig()
-		merged := MergeDeployConfigs(projectDC, localDC)
-		if merged != nil {
-			if entry, ok := merged.Images[c.Name]; ok {
-				deployEntry = &entry
-				if entry.Version != "" {
-					c.Tag = entry.Version
-				}
-				if entry.InstallOpts != nil {
-					opts = entry.InstallOpts.ApplyTo(opts)
-				}
-				if len(c.AddLayer) == 0 && len(entry.AddLayers) > 0 {
-					c.AddLayer = append([]string(nil), entry.AddLayers...)
-				}
-			}
-		}
-		if deployEntry == nil {
-			return fmt.Errorf("ov deploy add: no <ref> and deploy.yml has no entry for %q", c.Name)
-		}
-		// The entry's image/name is what we actually deploy. deploy.yml
-		// keys the entry by deploy name; the target image name lives
-		// outside (use c.Name as a fallback when the entry lacks an
-		// explicit image pointer — for now we use the deploy key).
-		refStr = c.Name
 	}
 
-	// Load the project config so we can compile plans against resolved
-	// distro/builder definitions.
+	// Walk pre-order. At each node, we dispatch using the existing
+	// target-specific runHost/runVM/runContainer helpers, with
+	// opts.ParentExec set to the executor derived from the parent
+	// chain.
+	//
+	// When rootNode is nil (ref-based deploy with no deploy.yml entry
+	// e.g. `ov deploy add foo ./path/to/image.yml`) we fall through
+	// to the single-dispatch path.
+	if rootNode == nil {
+		return c.dispatchNode(resolvedPath, nil, nil, dir)
+	}
+
+	return WalkDeploymentTree(resolvedPath, rootNode, nil, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+		if err := c.dispatchNode(path, node, parentExec, dir); err != nil {
+			return nil, err
+		}
+		return deriveChildExecutorForPath(path, node, parentExec)
+	})
+}
+
+// dispatchNode compiles plans for a single node and runs the
+// appropriate target. Factored out of Run so the tree walker can call
+// it once per node.
+//
+// path is the dotted identifier ("", "openclaw-stack", or
+// "openclaw-stack.web.db"). It's propagated via opts.Path so the
+// target's logging can identify which node is executing.
+//
+// node is the resolved DeploymentNode; nil when the caller provided
+// an explicit ref (Ref != "") with no matching deploy.yml entry.
+//
+// parentExec is the DeployExecutor of the enclosing environment; nil
+// at the root. Non-nil means "this node is a child of something" —
+// its target composes a NestedExecutor over parentExec.
+func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExec DeployExecutor, dir string) error {
+	opts := c.emitOpts()
+	opts.ParentExec = parentExec
+	opts.Path = path
+	// Note: opts.ParentNode is populated by the walker when available.
+
+	// Per-node field overlays from the deploy.yml entry. On the root
+	// this matches the pre-v2 behavior; on children we must reload
+	// fields from the child node (not c.Name's top-level entry).
+	refStr := c.Ref
+	addLayers := append([]string(nil), c.AddLayer...)
+	tag := c.Tag
+	if node != nil {
+		if node.Version != "" {
+			tag = node.Version
+		}
+		if node.InstallOpts != nil {
+			opts = node.InstallOpts.ApplyTo(opts)
+		}
+		if len(addLayers) == 0 && len(node.AddLayers) > 0 {
+			addLayers = append([]string(nil), node.AddLayers...)
+		}
+	}
+	if refStr == "" {
+		if node == nil {
+			return fmt.Errorf("ov deploy add: no <ref> and deploy.yml has no entry for %q", path)
+		}
+		// Entry-driven: the deploy key IS the ref (by convention).
+		// Per-node ref could be introduced later via `image:` field.
+		refStr = pathLeaf(path)
+	}
+
 	cfg, distroCfg, builderCfg, err := loadConfigForDeploy(dir)
 	if err != nil {
 		return err
@@ -135,31 +180,28 @@ func (c *DeployAddCmd) Run() error {
 	var base string
 	var layerSet []string
 
-	// Compile per-layer plans. The strategy differs by ref kind:
-	//   - image ref                → one plan per layer in the image
-	//   - layer ref                → a single plan
-	//   - `host` / `vm:<name>`     → no primary plan; all layers come from
-	//                                 add_layers (compiled in the loop below)
-	if c.Name == "host" || strings.HasPrefix(c.Name, "vm:") {
-		// Target-only deploy: no primary image/layer ref. The entry's
-		// add_layers (merged from project + local deploy.yml) carries the
-		// full install payload.
-		base = c.Name
+	target := classifyNodeTarget(node, path)
+
+	// Target-only deploys (host, vm) don't compile primary plans —
+	// everything comes from add_layers.
+	if target == "host" || target == "vm" {
+		base = path
 	} else {
 		ref, err := ResolveDeployRef(refStr, dir)
 		if err != nil {
 			return fmt.Errorf("resolving ref %q: %w", refStr, err)
 		}
+		// Save c.Tag for compilePlans; restore after.
+		savedTag := c.Tag
+		c.Tag = tag
 		plans, base, layerSet, err = c.compilePlans(ref, cfg, distroCfg, builderCfg, dir)
+		c.Tag = savedTag
 		if err != nil {
 			return err
 		}
 	}
 
-	// Merge add_layers: on top (if any). Each --add-layer is resolved
-	// independently and contributes one per-layer plan appended to the
-	// plan slice.
-	for _, al := range c.AddLayer {
+	for _, al := range addLayers {
 		alRef, err := ResolveDeployRef(al, dir)
 		if err != nil {
 			return fmt.Errorf("resolving --add-layer %q: %w", al, err)
@@ -171,27 +213,118 @@ func (c *DeployAddCmd) Run() error {
 		plans = append(plans, alPlans...)
 	}
 
-	// Stamp every plan with the deploy-id + add_layers provenance.
-	deployID := computeDeployID(base, layerSet, c.AddLayer)
+	deployID := computeDeployID(base, layerSet, addLayers)
 	for _, p := range plans {
 		p.DeployID = deployID
-		p.AddLayers = append([]string(nil), c.AddLayer...)
+		p.AddLayers = append([]string(nil), addLayers...)
 	}
 
-	// Dry-run path: print the plans and exit.
 	if c.DryRun {
 		return c.printPlans(plans, opts)
 	}
 
-	// Dispatch to the chosen target.
-	switch {
-	case c.Name == "host":
+	// Target dispatch. Use node.Target as the canonical source
+	// when present; fall back to the legacy name-prefix heuristic
+	// for refs without deploy.yml entries.
+	switch target {
+	case "host":
 		return c.runHost(plans, dir, distroCfg, opts)
-	case strings.HasPrefix(c.Name, "vm:"):
-		return c.runVM(plans, dir, opts)
+	case "vm":
+		// runVM keys off c.Name to resolve the VM entity (the prefix
+		// "vm:" is a target-type tag, not part of the vm name).
+		//
+		//   Root vm deploy   — c.Name is already "vm:<name>" as typed
+		//                      by the user; leave untouched.
+		//   Nested vm child  — path looks like "stack.myvm"; c.Name
+		//                      must be rewritten to "vm:<leaf>" so
+		//                      parseVmDeployName finds the entity.
+		saved := c.Name
+		if strings.Contains(path, ".") {
+			c.Name = "vm:" + pathLeaf(path)
+		}
+		err := c.runVM(plans, dir, opts)
+		c.Name = saved
+		return err
+	case "kubernetes":
+		return fmt.Errorf("target=kubernetes dispatch via tree walker not yet wired — use `ov deploy add --target kubernetes` directly")
 	default:
-		return c.runContainer(plans, base, distroCfg, builderCfg, opts)
+		// container target. runContainer uses c.Name as the
+		// container name; for nested containers we flatten the
+		// dotted path into a podman-legal name.
+		saved := c.Name
+		if path != "" {
+			c.Name = NestedContainerName(path)
+		}
+		err := c.runContainer(plans, base, distroCfg, builderCfg, opts)
+		c.Name = saved
+		return err
 	}
+}
+
+// classifyNodeTarget picks the target discriminator for a node. Uses
+// node.Target when non-empty, else falls back to the legacy path-
+// prefix conventions (`host` literal root, `vm:` prefix) to preserve
+// ref-based deploys that have no deploy.yml entry.
+func classifyNodeTarget(node *DeploymentNode, path string) string {
+	if node != nil && node.Target != "" {
+		return node.Target
+	}
+	// Legacy name-prefix inference.
+	leaf := pathLeaf(path)
+	if leaf == "host" {
+		return "host"
+	}
+	if strings.HasPrefix(leaf, "vm:") {
+		return "vm"
+	}
+	return "container"
+}
+
+// pathLeaf returns the last segment of a dotted path. "foo.bar.baz"
+// → "baz"; "foo" → "foo"; "" → "".
+func pathLeaf(path string) string {
+	if idx := strings.LastIndexByte(path, '.'); idx >= 0 {
+		return path[idx+1:]
+	}
+	return path
+}
+
+// deriveChildExecutorForPath is a small shim over deriveChildExecutor
+// that supplies the current node's flattened container name (derived
+// from the dotted path) when the node's target is container. Keeps
+// the pure-function deriveChildExecutor free of path-awareness.
+func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+	if node == nil {
+		return parentExec, nil
+	}
+	if !node.HasChildren() {
+		return parentExec, nil
+	}
+	switch classifyNodeTarget(node, path) {
+	case "host":
+		if parentExec != nil {
+			return parentExec, nil
+		}
+		return LocalDeployExecutor{}, nil
+	case "container":
+		name := NestedContainerName(path)
+		engineJump := JumpPodmanExec
+		if node.Engine == "docker" {
+			engineJump = JumpDockerExec
+		}
+		if parentExec == nil {
+			parentExec = LocalDeployExecutor{}
+		}
+		return &NestedExecutor{
+			Parent: parentExec,
+			Jump:   NestedJump{Kind: engineJump, Target: name},
+		}, nil
+	case "vm":
+		return vmChildExecutor(node, parentExec)
+	case "kubernetes":
+		return nil, fmt.Errorf("kubernetes targets cannot have children")
+	}
+	return parentExec, nil
 }
 
 // Run executes `ov deploy del`.
@@ -476,8 +609,8 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	var img *ResolvedImage
 	if strings.HasPrefix(c.Name, "vm:") {
 		if vmName, _, perr := parseVmDeployName(c.Name); perr == nil {
-			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VMs != nil {
-				if spec, present := uf.VMs[vmName]; present {
+			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
+				if spec, present := uf.VM[vmName]; present {
 					img = syntheticVmImage(spec)
 				}
 			}
@@ -522,6 +655,15 @@ func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *Dist
 		HostHome: os.Getenv("HOME"),
 		Distro:   hostDistro,
 	}
+	// When this host deploy is nested inside a container or VM, the
+	// tree walker sets opts.ParentExec to the parent's executor. The
+	// HostDeployTarget runs all its bash primitives through that
+	// executor instead of the local shell — so "apply these layers
+	// inside the parent container/VM" works without a different target
+	// type.
+	if opts.ParentExec != nil {
+		tgt.Executor = opts.ParentExec
+	}
 	return tgt.Emit(plans, opts)
 }
 
@@ -534,6 +676,13 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 		BaseImage:     base + ":" + c.Tag,
 		DistroDef:     resolveDistroDef(distroCfg, detectHostContext().Distro),
 		BuilderConfig: builderCfg,
+	}
+	// Thread ParentExec: when this container is a child of another
+	// deployment, the overlay build (if any) must run in the parent's
+	// venue. The target's own check rejects the combo with a clear
+	// error for cases we haven't wired yet (build-context transfer).
+	if opts.ParentExec != nil {
+		tgt.Executor = opts.ParentExec
 	}
 	if err := tgt.Emit(plans, opts); err != nil {
 		return err
@@ -628,7 +777,7 @@ func syntheticVmImage(spec *VmSpec) *ResolvedImage {
 		UID:          1000,
 		GID:          1000,
 		Home:         "/home/" + user,
-		Distro:       []string{"archlinux"}, // cloud_image today is arch-cloud-base; extend when more VM distros land.
+		Distro:       []string{"archlinux"}, // cloud_image today is arch; extend when more VM distros land.
 		Pkg:          "pac",
 		BuildFormats: []string{"pac"},
 	}

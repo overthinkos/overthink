@@ -214,7 +214,7 @@ VMs are a first-class authoring surface alongside container images. `vms.yml` de
 ```yaml
 # vms.yml
 vms:
-  arch-cloud-base:                                 # cloud_image source
+  arch:                                 # cloud_image source
     source:
       kind: cloud_image
       url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
@@ -223,7 +223,7 @@ vms:
     disk_size: 40G
     ram: 8G
     cpus: 4
-    firmware: bios                                 # BIOS preferred for cloud images — see /ov-vms:arch-cloud-base
+    firmware: bios                                 # BIOS preferred for cloud images — see /ov-vms:arch
     ssh: {port: 2224, key_source: generate}
     cloud_init:
       packages: [sudo, spice-vdagent]
@@ -242,14 +242,14 @@ The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fiel
 `ov deploy add vm:<name> <ref>` applies host-deploy-style layer recipes **inside** a provisioned VM over SSH. The same `InstallPlan` IR drives container, host, VM, and K8s deploys — write a layer once, deploy it anywhere. See `/ov-dev:vm-deploy-target` for the SSH-executor model and `/ov-vms:vms` for the full authoring reference.
 
 ```bash
-ov vm create arch-cloud-base                              # provision VM
-ov deploy add vm:arch-cloud-base fedora-coder \           # apply kitchen-sink layers in the guest
+ov vm create arch                              # provision VM
+ov deploy add vm:arch fedora-coder \           # apply kitchen-sink layers in the guest
     --add-layer team-extras \
     --add-layer github.com/team/configs/layers/sshkeys
-ov deploy del vm:arch-cloud-base                          # reverse applied layers; VM stays up
+ov deploy del vm:arch                          # reverse applied layers; VM stays up
 ```
 
-See `/ov-vms:arch-cloud-base` for the canonical cloud_image VM with BIOS-firmware + virtio-gpu + resource-sizing RCA write-up, and `/ov-vms:selkies-desktop-bootc-bootc` (+ paired `/ov-images:selkies-desktop-bootc`) for the canonical bootc VM.
+See `/ov-vms:arch` for the canonical cloud_image VM with BIOS-firmware + virtio-gpu + resource-sizing RCA write-up, and `/ov-vms:selkies-desktop-bootc-bootc` (+ paired `/ov-images:selkies-desktop-bootc`) for the canonical bootc VM.
 
 ## Install
 
@@ -312,10 +312,10 @@ ov vm build selkies-desktop-bootc-bootc --type qcow2 # kind:vm entity in vms.yml
 ov vm create selkies-desktop-bootc-bootc
 ov vm start selkies-desktop-bootc-bootc
 
-# Build and run a cloud_image VM (Arch Linux + cloud-init, canonical /ov-vms:arch-cloud-base example)
-ov vm build arch-cloud-base                          # fetches qcow2, resizes, renders seed ISO
-ov vm create arch-cloud-base                         # BIOS firmware + virtio-gpu + passt portForward
-ssh -p 2224 -i ~/.local/share/ov/vm/ov-arch-cloud-base/id_ed25519 arch@127.0.0.1
+# Build and run a cloud_image VM (Arch Linux + cloud-init, canonical /ov-vms:arch example)
+ov vm build arch                          # fetches qcow2, resizes, renders seed ISO
+ov vm create arch                         # BIOS firmware + virtio-gpu + passt portForward
+ssh -p 2224 -i ~/.local/share/ov/vm/ov-arch/id_ed25519 arch@127.0.0.1
 
 # Apply layers directly to the local filesystem (no container)
 ov deploy add host ripgrep
@@ -471,7 +471,7 @@ Each entry points to the canonical skill — details belong there, not here.
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
 | Service built fine but broken in production | `ov test <image>` runs the baked layer + image + deploy checks against the live container; `ov image test <image>` checks the disposable build (`/ov:test`) |
 | `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vms:vms`, `/ov:migrate`) |
-| SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vms:arch-cloud-base` Finding B) |
+| SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vms:arch` Finding B) |
 | `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov:vm` Backend matrix) |
 | `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov:deploy` "VM target") |
 

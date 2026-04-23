@@ -126,10 +126,10 @@ func ResolveTestVarsBuild(meta *ImageMetadata) *TestVarResolver {
 // On inspect failure the function still returns a resolver with the
 // build-time portion populated; HasRuntime is false and runtime-only vars
 // will be unresolved downstream.
-func ResolveTestVarsRuntime(meta *ImageMetadata, deploy *DeployImageConfig, engine, containerName string) (*TestVarResolver, error) {
+func ResolveTestVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, containerName string) (*TestVarResolver, error) {
 	instance := ""
 	if deploy != nil {
-		// DeployImageConfig is per-map-key; the instance lives in the map key
+		// DeploymentNode is per-map-key; the instance lives in the map key
 		// (see parseDeployKey) so pass it in via containerName context if the
 		// caller has already resolved it. For now leave the value empty —
 		// callers that want INSTANCE populated should set it via the

@@ -36,7 +36,7 @@ type K8sGenerateOpts struct {
 	DeploymentName string              // map key from overthink.yml:deployments.images (base image name)
 	Instance       string              // "" for the bare overlay; non-empty for image/instance
 	ImageRef       string              // fully qualified image ref (registry/name:tag)
-	Deployment     DeployImageConfig
+	Deployment     DeploymentNode
 	Capabilities   *Capabilities
 	Cluster        *ClusterProfile
 	OutputDir      string              // usually <projectDir>/.overthink/k8s
@@ -544,7 +544,7 @@ func generateEnv(env []string) []map[string]any {
 // Resources.
 // -----------------------------------------------------------------------------
 
-func generateResources(d DeployImageConfig) map[string]any {
+func generateResources(d DeploymentNode) map[string]any {
 	out := map[string]any{}
 	req := map[string]any{}
 	if d.Resources != nil {
@@ -661,7 +661,7 @@ func generateVolumeClaimTemplates(opts K8sGenerateOpts) []map[string]any {
 	return out
 }
 
-func generateVolumeMounts(d DeployImageConfig) []map[string]any {
+func generateVolumeMounts(d DeploymentNode) []map[string]any {
 	var out []map[string]any
 	for _, s := range d.Storage {
 		mount := s.Path

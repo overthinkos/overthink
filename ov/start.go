@@ -155,7 +155,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	// Inject agent forwarding mounts and env (direct mode only)
-	var deployImage *DeployImageConfig
+	var deployImage *DeploymentNode
 	if dc != nil {
 		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay

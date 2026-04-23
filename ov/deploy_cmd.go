@@ -51,7 +51,7 @@ func (c *DeployShowCmd) Run() error {
 			return nil
 		}
 		// Print just this image's config
-		out := &DeployConfig{Images: map[string]DeployImageConfig{key: entry}}
+		out := &DeployConfig{Images: map[string]DeploymentNode{key: entry}}
 		return marshalToStdout(out)
 	}
 
@@ -143,7 +143,7 @@ func (c *DeployImportCmd) Run() error {
 		base = existing
 	}
 	if base == nil {
-		base = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+		base = &DeployConfig{Images: make(map[string]DeploymentNode)}
 	}
 
 	// Merge input files left-to-right
@@ -162,10 +162,10 @@ func (c *DeployImportCmd) Run() error {
 				existing.Images[c.Image] = entry
 				merged = existing
 			} else {
-				merged = &DeployConfig{Images: map[string]DeployImageConfig{c.Image: entry}}
+				merged = &DeployConfig{Images: map[string]DeploymentNode{c.Image: entry}}
 			}
 		} else {
-			merged = &DeployConfig{Images: map[string]DeployImageConfig{c.Image: entry}}
+			merged = &DeployConfig{Images: map[string]DeploymentNode{c.Image: entry}}
 		}
 	}
 
@@ -319,7 +319,7 @@ func marshalToStdout(dc *DeployConfig) error {
 }
 
 func filterDeployImages(dc *DeployConfig, names []string) *DeployConfig {
-	filtered := &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	filtered := &DeployConfig{Images: make(map[string]DeploymentNode)}
 	for _, name := range names {
 		if entry, ok := dc.Images[name]; ok {
 			filtered.Images[name] = entry

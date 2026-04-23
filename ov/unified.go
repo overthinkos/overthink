@@ -40,18 +40,23 @@ const MaxIncludeDepth = 8
 // Every field is optional — a file with only `distros:` is valid (typical for
 // a build.yml-style include); a file with only `deployments:` is valid (typical
 // for a deploy.yml-style include); etc.
+//
+// Schema version 2 consolidates the legacy vms.yml + deploy.yml split into one
+// deploy.yml file carrying both `vm:` (singular) and `deployments:` at the
+// root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
+// `ov migrate merge-vms` for the one-shot migration from v1.
 type UnifiedFile struct {
-	Version     int                      `yaml:"version,omitempty"`
-	Includes    []string                 `yaml:"includes,omitempty"`
-	Discover    *DiscoverConfig          `yaml:"discover,omitempty"`
-	Distros     map[string]*DistroDef    `yaml:"distros,omitempty"`
-	Builders    map[string]*BuilderDef   `yaml:"builders,omitempty"`
-	Inits       map[string]*InitDef      `yaml:"inits,omitempty"`
-	Defaults    ImageConfig              `yaml:"defaults,omitempty"`
-	Images      map[string]ImageConfig   `yaml:"images,omitempty"`
-	Layers      map[string]*InlineLayer  `yaml:"layers,omitempty"`
-	VMs         map[string]*VmSpec       `yaml:"vms,omitempty"`
-	Deployments *DeploymentsSection      `yaml:"deployments,omitempty"`
+	Version     int                     `yaml:"version,omitempty"`
+	Includes    []string                `yaml:"includes,omitempty"`
+	Discover    *DiscoverConfig         `yaml:"discover,omitempty"`
+	Distros     map[string]*DistroDef   `yaml:"distros,omitempty"`
+	Builders    map[string]*BuilderDef  `yaml:"builders,omitempty"`
+	Inits       map[string]*InitDef     `yaml:"inits,omitempty"`
+	Defaults    ImageConfig             `yaml:"defaults,omitempty"`
+	Images      map[string]ImageConfig  `yaml:"images,omitempty"`
+	Layers      map[string]*InlineLayer `yaml:"layers,omitempty"`
+	VM          map[string]*VmSpec      `yaml:"vm,omitempty"`
+	Deployments *DeploymentsSection     `yaml:"deployments,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -63,7 +68,7 @@ type DiscoverConfig struct {
 	Builders    []ScanSpec `yaml:"builders,omitempty"`
 	Distros     []ScanSpec `yaml:"distros,omitempty"`
 	Inits       []ScanSpec `yaml:"inits,omitempty"`
-	VMs         []ScanSpec `yaml:"vms,omitempty"`
+	VM          []ScanSpec `yaml:"vm,omitempty"`
 	Clusters    []ScanSpec `yaml:"clusters,omitempty"` // reserved for Part F
 }
 
@@ -133,9 +138,9 @@ func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
 // deployment entries. Matches the two-tier deploy model: this block is the
 // authored/in-repo defaults; ~/.config/ov/deploy.yml is the per-machine overlay.
 type DeploymentsSection struct {
-	Defaults *DeployImageConfig           `yaml:"defaults,omitempty"`
+	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
 	Provides *ProvidesConfig              `yaml:"provides,omitempty"`
-	Images   map[string]DeployImageConfig `yaml:"images,omitempty"`
+	Images   map[string]DeploymentNode `yaml:"images,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -183,10 +188,10 @@ type ImageDoc struct {
 	ImageConfig `yaml:",inline"`
 }
 
-// DeploymentDoc wraps a single DeployImageConfig.
+// DeploymentDoc wraps a single DeploymentNode.
 type DeploymentDoc struct {
 	Name              string `yaml:"name"`
-	DeployImageConfig `yaml:",inline"`
+	DeploymentNode `yaml:",inline"`
 }
 
 // BuilderDoc wraps a single BuilderDef.
@@ -235,7 +240,12 @@ var entityKinds = []entityKind{
 	{Key: "builder", Filename: "builder.yml"},
 	{Key: "distro", Filename: "distro.yml"},
 	{Key: "init", Filename: "init.yml"},
-	{Key: "vm", Filename: "vm.yml"},
+	// Note: `vm` is intentionally absent from this set in schema v2.
+	// v1 supported a standalone `vm: {name: X, spec: {...}}` kind-keyed
+	// document form, but that collides with the v2 root-level `vm:`
+	// map key that carries all VM entities inside deploy.yml. v2
+	// canonicalizes on the map form; single-VM kind-keyed documents
+	// are no longer accepted.
 }
 
 // -----------------------------------------------------------------------------
@@ -246,6 +256,11 @@ var entityKinds = []entityKind{
 // walks `discover:` roots, and returns the merged UnifiedFile plus a flag
 // indicating whether overthink.yml was present. When the file does not exist,
 // (nil, false, nil) is returned so callers can fall through to legacy loaders.
+//
+// Enforces schema version 2: any loaded overthink.yml whose `version:` is
+// absent or less than 2 is hard-rejected with a migration hint. v1 configs
+// used a separate vms.yml + plural `vms:` root key; `ov migrate merge-vms`
+// produces a v2 layout in one shot.
 func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	root := filepath.Join(dir, UnifiedFileName)
 	if !fileExists(root) {
@@ -256,7 +271,81 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := loadUnifiedInto(root, merged, visited, 0); err != nil {
 		return nil, true, err
 	}
+	if merged.Version < schemaVersion {
+		return nil, true, fmt.Errorf(
+			"%s: schema v%d is required (found v%d). Run: ov migrate merge-vms",
+			root, schemaVersion, merged.Version,
+		)
+	}
+	if err := validateDeploymentTree(merged.Deployments); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	return merged, true, nil
+}
+
+// validateDeploymentTree enforces structural invariants on the
+// deployments tree that can't be expressed in the YAML struct tags:
+//
+//   - Map keys at every level MUST NOT contain "." (dots are reserved
+//     for dotted-path CLI addressing like `ov deploy add a.b.c`).
+//   - The reserved name `arch` is no longer valid — schema
+//     v2 renamed it to `arch`. This catches stale user configs that
+//     sneaked past the merge-vms migration.
+//
+// Errors include the offending path so the user sees exactly which
+// entry needs to be fixed.
+func validateDeploymentTree(section *DeploymentsSection) error {
+	if section == nil {
+		return nil
+	}
+	for name, node := range section.Images {
+		if err := validateDeploymentName(name, ""); err != nil {
+			return err
+		}
+		if err := validateDeploymentChildren(name, &node); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateDeploymentChildren(path string, node *DeploymentNode) error {
+	if node == nil || len(node.Children) == 0 {
+		return nil
+	}
+	for childName, child := range node.Children {
+		childPath := childName
+		if path != "" {
+			childPath = path + "." + childName
+		}
+		if err := validateDeploymentName(childName, path); err != nil {
+			return err
+		}
+		if err := validateDeploymentChildren(childPath, child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateDeploymentName(name, parentPath string) error {
+	full := name
+	if parentPath != "" {
+		full = parentPath + "." + name
+	}
+	if strings.Contains(name, ".") {
+		return fmt.Errorf(
+			"deployment key %q contains '.' — the character is reserved for dotted-path addressing (ov deploy add a.b.c). Rename this entry in deploy.yml",
+			full,
+		)
+	}
+	if strings.Contains(name, legacyVmEntityName) {
+		return fmt.Errorf(
+			"deployment key %q references the legacy entity name %q which was renamed to %q in schema v2. Run: ov migrate merge-vms",
+			full, legacyVmEntityName, currentVmEntityName,
+		)
+	}
+	return nil
 }
 
 // loadUnifiedInto reads one file, merges every one of its documents into merged,
@@ -268,6 +357,15 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("resolving %s: %w", path, err)
+	}
+	// Hard-reject the legacy vms.yml layout (v1). The file-level check
+	// catches both `includes:` users and any rogue discover path. Mirror
+	// of the `vms:` key-level check in classifyDoc.
+	if filepath.Base(abs) == legacyVmFilename {
+		return fmt.Errorf(
+			"%s: vms.yml is no longer accepted. VM entities now live under the `vm:` key in deploy.yml. Run: ov migrate merge-vms",
+			abs,
+		)
 	}
 	if visited[abs] {
 		return fmt.Errorf("include cycle: %s already visited", abs)
@@ -374,10 +472,12 @@ const (
 )
 
 // rootShapeKeys are the top-level keys that mark a doc as root-shaped.
+// `vm` (singular) is the v2 key for VM entities; `vms` (plural) is the
+// legacy v1 spelling that classifyDoc rejects with a migration hint.
 var rootShapeKeys = map[string]bool{
 	"version": true, "includes": true, "discover": true, "defaults": true,
 	"distros": true, "builders": true, "inits": true,
-	"images": true, "layers": true, "vms": true, "deployments": true,
+	"images": true, "layers": true, "vm": true, "deployments": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.
@@ -416,6 +516,7 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 
 	hasRoot, hasKind := false, false
 	var keys []string
+	hasLegacyVmsKey := false
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
@@ -425,6 +526,17 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		if kindKeysSet[k] {
 			hasKind = true
 		}
+		if k == legacyVmRootKey {
+			hasLegacyVmsKey = true
+		}
+	}
+	// Legacy `vms:` root key (v1 schema) — hard-rejected before the
+	// generic ambiguity / unrecognized-keys branches so the user gets
+	// a pointer straight at the migration command.
+	if hasLegacyVmsKey {
+		return 0, fmt.Errorf(
+			"the `vms:` root key was renamed to `vm:` (singular) in schema v2. Run: ov migrate merge-vms",
+		)
 	}
 	switch {
 	case hasRoot && hasKind:
@@ -465,7 +577,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 		dst.Discover.Builders = append(dst.Discover.Builders, src.Discover.Builders...)
 		dst.Discover.Distros = append(dst.Discover.Distros, src.Discover.Distros...)
 		dst.Discover.Inits = append(dst.Discover.Inits, src.Discover.Inits...)
-		dst.Discover.VMs = append(dst.Discover.VMs, src.Discover.VMs...)
+		dst.Discover.VM = append(dst.Discover.VM, src.Discover.VM...)
 		dst.Discover.Clusters = append(dst.Discover.Clusters, src.Discover.Clusters...)
 	}
 	mergeDistroMap(&dst.Distros, src.Distros)
@@ -473,7 +585,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeInitMap(&dst.Inits, src.Inits)
 	mergeImageMap(&dst.Images, src.Images)
 	mergeLayerMap(&dst.Layers, src.Layers)
-	mergeVmMap(&dst.VMs, src.VMs)
+	mergeVmMap(&dst.VM, src.VM)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -580,7 +692,7 @@ func mergeDeployments(dst **DeploymentsSection, src *DeploymentsSection) {
 	}
 	if len(src.Images) > 0 {
 		if d.Images == nil {
-			d.Images = make(map[string]DeployImageConfig)
+			d.Images = make(map[string]DeploymentNode)
 		}
 		for k, v := range src.Images {
 			if _, exists := d.Images[k]; !exists {
@@ -702,10 +814,10 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 			merged.Deployments = &DeploymentsSection{}
 		}
 		if merged.Deployments.Images == nil {
-			merged.Deployments.Images = map[string]DeployImageConfig{}
+			merged.Deployments.Images = map[string]DeploymentNode{}
 		}
 		if _, exists := merged.Deployments.Images[kd.Deployment.Name]; !exists {
-			merged.Deployments.Images[kd.Deployment.Name] = kd.Deployment.DeployImageConfig
+			merged.Deployments.Images[kd.Deployment.Name] = kd.Deployment.DeploymentNode
 		}
 	case kd.Builder != nil:
 		if kd.Builder.Name == "" {
@@ -744,12 +856,12 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if kd.VM.Name == "" {
 			return fmt.Errorf("vm: missing name")
 		}
-		if merged.VMs == nil {
-			merged.VMs = map[string]*VmSpec{}
+		if merged.VM == nil {
+			merged.VM = map[string]*VmSpec{}
 		}
-		if _, exists := merged.VMs[kd.VM.Name]; !exists {
+		if _, exists := merged.VM[kd.VM.Name]; !exists {
 			spec := kd.VM.Spec
-			merged.VMs[kd.VM.Name] = &spec
+			merged.VM[kd.VM.Name] = &spec
 		}
 	}
 	_ = srcDir

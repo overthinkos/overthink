@@ -24,7 +24,7 @@ package main
 // Classified is the small contract a config struct implements so the
 // ov CLI can ask "are you disposable?" / "what lifecycle tag do you
 // carry?" without caring whether the underlying struct is VmSpec
-// (vms.yml), DeployImageConfig (deploy.yml), or a per-instance
+// (vms.yml), DeploymentNode (deploy.yml), or a per-instance
 // override.
 //
 // Both fields are plain values — no pointers, no derivation. Default

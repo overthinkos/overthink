@@ -9,7 +9,7 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// K8sDeployConfig — the `kubernetes:` sub-block on DeployImageConfig. Part F.
+// K8sDeployConfig — the `kubernetes:` sub-block on DeploymentNode. Part F.
 //
 // Deliberately thin: only fields that can't be expressed generically live
 // here. Cluster-wide concerns (storage class names, ingress class, cert

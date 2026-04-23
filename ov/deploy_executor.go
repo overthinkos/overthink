@@ -6,14 +6,31 @@ import (
 
 // DeployExecutor abstracts shell execution + file placement for deploy
 // targets. HostDeployTarget uses LocalDeployExecutor (spawns bash directly);
-// VmDeployTarget uses SSHDeployExecutor (wraps scripts as `ssh vm sudo
-// bash -s`, uses scp for file transfers).
+// VmDeployTarget uses SSHExecutor (wraps scripts as `ssh vm sudo bash -s`,
+// uses scp for file transfers). Nested topologies (container-in-vm,
+// vm-in-container, host-in-vm-in-container, etc.) use NestedExecutor,
+// which composes a parent DeployExecutor with a "shell jump" (podman
+// exec / ssh / virsh) prepended to every primitive.
 //
-// The interface is intentionally narrow: just the four operations
-// HostDeployTarget currently performs on the host. Any future
-// transport (e.g. nspawn container, remote Kubernetes pod) implements
-// the same four methods.
+// The interface is narrow but carries one identity method — Venue() —
+// that answers the question "where does bash actually run when I call
+// RunSystem?". Ledger files live on that venue's filesystem, so the
+// venue string is how install_ledger.go picks the right install
+// database without a global constant.
 type DeployExecutor interface {
+	// Venue returns a stable identifier for where this executor's
+	// commands physically run. Examples:
+	//
+	//   "local"                            — LocalDeployExecutor.
+	//   "ssh://arch@127.0.0.1:2224"        — SSHExecutor.
+	//   "nested:podman exec stack/local"   — NestedExecutor over local.
+	//   "nested:ssh vm/local"              — NestedExecutor over SSH.
+	//
+	// The string is used as a map key for per-venue ledgers, so it
+	// must be stable across invocations for the same logical target.
+	// Not a URL — don't parse it; just compare.
+	Venue() string
+
 	// RunSystem executes a bash script with root privileges. On the
 	// host, this is `sudo bash -s <<<script`; on the VM target, it's
 	// `ssh <user>@<host> sudo bash -s <<<script`. The script body runs
@@ -44,6 +61,15 @@ type DeployExecutor interface {
 // + filesystem. Faithful behavior-preserving wrapper around the
 // existing runSudoShell / runUserShell / BuilderRun helpers.
 type LocalDeployExecutor struct{}
+
+// VenueLocal is the stable Venue() identifier for the local host.
+// Exported so install_ledger.go and tests can reference it without
+// hard-coding the literal.
+const VenueLocal = "local"
+
+// Venue returns the fixed "local" identifier — commands always run on
+// the invoking user's host.
+func (LocalDeployExecutor) Venue() string { return VenueLocal }
 
 // RunSystem delegates to the package-level runSudoShell.
 func (LocalDeployExecutor) RunSystem(_ context.Context, script string, opts EmitOpts) error {

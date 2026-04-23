@@ -5,26 +5,24 @@ deployments:
                 - 18790:18789
                 - 5901:5900
                 - 9223:9222
-
         # --- VM deploy: upstream Arch Linux cloud image ---
         #
-        # Pairs with the kind:vm entity in vms.yml (vm_source: arch-cloud-base).
+        # Pairs with the kind:vm entity in vms.yml (vm_source: arch).
         # Deploy name prefixed with `vm:` routes dispatch to VmDeployTarget,
         # which SSH's into the guest via the key in
-        # ~/.local/share/ov/vm/ov-arch-cloud-base/id_ed25519 and applies
+        # ~/.local/share/ov/vm/ov-arch/id_ed25519 and applies
         # layers inside the VM via the same InstallPlan IR HostDeployTarget
         # uses (ledger at guest's ~/.config/overthink/installed/).
         #
         # Lifecycle:
-        #   ov vm build arch-cloud-base        # fetch qcow2 + seed ISO
-        #   ov vm create arch-cloud-base       # define libvirt domain + start
-        #   ov deploy add vm:arch-cloud-base   # apply layers inside guest
-        #   ov deploy del vm:arch-cloud-base   # reverse layers in guest
-        #   ov vm destroy arch-cloud-base --disk  # tear down VM + qcow2
-        "vm:arch-cloud-base":
+        #   ov vm build arch        # fetch qcow2 + seed ISO
+        #   ov vm create arch       # define libvirt domain + start
+        #   ov deploy add vm:arch   # apply layers inside guest
+        #   ov deploy del vm:arch   # reverse layers in guest
+        #   ov vm destroy arch --disk  # tear down VM + qcow2
+        "vm:arch":
             target: vm
-            vm_source: arch-cloud-base
-
+            vm_source: arch
             # --- Layers applied inside the VM via `ov deploy host` on the
             # guest (VmDeployTarget routes each InstallStep to the right
             # DeployExecutor method wrapped around SSH) ---
@@ -32,96 +30,233 @@ deployments:
                 - ripgrep
                 - uv
                 - pre-commit
-
             # --- Host-target install knobs honored by the in-guest apply ---
             install_opts:
                 with_services: true
-                allow_repo_changes: true       # Arch pacman-key + repo tweaks need this
-                skip_incompatible: true        # skip rpm:/deb:-only layer sections on Arch
-                verify: true                    # re-run layer tests: post-install
-
+                allow_repo_changes: true # Arch pacman-key + repo tweaks need this
+                skip_incompatible: true # skip rpm:/deb:-only layer sections on Arch
+                verify: true # re-run layer tests: post-install
             # --- Guest environment overlay ---
             env:
                 - OVERTHINK_DEV=true
-
             # --- Deploy-level probes: VmDeployTarget runs these via SSH for
             # `command:` verbs; host-side for `libvirt:` and `spice:` verbs.
             # Organised by subsystem so a red square in the output points
             # straight at the broken layer of the stack. ---
             tests:
                 # --- C.1  SSH connectivity & guest identity ---------------------
-                - {id: guest-identity-uid,      scope: deploy, command: id,                  stdout: {contains: "uid=1000(arch)"}}
-                - {id: guest-identity-wheel,    scope: deploy, command: id,                  stdout: {contains: wheel}}
+                - {id: guest-identity-uid, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
+                - {id: guest-identity-wheel, scope: deploy, command: id, stdout: {contains: wheel}}
                 - {id: guest-hostname-nonempty, scope: deploy, command: "cat /etc/hostname", stdout: {matches: ".+"}}
-                - {id: guest-os-release-arch,  scope: deploy, command: cat /etc/os-release, stdout: {contains: "ID=arch"}}
-                - {id: guest-sudo-nopasswd,     scope: deploy, command: sudo -n whoami,      stdout: {equals: root}}
-                - {id: guest-kernel-release,    scope: deploy, command: uname -r,            stdout: {matches: "[0-9]+\\.[0-9]+"}}
-
+                - {id: guest-os-release-arch, scope: deploy, command: cat /etc/os-release, stdout: {contains: "ID=arch"}}
+                - {id: guest-sudo-nopasswd, scope: deploy, command: sudo -n whoami, stdout: {equals: root}}
+                - {id: guest-kernel-release, scope: deploy, command: uname -r, stdout: {matches: "[0-9]+\\.[0-9]+"}}
                 # --- C.2  Cloud-init completion --------------------------------
-                - {id: cloud-init-status-done,  scope: deploy, command: "cloud-init status --wait --long", stdout: {contains: "status: done"}}
+                - {id: cloud-init-status-done, scope: deploy, command: "cloud-init status --wait --long", stdout: {contains: "status: done"}}
                 - {id: cloud-init-instance-dir, scope: deploy, command: "test -d /var/lib/cloud/instance"}
-                - {id: cloud-init-no-errors,    scope: deploy, command: "cat /var/lib/cloud/data/result.json", stdout: {contains: "\"errors\": []"}}
-
+                - {id: cloud-init-no-errors, scope: deploy, command: "cat /var/lib/cloud/data/result.json", stdout: {contains: "\"errors\": []"}}
                 # --- C.3  spice-vdagent service (in-guest) ---------------------
-                - {id: spice-vdagentd-active,   scope: deploy, command: "systemctl is-active spice-vdagentd",  stdout: {equals: active}}
+                - {id: spice-vdagentd-active, scope: deploy, command: "systemctl is-active spice-vdagentd", stdout: {equals: active}}
                 # "static" means enabled-by-default unit file (no [Install] section); equivalent to enabled for our purpose.
-                - {id: spice-vdagentd-enabled,  scope: deploy, command: "systemctl is-enabled spice-vdagentd", stdout: {matches: "^(enabled|static)"}}
-                - {id: spice-vdagent-process,   scope: deploy, command: "pgrep -x spice-vdagent || pgrep -f spice-vdagent"}
-
+                - {id: spice-vdagentd-enabled, scope: deploy, command: "systemctl is-enabled spice-vdagentd", stdout: {matches: "^(enabled|static)"}}
+                - {id: spice-vdagent-process, scope: deploy, command: "pgrep -x spice-vdagent || pgrep -f spice-vdagent"}
                 # --- C.4  virtio-gpu driver / DRI node -------------------------
-                - {id: virtio-gpu-module,       scope: deploy, command: "lsmod | grep -q virtio_gpu"}
-                - {id: dri-card0-present,       scope: deploy, command: "test -e /dev/dri/card0"}
-                - {id: virtio-pci-display,      scope: deploy, command: "lspci | grep -Ei 'virtio.*(gpu|display|vga)'"}
-
+                - {id: virtio-gpu-module, scope: deploy, command: "lsmod | grep -q virtio_gpu"}
+                - {id: dri-card0-present, scope: deploy, command: "test -e /dev/dri/card0"}
+                - {id: virtio-pci-display, scope: deploy, command: "lspci | grep -Ei 'virtio.*(gpu|display|vga)'"}
                 # --- C.5  SPICE channel (host-side, via spice: verb) -----------
-                - {id: spice-status-main,       scope: deploy, spice: status,     stdout: {contains: display}}
+                - {id: spice-status-main, scope: deploy, spice: status, stdout: {contains: display}}
                 - id: spice-framebuffer-nonzero
                   scope: deploy
                   spice: screenshot
-                  artifact: /tmp/arch-cloud-base-spice.png
+                  artifact: /tmp/arch-spice.png
                   artifact_min_bytes: 1024
-
                 # --- C.6  libvirt domain (host-side, via libvirt: verb) --------
                 # Note: libvirt: list takes no VM arg; covered by libvirt: info.
                 # qemu-guest-agent is wired up via vms.yml's libvirt.snippets
                 # (channel type='unix' → target virtio 'org.qemu.guest_agent.0')
                 # plus cloud-init packages: [qemu-guest-agent] + service enable.
-                - {id: libvirt-domain-running,   scope: deploy, libvirt: info, stdout: {contains: running}}
-                - {id: libvirt-domain-xml-q35,   scope: deploy, libvirt: "domain-xml", stdout: {contains: q35}}
+                - {id: libvirt-domain-running, scope: deploy, libvirt: info, stdout: {contains: running}}
+                - {id: libvirt-domain-xml-q35, scope: deploy, libvirt: "domain-xml", stdout: {contains: q35}}
                 - {id: libvirt-domain-xml-virtio, scope: deploy, libvirt: "domain-xml", stdout: {contains: "type='virtio'"}}
                 - {id: libvirt-qmp-query-status, scope: deploy, libvirt: qmp, text: query-status, stdout: {contains: running}}
                 # guest/ping writes its "agent responsive" to stderr (libvirt RPC convention).
-                - {id: libvirt-guest-agent-ping, scope: deploy, libvirt: "guest/ping",     stderr: {contains: responsive}}
-                - {id: libvirt-guest-hostname,   scope: deploy, libvirt: "guest/hostname", stdout: {matches: ".+"}}
-                - {id: libvirt-guest-os-info,    scope: deploy, libvirt: "guest/os-info",  stdout: {contains: arch}}
+                - {id: libvirt-guest-agent-ping, scope: deploy, libvirt: "guest/ping", stderr: {contains: responsive}}
+                - {id: libvirt-guest-hostname, scope: deploy, libvirt: "guest/hostname", stdout: {matches: ".+"}}
+                - {id: libvirt-guest-os-info, scope: deploy, libvirt: "guest/os-info", stdout: {contains: arch}}
                 - {id: libvirt-guest-interfaces, scope: deploy, libvirt: "guest/interfaces", stdout: {contains: lo}}
-
                 # --- C.7  pacman-key + repo health -----------------------------
-                - {id: pacman-key-populated,    scope: deploy, command: "pacman-key --list-keys archlinux 2>&1 | grep -q pub"}
-                - {id: pacman-repos-reachable,  scope: deploy, command: "sudo pacman -Sy --noconfirm"}
-
+                - {id: pacman-key-populated, scope: deploy, command: "pacman-key --list-keys archlinux 2>&1 | grep -q pub"}
+                - {id: pacman-repos-reachable, scope: deploy, command: "sudo pacman -Sy --noconfirm"}
                 # --- C.8  ed25519 SSH key injection ----------------------------
-                - {id: ssh-authorized-keys,     scope: deploy, command: "test -f /home/arch/.ssh/authorized_keys"}
-                - {id: ssh-ed25519-key-count,   scope: deploy, command: "grep -c ssh-ed25519 /home/arch/.ssh/authorized_keys", stdout: {matches: "[1-9]"}}
-
+                - {id: ssh-authorized-keys, scope: deploy, command: "test -f /home/arch/.ssh/authorized_keys"}
+                - {id: ssh-ed25519-key-count, scope: deploy, command: "grep -c ssh-ed25519 /home/arch/.ssh/authorized_keys", stdout: {matches: "[1-9]"}}
                 # --- C.9  Resource sizing (vm_spec: 4 cpus, 8 GiB, 40 GiB) -----
                 # $-anchors dropped per /ov:test Gotcha #6 — command stdout carries a trailing newline.
-                - {id: cpu-count-4,             scope: deploy, command: nproc,                 stdout: {matches: "^4"}}
-                - {id: mem-8g-ballpark,         scope: deploy, command: "awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo", stdout: {matches: "^[78]"}}
+                - {id: cpu-count-4, scope: deploy, command: nproc, stdout: {matches: "^4"}}
+                - {id: mem-8g-ballpark, scope: deploy, command: "awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo", stdout: {matches: "^[78]"}}
                 # Arch cloud image ships at 2 GiB; growpart expands to ~40 GiB on first boot.
                 # Accept any size ≥ 10 to tolerate fresh-create windows before growpart finishes.
-                - {id: disk-ballpark,           scope: deploy, command: "df -BG / | awk 'NR==2 {gsub(\"G\",\"\",$2); print int($2)}'", stdout: {matches: "^([1-9][0-9]|[1-9][0-9][0-9])"}}
-
+                - {id: disk-ballpark, scope: deploy, command: "df -BG / | awk 'NR==2 {gsub(\"G\",\"\",$2); print int($2)}'", stdout: {matches: "^([1-9][0-9]|[1-9][0-9][0-9])"}}
                 # --- C.10 Layer-applied tooling (ripgrep / uv / pre-commit) ----
                 # Plus ov itself — installed at cloud-init time via the
                 # Arch PKGBUILD + pacman -U path authored in vms.yml.
-                - {id: ov-binary-present,       scope: deploy, command: "command -v ov"}
-                - {id: ov-version,              scope: deploy, command: "ov version",           stdout: {matches: "[0-9]{4}\\.[0-9]+"}}
-                - {id: ripgrep-version,         scope: deploy, command: "rg --version",         stdout: {contains: ripgrep}}
-                - {id: uv-version,              scope: deploy, command: "uv --version",         stdout: {contains: "uv "}}
-                - {id: pre-commit-version,      scope: deploy, command: "pre-commit --version", stdout: {contains: pre-commit}}
-                - {id: tooling-on-path,         scope: deploy, command: "command -v rg uv pre-commit"}
-
+                - {id: ov-binary-present, scope: deploy, command: "command -v ov"}
+                - {id: ov-version, scope: deploy, command: "ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}}
+                - {id: ripgrep-version, scope: deploy, command: "rg --version", stdout: {contains: ripgrep}}
+                - {id: uv-version, scope: deploy, command: "uv --version", stdout: {contains: "uv "}}
+                - {id: pre-commit-version, scope: deploy, command: "pre-commit --version", stdout: {contains: pre-commit}}
+                - {id: tooling-on-path, scope: deploy, command: "command -v rg uv pre-commit"}
                 # --- C.11 Network / DNS ---------------------------------------
-                - {id: dns-archlinux-org,       scope: deploy, command: "getent hosts archlinux.org"}
-                - {id: https-archlinux-org,     scope: deploy, command: "curl -sfo /dev/null -w '%{http_code}' https://archlinux.org/", stdout: {matches: "^(20[0-9]|30[0-9])"}}
+                - {id: dns-archlinux-org, scope: deploy, command: "getent hosts archlinux.org"}
+                - {id: https-archlinux-org, scope: deploy, command: "curl -sfo /dev/null -w '%{http_code}' https://archlinux.org/", stdout: {matches: "^(20[0-9]|30[0-9])"}}
+vm:
+    arch:
+        source:
+            kind: cloud_image
+            url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+            checksum:
+                type: sha256
+            base_user: arch
+        # Classification (see /ov-dev:disposable):
+        #   disposable=true is LOAD-BEARING — authorizes `ov rebuild
+        #   arch` to run unattended. This VM exists for
+        #   verification and rebuild-at-will.
+        #   lifecycle=dev is a human-facing tier tag — INFORMATIONAL
+        #   ONLY. It has zero effect on disposability.
+        disposable: true
+        lifecycle: dev
+        disk_size: 40G
+        ram: 8G
+        cpus: 4
+        machine: q35
+        firmware: bios
+        network:
+            mode: user
+        ssh:
+            port: 2224
+            key_source: generate
+        cloud_init:
+            timezone: UTC
+            packages:
+                - sudo
+                - spice-vdagent
+                - qemu-guest-agent # qemu-ga speaks on the virtio-serial channel below
+                # ov-git build-time deps installed by cloud-init's packages:
+                # stage (which handles the pacman-init.service race for us).
+                # The runcmd below assumes these are already on disk.
+                - git
+                - go
+                - base-devel
+            runcmd:
+                - systemctl enable --now spice-vdagentd
+                - systemctl enable --now qemu-guest-agent
+                # --- Auto-install ov from the GitHub source tree via the
+                # Arch PKGBUILD (overthinkos/overthink-arch submodule under
+                # pkg/arch/). One atomic bash -lc with set -euo pipefail so
+                # any failure aborts the install cleanly and leaves a clear
+                # marker in /var/log/cloud-init-output.log.
+                #
+                # --recurse-submodules is required because pkg/arch/ is a
+                # git submodule; a plain --depth 1 leaves the submodule
+                # empty and makepkg fails with "PKGBUILD does not exist".
+                #
+                # rm -rf on ov-src guards against re-runs over a dirty disk
+                # where the previous cloud-init attempt left a partial
+                # checkout behind (git clone refuses to clobber).
+                - |
+                  bash -lc '
+                  set -euxo pipefail
+                  rm -rf /home/arch/ov-src
+                  sudo -u arch -H git clone --depth 1 --recurse-submodules --shallow-submodules \
+                      https://github.com/overthinkos/overthink.git /home/arch/ov-src
+                  sudo -u arch -H bash -lc "cd /home/arch/ov-src/pkg/arch && makepkg -s --noconfirm --needed"
+                  cd /home/arch/ov-src/pkg/arch && pacman -U --noconfirm ov-git-*-x86_64.pkg.tar.zst
+                  '
+            ov_install:
+                # strategy: skip — the runcmd above handles the install.
+                # "skip" tells VmDeployTarget not to scp the host binary
+                # post-boot (the default "auto" behavior) and not to add
+                # any URL-download runcmd.
+                strategy: skip
+        libvirt:
+            devices:
+                channels:
+                    - type: spicevmc
+                      name: com.redhat.spice.0
+                graphics:
+                    # SPICE on a UNIX socket.
+                    #
+                    # QEMU allows only ONE <listen> per <graphics>
+                    # element (libvirt returns "QEMU does not support
+                    # multiple listens" otherwise), so we pick socket:
+                    # no TCP port, no network exposure, same config
+                    # whether the host is local or remote.
+                    #
+                    # Remote GUI access works out of the box via:
+                    #
+                    #   virt-manager --connect qemu+ssh://host/session
+                    #   virt-viewer  --connect qemu+ssh://host/session --attach <vm>
+                    #   remote-viewer spice+unix:///...  (after ov ssh tunnel)
+                    #
+                    # virt-manager/virt-viewer auto-tunnel by spawning
+                    # `ssh host nc -U <socket>` on the libvirt host —
+                    # this requires `nc` (openbsd-netcat / netcat-
+                    # openbsd / nmap-ncat) to be installed there.
+                    # ov's setup.sh + pkg/arch/PKGBUILD install it
+                    # automatically. If you see virt-manager hang at
+                    # "Connecting to graphical console for guest",
+                    # check that `ssh <host> which nc` returns a
+                    # path — that's almost always the cause.
+                    - type: spice
+                      listen:
+                        - type: socket
+                video:
+                    - model: virtio
+                      vram: 65536
+                      heads: 1
+                      accel3d: false
+                rng:
+                    - model: virtio
+                      backend: /dev/urandom
+                memballoon:
+                    model: virtio
+            # qemu-guest-agent virtio-serial channel. The structured channels:
+            # entry above handles spicevmc; the unix/virtio form needed for
+            # org.qemu.guest_agent.0 is injected via a raw snippet so libvirt
+            # auto-allocates the host-side socket path (`<channel type='unix'>`
+            # with an empty source lets virtqemud pick the path — matches the
+            # behavior of layers/qemu-guest-agent/layer.yml for container VMs).
+            snippets:
+                - "<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"
+    aurora-bootc:
+        source:
+            kind: bootc
+            image: aurora
+        disk_size: 80 GiB
+        ram: 12G
+        cpus: 4
+    bazzite-ai-bootc:
+        source:
+            kind: bootc
+            image: bazzite-ai
+    openclaw-browser-bootc-bootc:
+        source:
+            kind: bootc
+            image: openclaw-browser-bootc
+        disk_size: 20 GiB
+        ram: 4G
+        cpus: 2
+        ssh:
+            user: root
+            port: 2222
+    selkies-desktop-bootc-bootc:
+        source:
+            kind: bootc
+            image: selkies-desktop-bootc
+        disk_size: 40 GiB
+        ram: 8G
+        cpus: 4
+        ssh:
+            user: root
+            port: 2250

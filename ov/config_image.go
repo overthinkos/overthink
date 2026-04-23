@@ -618,7 +618,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			// Update deploy.yml with seeded state
 			if seeded > 0 {
 				if dc == nil {
-					dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+					dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
 				}
 				imgDeploy := dc.Images[deployKey(c.Image, c.Instance)]
 				for i := range imgDeploy.Volumes {
@@ -835,10 +835,10 @@ func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 		return nil
 	}
 	if *dc == nil {
-		*dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+		*dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
 	}
 	if (*dc).Images == nil {
-		(*dc).Images = make(map[string]DeployImageConfig)
+		(*dc).Images = make(map[string]DeploymentNode)
 	}
 	key := deployKey(c.Image, c.Instance)
 	entry := (*dc).Images[key]
@@ -903,7 +903,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -964,7 +964,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}

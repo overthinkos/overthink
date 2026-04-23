@@ -20,12 +20,12 @@ import (
 //
 // See the approved plan D7.
 type VmDeployTarget struct {
-	// Name is the deploy name (e.g. "vm:arch-cloud-base" — retains the
+	// Name is the deploy name (e.g. "vm:arch" — retains the
 	// `vm:` prefix for ledger keying so two VMs with the same image
 	// name don't collide).
 	Name string
 
-	// VMName is the underlying kind:vm entity name (e.g. "arch-cloud-base").
+	// VMName is the underlying kind:vm entity name (e.g. "arch").
 	VMName string
 
 	// Spec is the resolved kind:vm entity.

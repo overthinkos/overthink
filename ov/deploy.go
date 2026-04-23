@@ -14,11 +14,37 @@ import (
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
 type DeployConfig struct {
 	Provides *ProvidesConfig              `yaml:"provides,omitempty"`
-	Images   map[string]DeployImageConfig `yaml:"images"`
+	Images   map[string]DeploymentNode `yaml:"images"`
 }
 
-// DeployImageConfig holds deployment-specific overrides for a single image.
-type DeployImageConfig struct {
+// DeploymentNode is one node in the deployments tree declared in
+// deploy.yml. Every deployment is a node; each node may carry zero or
+// more `children:` that run inside its environment. The node's Target
+// discriminator picks the DeployTarget that owns execution:
+//
+//   - "host"        — local filesystem (HostDeployTarget + LocalDeployExecutor).
+//   - "vm"          — a libvirt/QEMU VM referenced by VmSource (VmDeployTarget
+//                     over SSHDeployExecutor).
+//   - "container"   — a podman/docker container (ContainerDeployTarget;
+//                     the default when Target is empty).
+//   - "kubernetes"  — a Kustomize manifest tree (K8sDeployTarget; leaf-only,
+//                     not nestable).
+//
+// Nested topologies compose at the executor layer: a child's DeployExecutor
+// wraps its parent's executor with a "shell jump" (podman exec, virsh
+// console, or an additional ssh hop). That means "container-in-vm" doesn't
+// need a new target implementation — it's ContainerDeployTarget whose
+// executor happens to be NestedExecutor{Parent: SSHDeployExecutor{…}}.
+//
+// Addressing is dotted path: `ov deploy add stack.web.db` walks the tree
+// stack → web → db and applies that leaf plus all of its descendants in
+// pre-order. Map keys MUST NOT contain `.` — the load-time validator in
+// unified.go rejects them with a remediation hint.
+//
+// Disposability is per-node and does NOT cascade. A parent with
+// disposable: true does not authorize destroying its children unattended —
+// each child's flag stands on its own (see /ov-dev:disposable).
+type DeploymentNode struct {
 	Version    string               `yaml:"version,omitempty"`
 	Status     string               `yaml:"status,omitempty"`
 	Info       string               `yaml:"info,omitempty"`
@@ -133,17 +159,149 @@ type DeployImageConfig struct {
 	// ZERO effect on disposability. Consumed by `ov status
 	// --lifecycle <tier>` filters and display columns.
 	Lifecycle string `yaml:"lifecycle,omitempty"`
+
+	// --- Recursive tree: child deployments (schema v2) ---
+	//
+	// Children are DeploymentNodes whose execution venue is nested
+	// inside this node's environment. A container node with a vm child
+	// creates the container first, then boots the VM inside it; the
+	// child's DeployExecutor composes this node's executor with a
+	// shell jump (podman exec / ssh / virsh) so commands execute
+	// inside the nested environment.
+	//
+	// Map keys MUST NOT contain `.` — dotted-path CLI addressing
+	// treats `.` as a node separator (foo.bar.baz). LoadUnified
+	// rejects offending keys at parse time with a remediation hint.
+	Children map[string]*DeploymentNode `yaml:"children,omitempty"`
 }
 
 // IsDisposable returns the literal Disposable field. Implements the
 // Classified interface.
-func (c DeployImageConfig) IsDisposable() bool {
+func (c DeploymentNode) IsDisposable() bool {
 	return IsDisposableFields(c.Disposable, c.Lifecycle)
+}
+
+// HasChildren reports whether this node has any nested deployments.
+// Cheap predicate used by the tree walker to decide pre-order vs
+// leaf-only dispatch.
+func (n *DeploymentNode) HasChildren() bool {
+	return n != nil && len(n.Children) > 0
+}
+
+// WalkPreOrder invokes fn on this node, then recurses into every
+// child in sorted key order. Pre-order is the add-order semantic: a
+// parent's environment must exist before its children can run inside
+// it, so the caller applies deploys root-first.
+//
+// fn receives the full dotted path to each node (e.g. "stack.web.db").
+// The root path argument is prepended; callers pass the node's own
+// key as `path`.
+//
+// When fn returns a non-nil error, traversal stops immediately and
+// the error propagates.
+func (n *DeploymentNode) WalkPreOrder(path string, fn func(path string, node *DeploymentNode) error) error {
+	if n == nil {
+		return nil
+	}
+	if err := fn(path, n); err != nil {
+		return err
+	}
+	for _, k := range sortedChildKeys(n.Children) {
+		childPath := k
+		if path != "" {
+			childPath = path + "." + k
+		}
+		if err := n.Children[k].WalkPreOrder(childPath, fn); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// WalkPostOrder invokes fn on every child (recursively, post-order)
+// before invoking fn on this node. Post-order is the delete-order
+// semantic: a child must be torn down while its parent environment
+// is still alive, so the caller reverses leaves first.
+func (n *DeploymentNode) WalkPostOrder(path string, fn func(path string, node *DeploymentNode) error) error {
+	if n == nil {
+		return nil
+	}
+	for _, k := range sortedChildKeys(n.Children) {
+		childPath := k
+		if path != "" {
+			childPath = path + "." + k
+		}
+		if err := n.Children[k].WalkPostOrder(childPath, fn); err != nil {
+			return err
+		}
+	}
+	return fn(path, n)
+}
+
+// ResolveNodePath walks roots[path0].Children[path1]...[pathN] and
+// returns the targeted node plus its parent chain (root-first,
+// excluding the target itself). Returns a descriptive error when any
+// path segment is missing so the user sees which segment doesn't
+// exist.
+//
+// An empty path is invalid — callers dispatch to
+// WalkPreOrder/WalkPostOrder against a named root instead of
+// resolving "".
+func ResolveNodePath(roots map[string]DeploymentNode, path string) (*DeploymentNode, []*DeploymentNode, error) {
+	parts := splitDottedPath(path)
+	if len(parts) == 0 {
+		return nil, nil, fmt.Errorf("empty or malformed deployment path %q", path)
+	}
+	rootName := parts[0]
+	rootEntry, ok := roots[rootName]
+	if !ok {
+		return nil, nil, fmt.Errorf("no deployment named %q", rootName)
+	}
+	current := &rootEntry
+	var ancestors []*DeploymentNode
+	for i := 1; i < len(parts); i++ {
+		ancestors = append(ancestors, current)
+		next, ok := current.Children[parts[i]]
+		if !ok {
+			prefix := strings.Join(parts[:i], ".")
+			return nil, nil, fmt.Errorf("no child %q under %q", parts[i], prefix)
+		}
+		current = next
+	}
+	return current, ancestors, nil
+}
+
+// splitDottedPath splits a dotted deployment path into segments. An
+// empty input or a path with any empty segment (leading/trailing/
+// doubled dots) yields nil so callers can flag the error at their
+// layer with the original offending path string.
+func splitDottedPath(path string) []string {
+	if path == "" {
+		return nil
+	}
+	out := strings.Split(path, ".")
+	for _, p := range out {
+		if p == "" {
+			return nil
+		}
+	}
+	return out
+}
+
+// sortedChildKeys returns the keys of a children map in deterministic
+// order so traversal produces stable output across runs.
+func sortedChildKeys(children map[string]*DeploymentNode) []string {
+	out := make([]string, 0, len(children))
+	for k := range children {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // LifecycleTag returns the literal Lifecycle field. Implements the
 // Classified interface.
-func (c DeployImageConfig) LifecycleTag() string {
+func (c DeploymentNode) LifecycleTag() string {
 	return c.Lifecycle
 }
 
@@ -677,7 +835,7 @@ func SaveDeployConfig(dc *DeployConfig) error {
 // MergeDeployConfigs merges multiple DeployConfigs left-to-right.
 // Later configs take precedence (field-level replace per image).
 func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
-	result := &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	result := &DeployConfig{Images: make(map[string]DeploymentNode)}
 	for _, dc := range configs {
 		if dc == nil || dc.Images == nil {
 			continue
@@ -911,7 +1069,7 @@ type SaveDeployStateInput struct {
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeployImageConfig)}
+		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
 	}
 	key := deployKey(imageName, instance)
 	entry := dc.Images[key] // preserve existing fields (tunnel, volumes, etc.)
@@ -1022,12 +1180,12 @@ func mergeEnvVars(existing, newVars []string) []string {
 
 // ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.
 func ExportAllImages(cfg *Config) *DeployConfig {
-	dc := &DeployConfig{Images: make(map[string]DeployImageConfig)}
+	dc := &DeployConfig{Images: make(map[string]DeploymentNode)}
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
-		entry := DeployImageConfig{
+		entry := DeploymentNode{
 			Version:   img.Version,
 			Status:    img.Status,
 			Info:      img.Info,

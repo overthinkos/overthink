@@ -4,7 +4,7 @@ package main
 // to libvirtxml.Domain and marshals to XML with the expected
 // fragments. Covers:
 //   - Top-level domain skeleton (name, memory, vcpu, on_*)
-//   - arch-cloud-base's actual libvirt stanza (spice graphics,
+//   - arch's actual libvirt stanza (spice graphics,
 //     spicevmc channel, virtio video+rng+memballoon)
 //   - Each Rule 5 divergence (video.accel3d scalar, graphics.listen
 //     scalar, memballoon.model scalar, rng.backend scalar).
@@ -57,7 +57,7 @@ func TestRenderDomainXML_Skeleton(t *testing.T) {
 }
 
 func TestRenderDomainXML_ArchCloudBase(t *testing.T) {
-	// Mirror the vms.yml arch-cloud-base `libvirt:` stanza (post hard
+	// Mirror the vms.yml arch `libvirt:` stanza (post hard
 	// cutover to socket-only SPICE — see libvirt_yaml_listen.go).
 	yamlStr := `
 devices:
@@ -88,7 +88,7 @@ devices:
 		Libvirt:  &lv,
 	}
 	rt := VmRuntimeParams{
-		Name:     "ov-arch-cloud-base",
+		Name:     "ov-arch",
 		RamMB:    8192,
 		Cpus:     4,
 		HostArch: "x86_64",

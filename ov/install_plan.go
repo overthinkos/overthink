@@ -814,16 +814,40 @@ type StepBatch struct {
 // container target's registry auth, the host target's --yes, --dry-run)
 // are bundled here too.
 type EmitOpts struct {
-	DryRun            bool
-	FormatJSON        bool // print IR as JSON on stdout instead of table
-	AllowRepoChanges  bool
-	AllowRootTasks    bool
-	WithServices      bool
-	SkipIncompatible  bool
-	AssumeYes         bool // skip sudo preflight, confirmation prompts
-	Verify            bool // run layer tests after install
-	Pull              bool // force re-fetch of remote refs / image pull
+	DryRun               bool
+	FormatJSON           bool // print IR as JSON on stdout instead of table
+	AllowRepoChanges     bool
+	AllowRootTasks       bool
+	WithServices         bool
+	SkipIncompatible     bool
+	AssumeYes            bool // skip sudo preflight, confirmation prompts
+	Verify               bool // run layer tests after install
+	Pull                 bool // force re-fetch of remote refs / image pull
 	BuilderImageOverride string
+
+	// ParentExec is the DeployExecutor of the parent deployment in a
+	// nested tree. Non-nil iff this target is dispatched as a child of
+	// another — DeployAddCmd's tree walker builds the chain root-first
+	// and passes the immediate ancestor's executor here. Targets that
+	// support being nested (host, container, vm) compose their own
+	// executor over ParentExec via NestedExecutor; leaf-only targets
+	// (kubernetes) ignore it and error if non-nil.
+	//
+	// When nil, the target runs against its natural root venue
+	// (LocalDeployExecutor for host, a fresh SSHExecutor for vm, etc.)
+	// — preserving the flat-schema behavior for v2 configs that happen
+	// to have no `children:`.
+	ParentExec DeployExecutor
+
+	// ParentNode is the DeploymentNode above this target in the tree.
+	// Useful for targets that need parent-level context beyond the
+	// executor (e.g. a vm child wants to know its parent container's
+	// name to wire network forwarding). nil at the root.
+	ParentNode *DeploymentNode
+
+	// Path is the dotted-path identifier of this node (e.g.
+	// "stack.web.db"). Used for logging + ledger keying.
+	Path string
 }
 
 // DeployTarget is the interface OCI + container-deploy + host-deploy

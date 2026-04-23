@@ -145,7 +145,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Resolve agent forwarding (SSH/GPG socket mounts)
-	var deployImage *DeployImageConfig
+	var deployImage *DeploymentNode
 	if dc != nil {
 		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay

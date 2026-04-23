@@ -85,7 +85,7 @@ func (c *TestRunCmd) Run() error {
 	}
 
 	// Build runtime variable resolver.
-	var deployOverlay *DeployImageConfig
+	var deployOverlay *DeploymentNode
 	if dc != nil {
 		if entry, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			deployOverlay = &entry
@@ -126,10 +126,10 @@ func (c *TestRunCmd) isVmTarget() bool {
 		return false
 	}
 	uf, ok, err := LoadUnified(dir)
-	if err != nil || !ok || uf.VMs == nil {
+	if err != nil || !ok || uf.VM == nil {
 		return false
 	}
-	_, present := uf.VMs[c.Image]
+	_, present := uf.VM[c.Image]
 	return present
 }
 
@@ -150,7 +150,7 @@ func (c *TestRunCmd) runVm() error {
 	if err != nil {
 		return err
 	}
-	spec := uf.VMs[c.Image]
+	spec := uf.VM[c.Image]
 
 	user := resolveVmSshUser(spec)
 	port := resolveVmSshPort(spec)
@@ -294,7 +294,7 @@ func (c *ImageTestCmd) Run() error {
 			// the live container's inspect output. Load deploy.yml overlay
 			// so deploy-overridden settings (e.g. remapped ports) win.
 			dc, _ := LoadDeployConfig()
-			var deployOverlay *DeployImageConfig
+			var deployOverlay *DeploymentNode
 			if dc != nil {
 				if entry, ok := dc.Images[deployKey(imageName, "")]; ok {
 					deployOverlay = &entry

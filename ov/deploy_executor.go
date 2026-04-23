@@ -1,7 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"os"
+	"os/exec"
 )
 
 // DeployExecutor abstracts shell execution + file placement for deploy
@@ -55,6 +58,16 @@ type DeployExecutor interface {
 	// ownerRoot). On VM, this is scp into a tmp location followed by
 	// `sudo install -m <mode> -o root -g root` on the guest.
 	PutFile(ctx context.Context, localPath, remotePath string, mode uint32, ownerRoot bool, opts EmitOpts) error
+
+	// GetFile retrieves the contents of a file on the venue. asRoot==true
+	// runs the read via sudo to handle paths the deploying user cannot
+	// access (e.g. /etc/rancher/k3s/k3s.yaml on a k3s server). On the
+	// host, this is os.ReadFile (or `sudo cat` when asRoot). On VM, this
+	// is `ssh <host> sudo cat <path>` with stdout captured. On nested
+	// executors, delegates through the jump via the parent's own RunSystem
+	// semantics. Used by layer_artifacts.go to publish files back to the
+	// operator after deploy completion.
+	GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error)
 }
 
 // LocalDeployExecutor implements DeployExecutor against the invoking user's shell
@@ -98,6 +111,50 @@ func (LocalDeployExecutor) PutFile(_ context.Context, localPath, remotePath stri
 	}
 	script := "install -D -m " + permOctal(mode) + " " + deployShellQuote(localPath) + " " + deployShellQuote(remotePath)
 	return runUserShell(script, opts)
+}
+
+// GetFile on the local executor is a direct filesystem read. When
+// asRoot is set, the read is delegated to `sudo cat` so files with
+// restricted permissions (e.g. /etc/shadow, rancher kubeconfig) can
+// still be retrieved. Stdout is captured verbatim.
+func (LocalDeployExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error) {
+	if opts.DryRun {
+		return nil, nil
+	}
+	if !asRoot {
+		return os.ReadFile(remotePath)
+	}
+	cmd := exec.CommandContext(ctx, "sudo", "cat", remotePath)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, wrapReadErr(err, remotePath, stderr.String())
+	}
+	return stdout.Bytes(), nil
+}
+
+// wrapReadErr is a small wrap helper so every executor's GetFile returns
+// a consistent error shape.
+func wrapReadErr(err error, path, stderr string) error {
+	if stderr != "" {
+		return &readFileError{path: path, stderr: stderr, cause: err}
+	}
+	return &readFileError{path: path, cause: err}
+}
+
+type readFileError struct {
+	path   string
+	stderr string
+	cause  error
+}
+
+func (e *readFileError) Error() string {
+	msg := "read " + e.path + ": " + e.cause.Error()
+	if e.stderr != "" {
+		msg += " (stderr: " + e.stderr + ")"
+	}
+	return msg
 }
 
 // permOctal renders a uint32 mode as a 4-digit octal string suitable

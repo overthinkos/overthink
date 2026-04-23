@@ -206,6 +206,41 @@ func (n *NestedExecutor) PutFile(ctx context.Context, localPath, remotePath stri
 	return n.Parent.RunUser(ctx, combined, opts)
 }
 
+// GetFile retrieves a file from the nested environment. Current
+// implementation is a minimal read-then-retrieve: the parent shell runs
+// `<jump> cat <path>` and the output is captured via a staged tmp file
+// on the parent venue, then Parent.GetFile pulls it back. Jumps without
+// an obvious cat+stdout path (libvirt-console) return an explicit
+// "not supported" error rather than silently producing empty bytes.
+func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error) {
+	if n.Parent == nil {
+		return nil, fmt.Errorf("NestedExecutor: nil Parent")
+	}
+	// Only podman/docker/ssh jumps support the stdout-cat approach.
+	switch n.Jump.Kind {
+	case JumpPodmanExec, JumpDockerExec, JumpSSH:
+		// ok
+	default:
+		return nil, fmt.Errorf("NestedExecutor.GetFile: jump kind %d does not support file retrieval (add explicit support if needed)", int(n.Jump.Kind))
+	}
+	// Stage the file on the parent venue by running `cat <path>` through
+	// the jump and redirecting to a tmp path, then read from the tmp.
+	stage := "/tmp/ov-nested-get-" + filepath.Base(remotePath)
+	cat := "cat " + deployShellQuote(remotePath)
+	if asRoot {
+		cat = "sudo " + cat
+	}
+	wrapped, err := wrapWithJump(n.Jump, cat+" > "+deployShellQuote(stage)+".tmp 2>/dev/null && mv "+deployShellQuote(stage)+".tmp "+deployShellQuote(stage), false /*staging writes are user-scope on parent*/)
+	if err != nil {
+		return nil, err
+	}
+	if err := n.Parent.RunUser(ctx, wrapped, opts); err != nil {
+		return nil, fmt.Errorf("nested GetFile stage: %w", err)
+	}
+	defer n.Parent.RunUser(ctx, "rm -f "+deployShellQuote(stage), opts)
+	return n.Parent.GetFile(ctx, stage, false, opts)
+}
+
 // wrapWithJump rewrites a script so it executes inside the nested
 // environment when run by the parent executor. The return value is a
 // single bash invocation (parent's shell) that internally invokes the

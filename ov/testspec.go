@@ -60,6 +60,29 @@ type Check struct {
 	Record  string `yaml:"record,omitempty"  json:"record,omitempty"`
 	Spice   string `yaml:"spice,omitempty"   json:"spice,omitempty"`
 	Libvirt string `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
+	K8s     string `yaml:"k8s,omitempty"     json:"k8s,omitempty"`
+
+	// Shared resource-identity modifiers — reusable across verbs that need
+	// them (k8s needs all four; future verbs can opt in). Kept as plain
+	// top-level fields so YAML authoring stays `name:` / `namespace:` rather
+	// than verb-prefixed.
+	Name      string `yaml:"name,omitempty"      json:"name,omitempty"`
+	Namespace string `yaml:"namespace,omitempty" json:"namespace,omitempty"`
+	Label     string `yaml:"label,omitempty"     json:"label,omitempty"`
+	Cluster   string `yaml:"cluster,omitempty"   json:"cluster,omitempty"`
+	Manifest  string `yaml:"manifest,omitempty"  json:"manifest,omitempty"` // path to a YAML file for k8s apply/delete — intentionally distinct from the file: verb
+
+	// k8s-specific modifiers — prefixed so they don't collide with the
+	// existing `Kind()` method on Check (Go forbids a field and method with
+	// the same name on the same type) and so the YAML surface is
+	// self-describing (k8s_kind: Deployment).
+	K8sKind     string `yaml:"k8s_kind,omitempty"     json:"k8s_kind,omitempty"`
+	K8sContext  string `yaml:"k8s_context,omitempty"  json:"k8s_context,omitempty"`
+	Kubeconfig  string `yaml:"kubeconfig,omitempty"   json:"kubeconfig,omitempty"`
+	K8sCount    int    `yaml:"k8s_count,omitempty"    json:"k8s_count,omitempty"`
+	K8sResource string `yaml:"k8s_resource,omitempty" json:"k8s_resource,omitempty"`
+	K8sGroup    string `yaml:"k8s_group,omitempty"    json:"k8s_group,omitempty"`
+	K8sVersion  string `yaml:"k8s_version,omitempty"  json:"k8s_version,omitempty"`
 
 	// Shared modifiers
 	ID          string `yaml:"id,omitempty"           json:"id,omitempty"`
@@ -205,7 +228,7 @@ var CheckVerbs = []string{
 	"http", "dns", "user", "group", "interface", "kernel-param",
 	"mount", "addr", "matching",
 	"cdp", "wl", "dbus", "vnc", "mcp",
-	"record", "spice", "libvirt",
+	"record", "spice", "libvirt", "k8s",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -292,6 +315,9 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.Libvirt != "" {
 		set = append(set, "libvirt")
+	}
+	if c.K8s != "" {
+		set = append(set, "k8s")
 	}
 	return set
 }
@@ -583,7 +609,11 @@ func (c *Check) StringFields() []*string {
 		&c.MountSource, &c.Filesystem,
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
-		&c.Record, &c.Spice, &c.Libvirt,
+		&c.Record, &c.Spice, &c.Libvirt, &c.K8s,
+		// k8s + shared resource-identity modifiers
+		&c.Name, &c.Namespace, &c.Label, &c.Cluster, &c.Manifest,
+		&c.K8sKind, &c.K8sContext, &c.Kubeconfig,
+		&c.K8sResource, &c.K8sGroup, &c.K8sVersion,
 		&c.Tab, &c.Expression, &c.URL, &c.Selector,
 		&c.Dest, &c.Path, &c.Artifact,
 		&c.Button, &c.Text, &c.KeyName, &c.Combo,

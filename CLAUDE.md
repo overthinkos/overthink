@@ -116,6 +116,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Unified `service:` schema.** See `/ov:layer` "Service Declaration".
 - **Capabilities as OCI-label contract.** See `/ov-dev:capabilities`.
 - **Deploy targets.** `ov deploy add <name> <ref>`: literal `host` → local filesystem; `vm:<name>` → VM via SSH; `kubernetes` → Kustomize tree; any other → container deploy. See `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov-dev:vm-deploy-target`. Shared IR: `/ov-dev:install-plan`.
+- **k3s cluster provisioning via layers.** `/ov-layers:k3s` + `/ov-layers:k3s-server` + `/ov-layers:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared token via `ov secrets set ov/secret/K3S_CLUSTER_TOKEN`. Kubeconfig pulled back via layer `artifacts:` block; ClusterProfile auto-registered post-deploy. Cluster probes via `/ov:test-k8s` (`ov test k8s nodes/addons/wait-ready/…`).
 
 ---
 

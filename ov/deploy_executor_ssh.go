@@ -145,6 +145,37 @@ func (e *SSHExecutor) PutFile(ctx context.Context, localPath, remotePath string,
 	return e.RunSystem(ctx, installScript, opts)
 }
 
+// GetFile retrieves the contents of a file from the guest via
+// `ssh <host> [sudo] cat <path>` with stdout captured. asRoot==true
+// wraps the read in sudo so restricted files (e.g. kubeconfig under
+// /etc/rancher) are accessible from the unprivileged SSH user.
+func (e *SSHExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error) {
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] ssh vm %scat %s\n",
+			func() string {
+				if asRoot {
+					return "sudo "
+				}
+				return ""
+			}(), remotePath)
+		return nil, nil
+	}
+	args := e.sshBaseArgs()
+	if asRoot {
+		args = append(args, "sudo", "cat", remotePath)
+	} else {
+		args = append(args, "cat", remotePath)
+	}
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("ssh cat %s: %w (stderr: %s)", remotePath, err, strings.TrimSpace(stderr.String()))
+	}
+	return stdout.Bytes(), nil
+}
+
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
 // connect, error on timeout. Used by VmDeployTarget right after

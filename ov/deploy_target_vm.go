@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -421,13 +422,32 @@ func renderVmTaskCommand(s *TaskStep) string {
 	task := s.Task
 	ctxPath := s.CtxPath
 
+	// Task.Env prelude — matches HostDeployTarget.renderTaskCommand so
+	// layer authors can declare env vars and have them reach the shell
+	// regardless of target (host/vm). Also required for the secret-
+	// injection path (ov/layer_secrets.go InjectSecretsIntoPlans) to
+	// propagate credential-store-resolved values to VM deploys.
+	envPrelude := ""
+	if len(task.Env) > 0 {
+		keys := make([]string, 0, len(task.Env))
+		for k := range task.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var b strings.Builder
+		for _, k := range keys {
+			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(task.Env[k]))
+		}
+		envPrelude = b.String()
+	}
+
 	switch {
 	case task.Cmd != "":
 		body := task.Cmd
 		if ctxPath != "" {
 			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
 		}
-		return body
+		return envPrelude + body
 	case task.Mkdir != "":
 		mode := task.Mode
 		if mode == "" {

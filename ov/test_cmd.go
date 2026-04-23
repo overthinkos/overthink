@@ -24,6 +24,7 @@ type TestCmd struct {
 	Spice   SpiceCmd   `cmd:"" help:"VM SPICE display (handshake, inputs, native screenshot)"`
 	Vnc     VncCmd     `cmd:"" help:"Control VNC desktop in running containers"`
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
+	K8s     K8sCmd     `cmd:"" name:"k8s" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
 }
 
 // TestRunCmd runs tests against a running service — the deploy-time entry point.

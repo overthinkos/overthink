@@ -82,6 +82,48 @@ type DataYAML struct {
 	Dest   string `yaml:"dest,omitempty"`   // optional subdirectory within the volume path
 }
 
+// LayerArtifact declares a file the layer publishes back to the operator
+// after its setup completes. Retrieval happens at `ov deploy add` finalization
+// via the target's back-channel (scp for SSH/VM, cp for host, podman cp for
+// container). The retrieved file is written to `RetrieveTo` with shell-style
+// ${ENV} expansion on the path. Optional `Rewrite` rules perform a literal
+// find/replace on the file contents before writing — used for rewriting
+// loopback addresses in kubeconfig files, etc.
+type LayerArtifact struct {
+	// Name is a human-readable identifier (e.g. "kubeconfig"). Used in
+	// log messages and as a dedupe key when multiple layers in the same
+	// deploy declare overlapping artifacts.
+	Name string `yaml:"name" json:"name"`
+
+	// Path is the on-target absolute path to retrieve. Required.
+	Path string `yaml:"path" json:"path"`
+
+	// RetrieveTo is the operator-side destination. Supports ${ENV} expansion
+	// (including ${deploy_name}, ${vm_name}, and any env vars already in
+	// scope). Parent directories are created with mode 0755. Required.
+	RetrieveTo string `yaml:"retrieve_to" json:"retrieve_to"`
+
+	// Mode is the file mode to apply on the retrieved destination (octal
+	// string like "0600"). Empty defaults to 0644.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty"`
+
+	// Rewrite applies literal find/replace pairs to the file contents
+	// before writing. Evaluated in order. Typical use: rewrite
+	// "server: https://127.0.0.1:6443" in a kubeconfig to the VM's
+	// reachable hostname so the kubeconfig is usable from the operator.
+	Rewrite []LayerArtifactRewrite `yaml:"rewrite,omitempty" json:"rewrite,omitempty"`
+
+	// Optional is ignored when true and the file doesn't exist on the
+	// target. Default: required (missing file fails the deploy).
+	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+}
+
+// LayerArtifactRewrite is a single find/replace pair.
+type LayerArtifactRewrite struct {
+	Find    string `yaml:"find" json:"find"`
+	Replace string `yaml:"replace" json:"replace"`
+}
+
 // EnvDependency declares an env var or MCP server that a layer needs or can use.
 // Reused for env_requires, env_accepts, mcp_requires, mcp_accepts,
 // secret_accepts, and secret_requires.
@@ -173,6 +215,16 @@ type LayerYAML struct {
 	// See testspec.go for the Check type.
 	Tests []Check `yaml:"tests,omitempty"`
 
+	// Artifacts are files a layer publishes back to the operator after its
+	// setup runs successfully. Each artifact is retrieved from the deploy
+	// venue (scp for VM/SSH targets, plain copy for host target, podman cp
+	// for container target) and written to `retrieve_to:`, optionally
+	// rewritten via `rewrite:` rules. Used by e.g. the k3s-server layer to
+	// publish `/etc/rancher/k3s/k3s.yaml` back to `~/.cache/ov/clusters/
+	// <deploy>/kubeconfig.yaml` so the operator can `kubectl` the new
+	// cluster without manual scp. Generic — not k3s-specific.
+	Artifacts []LayerArtifact `yaml:"artifacts,omitempty"`
+
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
 	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
@@ -198,6 +250,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
 	"vars": true, "tasks": true, "tests": true,
+	"artifacts": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -477,6 +530,7 @@ type Layer struct {
 	vars           map[string]string // layer-local variables (from layer.yml vars:)
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
+	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 }
 
 // ScanLayers returns all layers for the project at dir. Post-unified-cutover
@@ -766,6 +820,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// Pre-populate tests (declarative checks)
 		layer.tests = ly.Tests
 
+		// Pre-populate artifacts (files to retrieve after setup)
+		layer.artifacts = ly.Artifacts
+
 		// Pre-populate port relay
 		layer.PortRelayPorts = ly.PortRelay
 
@@ -1051,6 +1108,12 @@ func (l *Layer) Hooks() *HooksConfig {
 // Secrets returns the secret declarations (pre-populated from layer.yml)
 func (l *Layer) Secrets() []SecretYAML {
 	return l.secrets
+}
+
+// Artifacts returns the files this layer publishes back to the operator
+// after its setup completes (pre-populated from layer.yml artifacts:).
+func (l *Layer) Artifacts() []LayerArtifact {
+	return l.artifacts
 }
 
 // EnvProvides returns env vars this layer provides to other containers (pre-populated from layer.yml)

@@ -303,6 +303,8 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result = r.runSpice(ctx, &expanded)
 	case "libvirt":
 		result = r.runLibvirt(ctx, &expanded)
+	case "k8s":
+		result = r.runK8s(ctx, &expanded)
 	default:
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("unknown verb %q", kind)

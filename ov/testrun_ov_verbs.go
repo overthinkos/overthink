@@ -259,6 +259,152 @@ var libvirtMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
+// k8s methods — `ov test k8s <method>` probes a Kubernetes cluster via the
+// vendored client-go SDK. Cluster selection is via --cluster <profile> /
+// --context / --kubeconfig (see cmd_test_k8s.go). Host-side; applicable to
+// any deploy whose post-provision registered a ClusterProfile (typically
+// a k3s-server layer).
+// ---------------------------------------------------------------------------
+
+var k8sMethods = map[string]methodSpec{
+	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster},
+	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes},
+	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods},
+	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady},
+	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt},
+	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster},
+	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster},
+	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt},
+	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal},
+	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons},
+	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply},
+	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply},
+	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw},
+}
+
+// ---------------------------------------------------------------------------
+// k8s positional-arg builders — every method emits --cluster/--context/
+// --kubeconfig + its method-specific flags. Because k8s probes are run
+// against a cluster (not a container/image), the --image positional from
+// runOvVerb is still passed, but `ov test k8s ...` ignores it by accepting
+// arbitrary trailing args under Kong's default catch-all policy.
+// ---------------------------------------------------------------------------
+
+// posK8sCluster emits only the shared cluster-selection flags. Used by
+// methods that take no other parameters (nodes, ingressclass, storageclass).
+func posK8sCluster(c *Check) []string {
+	return k8sClusterArgs(c)
+}
+
+func posK8sWaitNodes(c *Check) []string {
+	args := k8sClusterArgs(c)
+	if c.K8sCount > 0 {
+		args = append(args, "--count", strconv.Itoa(c.K8sCount))
+	}
+	if c.Name != "" {
+		args = append(args, "--name", c.Name)
+	}
+	if c.Timeout != "" {
+		args = append(args, "--timeout", c.Timeout)
+	}
+	return args
+}
+
+func posK8sPods(c *Check) []string {
+	args := k8sClusterArgs(c)
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	if c.Label != "" {
+		args = append(args, "--label", c.Label)
+	}
+	return args
+}
+
+func posK8sWaitReady(c *Check) []string {
+	args := k8sClusterArgs(c)
+	args = append(args, "--kind", c.K8sKind, "--name", c.Name)
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	if c.Timeout != "" {
+		args = append(args, "--timeout", c.Timeout)
+	}
+	return args
+}
+
+func posK8sNamespaceOpt(c *Check) []string {
+	args := k8sClusterArgs(c)
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	return args
+}
+
+func posK8sLbExternal(c *Check) []string {
+	args := k8sClusterArgs(c)
+	args = append(args, "--namespace", c.Namespace, "--name", c.Name)
+	if c.Timeout != "" {
+		args = append(args, "--timeout", c.Timeout)
+	}
+	return args
+}
+
+func posK8sAddons(c *Check) []string {
+	args := k8sClusterArgs(c)
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	if c.Timeout != "" {
+		args = append(args, "--timeout", c.Timeout)
+	}
+	return args
+}
+
+func posK8sApply(c *Check) []string {
+	args := k8sClusterArgs(c)
+	args = append(args, "--file", c.Manifest)
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	return args
+}
+
+func posK8sRaw(c *Check) []string {
+	args := k8sClusterArgs(c)
+	args = append(args, "--resource", c.K8sResource)
+	if c.K8sGroup != "" {
+		args = append(args, "--group", c.K8sGroup)
+	}
+	if c.K8sVersion != "" {
+		args = append(args, "--version", c.K8sVersion)
+	}
+	if c.Name != "" {
+		args = append(args, "--name", c.Name)
+	}
+	if c.Namespace != "" {
+		args = append(args, "--namespace", c.Namespace)
+	}
+	return args
+}
+
+// k8sClusterArgs renders the shared --cluster / --context / --kubeconfig
+// selection flags from the Check.
+func k8sClusterArgs(c *Check) []string {
+	var args []string
+	if c.Cluster != "" {
+		args = append(args, "--cluster", c.Cluster)
+	}
+	if c.K8sContext != "" {
+		args = append(args, "--context", c.K8sContext)
+	}
+	if c.Kubeconfig != "" {
+		args = append(args, "--kubeconfig", c.Kubeconfig)
+	}
+	return args
+}
+
+// ---------------------------------------------------------------------------
 // positional-arg builders — reused across verbs.
 // Each returns the positional args to insert AFTER the image name,
 // BEFORE any -i instance flag. They never fail: required-modifier checks
@@ -475,6 +621,10 @@ func (r *Runner) runLibvirt(ctx context.Context, c *Check) TestResult {
 	return r.runOvVerb(ctx, c, "libvirt", c.Libvirt, libvirtMethods)
 }
 
+func (r *Runner) runK8s(ctx context.Context, c *Check) TestResult {
+	return r.runOvVerb(ctx, c, "k8s", c.K8s, k8sMethods)
+}
+
 // runOvVerb is the shared dispatch path: skip checks, method lookup,
 // argv building, subprocess exec, matcher pipeline, optional artifact size
 // assertion. Returns the TestResult directly.
@@ -626,6 +776,39 @@ func isZeroField(c *Check, name string) bool {
 		return c.Spice == ""
 	case "Libvirt":
 		return c.Libvirt == ""
+	case "K8s":
+		return c.K8s == ""
+	case "Name":
+		return c.Name == ""
+	case "Namespace":
+		return c.Namespace == ""
+	case "Label":
+		return c.Label == ""
+	case "Cluster":
+		return c.Cluster == ""
+	case "Manifest":
+		return c.Manifest == ""
+	case "Kind":
+		// Kind is a METHOD on Check; required-field lookups of "Kind" target
+		// the k8s-specific K8sKind field to avoid the method-vs-field name
+		// clash that Go disallows.
+		return c.K8sKind == ""
+	case "K8sKind":
+		return c.K8sKind == ""
+	case "K8sContext":
+		return c.K8sContext == ""
+	case "Kubeconfig":
+		return c.Kubeconfig == ""
+	case "K8sCount":
+		return c.K8sCount == 0
+	case "K8sResource":
+		return c.K8sResource == ""
+	case "K8sGroup":
+		return c.K8sGroup == ""
+	case "K8sVersion":
+		return c.K8sVersion == ""
+	case "File":
+		return c.File == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

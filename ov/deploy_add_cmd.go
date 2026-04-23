@@ -649,7 +649,6 @@ func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
 
 func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *DistroConfig, opts EmitOpts) error {
 	_ = distroCfg
-	_ = dir
 	hostDistro, _ := DetectHostDistro()
 	tgt := &HostDeployTarget{
 		HostHome: os.Getenv("HOME"),
@@ -661,10 +660,62 @@ func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *Dist
 	// executor instead of the local shell — so "apply these layers
 	// inside the parent container/VM" works without a different target
 	// type.
+	var exec DeployExecutor = LocalDeployExecutor{}
 	if opts.ParentExec != nil {
 		tgt.Executor = opts.ParentExec
+		exec = opts.ParentExec
 	}
-	return tgt.Emit(plans, opts)
+
+	// Resolve layer secret_requires / secret_accepts and inject them
+	// into each TaskStep's env BEFORE emission. Missing required
+	// secrets fail the deploy immediately (R1).
+	layerList, err := LayersForPlans(plans, dir, nil)
+	if err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+	secretEnv, missing := ResolveSecretsForLayers(layerList)
+	if err := FormatMissingSecretsError(missing); err != nil {
+		return err
+	}
+	InjectSecretsIntoPlans(plans, secretEnv)
+
+	// Collect env for artifact substitution — merges resolved secrets +
+	// any deploy.yml env: entries on this node.
+	artifactEnv := map[string]string{}
+	for k, v := range secretEnv {
+		artifactEnv[k] = v
+	}
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if entry, exists := dc.Images[c.Name]; exists {
+			for _, line := range entry.Env {
+				if idx := strings.Index(line, "="); idx > 0 {
+					artifactEnv[line[:idx]] = line[idx+1:]
+				}
+			}
+		}
+	}
+
+	if err := tgt.Emit(plans, opts); err != nil {
+		return err
+	}
+
+	// Retrieve layer artifacts (files the layer publishes back — e.g.
+	// kubeconfig from a k3s-server layer). Ignored when opts.DryRun.
+	if !opts.DryRun {
+		if err := RetrieveLayerArtifacts(context.Background(), exec, layerList, sanitizeDeployName(c.Name), artifactEnv, opts); err != nil {
+			return fmt.Errorf("retrieving layer artifacts: %w", err)
+		}
+		// k3s-server post-hook: merge retrieved kubeconfig into
+		// ~/.kube/config and write a ClusterProfile so the new cluster
+		// is immediately usable as an `ov deploy add --target kubernetes`
+		// destination. No-op when k3s-server isn't in the layer list.
+		if deployHasLayer(layerList, "k3s-server") {
+			if err := K3sPostProvision(c.Name); err != nil {
+				return fmt.Errorf("k3s post-provision: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg *DistroConfig, builderCfg *BuilderConfig, opts EmitOpts) error {

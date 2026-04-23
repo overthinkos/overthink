@@ -30,6 +30,7 @@ deployments:
                 - ripgrep
                 - uv
                 - pre-commit
+                - k3s-server
             # --- Host-target install knobs honored by the in-guest apply ---
             install_opts:
                 with_services: true
@@ -39,6 +40,11 @@ deployments:
             # --- Guest environment overlay ---
             env:
                 - OVERTHINK_DEV=true
+                # K3S_SERVER_HOSTNAME used by k3s-server layer's tls-san and
+                # artifact kubeconfig rewrite. 127.0.0.1 is fine for a local
+                # single-node verification; for multi-node or operator-side
+                # access, set the VM's reachable hostname.
+                - K3S_SERVER_HOSTNAME=127.0.0.1
             # --- Deploy-level probes: VmDeployTarget runs these via SSH for
             # `command:` verbs; host-side for `libvirt:` and `spice:` verbs.
             # Organised by subsystem so a red square in the output points
@@ -133,6 +139,11 @@ vm:
         firmware: bios
         network:
             mode: user
+            # Expose the k3s API server to the operator side so
+            # `ov test k8s --cluster vm-arch` can reach it via the
+            # kubeconfig artifact. Format: "host:guest".
+            port_forwards:
+                - "6443:6443"
         ssh:
             port: 2224
             key_source: generate

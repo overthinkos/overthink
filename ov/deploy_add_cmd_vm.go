@@ -104,9 +104,74 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 		Exec:   exec,
 	}
 
+	// Resolve layer secret_requires / secret_accepts and inject them
+	// into the TaskSteps BEFORE emission. Missing required secrets
+	// fail the deploy immediately (R1).
+	layerList, err := LayersForPlans(plans, dir, nil)
+	if err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+	secretEnv, missing := ResolveSecretsForLayers(layerList)
+	if mErr := FormatMissingSecretsError(missing); mErr != nil {
+		return mErr
+	}
+	InjectSecretsIntoPlans(plans, secretEnv)
+
+	// Collect env for artifact substitution — merges resolved secrets +
+	// any deploy.yml env: entries on this node. Needed so rewrite rules
+	// like "${K3S_SERVER_HOSTNAME}" resolve to the declared hostname
+	// rather than the literal placeholder.
+	artifactEnv := map[string]string{}
+	for k, v := range secretEnv {
+		artifactEnv[k] = v
+	}
+	// Pull env from project-level deploy config (overthink.yml's
+	// deployments: section, not the per-machine overlay ~/.config/ov/
+	// deploy.yml which LoadDeployConfig reads).
+	if uf != nil {
+		if pdc := uf.ProjectDeployConfig(); pdc != nil {
+			if entry, exists := pdc.Images[c.Name]; exists {
+				for _, line := range entry.Env {
+					if idx := strings.Index(line, "="); idx > 0 {
+						artifactEnv[line[:idx]] = line[idx+1:]
+					}
+				}
+			}
+		}
+	}
+	// Per-machine overlay env also merges in (same precedence rule: later
+	// wins, operator overlay is "later").
+	if dc != nil {
+		if entry, exists := dc.Images[c.Name]; exists {
+			for _, line := range entry.Env {
+				if idx := strings.Index(line, "="); idx > 0 {
+					artifactEnv[line[:idx]] = line[idx+1:]
+				}
+			}
+		}
+	}
+
 	// Emit plans.
 	if err := target.Emit(plans, opts); err != nil {
 		return fmt.Errorf("VmDeployTarget.Emit: %w", err)
+	}
+
+	// Retrieve layer artifacts (files the layer publishes back to the
+	// operator after successful setup, e.g. kubeconfig from a k3s-server
+	// layer). Uses the same SSH executor that applied the deploy.
+	if !opts.DryRun {
+		if aErr := RetrieveLayerArtifacts(context.Background(), exec, layerList, sanitizeDeployName(c.Name), artifactEnv, opts); aErr != nil {
+			return fmt.Errorf("retrieving layer artifacts: %w", aErr)
+		}
+		// k3s-server post-hook: merge retrieved kubeconfig into
+		// ~/.kube/config and write a ClusterProfile so the new cluster
+		// is immediately usable via `ov test k8s --cluster <name>` and
+		// `ov deploy add <app> --target kubernetes --kubernetes-cluster <name>`.
+		if deployHasLayer(layerList, "k3s-server") {
+			if pErr := K3sPostProvision(c.Name); pErr != nil {
+				return fmt.Errorf("k3s post-provision: %w", pErr)
+			}
+		}
 	}
 
 	// Write back updated VmDeployState to deploy.yml.

@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // TestCmd groups the deploy-time test runner with the live-container
@@ -360,7 +363,7 @@ func (c *TestRunCmd) runVm() error {
 // `ov image build <name>` first if the image isn't in local storage yet.
 type ImageTestCmd struct {
 	Image         string   `arg:"" help:"Image reference (full ref or short name resolved against local container storage; never reads image.yml)"`
-	Format        string   `long:"format" default:"text" help:"Output format: text, json, tap"`
+	Format        string   `long:"format" default:"text" help:"Output format: text, json, tap, yaml"`
 	Filter        []string `long:"filter" help:"Only run checks with these verbs (repeatable)"`
 	IncludeDeploy bool     `long:"include-deploy" help:"Also run the deploy section (normally skipped)"`
 }
@@ -453,16 +456,85 @@ func (c *ImageTestCmd) Run() error {
 	runner.Distros = meta.Distro
 	results := runner.Run(context.Background(), checks)
 
+	// Also run scenarios if a Description set is baked into the image.
+	// This is what `ov benchmark` reads when --format yaml is requested.
+	var scenarioResults []ScenarioResult
+	if meta.Description != nil && !meta.Description.IsEmpty() {
+		scenarioResults = RunScenarios(context.Background(), runner, meta.Description, nil, false)
+	}
+
 	if liveContainer != "" {
 		fmt.Fprintf(os.Stderr, "Image: %s (live container: %s)\n", imageRef, liveContainer)
 	} else {
 		fmt.Fprintf(os.Stderr, "Image: %s\n", imageRef)
 	}
+
+	// YAML format emits the shape ParseOvTestOutput expects —
+	// this is the benchmark scorer's input format.
+	if c.Format == "yaml" {
+		return emitImageTestYAML(os.Stdout, imageRef, liveContainer, scenarioResults, results)
+	}
+
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
 		return fmt.Errorf("%d check(s) failed", fails)
 	}
 	return nil
+}
+
+// emitImageTestYAML writes the `ov image test --format yaml` payload
+// that ParseOvTestOutput (benchmark_score.go) consumes. The shape is:
+//
+//	image: <ref>
+//	mode: image | run
+//	scenarios:
+//	  - id, origin, name, tags, status, pending_steps, steps[]
+//	summary: { total, pass, fail, skip }
+func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []ScenarioResult, _ []TestResult) error {
+	mode := "image"
+	if liveContainer != "" {
+		mode = "run"
+	}
+	out := TestRunResults{Image: imageRef, Mode: mode}
+	for _, sr := range scenarios {
+		tr := ScenarioTestResult{
+			ID:           sr.ScenarioID,
+			Origin:       sr.Origin,
+			Name:         sr.Name,
+			Tags:         append([]string(nil), sr.Tags...),
+			Status:       sr.Status.String(),
+			PendingSteps: sr.Pending,
+		}
+		for _, sp := range sr.Steps {
+			stepRes := StepTestResult{
+				Keyword: sp.Keyword,
+				Text:    sp.Text,
+				StepID:  sp.StepID,
+				Status:  sp.Result.Status.String(),
+				Verb:    sp.Result.Verb,
+			}
+			if sp.Result.Verb == "" {
+				stepRes.Pending = true
+			}
+			tr.Steps = append(tr.Steps, stepRes)
+		}
+		out.Scenarios = append(out.Scenarios, tr)
+		out.Summary.Total++
+		switch tr.Status {
+		case "pass":
+			out.Summary.Pass++
+		case "fail":
+			out.Summary.Fail++
+		case "skip":
+			out.Summary.Skip++
+		}
+	}
+	data, err := yaml.Marshal(&out)
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
 
 // collectChecksForRun is the full ov-test assembly: all three label sections

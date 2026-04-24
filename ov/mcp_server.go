@@ -94,6 +94,11 @@ var mcpDestructivePaths = map[string]bool{
 	"layer.add-deb": true,
 	"layer.add-pac": true,
 	"layer.add-aur": true,
+	// Benchmark — run mutates workspace + rebuilds images; self-evaluate
+	// rebuilds images. Read-only siblings (scope, last-test-tag, list,
+	// list-runners, report) stay exposed.
+	"benchmark.run":           true,
+	"benchmark.self-evaluate": true,
 	// VM lifecycle
 	"vm.create":  true,
 	"vm.destroy": true,

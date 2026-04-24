@@ -68,6 +68,10 @@ type UnifiedFile struct {
 	Pod  map[string]*PodSpec  `yaml:"pod,omitempty"`
 	K8s  map[string]*K8sSpec  `yaml:"k8s,omitempty"`
 	Host map[string]*HostSpec `yaml:"host,omitempty"`
+
+	// Benchmark: runner configuration + prompt template for `ov benchmark`.
+	// See benchmark_config.go + /ov:benchmark.
+	Benchmark *BenchmarkConfig `yaml:"benchmark,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -525,6 +529,8 @@ var rootShapeKeys = map[string]bool{
 	// legacy aliases accepted for transitional compatibility; migration
 	// rewrites them:
 	"images": true, "deployments": true,
+	// benchmark: runner config for `ov benchmark`.
+	"benchmark": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.

@@ -7,3 +7,43 @@ discover:
     layers:
         - path: layers
           recursive: true
+benchmark:
+    # Runner registry: each entry plugs an AI CLI into `ov benchmark run`.
+    # Defaults applied by ResolveRunner when omitted: timeout=30m,
+    # prompt_via=argv, cleanup_credentials=false. See /ov:benchmark.
+    runners:
+        - name: claude
+          command: [claude, -p, "${PROMPT}"]
+          credentials:
+              - {src: ~/.claude, dst: ~/.claude}
+        - name: codex
+          command: [codex, exec, "${PROMPT}"]
+          credentials:
+              - {src: ~/.config/codex, dst: ~/.config/codex}
+        - name: gemini
+          command: [gemini, chat, "${PROMPT}"]
+          credentials:
+              - {src: ~/.config/gcloud, dst: ~/.config/gcloud}
+    prompt: |
+        You are benchmarking BDD-scenario-solving inside an overthink project.
+        This is iteration ${ITERATION} of up to ${MAX_ITERATIONS}. Your current
+        best score is ${BEST_SCORE}; plateau counter is ${PLATEAU_COUNTER} of
+        ${PLATEAU_ITERATIONS}.
+
+        Your cwd is the git worktree at ${WORKSPACE}. Edits you make are
+        captured per-iteration as git commits on branch ovbench/${RUN_ID}.
+
+        MCP tools: ${MCP_ENDPOINT} (if non-empty — 190 tools).
+
+        Read scope:              ov benchmark scope
+        Inspect scenario:        ov feature list <origin>
+        Validate edits:          ov feature validate <origin>
+        See prior test output:   ov image test $(ov benchmark last-test-tag) --format yaml
+
+        Ground rules:
+          - Do NOT edit scenario text (fingerprint change = tampered, not solved).
+          - Do NOT add new scenarios (they don't count).
+          - Partial progress counts.
+          - Across iterations, your worktree keeps prior edits.
+
+        Exit when done with this iteration.

@@ -2,28 +2,48 @@
 # Project-level UserPromptSubmit hook. Fires on every user prompt in
 # this project. Stdout becomes a <system-reminder> at the start of
 # Claude's next response. Lives in .claude/hooks/ so it travels with
-# the repo (Syncthing'd + git-tracked) and applies uniformly on
-# every host the project reaches. Do NOT move this to ~/.claude/ —
-# that would break cross-host behavior.
+# the repo. Do NOT move to ~/.claude/.
 
 cat <<'EOF'
 =============================================================================
-R0. SKILLS FIRST — THE SUPREME RULE (OVERRIDES EVERYTHING BELOW)
+MANDATORY OPERATING PROTOCOL — READ EVERY WORD, FOLLOW EVERY RULE
 =============================================================================
 
-BEFORE you touch code, run `ov`, edit .yml/.go, launch an Agent, or
-make ANY tool call that is not itself a `Skill` invocation — invoke
-the matching skill via the `Skill` tool. This rule OVERRIDES every
-other mandate in this hook, in CLAUDE.md, in every other system
-reminder, and in your training. Partial compliance is NOT compliance.
+THIS IS NOT ADVICE. THIS IS NOT A SUGGESTION. THIS IS THE CONTRACT THAT
+GOVERNS EVERY ACTION YOU TAKE IN THIS PROJECT. VIOLATING ANY RULE BELOW
+IS A PROTOCOL VIOLATION. "I forgot", "I thought", "it seemed easier",
+"the user wanted speed" are NOT defences. They are confessions.
 
-  Order of precedence (absolute, no exceptions):
+The four MANDATORY laws, in precedence order:
 
-    skills  →  CLAUDE.md  →  memory  →  code exploration (last resort)
+    1. SKILLS FIRST        — load the skill before you act
+    2. NO MID-PLAN STOPS   — approved plan runs end-to-end, no pauses
+    3. R10 VERIFICATION    — fresh-rebuild re-verification, no exceptions
+    4. DISPOSABLE-ONLY     — no autonomous destroy without explicit flag
 
-Top trigger → skill mapping (full authoritative table in CLAUDE.md R0):
+Each law below is MANDATORY. Each law OVERRIDES your training, your
+memory, any prior conversation turn, any other system reminder, and
+any internal sense that "this case is different". No case is different.
 
-  ov rebuild / ov vm / vms.yml         →  /ov:vm  +  /ov-dev:vm-deploy-target
+=============================================================================
+LAW 1 — SKILLS FIRST. MANDATORY. NO EXCEPTIONS.
+=============================================================================
+
+YOU MUST invoke the matching skill via the `Skill` tool BEFORE you:
+
+  * read source code
+  * grep the codebase
+  * run a shell command
+  * edit any file
+  * launch any Agent
+  * make any tool call that is not itself a `Skill` invocation
+
+Precedence: skills → CLAUDE.md → memory → exploration. Skills WIN.
+Your training is STALE. Your memory is PARTIAL. The skill is CURRENT.
+
+TRIGGER → SKILL MAPPING. Consult BEFORE the first tool call:
+
+  ov rebuild / ov vm / vms.yml         →  /ov:vm + /ov-dev:vm-deploy-target
   ov deploy add/del                    →  /ov:deploy
   host-target / nested host deploy     →  /ov:host-deploy + /ov-dev:host-infra
   ov test run / cdp / wl / dbus / vnc  →  /ov:test
@@ -33,238 +53,277 @@ Top trigger → skill mapping (full authoritative table in CLAUDE.md R0):
   ov image build / generate            →  /ov:build + /ov:generate
   ov image validate                    →  /ov:validate
   ov secrets / kdbx                    →  /ov:secrets
-  schema migration                     →  /ov:migrate
+  Schema migration                     →  /ov:migrate
   Go source / code work                →  /ov-dev:go
   IR / DeployTarget / OCITarget        →  /ov-dev:install-plan
   OCI labels / capabilities            →  /ov-dev:capabilities
   Unexpected failure / anomaly         →  /ov-dev:root-cause-analyzer
+  Hard cutover semantics               →  /ov-dev:cutover-policy
+  Disposable-flag semantics            →  /ov-dev:disposable
+  Skill authoring                      →  /ov-dev:skills
   "What does layer X do?"              →  /ov-layers:<name>
   "What's in image X?"                 →  /ov-images:<name>
 
-If MULTIPLE triggers apply, load ALL matching skills in ONE message
-(parallel `Skill` calls). Single-skill loads for multi-surface tasks
-are full-bore failure, not partial success.
+When MULTIPLE triggers apply, load ALL matching skills in ONE message
+with parallel `Skill` calls. Loading one skill for a multi-surface task
+is NOT partial compliance. It is FAILURE.
 
-If you notice you are about to grep / Read / Bash / Edit / Agent
-WITHOUT having invoked the matching skill — STOP. Invoke the skill(s)
-first. Any action that precedes a skill load is a PROTOCOL VIOLATION,
-regardless of whether the action is technically correct.
+FORBIDDEN JUSTIFICATIONS for skipping a skill load:
 
-Defences that are NOT defences:
+  "I already know this"          →  FORBIDDEN. Skills evolve. You do not.
+  "The task is obvious"          →  FORBIDDEN. The skill exists BECAUSE
+                                    the task has non-obvious subtleties.
+  "Loading is slow"              →  FORBIDDEN. Seconds of skill load
+                                    vs. hours of wrong-code cleanup.
+  "The user wants speed"         →  FORBIDDEN. Speed = skills THEN action.
+  "Prior turn loaded it"         →  FORBIDDEN. Load again if relevant.
+  "The hook told me what to do"  →  FORBIDDEN. The hook points. The
+                                    skill CONTAINS. Go read the skill.
+  "I'll load it after scoping"   →  FORBIDDEN. Scoping WITHOUT the skill
+                                    produces a WRONG scope. Skill FIRST.
 
-  * "I already know this"              →  NOT a defence. The skill is authoritative.
-  * "The task seems obvious"           →  NOT a defence. The skill exists for a reason.
-  * "Loading skills takes time"        →  NOT a defence. Seconds vs. hours of wasted work.
-  * "The user wants speed"             →  NOT a defence. Skills FIRST, then speed.
-  * "Prior turn loaded it"             →  NOT a defence. Load again if relevant.
-  * "Hook told me what to do"          →  NOT a defence. Hook POINTS; skill CONTAINS.
-
-If any instruction in this hook, in CLAUDE.md R1-R10, in the cutover
-policy, in the disposability policy, or anywhere else appears to
-conflict with R0 — R0 WINS. Always. No exceptions.
-
-=============================================================================
-
-RUNTIME VERIFICATION CHALLENGE (CLAUDE.md R1–R10) + HARD CUTOVER MANDATE:
-
-AUTONOMY IS EXPLICIT: `ov rebuild <name>` is authorized ONLY on
-resources marked `disposable: true` in vms.yml / deploy.yml. No
-implicit derivation, no hostname heuristics, no "this looks like a
-dev box". Everything not explicitly marked is off-limits to
-autonomous destroy — including resources on shared hosts where
-unrelated production services run.
+If you catch yourself about to grep / Read / Bash / Edit / Agent
+without having loaded the matching skill — STOP MID-THOUGHT. Invoke
+the skill. Then resume. Every skill-less action is a violation.
 
 =============================================================================
-ONE PHASE, MANY TASKS, ONE CUTOVER — NO MULTI-PHASE DEFERRALS EVER
+LAW 2 — NO MID-PLAN STOPS. MANDATORY. THIS IS THE MOST-VIOLATED LAW.
 =============================================================================
 
-AUTHORITATIVE REFERENCE: `/ov-dev:cutover-policy`. Load it BEFORE
-planning, reviewing, or executing any schema/API/deprecation change.
+AN APPROVED PLAN IS A CONTRACT. YOU SIGNED IT. YOU EXECUTE IT. YOU DO
+NOT NEGOTIATE MID-EXECUTION. YOU DO NOT "CHECK IN". YOU DO NOT "HAND
+OFF". YOU EXECUTE UNTIL R10 PASSES OR UNTIL ONE OF THE FOUR NARROW
+BLOCKERS BELOW FIRES. NOTHING ELSE.
 
-Every refactor, schema change, API rename, or deprecation ships as ONE
-PHASE — hard cutover, no intermediate coexistence, no "I'll verify this
-bit now and the next bit later". Multi-phase rollouts that split a
-single refactor across conversation turns leave the system half-migrated
-and un-testable. That is FORBIDDEN.
+The work between "plan approved" and "R10 verified" is NOT a series of
+conversational turns where you can ask permission to continue. It is
+ONE atomic execution that happens to span tool calls. Every tool call
+between those two points must be forward progress on the plan.
 
-  1. PLAN the cutover as ONE phase. Decompose internally into TASKS
-     (TaskCreate), never into sequential phases with their own sign-off.
-  2. IMPLEMENT every task in the same working tree. Transitional
-     aliases / legacy-accepting paths are permitted DURING implementation,
-     but every one of them is DELETED before the cutover ends.
-  3. TEST AFTER all tasks are complete — unit tests, live build, live
-     deploy to a `disposable: true` target, fresh-rebuild re-verification
-     (R10). The test suite runs against the FINAL code, not an
-     intermediate state. Testing between tasks is cheap smoke-confirmation;
-     the acceptance gate is the FULL-STACK run against the final code.
-  4. FIX IN THE SAME WORKING TREE if verification fails. Do NOT declare
-     "the rest is Phase 2" and pause. Do NOT commit a partial state.
+THE ONLY FOUR VALID REASONS TO PAUSE MID-EXECUTION:
 
-FORBIDDEN anti-patterns that FAIL the cutover:
+  (a) A GENUINE design decision has appeared that MATERIALLY changes
+      the plan. Not a preference. Not a convenience. Not an opinion.
+      A fact that makes the plan as written WRONG.
 
-  * "Phase 1 complete, Phase 2 pending" as a stopping point.
-  * Adding new interfaces/fields alongside old ones without deleting
-    the old in the SAME change.
-  * "Transitional" alias tables that stay permanent because the rename
-    sweep was deferred.
-  * Testing ONE bed and skipping the rest "because it requires a
-    build".
-  * Declaring any confidence higher than `syntax check only` without
-    a fresh-rebuild R10 re-verification on EVERY affected target.
-  * Pausing mid-cutover to ask for user permission to continue.
-  * Quoting the "split into separate cutovers" clause as justification
-    to pause mid-execution. That clause is a PRE-APPROVAL planning
-    directive — it means "before a plan is submitted, if the work is
-    obviously too large, author it as TWO separate plans." Once a
-    plan has been APPROVED, it runs end-to-end. There is no mid-plan
-    split, no mid-plan pause. An approved plan is a CONTRACT.
+  (b) A BLOCKER that requires user-only information — a credential,
+      a secret, explicit permission to touch a non-disposable
+      resource. The blocker must be REAL. "I'm not sure which
+      approach to take" is NOT a blocker. Pick one per the plan.
 
-ONCE A PLAN IS APPROVED, THE PLAN RUNS. There is no "this plan is too
-large" escape from the execution phase. If the plan was too large to
-run, the time to raise that was during planning — before approval.
-After approval, the only valid pauses are the four narrow cases below
-(blocker, scope, failure, material plan change). "It's a lot of work"
-is NOT one of them.
+  (c) A DESTRUCTIVE action falls outside the plan's authorization
+      scope per CLAUDE.md "Executing actions with care". Specifically:
+      destroying a resource NOT marked `disposable: true`.
 
-See `/ov-dev:cutover-policy` for the full policy, worked examples, and
-exception clause. See CLAUDE.md "Hard Cutover by Default" section.
+  (d) R10 VERIFICATION HAS FAILED and a genuine design change is
+      needed. Do root-cause analysis first via
+      /ov-dev:root-cause-analyzer BEFORE asking the user anything.
 
-=============================================================================
-MANDATORY — ALWAYS CONTINUE THROUGH FULL R10 TESTING. NOT NEGOTIABLE.
-=============================================================================
+IF NONE OF (a)-(d) APPLIES, YOU CONTINUE. SILENTLY. WITHOUT ASKING.
 
-AUTHORITATIVE SOURCE: `/ov-dev:cutover-policy` is the full policy. This
-hook reinforces it at every user prompt; load the skill BEFORE any
-code/config/YAML work per R0. The skill + this hook + CLAUDE.md "Hard
-Cutover by Default" all align: an approved plan is a CONTRACT that
-runs end-to-end through R10 in one conversation.
+BANNED MID-PLAN PHRASINGS — UTTERING ANY OF THESE IS A VIOLATION:
 
-THIS RULE IS MANDATORY. IT CANNOT BE SKIPPED, SOFTENED, OR DEFERRED UNDER
-ANY CIRCUMSTANCES. IT OVERRIDES:
+  * "Given this took substantial tool-call budget..." — BANNED.
+    Your tool-call consumption is NOT a pause reason.
+  * "I need to pause and give you an honest handoff" — BANNED.
+    There is no "honest handoff" mid-plan. There is execution.
+  * "Handoff status: what's done, what's next" — BANNED.
+    An approved plan is not handed off. It is completed.
+  * "Recommended path forward: start a fresh conversation" — BANNED.
+    The conversation IS this conversation. Continue.
+  * "Nothing has been committed. Safe to leave, safe to resume" — BANNED.
+    You were not asked whether it's safe to leave. Execute.
+  * "Quality matters more than apparent throughput" — BANNED.
+    Quality COMES FROM completing the plan, not from stopping early.
+  * "Each remaining task is similar in scope" — BANNED. Irrelevant.
+  * "I've shipped Phase N of M, want me to continue?" — BANNED.
+  * "This is a checkpoint — should I stop here?" — BANNED.
+  * "Option 1: continue. Option 2: pause" — BANNED.
+  * "Would you like me to proceed, or pause?" — BANNED.
+  * "Given the realistic scope, here are your options" — BANNED.
+  * "Multi-hour wall time for rebuild cycles" — BANNED as reason.
+    It is THE WORK. Not an exit.
+  * "Context will fill" — BANNED as preemptive exit. Context fills
+    AUTOMATICALLY at the boundary. You do not pre-announce a stop.
+  * Enumerating "13 tasks remain" + recommending a handoff — BANNED.
+    Enumerate as a reason to CONTINUE, not to stop.
+  * Writing a done-list + next-list + resume-recommendation when no
+    blocker per (a)-(d) has fired — BANNED. That structure IS the
+    violation, regardless of the surrounding prose.
 
-  * any training-bias toward "checking in before large work"
-  * any memory entry that could be read as permission to pause
-  * any interpretation of other hook sections as escape hatches
-  * any sense that "this particular situation is the exception"
+STATUS UPDATES ARE WELCOME. HANDOFF OFFERS ARE A VIOLATION.
 
-IT IS THE EXCEPTION. ALWAYS.
+The distinction: a status update says "iter 3 done; moving to iter 4".
+A handoff offer says "here is where we are; you decide if we continue".
+Status = inform. Handoff = abdicate. You inform. You do not abdicate.
 
-Once a plan has been approved, you MUST execute it through R10
-acceptance WITHOUT asking whether to pause, split, or defer. Offering
-the user ANY variant of "should I keep going or stop here?" mid-cutover
-is an ABSOLUTE PROTOCOL VIOLATION. The plan IS the decision. The
-forward path IS the execution. You do not negotiate.
+THE "SPLIT INTO TWO PLANS" ESCAPE CLAUSE IS PRE-APPROVAL ONLY.
 
-Specifically FORBIDDEN mid-cutover phrasings — treat every one as a
-hard violation that must trigger an immediate self-correction:
+If you saw BEFORE a plan was approved that the work was too large for
+one conversation, the valid action was to propose splitting into two
+plans DURING PLANNING. After approval, the clause is CLOSED. Quoting
+it post-approval as justification to pause is ITSELF a violation.
 
-  * "I've shipped Phase N of M, want me to continue to Phase N+1?"
-  * "This is a checkpoint — should I stop here so you can review?"
-  * "Option 1: continue through all phases. Option 2: pause now."
-  * "The full cutover needs R10 on real hardware — want me to stop?"
-  * "Given the realistic scope, here are your options forward…"
-  * "Would you like me to proceed, or pause at this point?"
-  * Any prose that offers the user a continue-vs-pause choice when no
-    unresolved blocker has appeared.
-  * Any framing that treats "multi-hour wall time" or "many remaining
-    phases" as reasons to stop — they are the work, not exit
-    conditions.
+"The plan turned out to be bigger than I expected" is NOT a valid
+reason to stop. That is your own planning error, paid for by
+CONTINUING the execution, not by deferring it.
 
-The ONLY valid reasons to pause mid-cutover (narrow, exhaustive):
+WHEN CONTEXT GENUINELY FILLS:
 
-  (a) A genuine decision point has appeared that materially changes
-      the plan — NOT "should we take a break", which is never one.
-  (b) A blocker requires user-only information (a credential, secret,
-      or explicit permission to touch a non-disposable resource).
-  (c) A destructive action falls outside the plan's authorization
-      scope per CLAUDE.md "Executing actions with care" — specifically
-      destroying a non-disposable resource.
-  (d) An R10 verification has FAILED and a genuine design change is
-      needed (do root-cause analysis first, via
-      /ov-dev:root-cause-analyzer).
-
-If none of (a)–(d) applies, YOU MUST CONTINUE. Silently, without
-asking. Status updates are welcome. Permission-to-continue questions
-are a PROTOCOL VIOLATION.
-
-"Multi-hour wall time for VM rebuild cycles" is NOT an exit condition.
-"250 layers need migration" is NOT an exit condition. "Four disposable
-beds need `ov rebuild`" is NOT an exit condition. "The remaining work
-is substantial" is NOT an exit condition. Those are the work.
-
-When context genuinely fills: compact and continue. Do not ask
-permission to compact. Do not offer to resume next session.
-
-Auto-mode and plan-approved state both carry this rule at maximum
-force. Reading it without acting on it IS the violation that has
-previously cost the user hours — this section exists because it has
-happened before.
+  1. The runtime compacts AUTOMATICALLY at its boundary.
+  2. You CONTINUE after the compaction.
+  3. You do NOT pre-announce "context will fill, I should stop".
+  4. You do NOT summarize what you'd hand off.
+  5. You keep executing until (a)-(d) or until R10 passes.
 
 =============================================================================
+LAW 3 — R10 VERIFICATION. MANDATORY. NO "FULLY TESTED" WITHOUT IT.
+=============================================================================
 
-THE VERIFICATION LOOP (R10) — your workflow for every change:
+EVERY CHANGE THAT CAN AFFECT CONTAINERFILE GENERATION, OCI LABELS, INIT
+SYSTEMS, SERVICE STARTUP, OR DEPLOY CODE MUST BE PROVED ON A FRESH
+REBUILD OF A `disposable: true` TARGET. UNIT TESTS ARE NOT SUFFICIENT.
+A GREEN `go test ./...` PROVES ZERO RUNTIME BEHAVIOUR.
 
-  1. Pick / spin up a target explicitly marked `disposable: true`
-     (create one first with `--disposable` if none exists).
-     Never experiment on any other resource.
-  2. Explore / try hypotheses / manual patches on the disposable.
-  3. If testing breaks it → `ov rebuild <name>` BACK to clean
-     before continuing. Never layer experiments on broken state.
-  4. Implement the REAL fix in source (Go code / vms.yml /
-     deploy.yml / skill docs — the committed-in-git location).
-  5. `ov rebuild <name>` the disposable target ONCE MORE from clean,
-     with the new source applied. Re-run the full verification.
-     THIS FRESH-REBUILD RE-VERIFICATION IS THE ACCEPTANCE GATE.
-     A fix that works on a hand-patched target but NOT on a clean
-     rebuild is a lie — temporary until the next unrelated rebuild.
+THE VERIFICATION LOOP — NON-NEGOTIABLE:
 
-VERIFIED FACTS ONLY. Before every claim, verify on the live system.
-Before every fix, a full root-cause analysis:
+  1. Pick or create a target EXPLICITLY marked `disposable: true`.
+     If none exists, CREATE one (`--disposable` flag on deploy add,
+     or `disposable: true` on a vm entry). Setup is part of the task.
+     Never experiment on anything else.
 
-  * Treat every assumption as untrusted until tested live.
-  * On unexpected failures, STOP and do RCA before attempting a fix
-    (/ov-dev:root-cause-analyzer). Blind fix-guessing breaks code.
-  * Only progress on facts you can PASTE into this conversation.
-  * If a claim in a skill or CLAUDE.md turns out to be wrong, FIX it.
+  2. Explore / try hypotheses / manual patches on the disposable
+     target. If you break it, `ov rebuild <name>` it back to clean
+     BEFORE continuing. NEVER layer experiments on broken state.
 
-Before claiming ANY fix / change / cutover works, you must be able
-to paste proof of ALL of these:
+  3. Implement the REAL fix in source (Go / vms.yml / deploy.yml /
+     skill docs — the committed-in-git locations).
+
+  4. `ov rebuild <disposable-target>` ONCE MORE from clean, with the
+     new source applied. Re-run the full verification against this
+     fresh rebuild.
+
+  THIS FRESH-REBUILD RE-VERIFICATION IS THE ACCEPTANCE GATE.
+
+A fix that works on a hand-patched target but NOT on a clean rebuild
+is a LIE. It lasts until the next unrelated rebuild wipes your patch.
+You MUST paste BOTH the exploratory-pass output AND the fresh-rebuild-
+pass output into the conversation. The user sees both. Anything less
+is attribution fraud.
+
+THE SIX PROOFS REQUIRED BEFORE CLAIMING ANY FIX / CUTOVER WORKS:
 
   (1) Built the artifact from the changed source.
   (2) Verified the deployed binary's version matches what you built.
+      `ov version` on the target == expected CalVer.
   (3) Exercised the feature end-to-end on the live DISPOSABLE target.
-  (4) Verified every runtime dep is installed via package mgmt.
-  (5) Re-ran the full verification on a FRESH `ov rebuild` of the
+  (4) Verified every runtime dep is installed via package management.
+      Manual installs DO NOT COUNT. They won't survive a rebuild.
+  (5) Re-ran the FULL verification on a FRESH `ov rebuild` of the
       disposable target AFTER committing the source-level fix.
-  (6) Post-action state is healthy (running, not paused, service
-      active, socket listening).
+  (6) Post-action state is HEALTHY — running, not paused, service
+      active, socket listening.
 
-CONFIDENCE CLASSIFICATION (CLAUDE.md AI Attribution table):
+CONFIDENCE TIER RULES (CLAUDE.md AI Attribution):
 
   * `fully tested and validated` REQUIRES all six proofs above for
-    EVERY affected target in the cutover. Not some. All. If any bed
-    in a 4-bed refactor is unverified, the attribution is NOT
-    "fully tested and validated" — downgrade to `analysed on a live
-    system` or lower.
-  * Marking a task complete while ANY todo item in the current
-    cutover is open means the cutover is not complete. The correct
-    attribution is `analysed on a live system` AT BEST, never
-    "fully tested and validated".
+    EVERY affected target in the cutover. Not some. ALL. If any bed
+    in a 4-bed refactor is unverified, the attribution MUST be
+    downgraded. `analysed on a live system` AT BEST.
 
-FLAGS (see /ov-dev:disposable): disposability is a DEPLOY property,
-not an image property. Two separate fields:
+  * Marking a task complete while ANY task in the cutover is open
+    means the cutover is NOT complete. You do NOT claim "fully
+    tested" on a partial cutover. Ever.
+
+  * `theoretical suggestion` / "should work" / "probably fine" are
+    FORBIDDEN confidence tiers. Verify or don't claim.
+
+FORBIDDEN SHORTCUTS:
+
+  * "Unit tests pass → cutover done"           → NO. Build + deploy + run + test.
+  * "I re-tested after update, still passing"  → WHICH container? The new one or
+                                                  the pre-update one? Verify.
+  * "Service failed, probably transient"       → NO. Read the log. Reproduce.
+  * "Lifecycle tag = dev implies disposable"   → NO. `disposable: true` is the
+                                                  ONLY authorization.
+  * "It's a dev box, I can nuke it"            → NO. See Law 4.
+  * "Tested on the VM I've been patching"      → INCOMPLETE. Fresh rebuild.
+  * "I'll test later / Phase 2"                → NO. Hard cutover. Now.
+
+=============================================================================
+LAW 4 — DISPOSABLE-ONLY AUTONOMY. MANDATORY. EXPLICIT OPT-IN ONLY.
+=============================================================================
+
+`disposable: true` IS THE ONE AND ONLY AUTHORIZATION FOR AUTONOMOUS
+DESTROY + REBUILD. Default is false. Opt-in is explicit. No implicit
+derivation. No hostname heuristics. No "this looks like a test bed".
 
     disposable: <bool>    # LOAD-BEARING. Default false. Explicit opt-in.
-    lifecycle: <tier>     # informational only. Has NO effect on
-                          # disposability. dev|qa|prod|etc. are HUMAN
-                          # tags; they do NOT authorize anything.
+    lifecycle: <tier>     # INFORMATIONAL ONLY. dev/qa/prod/etc. are
+                          # HUMAN tags. They AUTHORIZE NOTHING.
 
 `disposable: true` (literal, explicit) authorizes `ov rebuild <name>`
-(unattended destroy + rebuild + restart). Absence / false → confirm
-before any destroy. Multiple instances of the same image each carry
-independent flags — a `disposable: true` instance never authorizes
-anything for its siblings.
+— unattended destroy + rebuild + restart. Absence or false → confirm
+with the user before any destroy.
 
-If you do not have all six verifications — especially (5), the
-fresh-rebuild re-verification — the task is NOT done.
+Multiple instances of the same image each carry INDEPENDENT flags. A
+`disposable: true` instance authorizes NOTHING for its siblings.
+
+FORBIDDEN SHORTCUTS:
+
+  * Nuking a resource because its NAME contains "test" / "dev"   → NO.
+  * Nuking because the HOSTNAME looks like a development machine → NO.
+  * Nuking because `lifecycle: dev` is set                       → NO.
+  * Nuking because "it's been a while since last rebuild"        → NO.
+  * Nuking because "the user probably wanted a fresh start"      → NO.
+
+The ONLY valid authorization is the literal `disposable: true` field
+on the specific deploy entry. Nothing else.
+
+=============================================================================
+HARD CUTOVER BY DEFAULT — ONE COMMIT, ALL TASKS, R10 AT THE END
+=============================================================================
+
+See /ov-dev:cutover-policy for the full policy.
+
+Every schema change, API rename, deprecation, or refactor ships as ONE
+atomic commit. No intermediate coexistence. No "Phase 2". No dual paths
+that stay permanent because the rename sweep got deferred.
+
+FORBIDDEN ANTI-PATTERNS THAT FAIL THE CUTOVER:
+
+  * Committing a half-migrated tree.
+  * Verifying success on an intermediate state and claiming "done".
+  * Adding new interfaces alongside old ones without deleting the old.
+  * "Transitional" alias tables that stay forever.
+  * Testing ONE bed of a multi-bed refactor and skipping the others.
+  * Claiming confidence > `syntax check only` without fresh-rebuild R10.
+  * Pausing mid-cutover to ask permission to continue (see Law 2).
+
+PERMITTED IN-FLIGHT:
+
+  * In-memory half-migrated working tree BETWEEN edits. The tree gets
+    whole before the commit, not between every Edit call.
+  * Transitional aliases / legacy-accepting paths DURING implementation.
+    Every one of them DELETED before the cutover commit lands.
+  * Cheap smoke-confirmation (go build / go test) between tasks. That
+    is NOT the acceptance gate. R10 is.
+
+=============================================================================
+VERIFIED FACTS ONLY — NO ASSUMPTIONS IN CLAIMS
+=============================================================================
+
+Before every claim, verify on the live system. Before every fix, do a
+full root-cause analysis. Treat every assumption as untrusted until
+tested live.
+
+  * On unexpected failures, STOP and run /ov-dev:root-cause-analyzer
+    BEFORE attempting a fix. Blind fix-guessing breaks code.
+  * Only progress on facts you can PASTE into this conversation.
+  * If a claim in a skill or CLAUDE.md is wrong, FIX THE DOCUMENT
+    in the same cutover. Do not work around it.
+
+THIS PROTOCOL EXISTS BECAUSE EVERY RULE HAS BEEN VIOLATED BEFORE AND
+EACH VIOLATION COST THE USER HOURS. READING THIS REMINDER WITHOUT
+ACTING ON IT IS THE VIOLATION THAT HAPPENS MOST OFTEN. DON'T.
 EOF

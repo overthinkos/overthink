@@ -1,0 +1,812 @@
+package main
+
+// benchmark_loop.go — the iteration state machine for `ov benchmark run`.
+//
+// Responsibilities:
+//   - Drive the plateau-bounded iteration loop
+//   - Write scope.yml + prompt.md per iteration
+//   - Dispatch the runner into the target deploy
+//   - Shell out to `ov image build` and `ov image test --format yaml`
+//     for per-iteration scoring
+//   - Aggregate per-iteration state into report.yml
+//
+// Every subprocess invocation goes through exported helper vars
+// (buildImageFn, runOvImageTestFn) so unit tests can substitute fakes
+// without touching the real podman/git/ov machinery.
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
+
+// ---------------------------------------------------------------------------
+// Opts + state types
+// ---------------------------------------------------------------------------
+
+// BenchmarkOpts are the resolved inputs to a run, populated by
+// BenchmarkRunCmd.Run before calling RunBenchmark.
+type BenchmarkOpts struct {
+	ProjectDir        string
+	Deployment        string
+	DeploymentNode    *DeploymentNode
+	Runner            *BenchmarkRunner
+	Prompt            string // template text; per-iter substitution at render time
+	TargetImage       string
+	Tags              string
+	PlateauIterations int
+	MaxIterations     int // 0 = unbounded (except by plateau)
+	MaxScenarios     int
+	NoMCP             bool
+	NoIsolate         bool
+	DryRun            bool
+	SkipRebuild       bool
+	RebuildBaseline   bool
+	Format            string // "text" | "yaml"
+	Stdout            *os.File
+	Stderr            *os.File
+
+	// PreAIScenarios is the frozen set of scenarios the benchmark is
+	// scored against. Populated from CollectDescriptions at Phase B.
+	// Changes to descriptions post-iteration don't alter this set.
+	PreAIScenarios []ScenarioTestResult
+
+	// PreFingerprints maps ScenarioID -> body fingerprint at baseline.
+	PreFingerprints map[string]string
+
+	// PreTagFingerprints maps ScenarioID -> tag fingerprint at baseline.
+	PreTagFingerprints map[string]string
+}
+
+// IterationState captures one iteration's outputs.
+type IterationState struct {
+	K                  int                        `yaml:"k"`
+	Score              int                        `yaml:"score"`
+	PlateauCounterAfter int                       `yaml:"plateau_counter_after"`
+	BuildFailure       bool                       `yaml:"build_failure,omitempty"`
+	BuildDuration      string                     `yaml:"build_duration,omitempty"`
+	TestDuration       string                     `yaml:"test_duration,omitempty"`
+	RunnerDuration     string                     `yaml:"runner_duration,omitempty"`
+	CommitSHA          string                     `yaml:"commit_sha,omitempty"`
+	Scenarios          []ScenarioVerdict          `yaml:"scenarios,omitempty"`
+	AddedScenarios     []string                   `yaml:"added_scenarios,omitempty"`
+}
+
+// ScenarioVerdict is one scenario's post-iteration outcome.
+type ScenarioVerdict struct {
+	ID              string  `yaml:"id"`
+	Origin          string  `yaml:"origin,omitempty"`
+	Verdict         Verdict `yaml:"verdict"`
+	Baseline        string  `yaml:"baseline,omitempty"`
+	Final           string  `yaml:"final,omitempty"`
+	FingerprintPre  string  `yaml:"fingerprint_pre,omitempty"`
+	FingerprintPost string  `yaml:"fingerprint_post,omitempty"`
+	PendingPre      int     `yaml:"pending_pre,omitempty"`
+	PendingPost     int     `yaml:"pending_post,omitempty"`
+}
+
+// FinalReport is the aggregate persisted to report.yml.
+type FinalReport struct {
+	RunID              string            `yaml:"run_id"`
+	TargetDeployment   string            `yaml:"target_deployment"`
+	TargetImage        string            `yaml:"target_image"`
+	Runner             string            `yaml:"runner"`
+	PlateauIterations  int               `yaml:"plateau_iterations"`
+	MaxIterations      int               `yaml:"max_iterations"`
+	StartedUTC         string            `yaml:"started_utc"`
+	FinishedUTC        string            `yaml:"finished_utc"`
+	ExitReason         string            `yaml:"exit_reason"` // plateau | ceiling | solved-all | interrupted | dry-run
+	IterationsRun      int               `yaml:"iterations_run"`
+	BestScore          int               `yaml:"best_score"`
+	BestIteration      int               `yaml:"best_iteration"`
+	Summary            ReportSummary     `yaml:"summary"`
+	Iterations         []IterationState  `yaml:"iterations,omitempty"`
+	FinalScenarios     []ScenarioVerdict `yaml:"scenarios,omitempty"`
+}
+
+// ReportSummary is the aggregate metrics panel.
+type ReportSummary struct {
+	Input          int     `yaml:"input"`
+	Solved         int     `yaml:"solved"`
+	Partial        int     `yaml:"partial"`
+	Unchanged      int     `yaml:"unchanged"`
+	Regressed      int     `yaml:"regressed"`
+	Tampered       int     `yaml:"tampered"`
+	Added          int     `yaml:"added"`
+	PercentSolved  float64 `yaml:"percent_solved"`
+}
+
+// ---------------------------------------------------------------------------
+// Subprocess seams (test hooks)
+// ---------------------------------------------------------------------------
+
+// buildImageFn builds the target image from the worktree into tag. It
+// returns the build's wall-clock duration and any error. Swappable for
+// tests via fake implementations.
+var buildImageFn = func(ctx context.Context, worktreeDir, image, tag, logPath string) (time.Duration, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, "ov", "-C", worktreeDir,
+		"image", "build", image, "--tag", tag)
+	if logPath != "" {
+		f, err := os.Create(logPath)
+		if err == nil {
+			cmd.Stdout = f
+			cmd.Stderr = f
+			defer f.Close()
+		}
+	}
+	err := cmd.Run()
+	return time.Since(start), err
+}
+
+// runOvImageTestFn shells out to `ov image test <tag> --format yaml`
+// and returns the raw YAML bytes + duration. Swappable for tests.
+var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
+	start := time.Now()
+	cmd := exec.CommandContext(ctx, "ov", "image", "test", tag, "--format", "yaml")
+	out, err := cmd.Output()
+	return out, time.Since(start), err
+}
+
+// runRunnerFn dispatches the runner into the target deploy and waits
+// for it to exit. Returns duration + error. Swappable for tests.
+var runRunnerFn = func(ctx context.Context, d Dispatcher, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
+	start := time.Now()
+	cmd, err := d.Build(ctx, layout, argv, env)
+	if err != nil {
+		return 0, err
+	}
+	if logPath != "" {
+		f, ferr := os.Create(logPath)
+		if ferr == nil {
+			cmd.Stdout = f
+			cmd.Stderr = f
+			defer f.Close()
+		}
+	}
+	err = cmd.Run()
+	return time.Since(start), err
+}
+
+// ---------------------------------------------------------------------------
+// RunBenchmark — the main entry point
+// ---------------------------------------------------------------------------
+
+// RunBenchmark executes the iteration loop against opts and returns
+// the final report. It does NOT create the worktree or run baseline
+// evaluation — those are Phase B/C concerns owned by the caller
+// (BenchmarkRunCmd.Run).
+func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout, dispatcher Dispatcher) (*FinalReport, error) {
+	started := time.Now().UTC()
+	report := &FinalReport{
+		RunID:             layout.RunID,
+		TargetDeployment:  opts.Deployment,
+		TargetImage:       opts.TargetImage,
+		Runner:            opts.Runner.Name,
+		PlateauIterations: opts.PlateauIterations,
+		MaxIterations:     opts.MaxIterations,
+		StartedUTC:        started.Format(time.RFC3339),
+	}
+
+	plateauCounter := 0
+	bestScore := 0
+	bestIteration := 0
+	preIDs := scenarioIDSet(opts.PreAIScenarios)
+
+	// Iteration loop.
+	for k := 1; opts.MaxIterations == 0 || k <= opts.MaxIterations; k++ {
+		// Compute still-unsolved.
+		unsolved := stillUnsolved(opts.PreAIScenarios, report.Iterations)
+		if len(unsolved) == 0 && k > 1 {
+			report.ExitReason = "solved-all"
+			break
+		}
+
+		iterState, err := runOneIteration(ctx, opts, layout, dispatcher, k, unsolved, report)
+		if err != nil {
+			// A genuine infrastructure error (not a build/test failure) aborts.
+			return report, fmt.Errorf("iter%d: %w", k, err)
+		}
+		report.Iterations = append(report.Iterations, iterState)
+
+		// Dry-run exits after iter 1 writes its scope+prompt.
+		if opts.DryRun {
+			report.ExitReason = "dry-run"
+			break
+		}
+
+		// Plateau bookkeeping.
+		if iterState.Score > bestScore {
+			bestScore = iterState.Score
+			bestIteration = k
+			plateauCounter = 0
+		} else {
+			plateauCounter++
+		}
+		iterState.PlateauCounterAfter = plateauCounter
+		// Re-persist with updated plateau counter (writeIterScore is
+		// called inside runOneIteration with counter=0 placeholder;
+		// fix in place by rewriting).
+		report.Iterations[len(report.Iterations)-1].PlateauCounterAfter = plateauCounter
+		_ = writeIterScore(layout, k, report.Iterations[len(report.Iterations)-1])
+
+		// Plateau exit.
+		if plateauCounter >= opts.PlateauIterations {
+			report.ExitReason = "plateau"
+			break
+		}
+
+		// Ceiling exit.
+		if opts.MaxIterations != 0 && k >= opts.MaxIterations {
+			report.ExitReason = "ceiling"
+			break
+		}
+	}
+
+	finished := time.Now().UTC()
+	report.FinishedUTC = finished.Format(time.RFC3339)
+	report.BestScore = bestScore
+	report.BestIteration = bestIteration
+	report.IterationsRun = len(report.Iterations)
+	if report.ExitReason == "" {
+		// Loop exited without hitting a condition above (e.g. unbounded
+		// ceiling + no plateau yet), only possible when ctx cancelled.
+		report.ExitReason = "interrupted"
+	}
+
+	// Aggregate per-scenario final verdicts (from the LAST iteration's
+	// scenario verdicts, plus `added` scenarios from the final reload).
+	if n := len(report.Iterations); n > 0 {
+		report.FinalScenarios = report.Iterations[n-1].Scenarios
+	}
+	report.Summary = computeSummary(report.FinalScenarios, len(preIDs))
+
+	// Persist the report.
+	if err := writeReport(layout, report); err != nil {
+		return report, fmt.Errorf("write report: %w", err)
+	}
+	return report, nil
+}
+
+// scenarioIDSet returns a set of scenario IDs from a frozen list.
+func scenarioIDSet(scenarios []ScenarioTestResult) map[string]bool {
+	out := make(map[string]bool, len(scenarios))
+	for _, s := range scenarios {
+		out[s.ID] = true
+	}
+	return out
+}
+
+// stillUnsolved returns scenario IDs still in play (not in verdict
+// Solved or Tampered) across the run so far.
+func stillUnsolved(pre []ScenarioTestResult, iters []IterationState) []ScenarioTestResult {
+	// Build a map of latest verdict per scenario ID.
+	latest := make(map[string]Verdict)
+	for _, it := range iters {
+		for _, v := range it.Scenarios {
+			latest[v.ID] = v.Verdict
+		}
+	}
+	var out []ScenarioTestResult
+	for _, s := range pre {
+		v, seen := latest[s.ID]
+		if !seen {
+			out = append(out, s)
+			continue
+		}
+		if v == VerdictSolved || v == VerdictTampered {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// runOneIteration
+// ---------------------------------------------------------------------------
+
+// runOneIteration drives a single pass through Phase E of the flow.
+func runOneIteration(
+	ctx context.Context,
+	opts BenchmarkOpts,
+	layout RunLayout,
+	dispatcher Dispatcher,
+	k int,
+	unsolved []ScenarioTestResult,
+	reportSoFar *FinalReport,
+) (IterationState, error) {
+	iter := IterationState{K: k}
+	iterDir := layout.IterDir(k)
+	if err := os.MkdirAll(iterDir, 0o755); err != nil {
+		return iter, fmt.Errorf("mkdir iter%d: %w", k, err)
+	}
+
+	// 1. Write scope.yml
+	scope := renderScope(opts, layout, k, reportSoFar, unsolved)
+	if err := writeScope(layout, k, scope); err != nil {
+		return iter, fmt.Errorf("write scope: %w", err)
+	}
+
+	// 2. Render + write prompt.md
+	mcpEndpoint, _ := dispatcher.MCPEndpoint(ctx)
+	substCtx := &SubstContext{
+		RunID:             layout.RunID,
+		WorkspacePath:     dispatcher.WorkspacePath(layout),
+		TargetImage:       opts.TargetImage,
+		TargetDeployment:  opts.Deployment,
+		Iteration:         k,
+		MaxIterations:     opts.MaxIterations,
+		PlateauIterations: opts.PlateauIterations,
+		PlateauCounter:    computePlateauSoFar(reportSoFar),
+		BestScore:         reportSoFar.BestScore,
+		MCPEndpoint:       mcpEndpoint,
+		Tags:              opts.Tags,
+		Timeout:           opts.Runner.Timeout,
+	}
+	promptText := Substitute(opts.Prompt, substCtx)
+	if err := writePrompt(layout, k, promptText); err != nil {
+		return iter, fmt.Errorf("write prompt: %w", err)
+	}
+
+	// Dry-run exits here without invoking the runner.
+	if opts.DryRun {
+		return iter, nil
+	}
+
+	// 3. Dispatch the runner.
+	runnerArgv, runnerEnv := renderRunnerInvocation(opts, substCtx, promptText, iterDir)
+	runnerLog := filepath.Join(iterDir, "runner.log")
+
+	// Apply per-runner timeout.
+	timeout, _ := ParseRunnerTimeout(opts.Runner.Timeout)
+	runnerCtx, cancelRunner := context.WithTimeout(ctx, timeout)
+	runnerDur, runnerErr := runRunnerFn(runnerCtx, dispatcher, layout, runnerArgv, runnerEnv, runnerLog)
+	cancelRunner()
+	iter.RunnerDuration = runnerDur.String()
+	if runnerErr != nil {
+		// Log-only; runner failures don't abort the loop (the plateau
+		// counter will catch a persistent bad runner).
+		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)
+	}
+
+	// 4. Rebuild (unless --skip-rebuild).
+	iterTag := fmt.Sprintf("ovbench/%s-iter%d:%s", layout.RunID, k, opts.TargetImage)
+	var testOut []byte
+	if !opts.SkipRebuild {
+		buildLog := filepath.Join(iterDir, "build.log")
+		buildDur, buildErr := buildImageFn(ctx, layout.WorktreeDir, opts.TargetImage, iterTag, buildLog)
+		iter.BuildDuration = buildDur.String()
+		if buildErr != nil {
+			iter.BuildFailure = true
+			// Score is unchanged (== prior iteration's score); no test run.
+			iter.Score = priorScore(reportSoFar)
+			iter.Scenarios = priorScenarios(reportSoFar)
+			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
+			}
+			_ = writeIterScore(layout, k, iter)
+			return iter, nil
+		}
+
+		// 5. Evaluate via ov image test.
+		testStart := time.Now()
+		out, _, testErr := runOvImageTestFn(ctx, iterTag)
+		iter.TestDuration = time.Since(testStart).String()
+		if testErr != nil {
+			// Test runner failure; treat as build failure (score unchanged).
+			iter.BuildFailure = true
+			iter.Score = priorScore(reportSoFar)
+			iter.Scenarios = priorScenarios(reportSoFar)
+			fmt.Fprintf(opts.Stderr, "iter%d: ov image test: %v\n", k, testErr)
+			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
+			}
+			_ = writeIterScore(layout, k, iter)
+			return iter, nil
+		}
+		testOut = out
+		// Persist raw test output.
+		_ = os.WriteFile(filepath.Join(iterDir, "test-output.yaml"), out, 0o644)
+	}
+
+	// 6. Parse + classify.
+	parsed, err := ParseOvTestOutput(testOut)
+	if err != nil {
+		return iter, fmt.Errorf("parse test output: %w", err)
+	}
+
+	// Reload fingerprints from the current worktree state (scenarios
+	// may have been edited).
+	postSet := loadWorktreeDescriptions(opts, layout)
+	postFingerprints := FingerprintSet(postSet)
+	postTagFingerprints := collectTagFingerprints(postSet)
+
+	// Classify each pre-AI scenario.
+	postByID := parsed.ScenarioByID()
+	for _, pre := range opts.PreAIScenarios {
+		preState := ScenarioState{
+			Present:        true,
+			Fingerprint:    opts.PreFingerprints[pre.ID],
+			Status:         pre.Status,
+			PendingSteps:   pre.PendingSteps,
+			TagFingerprint: opts.PreTagFingerprints[pre.ID],
+		}
+		var postState ScenarioState
+		if post, ok := postByID[pre.ID]; ok {
+			postState = ScenarioState{
+				Present:        true,
+				Fingerprint:    postFingerprints[pre.ID],
+				Status:         post.Status,
+				PendingSteps:   post.PendingSteps,
+				TagFingerprint: postTagFingerprints[pre.ID],
+			}
+		}
+		v := Classify(preState, postState)
+		iter.Scenarios = append(iter.Scenarios, ScenarioVerdict{
+			ID:              pre.ID,
+			Origin:          pre.Origin,
+			Verdict:         v,
+			Baseline:        pre.Status,
+			Final:           postState.Status,
+			FingerprintPre:  preState.Fingerprint,
+			FingerprintPost: postState.Fingerprint,
+			PendingPre:      preState.PendingSteps,
+			PendingPost:     postState.PendingSteps,
+		})
+		if v == VerdictSolved {
+			iter.Score++
+		}
+	}
+
+	// Identify `added` scenarios (present post but not in pre).
+	preIDs := scenarioIDSet(opts.PreAIScenarios)
+	for id := range postByID {
+		if !preIDs[id] {
+			iter.AddedScenarios = append(iter.AddedScenarios, id)
+		}
+	}
+
+	// 7. Commit iteration on the worktree branch.
+	solvedIDs := collectSolvedIDs(iter.Scenarios)
+	if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+		fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
+	}
+	_ = solvedIDs // consumed inside commitIterationBestEffort
+
+	// Persist per-iter score.yml.
+	if err := writeIterScore(layout, k, iter); err != nil {
+		return iter, fmt.Errorf("write iter score: %w", err)
+	}
+	return iter, nil
+}
+
+// commitIterationBestEffort commits the iteration and stashes the SHA.
+// Errors are non-fatal — the commit step is audit-trail; a hook abort
+// doesn't invalidate the iteration's scoring.
+func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState) error {
+	solved := collectSolvedIDs(iter.Scenarios)
+	sha, err := CommitIteration(ctx, layout, k, iter.Score, solved)
+	if err != nil {
+		return err
+	}
+	iter.CommitSHA = sha
+	return nil
+}
+
+// collectSolvedIDs returns the IDs with Verdict == Solved.
+func collectSolvedIDs(v []ScenarioVerdict) []string {
+	var out []string
+	for _, s := range v {
+		if s.Verdict == VerdictSolved {
+			out = append(out, s.ID)
+		}
+	}
+	return out
+}
+
+// priorScore returns the last iteration's score or 0 for the first iteration.
+func priorScore(r *FinalReport) int {
+	if r == nil || len(r.Iterations) == 0 {
+		return 0
+	}
+	return r.Iterations[len(r.Iterations)-1].Score
+}
+
+// priorScenarios returns the last iteration's scenario slice.
+func priorScenarios(r *FinalReport) []ScenarioVerdict {
+	if r == nil || len(r.Iterations) == 0 {
+		return nil
+	}
+	return r.Iterations[len(r.Iterations)-1].Scenarios
+}
+
+// computePlateauSoFar returns the plateau counter value going into iter k+1.
+func computePlateauSoFar(r *FinalReport) int {
+	if r == nil || len(r.Iterations) == 0 {
+		return 0
+	}
+	return r.Iterations[len(r.Iterations)-1].PlateauCounterAfter
+}
+
+// ---------------------------------------------------------------------------
+// Scope rendering
+// ---------------------------------------------------------------------------
+
+// Scope is the YAML-serializable form of /workspace/.benchmark/scope.yml.
+type BenchmarkScope struct {
+	RunID             string               `yaml:"run_id"`
+	Iteration         int                  `yaml:"iteration"`
+	MaxIterations     int                  `yaml:"max_iterations"`
+	PlateauIterations int                  `yaml:"plateau_iterations"`
+	PlateauCounter    int                  `yaml:"plateau_counter"`
+	BestScore         int                  `yaml:"best_score"`
+	TargetImage       string               `yaml:"target_image"`
+	TargetDeployment  string               `yaml:"target_deployment"`
+	Tags              string               `yaml:"tags,omitempty"`
+	History           []ScopeHistoryEntry  `yaml:"history,omitempty"`
+	Scenarios         []ScopeScenario      `yaml:"scenarios,omitempty"`
+}
+
+// ScopeHistoryEntry summarizes one past iteration for the AI.
+type ScopeHistoryEntry struct {
+	K                  int      `yaml:"k"`
+	Score              int      `yaml:"score"`
+	SolvedIDs          []string `yaml:"solved_ids,omitempty"`
+	NewlySolvedIDs     []string `yaml:"newly_solved_ids,omitempty"`
+	Runtime            string   `yaml:"runtime,omitempty"`
+	PlateauCounterAfter int     `yaml:"plateau_counter_after,omitempty"`
+}
+
+// ScopeScenario is one still-unsolved scenario as the AI sees it.
+type ScopeScenario struct {
+	ID              string                     `yaml:"id"`
+	Origin          string                     `yaml:"origin,omitempty"`
+	BaselineVerdict string                     `yaml:"baseline_verdict,omitempty"`
+	Trajectory      []ScopeScenarioTrajectory  `yaml:"trajectory,omitempty"`
+	PendingCurrent  int                        `yaml:"pending_steps_current,omitempty"`
+}
+
+// ScopeScenarioTrajectory records one iteration's verdict + pending delta.
+type ScopeScenarioTrajectory struct {
+	K                 int     `yaml:"k"`
+	Verdict           Verdict `yaml:"verdict"`
+	PendingStepsDelta int     `yaml:"pending_steps_delta,omitempty"`
+}
+
+// renderScope builds the Scope that iteration k will see.
+func renderScope(opts BenchmarkOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []ScenarioTestResult) *BenchmarkScope {
+	s := &BenchmarkScope{
+		RunID:             layout.RunID,
+		Iteration:         k,
+		MaxIterations:     opts.MaxIterations,
+		PlateauIterations: opts.PlateauIterations,
+		PlateauCounter:    computePlateauSoFar(reportSoFar),
+		BestScore:         reportSoFar.BestScore,
+		TargetImage:       opts.TargetImage,
+		TargetDeployment:  opts.Deployment,
+		Tags:              opts.Tags,
+	}
+	for _, h := range reportSoFar.Iterations {
+		s.History = append(s.History, ScopeHistoryEntry{
+			K:                   h.K,
+			Score:               h.Score,
+			SolvedIDs:           collectSolvedIDs(h.Scenarios),
+			Runtime:             h.RunnerDuration,
+			PlateauCounterAfter: h.PlateauCounterAfter,
+		})
+	}
+	for _, u := range unsolved {
+		s.Scenarios = append(s.Scenarios, ScopeScenario{
+			ID:              u.ID,
+			Origin:          u.Origin,
+			BaselineVerdict: u.Status,
+			PendingCurrent:  u.PendingSteps,
+		})
+	}
+	return s
+}
+
+// writeScope writes scope.yml to iter<k>/ AND mirrors to the worktree
+// at <worktree>/.benchmark/scope.yml (the path `ov benchmark scope`
+// reads from inside the deploy).
+func writeScope(layout RunLayout, k int, s *BenchmarkScope) error {
+	data, err := yaml.Marshal(s)
+	if err != nil {
+		return err
+	}
+	iterPath := filepath.Join(layout.IterDir(k), "scope.yml")
+	if err := os.WriteFile(iterPath, data, 0o644); err != nil {
+		return err
+	}
+	// Mirror into the worktree. Ensure dir exists.
+	mirrorDir := filepath.Join(layout.WorktreeDir, ".benchmark")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(mirrorDir, "scope.yml"), data, 0o644)
+}
+
+// writePrompt mirrors prompt.md alongside scope.yml.
+func writePrompt(layout RunLayout, k int, text string) error {
+	iterPath := filepath.Join(layout.IterDir(k), "prompt.md")
+	if err := os.WriteFile(iterPath, []byte(text), 0o644); err != nil {
+		return err
+	}
+	mirrorDir := filepath.Join(layout.WorktreeDir, ".benchmark")
+	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(mirrorDir, "prompt.md"), []byte(text), 0o644)
+}
+
+// writeIterScore writes iter<k>/score.yml.
+func writeIterScore(layout RunLayout, k int, state IterationState) error {
+	data, err := yaml.Marshal(state)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(layout.IterDir(k), "score.yml"), data, 0o644)
+}
+
+// writeReport writes the aggregated report.yml.
+func writeReport(layout RunLayout, r *FinalReport) error {
+	data, err := yaml.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(layout.RunDir, "report.yml"), data, 0o644)
+}
+
+// ---------------------------------------------------------------------------
+// Runner argv + env rendering
+// ---------------------------------------------------------------------------
+
+// renderRunnerInvocation prepares the argv + env the dispatcher will
+// execute, per the runner's prompt_via mode.
+func renderRunnerInvocation(opts BenchmarkOpts, substCtx *SubstContext, promptText, iterDir string) ([]string, map[string]string) {
+	// Write prompt-file if the runner uses that delivery mode.
+	if opts.Runner.PromptVia == "file" {
+		path := filepath.Join(iterDir, "prompt-arg.md")
+		_ = os.WriteFile(path, []byte(promptText), 0o644)
+		substCtx.PromptFile = path
+	}
+	if opts.Runner.PromptVia == "argv" || opts.Runner.PromptVia == "" {
+		substCtx.Prompt = promptText
+	}
+
+	argv := SubstituteArgv(opts.Runner.Command, substCtx)
+	env := SubstituteEnv(opts.Runner.Env, substCtx)
+	if env == nil {
+		env = make(map[string]string)
+	}
+	env["OV_BENCHMARK_RUN_ID"] = substCtx.RunID
+	env["OV_BENCHMARK_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
+	return argv, env
+}
+
+// ---------------------------------------------------------------------------
+// Post-AI description reload + tag-fingerprint collection
+// ---------------------------------------------------------------------------
+
+// loadWorktreeDescriptions re-collects the target image's description
+// set from the worktree's current state. Swappable for tests via
+// this package-level var. The real implementation calls the unified
+// loader; the test fakes return a canned LabelDescriptionSet.
+//
+// A nil return is treated by FingerprintSet / collectTagFingerprints
+// as "no scenarios" (both return empty maps on nil input).
+var loadWorktreeDescriptions = func(opts BenchmarkOpts, layout RunLayout) *LabelDescriptionSet {
+	// Real implementation deferred to the CLI wiring in benchmark_cmd.go.
+	// The package-var swap lets unit tests inject fake data without
+	// going through the full unified loader.
+	return nil
+}
+
+// collectTagFingerprints mirrors FingerprintSet but for tags only.
+func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
+	out := make(map[string]string)
+	if set == nil {
+		return out
+	}
+	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
+		for _, ld := range sec {
+			for sIdx, scenario := range ld.Description.Scenarios {
+				expanded := ExpandScenario(scenario)
+				for _, es := range expanded {
+					id := ScenarioID(ld.Origin, sIdx, es.RowIndex)
+					out[id] = FingerprintTags(es.Tags)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
+// Summary aggregation
+// ---------------------------------------------------------------------------
+
+// computeSummary tallies per-verdict counts from the final scenario set.
+func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
+	s := ReportSummary{Input: total}
+	for _, v := range scenarios {
+		switch v.Verdict {
+		case VerdictSolved:
+			s.Solved++
+		case VerdictPartial:
+			s.Partial++
+		case VerdictUnchanged:
+			s.Unchanged++
+		case VerdictRegressed:
+			s.Regressed++
+		case VerdictTampered:
+			s.Tampered++
+		case VerdictAdded:
+			s.Added++
+		}
+	}
+	if total > 0 {
+		s.PercentSolved = float64(s.Solved) / float64(total) * 100.0
+	}
+	return s
+}
+
+// ---------------------------------------------------------------------------
+// Scope-from-env — `ov benchmark scope` handler
+// ---------------------------------------------------------------------------
+
+// ResolveAndPrintScope reads OV_BENCHMARK_RUN_ID from the environment,
+// locates the active scope.yml, and writes its contents to out. The
+// AI-facing `ov benchmark scope` command dispatches here.
+//
+// Path resolution: /workspace/.benchmark/scope.yml is the canonical
+// mirror path (written per-iteration by writeScope), reachable both
+// from inside a pod/vm deploy and from the host when OV_PROJECT_DIR
+// is set to the project root.
+func ResolveAndPrintScope(projectDir string, stdout *os.File) error {
+	// Prefer the per-run worktree-mirrored scope.yml path.
+	candidates := []string{
+		"/workspace/.benchmark/scope.yml",
+	}
+	runID := os.Getenv("OV_BENCHMARK_RUN_ID")
+	if runID != "" {
+		candidates = append(candidates, filepath.Join(projectDir, ".benchmark", runID, "worktree", ".benchmark", "scope.yml"))
+	}
+	candidates = append(candidates, filepath.Join(projectDir, ".benchmark", "scope.yml"))
+
+	for _, p := range candidates {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			_, _ = stdout.Write(data)
+			return nil
+		}
+	}
+	return fmt.Errorf("benchmark scope: no scope.yml found (tried %s)", strings.Join(candidates, ", "))
+}
+
+// ResolveLastTestTag reads OV_BENCHMARK_RUN_ID + OV_BENCHMARK_ITERATION
+// from the environment and prints the prior iteration's image tag.
+// Used by `ov benchmark last-test-tag` so the AI can re-run
+// `ov image test <tag> --format yaml` without triggering a rebuild.
+func ResolveLastTestTag(targetImage string, stdout *os.File) error {
+	runID := os.Getenv("OV_BENCHMARK_RUN_ID")
+	if runID == "" {
+		return fmt.Errorf("benchmark: OV_BENCHMARK_RUN_ID not set")
+	}
+	iterStr := os.Getenv("OV_BENCHMARK_ITERATION")
+	var iter int
+	fmt.Sscanf(iterStr, "%d", &iter)
+	if iter <= 1 {
+		return fmt.Errorf("benchmark: no prior iteration on iter %d", iter)
+	}
+	tag := fmt.Sprintf("ovbench/%s-iter%d:%s", runID, iter-1, targetImage)
+	fmt.Fprintln(stdout, tag)
+	return nil
+}

@@ -62,7 +62,8 @@ type CLI struct {
 	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
 	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
-	Feature  FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
+	Feature    FeatureCmd    `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
+	Benchmark  BenchmarkCmd  `cmd:"" help:"Iterate an AI agent against BDD scenarios until it plateaus"`
 	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`

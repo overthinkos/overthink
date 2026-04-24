@@ -56,6 +56,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | "What does layer X do?" | `/ov-layers:<name>` |
 | "What's in image X?" | `/ov-images:<name>` |
 | Skill authoring / skill maintenance | `/ov-dev:skills` |
+| `ov benchmark *` / `benchmark:` YAML / AI-agent scoring / `ovbench/*` branches | `/ov:benchmark` |
 
 Full index: `plugins/README.md` — 250+ skills. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
 

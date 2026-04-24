@@ -56,12 +56,12 @@ type Dispatcher interface {
 	// SyncCredentials copies each mount's src into the deploy at dst.
 	// Called ONCE per benchmark run during preflight, NOT per iteration.
 	// MUST NOT copy credential material into the worktree.
+	//
+	// Credentials persist in the deploy; there is no cleanup counterpart.
+	// Disposable deploys get destroyed (not file-level cleaned) at end
+	// of life; persistent deploys benefit from retained auth state for
+	// repeat runs.
 	SyncCredentials(ctx context.Context, mounts []CredentialMount) error
-
-	// CleanupCredentials removes each mount's dst from the deploy.
-	// Called at benchmark end only when BenchmarkRunner.Cleanup is true.
-	// Best-effort; errors are logged but do not fail the benchmark.
-	CleanupCredentials(ctx context.Context, mounts []CredentialMount) error
 }
 
 // ---------------------------------------------------------------------------
@@ -155,10 +155,6 @@ func (h *hostDispatcher) SyncCredentials(ctx context.Context, mounts []Credentia
 	return syncCredentialsLocal(ctx, mounts)
 }
 
-func (h *hostDispatcher) CleanupCredentials(ctx context.Context, mounts []CredentialMount) error {
-	return cleanupCredentialsLocal(ctx, mounts)
-}
-
 // ---------------------------------------------------------------------------
 // podDispatcher
 // ---------------------------------------------------------------------------
@@ -228,6 +224,10 @@ func (p *podDispatcher) Preflight(ctx context.Context, runnerBin string) error {
 
 func (p *podDispatcher) SyncCredentials(ctx context.Context, mounts []CredentialMount) error {
 	engine := pickEngine(p.node)
+	// Resolve the in-container $HOME once; use it to expand any ~ on
+	// the dst side. podman cp does NOT auto-expand ~ in container paths,
+	// so leaving "~/.claude" raw fails with a literal-~ directory attempt.
+	var containerHome string
 	for _, m := range mounts {
 		srcAbs, err := expandHostPath(m.Src)
 		if err != nil {
@@ -240,21 +240,32 @@ func (p *podDispatcher) SyncCredentials(ctx context.Context, mounts []Credential
 			}
 			return fmt.Errorf("benchmark: credential src %q unreadable: %w", srcAbs, err)
 		}
-		// podman cp auto-creates the parent dir in the container.
-		cpCmd := exec.CommandContext(ctx, engine, "cp", srcAbs, p.containerName+":"+m.Dst)
-		if out, err := cpCmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("benchmark: podman cp for %q: %w\n%s", m.Src, err, string(out))
+		dst := m.Dst
+		if strings.HasPrefix(dst, "~") {
+			if containerHome == "" {
+				h, err := resolveContainerHome(ctx, engine, p.containerName)
+				if err != nil {
+					return fmt.Errorf("benchmark: resolve container home for dst %q: %w", m.Dst, err)
+				}
+				containerHome = h
+			}
+			dst = substTilde(dst, containerHome)
 		}
-	}
-	return nil
-}
-
-func (p *podDispatcher) CleanupCredentials(ctx context.Context, mounts []CredentialMount) error {
-	engine := pickEngine(p.node)
-	for _, m := range mounts {
-		// Best-effort; ignore errors.
-		_ = exec.CommandContext(ctx, engine, "exec", p.containerName,
-			"rm", "-rf", m.Dst).Run()
+		// Ensure parent dir exists in the container. `podman cp` does
+		// NOT auto-create it; a file-path dst whose parent is missing
+		// fails with "could not be found on container".
+		parent := filepath.Dir(dst)
+		if parent != "" && parent != "/" {
+			mkCmd := exec.CommandContext(ctx, engine, "exec", p.containerName,
+				"mkdir", "-p", parent)
+			if out, err := mkCmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("benchmark: mkdir -p %q in container: %w\n%s", parent, err, string(out))
+			}
+		}
+		cpCmd := exec.CommandContext(ctx, engine, "cp", srcAbs, p.containerName+":"+dst)
+		if out, err := cpCmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("benchmark: podman cp for %q -> %q: %w\n%s", m.Src, dst, err, string(out))
+		}
 	}
 	return nil
 }
@@ -320,6 +331,7 @@ func (v *vmDispatcher) Preflight(ctx context.Context, runnerBin string) error {
 }
 
 func (v *vmDispatcher) SyncCredentials(ctx context.Context, mounts []CredentialMount) error {
+	var guestHome string
 	for _, m := range mounts {
 		srcAbs, err := expandHostPath(m.Src)
 		if err != nil {
@@ -332,6 +344,17 @@ func (v *vmDispatcher) SyncCredentials(ctx context.Context, mounts []CredentialM
 			}
 			return fmt.Errorf("benchmark: credential src %q unreadable: %w", srcAbs, err)
 		}
+		dst := m.Dst
+		if strings.HasPrefix(dst, "~") {
+			if guestHome == "" {
+				h, err := resolveVmGuestHome(ctx, v.name)
+				if err != nil {
+					return fmt.Errorf("benchmark: resolve guest home for vm %q dst %q: %w", v.name, m.Dst, err)
+				}
+				guestHome = h
+			}
+			dst = substTilde(dst, guestHome)
+		}
 		// Use rsync over ov vm ssh. A trailing slash on the src
 		// dir preserves contents-not-parent semantics.
 		src := srcAbs
@@ -339,19 +362,11 @@ func (v *vmDispatcher) SyncCredentials(ctx context.Context, mounts []CredentialM
 			src = srcAbs + "/"
 		}
 		cmd := exec.CommandContext(ctx, "rsync", "-a", "-e",
-			"ov vm ssh "+v.name+" --", src, v.name+":"+m.Dst+"/")
+			"ov vm ssh "+v.name+" --", src, v.name+":"+dst+"/")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("benchmark: rsync to vm %q for %q: %w\n%s",
-				v.name, m.Src, err, string(out))
+			return fmt.Errorf("benchmark: rsync to vm %q for %q -> %q: %w\n%s",
+				v.name, m.Src, dst, err, string(out))
 		}
-	}
-	return nil
-}
-
-func (v *vmDispatcher) CleanupCredentials(ctx context.Context, mounts []CredentialMount) error {
-	for _, m := range mounts {
-		_ = exec.CommandContext(ctx, "ov", "vm", "ssh", v.name, "--",
-			"rm", "-rf", m.Dst).Run()
 	}
 	return nil
 }
@@ -422,6 +437,54 @@ func expandHostPath(p string) (string, error) {
 	return p, nil
 }
 
+// substTilde replaces a leading `~` (bare or `~/`) in p with home. All
+// other paths pass through unchanged. This is the in-memory counterpart
+// to expandHostPath once the caller has already fetched the remote
+// $HOME via resolveContainerHome / resolveVmGuestHome — it does no
+// lookups itself.
+func substTilde(p, home string) string {
+	if p == "~" {
+		return home
+	}
+	if strings.HasPrefix(p, "~/") {
+		return filepath.Join(home, p[2:])
+	}
+	return p
+}
+
+// resolveContainerHome returns the in-container $HOME for the running
+// user (uid from `id -u`). Swappable via the package-level var so tests
+// can stub out the podman exec round-trip.
+var resolveContainerHome = func(ctx context.Context, engine, container string) (string, error) {
+	cmd := exec.CommandContext(ctx, engine, "exec", container,
+		"sh", "-c", "getent passwd $(id -u) | cut -d: -f6")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("exec %s in %s: %w", "getent passwd", container, err)
+	}
+	home := strings.TrimSpace(string(out))
+	if home == "" {
+		return "", fmt.Errorf("empty home for container %s", container)
+	}
+	return home, nil
+}
+
+// resolveVmGuestHome returns the in-guest $HOME for the SSH user of a
+// VM deploy. Swappable via the package-level var for tests.
+var resolveVmGuestHome = func(ctx context.Context, vmName string) (string, error) {
+	cmd := exec.CommandContext(ctx, "ov", "vm", "ssh", vmName, "--",
+		"sh", "-c", "getent passwd $(id -u) | cut -d: -f6")
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("ov vm ssh %s getent passwd: %w", vmName, err)
+	}
+	home := strings.TrimSpace(string(out))
+	if home == "" {
+		return "", fmt.Errorf("empty home for vm %s", vmName)
+	}
+	return home, nil
+}
+
 // ---------------------------------------------------------------------------
 // Local credential sync (used by hostDispatcher; also the swappable
 // entry point that tests can stub)
@@ -460,18 +523,6 @@ var syncCredentialsLocal = func(ctx context.Context, mounts []CredentialMount) e
 				return fmt.Errorf("benchmark: copy %q -> %q: %w", srcAbs, dstAbs, err)
 			}
 		}
-	}
-	return nil
-}
-
-// cleanupCredentialsLocal removes each mount's dst from the host.
-var cleanupCredentialsLocal = func(ctx context.Context, mounts []CredentialMount) error {
-	for _, m := range mounts {
-		dstAbs, err := expandHostPath(m.Dst)
-		if err != nil {
-			continue
-		}
-		_ = os.RemoveAll(dstAbs)
 	}
 	return nil
 }

@@ -988,3 +988,16 @@ image:
             - valkey
         ports:
             - 6379:6379
+
+    # Throwaway benchmark target used by `ov benchmark run bench-target`.
+    # The bench-target layer ships a deliberately-failing BDD scenario
+    # that an AI solves by adding a write: task. Fedora base + minimal
+    # layer stack keeps per-iteration rebuild fast.
+    bench-target:
+        base: fedora
+        layers:
+            - claude-code
+            - ov-mcp
+            - bench-target-layer
+        ports:
+            - 18765:18765

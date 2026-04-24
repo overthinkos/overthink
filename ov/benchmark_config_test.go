@@ -61,9 +61,8 @@ benchmark:
         ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       timeout: 20m
       credentials:
-        - src: ~/.claude
-          dst: ~/.claude
-      cleanup_credentials: false
+        - src: ~/.claude/.credentials.json
+          dst: ~/.claude/.credentials.json
     - name: codex
       command: [codex, exec, "${PROMPT}"]
   prompt: |
@@ -88,7 +87,7 @@ benchmark:
 	if len(cfg.Runners[0].Credentials) != 1 {
 		t.Fatalf("want 1 credential, got %d", len(cfg.Runners[0].Credentials))
 	}
-	if cfg.Runners[0].Credentials[0].Src != "~/.claude" {
+	if cfg.Runners[0].Credentials[0].Src != "~/.claude/.credentials.json" {
 		t.Errorf("credential src: %q", cfg.Runners[0].Credentials[0].Src)
 	}
 	if cfg.Runners[0].Env["ANTHROPIC_API_KEY"] != "${ANTHROPIC_API_KEY}" {
@@ -168,22 +167,19 @@ func TestResolveRunner_DefaultsApplied(t *testing.T) {
 	if r.PromptVia != "argv" {
 		t.Errorf("PromptVia should default to argv, got %q", r.PromptVia)
 	}
-	if r.Cleanup {
-		t.Error("Cleanup should remain false by default")
-	}
 }
 
 func TestResolveRunner_ExplicitOverridesDefault(t *testing.T) {
 	cfg := &BenchmarkConfig{
 		Runners: []BenchmarkRunner{
-			{Name: "x", Timeout: "5m", PromptVia: "file", Cleanup: true},
+			{Name: "x", Timeout: "5m", PromptVia: "file"},
 		},
 	}
 	r, err := ResolveRunner(cfg, "x")
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if r.Timeout != "5m" || r.PromptVia != "file" || !r.Cleanup {
+	if r.Timeout != "5m" || r.PromptVia != "file" {
 		t.Errorf("explicit values not preserved: %+v", r)
 	}
 }

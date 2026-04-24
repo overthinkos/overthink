@@ -115,10 +115,6 @@ func (c *BenchmarkRunCmd) Run() error {
 	if err := dispatcher.SyncCredentials(ctx, runner.Credentials); err != nil {
 		return fmt.Errorf("sync credentials: %w", err)
 	}
-	// Best-effort cleanup on exit when requested.
-	if runner.Cleanup {
-		defer func() { _ = dispatcher.CleanupCredentials(ctx, runner.Credentials) }()
-	}
 
 	// B. Collect + filter scenarios from the worktree (so we see the
 	// frozen pre-AI state).

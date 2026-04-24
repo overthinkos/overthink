@@ -10,20 +10,29 @@ discover:
 benchmark:
     # Runner registry: each entry plugs an AI CLI into `ov benchmark run`.
     # Defaults applied by ResolveRunner when omitted: timeout=30m,
-    # prompt_via=argv, cleanup_credentials=false. See /ov:benchmark.
+    # prompt_via=argv. See /ov:benchmark.
+    #
+    # Credentials sync the minimum file the AI CLI needs to authenticate
+    # non-interactively — typically a single refresh-token file. Syncing
+    # whole config directories bloats the copy (~.claude alone is ~430MB)
+    # and leaks unnecessary state into the deploy.
     runners:
         - name: claude
-          command: [claude, -p, "${PROMPT}"]
+          # --dangerously-skip-permissions lets claude edit files + run
+          # commands autonomously without stopping to ask. The benchmark
+          # runs in a disposable deploy, so this is the correct mode for
+          # this context. See /ov:benchmark for safety rationale.
+          command: [claude, -p, --dangerously-skip-permissions, "${PROMPT}"]
           credentials:
-              - {src: ~/.claude, dst: ~/.claude}
+              - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
         - name: codex
           command: [codex, exec, "${PROMPT}"]
           credentials:
-              - {src: ~/.config/codex, dst: ~/.config/codex}
+              - {src: ~/.config/codex/auth.json, dst: ~/.config/codex/auth.json, optional: true}
         - name: gemini
           command: [gemini, chat, "${PROMPT}"]
           credentials:
-              - {src: ~/.config/gcloud, dst: ~/.config/gcloud}
+              - {src: ~/.config/gcloud/application_default_credentials.json, dst: ~/.config/gcloud/application_default_credentials.json, optional: true}
     prompt: |
         You are benchmarking BDD-scenario-solving inside an overthink project.
         This is iteration ${ITERATION} of up to ${MAX_ITERATIONS}. Your current

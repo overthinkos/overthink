@@ -57,7 +57,6 @@ type BenchmarkRunner struct {
 	Timeout     string            `yaml:"timeout,omitempty"`
 	WorkingDir  string            `yaml:"working_dir,omitempty"`
 	Credentials []CredentialMount `yaml:"credentials,omitempty"`
-	Cleanup     bool              `yaml:"cleanup_credentials,omitempty"`
 }
 
 // CredentialMount names one host path whose contents are synced into
@@ -162,7 +161,6 @@ func LoadBenchmarkConfig(dir string) (*BenchmarkConfig, error) {
 // and exactly one is configured. Applies Go-level defaults:
 //   - Timeout: "30m" when empty
 //   - PromptVia: "argv" when empty
-//   - Cleanup: already false by zero value (no action)
 //
 // Errors: ErrNoRunners when the config carries no runners;
 // ErrRunnerNotFound when name is non-empty and doesn't match; ambiguity
@@ -335,7 +333,7 @@ func PrintRunners(w io.Writer, cfg *BenchmarkConfig) {
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tCOMMAND\tTIMEOUT\tPROMPT_VIA\tCREDENTIALS\tCLEANUP")
+	fmt.Fprintln(tw, "NAME\tCOMMAND\tTIMEOUT\tPROMPT_VIA\tCREDENTIALS")
 	for _, r := range cfg.Runners {
 		timeout := r.Timeout
 		if timeout == "" {
@@ -349,8 +347,8 @@ func PrintRunners(w io.Writer, cfg *BenchmarkConfig) {
 		if len(cmd) > 60 {
 			cmd = cmd[:57] + "..."
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%v\n",
-			r.Name, cmd, timeout, promptVia, len(r.Credentials), r.Cleanup)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\n",
+			r.Name, cmd, timeout, promptVia, len(r.Credentials))
 	}
 	_ = tw.Flush()
 }

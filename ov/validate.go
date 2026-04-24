@@ -881,42 +881,11 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 	}
 }
 
-// validateDNS validates DNS and ACME email fields
+// validateDNS is a no-op in schema v4. DNS and AcmeEmail moved off
+// ImageConfig to DeploymentNode (they're deployment choices). Deploy-side
+// validation of these fields is handled by validateDeployConfig.
 func validateDNS(cfg *Config, errs *ValidationError) {
-	// Validate defaults.dns if set
-	if cfg.Defaults.DNS != "" {
-		if !strings.Contains(cfg.Defaults.DNS, ".") {
-			errs.Add("defaults.dns: must be a valid domain name (got %q)", cfg.Defaults.DNS)
-		}
-		if strings.HasPrefix(cfg.Defaults.DNS, ".") || strings.HasSuffix(cfg.Defaults.DNS, ".") {
-			errs.Add("defaults.dns: cannot start or end with a dot (got %q)", cfg.Defaults.DNS)
-		}
-	}
-
-	// Validate defaults.acme_email if set
-	if cfg.Defaults.AcmeEmail != "" && !strings.Contains(cfg.Defaults.AcmeEmail, "@") {
-		errs.Add("defaults.acme_email: must be a valid email address (got %q)", cfg.Defaults.AcmeEmail)
-	}
-
-	// Validate each enabled image's DNS and ACME email
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-
-		if img.DNS != "" {
-			if !strings.Contains(img.DNS, ".") {
-				errs.Add("image %q: dns must be a valid domain name (got %q)", imageName, img.DNS)
-			}
-			if strings.HasPrefix(img.DNS, ".") || strings.HasSuffix(img.DNS, ".") {
-				errs.Add("image %q: dns cannot start or end with a dot (got %q)", imageName, img.DNS)
-			}
-		}
-
-		if img.AcmeEmail != "" && !strings.Contains(img.AcmeEmail, "@") {
-			errs.Add("image %q: acme_email must be a valid email address (got %q)", imageName, img.AcmeEmail)
-		}
-	}
+	// intentionally empty — schema v4 removed image-level dns/acme_email
 }
 
 // tunnelNameRe matches valid cloudflare tunnel names
@@ -1094,57 +1063,13 @@ func validateTunnel(cfg *Config, layers map[string]*Layer, errs *ValidationError
 		}
 	}
 
-	check("defaults", cfg.Defaults.Tunnel, cfg.Defaults.DNS, cfg.Defaults.Ports, nil)
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		// Resolve DNS for the image (image -> defaults)
-		dns := img.DNS
-		if dns == "" {
-			dns = cfg.Defaults.DNS
-		}
-		var portProtos map[int]string
-		if layers != nil {
-			portProtos = collectPortProtos(layers, img.Layers)
-		}
-		check(fmt.Sprintf("image %q", imageName), img.Tunnel, dns, img.Ports, portProtos)
-	}
-
-	// Cross-image tailscale public port conflict check
-	portUsers := make(map[int][]string) // public port -> image names
-	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() {
-			continue
-		}
-		// Resolve effective tunnel: image -> defaults
-		tunnel := img.Tunnel
-		if tunnel == nil {
-			tunnel = cfg.Defaults.Tunnel
-		}
-		if tunnel == nil || tunnel.Provider != "tailscale" {
-			continue
-		}
-		// Collect all tailscale public ports (from Ports list and PortMap keys)
-		if tunnel.Public.All {
-			for _, hp := range parseHostPorts(img.Ports) {
-				portUsers[hp] = append(portUsers[hp], imageName)
-			}
-		}
-		for _, p := range tunnel.Public.Ports {
-			portUsers[p] = append(portUsers[p], imageName)
-		}
-		for p := range tunnel.Public.PortMap {
-			portUsers[p] = append(portUsers[p], imageName)
-		}
-	}
-	for port, names := range portUsers {
-		if len(names) < 2 {
-			continue
-		}
-		sort.Strings(names)
-		errs.Add("images %s: tailscale public port %d used by multiple images (each needs a unique port)", formatImageList(names), port)
-	}
+	// Schema v4: Tunnel / DNS moved off ImageConfig. Tunnel validation +
+	// cross-image port conflict detection now apply at deploy-side (see
+	// validateDeployConfig), not at image-side. This image-side check is
+	// a no-op in v4 — the `check` helper is retained for deploy validation
+	// to call with DeploymentNode.Tunnel values.
+	_ = check
+	_ = layers
 }
 
 // validateRemoteLayers checks remote layer consistency
@@ -1333,18 +1258,13 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 		}
 	}
 
-	// Validate defaults engine
-	if e := cfg.Defaults.Engine; e != "" && !validEngines[e] {
-		errs.Add("defaults: engine must be \"docker\" or \"podman\", got %q", e)
-	}
+	// Schema v4: ImageConfig.Engine removed (deploy-only choice).
+	// Defaults.Engine + per-image Engine no longer exist. Layer-level
+	// conflict detection still applies below.
 
-	// Validate image engine declarations and check for conflicting layer requirements
 	for imageName, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
-		}
-		if e := img.Engine; e != "" && !validEngines[e] {
-			errs.Add("image %q: engine must be \"docker\" or \"podman\", got %q", imageName, e)
 		}
 
 		// Check for conflicting layer engine requirements within the image

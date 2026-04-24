@@ -158,18 +158,13 @@ func (c *BuildCmd) Run() error {
 	return nil
 }
 
-// imageTags computes the tags for an image (CalVer tag + latest if auto-tagged).
+// imageTags computes the tags for an image. ov is CalVer-only — it never
+// emits `:latest`. Every built image carries exactly its CalVer tag
+// (`img.FullTag`, e.g. `ghcr.io/overthinkos/fedora:2026.114.1042`), and
+// short-name resolution goes through `ResolveNewestLocalCalVer` in
+// local_image.go via the `org.overthinkos.version` OCI label.
 func imageTags(name string, img *ResolvedImage, cfg *Config) []string {
-	tags := []string{img.FullTag}
-	origCfg := cfg.Images[name]
-	if origCfg.Tag == "" || origCfg.Tag == "auto" {
-		if img.Registry != "" {
-			tags = append(tags, fmt.Sprintf("%s/%s:latest", img.Registry, name))
-		} else {
-			tags = append(tags, fmt.Sprintf("%s:latest", name))
-		}
-	}
-	return tags
+	return []string{img.FullTag}
 }
 
 // mergeAfterBuild merges a single image if merge.auto is enabled.
@@ -178,7 +173,7 @@ func mergeAfterBuild(name string, img *ResolvedImage) {
 	if img.Merge == nil || !img.Merge.Auto {
 		return
 	}
-	mergeCmd := &MergeCmd{Image: name, Tag: "latest"}
+	mergeCmd := &MergeCmd{Image: name, Tag: ""}
 	if err := mergeCmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: merge %s: %v\n", name, err)
 	}
@@ -423,7 +418,10 @@ func hostPlatform() string {
 func (c *BuildCmd) buildRemote(ref string) error {
 	tag := c.Tag
 	if tag == "" {
-		tag = "latest"
+		// ov is CalVer-only. A remote build with no explicit CalVer
+		// gets a fresh one at build time — matching the local
+		// `ov image build` behaviour (generate.go:ComputeCalVer).
+		tag = ComputeCalVer()
 	}
 
 	ctx, err := ResolveRemoteImage(ref, tag)

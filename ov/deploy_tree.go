@@ -59,8 +59,8 @@ func WalkDeploymentTree(rootPath string, root *DeploymentNode, parentExec Deploy
 	if !root.HasChildren() {
 		return nil
 	}
-	for _, k := range sortedChildKeys(root.Children) {
-		child := root.Children[k]
+	for _, k := range sortedNestedKeys(root.Nested) {
+		child := root.Nested[k]
 		childPath := k
 		if rootPath != "" {
 			childPath = rootPath + "." + k
@@ -93,8 +93,8 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 		return err
 	}
 	if root.HasChildren() {
-		for _, k := range sortedChildKeys(root.Children) {
-			child := root.Children[k]
+		for _, k := range sortedNestedKeys(root.Nested) {
+			child := root.Nested[k]
 			childPath := k
 			if rootPath != "" {
 				childPath = rootPath + "." + k
@@ -239,6 +239,17 @@ func sshParamsForVm(node *DeploymentNode) (*SSHExecutor, error) {
 		return nil, fmt.Errorf("sshParamsForVm: nil node")
 	}
 	state := node.VmState
+	// Fallback: in schema v4 the deployment key ("arch-vm") and the
+	// legacy state-key format ("vm:arch") differ. Check the local
+	// overlay under "vm:<template-name>" when the in-memory node's
+	// VmState is nil.
+	if state == nil && node.Vm != "" {
+		if dc, _ := LoadDeployConfig(); dc != nil {
+			if legacy, ok := dc.Deployment["vm:"+node.Vm]; ok && legacy.VmState != nil {
+				state = legacy.VmState
+			}
+		}
+	}
 	if state == nil {
 		return nil, fmt.Errorf("vm node: no VmState — run `ov vm create` + `ov deploy add` for this node first")
 	}
@@ -293,10 +304,10 @@ func resolveTreeRoot(dir string) (map[string]DeploymentNode, error) {
 	}
 	localDC, _ := LoadDeployConfig()
 	merged := MergeDeployConfigs(projectDC, localDC)
-	if merged == nil || merged.Images == nil {
+	if merged == nil || merged.Deployment == nil {
 		return nil, nil
 	}
-	return merged.Images, nil
+	return merged.Deployment, nil
 }
 
 // Suppressor for imports only used in doc comments / future

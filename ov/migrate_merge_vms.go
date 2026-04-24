@@ -93,7 +93,7 @@ const (
 	legacyVmFilename    = "vms.yml"
 	legacyVmRootKey     = "vms"
 	currentVmRootKey    = "vm"
-	schemaVersion       = 2
+	schemaVersion       = 4
 )
 
 // MigrateMergeVms performs the migration and returns the list of

@@ -53,7 +53,7 @@ var forceTTY bool
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
 	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag        string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Tag        string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	Command   string   `short:"c" help:"Command to execute instead of interactive shell"`
 	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	TTY        bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
@@ -96,7 +96,7 @@ func (c *ShellCmd) Run() error {
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
-		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -147,7 +147,7 @@ func (c *ShellCmd) Run() error {
 	// Resolve agent forwarding (SSH/GPG socket mounts)
 	var deployImage *DeploymentNode
 	if dc != nil {
-		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay
 		}
 	}
@@ -206,8 +206,30 @@ func (c *ShellCmd) Run() error {
 	return execCommand(enginePath, args)
 }
 
-// resolveShellImageRef builds the full image reference from registry, name, and tag.
+// resolveShellImageRef builds the full image reference from registry,
+// name, and tag. When `tag` is empty, it resolves to the newest local
+// CalVer for the given short name via `ResolveNewestLocalCalVer` —
+// this is the CalVer-only contract (`/ov:build` "Cache Efficiency").
+// Callers that explicitly want a specific tag pass it; callers whose
+// `--tag` flag is empty get the newest CalVer without extra work.
+//
+// When `registry` is set AND `tag` is empty, there's no way to guess
+// a remote CalVer without a registry-list call, so the caller gets
+// `<registry>/<name>` back with no tag suffix — the engine will
+// resolve it locally first (matching any single local tag) or error.
 func resolveShellImageRef(registry, name, tag string) string {
+	if tag == "" {
+		// Try local CalVer resolution. Best-effort: if nothing local
+		// matches, fall back to a tagless ref so the engine's own
+		// resolution path can error with its canonical message.
+		if resolved, err := ResolveNewestLocalCalVer("podman", name); err == nil && resolved != "" {
+			return resolved
+		}
+		if registry != "" {
+			return fmt.Sprintf("%s/%s", registry, name)
+		}
+		return name
+	}
 	if registry != "" {
 		return fmt.Sprintf("%s/%s:%s", registry, name, tag)
 	}

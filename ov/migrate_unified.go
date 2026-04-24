@@ -215,7 +215,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 	if ds != nil {
 		uf.Deployments = &DeploymentsSection{
 			Provides: ds.Provides,
-			Images:   ds.Images,
+			Images:   ds.Deployment,
 		}
 	}
 	// Auto-discover layers/ if present.
@@ -269,11 +269,11 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 
 	// deploy.yml → deployments block.
 	deployPath := filepath.Join(dir, "deploy.yml")
-	if ds != nil && (len(ds.Images) > 0 || ds.Provides != nil) {
+	if ds != nil && (len(ds.Deployment) > 0 || ds.Provides != nil) {
 		depOut := &UnifiedFile{
 			Deployments: &DeploymentsSection{
 				Provides: ds.Provides,
-				Images:   ds.Images,
+				Images:   ds.Deployment,
 			},
 		}
 		p, err := writeUnifiedFile(deployPath, depOut, dryRun)

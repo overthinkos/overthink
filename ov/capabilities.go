@@ -58,20 +58,18 @@ var CapabilityLabelMap = map[string]string{
 	// Security
 	"Security": LabelSecurity,
 
-	// Networking / tunnel / TLS — lives in capabilities (tunnels still baked
-	// at build when declared on image; deploy.yml can override).
-	"Network":   LabelNetwork,
-	"Tunnel":    LabelTunnel,
-	"DNS":       LabelDNS,
-	"AcmeEmail": LabelAcmeEmail,
+	// Networking — image-declared network mode. Tunnel / DNS / AcmeEmail
+	// moved to DeploymentNode in schema v4 (deployment choices, no
+	// image-declaration meaning).
+	"Network": LabelNetwork,
 
 	// Env / vars
 	"Env":        LabelEnv,
 	"EnvLayers":  LabelEnvLayers,
 	"PathAppend": LabelPathAppend,
 
-	// Engine / init
-	"Engine":   LabelEngine,
+	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).
+	// Engine moved to DeploymentNode in schema v4 (deploy-host choice).
 	"Init":         LabelInit,
 	"Services":     LabelServices,
 	"ServiceNames": LabelInit, // per-init active names; baked alongside the init label

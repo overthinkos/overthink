@@ -30,9 +30,10 @@ const (
 	LabelAliases        = "org.overthinkos.aliases"
 	LabelSecurity       = "org.overthinkos.security"
 	LabelNetwork        = "org.overthinkos.network"
-	LabelTunnel         = "org.overthinkos.tunnel"
-	LabelDNS            = "org.overthinkos.dns"
-	LabelAcmeEmail      = "org.overthinkos.acme_email"
+	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
+	// removed — these are deployment choices with no image-declaration
+	// meaning. Deploy-time values flow through DeploymentNode →
+	// ImageMetadata, not through OCI labels.
 	LabelEnv            = "org.overthinkos.env"
 	LabelHooks          = "org.overthinkos.hooks"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
@@ -42,7 +43,6 @@ const (
 	LabelInit           = "org.overthinkos.init"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
-	LabelEngine         = "org.overthinkos.engine"
 	LabelPortProtos     = "org.overthinkos.port_protos"
 	LabelPortRelay      = "org.overthinkos.port_relay"
 	LabelSkills         = "org.overthinkos.skills"
@@ -218,15 +218,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		return nil, nil
 	}
 
+	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
+	// they are deployment choices and flow onto ImageMetadata via
+	// MergeDeployOntoMetadata (deploy.yml → metadata).
 	meta := &ImageMetadata{
-		Image:     labels[LabelImage],
-		Registry:  labels[LabelRegistry],
-		User:      labels[LabelUser],
-		Home:      labels[LabelHome],
-		DNS:       labels[LabelDNS],
-		AcmeEmail: labels[LabelAcmeEmail],
-		Network:   labels[LabelNetwork],
-		Engine:    labels[LabelEngine],
+		Image:    labels[LabelImage],
+		Registry: labels[LabelRegistry],
+		User:     labels[LabelUser],
+		Home:     labels[LabelHome],
+		Network:  labels[LabelNetwork],
 	}
 
 	// Bootc

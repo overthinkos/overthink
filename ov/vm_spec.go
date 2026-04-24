@@ -39,6 +39,15 @@ type VmSpec struct {
 	// --- Fully-generic libvirt / qemu configuration ---
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
+
+	// --- Target-specific tests (optional; default empty) ---
+	//
+	// Layer tests and image tests propagate automatically via the existing
+	// composition machinery. These slots are ONLY for tests genuinely
+	// specific to the VM template (e.g., checking a cloud-init runcmd
+	// took effect, probing a libvirt device).
+	Tests       []Check `yaml:"tests,omitempty"`
+	DeployTests []Check `yaml:"deploy_tests,omitempty"`
 }
 
 // Note: per /ov-dev:disposable, disposability is a DEPLOY property and

@@ -987,11 +987,10 @@ func (g *Generator) generateTraefikRoutes(imageName string, layerOrder []string,
 	}
 
 	for _, r := range routes {
-		// Use image DNS if configured, otherwise layer's host
+		// Schema v4: DNS removed from ResolvedImage (deploy-only choice).
+		// Traefik route hostnames come from the layer's host declaration.
+		// Deploy-time DNS override via DeploymentNode.DNS applies separately.
 		host := r.cfg.Host
-		if img.DNS != "" {
-			host = img.DNS
-		}
 
 		b.WriteString(fmt.Sprintf("    %s:\n", r.name))
 		b.WriteString(fmt.Sprintf("      rule: \"Host(`%s`)\"\n", host))
@@ -1421,17 +1420,9 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if img.Network != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
 	}
-	// Emit resolved engine label (includes layer-level requirements)
-	resolvedEngine := ResolveImageEngine(g.Config, g.Layers, imageName, "")
-	if resolvedEngine != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelEngine, resolvedEngine))
-	}
-	if img.DNS != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDNS, img.DNS))
-	}
-	if img.AcmeEmail != "" {
-		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelAcmeEmail, img.AcmeEmail))
-	}
+	// Schema v4: LabelEngine / LabelDNS / LabelAcmeEmail removed —
+	// deployment choices, not image declarations. Deploy-time values
+	// flow through DeploymentNode → ImageMetadata.
 
 	// Platform identity + builder-pool coordination labels.
 	// No serialized selector union — derive as ["all"] ∪ distro ∪ formats at read time.
@@ -1474,7 +1465,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Security: collected from layers + image config
 	security := CollectSecurity(g.Config, g.Layers, imageName)
-	if security.Privileged || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
+	if security.Privileged || security.CgroupNS != "" || len(security.CapAdd) > 0 || len(security.Devices) > 0 || len(security.SecurityOpt) > 0 || len(security.GroupAdd) > 0 || security.ShmSize != "" || len(security.Mounts) > 0 {
 		writeJSONLabel(b, LabelSecurity, security)
 	}
 

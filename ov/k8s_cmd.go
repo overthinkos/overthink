@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	_ "gopkg.in/yaml.v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -75,12 +75,12 @@ type k8sClusterFlags struct {
 func (f *k8sClusterFlags) restConfig() (*rest.Config, error) {
 	var ctxName string
 	if f.Cluster != "" {
+		// Schema v4: cluster profiles absorbed into kind:k8s entities.
+		// Lookup unified loader for the matching K8sSpec's context.
 		cwd, _ := os.Getwd()
-		prof, err := LoadClusterProfile(cwd, f.Cluster)
-		if err != nil {
-			return nil, err
+		if spec := findK8sSpec(cwd, f.Cluster); spec != nil {
+			ctxName = spec.KubeconfigContext
 		}
-		ctxName = prof.KubeconfigContext
 	}
 	if f.Context != "" {
 		ctxName = f.Context
@@ -865,50 +865,72 @@ func kindToPluralResource(kind string) (string, bool) {
 }
 
 // ---------------------------------------------------------------------------
-// ClusterProfile generation helper — used by ov/k3s_post.go (Task #10).
-// Exported (unexported-uppercase is fine within the same package but this
-// helper is likely to be called from package-local callers; rename if a
-// cross-package call site appears).
+// Schema v4: WriteClusterProfile removed.
+//
+// The user-scoped auto-write to ~/.config/ov/clusters/<name>.yaml is gone.
+// k3s-provisioned clusters get a kind:k8s entity authored inline (via
+// `ov migrate schema-v4` for existing profiles, or directly in
+// overthink.yml / k8s.yml for new deployments).
+//
+// A stub is kept below so k3s_post.go compiles; in v4, the k3s-server
+// layer's artifacts: block is what surfaces the kubeconfig, and operators
+// author the matching kind:k8s entry themselves.
 // ---------------------------------------------------------------------------
 
-// WriteClusterProfile persists a ClusterProfile tailored for a k3s-provisioned
-// cluster to ~/.config/ov/clusters/<name>.yaml. The profile sets:
-//   - ingress.class = traefik (default k3s ingress)
-//   - storage.class_default = local-path (default k3s provisioner)
-//   - kubeconfig_context = <contextName>
+// WriteClusterProfile is a no-op in schema v4. Kept as a stub so callers
+// compile during the cutover. Remove all call sites before shipping.
 func WriteClusterProfile(name, contextName string) error {
-	p := ClusterProfile{
-		Version:           1,
-		Kind:              "cluster-profile",
-		Name:              name,
-		KubeconfigContext: contextName,
-		DefaultNamespace:  "default",
-		Ingress: ClusterIngress{
-			Enabled:         true,
-			Class:           "traefik",
-			PathTypeDefault: "Prefix",
-		},
-		Storage: ClusterStorage{
-			ClassDefault: "local-path",
-		},
-	}
-	data, err := yaml.Marshal(&p)
-	if err != nil {
-		return fmt.Errorf("marshaling cluster profile: %w", err)
-	}
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return fmt.Errorf("resolving user config dir: %w", err)
-	}
-	dir := filepath.Join(configDir, "ov", "clusters")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("mkdir %s: %w", dir, err)
-	}
-	out := filepath.Join(dir, name+".yaml")
-	if err := os.WriteFile(out, data, 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", out, err)
-	}
+	// Intentionally a no-op. See comment block above.
+	_ = name
+	_ = contextName
 	return nil
+}
+
+// findK8sSpec looks up a K8sSpec by name from the project's overthink.yml /
+// k8s.yml via the unified loader. Returns nil if no matching kind:k8s
+// entity exists or if the unified file can't be loaded.
+func findK8sSpec(dir, name string) *K8sSpec {
+	if dir == "" || name == "" {
+		return nil
+	}
+	uf, _, err := LoadUnified(dir)
+	if err != nil || uf == nil {
+		return nil
+	}
+	if uf.K8s == nil {
+		return nil
+	}
+	return uf.K8s[name]
+}
+
+// findPodSpec looks up a PodSpec by name from the unified loader.
+func findPodSpec(dir, name string) *PodSpec {
+	if dir == "" || name == "" {
+		return nil
+	}
+	uf, _, err := LoadUnified(dir)
+	if err != nil || uf == nil {
+		return nil
+	}
+	if uf.Pod == nil {
+		return nil
+	}
+	return uf.Pod[name]
+}
+
+// findHostSpec looks up a HostSpec by name from the unified loader.
+func findHostSpec(dir, name string) *HostSpec {
+	if dir == "" || name == "" {
+		return nil
+	}
+	uf, _, err := LoadUnified(dir)
+	if err != nil || uf == nil {
+		return nil
+	}
+	if uf.Host == nil {
+		return nil
+	}
+	return uf.Host[name]
 }
 
 // Force-use the strconv import so the file compiles even if none of the

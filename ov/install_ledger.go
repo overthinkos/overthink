@@ -28,6 +28,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"context"
 )
 
 // LedgerPaths describes where ledger files live on disk. Extracted so
@@ -296,4 +298,94 @@ func containsString(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// Executor-routed ledger I/O for nested deploys.
+//
+// A nested host-deploy (e.g. arch-vm.arch-host — host-target running
+// INSIDE a VM via SSH) must write its ledger on the SUBSTRATE
+// filesystem (guest HOME), not on the operator's local FS. The
+// ancestor-executor-chain derivation in deploy_add_cmd.go already
+// routes install commands through the correct executor; the ledger
+// needs the same treatment.
+// ---------------------------------------------------------------------------
+
+// AddLayerDeploymentVia is the executor-routed variant of
+// AddLayerDeployment. When exec is nil or a local executor, it
+// falls back to operator-side file I/O (today's behaviour). When exec
+// is a non-local DeployExecutor (SSHExecutor / NestedExecutor), the
+// ledger file I/O goes through exec.GetFile + exec.RunSystem so the
+// ledger lands on the substrate's filesystem under the substrate's
+// ~/.config/overthink/installed/ — matching the install's actual
+// venue (arch-vm.arch-host writes in the arch VM guest; sway-pod with
+// nested pods writes in the parent pod; etc.).
+func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, deployID string, update func(*LayerRecord)) error {
+	if exec == nil {
+		return AddLayerDeployment(paths, layerName, deployID, update)
+	}
+	if _, isLocal := exec.(LocalDeployExecutor); isLocal {
+		return AddLayerDeployment(paths, layerName, deployID, update)
+	}
+	ctx := context.Background()
+	// Substrate ledger path: ~/.config/overthink/installed/layers/<name>.json
+	// — ~ resolves in the substrate shell, not operator shell.
+	remoteFile := "~/.config/overthink/installed/layers/" + layerName + ".json"
+	// Create BOTH installed/layers and installed/deploys so the full
+	// ledger directory tree (matching Ensure()) exists on the substrate.
+	// Ensures bed tests like `test -d ~/.config/overthink/installed/deploys`
+	// pass even when no DeployRecord has been written yet.
+	mkdirScript := "mkdir -p ~/.config/overthink/installed/layers ~/.config/overthink/installed/deploys"
+	data, err := exec.GetFile(ctx, remoteFile, false, EmitOpts{})
+	var rec *LayerRecord
+	if err == nil && len(data) > 0 {
+		rec = &LayerRecord{}
+		if jerr := json.Unmarshal(data, rec); jerr != nil {
+			rec = nil
+		}
+	}
+	if rec == nil {
+		rec = &LayerRecord{
+			Layer:      layerName,
+			DeployedAt: time.Now().UTC().Format(time.RFC3339),
+		}
+	}
+	if !containsString(rec.DeployedBy, deployID) {
+		rec.DeployedBy = append(rec.DeployedBy, deployID)
+	}
+	if update != nil {
+		update(rec)
+	}
+	encoded, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("AddLayerDeploymentVia: marshal: %w", err)
+	}
+	script := mkdirScript + " && cat > " + remoteFile + " <<'OV_LEDGER_EOF'\n" +
+		string(encoded) + "\nOV_LEDGER_EOF\n"
+	if runErr := exec.RunUser(ctx, script, EmitOpts{}); runErr != nil {
+		return fmt.Errorf("AddLayerDeploymentVia: write via executor: %w", runErr)
+	}
+	return nil
+}
+
+// WriteDeployRecordVia is the executor-routed variant of
+// WriteDeployRecord. Same semantics as AddLayerDeploymentVia but for
+// deploy records (deploys/<id>.json).
+func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRecord) error {
+	if exec == nil {
+		return WriteDeployRecord(paths, rec)
+	}
+	if _, isLocal := exec.(LocalDeployExecutor); isLocal {
+		return WriteDeployRecord(paths, rec)
+	}
+	ctx := context.Background()
+	remoteFile := "~/.config/overthink/installed/deploys/" + rec.DeployID + ".json"
+	remoteDir := "~/.config/overthink/installed/deploys"
+	encoded, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("WriteDeployRecordVia: marshal: %w", err)
+	}
+	script := "mkdir -p " + remoteDir + " && cat > " + remoteFile + " <<'OV_LEDGER_EOF'\n" +
+		string(encoded) + "\nOV_LEDGER_EOF\n"
+	return exec.RunUser(ctx, script, EmitOpts{})
 }

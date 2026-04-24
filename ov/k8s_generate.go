@@ -38,7 +38,7 @@ type K8sGenerateOpts struct {
 	ImageRef       string              // fully qualified image ref (registry/name:tag)
 	Deployment     DeploymentNode
 	Capabilities   *Capabilities
-	Cluster        *ClusterProfile
+	Cluster        *K8sSpec
 	OutputDir      string              // usually <projectDir>/.overthink/k8s
 }
 
@@ -577,7 +577,7 @@ func generateResources(d DeploymentNode) map[string]any {
 // Storage / PVC / Volumes.
 // -----------------------------------------------------------------------------
 
-func storageClass(cluster *ClusterProfile, hint string) string {
+func storageClass(cluster *K8sSpec, hint string) string {
 	if cluster == nil {
 		return ""
 	}
@@ -598,7 +598,7 @@ func storageClass(cluster *ClusterProfile, hint string) string {
 	return cluster.Storage.ClassDefault
 }
 
-func accessMode(cluster *ClusterProfile, access string) string {
+func accessMode(cluster *K8sSpec, access string) string {
 	switch access {
 	case "many-readers":
 		return "ReadOnlyMany"

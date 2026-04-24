@@ -523,11 +523,11 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 		// Get ports from deploy.yml first (try direct match, then scan for instance keys)
 		dc, _ := LoadDeployConfig()
 		if dc != nil {
-			if dcImg, ok := dc.Images[imageName]; ok {
+			if dcImg, ok := dc.Deployment[imageName]; ok {
 				cs.Ports = dcImg.Ports
 			} else {
 				// Try to match instance deploy keys (e.g., "selkies-desktop/foo" for stem "selkies-desktop-foo")
-				for key, entry := range dc.Images {
+				for key, entry := range dc.Deployment {
 					img, inst := parseDeployKey(key)
 					if inst != "" && strings.TrimPrefix(containerNameInstance(img, inst), "ov-") == imageName {
 						cs.Ports = entry.Ports
@@ -536,11 +536,13 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 				}
 			}
 		}
-		// Fall back to image labels
+		// Fall back to image labels — resolve to the newest local CalVer
+		// for this short name (ov is CalVer-only; no `:latest` tag).
 		if len(cs.Ports) == 0 {
-			imageRef := fmt.Sprintf("%s:latest", imageName)
-			if meta, _ := ExtractMetadata(engineBin, imageRef); meta != nil {
-				cs.Ports = meta.Ports
+			if imageRef, err := ResolveNewestLocalCalVer(engineBin, imageName); err == nil && imageRef != "" {
+				if meta, _ := ExtractMetadata(engineBin, imageRef); meta != nil {
+					cs.Ports = meta.Ports
+				}
 			}
 		}
 
@@ -672,7 +674,7 @@ func (c *StatusCmd) statusSingle(rt *ResolvedRuntime) error {
 	// Enrich from deploy.yml
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if dcImg, ok := dc.Images[deployKey(imageName, c.Instance)]; ok {
+		if dcImg, ok := dc.Deployment[deployKey(imageName, c.Instance)]; ok {
 			status.Ports = dcImg.Ports
 			if dcImg.Network != "" {
 				status.Network = dcImg.Network
@@ -683,9 +685,13 @@ func (c *StatusCmd) statusSingle(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Try to get image labels for additional info (ports, volumes, network)
-	imageRef := fmt.Sprintf("%s:latest", imageName)
-	meta, _ := ExtractMetadata(engine, imageRef)
+	// Try to get image labels for additional info (ports, volumes,
+	// network) — resolve to newest local CalVer (ov is CalVer-only).
+	imageRef, _ := ResolveNewestLocalCalVer(engine, imageName)
+	var meta *ImageMetadata
+	if imageRef != "" {
+		meta, _ = ExtractMetadata(engine, imageRef)
+	}
 	if meta != nil {
 		if len(status.Ports) == 0 {
 			status.Ports = meta.Ports

@@ -78,26 +78,27 @@ func (c *TestRunCmd) Run() error {
 
 	// Load deploy overlay (local tests) AND project-level tests. Schema
 	// v3 allows deployment names that don't match image names (e.g.
-	// `k3s-pod` → `fedora-ov`), so tests keyed under the deployment
-	// name in the project deploy.yml would otherwise be invisible here.
-	// Merge by id: project baseline, personal overlay wins.
+	// `openclaw-sway-browser-pod` → `openclaw-sway-browser`), so tests
+	// keyed under the deployment name in the project deploy.yml would
+	// otherwise be invisible here. Merge by id: project baseline,
+	// personal overlay wins.
 	dir, _ := os.Getwd()
 	var localTests []Check
 	var projectTests []Check
 	var deployOverlay *DeploymentNode
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		if pc := uf.ProjectDeployConfig(); pc != nil {
-			if entry, ok := pc.Images[c.Image]; ok {
+			if entry, ok := pc.Deployment[c.Image]; ok {
 				projectTests = entry.Tests
 			}
 		}
 	}
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if entry, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+		if entry, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 			localTests = entry.Tests
 			deployOverlay = &entry
-		} else if entry, ok := dc.Images[c.Image]; ok {
+		} else if entry, ok := dc.Deployment[c.Image]; ok {
 			localTests = entry.Tests
 			deployOverlay = &entry
 		}
@@ -129,20 +130,71 @@ func (c *TestRunCmd) Run() error {
 	return nil
 }
 
-// isVmTarget returns true when c.Image names a `kind: vm` entity in vms.yml.
-// Cheap check — a missing/unreadable overthink.yml returns false and the
-// caller falls through to the container dispatch path.
+// isVmTarget returns true when c.Image names a `kind: vm` entity OR a
+// kind:deployment with target:vm OR a dotted-path child deployment nested
+// inside a target:vm parent. Cheap check — a missing/unreadable
+// overthink.yml returns false and the caller falls through to the
+// container dispatch path.
 func (c *TestRunCmd) isVmTarget() bool {
 	dir, err := os.Getwd()
 	if err != nil {
 		return false
 	}
 	uf, ok, err := LoadUnified(dir)
-	if err != nil || !ok || uf.VM == nil {
+	if err != nil || !ok {
 		return false
 	}
-	_, present := uf.VM[c.Image]
-	return present
+	// Direct kind:vm entity name match.
+	if uf.VM != nil {
+		if _, present := uf.VM[c.Image]; present {
+			return true
+		}
+	}
+	// Schema v4: kind:deployment name with target:vm (possibly dotted).
+	if uf.Deployments != nil && uf.Deployments.Images != nil {
+		// Simple deployment-key lookup.
+		if entry, present := uf.Deployments.Images[c.Image]; present {
+			if entry.Target == "vm" {
+				return true
+			}
+		}
+		// Dotted-path nested lookup: route via the VM parent when the
+		// root segment points at a target:vm deployment (regardless of
+		// the leaf's target — child commands execute through the
+		// parent's SSH substrate).
+		if idx := strings.Index(c.Image, "."); idx > 0 {
+			root := c.Image[:idx]
+			if entry, present := uf.Deployments.Images[root]; present && entry.Target == "vm" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolveNestedNode walks a dotted path through the Nested tree rooted at
+// the top-level deployment, returning the leaf DeploymentNode.
+func resolveNestedNode(roots map[string]DeploymentNode, path string) *DeploymentNode {
+	parts := strings.Split(path, ".")
+	if len(parts) == 0 {
+		return nil
+	}
+	entry, ok := roots[parts[0]]
+	if !ok {
+		return nil
+	}
+	current := &entry
+	for _, p := range parts[1:] {
+		if current.Nested == nil {
+			return nil
+		}
+		next, ok := current.Nested[p]
+		if !ok || next == nil {
+			return nil
+		}
+		current = next
+	}
+	return current
 }
 
 // runVm executes deploy-scope tests against a VM guest over SSH.
@@ -162,12 +214,37 @@ func (c *TestRunCmd) runVm() error {
 	if err != nil {
 		return err
 	}
-	spec := uf.VM[c.Image]
+	// Schema v4: c.Image may be
+	//   (a) a kind:vm entity name directly (e.g. "arch"),
+	//   (b) a kind:deployment name with target:vm (e.g. "arch-vm") whose
+	//       Vm field points at the actual kind:vm entity, OR
+	//   (c) a dotted path "parent.child" where `parent` is a target:vm
+	//       deployment and `child` is a nested node whose tests run in
+	//       the parent's SSH substrate.
+	vmName := c.Image
+	var nestedLeaf *DeploymentNode
+	if uf.Deployments != nil && uf.Deployments.Images != nil {
+		if entry, ok := uf.Deployments.Images[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
+			vmName = entry.Vm
+		} else if idx := strings.Index(c.Image, "."); idx > 0 {
+			root := c.Image[:idx]
+			if parent, present := uf.Deployments.Images[root]; present && parent.Target == "vm" {
+				if parent.Vm != "" {
+					vmName = parent.Vm
+				}
+				nestedLeaf = resolveNestedNode(uf.Deployments.Images, c.Image)
+			}
+		}
+	}
+	var spec *VmSpec
+	if uf.VM != nil {
+		spec = uf.VM[vmName]
+	}
 
 	user := resolveVmSshUser(spec)
 	port := resolveVmSshPort(spec)
 	home, _ := os.UserHomeDir()
-	keyPath := home + "/.local/share/ov/vm/ov-" + c.Image + "/id_ed25519"
+	keyPath := home + "/.local/share/ov/vm/ov-" + vmName + "/id_ed25519"
 
 	// Two deploy sources for VMs:
 	//   - project-level: overthink.yml / deploy.yml `deployments.images["vm:<name>"]`
@@ -185,11 +262,18 @@ func (c *TestRunCmd) runVm() error {
 		if images == nil {
 			return nil
 		}
+		// Schema v4: direct deployment-key lookup (c.Image matches a
+		// kind:deployment name with target:vm).
+		if entry, ok := images[c.Image]; ok && entry.Target == "vm" {
+			return &entry
+		}
+		// Legacy: `vm:<name>` deploy key.
 		if entry, ok := images["vm:"+c.Image]; ok {
 			return &entry
 		}
+		// By VM template name: c.Image matches the referenced kind:vm.
 		for _, entry := range images {
-			if entry.Target == "vm" && entry.VmSource == c.Image {
+			if entry.Target == "vm" && entry.Vm == c.Image {
 				e := entry
 				return &e
 			}
@@ -197,13 +281,17 @@ func (c *TestRunCmd) runVm() error {
 		return nil
 	}
 	var projectTests, localTests []Check
-	if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry := findVmEntry(pc.Images); entry != nil {
+	// Nested dotted-path short-circuit: when the request is for a
+	// child node, use its own Tests directly instead of the parent's.
+	if nestedLeaf != nil {
+		projectTests = nestedLeaf.Tests
+	} else if pc := uf.ProjectDeployConfig(); pc != nil {
+		if entry := findVmEntry(pc.Deployment); entry != nil {
 			projectTests = entry.Tests
 		}
 	}
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry := findVmEntry(dc.Images); entry != nil {
+		if entry := findVmEntry(dc.Deployment); entry != nil {
 			localTests = entry.Tests
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
@@ -328,7 +416,7 @@ func (c *ImageTestCmd) Run() error {
 			dc, _ := LoadDeployConfig()
 			var deployOverlay *DeploymentNode
 			if dc != nil {
-				if entry, ok := dc.Images[deployKey(imageName, "")]; ok {
+				if entry, ok := dc.Deployment[deployKey(imageName, "")]; ok {
 					deployOverlay = &entry
 				}
 			}

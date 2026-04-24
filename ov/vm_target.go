@@ -65,7 +65,19 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 	if !ok || uf.VM == nil {
 		return nil, fmt.Errorf("no kind:vm entities declared in overthink.yml")
 	}
+	// Schema v4: callers may pass either a kind:vm entity name directly
+	// (e.g. "arch") or a kind:deployment name with target:vm (e.g.
+	// "arch-vm") whose Vm field points at the actual entity.
 	spec, present := uf.VM[vmName]
+	if !present && uf.Deployments != nil && uf.Deployments.Images != nil {
+		if entry, ok := uf.Deployments.Images[vmName]; ok && entry.Target == "vm" && entry.Vm != "" {
+			if s, okSpec := uf.VM[entry.Vm]; okSpec {
+				spec = s
+				vmName = entry.Vm
+				present = true
+			}
+		}
+	}
 	if !present {
 		known := make([]string, 0, len(uf.VM))
 		for k := range uf.VM {

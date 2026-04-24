@@ -116,6 +116,13 @@ func generateQuadlet(cfg QuadletConfig) string {
 				b.WriteString(fmt.Sprintf("PodmanArgs=--security-opt %s\n", opt))
 			}
 		}
+		// Privileged containers that also declare devices still need them
+		// explicitly — --privileged grants /dev/* host-wide access but
+		// some workloads (k3s → /dev/fuse) prefer the explicit wiring so
+		// the device is present regardless of host /dev/ layout.
+		for _, dev := range cfg.Security.Devices {
+			b.WriteString(fmt.Sprintf("AddDevice=%s\n", dev))
+		}
 	} else {
 		for _, cap := range cfg.Security.CapAdd {
 			b.WriteString(fmt.Sprintf("AddCapability=%s\n", cap))
@@ -130,6 +137,13 @@ func generateQuadlet(cfg QuadletConfig) string {
 				b.WriteString(fmt.Sprintf("PodmanArgs=--security-opt %s\n", opt))
 			}
 		}
+	}
+	// CgroupNS applies in both privileged and non-privileged paths —
+	// e.g. k3s needs --cgroupns=host to see the host's cpuset cgroup
+	// controller that the rootless user slice doesn't delegate to its
+	// sub-slices. Declared at the layer level; no-op for VM/host deploys.
+	if cfg.Security.CgroupNS != "" {
+		b.WriteString(fmt.Sprintf("PodmanArgs=--cgroupns=%s\n", cfg.Security.CgroupNS))
 	}
 	for _, group := range cfg.Security.GroupAdd {
 		b.WriteString(fmt.Sprintf("GroupAdd=%s\n", group))

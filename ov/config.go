@@ -54,6 +54,7 @@ type AliasConfig struct {
 // SecurityConfig holds container security options (privileged, capabilities, devices).
 type SecurityConfig struct {
 	Privileged  bool     `yaml:"privileged,omitempty" json:"privileged,omitempty"`
+	CgroupNS    string   `yaml:"cgroupns,omitempty" json:"cgroupns,omitempty"` // --cgroupns=<value>: "host" | "private" | "". Layer-intrinsic; needed by workloads like k3s that require host cgroup controllers (cpuset) not delegated to rootless sub-slices.
 	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
 	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
@@ -119,14 +120,13 @@ type ImageConfig struct {
 	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
 	Builder    BuilderMap        `yaml:"builder,omitempty"`      // build type → builder image (pixi, npm, cargo, aur)
 	Builds     []string          `yaml:"builds,omitempty"`       // what this builder image can build (pixi, npm, cargo, aur)
-	DNS        string            `yaml:"dns,omitempty"`          // DNS hostname for traefik routing and tunnels
-	AcmeEmail  string            `yaml:"acme_email,omitempty"`   // email for Let's Encrypt notifications
-	Tunnel     *TunnelYAML       `yaml:"tunnel,omitempty"`       // tunnel configuration (tailscale or cloudflare)
-	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE)
+	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
+	// deployment choices with no declaration meaning. They live on
+	// DeploymentNode and flow through to consumers via ImageMetadata.
+	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
 	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
-	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options
-	Network    string            `yaml:"network,omitempty"`      // container network mode (e.g. "host", "none", "slirp4netns")
-	Engine     string            `yaml:"engine,omitempty" json:"engine,omitempty"` // per-image run engine override ("docker", "podman", or "")
+	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options — declaration of required capabilities
+	Network    string            `yaml:"network,omitempty"`      // container network mode — declaration of required/recommended mode
 	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
 	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
 
@@ -194,18 +194,15 @@ type ResolvedImage struct {
 	// Auto-generated intermediate image
 	Auto bool // true for auto-generated intermediate images
 
-	// DNS and ACME configuration
-	DNS       string // DNS hostname for traefik routing and tunnels
-	AcmeEmail string // email for Let's Encrypt notifications
+	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed from
+	// ResolvedImage — they are deployment choices with no declaration
+	// meaning. Consumers read them from ImageMetadata (post deploy-overlay)
+	// instead of from the resolved image config.
 
-	// Tunnel configuration
-	Tunnel *TunnelConfig `json:",omitempty"` // resolved tunnel config (nil if no tunnel)
-
-	// Container network mode (e.g. "host", "none")
+	// Container network mode (e.g. "host", "none") — declaration of
+	// required/recommended network mode. Deployment overrides via
+	// MergeDeployOntoMetadata.
 	Network string
-
-	// Per-image run engine override (resolved from image config and layer requirements)
-	Engine string `json:"engine,omitempty"`
 
 	// Build config (resolved per-image from format_config ref to build.yml)
 	DistroConfig  *DistroConfig  `json:"-"` // distro section of build.yml
@@ -429,20 +426,9 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	// BuilderCapabilities: image-specific capability declaration, NOT inherited
 	resolved.BuilderCapabilities = img.Builds
 
-	// Resolve DNS: image -> defaults -> ""
-	resolved.DNS = img.DNS
-	if resolved.DNS == "" {
-		resolved.DNS = c.Defaults.DNS
-	}
-
-	// Resolve AcmeEmail: image -> defaults -> ""
-	resolved.AcmeEmail = img.AcmeEmail
-	if resolved.AcmeEmail == "" {
-		resolved.AcmeEmail = c.Defaults.AcmeEmail
-	}
-
-	// Tunnel config is a deploy-time concern — resolved from deploy.yml only.
-	// image.yml tunnel: field is ignored (kept in struct for YAML compat).
+	// Schema v4: DNS / AcmeEmail / Tunnel / Engine no longer resolve from
+	// image config — they are deployment choices and flow through
+	// MergeDeployOntoMetadata → ImageMetadata directly.
 
 	// VM configuration (disk_size, ram, cpus, firmware, libvirt, …) lives
 	// on `kind: vm` entities in vms.yml, NOT on image.yml entries. The
@@ -457,12 +443,6 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	resolved.Network = img.Network
 	if resolved.Network == "" {
 		resolved.Network = c.Defaults.Network
-	}
-
-	// Resolve engine: image -> defaults -> "" (layer requirements resolved separately)
-	resolved.Engine = img.Engine
-	if resolved.Engine == "" {
-		resolved.Engine = c.Defaults.Engine
 	}
 
 	// Data image flag (not inherited from defaults)

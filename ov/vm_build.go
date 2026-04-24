@@ -31,7 +31,10 @@ func (c *VmBuildCmd) Run() error {
 	// Parse image:tag format from positional arg
 	imageName, imageTag := parseImageArg(c.Image)
 
-	calverTag := "latest"
+	// ov is CalVer-only — if neither the positional arg nor --tag
+	// specifies a version, resolve to the newest local CalVer by
+	// short name; no `:latest` fallback.
+	calverTag := ""
 	if imageTag != "" {
 		calverTag = imageTag
 	} else if c.Tag != "" {
@@ -171,7 +174,7 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		// rebuilds).
 		var existingState *VmDeployState
 		if dc, _ := LoadDeployConfig(); dc != nil {
-			if e, ok := dc.Images["vm:"+vmName]; ok {
+			if e, ok := dc.Deployment["vm:"+vmName]; ok {
 				existingState = e.VmState
 			}
 		}

@@ -28,7 +28,7 @@ func (c *CmdCmd) Run() error {
 		dc, _ := LoadDeployConfig()
 		var deployImage *DeploymentNode
 		if dc != nil {
-			if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+			if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 				deployImage = &overlay
 			}
 		}

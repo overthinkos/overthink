@@ -122,29 +122,46 @@ func retrieveOne(
 // and any caller-supplied env vars. Unknown references are left as-is
 // — literal text that happens to look like a variable reference should
 // not silently empty-string out.
+//
+// Supports shell-style ${KEY:-default} fallback: when KEY is unset or
+// empty, the substitution resolves to `default`. Needed for layer
+// artifact rewrites that want a sensible fallback when the operator
+// doesn't set an optional env var (e.g. K3S_KUBECONFIG_SERVER).
+// Nested ${} is NOT supported — keep defaults literal.
 func expandArtifactVars(s, deployName, layerName string, envVars map[string]string) string {
-	// Simple implementation: iterate known mapping and do literal replacement.
-	// Does not parse arbitrary ${...}; anything else in envVars is honored
-	// by passing through os.Expand-style substitution after the known set.
 	mapFn := func(key string) string {
+		// ${KEY:-default} fallback syntax.
+		var defaultVal string
+		if idx := strings.Index(key, ":-"); idx >= 0 {
+			defaultVal = key[idx+2:]
+			key = key[:idx]
+		}
+		resolved := ""
 		switch key {
 		case "deploy_name":
-			return deployName
+			resolved = deployName
 		case "layer_name":
-			return layerName
+			resolved = layerName
 		case "HOME":
 			if home, err := os.UserHomeDir(); err == nil {
-				return home
+				resolved = home
+			} else {
+				resolved = os.Getenv("HOME")
 			}
-			return os.Getenv("HOME")
+		default:
+			if v, ok := envVars[key]; ok {
+				resolved = v
+			} else if v := os.Getenv(key); v != "" {
+				resolved = v
+			}
 		}
-		if v, ok := envVars[key]; ok {
-			return v
+		if resolved != "" {
+			return resolved
 		}
-		if v := os.Getenv(key); v != "" {
-			return v
+		if defaultVal != "" {
+			return defaultVal
 		}
-		// Leave unknown refs intact.
+		// Unknown ref with no default — leave intact.
 		return "${" + key + "}"
 	}
 	return os.Expand(s, mapFn)

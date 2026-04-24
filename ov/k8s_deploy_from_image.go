@@ -49,15 +49,14 @@ func DeployFromImage(opts DeployFromImageOpts) (string, error) {
 		return "", fmt.Errorf("reading capabilities from %q: %w", opts.ImageRef, err)
 	}
 
-	// 2. Load cluster profile.
+	// 2. Look up kind:k8s template (schema v4 replacement for ClusterProfile).
 	projectDir := opts.ProjectDir
 	if projectDir == "" {
 		projectDir = "."
 	}
-	cluster, err := LoadClusterProfile(projectDir, opts.ClusterName)
-	if err != nil {
-		return "", fmt.Errorf("loading cluster profile: %w", err)
-	}
+	cluster := findK8sSpec(projectDir, opts.ClusterName)
+	// cluster may be nil — downstream Kustomize emission handles that
+	// (defaults fall back to kubectl current-context + "default" namespace).
 
 	// 3. Derive deployment name if not provided (use image basename without tag).
 	deployName := opts.DeploymentName
@@ -76,7 +75,7 @@ func DeployFromImage(opts DeployFromImageOpts) (string, error) {
 	if dc.Kubernetes == nil {
 		dc.Kubernetes = &K8sDeployConfig{}
 	}
-	dc.Kubernetes.Cluster = opts.ClusterName
+	dc.K8s = opts.ClusterName
 	if opts.Namespace != "" {
 		dc.Kubernetes.Namespace = opts.Namespace
 	}

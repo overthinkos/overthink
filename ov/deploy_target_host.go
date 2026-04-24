@@ -190,7 +190,11 @@ func (t *HostDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opts
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
 	}
-	return AddLayerDeployment(t.LedgerPaths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
+	// Route via the executor so nested host-deploys (host-target inside
+	// a VM / pod via SSH / podman exec) write the ledger on the substrate,
+	// not the operator's filesystem. Local executor → operator-side
+	// (unchanged behaviour).
+	return AddLayerDeploymentVia(t.Executor, t.LedgerPaths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)

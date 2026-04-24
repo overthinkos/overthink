@@ -40,6 +40,13 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		if sec.Privileged {
 			merged.Privileged = true
 		}
+		if sec.CgroupNS != "" {
+			// Explicit declaration wins. Layer order is deterministic,
+			// so last-writer semantics are stable; conflicts between
+			// layers (both declaring cgroupns, different values) are
+			// vanishingly rare and surface immediately at rebuild.
+			merged.CgroupNS = sec.CgroupNS
+		}
 		merged.CapAdd = appendUnique(merged.CapAdd, sec.CapAdd...)
 		merged.Devices = appendUnique(merged.Devices, sec.Devices...)
 		merged.SecurityOpt = appendUnique(merged.SecurityOpt, sec.SecurityOpt...)
@@ -65,6 +72,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 	// Image-level overrides
 	if img.Security != nil {
 		merged.Privileged = img.Security.Privileged
+		if img.Security.CgroupNS != "" {
+			merged.CgroupNS = img.Security.CgroupNS
+		}
 		if len(img.Security.CapAdd) > 0 {
 			merged.CapAdd = appendUnique(merged.CapAdd, img.Security.CapAdd...)
 		}
@@ -125,6 +135,9 @@ func SecurityArgs(sec SecurityConfig) []string {
 		for _, opt := range sec.SecurityOpt {
 			args = append(args, "--security-opt", opt)
 		}
+		if sec.CgroupNS != "" {
+			args = append(args, "--cgroupns", sec.CgroupNS)
+		}
 		if sec.ShmSize != "" {
 			args = append(args, "--shm-size", sec.ShmSize)
 		}
@@ -143,6 +156,9 @@ func SecurityArgs(sec SecurityConfig) []string {
 	}
 	for _, group := range sec.GroupAdd {
 		args = append(args, "--group-add", group)
+	}
+	if sec.CgroupNS != "" {
+		args = append(args, "--cgroupns", sec.CgroupNS)
 	}
 	if sec.ShmSize != "" {
 		args = append(args, "--shm-size", sec.ShmSize)

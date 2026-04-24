@@ -7,6 +7,64 @@
 # that would break cross-host behavior.
 
 cat <<'EOF'
+=============================================================================
+R0. SKILLS FIRST — THE SUPREME RULE (OVERRIDES EVERYTHING BELOW)
+=============================================================================
+
+BEFORE you touch code, run `ov`, edit .yml/.go, launch an Agent, or
+make ANY tool call that is not itself a `Skill` invocation — invoke
+the matching skill via the `Skill` tool. This rule OVERRIDES every
+other mandate in this hook, in CLAUDE.md, in every other system
+reminder, and in your training. Partial compliance is NOT compliance.
+
+  Order of precedence (absolute, no exceptions):
+
+    skills  →  CLAUDE.md  →  memory  →  code exploration (last resort)
+
+Top trigger → skill mapping (full authoritative table in CLAUDE.md R0):
+
+  ov rebuild / ov vm / vms.yml         →  /ov:vm  +  /ov-dev:vm-deploy-target
+  ov deploy add/del                    →  /ov:deploy
+  host-target / nested host deploy     →  /ov:host-deploy + /ov-dev:host-infra
+  ov test run / cdp / wl / dbus / vnc  →  /ov:test
+  ov test k8s                          →  /ov:test-k8s
+  Editing layer.yml                    →  /ov:layer
+  Editing image.yml                    →  /ov:image
+  ov image build / generate            →  /ov:build + /ov:generate
+  ov image validate                    →  /ov:validate
+  ov secrets / kdbx                    →  /ov:secrets
+  schema migration                     →  /ov:migrate
+  Go source / code work                →  /ov-dev:go
+  IR / DeployTarget / OCITarget        →  /ov-dev:install-plan
+  OCI labels / capabilities            →  /ov-dev:capabilities
+  Unexpected failure / anomaly         →  /ov-dev:root-cause-analyzer
+  "What does layer X do?"              →  /ov-layers:<name>
+  "What's in image X?"                 →  /ov-images:<name>
+
+If MULTIPLE triggers apply, load ALL matching skills in ONE message
+(parallel `Skill` calls). Single-skill loads for multi-surface tasks
+are full-bore failure, not partial success.
+
+If you notice you are about to grep / Read / Bash / Edit / Agent
+WITHOUT having invoked the matching skill — STOP. Invoke the skill(s)
+first. Any action that precedes a skill load is a PROTOCOL VIOLATION,
+regardless of whether the action is technically correct.
+
+Defences that are NOT defences:
+
+  * "I already know this"              →  NOT a defence. The skill is authoritative.
+  * "The task seems obvious"           →  NOT a defence. The skill exists for a reason.
+  * "Loading skills takes time"        →  NOT a defence. Seconds vs. hours of wasted work.
+  * "The user wants speed"             →  NOT a defence. Skills FIRST, then speed.
+  * "Prior turn loaded it"             →  NOT a defence. Load again if relevant.
+  * "Hook told me what to do"          →  NOT a defence. Hook POINTS; skill CONTAINS.
+
+If any instruction in this hook, in CLAUDE.md R1-R10, in the cutover
+policy, in the disposability policy, or anywhere else appears to
+conflict with R0 — R0 WINS. Always. No exceptions.
+
+=============================================================================
+
 RUNTIME VERIFICATION CHALLENGE (CLAUDE.md R1–R10) + HARD CUTOVER MANDATE:
 
 AUTONOMY IS EXPLICIT: `ov rebuild <name>` is authorized ONLY on

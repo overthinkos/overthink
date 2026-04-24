@@ -219,33 +219,16 @@ func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 
 	inImageYml := false
 	resolvedImgPath := imgYml
-	if data, err := os.ReadFile(imgYml); err == nil {
-		var top struct {
-			Images map[string]interface{} `yaml:"images"`
-		}
-		if err := yaml.Unmarshal(data, &top); err == nil {
-			if _, ok := top.Images[name]; ok {
-				inImageYml = true
-			}
-		}
-	}
-	// Schema-v3: also check the unified images.yml map — this is the
-	// actual source of truth when the project uses overthink.yml includes
-	// (images.yml holds all image definitions; image.yml is only for the
-	// single-image-per-dir legacy layout).
-	if !inImageYml {
-		if data, err := os.ReadFile(imagesYml); err == nil {
-			var top struct {
-				Images map[string]interface{} `yaml:"images"`
-			}
-			if err := yaml.Unmarshal(data, &top); err == nil {
-				if _, ok := top.Images[name]; ok {
-					inImageYml = true
-					resolvedImgPath = imagesYml
-				}
-			}
+	// Schema v4: only overthink.yml is the entry point. Resolve image
+	// names through the unified loader (which pulls in includes like
+	// image.yml / images.yml transparently). No direct file reads here.
+	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
+		if _, present := uf.Images[name]; present {
+			inImageYml = true
+			resolvedImgPath = imgYml
 		}
 	}
+	_ = imagesYml
 
 	inLayers := false
 	layerYML := filepath.Join(layersDir, "layer.yml")

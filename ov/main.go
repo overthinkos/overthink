@@ -214,18 +214,30 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
 		case "tunnel":
-			if resolved.Tunnel != nil && len(resolved.Tunnel.Ports) > 0 {
-				fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
-				for _, tp := range resolved.Tunnel.Ports {
-					access := "private"
-					if tp.Public {
-						access = "public"
+			// Schema v4: Tunnel moved off ImageConfig/ResolvedImage —
+			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
+			dc, _ := LoadDeployConfig()
+			if dc != nil {
+				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
+					layers, err := ScanAllLayersWithConfig(dir, cfg)
+					if err == nil {
+						portProtos := make(map[int]string)
+						tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layers, portProtos, resolved.Ports)
+						if tc != nil && len(tc.Ports) > 0 {
+							fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+							for _, tp := range tc.Ports {
+								access := "private"
+								if tp.Public {
+									access = "public"
+								}
+								hostname := tp.Hostname
+								if hostname == "" {
+									hostname = "-"
+								}
+								fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
+							}
+						}
 					}
-					hostname := tp.Hostname
-					if hostname == "" {
-						hostname = "-"
-					}
-					fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
 				}
 			}
 		case "network":
@@ -244,7 +256,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 					for _, dv := range overlay.Volumes {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}

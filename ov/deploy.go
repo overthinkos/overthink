@@ -12,9 +12,13 @@ import (
 
 // DeployConfig represents per-machine deployment overrides (~/.config/ov/deploy.yml).
 // Only runtime/deployment fields are supported — build-time fields are structurally excluded.
+//
+// Schema v4: the top-level map key is `deployment:` (singular, flat). The
+// legacy `images:` / `deployments.images.*` nesting is gone — all target
+// kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type DeployConfig struct {
-	Provides *ProvidesConfig              `yaml:"provides,omitempty"`
-	Images   map[string]DeploymentNode `yaml:"images"`
+	Provides   *ProvidesConfig              `yaml:"provides,omitempty"`
+	Deployment map[string]DeploymentNode    `yaml:"deployment"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in
@@ -132,40 +136,51 @@ type DeploymentNode struct {
 	// otherwise have to be passed on every command invocation.
 	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
 
-	// --- Schema-v3 cross-reference fields ---
-	//
-	// Image names the image this pod deployment is built from. When
-	// non-empty, used in place of the deployment key during ref
-	// resolution for target: pod (formerly container). Enables
-	// deployment names like "sway-pod" that don't match an image
-	// name in images.yml (e.g. openclaw-sway-browser).
-	//
-	// For target: vm, use VmSource instead.
-	// For target: k8s, use Cluster.
-	// For target: host with nested execution, use Inside.
+	// --- Schema-v4 template references (exactly one matching Target) ---
+
+	// Image names a kind:image directly. Used for target: pod when no
+	// kind:pod template is needed (the common case), or as a legacy
+	// fallback for other targets during migration.
 	Image string `yaml:"image,omitempty"`
 
-	// Cluster names a kind:cluster entity from the top-level cluster:
-	// block. Only meaningful for target: k8s. The k8s: test verbs
-	// can also name a cluster directly; this field is the deployment-
-	// level default.
-	Cluster string `yaml:"cluster,omitempty"`
+	// Pod names a kind:pod template (image ref + sidecars + optional
+	// tests + shared env defaults). Only meaningful for target: pod.
+	Pod string `yaml:"pod,omitempty"`
 
-	// Inside names another deployment in which this one's execution
-	// venue is nested. Only meaningful for target: host — routes
-	// layer application through a NestedExecutor that targets the
-	// referenced deployment's executor (e.g. SSH into a vm). Enables
-	// exercising the host-deploy code path against a VM guest's FS
-	// with zero operator-side writes.
-	Inside string `yaml:"inside,omitempty"`
+	// Vm names a kind:vm entity. Only meaningful for target: vm.
+	// Schema v4 rename of the legacy `vm_source:` field.
+	Vm string `yaml:"vm,omitempty"`
 
-	// --- VM-target fields (D9) ---
+	// K8s names a kind:k8s template (workload defaults + cluster config;
+	// absorbs former ClusterProfile fields). Only meaningful for
+	// target: k8s. Replaces the legacy `cluster:` field.
+	K8s string `yaml:"k8s,omitempty"`
 
-	// VmSource references a kind:vm entity by name. Only meaningful when
-	// this entry represents a VM deploy (deploy name starts with "vm:"
-	// or Target == "vm"). Resolves through the same unified-schema
-	// loader that handles kind:image and kind:layer refs.
-	VmSource string `yaml:"vm_source,omitempty"`
+	// Host names a kind:host template (layer stack + install_opts).
+	// Only meaningful for target: host. Optional — a host deployment
+	// MAY inline `layers:` / `add_layers:` directly without a template.
+	Host string `yaml:"host,omitempty"`
+
+	// --- Scalar overrides of target-template defaults ---
+
+	// Cpus overrides kind:vm.cpus for this deployment instance.
+	Cpus int `yaml:"cpus,omitempty"`
+
+	// Ram overrides kind:vm.ram for this deployment instance
+	// (format: "16G", "32Gi", etc.).
+	Ram string `yaml:"ram,omitempty"`
+
+	// DiskSize overrides kind:vm.disk_size for this deployment instance
+	// (format: "40G", "80GiB", etc.).
+	DiskSize string `yaml:"disk_size,omitempty"`
+
+	// --- Derived nesting fields (authored via `nested:`, not these) ---
+
+	// Inside is DERIVED from the parent's Nested tree at load time.
+	// v4 REJECTS authored `inside:` entries with a migration-hint error;
+	// author the parent's `nested:` map instead. Kept here because the
+	// derived value is consulted by NestedExecutor routing.
+	Inside string `yaml:"-"`
 
 	// VmState is the runtime state written by VmDeployTarget on first
 	// apply. Preserved across reboots so ov deploy del can reverse the
@@ -187,9 +202,9 @@ type DeploymentNode struct {
 	// --lifecycle <tier>` filters and display columns.
 	Lifecycle string `yaml:"lifecycle,omitempty"`
 
-	// --- Recursive tree: child deployments (schema v2) ---
+	// --- Recursive tree: nested deployments (schema v4) ---
 	//
-	// Children are DeploymentNodes whose execution venue is nested
+	// Nested are DeploymentNodes whose execution venue is nested
 	// inside this node's environment. A container node with a vm child
 	// creates the container first, then boots the VM inside it; the
 	// child's DeployExecutor composes this node's executor with a
@@ -199,7 +214,11 @@ type DeploymentNode struct {
 	// Map keys MUST NOT contain `.` — dotted-path CLI addressing
 	// treats `.` as a node separator (foo.bar.baz). LoadUnified
 	// rejects offending keys at parse time with a remediation hint.
-	Children map[string]*DeploymentNode `yaml:"children,omitempty"`
+	//
+	// Schema v4 rename: `children:` → `nested:`. The parent-reverse-
+	// reference Inside is DERIVED from this tree at load time; authored
+	// `inside:` entries are rejected.
+	Nested map[string]*DeploymentNode `yaml:"nested,omitempty"`
 }
 
 // IsDisposable returns the literal Disposable field. Implements the
@@ -212,7 +231,7 @@ func (c DeploymentNode) IsDisposable() bool {
 // Cheap predicate used by the tree walker to decide pre-order vs
 // leaf-only dispatch.
 func (n *DeploymentNode) HasChildren() bool {
-	return n != nil && len(n.Children) > 0
+	return n != nil && len(n.Nested) > 0
 }
 
 // WalkPreOrder invokes fn on this node, then recurses into every
@@ -233,12 +252,12 @@ func (n *DeploymentNode) WalkPreOrder(path string, fn func(path string, node *De
 	if err := fn(path, n); err != nil {
 		return err
 	}
-	for _, k := range sortedChildKeys(n.Children) {
+	for _, k := range sortedNestedKeys(n.Nested) {
 		childPath := k
 		if path != "" {
 			childPath = path + "." + k
 		}
-		if err := n.Children[k].WalkPreOrder(childPath, fn); err != nil {
+		if err := n.Nested[k].WalkPreOrder(childPath, fn); err != nil {
 			return err
 		}
 	}
@@ -253,19 +272,19 @@ func (n *DeploymentNode) WalkPostOrder(path string, fn func(path string, node *D
 	if n == nil {
 		return nil
 	}
-	for _, k := range sortedChildKeys(n.Children) {
+	for _, k := range sortedNestedKeys(n.Nested) {
 		childPath := k
 		if path != "" {
 			childPath = path + "." + k
 		}
-		if err := n.Children[k].WalkPostOrder(childPath, fn); err != nil {
+		if err := n.Nested[k].WalkPostOrder(childPath, fn); err != nil {
 			return err
 		}
 	}
 	return fn(path, n)
 }
 
-// ResolveNodePath walks roots[path0].Children[path1]...[pathN] and
+// ResolveNodePath walks roots[path0].Nested[path1]...[pathN] and
 // returns the targeted node plus its parent chain (root-first,
 // excluding the target itself). Returns a descriptive error when any
 // path segment is missing so the user sees which segment doesn't
@@ -288,7 +307,7 @@ func ResolveNodePath(roots map[string]DeploymentNode, path string) (*DeploymentN
 	var ancestors []*DeploymentNode
 	for i := 1; i < len(parts); i++ {
 		ancestors = append(ancestors, current)
-		next, ok := current.Children[parts[i]]
+		next, ok := current.Nested[parts[i]]
 		if !ok {
 			prefix := strings.Join(parts[:i], ".")
 			return nil, nil, fmt.Errorf("no child %q under %q", parts[i], prefix)
@@ -315,9 +334,9 @@ func splitDottedPath(path string) []string {
 	return out
 }
 
-// sortedChildKeys returns the keys of a children map in deterministic
+// sortedNestedKeys returns the keys of a children map in deterministic
 // order so traversal produces stable output across runs.
-func sortedChildKeys(children map[string]*DeploymentNode) []string {
+func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 	out := make([]string, 0, len(children))
 	for k := range children {
 		out = append(out, k)
@@ -519,7 +538,7 @@ func (dc *DeployConfig) DeployedContainerNames() []string {
 	}
 	var names []string
 	seen := map[string]bool{}
-	for key := range dc.Images {
+	for key := range dc.Deployment {
 		img, inst := parseDeployKey(key)
 		name := containerNameInstance(img, inst)
 		if !seen[name] {
@@ -575,11 +594,11 @@ func LoadDeployConfig() (*DeployConfig, error) {
 // Field-level replace: deploy.yml value fully replaces image.yml value.
 // Unknown images in deploy.yml are silently ignored.
 func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
-	if dc == nil || dc.Images == nil {
+	if dc == nil || dc.Deployment == nil {
 		return
 	}
 
-	for name, overlay := range dc.Images {
+	for name, overlay := range dc.Deployment {
 		img, ok := cfg.Images[name]
 		if !ok {
 			continue // silently ignore unknown images
@@ -594,15 +613,9 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Info != "" {
 			img.Info = overlay.Info
 		}
-		if overlay.Tunnel != nil {
-			img.Tunnel = overlay.Tunnel
-		}
-		if overlay.DNS != "" {
-			img.DNS = overlay.DNS
-		}
-		if overlay.AcmeEmail != "" {
-			img.AcmeEmail = overlay.AcmeEmail
-		}
+		// Schema v4: Tunnel / DNS / AcmeEmail / Engine removed from
+		// ImageConfig — overlay copies for those removed. Values flow
+		// through MergeDeployOntoMetadata → ImageMetadata instead.
 		if overlay.Ports != nil {
 			img.Ports = overlay.Ports
 		}
@@ -618,9 +631,6 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Network != "" {
 			img.Network = overlay.Network
 		}
-		if overlay.Engine != "" {
-			img.Engine = overlay.Engine
-		}
 		cfg.Images[name] = img
 	}
 }
@@ -628,11 +638,11 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 // MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
 // Same field-level replace semantics as MergeDeployOverlay.
 func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance string) {
-	if dc == nil || dc.Images == nil || meta == nil {
+	if dc == nil || dc.Deployment == nil || meta == nil {
 		return
 	}
 
-	overlay, ok := dc.Images[deployKey(meta.Image, instance)]
+	overlay, ok := dc.Deployment[deployKey(meta.Image, instance)]
 	if !ok {
 		return
 	}
@@ -862,13 +872,13 @@ func SaveDeployConfig(dc *DeployConfig) error {
 // MergeDeployConfigs merges multiple DeployConfigs left-to-right.
 // Later configs take precedence (field-level replace per image).
 func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
-	result := &DeployConfig{Images: make(map[string]DeploymentNode)}
+	result := &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	for _, dc := range configs {
-		if dc == nil || dc.Images == nil {
+		if dc == nil || dc.Deployment == nil {
 			continue
 		}
-		for name, overlay := range dc.Images {
-			existing := result.Images[name]
+		for name, overlay := range dc.Deployment {
+			existing := result.Deployment[name]
 			if overlay.Tunnel != nil {
 				existing.Tunnel = overlay.Tunnel
 			}
@@ -911,8 +921,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Target != "" {
 				existing.Target = overlay.Target
 			}
-			if overlay.VmSource != "" {
-				existing.VmSource = overlay.VmSource
+			if overlay.Vm != "" {
+				existing.Vm = overlay.Vm
 			}
 			// Schema-v3 cross-ref fields. Each is a string cross-reference
 			// (to the top-level vm:/cluster: or another deployment) and
@@ -920,12 +930,19 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Image != "" {
 				existing.Image = overlay.Image
 			}
-			if overlay.Cluster != "" {
-				existing.Cluster = overlay.Cluster
+			// Schema v4: Cluster renamed to K8s (per-deployment template
+			// ref to kind:k8s, absorbing former ClusterProfile).
+			if overlay.K8s != "" {
+				existing.K8s = overlay.K8s
 			}
-			if overlay.Inside != "" {
-				existing.Inside = overlay.Inside
+			if overlay.Pod != "" {
+				existing.Pod = overlay.Pod
 			}
+			if overlay.Host != "" {
+				existing.Host = overlay.Host
+			}
+			// Inside is derived from the Nested tree at load time and not
+			// authored — skip overlay merge.
 			// Disposable / Lifecycle (R10-load-bearing). The overlay is
 			// authoritative when set; the baseline value from the project
 			// config only applies when the overlay doesn't mention it.
@@ -946,8 +963,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.InstallOpts != nil {
 				existing.InstallOpts = overlay.InstallOpts
 			}
-			if overlay.Children != nil {
-				existing.Children = overlay.Children
+			if overlay.Nested != nil {
+				existing.Nested = overlay.Nested
 			}
 			// VmState is per-machine state written by VmDeployTarget; it
 			// only ever lives in the local deploy.yml, never in the
@@ -956,7 +973,7 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.VmState != nil {
 				existing.VmState = overlay.VmState
 			}
-			result.Images[name] = existing
+			result.Deployment[name] = existing
 		}
 	}
 	return result
@@ -964,8 +981,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 
 // RemoveImageDeploy removes an image's entry from a deploy config.
 func RemoveImageDeploy(dc *DeployConfig, imageName string) {
-	if dc != nil && dc.Images != nil {
-		delete(dc.Images, imageName)
+	if dc != nil && dc.Deployment != nil {
+		delete(dc.Deployment, imageName)
 	}
 }
 
@@ -980,7 +997,7 @@ func cleanDeployEntry(imageName, instance string) {
 
 	key := deployKey(imageName, instance)
 	hasImage := false
-	if _, ok := dc.Images[key]; ok {
+	if _, ok := dc.Deployment[key]; ok {
 		hasImage = true
 		RemoveImageDeploy(dc, key)
 	}
@@ -1011,7 +1028,7 @@ func cleanDeployEntry(imageName, instance string) {
 		} else {
 			// Base image removal: only remove if no other entries for the same base image remain
 			hasOtherEntries := false
-			for k := range dc.Images {
+			for k := range dc.Deployment {
 				base, _ := parseDeployKey(k)
 				if base == imageName {
 					hasOtherEntries = true
@@ -1046,7 +1063,7 @@ func cleanDeployEntry(imageName, instance string) {
 		return
 	}
 
-	if len(dc.Images) == 0 && dc.Provides == nil {
+	if len(dc.Deployment) == 0 && dc.Provides == nil {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
 			os.Remove(path)
 		}
@@ -1122,10 +1139,10 @@ type SaveDeployStateInput struct {
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	}
 	key := deployKey(imageName, instance)
-	entry := dc.Images[key] // preserve existing fields (tunnel, volumes, etc.)
+	entry := dc.Deployment[key] // preserve existing fields (tunnel, volumes, etc.)
 	if input.Volumes != nil {
 		entry.Volumes = input.Volumes
 	}
@@ -1170,7 +1187,7 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if input.SetLifecycle {
 		entry.Lifecycle = input.Lifecycle
 	}
-	dc.Images[key] = entry
+	dc.Deployment[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}
@@ -1233,32 +1250,28 @@ func mergeEnvVars(existing, newVars []string) []string {
 
 // ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.
 func ExportAllImages(cfg *Config) *DeployConfig {
-	dc := &DeployConfig{Images: make(map[string]DeploymentNode)}
+	dc := &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
 		}
+		// Schema v4: Tunnel / DNS / AcmeEmail / Engine no longer sourced
+		// from ImageConfig (they're deploy-only).
 		entry := DeploymentNode{
-			Version:   img.Version,
-			Status:    img.Status,
-			Info:      img.Info,
-			Ports:     img.Ports,
-			Tunnel:    img.Tunnel,
-			DNS:       img.DNS,
-			AcmeEmail: img.AcmeEmail,
-			Env:       img.Env,
-			EnvFile:   img.EnvFile,
-			Security:  img.Security,
-			Network:   img.Network,
-			Engine:    img.Engine,
+			Version:  img.Version,
+			Status:   img.Status,
+			Info:     img.Info,
+			Ports:    img.Ports,
+			Env:      img.Env,
+			EnvFile:  img.EnvFile,
+			Security: img.Security,
+			Network:  img.Network,
 		}
 		// Only include if at least one field is set
 		if entry.Version != "" || entry.Status != "" || entry.Info != "" ||
-			entry.Ports != nil || entry.Tunnel != nil || entry.DNS != "" ||
-			entry.AcmeEmail != "" || entry.Env != nil ||
-			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" ||
-			entry.Engine != "" {
-			dc.Images[name] = entry
+			entry.Ports != nil || entry.Env != nil ||
+			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
+			dc.Deployment[name] = entry
 		}
 	}
 	return dc

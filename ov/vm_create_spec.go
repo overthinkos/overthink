@@ -52,7 +52,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	if spec.Source.Kind == "cloud_image" && seedISOAbs != "" {
 		var existingState *VmDeployState
 		if dc, _ := LoadDeployConfig(); dc != nil {
-			if entry, ok := dc.Images["vm:"+vmName]; ok {
+			if entry, ok := dc.Deployment["vm:"+vmName]; ok {
 				existingState = entry.VmState
 			}
 		}

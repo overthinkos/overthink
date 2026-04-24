@@ -54,9 +54,20 @@ type UnifiedFile struct {
 	Inits       map[string]*InitDef     `yaml:"inits,omitempty"`
 	Defaults    ImageConfig             `yaml:"defaults,omitempty"`
 	Images      map[string]ImageConfig  `yaml:"images,omitempty"`
+	// Schema v4 singular alias. Populated by ImageSingular during YAML
+	// unmarshal; merged into Images post-load via normalizeAliases.
+	ImageSingular map[string]ImageConfig `yaml:"image,omitempty"`
 	Layers      map[string]*InlineLayer `yaml:"layers,omitempty"`
 	VM          map[string]*VmSpec      `yaml:"vm,omitempty"`
 	Deployments *DeploymentsSection     `yaml:"deployments,omitempty"`
+	// Schema v4 singular alias for Deployments. Populated via
+	// DeploymentSingular; merged post-load.
+	DeploymentSingular map[string]DeploymentNode `yaml:"deployment,omitempty"`
+
+	// Schema v4: first-class target template maps (singular keys).
+	Pod  map[string]*PodSpec  `yaml:"pod,omitempty"`
+	K8s  map[string]*K8sSpec  `yaml:"k8s,omitempty"`
+	Host map[string]*HostSpec `yaml:"host,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -160,6 +171,31 @@ type kindKeyedDoc struct {
 	Distro     *DistroDoc     `yaml:"distro,omitempty"`
 	Init       *InitDoc       `yaml:"init,omitempty"`
 	VM         *VmDoc         `yaml:"vm,omitempty"`
+	// Schema v4 first-class target templates.
+	Pod  *PodDoc  `yaml:"pod,omitempty"`
+	K8s  *K8sDoc  `yaml:"k8s,omitempty"`
+	Host *HostDoc `yaml:"host,omitempty"`
+}
+
+// PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
+// standalone form.
+type PodDoc struct {
+	Name    string `yaml:"name"`
+	PodSpec `yaml:",inline"`
+}
+
+// K8sDoc wraps a single K8sSpec with an explicit Name — the kind:k8s
+// standalone form.
+type K8sDoc struct {
+	Name    string `yaml:"name"`
+	K8sSpec `yaml:",inline"`
+}
+
+// HostDoc wraps a single HostSpec with an explicit Name — the kind:host
+// standalone form.
+type HostDoc struct {
+	Name     string `yaml:"name"`
+	HostSpec `yaml:",inline"`
 }
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
@@ -240,12 +276,13 @@ var entityKinds = []entityKind{
 	{Key: "builder", Filename: "builder.yml"},
 	{Key: "distro", Filename: "distro.yml"},
 	{Key: "init", Filename: "init.yml"},
-	// Note: `vm` is intentionally absent from this set in schema v2.
-	// v1 supported a standalone `vm: {name: X, spec: {...}}` kind-keyed
-	// document form, but that collides with the v2 root-level `vm:`
-	// map key that carries all VM entities inside deploy.yml. v2
-	// canonicalizes on the map form; single-VM kind-keyed documents
-	// are no longer accepted.
+	// Schema v4 additions — first-class target template kinds. All
+	// singular. All authored in overthink.yml or in their convention
+	// files (pod.yml / vm.yml / k8s.yml / host.yml).
+	{Key: "pod", Filename: "pod.yml"},
+	{Key: "vm", Filename: "vm.yml"},
+	{Key: "k8s", Filename: "k8s.yml"},
+	{Key: "host", Filename: "host.yml"},
 }
 
 // -----------------------------------------------------------------------------
@@ -271,9 +308,10 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := loadUnifiedInto(root, merged, visited, 0); err != nil {
 		return nil, true, err
 	}
+	normalizeV4Aliases(merged)
 	if merged.Version < schemaVersion {
 		return nil, true, fmt.Errorf(
-			"%s: schema v%d is required (found v%d). Run: ov migrate merge-vms",
+			"%s: schema v%d is required (found v%d). Run: ov migrate schema-v4",
 			root, schemaVersion, merged.Version,
 		)
 	}
@@ -310,10 +348,10 @@ func validateDeploymentTree(section *DeploymentsSection) error {
 }
 
 func validateDeploymentChildren(path string, node *DeploymentNode) error {
-	if node == nil || len(node.Children) == 0 {
+	if node == nil || len(node.Nested) == 0 {
 		return nil
 	}
-	for childName, child := range node.Children {
+	for childName, child := range node.Nested {
 		childPath := childName
 		if path != "" {
 			childPath = path + "." + childName
@@ -408,6 +446,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			// Queue discovery roots (resolved relative to this file).
 			// Discovery runs only AFTER all includes are fully merged, so
 			// collect them on merged.Discover directly and process at end.
+			normalizeV4Aliases(&uf)
 			mergeUnified(merged, &uf, filepath.Dir(abs))
 		case docShapeKind:
 			var kd kindKeyedDoc
@@ -472,12 +511,19 @@ const (
 )
 
 // rootShapeKeys are the top-level keys that mark a doc as root-shaped.
-// `vm` (singular) is the v2 key for VM entities; `vms` (plural) is the
-// legacy v1 spelling that classifyDoc rejects with a migration hint.
+// Schema v4 uses singular keys uniformly: image/pod/vm/k8s/host/deployment.
+// Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
+// with a migration hint.
 var rootShapeKeys = map[string]bool{
 	"version": true, "includes": true, "discover": true, "defaults": true,
 	"distros": true, "builders": true, "inits": true,
-	"images": true, "layers": true, "vm": true, "deployments": true,
+	"layers": true,
+	// v4 singular kind maps:
+	"image": true, "pod": true, "vm": true, "k8s": true, "host": true,
+	"deployment": true,
+	// legacy aliases accepted for transitional compatibility; migration
+	// rewrites them:
+	"images": true, "deployments": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.
@@ -520,10 +566,21 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
-		if rootShapeKeys[k] {
+		// Schema v4: the target-template kind keys (image/pod/vm/k8s/host/
+		// deployment) overlap with root-shape map keys. Disambiguate by
+		// value inspection — kind-keyed single-entity form has a `name:`
+		// scalar child; root-shape map form has child keys that are names
+		// themselves (no `name:` key at the first level of the value).
+		val := inner.Content[i+1]
+		if rootShapeKeys[k] && kindKeysSet[k] {
+			if mapHasKey(val, "name") {
+				hasKind = true
+			} else {
+				hasRoot = true
+			}
+		} else if rootShapeKeys[k] {
 			hasRoot = true
-		}
-		if kindKeysSet[k] {
+		} else if kindKeysSet[k] {
 			hasKind = true
 		}
 		if k == legacyVmRootKey {
@@ -553,6 +610,56 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 // -----------------------------------------------------------------------------
 // Merge helpers.
 // -----------------------------------------------------------------------------
+
+// mapHasKey reports whether a yaml mapping node contains a top-level key.
+// Used by classifyDoc to disambiguate kind-keyed (has `name:`) vs
+// root-shape (value is a map of named entries) forms.
+func mapHasKey(node *yaml.Node, key string) bool {
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		if node.Content[i].Kind == yaml.ScalarNode && node.Content[i].Value == key {
+			return true
+		}
+	}
+	return false
+}
+
+// normalizeV4Aliases folds the schema-v4 singular root-shape keys (image:,
+// deployment:) into the canonical plural fields used by the rest of the
+// codebase (Images, Deployments.Images). Makes the loader accept both
+// forms interchangeably during the v4 migration window.
+func normalizeV4Aliases(u *UnifiedFile) {
+	if u == nil {
+		return
+	}
+	if len(u.ImageSingular) > 0 {
+		if u.Images == nil {
+			u.Images = make(map[string]ImageConfig)
+		}
+		for k, v := range u.ImageSingular {
+			if _, ok := u.Images[k]; !ok {
+				u.Images[k] = v
+			}
+		}
+		u.ImageSingular = nil
+	}
+	if len(u.DeploymentSingular) > 0 {
+		if u.Deployments == nil {
+			u.Deployments = &DeploymentsSection{}
+		}
+		if u.Deployments.Images == nil {
+			u.Deployments.Images = make(map[string]DeploymentNode)
+		}
+		for k, v := range u.DeploymentSingular {
+			if _, ok := u.Deployments.Images[k]; !ok {
+				u.Deployments.Images[k] = v
+			}
+		}
+		u.DeploymentSingular = nil
+	}
+}
 
 // mergeUnified merges src into dst such that dst's existing values WIN on
 // conflict at the same leaf (root-wins). This means when loadUnifiedInto is
@@ -586,6 +693,9 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeImageMap(&dst.Images, src.Images)
 	mergeLayerMap(&dst.Layers, src.Layers)
 	mergeVmMap(&dst.VM, src.VM)
+	mergePodMap(&dst.Pod, src.Pod)
+	mergeK8sMap(&dst.K8s, src.K8s)
+	mergeHostMap(&dst.Host, src.Host)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -668,6 +778,50 @@ func mergeVmMap(dst *map[string]*VmSpec, src map[string]*VmSpec) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*VmSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// Schema v4 target-template merge helpers. Same root-wins semantics as
+// mergeVmMap: existing entries survive; included-file entries fill gaps.
+func mergePodMap(dst *map[string]*PodSpec, src map[string]*PodSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*PodSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+func mergeK8sMap(dst *map[string]*K8sSpec, src map[string]*K8sSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*K8sSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+func mergeHostMap(dst *map[string]*HostSpec, src map[string]*HostSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*HostSpec)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -779,6 +933,15 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.VM != nil {
 		count++
 	}
+	if kd.Pod != nil {
+		count++
+	}
+	if kd.K8s != nil {
+		count++
+	}
+	if kd.Host != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
 	}
@@ -862,6 +1025,39 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.VM[kd.VM.Name]; !exists {
 			spec := kd.VM.Spec
 			merged.VM[kd.VM.Name] = &spec
+		}
+	case kd.Pod != nil:
+		if kd.Pod.Name == "" {
+			return fmt.Errorf("pod: missing name")
+		}
+		if merged.Pod == nil {
+			merged.Pod = map[string]*PodSpec{}
+		}
+		if _, exists := merged.Pod[kd.Pod.Name]; !exists {
+			spec := kd.Pod.PodSpec
+			merged.Pod[kd.Pod.Name] = &spec
+		}
+	case kd.K8s != nil:
+		if kd.K8s.Name == "" {
+			return fmt.Errorf("k8s: missing name")
+		}
+		if merged.K8s == nil {
+			merged.K8s = map[string]*K8sSpec{}
+		}
+		if _, exists := merged.K8s[kd.K8s.Name]; !exists {
+			spec := kd.K8s.K8sSpec
+			merged.K8s[kd.K8s.Name] = &spec
+		}
+	case kd.Host != nil:
+		if kd.Host.Name == "" {
+			return fmt.Errorf("host: missing name")
+		}
+		if merged.Host == nil {
+			merged.Host = map[string]*HostSpec{}
+		}
+		if _, exists := merged.Host[kd.Host.Name]; !exists {
+			spec := kd.Host.HostSpec
+			merged.Host[kd.Host.Name] = &spec
 		}
 	}
 	_ = srcDir
@@ -1126,8 +1322,8 @@ func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
 		return nil
 	}
 	return &DeployConfig{
-		Provides: uf.Deployments.Provides,
-		Images:   uf.Deployments.Images,
+		Provides:   uf.Deployments.Provides,
+		Deployment: uf.Deployments.Images,
 	}
 }
 

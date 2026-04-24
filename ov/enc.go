@@ -802,7 +802,7 @@ func loadEncryptedVolumes(imageName, instance string) ([]DeployVolumeConfig, str
 		return nil, rt.EncryptedStoragePath, nil
 	}
 
-	overlay, ok := dc.Images[deployKey(imageName, instance)]
+	overlay, ok := dc.Deployment[deployKey(imageName, instance)]
 	if !ok {
 		return nil, rt.EncryptedStoragePath, nil
 	}

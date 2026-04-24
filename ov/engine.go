@@ -18,25 +18,17 @@ func EngineBinary(engine string) string {
 }
 
 // ResolveImageEngine returns the run engine for a specific image.
-// Priority: image-level engine > defaults engine > layer engine requirements > global default.
-// Layer requirements are resolved transitively via ResolveLayerOrder.
+// Schema v4: ImageConfig.Engine removed (deploy-only choice). Priority is
+// now: layer engine requirements > global default. Deploy-time overrides
+// come from DeploymentNode.Engine via ResolveImageEngineForDeploy /
+// ResolveImageEngineFromMeta.
 func ResolveImageEngine(cfg *Config, layers map[string]*Layer, imageName string, globalRunEngine string) string {
 	img, ok := cfg.Images[imageName]
 	if !ok {
 		return globalRunEngine
 	}
 
-	// 1. Explicit image-level override
-	if img.Engine != "" {
-		return img.Engine
-	}
-
-	// 2. Defaults-level engine
-	if cfg.Defaults.Engine != "" {
-		return cfg.Defaults.Engine
-	}
-
-	// 3. Layer-level engine requirements (transitive closure)
+	// Layer-level engine requirements (transitive closure)
 	resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
 	if err == nil {
 		for _, layerName := range resolved {
@@ -79,7 +71,7 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) string {
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if entry, ok := dc.Images[deployKey(imageName, instance)]; ok && entry.Engine != "" {
+		if entry, ok := dc.Deployment[deployKey(imageName, instance)]; ok && entry.Engine != "" {
 			return entry.Engine
 		}
 	}

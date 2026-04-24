@@ -170,10 +170,15 @@ un-testable. That is FORBIDDEN.**
   "done" while any other task in the cutover is still open is a lie; the
   cutover isn't done until every task is done. Confidence attributions
   above `syntax check only` require R10 acceptance on the FINAL code.
-- **Splitting one cutover across conversation turns.** If the work is
-  genuinely too large for one session, plan TWO SEPARATE cutovers in the
-  plan file — each standing alone with its own migration + its own test
-  sweep + its own R10 gate. Never "pause mid-cutover and pick up later."
+- **Splitting one cutover across conversation turns.** ABSOLUTELY
+  FORBIDDEN. Once a plan is approved, it executes end-to-end through
+  R10 in the same conversation. Never "pause mid-cutover and pick up
+  later." There is no "the work was bigger than expected" escape
+  clause. If an approved plan turns out to exceed session resources,
+  compact context and continue — do not pause, do not split, do not
+  re-plan mid-execution. "Too large" is the state you plan against
+  BEFORE approval (the "Exception" clause below — only usable BEFORE
+  approval); never a valid post-approval reason to stop.
 
 **What this policy permits — equally precisely:**
 
@@ -223,8 +228,11 @@ A matching one-shot `ov migrate <name>` command transforms legacy configs
 in-place; residual legacy fields raise hard load-time errors with a
 remediation hint.
 
-**Exception:** the user explicitly instructs a phased rollout AND that
-phasing is recorded in the plan file.
+**Exception (PRE-APPROVAL ONLY):** the user explicitly instructs a
+phased rollout AND that phasing is recorded in the plan file BEFORE
+approval. After a plan has been approved, this exception is closed —
+the plan runs end-to-end through R10. There is no post-approval split
+and no "resume in the next session." An approved plan is a CONTRACT.
 
 See `/ov-dev:cutover-policy` for forbidden patterns, required deliverables,
 and the anti-pattern catalog. See `/ov:migrate` for the `ov migrate <name>`

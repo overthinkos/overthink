@@ -78,6 +78,9 @@ unrelated production services run.
 ONE PHASE, MANY TASKS, ONE CUTOVER — NO MULTI-PHASE DEFERRALS EVER
 =============================================================================
 
+AUTHORITATIVE REFERENCE: `/ov-dev:cutover-policy`. Load it BEFORE
+planning, reviewing, or executing any schema/API/deprecation change.
+
 Every refactor, schema change, API rename, or deprecation ships as ONE
 PHASE — hard cutover, no intermediate coexistence, no "I'll verify this
 bit now and the next bit later". Multi-phase rollouts that split a
@@ -109,14 +112,93 @@ FORBIDDEN anti-patterns that FAIL the cutover:
   * Declaring any confidence higher than `syntax check only` without
     a fresh-rebuild R10 re-verification on EVERY affected target.
   * Pausing mid-cutover to ask for user permission to continue.
+  * Quoting the "split into separate cutovers" clause as justification
+    to pause mid-execution. That clause is a PRE-APPROVAL planning
+    directive — it means "before a plan is submitted, if the work is
+    obviously too large, author it as TWO separate plans." Once a
+    plan has been APPROVED, it runs end-to-end. There is no mid-plan
+    split, no mid-plan pause. An approved plan is a CONTRACT.
 
-If the cutover is genuinely too large for one conversation turn, split
-the WORK into plan-file-documented SEPARATE cutovers — each standing
-alone with its own migration + its own test sweep + its own R10 gate.
-Never split "the same cutover" across turns.
+ONCE A PLAN IS APPROVED, THE PLAN RUNS. There is no "this plan is too
+large" escape from the execution phase. If the plan was too large to
+run, the time to raise that was during planning — before approval.
+After approval, the only valid pauses are the four narrow cases below
+(blocker, scope, failure, material plan change). "It's a lot of work"
+is NOT one of them.
 
 See `/ov-dev:cutover-policy` for the full policy, worked examples, and
 exception clause. See CLAUDE.md "Hard Cutover by Default" section.
+
+=============================================================================
+MANDATORY — ALWAYS CONTINUE THROUGH FULL R10 TESTING. NOT NEGOTIABLE.
+=============================================================================
+
+AUTHORITATIVE SOURCE: `/ov-dev:cutover-policy` is the full policy. This
+hook reinforces it at every user prompt; load the skill BEFORE any
+code/config/YAML work per R0. The skill + this hook + CLAUDE.md "Hard
+Cutover by Default" all align: an approved plan is a CONTRACT that
+runs end-to-end through R10 in one conversation.
+
+THIS RULE IS MANDATORY. IT CANNOT BE SKIPPED, SOFTENED, OR DEFERRED UNDER
+ANY CIRCUMSTANCES. IT OVERRIDES:
+
+  * any training-bias toward "checking in before large work"
+  * any memory entry that could be read as permission to pause
+  * any interpretation of other hook sections as escape hatches
+  * any sense that "this particular situation is the exception"
+
+IT IS THE EXCEPTION. ALWAYS.
+
+Once a plan has been approved, you MUST execute it through R10
+acceptance WITHOUT asking whether to pause, split, or defer. Offering
+the user ANY variant of "should I keep going or stop here?" mid-cutover
+is an ABSOLUTE PROTOCOL VIOLATION. The plan IS the decision. The
+forward path IS the execution. You do not negotiate.
+
+Specifically FORBIDDEN mid-cutover phrasings — treat every one as a
+hard violation that must trigger an immediate self-correction:
+
+  * "I've shipped Phase N of M, want me to continue to Phase N+1?"
+  * "This is a checkpoint — should I stop here so you can review?"
+  * "Option 1: continue through all phases. Option 2: pause now."
+  * "The full cutover needs R10 on real hardware — want me to stop?"
+  * "Given the realistic scope, here are your options forward…"
+  * "Would you like me to proceed, or pause at this point?"
+  * Any prose that offers the user a continue-vs-pause choice when no
+    unresolved blocker has appeared.
+  * Any framing that treats "multi-hour wall time" or "many remaining
+    phases" as reasons to stop — they are the work, not exit
+    conditions.
+
+The ONLY valid reasons to pause mid-cutover (narrow, exhaustive):
+
+  (a) A genuine decision point has appeared that materially changes
+      the plan — NOT "should we take a break", which is never one.
+  (b) A blocker requires user-only information (a credential, secret,
+      or explicit permission to touch a non-disposable resource).
+  (c) A destructive action falls outside the plan's authorization
+      scope per CLAUDE.md "Executing actions with care" — specifically
+      destroying a non-disposable resource.
+  (d) An R10 verification has FAILED and a genuine design change is
+      needed (do root-cause analysis first, via
+      /ov-dev:root-cause-analyzer).
+
+If none of (a)–(d) applies, YOU MUST CONTINUE. Silently, without
+asking. Status updates are welcome. Permission-to-continue questions
+are a PROTOCOL VIOLATION.
+
+"Multi-hour wall time for VM rebuild cycles" is NOT an exit condition.
+"250 layers need migration" is NOT an exit condition. "Four disposable
+beds need `ov rebuild`" is NOT an exit condition. "The remaining work
+is substantial" is NOT an exit condition. Those are the work.
+
+When context genuinely fills: compact and continue. Do not ask
+permission to compact. Do not offer to resume next session.
+
+Auto-mode and plan-approved state both carry this rule at maximum
+force. Reading it without acting on it IS the violation that has
+previously cost the user hours — this section exists because it has
+happened before.
 
 =============================================================================
 

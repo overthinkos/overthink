@@ -1,11 +1,8 @@
 layer:
   name: notebook-templates
-  info: "Starter notebook templates for jupyter"
-
   data:
     - src: data/notebooks
       volume: workspace
-
   tests:
     - id: notebook-templates-dir
       scope: deploy
@@ -19,4 +16,11 @@ layer:
       exit_status: 0
       stdout:
         - matches: "\\.ipynb"
-
+  description:
+    feature: Starter notebook templates for jupyter
+    narrative: |-
+      Starter notebook templates for jupyter
+    scenarios:
+      - name: 'TODO: describe Starter notebook templates for jupyter'
+        tags: [skeleton]
+        steps: []

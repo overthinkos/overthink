@@ -165,9 +165,14 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // Unknown top-level keys are captured as tag-based package sections
 // (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
-	Version        string            `yaml:"version,omitempty"`   // CalVer version (YYYY.DDD.HHMM) of this layer definition
-	Status         string            `yaml:"status,omitempty"`    // working, testing, broken (default: testing)
-	Info           string            `yaml:"info,omitempty"`      // free-form description of what works/doesn't
+	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description — replaces the retired info:/status: scalar fields
+	// Legacy Info / Status fields — retained as load-time rejection traps
+	// per `/ov-dev:cutover-policy`. When non-empty, the loader errors with
+	// a remediation hint pointing at `ov migrate description`. Authors
+	// migrate once; after migration these fields are empty and invisible.
+	Status string `yaml:"status,omitempty"`
+	Info   string `yaml:"info,omitempty"`
 	// Directory is the anchor for relative file references in this layer (tasks.copy,
 	// tasks.write inline paths, data.src, extract, install-file detection). Defaults
 	// to "." — the directory containing this layer.yml. Relative values resolve
@@ -531,6 +536,7 @@ type Layer struct {
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
+	description    *Description      // Gherkin-shaped self-description (from layer.yml description:)
 }
 
 // ScanLayers returns all layers for the project at dir. Post-unified-cutover
@@ -655,11 +661,35 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 		if err := inner.Content[layerIdx].Decode(&ly); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
+		if err := rejectLegacyInfoStatus(path, ly.Info, ly.Status); err != nil {
+			return nil, err
+		}
 		return &ly, nil
 	}
 
 	// No `layer:` wrapper — legacy flat form. Reject with migration hint.
 	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate unified --rewrite-layers` to convert to the canonical `layer:` kind-keyed form", path)
+}
+
+// rejectLegacyInfoStatus errors when either field is non-empty on a
+// freshly-parsed entity. Part of the BDD description cutover per
+// `/ov-dev:cutover-policy`: legacy info: / status: scalar fields are
+// banned; authors migrate them into description.feature / .narrative /
+// .tags via `ov migrate description`. The error carries an actionable
+// remediation hint.
+func rejectLegacyInfoStatus(sourcePath, info, status string) error {
+	if info == "" && status == "" {
+		return nil
+	}
+	var which []string
+	if info != "" {
+		which = append(which, "'info'")
+	}
+	if status != "" {
+		which = append(which, "'status'")
+	}
+	return fmt.Errorf("%s: legacy %s field(s) present — the BDD description cutover replaced info:/status: with structured description:. Run: ov migrate description",
+		sourcePath, strings.Join(which, "+"))
 }
 
 // resolveLayerSourceDir returns the anchor directory for relative file lookups
@@ -819,6 +849,9 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate tests (declarative checks)
 		layer.tests = ly.Tests
+
+		// Pre-populate description (Gherkin-shaped self-description)
+		layer.description = ly.Description
 
 		// Pre-populate artifacts (files to retrieve after setup)
 		layer.artifacts = ly.Artifacts

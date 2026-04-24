@@ -253,11 +253,12 @@ type InitDoc struct {
 // (often as a paired entry in the same file as a kind:image entry for
 // bootc images — see migrate vm-spec).
 type VmDoc struct {
-	Name    string  `yaml:"name"`
-	Version string  `yaml:"version,omitempty"`
-	Status  string  `yaml:"status,omitempty"`
-	Info    string  `yaml:"info,omitempty"`
-	Spec    VmSpec  `yaml:"spec"`
+	Name        string       `yaml:"name"`
+	Version     string       `yaml:"version,omitempty"`
+	Status      string       `yaml:"status,omitempty"`      // [DEPRECATED - migrate to description.tags]
+	Info        string       `yaml:"info,omitempty"`        // [DEPRECATED - migrate to description.feature+narrative]
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
+	Spec        VmSpec       `yaml:"spec"`
 }
 
 // -----------------------------------------------------------------------------

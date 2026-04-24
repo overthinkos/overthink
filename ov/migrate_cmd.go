@@ -12,6 +12,7 @@ type MigrateCmdGroup struct {
 	MergeVms       MigrateMergeVmsCmd       `cmd:"merge-vms" help:"Merge vms.yml into deploy.yml, rename vms:→vm:, rename arch-cloud-base→arch, bump schema v1→v2"`
 	DeploySchemaV3 MigrateDeploySchemaV3Cmd `cmd:"deploy-v3" help:"Migrate deploy.yml to schema v3: rename vm:X→X-vm, container→pod, kubernetes→k8s, vm_source:→vm:, bump version 2→3"`
 	SchemaV4       MigrateSchemaV4Cmd       `cmd:"schema-v4" help:"Migrate schema v3 → v4: flatten deployments.images→deployment, rename plurals to singular, children:→nested:, remove deploy-choice fields from images, bump version 3→4"`
+	Description    MigrateDescriptionCmd    `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

@@ -1,9 +1,14 @@
 layer:
   name: notebook-ollama
-  info: "Ollama integration notebook collection"
-
   data:
     - src: data/ollama
       volume: workspace
       dest: ollama
-
+  description:
+    feature: Ollama integration notebook collection
+    narrative: |-
+      Ollama integration notebook collection
+    scenarios:
+      - name: 'TODO: describe Ollama integration notebook collection'
+        tags: [skeleton]
+        steps: []

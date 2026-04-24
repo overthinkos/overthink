@@ -99,10 +99,16 @@ func (m BuilderMap) AllBuilders() []string {
 
 // ImageConfig represents configuration for a single image or defaults
 type ImageConfig struct {
-	Enabled   *bool         `yaml:"enabled,omitempty"`
-	Version   string        `yaml:"version,omitempty"`  // CalVer version (YYYY.DDD.HHMM) of this image definition
-	Status    string        `yaml:"status,omitempty"`   // working, testing, broken (default: testing)
-	Info      string        `yaml:"info,omitempty"`     // free-form description of what works/doesn't
+	Enabled     *bool        `yaml:"enabled,omitempty"`
+	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description — replaces the retired info:/status: scalar fields
+	// Legacy scalar fields — retained as rejection traps per
+	// `/ov-dev:cutover-policy`. Non-empty at config load time errors
+	// with a remediation hint pointing at `ov migrate description`.
+	// Internal read sites continue to reference these fields; they are
+	// always "" post-migration.
+	Status string `yaml:"status,omitempty"`
+	Info   string `yaml:"info,omitempty"`
 	Base      string        `yaml:"base,omitempty"`
 	Bootc     bool          `yaml:"bootc,omitempty"`
 	Platforms []string      `yaml:"platforms,omitempty"`
@@ -261,7 +267,16 @@ func LoadConfigRaw(dir string) (*Config, error) {
 	if !present {
 		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified` to convert legacy image.yml/build.yml/deploy.yml)", dir)
 	}
-	return uf.ProjectConfig(), nil
+	cfg := uf.ProjectConfig()
+	// BDD description cutover — reject any residual legacy info:/status:
+	// at the ImageConfig layer. Per `/ov-dev:cutover-policy` hard cutover,
+	// non-empty legacy fields are a load-time error with a remediation hint.
+	for name, img := range cfg.Images {
+		if err := rejectLegacyInfoStatus(fmt.Sprintf("image %q", name), img.Info, img.Status); err != nil {
+			return nil, err
+		}
+	}
+	return cfg, nil
 }
 
 // ResolveImage resolves a single image's configuration by applying defaults

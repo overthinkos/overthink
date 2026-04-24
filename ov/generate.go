@@ -1490,6 +1490,15 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		writeJSONLabel(b, LabelTests, tests)
 	}
 
+	// Description: three-section Gherkin-shaped self-description.
+	// Replaces the retired LabelInfo/LabelStatus scalar labels. Local
+	// deploy.yml `description:` overlays merge at runtime via
+	// MergeDeployDescriptions, not here.
+	descriptions := CollectDescriptions(g.Config, g.Layers, imageName)
+	if descriptions != nil {
+		writeJSONLabel(b, LabelDescription, descriptions)
+	}
+
 	// VM config + libvirt snippets labels removed in the hard-cutover.
 	// VM definitions live in vms.yml (`kind: vm` entities) as a
 	// separate artifact from the container image; container image OCI

@@ -49,9 +49,10 @@ type DeployConfig struct {
 // disposable: true does not authorize destroying its children unattended —
 // each child's flag stands on its own (see /ov-dev:disposable).
 type DeploymentNode struct {
-	Version    string               `yaml:"version,omitempty"`
-	Status     string               `yaml:"status,omitempty"`
-	Info       string               `yaml:"info,omitempty"`
+	Version     string       `yaml:"version,omitempty"`
+	Status      string       `yaml:"status,omitempty"`     // [DEPRECATED - migrate to description.tags]
+	Info        string       `yaml:"info,omitempty"`       // [DEPRECATED - migrate to description.feature+narrative]
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
 	Tunnel     *TunnelYAML          `yaml:"tunnel,omitempty"`
 	DNS        string               `yaml:"dns,omitempty"`
 	AcmeEmail  string               `yaml:"acme_email,omitempty"`

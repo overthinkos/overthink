@@ -79,10 +79,14 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 
 	ctx := opts.ContextOrDefault()
 
-	// 1. Wait for SSH.
+	// 1. Wait for SSH. 300s accommodates first-boot cloud-init package
+	//    installs on arch / debian / ubuntu cloud images — 120s was too
+	//    tight (observed failing on arch-vm with `spice-vdagent` +
+	//    runcmds). Steady-state reboots still land inside 30s; the
+	//    timeout is a ceiling, not a floor.
 	if sshExec, ok := t.Exec.(*SSHExecutor); ok {
 		fmt.Fprintf(os.Stderr, "Waiting for sshd on %s:%d...\n", sshExec.Host, sshExec.Port)
-		if err := sshExec.WaitForSSH(ctx, 120); err != nil {
+		if err := sshExec.WaitForSSH(ctx, 300); err != nil {
 			return fmt.Errorf("VmDeployTarget: wait-for-sshd: %w", err)
 		}
 	}
@@ -110,9 +114,13 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		return fmt.Errorf("VmDeployTarget: ensure guest ledger dirs: %w", err)
 	}
 
-	// 5. Iterate plans, writing per-layer ledger records to the HOST
-	//    (same as container deploys — the ledger is host-side regardless
-	//    of where the work executes). DeployRecord is written at the end.
+	// 5. Iterate plans, writing per-layer ledger records INTO THE GUEST
+	//    via t.Exec. VM deploys are disposable — storing ledger on
+	//    the operator leaves garbage that survives `ov vm destroy` and
+	//    breaks the zero-operator-side-effects invariant (see B6). The
+	//    guest-side ledger path is still
+	//    `~/.config/overthink/installed/…`; it just resolves to the
+	//    guest's HOME via the SSH executor.
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
 		return fmt.Errorf("VmDeployTarget: ledger paths: %w", err)
@@ -131,7 +139,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 			if layerRec != nil {
 				_ = t.recordLayer(paths, layerRec, plan, opts)
 			}
-			_ = WriteDeployRecord(paths, deployRec)
+			_ = WriteDeployRecordVia(t.Exec, paths, deployRec)
 			return fmt.Errorf("VmDeployTarget: plan %s: %w", plan.Layer, err)
 		}
 		if err := t.recordLayer(paths, layerRec, plan, opts); err != nil {
@@ -147,7 +155,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 
 	deployRec.AddLayers = append(deployRec.AddLayers, deployRec.Layers...)
 	if !opts.DryRun {
-		if err := WriteDeployRecord(paths, deployRec); err != nil {
+		if err := WriteDeployRecordVia(t.Exec, paths, deployRec); err != nil {
 			return fmt.Errorf("VmDeployTarget: writing deploy record: %w", err)
 		}
 	}
@@ -166,14 +174,15 @@ func firstDeployID(plans []*InstallPlan) string {
 	return ""
 }
 
-// recordLayer writes the per-layer ledger entry on the host. Mirrors
-// HostDeployTarget.recordLayer; keeps the VM deploy's ledger writes in
-// the same spot as host/container deploys so `ov deploy del` finds them.
+// recordLayer writes the per-layer ledger entry INTO THE GUEST via
+// t.Exec. Mirrors HostDeployTarget.recordLayer's executor-routed
+// pattern (B6 fix) so VM deploys obey the same
+// zero-operator-side-effects invariant as nested host deploys.
 func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" || rec == nil {
 		return nil
 	}
-	return AddLayerDeployment(paths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
+	return AddLayerDeploymentVia(t.Exec, paths, plan.Layer, plan.DeployID, func(existing *LayerRecord) {
 		existing.Version = rec.Version
 		existing.Steps = append(existing.Steps, rec.Steps...)
 		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
@@ -361,7 +370,23 @@ func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePack
 
 // execServiceCustom writes a custom systemd unit file to the guest
 // and enables it.
+//
+// The compiler (compileServiceSteps in install_build.go) emits
+// ServiceCustomStep with empty UnitText/UnitPath — the note on the
+// compiler says rendering "happens at deploy time because the compiler
+// doesn't know the target init system yet". For a VM deploy the init
+// system is systemd (cloud_image VMs ship systemd; bootc VMs also do).
+// We resolve the systemd InitDef + the ServiceEntry from layer.yml
+// lazily and call RenderService to populate the step. Without this,
+// the install command below would execute with an empty path and
+// produce `install: cannot overwrite directory '' with non-directory
+// '/dev/stdin'` — the symptom observed on k3s-vm.
 func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts) error {
+	if s.UnitText == "" || s.UnitPath == "" {
+		if err := renderCustomServiceForSystemdTarget(s); err != nil {
+			return fmt.Errorf("service %s: %w", s.Name, err)
+		}
+	}
 	script := fmt.Sprintf(`
 set -e
 install -D -m0644 /dev/stdin %s <<'OV_UNIT'
@@ -386,6 +411,96 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 		return nil
 	}
 	return fmt.Errorf("builder steps (%s) in VM deploys are not yet supported (Phase 2); re-run with --skip-incompatible to ignore", s.Builder)
+}
+
+// renderCustomServiceForSystemdTarget populates s.UnitText + s.UnitPath
+// for a ServiceCustomStep whose compile-time rendering was deferred to
+// deploy time. Reads the project's overthink.yml to resolve the systemd
+// InitDef and the originating ServiceEntry from the layer's service: list,
+// then calls RenderService (same helper used by generate.go:1067 for
+// build-time fragment emission).
+//
+// The step's Name field follows the convention set in
+// install_build.go:compileServiceSteps — `ov-<layer>-<entry>`. We strip
+// the `ov-<layer>-` prefix to recover the original entry name.
+func renderCustomServiceForSystemdTarget(s *ServiceCustomStep) error {
+	if s.LayerName == "" {
+		return fmt.Errorf("ServiceCustomStep missing LayerName; cannot render unit")
+	}
+	dir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("getwd: %w", err)
+	}
+	_, _, initCfg, err := LoadBuildConfigForImage(dir)
+	if err != nil {
+		return fmt.Errorf("loading build.yml for init resolve: %w", err)
+	}
+	if initCfg == nil {
+		return fmt.Errorf("no init: section in overthink.yml; cannot render systemd unit for %s", s.Name)
+	}
+	def, ok := initCfg.Init["systemd"]
+	if !ok || def == nil {
+		return fmt.Errorf("no systemd InitDef in overthink.yml init: section")
+	}
+
+	cfg, err := LoadConfig(dir)
+	if err != nil {
+		return fmt.Errorf("loading config for layer lookup: %w", err)
+	}
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	if err != nil {
+		return fmt.Errorf("scanning layers: %w", err)
+	}
+	layer, ok := layers[s.LayerName]
+	if !ok || layer == nil {
+		return fmt.Errorf("layer %q not found for service rendering", s.LayerName)
+	}
+
+	entryName := strings.TrimPrefix(s.Name, "ov-"+s.LayerName+"-")
+	var origEntry *ServiceEntry
+	for i := range layer.Service() {
+		if layer.Service()[i].Name == entryName {
+			origEntry = &layer.Service()[i]
+			break
+		}
+	}
+	if origEntry == nil {
+		return fmt.Errorf("service entry %q not found in layer %q", entryName, s.LayerName)
+	}
+
+	// RenderService at service_render.go:210 sets ctx.Name = entry.Name
+	// unconditionally — we can't feed the prefixed step name via the
+	// context. Clone the entry with Name overridden to the step's
+	// prefixed form so the rendered UnitPath and the executor's
+	// `systemctl enable s.Name` agree on the unit filename.
+	entryClone := *origEntry
+	entryClone.Name = s.Name
+	entry := &entryClone
+
+	// Minimal context — RenderService populates Name/Scope/Env/After/etc.
+	// from the entry fields. We only fill the Layer tag and the
+	// scope-aware unit directories referenced by unit_path_template.
+	ctx := ServiceRenderContext{
+		Layer:         s.LayerName,
+		SystemUnitDir: "/etc/systemd/system",
+	}
+	if homeDir, _ := os.UserHomeDir(); homeDir != "" {
+		ctx.Home = homeDir
+		ctx.UserUnitDir = homeDir + "/.config/systemd/user"
+	}
+	rendered, err := RenderService(entry, def, ctx)
+	if err != nil {
+		return fmt.Errorf("RenderService: %w", err)
+	}
+	if rendered == nil {
+		return fmt.Errorf("RenderService returned nil for %s/%s", s.LayerName, entryName)
+	}
+	s.UnitText = rendered.UnitText
+	s.UnitPath = rendered.UnitPath
+	if s.UnitText == "" || s.UnitPath == "" {
+		return fmt.Errorf("RenderService produced empty UnitText/UnitPath for %s/%s", s.LayerName, entryName)
+	}
+	return nil
 }
 
 // --- Package-install fallback shared with host (mirrors

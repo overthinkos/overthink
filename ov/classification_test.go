@@ -76,7 +76,7 @@ images:
 		{"fedora-coder-scratch", true},  // explicit disposable: true
 	}
 	for _, tc := range tests {
-		e, ok := cfg.Images[tc.key]
+		e, ok := cfg.Deployment[tc.key]
 		if !ok {
 			t.Fatalf("image %q missing", tc.key)
 		}

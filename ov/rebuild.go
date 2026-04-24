@@ -32,11 +32,17 @@ import (
 )
 
 // RebuildCmd implements `ov rebuild`.
+//
+// By default, `ov rebuild` actually rebuilds the underlying image (not
+// just the runtime artifacts). This matches the command's name: a
+// rebuild that silently reused a stale image would be a refresh, not a
+// rebuild. For the faster "reuse existing image" path, pass
+// `--reuse-image`.
 type RebuildCmd struct {
-	Name         string `arg:"" help:"Deploy or VM name (vms.yml entity or deploy.yml entry)"`
-	Instance     string `short:"i" long:"instance" help:"Instance name (for multi-instance VMs/deploys)"`
-	DryRun       bool   `long:"dry-run" help:"Print the rebuild sequence without executing"`
-	RebuildImage bool   `long:"rebuild-image" help:"Also rebuild the underlying image (default: reuse current)"`
+	Name       string `arg:"" help:"Deploy or VM name (vms.yml entity or deploy.yml entry)"`
+	Instance   string `short:"i" long:"instance" help:"Instance name (for multi-instance VMs/deploys)"`
+	DryRun     bool   `long:"dry-run" help:"Print the rebuild sequence without executing"`
+	ReuseImage bool   `long:"reuse-image" help:"Skip the underlying image build and reuse the currently-tagged one (faster; risks running on a stale image)"`
 }
 
 // Run executes the rebuild orchestration.
@@ -60,8 +66,20 @@ func (c *RebuildCmd) Run() error {
 			return err
 		}
 	case "deploy":
-		if err := c.rebuildContainerDeploy(); err != nil {
-			return err
+		target := c.deployTarget()
+		switch target {
+		case "vm":
+			if err := c.rebuildVmDeploy(); err != nil {
+				return err
+			}
+		case "host":
+			if err := c.rebuildHostDeploy(); err != nil {
+				return err
+			}
+		default: // "pod", "container", "" (legacy), "k8s"
+			if err := c.rebuildContainerDeploy(); err != nil {
+				return err
+			}
 		}
 	default:
 		return fmt.Errorf("unreachable: kind=%q", kind)
@@ -143,7 +161,7 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 // unambiguous).
 func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) (disposable bool, lifecycle string) {
 	for _, node := range tree {
-		if (node.Target == "vm" || node.Target == "") && node.VmSource == vmName {
+		if (node.Target == "vm" || node.Target == "") && node.Vm == vmName {
 			if node.Disposable {
 				disposable = true
 			}
@@ -196,7 +214,7 @@ func (c *RebuildCmd) refuseMessage(kind, lifecycle string) error {
 func (c *RebuildCmd) rebuildVm() error {
 	if c.DryRun {
 		fmt.Printf("dry-run: ov vm destroy %s\n", c.Name)
-		if c.RebuildImage {
+		if !c.ReuseImage {
 			fmt.Printf("dry-run: ov vm build %s\n", c.Name)
 		}
 		fmt.Printf("dry-run: ov vm create %s\n", c.Name)
@@ -205,7 +223,7 @@ func (c *RebuildCmd) rebuildVm() error {
 	}
 	// Destroy is best-effort (may not exist yet).
 	_ = runOvSubcommand("vm", "destroy", c.Name)
-	if c.RebuildImage {
+	if !c.ReuseImage {
 		if err := runOvSubcommand("vm", "build", c.Name); err != nil {
 			return fmt.Errorf("ov vm build %s: %w", c.Name, err)
 		}
@@ -238,25 +256,200 @@ func (c *RebuildCmd) rebuildVm() error {
 	return nil
 }
 
-// rebuildContainerDeploy: remove → (optional image build) → deploy add → start.
+// rebuildContainerDeploy follows a build → build-test → stop → start
+// cycle so the running container only gets disrupted AFTER the new
+// artifact is known good. If any earlier step fails, the previous
+// container keeps running untouched.
+//
+// Sequence:
+//  1. (unless --reuse-image) ov image build <base>   [build]
+//  2. (unless --reuse-image) ov image test <base>    [build-scope test: disposable container]
+//  3. ov deploy add <name>                           [compile overlay if add_layers; non-destructive]
+//  4. ov stop <name>                                 [disruption window starts]
+//  5. ov config <name>                               [regenerate quadlet]
+//  6. ov start <name>                                [start with new image]
+//
+// Deploy-scope tests are NOT part of rebuild — operators run
+// `ov test run <name>` separately against the running service. That
+// keeps rebuild focused (build the artifact, start it) and test
+// distinct (build-scope during rebuild; deploy-scope on demand).
+//
+// Uses `ov stop` — NOT `ov remove`. `ov remove` wipes the deploy.yml
+// entry (ports/tunnel/volumes/env); rebuild must preserve operator
+// configuration. `ov stop` only runs `systemctl --user stop` and
+// leaves everything else in place.
 func (c *RebuildCmd) rebuildContainerDeploy() error {
+	baseRef := c.deployBaseImageRef()
+	if baseRef == "" {
+		// Fall back to using the deploy name itself as the ref — some
+		// deploys are named after their image.
+		baseRef = c.Name
+	}
+
 	if c.DryRun {
-		fmt.Printf("dry-run: ov remove %s\n", c.Name)
-		if c.RebuildImage {
-			fmt.Printf("dry-run: ov image build <ref>\n")
+		if !c.ReuseImage {
+			fmt.Printf("dry-run: ov image build %s\n", baseRef)
+			fmt.Printf("dry-run: ov image test %s\n", baseRef)
 		}
-		fmt.Printf("dry-run: ov deploy add %s <ref>\n", c.Name)
+		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
+		fmt.Printf("dry-run: ov stop %s\n", c.Name)
+		fmt.Printf("dry-run: ov config %s\n", c.Name)
 		fmt.Printf("dry-run: ov start %s\n", c.Name)
 		return nil
 	}
-	// Teardown is best-effort.
-	_ = runOvSubcommand("remove", c.Name)
-	// Re-add from deploy.yml entry (ref lives there).
+
+	// 1-2. Rebuild the base image and run build-scope tests on it.
+	// Fail fast before touching anything that might disrupt the
+	// running container.
+	if !c.ReuseImage {
+		if err := runOvSubcommand("image", "build", baseRef); err != nil {
+			return fmt.Errorf("ov image build %s: %w", baseRef, err)
+		}
+		if err := runOvSubcommand("image", "test", baseRef); err != nil {
+			return fmt.Errorf("ov image test %s: %w", baseRef, err)
+		}
+	}
+
+	// 3. Re-apply the deploy. For pod targets with add_layers this
+	//    builds the overlay image; failures here leave the running
+	//    container untouched.
 	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
 		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
 	}
+
+	// 4. Stop the running container (systemctl --user stop only).
+	_ = runOvSubcommand("stop", c.Name)
+
+	// 5. Regenerate the quadlet so systemd picks up any changed image
+	//    or deploy.yml field on the next start.
+	if err := runOvSubcommand("config", c.Name); err != nil {
+		return fmt.Errorf("ov config %s: %w", c.Name, err)
+	}
+
+	// 6. Start with the new image.
 	if err := runOvSubcommand("start", c.Name); err != nil {
 		return fmt.Errorf("ov start %s: %w", c.Name, err)
+	}
+	return nil
+}
+
+// deployTarget re-reads the deploy node to return its Target field.
+// Called after resolve() has already approved the rebuild; used by
+// Run() to dispatch among target=vm / target=host / target=pod.
+// Returns "" when the node can't be resolved (falls through to
+// container path, matching legacy behaviour).
+func (c *RebuildCmd) deployTarget() string {
+	dir, derr := os.Getwd()
+	if derr != nil {
+		return ""
+	}
+	tree, _ := resolveTreeRoot(dir)
+	if tree == nil {
+		return ""
+	}
+	node, _, err := ResolveNodePath(tree, c.Name)
+	if err != nil || node == nil {
+		return ""
+	}
+	return node.Target
+}
+
+// deployBaseImageRef returns the image name declared on the deploy
+// node (DeploymentNode.Image). For pod/k8s targets this is the base
+// image the deploy runs or overlays on top of. Returns "" if the
+// node has no image field set — caller must handle that case.
+func (c *RebuildCmd) deployBaseImageRef() string {
+	dir, derr := os.Getwd()
+	if derr != nil {
+		return ""
+	}
+	tree, _ := resolveTreeRoot(dir)
+	if tree == nil {
+		return ""
+	}
+	node, _, err := ResolveNodePath(tree, c.Name)
+	if err != nil || node == nil {
+		return ""
+	}
+	return node.Image
+}
+
+// rebuildVmDeploy handles `ov rebuild <deploy-name>` for deploys with
+// target: vm. The deploy's `vm:` field points at a kind:vm entity;
+// we destroy that entity's domain, optionally rebuild its image,
+// recreate + start the VM, and then run `ov deploy add <deploy-name>`
+// to apply the deploy's add_layers over SSH. No `ov start <deploy>`
+// step — there's no quadlet to start; the SSH layer apply is the
+// final state.
+func (c *RebuildCmd) rebuildVmDeploy() error {
+	dir, derr := os.Getwd()
+	if derr != nil {
+		return fmt.Errorf("getwd: %w", derr)
+	}
+	tree, _ := resolveTreeRoot(dir)
+	node, _, err := ResolveNodePath(tree, c.Name)
+	if err != nil || node == nil {
+		return fmt.Errorf("ov rebuild: can't re-resolve deploy %q", c.Name)
+	}
+	vmName := node.Vm
+	if vmName == "" {
+		return fmt.Errorf("ov rebuild: deploy %q has target=vm but no `vm:` field set", c.Name)
+	}
+
+	if c.DryRun {
+		fmt.Printf("dry-run: ov vm destroy %s\n", vmName)
+		if !c.ReuseImage {
+			fmt.Printf("dry-run: ov vm build %s\n", vmName)
+		}
+		fmt.Printf("dry-run: ov vm create %s\n", vmName)
+		fmt.Printf("dry-run: ov vm start %s\n", vmName)
+		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
+		return nil
+	}
+	// Destroy is best-effort (may not exist yet).
+	_ = runOvSubcommand("vm", "destroy", vmName)
+	if !c.ReuseImage {
+		if err := runOvSubcommand("vm", "build", vmName); err != nil {
+			return fmt.Errorf("ov vm build %s: %w", vmName, err)
+		}
+	}
+	if err := runOvSubcommand("vm", "create", vmName); err != nil {
+		return fmt.Errorf("ov vm create %s: %w", vmName, err)
+	}
+	// `ov vm create` may auto-start the VM; ov vm start then reports
+	// "already running", which we accept as the desired end state.
+	stderr, startErr := runOvSubcommandCapture("vm", "start", vmName)
+	if startErr != nil && !isBenignAlreadyRunning(stderr) {
+		fmt.Fprint(os.Stderr, stderr)
+		return fmt.Errorf("ov vm start %s: %w", vmName, startErr)
+	}
+	if stderr != "" && startErr == nil {
+		fmt.Fprint(os.Stderr, stderr)
+	}
+	// Apply the deploy's add_layers (in-guest, over SSH).
+	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
+		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
+	}
+	return nil
+}
+
+// rebuildHostDeploy handles `ov rebuild <deploy-name>` for deploys
+// with target: host (including nested dotted-path host deploys like
+// `arch-vm.arch-host`). Applies layers via HostDeployTarget to the
+// local FS or the nested-executor venue.
+//
+// `ov deploy add` is idempotent on host targets — it re-applies
+// against the existing ledger without needing an explicit teardown.
+// We do NOT call `ov deploy del` here: deletion would reverse repo
+// changes, disable services, and strip env.d files, which the
+// operator explicitly opted into. Refresh, don't destroy.
+func (c *RebuildCmd) rebuildHostDeploy() error {
+	if c.DryRun {
+		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
+		return nil
+	}
+	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
+		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
 	}
 	return nil
 }

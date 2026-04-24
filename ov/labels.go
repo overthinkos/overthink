@@ -30,9 +30,10 @@ const (
 	LabelAliases        = "org.overthinkos.aliases"
 	LabelSecurity       = "org.overthinkos.security"
 	LabelNetwork        = "org.overthinkos.network"
-	LabelTunnel         = "org.overthinkos.tunnel"
-	LabelDNS            = "org.overthinkos.dns"
-	LabelAcmeEmail      = "org.overthinkos.acme_email"
+	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
+	// removed — these are deployment choices with no image-declaration
+	// meaning. Deploy-time values flow through DeploymentNode →
+	// ImageMetadata, not through OCI labels.
 	LabelEnv            = "org.overthinkos.env"
 	LabelHooks          = "org.overthinkos.hooks"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
@@ -42,7 +43,6 @@ const (
 	LabelInit           = "org.overthinkos.init"
 	LabelEnvLayers      = "org.overthinkos.env_layers"
 	LabelPathAppend     = "org.overthinkos.path_append"
-	LabelEngine         = "org.overthinkos.engine"
 	LabelPortProtos     = "org.overthinkos.port_protos"
 	LabelPortRelay      = "org.overthinkos.port_relay"
 	LabelSkills         = "org.overthinkos.skills"
@@ -65,6 +65,13 @@ const (
 	LabelMCPRequires    = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
 	LabelTests          = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
+	// LabelDescription — three-section Gherkin-shaped self-description for
+	// every `kind:` entity the image rolled up. Each section carries one
+	// LabeledDescription per contributing entity (layer/image/deploy).
+	// Authored inline in YAML under `description:` on each kind; collected
+	// via CollectDescriptions following the same base-chain walk as
+	// CollectTests. Subject to a 256 KiB soft cap with narrative truncation.
+	LabelDescription = "org.overthinkos.description"
 	// LabelServices — structured JSON array of CapabilityService (full
 	// per-entry spec, not just names). Source-less deploy (`ov deploy from-image`)
 	// reads this to reconstruct every service's config without the repo.
@@ -175,6 +182,7 @@ type ImageMetadata struct {
 	MCPRequires    []EnvDependency   // MCP servers image must have from the environment
 	MCPAccepts     []EnvDependency   // MCP servers image can optionally use
 	Tests          *LabelTestSet    // three-section (layer/image/deploy) declarative test spec
+	Description    *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -218,15 +226,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 		return nil, nil
 	}
 
+	// Schema v4: DNS / AcmeEmail / Engine no longer read from OCI labels —
+	// they are deployment choices and flow onto ImageMetadata via
+	// MergeDeployOntoMetadata (deploy.yml → metadata).
 	meta := &ImageMetadata{
-		Image:     labels[LabelImage],
-		Registry:  labels[LabelRegistry],
-		User:      labels[LabelUser],
-		Home:      labels[LabelHome],
-		DNS:       labels[LabelDNS],
-		AcmeEmail: labels[LabelAcmeEmail],
-		Network:   labels[LabelNetwork],
-		Engine:    labels[LabelEngine],
+		Image:    labels[LabelImage],
+		Registry: labels[LabelRegistry],
+		User:     labels[LabelUser],
+		Home:     labels[LabelHome],
+		Network:  labels[LabelNetwork],
 	}
 
 	// Bootc
@@ -497,6 +505,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 			return nil, fmt.Errorf("parsing %s: %w", LabelTests, err)
 		}
 		meta.Tests = &ts
+	}
+
+	// Description (three-section Gherkin-shaped self-description)
+	if v := labels[LabelDescription]; v != "" {
+		var ds LabelDescriptionSet
+		if err := json.Unmarshal([]byte(v), &ds); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelDescription, err)
+		}
+		meta.Description = &ds
 	}
 
 	return meta, nil

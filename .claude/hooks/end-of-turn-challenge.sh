@@ -9,6 +9,27 @@ END-OF-TURN CHALLENGE (soft — does not block):
 
 You are about to stop. Before you do, confirm EACH of these:
 
+  SKILLS FIRST (CLAUDE.md R0 — SUPREME RULE, overrides everything below)
+  ----------------------------------------------------------------------
+  [ ] For EVERY non-trivial action this turn (Bash / Read / Edit / Agent
+      / tool calls other than Skill itself), did you invoke the matching
+      skill via the `Skill` tool BEFORE the action?
+  [ ] If multiple surfaces were touched (code + ov + tests), did you
+      load ALL relevant skills up-front in ONE message (parallel Skill
+      calls)? Partial loading is full-bore failure.
+  [ ] If you caught yourself grep-ing / Read-ing source / running `ov`
+      WITHOUT a skill load first, did you STOP, invoke the skill, and
+      re-validate the work you already did against the skill's
+      guidance?
+  [ ] If the answer to ANY of the above is "no" — this turn is a
+      PROTOCOL VIOLATION of R0. You do NOT get to skip this. Correct
+      course now: load the missed skill(s), review whether the actions
+      you took align with the skill's actual guidance, and fix what
+      doesn't align before stopping. R0 overrides the urge to just
+      wrap up the turn — "almost done" is not compliance.
+  [ ] "I already know this area" / "the task was simple" / "the hook
+      told me enough" are NOT defences. R0 has no exceptions.
+
   ONE-PHASE HARD CUTOVER (CLAUDE.md / /ov-dev:cutover-policy)
   -----------------------------------------------------------
   [ ] Every task in the current cutover is in `completed` status —

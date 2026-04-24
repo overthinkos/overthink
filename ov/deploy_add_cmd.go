@@ -33,7 +33,7 @@ type DeployAddCmd struct {
 	AddLayer []string `long:"add-layer" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
-	Tag     string `long:"tag" default:"latest" help:"Image tag"`
+	Tag     string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	DryRun  bool   `long:"dry-run" help:"Print the plan without executing"`
 	Format  string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
 	Pull    bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
@@ -98,10 +98,26 @@ func (c *DeployAddCmd) Run() error {
 	tree, _ := resolveTreeRoot(dir)
 	var rootNode *DeploymentNode
 	var resolvedPath string
+	// parentExec is the executor chain derived from any ANCESTORS the
+	// dotted path walks through. Without this, `ov deploy add a.b.c`
+	// would run c's dispatch locally — ignoring a/b's substrate.
+	var parentExec DeployExecutor
 	if tree != nil {
-		if n, _, nodeErr := ResolveNodePath(tree, targetPath); nodeErr == nil {
+		if n, ancestors, nodeErr := ResolveNodePath(tree, targetPath); nodeErr == nil {
 			rootNode = n
 			resolvedPath = targetPath
+			// Derive the parent's executor chain from ancestors so the
+			// target node runs in the right substrate (SSH into parent
+			// VM, podman exec into parent pod, etc.).
+			segments := splitDottedPath(targetPath)
+			for i, anc := range ancestors {
+				ancPath := strings.Join(segments[:i+1], ".")
+				next, derr := deriveChildExecutorForPath(ancPath, anc, parentExec)
+				if derr != nil {
+					return fmt.Errorf("deriving executor for ancestor %q: %w", ancPath, derr)
+				}
+				parentExec = next
+			}
 		}
 	}
 
@@ -117,7 +133,7 @@ func (c *DeployAddCmd) Run() error {
 		return c.dispatchNode(resolvedPath, nil, nil, dir)
 	}
 
-	return WalkDeploymentTree(resolvedPath, rootNode, nil, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+	return WalkDeploymentTree(resolvedPath, rootNode, parentExec, func(path string, node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
 		if err := c.dispatchNode(path, node, parentExec, dir); err != nil {
 			return nil, err
 		}
@@ -207,14 +223,49 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		}
 	}
 
+	// For pod/k8s targets the add_layers must compile against the BASE
+	// IMAGE's context (distro=fedora, pkg=rpm, etc.) rather than the
+	// operator host's context — otherwise the layer's install tasks pick
+	// the wrong distro section and the overlay build fails. Only host/vm
+	// targets use syntheticHostImage / syntheticVmImage (handled inside
+	// compileLayerPlans).
+	var baseImg *ResolvedImage
+	if (target == "pod" || target == "k8s") && refStr != "" {
+		if baseResolved, rerr := cfg.ResolveImage(refStr, tag, dir); rerr == nil {
+			baseImg = baseResolved
+			if distroCfg != nil {
+				baseImg.DistroDef = distroCfg.ResolveDistro(baseImg.Distro)
+			}
+			if builderCfg != nil {
+				baseImg.BuilderConfig = builderCfg
+			}
+		}
+	}
 	for _, al := range addLayers {
 		alRef, err := ResolveDeployRef(al, dir)
 		if err != nil {
 			return fmt.Errorf("resolving --add-layer %q: %w", al, err)
 		}
-		alPlans, _, _, err := c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
+		var alPlans []*InstallPlan
+		if baseImg != nil {
+			alPlans, _, _, err = c.compileLayerPlansWithContext(alRef, cfg, distroCfg, builderCfg, dir, baseImg)
+		} else {
+			alPlans, _, _, err = c.compilePlans(alRef, cfg, distroCfg, builderCfg, dir)
+		}
 		if err != nil {
 			return fmt.Errorf("compiling --add-layer %q: %w", al, err)
+		}
+		// Mark each plan's own layer (plus transitive deps) as overlay
+		// layers so the Pod target picks them ALL up — not just the
+		// user-facing ref name (k3s-server without its k3s base dep).
+		overlayNames := make([]string, 0, len(alPlans))
+		for _, p := range alPlans {
+			if p.Layer != "" {
+				overlayNames = append(overlayNames, p.Layer)
+			}
+		}
+		for _, p := range alPlans {
+			p.AddLayers = append(p.AddLayers, overlayNames...)
 		}
 		plans = append(plans, alPlans...)
 	}
@@ -222,7 +273,23 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	deployID := computeDeployID(base, layerSet, addLayers)
 	for _, p := range plans {
 		p.DeployID = deployID
-		p.AddLayers = append([]string(nil), addLayers...)
+		// Union — don't clobber. The per-alPlan propagation loop above
+		// already populated p.AddLayers with the overlay-layer names
+		// (explicit add_layers + their transitive deps). Plain overwrite
+		// with the user-facing addLayers list drops the transitive
+		// entries, so (e.g.) an overlay declaring add_layers:[k3s-server]
+		// would ship k3s-server but not its k3s base layer — runtime
+		// failure.
+		seen := make(map[string]bool, len(p.AddLayers))
+		for _, al := range p.AddLayers {
+			seen[al] = true
+		}
+		for _, al := range addLayers {
+			if !seen[al] {
+				p.AddLayers = append(p.AddLayers, al)
+				seen[al] = true
+			}
+		}
 	}
 
 	if c.DryRun {
@@ -243,15 +310,15 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		return c.runHost(plans, dir, distroCfg, opts)
 	case "vm":
 		// runVM keys off c.Name to resolve the VM entity.
-		//   Schema v3 plain name — node.VmSource names the vm entity;
+		//   Schema v3 plain name — node.Vm names the vm entity;
 		//                          rewrite c.Name to "vm:<vm_source>"
 		//                          for the legacy VM constructor path.
 		//   Nested vm child      — path has dots; use leaf.
 		//   Legacy user input    — "vm:<name>" already; leave.
 		saved := c.Name
 		switch {
-		case node != nil && node.VmSource != "" && !strings.HasPrefix(c.Name, "vm:"):
-			c.Name = "vm:" + node.VmSource
+		case node != nil && node.Vm != "" && !strings.HasPrefix(c.Name, "vm:"):
+			c.Name = "vm:" + node.Vm
 		case strings.Contains(path, "."):
 			c.Name = "vm:" + pathLeaf(path)
 		}
@@ -377,9 +444,9 @@ func (c *DeployDelCmd) Run() error {
 			// VmSource so runVmDel's legacy parseVmDeployName path works.
 			if cwd, _ := os.Getwd(); cwd != "" {
 				if tree, _ := resolveTreeRoot(cwd); tree != nil {
-					if node, ok := tree[c.Name]; ok && node.VmSource != "" {
+					if node, ok := tree[c.Name]; ok && node.Vm != "" {
 						saved := c.Name
-						c.Name = "vm:" + node.VmSource
+						c.Name = "vm:" + node.Vm
 						err := c.runVmDel(paths)
 						c.Name = saved
 						return err
@@ -659,6 +726,41 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 	return plans, img.Name, order, nil
 }
 
+// compileLayerPlansWithContext is the same as compileLayerPlans but uses
+// the provided *ResolvedImage as the compile context (so add_layers for
+// a pod/k8s deployment compile against the base image's distro/user
+// context, not the operator host's).
+func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedImage) ([]*InstallPlan, string, []string, error) {
+	_ = builderCfg
+	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if _, ok := layers[ref.Name]; !ok {
+		return nil, "", nil, fmt.Errorf("layer %q not found", ref.Name)
+	}
+	order, err := ResolveLayerOrder([]string{ref.Name}, layers, nil)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
+	}
+	if distroCfg != nil && ctx.DistroDef == nil {
+		ctx.DistroDef = distroCfg.ResolveDistro(ctx.Distro)
+	}
+	if builderCfg != nil && ctx.BuilderConfig == nil {
+		ctx.BuilderConfig = builderCfg
+	}
+	hostCtx := detectHostContext()
+	var plans []*InstallPlan
+	for _, name := range order {
+		p, err := BuildDeployPlan(layers[name], ctx, hostCtx)
+		if err != nil {
+			return nil, "", nil, fmt.Errorf("compiling %s: %w", name, err)
+		}
+		plans = append(plans, p)
+	}
+	return plans, ref.Name, order, nil
+}
+
 func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
 	layers, err := ScanAllLayersWithConfig(dir, cfg)
@@ -763,7 +865,7 @@ func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *Dist
 		artifactEnv[k] = v
 	}
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, exists := dc.Images[c.Name]; exists {
+		if entry, exists := dc.Deployment[c.Name]; exists {
 			for _, line := range entry.Env {
 				if idx := strings.Index(line, "="); idx > 0 {
 					artifactEnv[line[:idx]] = line[idx+1:]
@@ -799,12 +901,72 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// Only the overlay build piece is implemented v1; the final
 	// container start (volumes, quadlet, traefik) is still routed
 	// through the existing `ov start` command.
+	// Build a Generator + ResolvedImage so the overlay's OCITarget can
+	// render tasks as RUN directives (not comments). Without these the
+	// overlay image would be byte-identical to the base image.
+	dir, _ := os.Getwd()
+	gen, _ := NewGenerator(dir, c.Tag)
+	var resolvedImg *ResolvedImage
+	if gen != nil && gen.Images != nil {
+		resolvedImg = gen.Images[base]
+	}
+	// Resolve DistroDef from the BASE IMAGE's distro, not the operator
+	// host's. The overlay's SystemPackagesSteps render using the base
+	// image's package format (e.g. fedora → rpm for a fedora-ov-based
+	// overlay). Using the host distro produces "no distro definition
+	// for format rpm" when the operator runs on arch but the base
+	// image is fedora.
+	var podDistroDef *DistroDef
+	if resolvedImg != nil && len(resolvedImg.Distro) > 0 {
+		podDistroDef = resolveDistroDef(distroCfg, resolvedImg.Distro[0])
+	} else {
+		// Fallback to host context only when the base image's distro
+		// is unknown (shouldn't happen for any well-formed image).
+		podDistroDef = resolveDistroDef(distroCfg, detectHostContext().Distro)
+	}
+	// Build the BaseImage ref. With CalVer-only resolution, c.Tag
+	// defaults to empty — in that case resolve the newest local
+	// CalVer for this short name so the overlay Containerfile's
+	// `FROM <ref>` line gets a real tag (never a trailing colon).
+	var baseRef string
+	if c.Tag != "" {
+		baseRef = base + ":" + c.Tag
+	} else {
+		// ResolveNewestLocalCalVer returns the full "<registry>/<name>:<calver>"
+		// ref; fall back to bare short name on miss (EnsureImage will
+		// surface the error with a CalVer-specification hint).
+		engineForLookup := "podman"
+		if resolvedImg != nil && resolvedImg.Registry != "" {
+			engineForLookup = "podman"
+		}
+		if resolved, err := ResolveNewestLocalCalVer(engineForLookup, base); err == nil && resolved != "" {
+			baseRef = resolved
+		} else {
+			baseRef = base
+		}
+	}
 	tgt := &PodDeployTarget{
 		DeployName:    c.Name,
-		BaseImage:     base + ":" + c.Tag,
-		DistroDef:     resolveDistroDef(distroCfg, detectHostContext().Distro),
+		BaseImage:     baseRef,
+		DistroDef:     podDistroDef,
 		BuilderConfig: builderCfg,
+		Generator:     gen,
+		Image:         resolvedImg,
 	}
+	// Resolve + inject layer secrets (secret_requires) so the overlay
+	// Containerfile emits `export VAR=VALUE` before each task's bash
+	// body. Without this, layers like k3s-server fail at build with
+	// "K3S_CLUSTER_TOKEN: unbound variable". Mirrors the runHost /
+	// runVM injection paths.
+	layerList, err := LayersForPlans(plans, dir, nil)
+	if err != nil {
+		return fmt.Errorf("loading layers for secret resolution: %w", err)
+	}
+	secretEnv, missing := ResolveSecretsForLayers(layerList)
+	if err := FormatMissingSecretsError(missing); err != nil {
+		return err
+	}
+	InjectSecretsIntoPlans(plans, secretEnv)
 	// Thread ParentExec: when this container is a child of another
 	// deployment, the overlay build (if any) must run in the parent's
 	// venue. The target's own check rejects the combo with a clear

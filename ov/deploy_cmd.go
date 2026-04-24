@@ -38,20 +38,20 @@ func (c *DeployShowCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	if dc == nil || len(dc.Images) == 0 {
+	if dc == nil || len(dc.Deployment) == 0 {
 		fmt.Println("No deploy.yml configured")
 		return nil
 	}
 
 	if c.Image != "" {
 		key := deployKey(c.Image, c.Instance)
-		entry, ok := dc.Images[key]
+		entry, ok := dc.Deployment[key]
 		if !ok {
 			fmt.Printf("No overrides for image %q\n", key)
 			return nil
 		}
 		// Print just this image's config
-		out := &DeployConfig{Images: map[string]DeploymentNode{key: entry}}
+		out := &DeployConfig{Deployment: map[string]DeploymentNode{key: entry}}
 		return marshalToStdout(out)
 	}
 
@@ -90,7 +90,7 @@ func (c *DeployExportCmd) exportOverrides() error {
 	if err != nil {
 		return err
 	}
-	if dc == nil || len(dc.Images) == 0 {
+	if dc == nil || len(dc.Deployment) == 0 {
 		fmt.Fprintln(os.Stderr, "No deploy.yml overrides to export")
 		return nil
 	}
@@ -143,7 +143,7 @@ func (c *DeployImportCmd) Run() error {
 		base = existing
 	}
 	if base == nil {
-		base = &DeployConfig{Images: make(map[string]DeploymentNode)}
+		base = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	}
 
 	// Merge input files left-to-right
@@ -151,7 +151,7 @@ func (c *DeployImportCmd) Run() error {
 
 	// Filter to single image if requested
 	if c.Image != "" {
-		entry, ok := merged.Images[c.Image]
+		entry, ok := merged.Deployment[c.Image]
 		if !ok {
 			return fmt.Errorf("image %q not found in input files", c.Image)
 		}
@@ -159,13 +159,13 @@ func (c *DeployImportCmd) Run() error {
 		if !c.Replace {
 			existing, _ := LoadDeployConfig()
 			if existing != nil {
-				existing.Images[c.Image] = entry
+				existing.Deployment[c.Image] = entry
 				merged = existing
 			} else {
-				merged = &DeployConfig{Images: map[string]DeploymentNode{c.Image: entry}}
+				merged = &DeployConfig{Deployment: map[string]DeploymentNode{c.Image: entry}}
 			}
 		} else {
-			merged = &DeployConfig{Images: map[string]DeploymentNode{c.Image: entry}}
+			merged = &DeployConfig{Deployment: map[string]DeploymentNode{c.Image: entry}}
 		}
 	}
 
@@ -212,14 +212,14 @@ func (c *DeployResetCmd) Run() error {
 	}
 
 	key := deployKey(c.Image, c.Instance)
-	if _, ok := dc.Images[key]; !ok {
+	if _, ok := dc.Deployment[key]; !ok {
 		fmt.Printf("No overrides for image %q\n", key)
 		return nil
 	}
 
 	RemoveImageDeploy(dc, key)
 
-	if len(dc.Images) == 0 {
+	if len(dc.Deployment) == 0 {
 		// No images left — remove the file
 		path, _ := DeployConfigPath()
 		os.Remove(path)
@@ -276,7 +276,7 @@ func (c *DeployStatusCmd) Run() error {
 	deployToStem := make(map[string]string) // deploy key → quadlet stem
 	stemToDeploy := make(map[string]string) // quadlet stem → deploy key
 	if dc != nil {
-		for key := range dc.Images {
+		for key := range dc.Deployment {
 			img, inst := parseDeployKey(key)
 			stem := strings.TrimPrefix(containerNameInstance(img, inst), "ov-")
 			deployToStem[key] = stem
@@ -319,10 +319,10 @@ func marshalToStdout(dc *DeployConfig) error {
 }
 
 func filterDeployImages(dc *DeployConfig, names []string) *DeployConfig {
-	filtered := &DeployConfig{Images: make(map[string]DeploymentNode)}
+	filtered := &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	for _, name := range names {
-		if entry, ok := dc.Images[name]; ok {
-			filtered.Images[name] = entry
+		if entry, ok := dc.Deployment[name]; ok {
+			filtered.Deployment[name] = entry
 		}
 	}
 	return filtered

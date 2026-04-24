@@ -27,6 +27,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -53,6 +54,14 @@ type PodDeployTarget struct {
 	DistroDef     *DistroDef
 	BuilderConfig *BuilderConfig
 
+	// Generator + Image are required for the overlay builder to render
+	// task steps (package installs, cmd runs, etc.) as actual RUN
+	// directives in the Containerfile. Without them the emitter degrades
+	// to "no Generator context" comments and the overlay contains no
+	// install logic — producing an image byte-identical to BaseImage.
+	Generator *Generator
+	Image     *ResolvedImage
+
 	// OverlayBuildDir is where the synthesized Containerfile + build
 	// context lives. Defaults to .build/overlay-<deploy-name>/.
 	OverlayBuildDir string
@@ -72,6 +81,76 @@ type PodDeployTarget struct {
 	// overlayImageRef is populated by Emit when an overlay was built;
 	// read via OverlayImageRef() after Emit returns.
 	overlayImageRef string
+}
+
+// renderOverlayServices hooks into the existing Generator init-fragment
+// pipeline (generate.go:375-605) to render service: blocks from overlay
+// layers into proper fragment files, emit a scratch stage that holds
+// them, and emit a RUN step that APPENDS the rendered fragments to the
+// base image's existing /etc/supervisord.conf. Reuses RenderService +
+// generateInitFragments so all the init-system-specific logic (scope,
+// overrides, packaged vs custom, etc.) is a single source of truth.
+// Returns (scratchStageBlock, runAppendBlock, error).
+// scratchStageBlock: the `FROM scratch AS <init>-overlay` + COPY lines
+// to place BEFORE the main image FROM.
+// runAppendBlock: the `RUN --mount=... cat >> /etc/supervisord.conf`
+// to place AFTER all overlay install tasks in the main image stage.
+func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string, string, error) {
+	if t.Generator == nil || t.Image == nil || t.Image.InitConfig == nil {
+		return "", "", nil
+	}
+	layerOrder := append([]string{}, t.Image.Layers...)
+	layerOrder = append(layerOrder, overlayLayers...)
+	initName, initDef := t.Image.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Image.Bootc, t.Image.InitSystem)
+	if initDef == nil || initDef.ServiceSchema == nil {
+		return "", "", nil
+	}
+	var anySvc bool
+	for _, n := range overlayLayers {
+		l := t.Generator.Layers[n]
+		if l != nil && l.HasInit(initName) {
+			anySvc = true
+			break
+		}
+	}
+	if !anySvc {
+		return "", "", nil
+	}
+	overlayImageName := "overlay-" + t.DeployName
+	// Point the Generator at the overlay build dir so generateInitFragments
+	// writes fragments there. OverlayBuildDir is already relative to the
+	// project dir (the build-context root), so the Containerfile can COPY
+	// from that path directly — no abs/rel gymnastics needed.
+	overlayDir := t.OverlayBuildDir
+	if overlayDir == "" {
+		overlayDir = filepath.Join(".build", "overlay-"+t.DeployName)
+	}
+	savedBuildDir := t.Generator.BuildDir
+	t.Generator.BuildDir = overlayDir
+	defer func() { t.Generator.BuildDir = savedBuildDir }()
+	if err := t.Generator.generateInitFragments(overlayImageName, initName, initDef, overlayLayers); err != nil {
+		return "", "", fmt.Errorf("overlay service fragments: %w", err)
+	}
+
+	var stage strings.Builder
+	stageName := initDef.StageName + "-overlay"
+	fmt.Fprintf(&stage, "FROM scratch AS %s\n", stageName)
+	for i, layerName := range overlayLayers {
+		l := t.Generator.Layers[layerName]
+		if l == nil || !l.HasInit(initName) {
+			continue
+		}
+		fileName := fmt.Sprintf("%02d-%s.conf", i+1, layerName)
+		srcRel := filepath.Join(overlayDir, overlayImageName, initDef.FragmentDir, fileName)
+		fmt.Fprintf(&stage, "COPY %s /supervisor-overlay/%s\n", srcRel, fileName)
+	}
+	stage.WriteString("\n")
+
+	var run strings.Builder
+	run.WriteString("\n# Append overlay service fragments to base /etc/supervisord.conf\n")
+	fmt.Fprintf(&run, "RUN --mount=type=bind,from=%s,source=/supervisor-overlay,target=/supervisor-overlay \\\n", stageName)
+	run.WriteString("    sh -c 'for f in /supervisor-overlay/*.conf; do echo; cat \"$f\"; done >> /etc/supervisord.conf'\n")
+	return stage.String(), run.String(), nil
 }
 
 // exec returns the configured executor, defaulting to the local one.
@@ -134,15 +213,20 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 }
 
 // tagDeployAlias tags t.overlayImageRef under
-// `<registry>/<deploy-name>:latest` so deployment-name-keyed commands
+// `<registry>/<deploy-name>:<calver>` so deployment-name-keyed commands
 // (`ov config setup`, `ov start`) resolve the image correctly when
 // deploy-name differs from image-name (schema v3). Registry comes from
 // the base image's `org.overthinkos.registry` OCI label.
+//
+// CalVer-only — no `:latest` alias is emitted. The short-name resolver
+// (`local_image.go`) uses the highest-CalVer match for a given deploy
+// name, which correctly picks the freshly-tagged alias here.
 func (t *PodDeployTarget) tagDeployAlias(opts EmitOpts) error {
 	registry := readImageRegistry(t.Engine, t.overlayImageRef)
-	aliasRef := t.DeployName + ":latest"
+	calver := ComputeCalVer()
+	aliasRef := t.DeployName + ":" + calver
 	if registry != "" {
-		aliasRef = registry + "/" + t.DeployName + ":latest"
+		aliasRef = registry + "/" + t.DeployName + ":" + calver
 	}
 	if aliasRef == t.overlayImageRef {
 		return nil
@@ -181,10 +265,16 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("overlay build dir: %w", err)
 	}
-	// Render overlay Containerfile via OCITarget.
+	// Render overlay Containerfile via OCITarget. Generator + Image are
+	// required for task emission to produce RUN directives (without them
+	// the emitter emits "no Generator context" comments — the overlay
+	// then contains no install logic).
 	oci := &OCITarget{
 		DistroDef:     t.DistroDef,
 		BuilderConfig: t.BuilderConfig,
+		Generator:     t.Generator,
+		Image:         t.Image,
+		BuildDir:      dir,
 	}
 	// Only emit for the overlay layers.
 	filtered := filterPlansByLayers(plans, overlayLayers)
@@ -195,8 +285,60 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	var cf bytes.Buffer
 	fmt.Fprintf(&cf, "# Overlay Containerfile for deploy %q\n", t.DeployName)
 	fmt.Fprintf(&cf, "# Extra layers: %s\n\n", strings.Join(overlayLayers, ", "))
+	// Emit per-layer context stages before the main FROM. The tasks
+	// emitted by oci.Emit() reference these via `--mount=type=bind,
+	// from=<layer>`, same as the full-build Containerfile does (see
+	// generate.go:289). Without these stages the bind mounts fail with
+	// "no stage or image found with that name."
+	if t.Generator != nil {
+		for _, layerName := range overlayLayers {
+			layer := t.Generator.Layers[layerName]
+			if layer == nil {
+				continue
+			}
+			fmt.Fprintf(&cf, "FROM scratch AS %s\n", layer.Name)
+			fmt.Fprintf(&cf, "COPY %s/ /\n\n", t.Generator.layerCopySource(layerName))
+		}
+	}
+	// Render service: entries from overlay layers — emits a scratch
+	// stage holding the rendered fragments AND a RUN-append line to be
+	// placed inside the main image stage below. Uses the Generator's
+	// init-fragment pipeline (same path as the full image build).
+	var svcStage, svcAppend string
+	if t.Generator != nil && t.Image != nil {
+		var svcErr error
+		svcStage, svcAppend, svcErr = t.renderOverlayServices(overlayLayers)
+		if svcErr != nil {
+			return svcErr
+		}
+	}
+	// Service scratch stage must come BEFORE the main FROM so buildah
+	// sees it when the main-stage RUN does `--mount=type=bind,from=<stage>`.
+	if svcStage != "" {
+		cf.WriteString(svcStage)
+	}
 	fmt.Fprintf(&cf, "FROM %s\n\n", t.BaseImage)
+	// Match the full-build convention: reset to USER root after FROM so
+	// layer tasks with `user: root` (most install/config tasks) run with
+	// the correct privileges. Full build does this in generate.go:467.
+	cf.WriteString("USER root\n\n")
 	cf.WriteString(oci.String())
+	// Append service fragments inside the MAIN image stage (after all
+	// layer tasks). This extends the base image's /etc/supervisord.conf
+	// instead of replacing it.
+	if svcAppend != "" {
+		cf.WriteString(svcAppend)
+	}
+	// Merge overlay-layer security into the base image's
+	// LabelSecurity and re-emit so `ov config` (quadlet generator)
+	// picks up intrinsic requirements declared by add_layers — e.g.
+	// k3s-server's `security: { privileged, cgroupns: host,
+	// devices: [/dev/fuse] }`. Without this, add_layers' security
+	// blocks are silently dropped because only the base image's
+	// layer-merged security made it into the base image's own label.
+	if overlayLabel := t.renderOverlaySecurityLabel(overlayLayers); overlayLabel != "" {
+		cf.WriteString(overlayLabel)
+	}
 
 	cfPath := filepath.Join(dir, "Containerfile")
 	if err := os.WriteFile(cfPath, cf.Bytes(), 0644); err != nil {
@@ -223,8 +365,16 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
 		return fmt.Errorf("PodDeployTarget: nested container overlay builds inside %s are not yet wired — build the base image locally, then `ov deploy add` with a pre-built ref", nested.Venue())
 	}
+	// Build context is the PROJECT ROOT (Generator.Dir), not the overlay
+	// build dir — the emitted Containerfile has `COPY layers/<name>/ /`
+	// paths that are relative to the project root, same as the full
+	// build (see generate.go:layerCopySource).
+	buildContext := dir
+	if t.Generator != nil && t.Generator.Dir != "" {
+		buildContext = t.Generator.Dir
+	}
 	buildScript := fmt.Sprintf("%s build -f %s -t %s %s",
-		t.Engine, deployShellQuote(cfPath), deployShellQuote(t.overlayImageRef), deployShellQuote(dir))
+		t.Engine, deployShellQuote(cfPath), deployShellQuote(t.overlayImageRef), deployShellQuote(buildContext))
 	if err := t.exec().RunUser(opts.ContextOrDefault(), buildScript, opts); err != nil {
 		return fmt.Errorf("overlay build: %w", err)
 	}
@@ -232,6 +382,58 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	// Schema v3: tag the overlay under `<registry>/<deploy-name>:
 	// latest`. See tagDeployAlias.
 	return t.tagDeployAlias(opts)
+}
+
+// renderOverlaySecurityLabel merges the base image's baked
+// LabelSecurity with each overlay layer's own `security:` block and
+// returns a Containerfile LABEL directive that overwrites the
+// base's label — or "" if no merge is needed. The resulting LABEL
+// sits after all tasks in the overlay stage so it wins on pull.
+// Picked up at deploy time by `ov config` via ExtractMetadata.
+func (t *PodDeployTarget) renderOverlaySecurityLabel(overlayLayers []string) string {
+	if t.Engine == "" || t.BaseImage == "" || t.Generator == nil {
+		return ""
+	}
+	// Start from the base image's existing security.
+	baseMeta, _ := ExtractMetadata(t.Engine, t.BaseImage)
+	var sec SecurityConfig
+	if baseMeta != nil {
+		sec = baseMeta.Security
+	}
+	// Merge each overlay layer's security on top. Same semantics as
+	// CollectSecurity in generate.go: union caps/devices/security_opts,
+	// OR privileged, last-writer for cgroupns, shm/memory tightest-wins.
+	added := false
+	for _, layerName := range overlayLayers {
+		layer := t.Generator.Layers[layerName]
+		if layer == nil {
+			continue
+		}
+		ls := layer.Security()
+		if ls == nil {
+			continue
+		}
+		added = true
+		if ls.Privileged {
+			sec.Privileged = true
+		}
+		if ls.CgroupNS != "" {
+			sec.CgroupNS = ls.CgroupNS
+		}
+		sec.CapAdd = appendUnique(sec.CapAdd, ls.CapAdd...)
+		sec.Devices = appendUnique(sec.Devices, ls.Devices...)
+		sec.SecurityOpt = appendUnique(sec.SecurityOpt, ls.SecurityOpt...)
+		sec.GroupAdd = appendUnique(sec.GroupAdd, ls.GroupAdd...)
+		sec.Mounts = appendUnique(sec.Mounts, ls.Mounts...)
+	}
+	if !added {
+		return ""
+	}
+	data, err := json.Marshal(sec)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf("LABEL %s=%s\n", LabelSecurity, shellSingleQuote(string(data)))
 }
 
 // readImageRegistry reads the org.overthinkos.registry OCI label from

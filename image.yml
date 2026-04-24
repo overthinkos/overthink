@@ -12,7 +12,7 @@ defaults:
         npm: fedora-builder
         pixi: fedora-builder
     format_config: build.yml
-images:
+image:
     arch-coder:
         base: archlinux
         layers:
@@ -141,10 +141,6 @@ images:
             - sshd
             - ov-full
             - golang
-        vm:
-            disk_size: 80 GiB
-            ram: 12G
-            cpus: 4
     bazzite-ai:
         enabled: false
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
@@ -374,7 +370,6 @@ images:
             - sshd
             - container-nesting
             - nvidia
-        network: host
     fedora-remote:
         base: quay.io/fedora/fedora:43
         platforms:
@@ -588,11 +583,6 @@ images:
             - 5900:5900
             - 9222:9222
             - 9224:9224
-        vm:
-            disk_size: 20 GiB
-            ram: 4G
-            cpus: 2
-            ssh_port: 2222
     openclaw-full:
         enabled: false
         base: fedora
@@ -747,11 +737,6 @@ images:
             - 13000:3000
             - 19222:9222
             - 19224:9224
-        vm:
-            disk_size: 40 GiB
-            ram: 8G
-            cpus: 4
-            ssh_port: 2250
         tests:
             - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
               id: selkies-desktop-bootc-binaries

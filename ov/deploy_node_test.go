@@ -12,10 +12,10 @@ func makeTree() map[string]DeploymentNode {
 	return map[string]DeploymentNode{
 		"stack": {
 			Target: "container",
-			Children: map[string]*DeploymentNode{
+			Nested: map[string]*DeploymentNode{
 				"web": {
 					Target: "container",
-					Children: map[string]*DeploymentNode{
+					Nested: map[string]*DeploymentNode{
 						"db": {Target: "host"},
 					},
 				},
@@ -24,7 +24,7 @@ func makeTree() map[string]DeploymentNode {
 		},
 		"arch": {
 			Target:   "vm",
-			VmSource: "arch",
+			Vm: "arch",
 		},
 	}
 }
@@ -134,7 +134,7 @@ func TestValidateDeploymentTree_RejectsArchCloudBase(t *testing.T) {
 
 func TestSortedChildKeys_Deterministic(t *testing.T) {
 	kids := map[string]*DeploymentNode{"z": {}, "a": {}, "m": {}}
-	got := sortedChildKeys(kids)
+	got := sortedNestedKeys(kids)
 	if !equalSlices(got, []string{"a", "m", "z"}) {
 		t.Errorf("got %v, want [a m z]", got)
 	}
@@ -145,7 +145,7 @@ func TestHasChildren(t *testing.T) {
 	if empty.HasChildren() {
 		t.Error("empty node should not report HasChildren")
 	}
-	withKids := &DeploymentNode{Children: map[string]*DeploymentNode{"k": {}}}
+	withKids := &DeploymentNode{Nested: map[string]*DeploymentNode{"k": {}}}
 	if !withKids.HasChildren() {
 		t.Error("node with children should report HasChildren")
 	}

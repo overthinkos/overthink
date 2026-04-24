@@ -58,20 +58,18 @@ var CapabilityLabelMap = map[string]string{
 	// Security
 	"Security": LabelSecurity,
 
-	// Networking / tunnel / TLS — lives in capabilities (tunnels still baked
-	// at build when declared on image; deploy.yml can override).
-	"Network":   LabelNetwork,
-	"Tunnel":    LabelTunnel,
-	"DNS":       LabelDNS,
-	"AcmeEmail": LabelAcmeEmail,
+	// Networking — image-declared network mode. Tunnel / DNS / AcmeEmail
+	// moved to DeploymentNode in schema v4 (deployment choices, no
+	// image-declaration meaning).
+	"Network": LabelNetwork,
 
 	// Env / vars
 	"Env":        LabelEnv,
 	"EnvLayers":  LabelEnvLayers,
 	"PathAppend": LabelPathAppend,
 
-	// Engine / init
-	"Engine":   LabelEngine,
+	// Init — auto-detected from layers (see init_config.go ResolveInitSystem).
+	// Engine moved to DeploymentNode in schema v4 (deploy-host choice).
 	"Init":         LabelInit,
 	"Services":     LabelServices,
 	"ServiceNames": LabelInit, // per-init active names; baked alongside the init label
@@ -106,6 +104,29 @@ var CapabilityLabelMap = map[string]string{
 
 	// Declarative tests (image-level invariants + deploy defaults)
 	"Tests": LabelTests,
+
+	// Gherkin-shaped self-description — three-section (layer/image/deploy)
+	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in
+	// the BDD cutover; those remain on ImageMetadata during the additive
+	// foundation phase and are removed in the hard-cutover commit.
+	"Description": LabelDescription,
+}
+
+// deployOnlyCapabilityFields are ImageMetadata fields that are NOT baked
+// as OCI labels by design — they're populated from deploy.yml overlays
+// (or deploy-host config) and have no image-declaration meaning. The
+// completeness check exempts them from CapabilityLabelMap mapping.
+//
+// This list codifies the schema v4 migration note on labels.go:33-36:
+// "Tunnel / DNS / AcmeEmail / Engine moved to DeploymentNode". The fields
+// stay on ImageMetadata because deploy-mode commands still consume them
+// after MergeDeployOntoMetadata runs — but they never round-trip through
+// OCI labels.
+var deployOnlyCapabilityFields = map[string]bool{
+	"Tunnel":    true,
+	"DNS":       true,
+	"AcmeEmail": true,
+	"Engine":    true,
 }
 
 // checkCapabilityLabelCompleteness returns an error listing any ImageMetadata
@@ -117,6 +138,9 @@ func checkCapabilityLabelCompleteness() error {
 	var missing []string
 	for i := 0; i < rt.NumField(); i++ {
 		name := rt.Field(i).Name
+		if deployOnlyCapabilityFields[name] {
+			continue
+		}
 		if _, ok := CapabilityLabelMap[name]; !ok {
 			missing = append(missing, name)
 		}

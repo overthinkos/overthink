@@ -451,6 +451,20 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 	// authors' $(cmd) / ${VAR} remain intact for bash itself to evaluate.
 	b.WriteString("bash <<'OVCMD'\n")
 	b.WriteString("BUILD_ARCH=$(uname -m)\n")
+	// Export task-declared env vars (including secret_requires values
+	// resolved by InjectSecretsIntoPlans) BEFORE the user's cmd body
+	// runs. Without this, references like `${K3S_CLUSTER_TOKEN}` inside
+	// the cmd body hit "unbound variable" under `set -u`.
+	if len(t.Env) > 0 {
+		keys := make([]string, 0, len(t.Env))
+		for k := range t.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(b, "export %s=%s\n", k, shellSingleQuote(t.Env[k]))
+		}
+	}
 	b.WriteString("set -e\n")
 	b.WriteString(t.Cmd)
 	if !strings.HasSuffix(t.Cmd, "\n") {

@@ -92,6 +92,23 @@ type Check struct {
 	Scope       string `yaml:"scope,omitempty"        json:"scope,omitempty"` // "build" | "deploy" (default filled by collector)
 	InContainer *bool  `yaml:"in_container,omitempty" json:"in_container,omitempty"`
 
+	// BDD-era modifiers (2026-04) — usable both in scenario Steps and in classical `tests:` entries.
+	//
+	//   Capture:       stash this check's produced output under <name>; downstream refs use ${CAPTURED:name}.
+	//                  Scoped per-scenario; reset between scenarios and between outline rows.
+	//                  Capture is recorded ONLY on the final PASS (so Eventually retries don't pollute).
+	//   Eventually:    duration string; retry the check (verb + matchers) until pass or timeout.
+	//                  Composes with Timeout (per-attempt cap) — Eventually is the outer retry cap.
+	//   RetryInterval: spacing between retries; defaults to "1s"; must be ≤ Eventually.
+	//   On:            target-entity override for multi-target scenarios. Omit → use the scenario's default target.
+	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
+	//   Tags:          free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
+	Capture       string   `yaml:"capture,omitempty"        json:"capture,omitempty"`
+	Eventually    string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
+	RetryInterval string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
+	On            string   `yaml:"on,omitempty"             json:"on,omitempty"`
+	Tags          []string `yaml:"tags,omitempty"           json:"tags,omitempty"`
+
 	// Origin is populated at collection time (layer:<name>, image:<name>,
 	// deploy-default, deploy-local). Not authored in YAML, but travels in
 	// the OCI label JSON.
@@ -569,6 +586,11 @@ var runtimeOnlyVarPrefixes = []string{
 	"CONTAINER_NAME",
 	"INSTANCE",
 	"ENV_",
+	// BDD-era: capture store + scenario/step ids are populated only at scenario
+	// execution time, so they're effectively runtime-only.
+	"CAPTURED",
+	"SCENARIO_ID",
+	"STEP_ID",
 }
 
 // IsRuntimeOnlyVar reports whether the given variable key (as returned by
@@ -622,6 +644,9 @@ func (c *Check) StringFields() []*string {
 		&c.McpName, &c.Tool, &c.URI, &c.Input,
 		// record-specific modifiers
 		&c.RecordName, &c.RecordMode,
+		// BDD-era modifiers — On may contain ${VAR}; Capture/Eventually/RetryInterval
+		// are identifiers/durations but still run through the expander for symmetry.
+		&c.On, &c.Capture, &c.Eventually, &c.RetryInterval,
 	}
 }
 

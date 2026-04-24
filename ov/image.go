@@ -44,7 +44,7 @@ type ImageCmd struct {
 //     repo and pulls the registry ref from its image.yml
 type ImagePullCmd struct {
 	Image    string `arg:"" help:"Image name (short, resolved via image.yml), fully-qualified ref, or @github.com/org/repo/image[:version]"`
-	Tag      string `long:"tag" default:"latest" help:"Image tag when resolving a short name"`
+	Tag      string `long:"tag" help:"Image CalVer tag when resolving a short name (empty = resolve from image.yml metadata or error with explicit guidance)"`
 	Platform string `long:"platform" help:"Target platform (default: host)"`
 }
 

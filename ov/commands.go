@@ -61,7 +61,7 @@ func (c *LogsCmd) Run() error {
 // UpdateCmd updates an image and restarts the service if active
 type UpdateCmd struct {
 	Image    string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag      string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	Build    bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Seed      bool   `long:"seed" default:"true" negatable:"" help:"Sync data from new image into bind-backed volumes (default: true)"`
@@ -171,7 +171,11 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	if c.DataFrom != "" {
 		dataRef = c.DataFrom
 		if !strings.Contains(dataRef, ":") {
-			dataRef += ":latest"
+			// Short name without tag — resolve to newest local CalVer.
+			// ov is CalVer-only; `:latest` is no longer a valid fallback.
+			if resolved, err := ResolveNewestLocalCalVer(engine, dataRef); err == nil && resolved != "" {
+				dataRef = resolved
+			}
 		}
 		dm, err := ExtractMetadata(engine, dataRef)
 		if err != nil || dm == nil {
@@ -190,7 +194,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	if dc == nil {
 		return
 	}
-	imgDeploy, ok := dc.Images[deployKey(c.Image, c.Instance)]
+	imgDeploy, ok := dc.Deployment[deployKey(c.Image, c.Instance)]
 	if !ok {
 		return
 	}
@@ -223,7 +227,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 				}
 			}
 		}
-		dc.Images[deployKey(c.Image, c.Instance)] = imgDeploy
+		dc.Deployment[deployKey(c.Image, c.Instance)] = imgDeploy
 		if err := SaveDeployConfig(dc); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
 		}

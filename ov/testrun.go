@@ -39,12 +39,25 @@ func (s TestStatus) String() string {
 }
 
 // TestResult captures the outcome of running a single Check.
+//
+// Attempts and TotalElapsed are populated only when the check had an
+// `eventually:` modifier (retry loop). Attempts=1 + TotalElapsed==Elapsed
+// for checks that ran exactly once. Reporters surface these when Attempts>1
+// so slow startup paths are visible ("PASS in 5 attempts over 12.3s").
 type TestResult struct {
-	Check   *Check
-	Verb    string
-	Status  TestStatus
-	Message string
-	Elapsed time.Duration
+	Check        *Check
+	Verb         string
+	Status       TestStatus
+	Message      string
+	Elapsed      time.Duration
+	Attempts     int           `json:"attempts,omitempty"`
+	TotalElapsed time.Duration `json:"total_elapsed,omitempty"`
+
+	// CapturedValue is the value stashed under `capture:` for consumption
+	// by downstream steps in the same scenario. Empty when Capture was
+	// unset or the check did not pass (captures are recorded only on
+	// final PASS — failing `eventually:` attempts don't pollute).
+	CapturedValue string `json:"captured_value,omitempty"`
 }
 
 // RunMode selects routing rules for a Run() invocation.
@@ -185,6 +198,28 @@ type Runner struct {
 	// to pick a distro-specific package name when names diverge across
 	// distros (e.g. openssh-server on Fedora vs openssh on Arch).
 	Distros []string
+
+	// Scenario carries the BDD scenario context when the runner is
+	// driving a description: scenario (from description_run.go). Nil
+	// under classical `tests:` runs — captures/${SCENARIO_ID}/etc. stay
+	// absent and existing behavior is unchanged.
+	//
+	// Scenario is mutated by description_run.go between steps (assigning
+	// CurrentStepID; updating Captures on PASS). Runner.runOne reads it
+	// to overlay ${CAPTURED:name}, ${SCENARIO_ID}, ${STEP_ID} into the
+	// variable-expansion env.
+	Scenario *ScenarioContext
+
+	// TargetResolver, when set, is called to obtain a (resolver, exec)
+	// pair for a given `on:` target name. Enables multi-target scenarios
+	// (the `on:` step modifier). Classical `tests:` runs leave this nil
+	// and use the Runner's static Resolver+Exec pair throughout.
+	//
+	// The caller (usually description_run.go) decides the lookup policy
+	// — typically a map of deployment/image names to pre-initialized
+	// executors. Returning (nil, nil, nil) means "unknown target"; the
+	// runner then reports the step as FAIL with a clear message.
+	TargetResolver func(target string) (*TestVarResolver, Executor, error)
 }
 
 // NewRunner constructs a Runner with sensible defaults. Caller passes an
@@ -213,6 +248,15 @@ func (r *Runner) Run(ctx context.Context, checks []Check) []TestResult {
 
 // runOne handles all the per-check housekeeping (verb resolution, skip
 // handling, variable expansion, routing) and dispatches to a verb handler.
+//
+// Two BDD-era behaviours layer on top of the classical path:
+//
+//  1. `on:` target dispatch — if the check specifies a non-default
+//     target AND r.TargetResolver is set, runOne temporarily swaps
+//     r.Exec / r.Resolver for the duration of the dispatch. Classical
+//     tests: runs pass nil TargetResolver and never hit this path.
+//  2. `eventually:` retry wrapper — when set, the verb dispatch is
+//     called repeatedly until pass or deadline.
 func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 	start := time.Now()
 	kind, err := c.Kind()
@@ -221,12 +265,16 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 		result.Status = TestFail
 		result.Message = err.Error()
 		result.Elapsed = time.Since(start)
+		result.Attempts = 1
+		result.TotalElapsed = result.Elapsed
 		return result
 	}
 	if c.Skip {
 		result.Status = TestSkip
 		result.Message = "skip: true"
 		result.Elapsed = time.Since(start)
+		result.Attempts = 1
+		result.TotalElapsed = result.Elapsed
 		return result
 	}
 	// exclude_distros: skip when any of the image's distro tags intersects
@@ -239,87 +287,160 @@ func (r *Runner) runOne(ctx context.Context, c *Check) TestResult {
 					result.Status = TestSkip
 					result.Message = fmt.Sprintf("excluded on distro %q", imgTag)
 					result.Elapsed = time.Since(start)
+					result.Attempts = 1
+					result.TotalElapsed = result.Elapsed
 					return result
 				}
 			}
 		}
 	}
 
+	// `on:` multi-target dispatch. Swap executor + resolver for the
+	// duration of this check only; restore on return. When r.TargetResolver
+	// is nil (classical tests: path), Resolver+Exec stay as-is.
+	origExec, origResolver := r.Exec, r.Resolver
+	if c.On != "" && r.TargetResolver != nil {
+		newResolver, newExec, terr := r.TargetResolver(c.On)
+		if terr != nil {
+			result.Status = TestFail
+			result.Message = fmt.Sprintf("on: %q — %v", c.On, terr)
+			result.Elapsed = time.Since(start)
+			result.Attempts = 1
+			result.TotalElapsed = result.Elapsed
+			return result
+		}
+		if newExec != nil {
+			r.Exec = newExec
+		}
+		if newResolver != nil {
+			r.Resolver = newResolver
+		}
+		defer func() {
+			r.Exec = origExec
+			r.Resolver = origResolver
+		}()
+	}
+
 	// Expand variables in-place on a copy so repeated runs over the same
-	// check list don't accumulate substitutions.
+	// check list don't accumulate substitutions. The env is derived by
+	// overlaying the ScenarioContext (captures + ids) onto the resolver
+	// base — so classical tests: with Scenario==nil see exactly today's
+	// behavior.
 	expanded := *c
-	missing := expanded.ExpandVars(r.effectiveEnv())
+	env := r.effectiveEnv()
+	missing := expanded.ExpandVars(env)
 	if len(missing) > 0 {
 		result.Status = TestSkip
 		result.Message = fmt.Sprintf("unresolved variables: %s", strings.Join(missing, ", "))
 		result.Elapsed = time.Since(start)
+		result.Attempts = 1
+		result.TotalElapsed = result.Elapsed
 		return result
 	}
 
-	switch kind {
-	case "file":
-		result = r.runFile(ctx, &expanded)
-	case "port":
-		result = r.runPort(ctx, &expanded)
-	case "command":
-		result = r.runCommand(ctx, &expanded)
-	case "http":
-		result = r.runHTTP(ctx, &expanded)
-	case "package":
-		result = r.runPackage(ctx, &expanded)
-	case "service":
-		result = r.runService(ctx, &expanded)
-	case "process":
-		result = r.runProcess(ctx, &expanded)
-	case "dns":
-		result = r.runDNS(ctx, &expanded)
-	case "user":
-		result = r.runUser(ctx, &expanded)
-	case "group":
-		result = r.runGroup(ctx, &expanded)
-	case "interface":
-		result = r.runInterface(ctx, &expanded)
-	case "kernel-param":
-		result = r.runKernelParam(ctx, &expanded)
-	case "mount":
-		result = r.runMount(ctx, &expanded)
-	case "addr":
-		result = r.runAddr(ctx, &expanded)
-	case "matching":
-		result = r.runMatching(ctx, &expanded)
-	case "cdp":
-		result = r.runCdp(ctx, &expanded)
-	case "wl":
-		result = r.runWl(ctx, &expanded)
-	case "dbus":
-		result = r.runDbus(ctx, &expanded)
-	case "vnc":
-		result = r.runVnc(ctx, &expanded)
-	case "mcp":
-		result = r.runMcp(ctx, &expanded)
-	case "record":
-		result = r.runRecord(ctx, &expanded)
-	case "spice":
-		result = r.runSpice(ctx, &expanded)
-	case "libvirt":
-		result = r.runLibvirt(ctx, &expanded)
-	case "k8s":
-		result = r.runK8s(ctx, &expanded)
-	default:
-		result.Status = TestSkip
-		result.Message = fmt.Sprintf("unknown verb %q", kind)
+	// Verb dispatch, wrapped in the `eventually:` retry when requested.
+	dispatch := func() TestResult {
+		var dr TestResult
+		switch kind {
+		case "file":
+			dr = r.runFile(ctx, &expanded)
+		case "port":
+			dr = r.runPort(ctx, &expanded)
+		case "command":
+			dr = r.runCommand(ctx, &expanded)
+		case "http":
+			dr = r.runHTTP(ctx, &expanded)
+		case "package":
+			dr = r.runPackage(ctx, &expanded)
+		case "service":
+			dr = r.runService(ctx, &expanded)
+		case "process":
+			dr = r.runProcess(ctx, &expanded)
+		case "dns":
+			dr = r.runDNS(ctx, &expanded)
+		case "user":
+			dr = r.runUser(ctx, &expanded)
+		case "group":
+			dr = r.runGroup(ctx, &expanded)
+		case "interface":
+			dr = r.runInterface(ctx, &expanded)
+		case "kernel-param":
+			dr = r.runKernelParam(ctx, &expanded)
+		case "mount":
+			dr = r.runMount(ctx, &expanded)
+		case "addr":
+			dr = r.runAddr(ctx, &expanded)
+		case "matching":
+			dr = r.runMatching(ctx, &expanded)
+		case "cdp":
+			dr = r.runCdp(ctx, &expanded)
+		case "wl":
+			dr = r.runWl(ctx, &expanded)
+		case "dbus":
+			dr = r.runDbus(ctx, &expanded)
+		case "vnc":
+			dr = r.runVnc(ctx, &expanded)
+		case "mcp":
+			dr = r.runMcp(ctx, &expanded)
+		case "record":
+			dr = r.runRecord(ctx, &expanded)
+		case "spice":
+			dr = r.runSpice(ctx, &expanded)
+		case "libvirt":
+			dr = r.runLibvirt(ctx, &expanded)
+		case "k8s":
+			dr = r.runK8s(ctx, &expanded)
+		default:
+			dr.Status = TestSkip
+			dr.Message = fmt.Sprintf("unknown verb %q", kind)
+		}
+		return dr
 	}
+
+	result = runWithEventually(ctx, &expanded, dispatch)
 	result.Check = c
 	result.Verb = kind
 	result.Elapsed = time.Since(start)
+	// runWithEventually sets TotalElapsed relative to its own start time;
+	// prefer that for multi-attempt cases. For single-attempt, Elapsed ≈
+	// TotalElapsed so the caller-facing fields stay consistent.
+	if result.TotalElapsed == 0 {
+		result.TotalElapsed = result.Elapsed
+	}
+
+	// Record capture on PASS only — retry loops handled by
+	// runWithEventually already enforce "final pass wins", so a single
+	// check with capture: + eventually: captures the right value.
+	if result.Status == TestPass && c.Capture != "" && r.Scenario != nil {
+		// Prefer Check-type-specific capture extraction where we have it;
+		// fall back to result.Message which verb handlers populate with
+		// their primary output on PASS.
+		r.Scenario.Capture(c.Capture, CaptureFromResult("", result.Message))
+		result.CapturedValue = r.Scenario.Captures[c.Capture]
+	}
 	return result
 }
 
+// effectiveEnv builds the variable-expansion env map for the current
+// check. When a ScenarioContext is attached, captures + SCENARIO_ID +
+// STEP_ID are overlaid on top of the resolver's base env — keeping
+// classical tests: behaviour unchanged (nil Scenario → no overlay).
 func (r *Runner) effectiveEnv() map[string]string {
-	if r.Resolver == nil {
-		return nil
+	var base map[string]string
+	if r.Resolver != nil {
+		base = r.Resolver.Env
 	}
-	return r.Resolver.Env
+	if r.Scenario == nil {
+		return base
+	}
+	// Copy-on-overlay so the resolver's shared Env map stays clean
+	// across scenarios.
+	env := make(map[string]string, len(base)+len(r.Scenario.Captures)+2)
+	for k, v := range base {
+		env[k] = v
+	}
+	r.Scenario.ApplyToEnv(env)
+	return env
 }
 
 // ---------------------------------------------------------------------------

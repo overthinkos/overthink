@@ -66,8 +66,8 @@ func TestMigrateMergeVms_HappyPath(t *testing.T) {
 
 	// overthink.yml: version 2, vms.yml removed from includes.
 	overthinkBody := mustRead(t, filepath.Join(dir, "overthink.yml"))
-	if !strings.Contains(overthinkBody, "version: 2") {
-		t.Errorf("overthink.yml: missing version: 2\n--\n%s", overthinkBody)
+	if !strings.Contains(overthinkBody, "version: 4") {
+		t.Errorf("overthink.yml: missing version: 4\n--\n%s", overthinkBody)
 	}
 	if strings.Contains(overthinkBody, "- vms.yml") {
 		t.Errorf("overthink.yml: vms.yml still listed in includes\n--\n%s", overthinkBody)
@@ -134,8 +134,8 @@ func TestMigrateMergeVms_NoMarkers(t *testing.T) {
 	// Fresh v2 fixture — no legacy markers anywhere. Migration should
 	// return nil, nil immediately.
 	dir := t.TempDir()
-	mustWrite(t, filepath.Join(dir, "overthink.yml"), "version: 2\nincludes: [deploy.yml]\n")
-	mustWrite(t, filepath.Join(dir, "deploy.yml"), "deployments:\n  images: {}\nvm: {}\n")
+	mustWrite(t, filepath.Join(dir, "overthink.yml"), "version: 4\nincludes: [deploy.yml]\n")
+	mustWrite(t, filepath.Join(dir, "deploy.yml"), "deployment: {}\nvm: {}\n")
 	changed, err := MigrateMergeVms(MigrateMergeVmsOpts{Dir: dir})
 	if err != nil {
 		t.Fatalf("migrate on clean v2: %v", err)
@@ -160,7 +160,7 @@ func TestMigrateMergeVms_LegacyVersionBumpOnly(t *testing.T) {
 		t.Fatal("version-only bump should report overthink.yml as changed")
 	}
 	body := mustRead(t, filepath.Join(dir, "overthink.yml"))
-	if !strings.Contains(body, "version: 2") {
+	if !strings.Contains(body, "version: 4") {
 		t.Errorf("version not bumped: %s", body)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "deploy.yml")); err == nil {

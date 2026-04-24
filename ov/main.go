@@ -62,6 +62,7 @@ type CLI struct {
 	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
 	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
+	Feature  FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
 	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`
@@ -214,18 +215,30 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", a.Name, a.Command)
 			}
 		case "tunnel":
-			if resolved.Tunnel != nil && len(resolved.Tunnel.Ports) > 0 {
-				fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
-				for _, tp := range resolved.Tunnel.Ports {
-					access := "private"
-					if tp.Public {
-						access = "public"
+			// Schema v4: Tunnel moved off ImageConfig/ResolvedImage —
+			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
+			dc, _ := LoadDeployConfig()
+			if dc != nil {
+				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
+					layers, err := ScanAllLayersWithConfig(dir, cfg)
+					if err == nil {
+						portProtos := make(map[int]string)
+						tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layers, portProtos, resolved.Ports)
+						if tc != nil && len(tc.Ports) > 0 {
+							fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+							for _, tp := range tc.Ports {
+								access := "private"
+								if tp.Public {
+									access = "public"
+								}
+								hostname := tp.Hostname
+								if hostname == "" {
+									hostname = "-"
+								}
+								fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
+							}
+						}
 					}
-					hostname := tp.Hostname
-					if hostname == "" {
-						hostname = "-"
-					}
-					fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
 				}
 			}
 		case "network":
@@ -244,7 +257,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 					for _, dv := range overlay.Volumes {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}

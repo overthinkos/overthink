@@ -1,9 +1,14 @@
 layer:
   name: notebook-llm-on-supercomputers
-  info: "LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)"
-
   data:
     - src: data/llms_on_supercomputers
       volume: workspace
       dest: llms_on_supercomputers
-
+  description:
+    feature: LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)
+    narrative: |-
+      LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)
+    scenarios:
+      - name: 'TODO: describe LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)'
+        tags: [skeleton]
+        steps: []

@@ -301,7 +301,7 @@ func (c *AliasInstallCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	imageRef := resolveShellImageRef("", c.Image, "latest")
+	imageRef := resolveShellImageRef("", c.Image, "")
 	runEngine := ResolveImageEngineForDeploy(c.Image, "", rt.RunEngine)
 	meta, err := ExtractMetadata(runEngine, imageRef)
 	if err != nil {

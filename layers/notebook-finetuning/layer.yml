@@ -1,9 +1,14 @@
 layer:
   name: notebook-finetuning
-  info: "Unsloth fine-tuning notebook collection"
-
   data:
     - src: data/finetuning
       volume: workspace
       dest: finetuning
-
+  description:
+    feature: Unsloth fine-tuning notebook collection
+    narrative: |-
+      Unsloth fine-tuning notebook collection
+    scenarios:
+      - name: 'TODO: describe Unsloth fine-tuning notebook collection'
+        tags: [skeleton]
+        steps: []

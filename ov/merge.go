@@ -24,7 +24,7 @@ type MergeCmd struct {
 	All        bool   `long:"all" help:"Merge all images with merge.auto enabled"`
 	MaxMB      int    `long:"max-mb" help:"Maximum size of a merged layer (MB)"`
 	MaxTotalMB int    `long:"max-total-mb" help:"Maximum total image size for merge (MB, 0=no limit)"`
-	Tag        string `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Tag        string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	DryRun     bool   `long:"dry-run" help:"Print merge plan without modifying the image"`
 }
 

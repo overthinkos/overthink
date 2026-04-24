@@ -24,7 +24,7 @@ type ImageConfigCmd struct {
 // initializes and mounts encrypted volumes.
 type ImageConfigSetupCmd struct {
 	Image       string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag         string   `long:"tag" default:"latest" help:"Image tag to use (default: latest)"`
+	Tag         string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
 	Env         []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE), merged with existing vars"`
 	Clean       bool     `short:"c" long:"clean" help:"Replace all env vars instead of merging (clean slate)"`
@@ -152,7 +152,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		deployVolumes = parseVolumeEnv(c.Image)
 	}
 	if len(deployVolumes) == 0 && dc != nil {
-		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -228,7 +228,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Check deploy.yml env_file
 	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 	}
@@ -321,7 +321,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
-		if overlay, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
 			deploySidecars = overlay.Sidecars
 		}
 	}
@@ -575,7 +575,11 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		if c.DataFrom != "" {
 			dataRef = c.DataFrom
 			if !strings.Contains(dataRef, ":") {
-				dataRef += ":latest"
+				// Short name without tag — resolve to newest local CalVer
+				// (ov is CalVer-only; no `:latest` fallback).
+				if resolved, err := ResolveNewestLocalCalVer(dataEngine, dataRef); err == nil && resolved != "" {
+					dataRef = resolved
+				}
 			}
 			dm, err := ExtractMetadata(dataEngine, dataRef)
 			if err != nil {
@@ -618,9 +622,9 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			// Update deploy.yml with seeded state
 			if seeded > 0 {
 				if dc == nil {
-					dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
+					dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 				}
-				imgDeploy := dc.Images[deployKey(c.Image, c.Instance)]
+				imgDeploy := dc.Deployment[deployKey(c.Image, c.Instance)]
 				for i := range imgDeploy.Volumes {
 					for _, entry := range dataMeta.DataEntries {
 						if imgDeploy.Volumes[i].Name == entry.Volume {
@@ -629,7 +633,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 						}
 					}
 				}
-				dc.Images[deployKey(c.Image, c.Instance)] = imgDeploy
+				dc.Deployment[deployKey(c.Image, c.Instance)] = imgDeploy
 				if err := SaveDeployConfig(dc); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
 				}
@@ -835,13 +839,13 @@ func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 		return nil
 	}
 	if *dc == nil {
-		*dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
+		*dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	}
-	if (*dc).Images == nil {
-		(*dc).Images = make(map[string]DeploymentNode)
+	if (*dc).Deployment == nil {
+		(*dc).Deployment = make(map[string]DeploymentNode)
 	}
 	key := deployKey(c.Image, c.Instance)
-	entry := (*dc).Images[key]
+	entry := (*dc).Deployment[key]
 	if entry.Security == nil {
 		entry.Security = &SecurityConfig{}
 	}
@@ -857,7 +861,7 @@ func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	if c.Cpus != "" {
 		entry.Security.Cpus = c.Cpus
 	}
-	(*dc).Images[key] = entry
+	(*dc).Deployment[key] = entry
 	return SaveDeployConfig(*dc)
 }
 
@@ -903,7 +907,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -964,7 +968,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Images: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -1149,7 +1153,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 	}
 
 	var updated []string
-	for key := range dc.Images {
+	for key := range dc.Deployment {
 		if key == skipImage {
 			continue
 		}
@@ -1165,8 +1169,10 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			continue
 		}
 
-		// Extract metadata from base image (not the deploy key)
-		imageRef := resolveShellImageRef("", imageName, "latest")
+		// Extract metadata from base image (not the deploy key).
+		// Empty tag → resolveShellImageRef picks newest local CalVer
+		// via the org.overthinkos.version label.
+		imageRef := resolveShellImageRef("", imageName, "")
 		meta, err := ExtractMetadata("podman", imageRef)
 		if err != nil || meta == nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not read metadata for %s, skipping quadlet update\n", key)
@@ -1196,7 +1202,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Build volumes from metadata
 		var deployVolumes []DeployVolumeConfig
 		var deploySidecars map[string]SidecarDef
-		if overlay, ok := dc.Images[key]; ok {
+		if overlay, ok := dc.Deployment[key]; ok {
 			deployVolumes = overlay.Volumes
 			deploySidecars = overlay.Sidecars
 		}
@@ -1207,7 +1213,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Resolve env file
 		var quadletEnvFile string
-		if overlay, ok := dc.Images[key]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Deployment[key]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 		if quadletEnvFile == "" {
@@ -1271,7 +1277,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		isKeyring := backend == "keyring" || backend == "auto" || backend == ""
 
 		if meta.Registry != "" {
-			imageRef = resolveShellImageRef(meta.Registry, imageName, "latest")
+			imageRef = resolveShellImageRef(meta.Registry, imageName, "")
 		}
 
 		// Resolve tunnel config from metadata (includes deploy.yml overrides)

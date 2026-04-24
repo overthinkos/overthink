@@ -41,7 +41,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	dc, _ := LoadDeployConfig()
 	var state *VmDeployState
 	if dc != nil {
-		if entry, exists := dc.Images[c.Name]; exists && entry.VmState != nil {
+		if entry, exists := dc.Deployment[c.Name]; exists && entry.VmState != nil {
 			state = entry.VmState
 		}
 	}
@@ -124,16 +124,24 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	for k, v := range secretEnv {
 		artifactEnv[k] = v
 	}
+	// Upstream dispatch may have rewritten c.Name to "vm:<entity>" for
+	// VM-target routing. The deploy.yml key is the ORIGINAL node name
+	// (e.g. "k3s-vm"), not the prefixed form — look up under both so
+	// the env lookup works regardless of which form was passed in.
+	envLookupKeys := []string{c.Name, strings.TrimPrefix(c.Name, "vm:")}
 	// Pull env from project-level deploy config (overthink.yml's
 	// deployments: section, not the per-machine overlay ~/.config/ov/
 	// deploy.yml which LoadDeployConfig reads).
 	if uf != nil {
 		if pdc := uf.ProjectDeployConfig(); pdc != nil {
-			if entry, exists := pdc.Images[c.Name]; exists {
-				for _, line := range entry.Env {
-					if idx := strings.Index(line, "="); idx > 0 {
-						artifactEnv[line[:idx]] = line[idx+1:]
+			for _, k := range envLookupKeys {
+				if entry, exists := pdc.Deployment[k]; exists {
+					for _, line := range entry.Env {
+						if idx := strings.Index(line, "="); idx > 0 {
+							artifactEnv[line[:idx]] = line[idx+1:]
+						}
 					}
+					break
 				}
 			}
 		}
@@ -141,11 +149,14 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Per-machine overlay env also merges in (same precedence rule: later
 	// wins, operator overlay is "later").
 	if dc != nil {
-		if entry, exists := dc.Images[c.Name]; exists {
-			for _, line := range entry.Env {
-				if idx := strings.Index(line, "="); idx > 0 {
-					artifactEnv[line[:idx]] = line[idx+1:]
+		for _, k := range envLookupKeys {
+			if entry, exists := dc.Deployment[k]; exists {
+				for _, line := range entry.Env {
+					if idx := strings.Index(line, "="); idx > 0 {
+						artifactEnv[line[:idx]] = line[idx+1:]
+					}
 				}
+				break
 			}
 		}
 	}
@@ -336,7 +347,7 @@ func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
 	keyPath := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName, "id_ed25519")
 
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, ok := dc.Images[deployName]; ok && entry.VmState != nil {
+		if entry, ok := dc.Deployment[deployName]; ok && entry.VmState != nil {
 			if entry.VmState.SshUser != "" {
 				user = entry.VmState.SshUser
 			}
@@ -437,19 +448,19 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	if dc == nil {
 		dc = &DeployConfig{}
 	}
-	if dc.Images == nil {
-		dc.Images = map[string]DeploymentNode{}
+	if dc.Deployment == nil {
+		dc.Deployment = map[string]DeploymentNode{}
 	}
 
-	entry, exists := dc.Images[deployName]
+	entry, exists := dc.Deployment[deployName]
 	if !exists {
 		entry = DeploymentNode{}
 	}
 	entry.Target = "vm"
 	vmName, _ := vmNameFromDeployName(deployName)
-	entry.VmSource = vmName
+	entry.Vm = vmName
 	entry.VmState = state
-	dc.Images[deployName] = entry
+	dc.Deployment[deployName] = entry
 
 	return SaveDeployConfig(dc)
 }
@@ -460,10 +471,10 @@ func removeVmDeployEntry(deployName string) error {
 	if err != nil {
 		return err
 	}
-	if dc == nil || dc.Images == nil {
+	if dc == nil || dc.Deployment == nil {
 		return nil
 	}
-	delete(dc.Images, deployName)
+	delete(dc.Deployment, deployName)
 	return SaveDeployConfig(dc)
 }
 

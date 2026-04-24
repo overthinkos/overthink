@@ -44,6 +44,10 @@ type methodSpec struct {
 	required []string
 	posArgs  func(c *Check) []string
 	artifact bool
+	// skipImage = true means the verb operates against a cluster or other
+	// non-image target, so the usual image/deploy-name positional must NOT
+	// be appended between the method path and posArgs. Used by k8s verbs.
+	skipImage bool
 }
 
 // ---------------------------------------------------------------------------
@@ -266,20 +270,22 @@ var libvirtMethods = map[string]methodSpec{
 // a k3s-server layer).
 // ---------------------------------------------------------------------------
 
+// k8s methods all run against a cluster, not an image/container, so
+// skipImage=true across the board.
 var k8sMethods = map[string]methodSpec{
-	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster},
-	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes},
-	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods},
-	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady},
-	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt},
-	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster},
-	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster},
-	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt},
-	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal},
-	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons},
-	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply},
-	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply},
-	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw},
+	"nodes":          {path: []string{"k8s", "nodes"}, posArgs: posK8sCluster, skipImage: true},
+	"wait-nodes":     {path: []string{"k8s", "wait-nodes"}, posArgs: posK8sWaitNodes, skipImage: true},
+	"pods":           {path: []string{"k8s", "pods"}, posArgs: posK8sPods, skipImage: true},
+	"wait-ready":     {path: []string{"k8s", "wait-ready"}, required: []string{"Kind", "Name"}, posArgs: posK8sWaitReady, skipImage: true},
+	"ingress":        {path: []string{"k8s", "ingress"}, posArgs: posK8sNamespaceOpt, skipImage: true},
+	"ingressclass":   {path: []string{"k8s", "ingressclass"}, posArgs: posK8sCluster, skipImage: true},
+	"storageclass":   {path: []string{"k8s", "storageclass"}, posArgs: posK8sCluster, skipImage: true},
+	"service":        {path: []string{"k8s", "service"}, posArgs: posK8sNamespaceOpt, skipImage: true},
+	"lb-external-ip": {path: []string{"k8s", "lb-external-ip"}, required: []string{"Namespace", "Name"}, posArgs: posK8sLbExternal, skipImage: true},
+	"addons":         {path: []string{"k8s", "addons"}, posArgs: posK8sAddons, skipImage: true},
+	"apply":          {path: []string{"k8s", "apply"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipImage: true},
+	"delete":         {path: []string{"k8s", "delete"}, required: []string{"Manifest"}, posArgs: posK8sApply, skipImage: true},
+	"raw":            {path: []string{"k8s", "raw"}, required: []string{"Resource"}, posArgs: posK8sRaw, skipImage: true},
 }
 
 // ---------------------------------------------------------------------------
@@ -648,13 +654,17 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		return failf(c, "%s: %s: %v", verb, method, err)
 	}
 
-	// Build argv: ["test"] + spec.path + [image] + spec.posArgs(c) + ["-i", instance]
+	// Build argv: ["test"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]
+	// spec.skipImage=true elides the image/deploy-name positional (used by
+	// k8s verbs that operate against a cluster instead of an image).
 	argv := append([]string{"test"}, spec.path...)
-	argv = append(argv, r.Image)
+	if !spec.skipImage {
+		argv = append(argv, r.Image)
+	}
 	if spec.posArgs != nil {
 		argv = append(argv, spec.posArgs(c)...)
 	}
-	if r.Instance != "" {
+	if r.Instance != "" && !spec.skipImage {
 		argv = append(argv, "-i", r.Instance)
 	}
 

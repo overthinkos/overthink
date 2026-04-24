@@ -1,6 +1,6 @@
 package main
 
-// deploy_target_container.go — ContainerDeployTarget deploys an
+// deploy_target_container.go — PodDeployTarget deploys an
 // InstallPlan as a running container.
 //
 // For container deploys, the same InstallPlan produced by
@@ -17,7 +17,7 @@ package main
 //      volume setup, tunnel config, traefik routes, env-provides wiring,
 //      etc.
 //
-// For v1, ContainerDeployTarget.Emit acts as a thin bridge: it
+// For v1, PodDeployTarget.Emit acts as a thin bridge: it
 // synthesizes the overlay image when needed, then hands off to the
 // existing deploy pipeline. Later passes can migrate more of
 // start.go's logic in here.
@@ -34,8 +34,8 @@ import (
 	"strings"
 )
 
-// ContainerDeployTarget applies an InstallPlan as a container.
-type ContainerDeployTarget struct {
+// PodDeployTarget applies an InstallPlan as a container.
+type PodDeployTarget struct {
 	// DeployName is the name under which this container is known in
 	// deploy.yml and in the systemd-quadlet layer.
 	DeployName string
@@ -75,7 +75,7 @@ type ContainerDeployTarget struct {
 }
 
 // exec returns the configured executor, defaulting to the local one.
-func (t *ContainerDeployTarget) exec() DeployExecutor {
+func (t *PodDeployTarget) exec() DeployExecutor {
 	if t.Executor == nil {
 		return LocalDeployExecutor{}
 	}
@@ -83,12 +83,12 @@ func (t *ContainerDeployTarget) exec() DeployExecutor {
 }
 
 // Name identifies this target.
-func (t *ContainerDeployTarget) Name() string { return "container" }
+func (t *PodDeployTarget) Name() string { return "pod" }
 
 // OverlayImageRef returns the overlay image reference that was built,
 // or the base image when no overlay was needed. Caller passes this to
 // the quadlet/start machinery.
-func (t *ContainerDeployTarget) OverlayImageRef() string {
+func (t *PodDeployTarget) OverlayImageRef() string {
 	if t.overlayImageRef != "" {
 		return t.overlayImageRef
 	}
@@ -99,7 +99,7 @@ func (t *ContainerDeployTarget) OverlayImageRef() string {
 // the plan set has any layers that aren't part of the base image.
 // Does NOT perform the final container start — that stays in start.go
 // via DeployUpCmd.
-func (t *ContainerDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
+func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if len(plans) == 0 {
 		return nil
 	}
@@ -114,11 +114,45 @@ func (t *ContainerDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error 
 	if len(overlayLayers) == 0 {
 		// Nothing to overlay — the existing base image is deploy-ready.
 		t.overlayImageRef = t.BaseImage
+		// Schema v3: still tag the base as `<registry>/<deploy-name>:
+		// latest` so `ov config/start <deploy-name>` can resolve it by
+		// deployment name when deploy-name != image-name (e.g. a pod
+		// deployment `sway-pod` targeting image `openclaw-sway-browser`).
+		if opts.DryRun {
+			return nil
+		}
+		if t.DeployName != "" && t.BaseImage != "" {
+			if err := t.tagDeployAlias(opts); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
 	// Synthesize overlay Containerfile.
 	return t.buildOverlay(plans, overlayLayers, opts)
+}
+
+// tagDeployAlias tags t.overlayImageRef under
+// `<registry>/<deploy-name>:latest` so deployment-name-keyed commands
+// (`ov config setup`, `ov start`) resolve the image correctly when
+// deploy-name differs from image-name (schema v3). Registry comes from
+// the base image's `org.overthinkos.registry` OCI label.
+func (t *PodDeployTarget) tagDeployAlias(opts EmitOpts) error {
+	registry := readImageRegistry(t.Engine, t.overlayImageRef)
+	aliasRef := t.DeployName + ":latest"
+	if registry != "" {
+		aliasRef = registry + "/" + t.DeployName + ":latest"
+	}
+	if aliasRef == t.overlayImageRef {
+		return nil
+	}
+	tagScript := fmt.Sprintf("%s tag %s %s",
+		t.Engine, deployShellQuote(t.overlayImageRef), deployShellQuote(aliasRef))
+	if err := t.exec().RunUser(opts.ContextOrDefault(), tagScript, opts); err != nil {
+		return fmt.Errorf("deploy-name alias tag: %w", err)
+	}
+	return nil
 }
 
 // collectOverlayLayers returns the set of layer names declared as
@@ -139,7 +173,7 @@ func collectOverlayLayers(plans []*InstallPlan) []string {
 }
 
 // buildOverlay synthesizes an overlay Containerfile and builds the image.
-func (t *ContainerDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []string, opts EmitOpts) error {
+func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []string, opts EmitOpts) error {
 	dir := t.OverlayBuildDir
 	if dir == "" {
 		dir = filepath.Join(".build", "overlay-"+t.DeployName)
@@ -187,14 +221,28 @@ func (t *ContainerDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers
 	// the build dir is on a shared filesystem the parent can see; we
 	// error loudly otherwise).
 	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
-		return fmt.Errorf("ContainerDeployTarget: nested container overlay builds inside %s are not yet wired — build the base image locally, then `ov deploy add` with a pre-built ref", nested.Venue())
+		return fmt.Errorf("PodDeployTarget: nested container overlay builds inside %s are not yet wired — build the base image locally, then `ov deploy add` with a pre-built ref", nested.Venue())
 	}
 	buildScript := fmt.Sprintf("%s build -f %s -t %s %s",
 		t.Engine, deployShellQuote(cfPath), deployShellQuote(t.overlayImageRef), deployShellQuote(dir))
 	if err := t.exec().RunUser(opts.ContextOrDefault(), buildScript, opts); err != nil {
 		return fmt.Errorf("overlay build: %w", err)
 	}
-	return nil
+
+	// Schema v3: tag the overlay under `<registry>/<deploy-name>:
+	// latest`. See tagDeployAlias.
+	return t.tagDeployAlias(opts)
+}
+
+// readImageRegistry reads the org.overthinkos.registry OCI label from
+// an image. Used by the schema-v3 alias tagging to preserve the
+// registry prefix the quadlet generator expects.
+func readImageRegistry(engine, imageRef string) string {
+	out, err := exec.Command(engine, "inspect", "--format", "{{index .Config.Labels \"org.overthinkos.registry\"}}", imageRef).CombinedOutput()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 // filterPlansByLayers returns only the plans whose Layer is in names.
@@ -228,7 +276,7 @@ func overlayTagFor(base string, layers []string) string {
 	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
-func (t *ContainerDeployTarget) stderr() *os.File {
+func (t *PodDeployTarget) stderr() *os.File {
 	if t.DryRunWriter != nil {
 		return t.DryRunWriter
 	}
@@ -237,7 +285,7 @@ func (t *ContainerDeployTarget) stderr() *os.File {
 
 // RemoveOverlayImage removes the overlay image produced by Emit. Used
 // at `ov deploy del` time unless --keep-image is set.
-func (t *ContainerDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
+func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 	if t.overlayImageRef == "" || t.overlayImageRef == t.BaseImage {
 		return nil
 	}

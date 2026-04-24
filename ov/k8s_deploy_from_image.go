@@ -67,11 +67,11 @@ func DeployFromImage(opts DeployFromImageOpts) (string, error) {
 
 	// 4. Build the deployment spec from the per-machine overlay if any.
 	dc := DeploymentNode{
-		Target: "kubernetes",
+		Target: "k8s",
 	}
 	if opts.DeployOverlay != nil {
 		dc = *opts.DeployOverlay
-		dc.Target = "kubernetes"
+		dc.Target = "k8s"
 	}
 	if dc.Kubernetes == nil {
 		dc.Kubernetes = &K8sDeployConfig{}

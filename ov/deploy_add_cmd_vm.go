@@ -19,11 +19,10 @@ import (
 // `ov vm create <vm-name>` first. A future enhancement (Task 19's
 // vm.go integration) will auto-boot on first apply.
 func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) error {
-	vmName, instance, err := parseVmDeployName(c.Name)
+	vmName, err := vmNameFromDeployName(c.Name)
 	if err != nil {
 		return err
 	}
-	_ = instance // reserved for -i instance support; not used in MVP dispatch
 
 	// Load the kind:vm entity from overthink.yml.
 	uf, ok, err := LoadUnified(dir)
@@ -311,7 +310,7 @@ func findVmDeployRecord(paths *LedgerPaths, vmName string) (*DeployRecord, error
 // vms.yml spec defaults + VmDeployState overlay in the local
 // deploy.yml) and wraps the resulting SSHExecutor in a ReverseRunner.
 func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
-	vmName, _, err := parseVmDeployName(deployName)
+	vmName, err := vmNameFromDeployName(deployName)
 	if err != nil {
 		return nil, err
 	}
@@ -378,21 +377,25 @@ func (r *sshReverseRunner) RunUser(script string) error {
 	return r.exec.RunUser(context.Background(), script, EmitOpts{})
 }
 
-// parseVmDeployName splits "vm:<name>[/<instance>]" into vmName +
-// instance. Returns an error if the prefix is missing or the name
-// portion is empty.
-func parseVmDeployName(deployName string) (vmName, instance string, err error) {
+// vmNameFromDeployName extracts the VM entity name from a deploy-key
+// in the legacy "vm:<name>[/<instance>]" form. This form is the
+// internal shape that deploy_add_cmd.go's dispatch rewrites before
+// calling runVM/runVmDel — schema-v3 entries with plain identifiers
+// and explicit `vm_source:` are rewritten upstream so this helper
+// always receives the prefixed form. The `instance` suffix is
+// preserved for future per-instance addressing but currently unused.
+func vmNameFromDeployName(deployName string) (string, error) {
 	if !strings.HasPrefix(deployName, "vm:") {
-		return "", "", fmt.Errorf("VM deploy name must start with 'vm:' (got %q)", deployName)
+		return "", fmt.Errorf("VM deploy name must start with 'vm:' (got %q)", deployName)
 	}
 	rest := strings.TrimPrefix(deployName, "vm:")
 	if rest == "" {
-		return "", "", fmt.Errorf("VM deploy name missing vm-name portion (got %q)", deployName)
+		return "", fmt.Errorf("VM deploy name missing vm-name portion (got %q)", deployName)
 	}
 	if idx := strings.IndexByte(rest, '/'); idx >= 0 {
-		return rest[:idx], rest[idx+1:], nil
+		return rest[:idx], nil
 	}
-	return rest, "", nil
+	return rest, nil
 }
 
 // resolveVmSshUser picks the SSH user for a spec. Precedence mirrors
@@ -443,7 +446,7 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 		entry = DeploymentNode{}
 	}
 	entry.Target = "vm"
-	vmName, _, _ := parseVmDeployName(deployName)
+	vmName, _ := vmNameFromDeployName(deployName)
 	entry.VmSource = vmName
 	entry.VmState = state
 	dc.Images[deployName] = entry

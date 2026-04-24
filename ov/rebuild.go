@@ -96,16 +96,25 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 		return "", false, "", fmt.Errorf("getwd: %w", derr)
 	}
 
-	// vms.yml (schema v2: `vm:` root key in deploy.yml via includes).
 	uf, ok, _ := LoadUnified(dir)
+	tree, _ := resolveTreeRoot(dir)
+
+	// VM-entity lookup — `ov rebuild arch` names a kind:vm entity.
+	// Per /ov-dev:disposable, disposability is a DEPLOY property, NOT
+	// an image/spec property. Authorization reads from the
+	// DeploymentNode(s) that reference this VM entity via `vm_source:`,
+	// NOT from VmSpec itself. When multiple deployments reference the
+	// same VM, disposability is authorized iff at least one of them
+	// carries disposable: true (the presence of ANY disposable-flagged
+	// deployment makes the VM rebuildable on that operator's behalf).
 	if ok && uf != nil && uf.VM != nil {
-		if spec, present := uf.VM[c.Name]; present && spec != nil {
-			return "vm", spec.IsDisposable(), spec.LifecycleTag(), nil
+		if _, present := uf.VM[c.Name]; present {
+			d, life := vmDisposableFromDeployments(tree, c.Name)
+			return "vm", d, life, nil
 		}
 	}
 
 	// Deployments tree — accept dotted paths.
-	tree, _ := resolveTreeRoot(dir)
 	if tree != nil {
 		if node, _, nodeErr := ResolveNodePath(tree, c.Name); nodeErr == nil && node != nil {
 			// For nested nodes, only "host" targets can be rebuilt
@@ -122,18 +131,28 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 		}
 	}
 
-	// Legacy per-machine deploy.yml fallback.
-	dc, _ := LoadDeployConfig()
-	if dc != nil && dc.Images != nil {
-		key := deployKey(c.Name, c.Instance)
-		if entry, present := dc.Images[key]; present {
-			return "deploy", entry.IsDisposable(), entry.LifecycleTag(), nil
-		}
-		if entry, present := dc.Images[c.Name]; present {
-			return "deploy", entry.IsDisposable(), entry.LifecycleTag(), nil
+	return "", false, "", fmt.Errorf("ov rebuild: %q is neither a kind:vm entity nor a deployments entry in this project", c.Name)
+}
+
+// vmDisposableFromDeployments returns the disposability + lifecycle
+// tag for a kind:vm entity by searching the deployments tree for
+// entries with target:vm pointing at vmName via vm_source:. Disposable
+// is true iff any matching deployment sets it; lifecycle is the first
+// non-empty tag encountered (stable iteration via map access is not
+// guaranteed, but for the common one-deploy-per-vm case this is
+// unambiguous).
+func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) (disposable bool, lifecycle string) {
+	for _, node := range tree {
+		if (node.Target == "vm" || node.Target == "") && node.VmSource == vmName {
+			if node.Disposable {
+				disposable = true
+			}
+			if lifecycle == "" {
+				lifecycle = node.Lifecycle
+			}
 		}
 	}
-	return "", false, "", fmt.Errorf("ov rebuild: %q is neither a kind:vm entity nor a deployments entry in this project", c.Name)
+	return disposable, lifecycle
 }
 
 // pathRoot returns the first segment of a dotted path. "foo.bar.baz" → "foo".

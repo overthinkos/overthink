@@ -14,7 +14,7 @@ import (
 // flat DeployTarget interface into a recursive dispatcher.
 //
 // Every DeployTarget today (HostDeployTarget, VmDeployTarget,
-// ContainerDeployTarget, K8sDeployTarget) runs InstallStep primitives
+// PodDeployTarget, K8sDeployTarget) runs InstallStep primitives
 // through a single DeployExecutor. When a deployment is nested inside
 // another — a container inside a VM, a VM inside a container, a host-
 // deploy inside any of the above — the child's executor is a

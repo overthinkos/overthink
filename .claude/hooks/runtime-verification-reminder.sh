@@ -7,7 +7,7 @@
 # that would break cross-host behavior.
 
 cat <<'EOF'
-RUNTIME VERIFICATION CHALLENGE (CLAUDE.md R1–R10):
+RUNTIME VERIFICATION CHALLENGE (CLAUDE.md R1–R10) + HARD CUTOVER MANDATE:
 
 AUTONOMY IS EXPLICIT: `ov rebuild <name>` is authorized ONLY on
 resources marked `disposable: true` in vms.yml / deploy.yml. No
@@ -15,6 +15,52 @@ implicit derivation, no hostname heuristics, no "this looks like a
 dev box". Everything not explicitly marked is off-limits to
 autonomous destroy — including resources on shared hosts where
 unrelated production services run.
+
+=============================================================================
+ONE PHASE, MANY TASKS, ONE CUTOVER — NO MULTI-PHASE DEFERRALS EVER
+=============================================================================
+
+Every refactor, schema change, API rename, or deprecation ships as ONE
+PHASE — hard cutover, no intermediate coexistence, no "I'll verify this
+bit now and the next bit later". Multi-phase rollouts that split a
+single refactor across conversation turns leave the system half-migrated
+and un-testable. That is FORBIDDEN.
+
+  1. PLAN the cutover as ONE phase. Decompose internally into TASKS
+     (TaskCreate), never into sequential phases with their own sign-off.
+  2. IMPLEMENT every task in the same working tree. Transitional
+     aliases / legacy-accepting paths are permitted DURING implementation,
+     but every one of them is DELETED before the cutover ends.
+  3. TEST AFTER all tasks are complete — unit tests, live build, live
+     deploy to a `disposable: true` target, fresh-rebuild re-verification
+     (R10). The test suite runs against the FINAL code, not an
+     intermediate state. Testing between tasks is cheap smoke-confirmation;
+     the acceptance gate is the FULL-STACK run against the final code.
+  4. FIX IN THE SAME WORKING TREE if verification fails. Do NOT declare
+     "the rest is Phase 2" and pause. Do NOT commit a partial state.
+
+FORBIDDEN anti-patterns that FAIL the cutover:
+
+  * "Phase 1 complete, Phase 2 pending" as a stopping point.
+  * Adding new interfaces/fields alongside old ones without deleting
+    the old in the SAME change.
+  * "Transitional" alias tables that stay permanent because the rename
+    sweep was deferred.
+  * Testing ONE bed and skipping the rest "because it requires a
+    build".
+  * Declaring any confidence higher than `syntax check only` without
+    a fresh-rebuild R10 re-verification on EVERY affected target.
+  * Pausing mid-cutover to ask for user permission to continue.
+
+If the cutover is genuinely too large for one conversation turn, split
+the WORK into plan-file-documented SEPARATE cutovers — each standing
+alone with its own migration + its own test sweep + its own R10 gate.
+Never split "the same cutover" across turns.
+
+See `/ov-dev:cutover-policy` for the full policy, worked examples, and
+exception clause. See CLAUDE.md "Hard Cutover by Default" section.
+
+=============================================================================
 
 THE VERIFICATION LOOP (R10) — your workflow for every change:
 
@@ -52,6 +98,18 @@ to paste proof of ALL of these:
       disposable target AFTER committing the source-level fix.
   (6) Post-action state is healthy (running, not paused, service
       active, socket listening).
+
+CONFIDENCE CLASSIFICATION (CLAUDE.md AI Attribution table):
+
+  * `fully tested and validated` REQUIRES all six proofs above for
+    EVERY affected target in the cutover. Not some. All. If any bed
+    in a 4-bed refactor is unverified, the attribution is NOT
+    "fully tested and validated" — downgrade to `analysed on a live
+    system` or lower.
+  * Marking a task complete while ANY todo item in the current
+    cutover is open means the cutover is not complete. The correct
+    attribution is `analysed on a live system` AT BEST, never
+    "fully tested and validated".
 
 FLAGS (see /ov-dev:disposable): disposability is a DEPLOY property,
 not an image property. Two separate fields:

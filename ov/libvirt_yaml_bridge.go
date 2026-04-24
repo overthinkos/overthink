@@ -122,15 +122,12 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 		}
 	}
 
-	// Classification metadata (see /ov-dev:disposable). Visible via
-	// `virsh dumpxml <domain> | grep ov:` without consulting vms.yml.
-	// Emitted only when disposable is explicitly true OR a lifecycle
-	// tag is set — omission = the spec has no opinion.
-	if spec.Disposable || spec.Lifecycle != "" {
-		d.Metadata = &libvirtxml.DomainMetadata{
-			XML: renderOvClassificationMetadata(spec.Disposable, spec.Lifecycle),
-		}
-	}
+	// Classification metadata (see /ov-dev:disposable). Per schema v3,
+	// disposability is a deploy property, not a spec property. libvirt
+	// domain XML no longer encodes a disposable flag sourced from the
+	// VM spec — callers that want the flag visible in `virsh dumpxml`
+	// can mount it via XMLPassthrough. Lifecycle tag is equally a
+	// deploy property now; no emission from spec.
 
 	return d, nil
 }

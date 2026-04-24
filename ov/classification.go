@@ -44,12 +44,8 @@ var CanonicalLifecycleTags = []string{
 	"scratch", "dev", "test", "qa", "staging", "prod",
 }
 
-// IsDisposableFields is the one-liner used by every caller: given the
-// literal field values from a loaded config, return the
-// authoritative bool. This exists separately from the struct methods
-// so tests can exercise the helper in isolation, and so the
-// invariant "no derivation" is visible at one line.
-func IsDisposableFields(disposable bool, lifecycle string) bool {
-	_ = lifecycle // explicitly unused: lifecycle does NOT affect the result
-	return disposable
-}
+// Note: the former `IsDisposableFields(disposable, lifecycle)` helper
+// was removed in the schema-v3 cutover. There was no derivation to
+// encode — the result was always the `disposable` argument verbatim,
+// and the helper's existence obscured that. Callers now read
+// `node.Disposable` directly. See /ov-dev:disposable.

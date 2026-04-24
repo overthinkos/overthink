@@ -7,9 +7,10 @@ import (
 
 // MigrateCmdGroup groups `ov migrate` subcommands.
 type MigrateCmdGroup struct {
-	Unified  MigrateUnifiedCmd  `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
-	VmSpec   MigrateVmSpecCmd   `cmd:"vm-spec" help:"Migrate legacy bootc:true + image.vm: + image.libvirt: fields to kind:vm entities"`
-	MergeVms MigrateMergeVmsCmd `cmd:"merge-vms" help:"Merge vms.yml into deploy.yml, rename vms:→vm:, rename arch-cloud-base→arch, bump schema v1→v2"`
+	Unified        MigrateUnifiedCmd        `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
+	VmSpec         MigrateVmSpecCmd         `cmd:"vm-spec" help:"Migrate legacy bootc:true + image.vm: + image.libvirt: fields to kind:vm entities"`
+	MergeVms       MigrateMergeVmsCmd       `cmd:"merge-vms" help:"Merge vms.yml into deploy.yml, rename vms:→vm:, rename arch-cloud-base→arch, bump schema v1→v2"`
+	DeploySchemaV3 MigrateDeploySchemaV3Cmd `cmd:"deploy-v3" help:"Migrate deploy.yml to schema v3: rename vm:X→X-vm, container→pod, kubernetes→k8s, vm_source:→vm:, bump version 2→3"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

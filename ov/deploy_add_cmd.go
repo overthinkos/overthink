@@ -3,7 +3,7 @@ package main
 // deploy_add_cmd.go — `ov deploy add <name> [<ref>]` and
 // `ov deploy del <name>`. Thin wiring on top of the pieces already
 // built: BuildDeployPlan → {OCITarget, HostDeployTarget,
-// ContainerDeployTarget}.
+// PodDeployTarget}.
 //
 // Name semantics:
 //   - literal "host" → deploy to the local machine via HostDeployTarget
@@ -166,9 +166,15 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if node == nil {
 			return fmt.Errorf("ov deploy add: no <ref> and deploy.yml has no entry for %q", path)
 		}
-		// Entry-driven: the deploy key IS the ref (by convention).
-		// Per-node ref could be introduced later via `image:` field.
-		refStr = pathLeaf(path)
+		// Schema v3: prefer the explicit `image:` cross-ref when set,
+		// so deployment names like "sway-pod" don't need to match an
+		// image name. Falls back to the deploy key for legacy entries.
+		switch {
+		case node.Image != "":
+			refStr = node.Image
+		default:
+			refStr = pathLeaf(path)
+		}
 	}
 
 	cfg, distroCfg, builderCfg, err := loadConfigForDeploy(dir)
@@ -223,34 +229,40 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		return c.printPlans(plans, opts)
 	}
 
-	// Target dispatch. Use node.Target as the canonical source
-	// when present; fall back to the legacy name-prefix heuristic
-	// for refs without deploy.yml entries.
+	// Target dispatch. Canonical schema-v3 values: host|vm|pod|k8s.
+	// Legacy "container"/"kubernetes" normalized once here so all
+	// downstream code uses the new vocabulary.
+	switch target {
+	case "container":
+		target = "pod"
+	case "kubernetes":
+		target = "k8s"
+	}
 	switch target {
 	case "host":
 		return c.runHost(plans, dir, distroCfg, opts)
 	case "vm":
-		// runVM keys off c.Name to resolve the VM entity (the prefix
-		// "vm:" is a target-type tag, not part of the vm name).
-		//
-		//   Root vm deploy   — c.Name is already "vm:<name>" as typed
-		//                      by the user; leave untouched.
-		//   Nested vm child  — path looks like "stack.myvm"; c.Name
-		//                      must be rewritten to "vm:<leaf>" so
-		//                      parseVmDeployName finds the entity.
+		// runVM keys off c.Name to resolve the VM entity.
+		//   Schema v3 plain name — node.VmSource names the vm entity;
+		//                          rewrite c.Name to "vm:<vm_source>"
+		//                          for the legacy VM constructor path.
+		//   Nested vm child      — path has dots; use leaf.
+		//   Legacy user input    — "vm:<name>" already; leave.
 		saved := c.Name
-		if strings.Contains(path, ".") {
+		switch {
+		case node != nil && node.VmSource != "" && !strings.HasPrefix(c.Name, "vm:"):
+			c.Name = "vm:" + node.VmSource
+		case strings.Contains(path, "."):
 			c.Name = "vm:" + pathLeaf(path)
 		}
 		err := c.runVM(plans, dir, opts)
 		c.Name = saved
 		return err
-	case "kubernetes":
-		return fmt.Errorf("target=kubernetes dispatch via tree walker not yet wired — use `ov deploy add --target kubernetes` directly")
-	default:
-		// container target. runContainer uses c.Name as the
-		// container name; for nested containers we flatten the
-		// dotted path into a podman-legal name.
+	case "k8s":
+		return fmt.Errorf("target=k8s dispatch via tree walker not yet wired — use `ov deploy add --target kubernetes` directly")
+	case "pod":
+		// Pod target (formerly container). runContainer uses c.Name
+		// as the pod name; nested pods flatten the dotted path.
 		saved := c.Name
 		if path != "" {
 			c.Name = NestedContainerName(path)
@@ -258,26 +270,37 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		err := c.runContainer(plans, base, distroCfg, builderCfg, opts)
 		c.Name = saved
 		return err
+	default:
+		return fmt.Errorf("unknown target %q; want host|vm|pod|k8s", target)
 	}
 }
 
 // classifyNodeTarget picks the target discriminator for a node. Uses
-// node.Target when non-empty, else falls back to the legacy path-
-// prefix conventions (`host` literal root, `vm:` prefix) to preserve
-// ref-based deploys that have no deploy.yml entry.
+// node.Target when non-empty. Returns canonical schema-v3 values
+// (host|vm|pod|k8s); legacy "container"/"kubernetes" spellings are
+// normalized to pod/k8s for transition compatibility — the `ov
+// migrate deploy-v3` command converts them to the canonical values
+// on-disk.
+//
+// For ref-based deploys with no deploy.yml entry (e.g. `ov deploy add
+// foo ./image.yml` where foo isn't declared), the deploy name itself
+// is the hint: literal `host` → host target; anything else → pod.
+// The legacy `vm:<name>` name-prefix heuristic was removed — VM
+// deploys are now always tree-backed with explicit target:vm.
 func classifyNodeTarget(node *DeploymentNode, path string) string {
 	if node != nil && node.Target != "" {
+		switch node.Target {
+		case "container":
+			return "pod"
+		case "kubernetes":
+			return "k8s"
+		}
 		return node.Target
 	}
-	// Legacy name-prefix inference.
-	leaf := pathLeaf(path)
-	if leaf == "host" {
+	if pathLeaf(path) == "host" {
 		return "host"
 	}
-	if strings.HasPrefix(leaf, "vm:") {
-		return "vm"
-	}
-	return "container"
+	return "pod"
 }
 
 // pathLeaf returns the last segment of a dotted path. "foo.bar.baz"
@@ -306,7 +329,7 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 			return parentExec, nil
 		}
 		return LocalDeployExecutor{}, nil
-	case "container":
+	case "pod":
 		name := NestedContainerName(path)
 		engineJump := JumpPodmanExec
 		if node.Engine == "docker" {
@@ -321,13 +344,16 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 		}, nil
 	case "vm":
 		return vmChildExecutor(node, parentExec)
-	case "kubernetes":
-		return nil, fmt.Errorf("kubernetes targets cannot have children")
+	case "k8s":
+		return nil, fmt.Errorf("k8s targets cannot have children")
 	}
 	return parentExec, nil
 }
 
-// Run executes `ov deploy del`.
+// Run executes `ov deploy del`. Dispatch resolves the deployment node
+// (when present in deploy.yml) and routes via the target's Kind().
+// Legacy name-prefix routing (`host` literal, `vm:<name>`) still works
+// for ref-based deploys without a deploy.yml entry.
 func (c *DeployDelCmd) Run() error {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
@@ -339,14 +365,63 @@ func (c *DeployDelCmd) Run() error {
 	}
 	defer lock.Release()
 
-	switch {
-	case c.Name == "host":
+	// Resolve target-kind: first check the deploy.yml tree for an
+	// explicit target:, else fall back to the name-prefix heuristic.
+	kind := c.resolveDelTargetKind()
+	switch kind {
+	case "host":
 		return c.runHostDel(paths)
-	case strings.HasPrefix(c.Name, "vm:"):
+	case "vm":
+		if !strings.HasPrefix(c.Name, "vm:") {
+			// Schema v3: plain identifier — find the matching node's
+			// VmSource so runVmDel's legacy parseVmDeployName path works.
+			if cwd, _ := os.Getwd(); cwd != "" {
+				if tree, _ := resolveTreeRoot(cwd); tree != nil {
+					if node, ok := tree[c.Name]; ok && node.VmSource != "" {
+						saved := c.Name
+						c.Name = "vm:" + node.VmSource
+						err := c.runVmDel(paths)
+						c.Name = saved
+						return err
+					}
+				}
+			}
+		}
 		return c.runVmDel(paths)
+	case "pod":
+		return c.runContainerDel(paths)
+	case "k8s":
+		return fmt.Errorf("`ov deploy del` for target=k8s: not yet supported — use `kubectl delete -k`")
 	default:
 		return c.runContainerDel(paths)
 	}
+}
+
+// resolveDelTargetKind returns the canonical schema-v3 target kind
+// (host|vm|pod|k8s) for c.Name, using the deploy.yml tree when
+// available. Fallback: legacy name-prefix heuristic.
+func (c *DeployDelCmd) resolveDelTargetKind() string {
+	if c.Name == "host" {
+		return "host"
+	}
+	if strings.HasPrefix(c.Name, "vm:") {
+		return "vm"
+	}
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		if tree, _ := resolveTreeRoot(cwd); tree != nil {
+			if node, ok := tree[c.Name]; ok && node.Target != "" {
+				switch node.Target {
+				case "container":
+					return "pod"
+				case "kubernetes":
+					return "k8s"
+				}
+				return node.Target
+			}
+		}
+	}
+	return "pod"
 }
 
 // runHostDel tears down host deploys: runs each ReverseOp, removes
@@ -474,8 +549,9 @@ func (c *DeployDelCmd) runContainerDel(paths *LedgerPaths) error {
 	return nil
 }
 
-// findContainerDeploy locates the deploy record with matching Target
-// (Target is "container:<name>").
+// findContainerDeploy locates the deploy record with matching Target.
+// Accepts both schema-v3 ("pod:<name>") and legacy ("container:<name>")
+// keying; Phase 6 migration rewrites existing records to the new form.
 func findContainerDeploy(paths *LedgerPaths, name string) (*DeployRecord, error) {
 	entries, err := os.ReadDir(paths.Deploys)
 	if err != nil {
@@ -484,7 +560,8 @@ func findContainerDeploy(paths *LedgerPaths, name string) (*DeployRecord, error)
 		}
 		return nil, err
 	}
-	want := "container:" + name
+	wantPod := "pod:" + name
+	wantContainer := "container:" + name
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -497,7 +574,7 @@ func findContainerDeploy(paths *LedgerPaths, name string) (*DeployRecord, error)
 		if err := json.Unmarshal(data, &rec); err != nil {
 			continue
 		}
-		if rec.Target == want {
+		if rec.Target == wantPod || rec.Target == wantContainer {
 			return &rec, nil
 		}
 	}
@@ -608,7 +685,7 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	// vm:<name>, host user for host/other targets.
 	var img *ResolvedImage
 	if strings.HasPrefix(c.Name, "vm:") {
-		if vmName, _, perr := parseVmDeployName(c.Name); perr == nil {
+		if vmName, perr := vmNameFromDeployName(c.Name); perr == nil {
 			if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
 				if spec, present := uf.VM[vmName]; present {
 					img = syntheticVmImage(spec)
@@ -722,7 +799,7 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// Only the overlay build piece is implemented v1; the final
 	// container start (volumes, quadlet, traefik) is still routed
 	// through the existing `ov start` command.
-	tgt := &ContainerDeployTarget{
+	tgt := &PodDeployTarget{
 		DeployName:    c.Name,
 		BaseImage:     base + ":" + c.Tag,
 		DistroDef:     resolveDistroDef(distroCfg, detectHostContext().Distro),

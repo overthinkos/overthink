@@ -76,22 +76,33 @@ func (c *TestRunCmd) Run() error {
 		return nil
 	}
 
-	// Load deploy overlay (local tests, if any).
-	dc, _ := LoadDeployConfig()
+	// Load deploy overlay (local tests) AND project-level tests. Schema
+	// v3 allows deployment names that don't match image names (e.g.
+	// `k3s-pod` → `fedora-ov`), so tests keyed under the deployment
+	// name in the project deploy.yml would otherwise be invisible here.
+	// Merge by id: project baseline, personal overlay wins.
+	dir, _ := os.Getwd()
 	var localTests []Check
+	var projectTests []Check
+	var deployOverlay *DeploymentNode
+	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+		if pc := uf.ProjectDeployConfig(); pc != nil {
+			if entry, ok := pc.Images[c.Image]; ok {
+				projectTests = entry.Tests
+			}
+		}
+	}
+	dc, _ := LoadDeployConfig()
 	if dc != nil {
 		if entry, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
 			localTests = entry.Tests
-		}
-	}
-
-	// Build runtime variable resolver.
-	var deployOverlay *DeploymentNode
-	if dc != nil {
-		if entry, ok := dc.Images[deployKey(c.Image, c.Instance)]; ok {
+			deployOverlay = &entry
+		} else if entry, ok := dc.Images[c.Image]; ok {
+			localTests = entry.Tests
 			deployOverlay = &entry
 		}
 	}
+	localTests = MergeDeployTests(projectTests, localTests)
 	resolver, _ := ResolveTestVarsRuntime(meta, deployOverlay, engine, containerName)
 	if c.Instance != "" {
 		resolver.Env["INSTANCE"] = c.Instance
@@ -164,15 +175,35 @@ func (c *TestRunCmd) runVm() error {
 	//   - per-machine:   ~/.config/ov/deploy.yml `images["vm:<name>"]`
 	//     → holds VmState written by `ov deploy add vm:<name>` and any local
 	//       overrides/additions.
-	// Merge by id (local replaces project), same rules as MergeDeployTests.
+	//
+	// Schema v3: also accept plain-identifier deployment entries whose
+	// `target: vm` + `vm_source: <c.Image>` resolves to the same VM.
+	// This is what makes `ov test <deploy-name>` work for beds like
+	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
+	// Merge by id (local replaces project); same rules as MergeDeployTests.
+	findVmEntry := func(images map[string]DeploymentNode) *DeploymentNode {
+		if images == nil {
+			return nil
+		}
+		if entry, ok := images["vm:"+c.Image]; ok {
+			return &entry
+		}
+		for _, entry := range images {
+			if entry.Target == "vm" && entry.VmSource == c.Image {
+				e := entry
+				return &e
+			}
+		}
+		return nil
+	}
 	var projectTests, localTests []Check
 	if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry, ok := pc.Images["vm:"+c.Image]; ok {
+		if entry := findVmEntry(pc.Images); entry != nil {
 			projectTests = entry.Tests
 		}
 	}
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, ok := dc.Images["vm:"+c.Image]; ok {
+		if entry := findVmEntry(dc.Images); entry != nil {
 			localTests = entry.Tests
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {

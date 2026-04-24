@@ -25,7 +25,7 @@ type DeployConfig struct {
 //   - "host"        — local filesystem (HostDeployTarget + LocalDeployExecutor).
 //   - "vm"          — a libvirt/QEMU VM referenced by VmSource (VmDeployTarget
 //                     over SSHDeployExecutor).
-//   - "container"   — a podman/docker container (ContainerDeployTarget;
+//   - "container"   — a podman/docker container (PodDeployTarget;
 //                     the default when Target is empty).
 //   - "kubernetes"  — a Kustomize manifest tree (K8sDeployTarget; leaf-only,
 //                     not nestable).
@@ -33,7 +33,7 @@ type DeployConfig struct {
 // Nested topologies compose at the executor layer: a child's DeployExecutor
 // wraps its parent's executor with a "shell jump" (podman exec, virsh
 // console, or an additional ssh hop). That means "container-in-vm" doesn't
-// need a new target implementation — it's ContainerDeployTarget whose
+// need a new target implementation — it's PodDeployTarget whose
 // executor happens to be NestedExecutor{Parent: SSHDeployExecutor{…}}.
 //
 // Addressing is dotted path: `ov deploy add stack.web.db` walks the tree
@@ -132,6 +132,33 @@ type DeploymentNode struct {
 	// otherwise have to be passed on every command invocation.
 	InstallOpts *InstallOptsConfig `yaml:"install_opts,omitempty"`
 
+	// --- Schema-v3 cross-reference fields ---
+	//
+	// Image names the image this pod deployment is built from. When
+	// non-empty, used in place of the deployment key during ref
+	// resolution for target: pod (formerly container). Enables
+	// deployment names like "sway-pod" that don't match an image
+	// name in images.yml (e.g. openclaw-sway-browser).
+	//
+	// For target: vm, use VmSource instead.
+	// For target: k8s, use Cluster.
+	// For target: host with nested execution, use Inside.
+	Image string `yaml:"image,omitempty"`
+
+	// Cluster names a kind:cluster entity from the top-level cluster:
+	// block. Only meaningful for target: k8s. The k8s: test verbs
+	// can also name a cluster directly; this field is the deployment-
+	// level default.
+	Cluster string `yaml:"cluster,omitempty"`
+
+	// Inside names another deployment in which this one's execution
+	// venue is nested. Only meaningful for target: host — routes
+	// layer application through a NestedExecutor that targets the
+	// referenced deployment's executor (e.g. SSH into a vm). Enables
+	// exercising the host-deploy code path against a VM guest's FS
+	// with zero operator-side writes.
+	Inside string `yaml:"inside,omitempty"`
+
 	// --- VM-target fields (D9) ---
 
 	// VmSource references a kind:vm entity by name. Only meaningful when
@@ -178,7 +205,7 @@ type DeploymentNode struct {
 // IsDisposable returns the literal Disposable field. Implements the
 // Classified interface.
 func (c DeploymentNode) IsDisposable() bool {
-	return IsDisposableFields(c.Disposable, c.Lifecycle)
+	return c.Disposable
 }
 
 // HasChildren reports whether this node has any nested deployments.
@@ -887,6 +914,29 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.VmSource != "" {
 				existing.VmSource = overlay.VmSource
 			}
+			// Schema-v3 cross-ref fields. Each is a string cross-reference
+			// (to the top-level vm:/cluster: or another deployment) and
+			// replaces the existing value when set.
+			if overlay.Image != "" {
+				existing.Image = overlay.Image
+			}
+			if overlay.Cluster != "" {
+				existing.Cluster = overlay.Cluster
+			}
+			if overlay.Inside != "" {
+				existing.Inside = overlay.Inside
+			}
+			// Disposable / Lifecycle (R10-load-bearing). The overlay is
+			// authoritative when set; the baseline value from the project
+			// config only applies when the overlay doesn't mention it.
+			// Without this merge, per-machine overlays would silently
+			// lose the disposable flag — a security-relevant bug.
+			if overlay.Disposable {
+				existing.Disposable = true
+			}
+			if overlay.Lifecycle != "" {
+				existing.Lifecycle = overlay.Lifecycle
+			}
 			if overlay.AddLayers != nil {
 				existing.AddLayers = overlay.AddLayers
 			}
@@ -895,6 +945,9 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			}
 			if overlay.InstallOpts != nil {
 				existing.InstallOpts = overlay.InstallOpts
+			}
+			if overlay.Children != nil {
+				existing.Children = overlay.Children
 			}
 			// VmState is per-machine state written by VmDeployTarget; it
 			// only ever lives in the local deploy.yml, never in the

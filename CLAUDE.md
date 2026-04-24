@@ -84,17 +84,56 @@ Before saying "done" answer YES to all of these:
 
 See `/ov:test` for the 10 testing standards and `/ov-dev:disposable` for the classification schema.
 
-## Hard Cutover by Default
+## Hard Cutover by Default — ONE PHASE, test EVERYTHING at the end
 
-Every schema change, API rename, or deprecation ships as a single hard-cutover
-PR — no backcompat shims, no phased-migration coexistence, no "Phase 2" TODOs.
+**Every refactor, schema change, API rename, or deprecation ships as ONE
+PHASE — hard cutover, no intermediate coexistence, no "I'll verify this bit
+now and the next bit later". Multi-phase rollouts that split a single
+refactor across conversation turns leave the system half-migrated and
+un-testable. That is FORBIDDEN.**
+
+The workflow for every non-trivial change is:
+
+1. **Split into tasks, not phases.** Use TaskCreate to decompose work into
+   independently-trackable tasks inside ONE commit. Tasks may be implemented
+   and marked complete incrementally, but the whole commit is atomic — no
+   intermediate `git commit`, no intermediate "done for today".
+2. **Implement all tasks together.** Schema changes, code edits, migration
+   commands, skill updates — all land in the same working-tree state.
+   Transitional aliases / legacy-accepting paths are fine DURING
+   implementation, but every one of them is DELETED before the end of the
+   same cutover.
+3. **Full test AFTER all code changes are implemented.** Unit tests, live
+   build, live deploy to a `disposable: true` target, fresh-rebuild
+   re-verification (R10). The tests run against the FINAL code, not an
+   intermediate state.
+4. **Fail the cutover if any verification fails.** Fix in the same working
+   tree. Re-run everything. Do NOT paper over a partial failure by declaring
+   "the rest is Phase 2".
+
 A matching one-shot `ov migrate <name>` command transforms legacy configs
-in-place; residual legacy fields raise hard load-time errors with a remediation
-hint. Exception: explicit user instruction to phase the cutover, recorded in
-the plan file.
+in-place; residual legacy fields raise hard load-time errors with a
+remediation hint.
 
-See `/ov-dev:cutover-policy` for forbidden patterns, required deliverables, and
-rationale. See `/ov:migrate` for the `ov migrate <name>` command surface.
+**Exception:** the user explicitly instructs a phased rollout AND that
+phasing is recorded in the plan file.
+
+See `/ov-dev:cutover-policy` for forbidden patterns, required deliverables,
+and the anti-pattern catalog. See `/ov:migrate` for the `ov migrate <name>`
+command surface.
+
+### Anti-patterns that FAIL the cutover
+
+- Adding new interfaces alongside the old without deleting the old in the
+  same change.
+- "Transitional" alias tables that stay permanent because the rename sweep
+  was deferred.
+- Claiming "Phase 1 complete, Phase 2 pending" and pausing for user
+  permission to continue mid-cutover.
+- Writing fresh tests against one bed but skipping the rest "because it
+  requires image builds".
+- Declaring any confidence higher than `syntax check only` without a
+  fresh-rebuild R10 re-verification on every affected target.
 
 ## Where things are documented
 

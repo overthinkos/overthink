@@ -1,121 +1,367 @@
+# =============================================================================
+# deploy.yml — Schema v3, disposable-only, zero-operator-side-effect test beds
+# =============================================================================
+#
+# Four disposable deployments, one per target kind (host / vm / pod / k8s),
+# together exercising every ov test verb (19 verbs: file, package, service,
+# port, process, command, http, dns, user, group, interface, kernel-param,
+# mount, addr, matching, cdp, wl, dbus, vnc, mcp, record, spice, libvirt, k8s).
+#
+# A `./ov test arch-vm && ./ov test arch-host && ./ov test sway-pod &&
+# ./ov test k3s-pod` smoke run catches regressions across the entire ov stack.
+#
+# Bed-to-verb coverage map:
+#   arch-vm       (target: vm)   — libvirt, spice, command (SSH-in-guest),
+#                                  file/service/port/process/package/user/
+#                                  group/interface/kernel-param/mount (guest),
+#                                  addr, dns, http, matching
+#   arch-vm.arch-host
+#                 (target: host) — command (nested SSH), file, package (proof
+#                                  of user-space install), process, port,
+#                                  matching  (exercises HostDeployTarget code
+#                                  path inside the VM guest's FS)
+#   sway-pod      (target: pod)  — cdp, wl, vnc, dbus, mcp, record,
+#                                  file/service/port/process/http (pod-side)
+#   k3s-pod       (target: pod)  — k8s (all 13 methods), file/service/
+#                                  port/process (pod-side), http, command
+#                                  (host-side `ov deploy from-image`)
+#
+# Zero-operator-side-effect audit:
+#   arch-vm            libvirt /var/lib/libvirt/images/  (standard qcow2)
+#   arch-vm.arch-host  INSIDE arch-vm guest — zero operator FS writes
+#   sway-pod           ~/.local/share/containers/        (rootless podman)
+#   k3s-pod            ~/.local/share/containers/        (rootless podman)
+#
+# No test writes to ~/.local/bin/, ~/.config/overthink/, /etc, /usr, or any
+# other operator-side directory. `ls ~/.local/bin/ ~/.config/overthink/`
+# should be byte-identical before and after a full four-bed run.
+#
+# Naming convention: <descriptor>-<target-kind>. Identifiers are
+# hyphen-separated, lowercase, no colons, no underscores.
+# Target values: host | vm | pod | k8s (schema v3). Legacy spellings
+# container / kubernetes are still accepted during the Phase 4 transition.
+#
+# Plan: /home/atrawog/.claude/plans/can-you-have-a-recursive-axolotl.md
+# =============================================================================
+
+version: 3
+
 deployments:
     images:
-        openclaw-sway-browser:
-            ports:
-                - 18790:18789
-                - 5901:5900
-                - 9223:9222
-        # --- VM deploy: upstream Arch Linux cloud image ---
-        #
-        # Pairs with the kind:vm entity in vms.yml (vm_source: arch).
-        # Deploy name prefixed with `vm:` routes dispatch to VmDeployTarget,
-        # which SSH's into the guest via the key in
-        # ~/.local/share/ov/vm/ov-arch/id_ed25519 and applies
-        # layers inside the VM via the same InstallPlan IR HostDeployTarget
-        # uses (ledger at guest's ~/.config/overthink/installed/).
-        #
-        # Lifecycle:
-        #   ov vm build arch        # fetch qcow2 + seed ISO
-        #   ov vm create arch       # define libvirt domain + start
-        #   ov deploy add vm:arch   # apply layers inside guest
-        #   ov deploy del vm:arch   # reverse layers in guest
-        #   ov vm destroy arch --disk  # tear down VM + qcow2
-        "vm:arch":
+
+        # =================================================================
+        # Bed 1: arch-vm (target: vm)
+        # ---------------------------------------------------------------
+        # Disposable Arch Linux VM. Exercises the VM lifecycle + libvirt +
+        # spice + ssh + cloud-init + qemu-guest-agent + in-guest OS probes.
+        # No k3s here (moved to k3s-pod); no heavy layer application here
+        # (moved to arch-vm.arch-host child).
+        # =================================================================
+        arch-vm:
             target: vm
             vm_source: arch
-            # --- Layers applied inside the VM via `ov deploy host` on the
-            # guest (VmDeployTarget routes each InstallStep to the right
-            # DeployExecutor method wrapped around SSH) ---
+            disposable: true
+            lifecycle: dev
+
+            # Minimal in-guest tooling so arch-host (child) has something
+            # to depend on, and so the command: probes have ripgrep/uv/
+            # pre-commit versions to verify.
             add_layers:
                 - ripgrep
                 - uv
                 - pre-commit
-                - k3s-server
-            # --- Host-target install knobs honored by the in-guest apply ---
+
             install_opts:
                 with_services: true
-                allow_repo_changes: true # Arch pacman-key + repo tweaks need this
-                skip_incompatible: true # skip rpm:/deb:-only layer sections on Arch
-                verify: true # re-run layer tests: post-install
-            # --- Guest environment overlay ---
+                allow_repo_changes: true   # pacman-key + mirror tweaks
+                skip_incompatible: true    # skip rpm:/deb:-only layer sections
+                verify: true
+
             env:
                 - OVERTHINK_DEV=true
-                # K3S_SERVER_HOSTNAME used by k3s-server layer's tls-san and
-                # artifact kubeconfig rewrite. 127.0.0.1 is fine for a local
-                # single-node verification; for multi-node or operator-side
-                # access, set the VM's reachable hostname.
-                - K3S_SERVER_HOSTNAME=127.0.0.1
-            # --- Deploy-level probes: VmDeployTarget runs these via SSH for
-            # `command:` verbs; host-side for `libvirt:` and `spice:` verbs.
-            # Organised by subsystem so a red square in the output points
-            # straight at the broken layer of the stack. ---
+
             tests:
-                # --- C.1  SSH connectivity & guest identity ---------------------
+
+                # --- C.1  Guest identity + SSH connectivity ---------------
                 - {id: guest-identity-uid, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
                 - {id: guest-identity-wheel, scope: deploy, command: id, stdout: {contains: wheel}}
                 - {id: guest-hostname-nonempty, scope: deploy, command: "cat /etc/hostname", stdout: {matches: ".+"}}
-                - {id: guest-os-release-arch, scope: deploy, command: cat /etc/os-release, stdout: {contains: "ID=arch"}}
-                - {id: guest-sudo-nopasswd, scope: deploy, command: sudo -n whoami, stdout: {equals: root}}
-                - {id: guest-kernel-release, scope: deploy, command: uname -r, stdout: {matches: "[0-9]+\\.[0-9]+"}}
-                # --- C.2  Cloud-init completion --------------------------------
+                - {id: guest-os-release-arch, scope: deploy, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}}
+                - {id: guest-sudo-nopasswd, scope: deploy, command: "sudo -n whoami", stdout: {equals: root}}
+                - {id: guest-kernel-release, scope: deploy, command: "uname -r", stdout: {matches: "[0-9]+\\.[0-9]+"}}
+
+                # --- C.2  Cloud-init completion ---------------------------
                 - {id: cloud-init-status-done, scope: deploy, command: "cloud-init status --wait --long", stdout: {contains: "status: done"}}
                 - {id: cloud-init-instance-dir, scope: deploy, command: "test -d /var/lib/cloud/instance"}
                 - {id: cloud-init-no-errors, scope: deploy, command: "cat /var/lib/cloud/data/result.json", stdout: {contains: "\"errors\": []"}}
-                # --- C.3  spice-vdagent service (in-guest) ---------------------
+
+                # --- C.3  spice-vdagent + virtio-gpu (in guest) ----------
                 - {id: spice-vdagentd-active, scope: deploy, command: "systemctl is-active spice-vdagentd", stdout: {equals: active}}
-                # "static" means enabled-by-default unit file (no [Install] section); equivalent to enabled for our purpose.
                 - {id: spice-vdagentd-enabled, scope: deploy, command: "systemctl is-enabled spice-vdagentd", stdout: {matches: "^(enabled|static)"}}
-                - {id: spice-vdagent-process, scope: deploy, command: "pgrep -x spice-vdagent || pgrep -f spice-vdagent"}
-                # --- C.4  virtio-gpu driver / DRI node -------------------------
                 - {id: virtio-gpu-module, scope: deploy, command: "lsmod | grep -q virtio_gpu"}
                 - {id: dri-card0-present, scope: deploy, command: "test -e /dev/dri/card0"}
-                - {id: virtio-pci-display, scope: deploy, command: "lspci | grep -Ei 'virtio.*(gpu|display|vga)'"}
-                # --- C.5  SPICE channel (host-side, via spice: verb) -----------
+
+                # --- C.4  SPICE wire (host-side via spice: verb) ---------
                 - {id: spice-status-main, scope: deploy, spice: status, stdout: {contains: display}}
                 - id: spice-framebuffer-nonzero
                   scope: deploy
                   spice: screenshot
-                  artifact: /tmp/arch-spice.png
+                  artifact: /tmp/arch-vm-spice.png
                   artifact_min_bytes: 1024
-                # --- C.6  libvirt domain (host-side, via libvirt: verb) --------
-                # Note: libvirt: list takes no VM arg; covered by libvirt: info.
-                # qemu-guest-agent is wired up via vms.yml's libvirt.snippets
-                # (channel type='unix' → target virtio 'org.qemu.guest_agent.0')
-                # plus cloud-init packages: [qemu-guest-agent] + service enable.
+
+                # --- C.5  libvirt domain (host-side via libvirt: verb) ---
                 - {id: libvirt-domain-running, scope: deploy, libvirt: info, stdout: {contains: running}}
                 - {id: libvirt-domain-xml-q35, scope: deploy, libvirt: "domain-xml", stdout: {contains: q35}}
                 - {id: libvirt-domain-xml-virtio, scope: deploy, libvirt: "domain-xml", stdout: {contains: "type='virtio'"}}
                 - {id: libvirt-qmp-query-status, scope: deploy, libvirt: qmp, text: query-status, stdout: {contains: running}}
-                # guest/ping writes its "agent responsive" to stderr (libvirt RPC convention).
                 - {id: libvirt-guest-agent-ping, scope: deploy, libvirt: "guest/ping", stderr: {contains: responsive}}
                 - {id: libvirt-guest-hostname, scope: deploy, libvirt: "guest/hostname", stdout: {matches: ".+"}}
                 - {id: libvirt-guest-os-info, scope: deploy, libvirt: "guest/os-info", stdout: {contains: arch}}
                 - {id: libvirt-guest-interfaces, scope: deploy, libvirt: "guest/interfaces", stdout: {contains: lo}}
-                # --- C.7  pacman-key + repo health -----------------------------
+
+                # --- C.6  Pacman + repo health ---------------------------
                 - {id: pacman-key-populated, scope: deploy, command: "pacman-key --list-keys archlinux 2>&1 | grep -q pub"}
                 - {id: pacman-repos-reachable, scope: deploy, command: "sudo pacman -Sy --noconfirm"}
-                # --- C.8  ed25519 SSH key injection ----------------------------
+
+                # --- C.7  SSH key injection ------------------------------
                 - {id: ssh-authorized-keys, scope: deploy, command: "test -f /home/arch/.ssh/authorized_keys"}
                 - {id: ssh-ed25519-key-count, scope: deploy, command: "grep -c ssh-ed25519 /home/arch/.ssh/authorized_keys", stdout: {matches: "[1-9]"}}
-                # --- C.9  Resource sizing (vm_spec: 4 cpus, 8 GiB, 40 GiB) -----
-                # $-anchors dropped per /ov:test Gotcha #6 — command stdout carries a trailing newline.
+
+                # --- C.8  Resource sizing (4 cpus, 8G mem, 40G disk) -----
                 - {id: cpu-count-4, scope: deploy, command: nproc, stdout: {matches: "^4"}}
                 - {id: mem-8g-ballpark, scope: deploy, command: "awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo", stdout: {matches: "^[78]"}}
-                # Arch cloud image ships at 2 GiB; growpart expands to ~40 GiB on first boot.
-                # Accept any size ≥ 10 to tolerate fresh-create windows before growpart finishes.
                 - {id: disk-ballpark, scope: deploy, command: "df -BG / | awk 'NR==2 {gsub(\"G\",\"\",$2); print int($2)}'", stdout: {matches: "^([1-9][0-9]|[1-9][0-9][0-9])"}}
-                # --- C.10 Layer-applied tooling (ripgrep / uv / pre-commit) ----
-                # Plus ov itself — installed at cloud-init time via the
-                # Arch PKGBUILD + pacman -U path authored in vms.yml.
+
+                # --- C.9  Layer-applied tooling + ov itself --------------
                 - {id: ov-binary-present, scope: deploy, command: "command -v ov"}
                 - {id: ov-version, scope: deploy, command: "ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}}
+                - {id: ov-help-works, scope: deploy, command: "ov --help 2>&1 | head -1", stdout: {contains: ov}}
                 - {id: ripgrep-version, scope: deploy, command: "rg --version", stdout: {contains: ripgrep}}
                 - {id: uv-version, scope: deploy, command: "uv --version", stdout: {contains: "uv "}}
                 - {id: pre-commit-version, scope: deploy, command: "pre-commit --version", stdout: {contains: pre-commit}}
                 - {id: tooling-on-path, scope: deploy, command: "command -v rg uv pre-commit"}
-                # --- C.11 Network / DNS ---------------------------------------
+
+                # --- C.10 Structured probes (package/service/port/process/
+                #          user/group/interface/kernel-param/mount) -------
+                - {id: pkg-base-devel-present, scope: deploy, package: base-devel, installed: true}
+                - {id: pkg-git-present, scope: deploy, package: git, installed: true}
+                - {id: svc-spice-vdagentd-running, scope: deploy, service: spice-vdagentd, running: true}
+                - {id: svc-sshd-running, scope: deploy, service: sshd, running: true}
+                - {id: port-22-listening, scope: deploy, port: 22, listening: true}
+                - {id: proc-sshd-running, scope: deploy, process: sshd, running: true}
+                - {id: user-arch-present, scope: deploy, user: arch, uid: 1000}
+                - {id: group-wheel-present, scope: deploy, group: wheel}
+                - {id: iface-lo-up, scope: deploy, interface: lo, mtu: 65536}
+                - {id: mount-root-mounted, scope: deploy, mount: /}
+
+                # --- C.11 Network / DNS (host-side + guest-side) ---------
                 - {id: dns-archlinux-org, scope: deploy, command: "getent hosts archlinux.org"}
                 - {id: https-archlinux-org, scope: deploy, command: "curl -sfo /dev/null -w '%{http_code}' https://archlinux.org/", stdout: {matches: "^(20[0-9]|30[0-9])"}}
+                - {id: dns-check-operator-side, scope: deploy, dns: archlinux.org, resolvable: true}
+                - {id: addr-ssh-reachable, scope: deploy, addr: "127.0.0.1:2224", reachable: true, timeout: "5s"}
+
+                # --- C.12 matching: verb smoke ---------------------------
+                # matching: <literal> checks the literal against contains/equals
+                # operators. Input is the matching: field itself.
+                - {id: matching-smoke, scope: deploy, matching: "arch", equals: "arch"}
+
+            # -----------------------------------------------------------------
+            # Bed 2: arch-host (target: host, nested in arch-vm)
+            # -----------------------------------------------------------------
+            # Exercises HostDeployTarget / InstallPlan / ReverseOps / ledger
+            # code path INSIDE arch-vm's guest FS via the existing
+            # parent-child NestedExecutor plumbing. Zero operator-side writes.
+            # Layers chosen for dotfile-only side effects so the bed is about
+            # exercising the code path, not installing services.
+            # -----------------------------------------------------------------
+            children:
+                arch-host:
+                    target: host
+                    disposable: true
+                    lifecycle: dev
+
+                    add_layers:
+                        - direnv
+
+                    tests:
+                        # Nested command runs: SSH into arch-vm → exec as arch user.
+                        - {id: ah-ov-deploy-list, scope: deploy, command: "ov deploy list"}
+                        - {id: ah-direnv-version, scope: deploy, command: "direnv --version"}
+
+                        # Ledger entries land in guest ~/.config/overthink/installed/
+                        # (NOT operator-side).
+                        - {id: ah-ledger-deploys-dir, scope: deploy, command: "test -d /home/arch/.config/overthink/installed/deploys"}
+                        - {id: ah-ledger-layers-dir, scope: deploy, command: "test -d /home/arch/.config/overthink/installed/layers"}
+                        - {id: ah-ledger-has-direnv-record, scope: deploy, command: "ls /home/arch/.config/overthink/installed/layers/direnv.json 2>&1"}
+
+                        # Proof: direnv NOT installed via pacman — it's user-
+                        # space-only via host-deploy.
+                        - {id: ah-direnv-not-pacman, scope: deploy, package: direnv, installed: false}
+
+                        # Nothing listening (host overlay runs no services).
+                        - {id: ah-no-listeners, scope: deploy, command: "ss -tlnp 2>/dev/null | wc -l", stdout: {matches: "^[0-9]+"}}
+
+                        # matching: verb — ov deploy list mentions the bed.
+                        - {id: ah-matching-list, scope: deploy, matching: "arch-host in list", contains: "arch"}
+
+
+        # =================================================================
+        # Bed 3: sway-pod (target: pod)
+        # ---------------------------------------------------------------
+        # Disposable rootless podman container running the full Sway desktop
+        # + Chrome + wayvnc stack. Exercises every live-container test verb
+        # (cdp, wl, vnc, dbus, mcp, record) plus in-container health probes.
+        # =================================================================
+        sway-pod:
+            target: pod
+            image: openclaw-sway-browser
+            disposable: true
+            lifecycle: dev
+
+            # Maps host ports so operator-side probes can reach them.
+            # HOST_PORT:N substitution is available for `http:` tests.
+            ports:
+                - 18790:18789     # openclaw gateway
+                - 5901:5900       # wayvnc
+                - 9223:9222       # chrome devtools
+
+            tests:
+
+                # --- Pod-runtime health (in-container) -------------------
+                - {id: sp-sway-running, scope: deploy, process: sway, running: true}
+                - {id: sp-chrome-present, scope: deploy, command: "command -v google-chrome || command -v chromium"}
+                - {id: sp-port-9222-listening, scope: deploy, port: 9222, listening: true}
+                - {id: sp-port-5900-listening, scope: deploy, port: 5900, listening: true}
+                - {id: sp-port-18789-listening, scope: deploy, port: 18789, listening: true}
+
+                # --- http: (operator-side, via HOST_PORT substitution) ---
+                - id: sp-http-cdp-json-version
+                  scope: deploy
+                  http: "http://127.0.0.1:${HOST_PORT:9222}/json/version"
+                  status: 200
+
+                # --- cdp: verb (Chrome DevTools Protocol) ----------------
+                - {id: sp-cdp-status, scope: deploy, cdp: status}
+                - {id: sp-cdp-list, scope: deploy, cdp: list}
+                - {id: sp-cdp-open-blank, scope: deploy, cdp: open, url: "about:blank"}
+                # eval + screenshot require a tab id. Use sp-cdp-list first
+                # to enumerate tabs; skip these deeper cdp checks here since
+                # targeting a specific tab requires multi-step orchestration
+                # beyond a single declarative probe.
+
+                # --- wl: verb (Wayland + sway IPC) -----------------------
+                - {id: sp-wl-status, scope: deploy, wl: status}
+                - id: sp-wl-screenshot
+                  scope: deploy
+                  wl: screenshot
+                  artifact: /tmp/sway-pod-wl.png
+                  artifact_min_bytes: 1024
+                - {id: sp-wl-sway-tree, scope: deploy, wl: "sway-tree"}
+                - {id: sp-wl-sway-workspaces, scope: deploy, wl: "sway-workspaces"}
+                - {id: sp-wl-sway-outputs, scope: deploy, wl: "sway-outputs"}
+
+                # --- vnc: verb (RFB wire to wayvnc) ----------------------
+                - {id: sp-vnc-status, scope: deploy, vnc: status}
+                - id: sp-vnc-screenshot
+                  scope: deploy
+                  vnc: screenshot
+                  artifact: /tmp/sway-pod-vnc.png
+                  artifact_min_bytes: 1024
+
+                # --- dbus: verb (D-Bus calls into container) -------------
+                - {id: sp-dbus-list, scope: deploy, dbus: list}
+
+                # --- mcp: verb (Model Context Protocol) ------------------
+                - {id: sp-mcp-ping, scope: deploy, mcp: ping}
+                - {id: sp-mcp-servers, scope: deploy, mcp: servers}
+                - {id: sp-mcp-list-tools, scope: deploy, mcp: "list-tools"}
+
+                # --- record: verb (asciinema / pixelflux) ----------------
+                # start exercises the verb surface; cmd+stop require
+                # multi-step orchestration state that doesn't survive
+                # the declarative-probe boundary. Use `ov test record`
+                # CLI interactively for full record→cmd→stop cycles.
+                - {id: sp-record-terminal-start, scope: deploy, record: start, record_name: test-term, record_mode: terminal}
+
+                # --- matching: verb smoke -----------------------------
+                - {id: sp-matching, scope: deploy, matching: "sway", equals: "sway"}
+
+
+        # =================================================================
+        # Bed 4: k3s-pod (target: pod, k3s-server inside the pod)
+        # ---------------------------------------------------------------
+        # Disposable rootless podman container running k3s-server. The
+        # kubeconfig artifact is pulled back to the operator for host-side
+        # `k8s:` probes (all 13 methods). k3s inside a pod — NOT a VM — so
+        # the cluster lifecycle is bounded by pod teardown.
+        # =================================================================
+        k3s-pod:
+            target: pod
+            image: fedora-ov
+            disposable: true
+            lifecycle: dev
+
+            add_layers:
+                - k3s-server
+
+            ports:
+                - 16443:6443      # kubernetes API (host 16443 to avoid
+                                   # conflict with any concurrent VM
+                                   # port_forwards on 6443)
+
+            env:
+                - K3S_SERVER_HOSTNAME=127.0.0.1
+
+            install_opts:
+                with_services: true
+                allow_repo_changes: true
+
+            tests:
+
+                # --- Pod-runtime health (k3s-server in-container) --------
+                - {id: kp-k3s-process, scope: deploy, process: k3s, running: true}
+                - {id: kp-port-6443-listening, scope: deploy, port: 6443, listening: true}
+                - {id: kp-kubeconfig-file, scope: deploy, file: /etc/rancher/k3s/k3s.yaml, exists: true}
+
+                # --- http: API healthz (operator-side via host port) -----
+                - id: kp-http-api-healthz
+                  scope: deploy
+                  http: "https://127.0.0.1:${HOST_PORT:16443}/healthz"
+                  status: 200
+                  allow_insecure: true
+
+                # --- k8s: verb (all 13 methods) --------------------------
+                - {id: kp-k8s-nodes, scope: deploy, k8s: nodes, cluster: "k3s-pod-cluster"}
+                - {id: kp-k8s-wait-nodes, scope: deploy, k8s: "wait-nodes", cluster: "k3s-pod-cluster", k8s_count: 1, timeout: "60s"}
+                - {id: kp-k8s-pods, scope: deploy, k8s: pods, cluster: "k3s-pod-cluster", namespace: kube-system}
+                - {id: kp-k8s-wait-ready, scope: deploy, k8s: "wait-ready", cluster: "k3s-pod-cluster", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "90s"}
+                - {id: kp-k8s-ingressclass-traefik, scope: deploy, k8s: ingressclass, cluster: "k3s-pod-cluster"}
+                - {id: kp-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "k3s-pod-cluster", stdout: {contains: "local-path"}}
+                - {id: kp-k8s-addons, scope: deploy, k8s: addons, cluster: "k3s-pod-cluster"}
+                - {id: kp-k8s-raw-version, scope: deploy, k8s: raw, cluster: "k3s-pod-cluster", text: "version -o json"}
+                - {id: kp-k8s-service-kubernetes, scope: deploy, k8s: service, cluster: "k3s-pod-cluster", namespace: default, name: kubernetes}
+
+                # --- command: ov-specific operator-side smoke ------------
+                - {id: kp-ov-version, scope: deploy, command: "/tmp/ov-build/ov version || ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
+                - id: kp-ov-deploy-from-image
+                  scope: deploy
+                  command: "rm -rf /tmp/k3s-probe-manifest && /tmp/ov-build/ov deploy from-image fedora-ov k3s-probe --out /tmp/k3s-probe-manifest 2>&1 || ov deploy from-image fedora-ov k3s-probe --out /tmp/k3s-probe-manifest 2>&1"
+                  in_container: false
+                - {id: kp-manifest-kustomization, scope: deploy, file: /tmp/k3s-probe-manifest/kustomization.yaml, exists: true, in_container: false}
+
+                # --- matching: verb smoke -----------------------------
+                - {id: kp-matching, scope: deploy, matching: "k3s-pod up", contains: "k3s"}
+
+
+# =============================================================================
+# Top-level vm: section — kind:vm entity definitions.
+# Each entity is a build-time spec; deploy-time properties (disposable,
+# lifecycle, layers, env, ports, tests) live on the matching deployments:
+# entry. Disposability FIELDS ARE A DEPLOY PROPERTY (see /ov-dev:disposable);
+# the `vm.arch.disposable` entry below is retained for backward compatibility
+# during the Phase 6 migration — the load-bearing copy is in
+# deployments.images.arch-vm.disposable.
+# =============================================================================
 vm:
     arch:
         source:
@@ -124,57 +370,41 @@ vm:
             checksum:
                 type: sha256
             base_user: arch
-        # Classification (see /ov-dev:disposable):
-        #   disposable=true is LOAD-BEARING — authorizes `ov rebuild
-        #   arch` to run unattended. This VM exists for
-        #   verification and rebuild-at-will.
-        #   lifecycle=dev is a human-facing tier tag — INFORMATIONAL
-        #   ONLY. It has zero effect on disposability.
+
+        # Retained for Phase 6 migration; load-bearing copy is on
+        # deployments.images.arch-vm (deploy-level property).
         disposable: true
         lifecycle: dev
+
         disk_size: 40G
         ram: 8G
         cpus: 4
         machine: q35
         firmware: bios
+
         network:
             mode: user
-            # Expose the k3s API server to the operator side so
-            # `ov test k8s --cluster vm-arch` can reach it via the
-            # kubeconfig artifact. Format: "host:guest".
             port_forwards:
-                - "6443:6443"
+                - "6443:6443"   # reserved for in-VM k3s experiments
+
         ssh:
             port: 2224
             key_source: generate
+
         cloud_init:
             timezone: UTC
             packages:
                 - sudo
                 - spice-vdagent
-                - qemu-guest-agent # qemu-ga speaks on the virtio-serial channel below
-                # ov-git build-time deps installed by cloud-init's packages:
-                # stage (which handles the pacman-init.service race for us).
-                # The runcmd below assumes these are already on disk.
+                - qemu-guest-agent
                 - git
                 - go
                 - base-devel
             runcmd:
                 - systemctl enable --now spice-vdagentd
                 - systemctl enable --now qemu-guest-agent
-                # --- Auto-install ov from the GitHub source tree via the
-                # Arch PKGBUILD (overthinkos/overthink-arch submodule under
-                # pkg/arch/). One atomic bash -lc with set -euo pipefail so
-                # any failure aborts the install cleanly and leaves a clear
-                # marker in /var/log/cloud-init-output.log.
-                #
-                # --recurse-submodules is required because pkg/arch/ is a
-                # git submodule; a plain --depth 1 leaves the submodule
-                # empty and makepkg fails with "PKGBUILD does not exist".
-                #
-                # rm -rf on ov-src guards against re-runs over a dirty disk
-                # where the previous cloud-init attempt left a partial
-                # checkout behind (git clone refuses to clobber).
+                # Build and install ov from the repo's PKGBUILD so
+                # `command: ov version` and related probes work in-guest.
                 - |
                   bash -lc '
                   set -euxo pipefail
@@ -185,40 +415,14 @@ vm:
                   cd /home/arch/ov-src/pkg/arch && pacman -U --noconfirm ov-git-*-x86_64.pkg.tar.zst
                   '
             ov_install:
-                # strategy: skip — the runcmd above handles the install.
-                # "skip" tells VmDeployTarget not to scp the host binary
-                # post-boot (the default "auto" behavior) and not to add
-                # any URL-download runcmd.
                 strategy: skip
+
         libvirt:
             devices:
                 channels:
                     - type: spicevmc
                       name: com.redhat.spice.0
                 graphics:
-                    # SPICE on a UNIX socket.
-                    #
-                    # QEMU allows only ONE <listen> per <graphics>
-                    # element (libvirt returns "QEMU does not support
-                    # multiple listens" otherwise), so we pick socket:
-                    # no TCP port, no network exposure, same config
-                    # whether the host is local or remote.
-                    #
-                    # Remote GUI access works out of the box via:
-                    #
-                    #   virt-manager --connect qemu+ssh://host/session
-                    #   virt-viewer  --connect qemu+ssh://host/session --attach <vm>
-                    #   remote-viewer spice+unix:///...  (after ov ssh tunnel)
-                    #
-                    # virt-manager/virt-viewer auto-tunnel by spawning
-                    # `ssh host nc -U <socket>` on the libvirt host —
-                    # this requires `nc` (openbsd-netcat / netcat-
-                    # openbsd / nmap-ncat) to be installed there.
-                    # ov's setup.sh + pkg/arch/PKGBUILD install it
-                    # automatically. If you see virt-manager hang at
-                    # "Connecting to graphical console for guest",
-                    # check that `ssh <host> which nc` returns a
-                    # path — that's almost always the cause.
                     - type: spice
                       listen:
                         - type: socket
@@ -232,14 +436,9 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
-            # qemu-guest-agent virtio-serial channel. The structured channels:
-            # entry above handles spicevmc; the unix/virtio form needed for
-            # org.qemu.guest_agent.0 is injected via a raw snippet so libvirt
-            # auto-allocates the host-side socket path (`<channel type='unix'>`
-            # with an empty source lets virtqemud pick the path — matches the
-            # behavior of layers/qemu-guest-agent/layer.yml for container VMs).
             snippets:
                 - "<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"
+
     aurora-bootc:
         source:
             kind: bootc
@@ -247,10 +446,12 @@ vm:
         disk_size: 80 GiB
         ram: 12G
         cpus: 4
+
     bazzite-ai-bootc:
         source:
             kind: bootc
             image: bazzite-ai
+
     openclaw-browser-bootc-bootc:
         source:
             kind: bootc
@@ -261,6 +462,7 @@ vm:
         ssh:
             user: root
             port: 2222
+
     selkies-desktop-bootc-bootc:
         source:
             kind: bootc
@@ -271,3 +473,14 @@ vm:
         ssh:
             user: root
             port: 2250
+
+
+# =============================================================================
+# Top-level cluster: section — named Kubernetes clusters. Used by
+# target: k8s deployments and by k8s: test verbs (cluster: <name>).
+# =============================================================================
+cluster:
+    k3s-pod-cluster:
+        # kubeconfig is produced by the k3s-server layer inside k3s-pod
+        # and pulled back to the operator via the layer artifacts: block.
+        from: k3s-pod

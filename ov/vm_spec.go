@@ -39,42 +39,16 @@ type VmSpec struct {
 	// --- Fully-generic libvirt / qemu configuration ---
 
 	Libvirt *LibvirtDomain `yaml:"libvirt,omitempty"`
-
-	// --- Disposable / lifecycle classification (see /ov-dev:disposable) ---
-
-	// Disposable, when true, authorizes `ov rebuild <name>` to
-	// destroy + rebuild + restart this VM unattended. Default is
-	// false (conservative; explicit opt-in). There is NO derivation
-	// from Lifecycle — a VM with `lifecycle: dev` but no
-	// `disposable: true` is still NOT disposable. See
-	// ov/classification.go and CLAUDE.md R10.
-	Disposable bool `yaml:"disposable,omitempty"`
-
-	// Lifecycle is a free-form human-facing tag for the deploy's
-	// tier (scratch | dev | test | qa | staging | prod | custom).
-	// Informational only — has ZERO effect on behavior. Consumed
-	// only by `ov vm list --lifecycle <tier>` filters and by
-	// metadata emission in libvirt domain XML.
-	Lifecycle string `yaml:"lifecycle,omitempty"`
 }
 
-// IsDisposable returns the literal Disposable field. Implements the
-// Classified interface.
-func (s *VmSpec) IsDisposable() bool {
-	if s == nil {
-		return false
-	}
-	return IsDisposableFields(s.Disposable, s.Lifecycle)
-}
-
-// LifecycleTag returns the literal Lifecycle field. Implements the
-// Classified interface.
-func (s *VmSpec) LifecycleTag() string {
-	if s == nil {
-		return ""
-	}
-	return s.Lifecycle
-}
+// Note: per /ov-dev:disposable, disposability is a DEPLOY property and
+// lives exclusively on DeploymentNode. The former `VmSpec.Disposable`
+// / `VmSpec.Lifecycle` fields were removed in the schema-v3 cutover —
+// the `ov rebuild <vm-name>` authorization reads from the
+// DeploymentNode(s) that reference this VM via `vm_source:` (see
+// rebuild.go:vmDisposableFromDeployments). `ov migrate deploy-v3`
+// moves any residual flags on a user's on-disk configs to the
+// matching deployment entries.
 
 // VmSource is the discriminated-union source for a VM disk image.
 // Kind selects the active branch — "cloud_image" uses URL/Checksum/Cache;

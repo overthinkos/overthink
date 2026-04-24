@@ -13,7 +13,9 @@ layer:
 
   tasks:
     - cmd: |
-        go install github.com/steipete/gogcli/cmd/gog@latest
+        # Pinned to v0.4.2 — go 1.25 compat (v0.13.0 requires go 1.26.2,
+        # which the current builder toolchain doesn't carry).
+        go install github.com/steipete/gogcli/cmd/gog@v0.4.2
         go clean -cache
       user: "${USER}"
 

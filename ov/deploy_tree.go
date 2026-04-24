@@ -136,24 +136,22 @@ func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (Deplo
 	}
 	switch node.Target {
 	case "host", "":
-		// When Target is empty and we're at the root, fall back to
-		// "container" as today's default. But if the node has children
-		// AND no explicit target, treat it as a host-like pass-through
-		// (children use parentExec or localhost).
+		// When Target is empty, fall back to "pod" (default for
+		// named deploys). Host with children → pass-through (children
+		// use parentExec or localhost).
 		if node.Target == "host" {
 			if parentExec != nil {
 				return parentExec, nil
 			}
 			return LocalDeployExecutor{}, nil
 		}
-		// Empty target → container (see classifyTarget).
 		return containerChildExecutor(node, parentExec)
-	case "container":
+	case "pod", "container":
 		return containerChildExecutor(node, parentExec)
 	case "vm":
 		return vmChildExecutor(node, parentExec)
-	case "kubernetes":
-		return nil, fmt.Errorf("target=kubernetes cannot have children (K8s manifests are leaf artifacts)")
+	case "k8s", "kubernetes":
+		return nil, fmt.Errorf("target=k8s cannot have children (manifests are leaf artifacts)")
 	default:
 		return nil, fmt.Errorf("unknown target %q", node.Target)
 	}
@@ -257,13 +255,19 @@ func sshParamsForVm(node *DeploymentNode) (*SSHExecutor, error) {
 }
 
 // classifyTarget normalizes the Target field for dispatch. Empty
-// Target falls back to "container" (preserving the pre-v2 implicit
-// default for named container deploys). The legacy name-prefix
-// heuristic (`host` literal, `vm:` prefix) is removed — Target is
-// now the canonical source of truth.
+// Target falls back to "pod" (default for named deploys). Legacy
+// "container"/"kubernetes" spellings normalize to pod/k8s so
+// downstream code speaks the schema-v3 vocabulary exclusively.
+// Target is the canonical source of truth (no name-prefix heuristic).
 func classifyTarget(node *DeploymentNode) string {
 	if node == nil || node.Target == "" {
-		return "container"
+		return "pod"
+	}
+	switch node.Target {
+	case "container":
+		return "pod"
+	case "kubernetes":
+		return "k8s"
 	}
 	return node.Target
 }

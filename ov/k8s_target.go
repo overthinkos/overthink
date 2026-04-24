@@ -36,7 +36,7 @@ type K8sDeployTarget struct {
 }
 
 // Name satisfies the DeployTarget interface.
-func (k *K8sDeployTarget) Name() string { return "kubernetes" }
+func (k *K8sDeployTarget) Name() string { return "k8s" }
 
 // Emit is a no-op for the K8s target — manifest generation is driven
 // directly from (capabilities, deployment, cluster profile) via

@@ -1,95 +1,16 @@
 package main
 
 import (
-	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
 )
 
-// TestIsDisposableFields — the one-liner invariant. lifecycle never
-// influences the result. This test is the wall against anyone later
-// "helpfully" adding a derivation shortcut.
-func TestIsDisposableFields(t *testing.T) {
-	cases := []struct {
-		name       string
-		disposable bool
-		lifecycle  string
-		want       bool
-	}{
-		{"default zero", false, "", false},
-		{"explicit true, no lifecycle", true, "", true},
-		{"explicit true with prod lifecycle", true, "prod", true},
-		{"explicit false, dev lifecycle — NOT disposable", false, "dev", false},
-		{"explicit false, scratch lifecycle — NOT disposable", false, "scratch", false},
-		{"explicit false, test lifecycle — NOT disposable", false, "test", false},
-		{"explicit false, custom tag — NOT disposable", false, "demo", false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := IsDisposableFields(tc.disposable, tc.lifecycle)
-			if got != tc.want {
-				t.Errorf("IsDisposableFields(%v, %q) = %v, want %v",
-					tc.disposable, tc.lifecycle, got, tc.want)
-			}
-		})
-	}
-}
-
-// TestVmSpecRoundTrip — verify the fields round-trip through
-// yaml.v3, and that the IsDisposable / LifecycleTag methods read
-// the literal values.
-func TestVmSpec_DisposableRoundTrip(t *testing.T) {
-	yamlStr := `
-source:
-  kind: cloud_image
-disposable: true
-lifecycle: dev
-`
-	var s VmSpec
-	if err := yaml.Unmarshal([]byte(yamlStr), &s); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if !s.IsDisposable() {
-		t.Error("VmSpec.IsDisposable() = false; want true (explicit)")
-	}
-	if got := s.LifecycleTag(); got != "dev" {
-		t.Errorf("VmSpec.LifecycleTag() = %q; want %q", got, "dev")
-	}
-
-	// Re-marshal and confirm both fields survive.
-	out, err := yaml.Marshal(&s)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	outStr := string(out)
-	for _, need := range []string{"disposable: true", "lifecycle: dev"} {
-		if !strings.Contains(outStr, need) {
-			t.Errorf("round-trip dropped %q; output:\n%s", need, out)
-		}
-	}
-}
-
-// TestVmSpec_LifecycleAloneDoesNotAuthorize — the critical
-// anti-derivation regression test. `lifecycle: dev` alone must
-// leave IsDisposable() false. This is the test that breaks if
-// someone reintroduces derivation.
-func TestVmSpec_LifecycleAloneDoesNotAuthorize(t *testing.T) {
-	yamlStr := `
-source:
-  kind: cloud_image
-lifecycle: dev
-`
-	var s VmSpec
-	if err := yaml.Unmarshal([]byte(yamlStr), &s); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if s.IsDisposable() {
-		t.Fatal("VmSpec{Lifecycle: dev}.IsDisposable() = true; want false. " +
-			"Lifecycle must NEVER authorize disposability on its own. " +
-			"If this test fails, someone reintroduced derivation logic — revert that.")
-	}
-}
+// Note: schema-v3 removed VmSpec.Disposable / VmSpec.Lifecycle and
+// the IsDisposableFields helper — disposability is now a DEPLOY
+// property only (see /ov-dev:disposable). The former
+// TestVmSpec_DisposableRoundTrip / TestVmSpec_LifecycleAloneDoesNotAuthorize
+// tests moved to the DeploymentNode-level equivalents below.
 
 // TestDeployImageConfig_DisposableRoundTrip — same invariants for
 // the container-deploy side.

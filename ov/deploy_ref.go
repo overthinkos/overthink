@@ -209,13 +209,16 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
 }
 
-// resolveLocalName checks image.yml then layers/ for a matching name.
-// Ambiguity is a hard error per the plan's disambiguation rule.
+// resolveLocalName checks image.yml, images.yml (unified), then layers/
+// for a matching name. Ambiguity is a hard error per the plan's
+// disambiguation rule.
 func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 	imgYml := filepath.Join(projectDir, "image.yml")
+	imagesYml := filepath.Join(projectDir, "images.yml")
 	layersDir := filepath.Join(projectDir, "layers", name)
 
 	inImageYml := false
+	resolvedImgPath := imgYml
 	if data, err := os.ReadFile(imgYml); err == nil {
 		var top struct {
 			Images map[string]interface{} `yaml:"images"`
@@ -223,6 +226,23 @@ func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 		if err := yaml.Unmarshal(data, &top); err == nil {
 			if _, ok := top.Images[name]; ok {
 				inImageYml = true
+			}
+		}
+	}
+	// Schema-v3: also check the unified images.yml map — this is the
+	// actual source of truth when the project uses overthink.yml includes
+	// (images.yml holds all image definitions; image.yml is only for the
+	// single-image-per-dir legacy layout).
+	if !inImageYml {
+		if data, err := os.ReadFile(imagesYml); err == nil {
+			var top struct {
+				Images map[string]interface{} `yaml:"images"`
+			}
+			if err := yaml.Unmarshal(data, &top); err == nil {
+				if _, ok := top.Images[name]; ok {
+					inImageYml = true
+					resolvedImgPath = imagesYml
+				}
 			}
 		}
 	}
@@ -242,7 +262,7 @@ func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 			Kind:   RefKindImage,
 			Source: RefSourceLocalName,
 			Name:   name,
-			Path:   imgYml,
+			Path:   resolvedImgPath,
 		}, nil
 	case inLayers:
 		return &DeployRef{
@@ -254,6 +274,6 @@ func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or layer in %s",
-		name, imgYml, layersDir)
+	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or %s or layer in %s",
+		name, imgYml, imagesYml, layersDir)
 }

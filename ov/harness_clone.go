@@ -14,7 +14,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -27,27 +26,24 @@ import (
 
 // RunLayout is the canonical set of paths for one harness run.
 //
-// Workspace / worktree separation:
-//   - ProjectDir is the WORKSPACE — the project tree. Read-only source
-//     for the clone. The harness never writes back into the workspace.
-//   - HarnessRoot is the harness DATA dir for this recipe. Lives under
-//     the user's data dir (XDG_DATA_HOME or ~/.local/share by default),
-//     OUTSIDE the project tree. All durable + transient harness state
-//     for the recipe lives here.
+// All harness state lives under <ProjectDir>/.harness/<recipe>/. The
+// directory is broadly gitignored (same pattern as .claude/memory/,
+// .claude/plans/) but stays IN the project tree so Syncthing-style
+// replication carries result files + NOTES.md memory across machines.
+// Result files are durable per-run records; runs/ are bulky transient
+// build artifacts the user can prune by hand.
 //
 // Same RunLayout shape applies to host / pod / vm targets — the only
-// difference is which executor walks the tree (LocalExecutor for host;
-// the in-target run-local for pod/vm). For pod/vm the in-target
-// run-local writes to its own $HOME-resolved HarnessRoot; the host's
-// dispatcher mirrors the durable directories (results/, note/) back
-// to the host's HarnessRoot at end of run.
+// difference is which executor walks the tree. For pod targets the
+// in-pod run-local writes under /workspace/.harness/ (the bind-mounted
+// project), so the host's mirrored copy is automatic.
 type RunLayout struct {
-	ProjectDir  string // WORKSPACE — read-only source of clone
+	ProjectDir  string // project tree (workspace)
 	Recipe      string // recipe name
 	RunID       string // "<UTC-timestamp>-<shorthash>"
-	HarnessRoot string // <data-dir>/ov/harness/<project-fp>/<recipe>
+	HarnessRoot string // <ProjectDir>/.harness/<recipe>
 	RunDir      string // <HarnessRoot>/runs/<run-id>
-	RepoDir     string // <HarnessRoot>/runs/<run-id>/repo (worktree)
+	RepoDir     string // <HarnessRoot>/runs/<run-id>/repo (per-run clone)
 	Branch      string // "ovharness/<run-id>"
 }
 
@@ -75,38 +71,14 @@ func NewRunLayout(projectDir, recipe, runID string) RunLayout {
 // HarnessDataRoot returns the absolute path to the harness data
 // directory for this (project, recipe) pair. Convention:
 //
-//	$XDG_DATA_HOME (default ~/.local/share) /ov/harness/<project-fp>/<recipe>
+//	<projectDir>/.harness/<recipe>
 //
-// Project fingerprint = base name of the project's absolute path +
-// "-" + the first 8 hex chars of sha256(absPath). The base-name
-// prefix keeps the directory listing human-scannable; the hash
-// suffix disambiguates two projects with the same base name but
-// different absolute paths (e.g. `~/work/foo` and `~/personal/foo`).
-//
-// The OV_HARNESS_DATA_ROOT env var, if non-empty, fully overrides
-// the path — useful for tests, CI sandboxes, and the in-pod / in-vm
-// run-local invocations where the host already resolved the path
-// and just wants the in-target run to honor it.
+// In-project location is deliberate — Syncthing-style file syncs
+// replicate the durable result files + NOTES.md memory across the
+// user's machines without an extra ~/.local/share replication path.
+// .harness/ is broadly gitignored (matches .claude/memory/ pattern).
 func HarnessDataRoot(projectDir, recipe string) string {
-	if override := os.Getenv("OV_HARNESS_DATA_ROOT"); override != "" {
-		return filepath.Join(override, recipe)
-	}
-	abs, _ := filepath.Abs(projectDir)
-	if abs == "" {
-		abs = projectDir
-	}
-	base := filepath.Base(abs)
-	sum := sha256.Sum256([]byte(abs))
-	fp := base + "-" + hex.EncodeToString(sum[:4])
-	home := os.Getenv("XDG_DATA_HOME")
-	if home == "" {
-		userHome, _ := os.UserHomeDir()
-		if userHome == "" {
-			userHome = "/tmp"
-		}
-		home = filepath.Join(userHome, ".local", "share")
-	}
-	return filepath.Join(home, "ov", "harness", fp, recipe)
+	return filepath.Join(projectDir, ".harness", recipe)
 }
 
 // GenerateRunID returns a fresh UTC-timestamp-prefixed identifier.
@@ -256,20 +228,17 @@ type RunSummary struct {
 	BranchExists bool
 }
 
-// ListRuns walks the harness data root for projectDir and returns one
-// RunSummary per run dir, across all recipes. Sorted newest first.
+// ListRuns walks <projectDir>/.harness/*/runs/ across all recipes
+// and returns one RunSummary per run dir. Sorted newest first.
 func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
-	// Project's harness root is <data-dir>/ov/harness/<project-fp>/.
-	// Each subdir is one recipe; each recipe has runs/, results/, note/.
-	projectRoot := filepath.Dir(HarnessDataRoot(projectDir, "_"))
-	recipes, err := os.ReadDir(projectRoot)
+	base := filepath.Join(projectDir, ".harness")
+	recipes, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read %s: %w", projectRoot, err)
+		return nil, fmt.Errorf("read %s: %w", base, err)
 	}
-	base := projectRoot
 	var out []RunSummary
 	for _, rEntry := range recipes {
 		if !rEntry.IsDir() {

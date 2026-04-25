@@ -40,9 +40,10 @@ type HarnessRunLocalCmd struct {
 	ProjectDir   string `name:"project-dir" hidden:"" help:"Override project root (default: cwd or /workspace)"`
 }
 
-// HarnessLockBase is the per-target lock file directory under the project root.
+// HarnessLockPath returns the absolute path of the per-recipe flock
+// file under the harness data root (outside the project tree).
 func HarnessLockPath(projectDir, recipe string) string {
-	return filepath.Join(projectDir, ".harness", recipe, ".lock")
+	return filepath.Join(HarnessDataRoot(projectDir, recipe), ".lock")
 }
 
 func (c *HarnessRunLocalCmd) Run() error {
@@ -192,13 +193,13 @@ func (c *HarnessRunLocalCmd) Run() error {
 	return nil
 }
 
-// acquireHarnessLock takes an exclusive flock on .harness/<recipe>/.lock.
+// acquireHarnessLock takes an exclusive flock on the per-recipe
+// lock file under the harness data root.
 func acquireHarnessLock(projectDir, recipe string) (func(), error) {
-	dir := filepath.Join(projectDir, ".harness", recipe)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", dir, err)
-	}
 	path := HarnessLockPath(projectDir, recipe)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("create %s: %w", filepath.Dir(path), err)
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open lock %s: %w", path, err)

@@ -10,8 +10,12 @@ import (
 
 func TestResolveDeployRefLocalImage(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "image.yml"), []byte(`
-images:
+	// Schema v4: ResolveDeployRef calls LoadUnified which reads
+	// overthink.yml as the entry point. Fixture must use the unified
+	// shape with version: 4 and the singular image: kind map.
+	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(`
+version: 4
+image:
   myimg:
     base: fedora
 `), 0644); err != nil {
@@ -38,9 +42,9 @@ rpm:
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
-	// Also create image.yml so the local-name resolver has something to
-	// search — but we don't add "ripgrep" to it, so it's layer-only.
-	_ = os.WriteFile(filepath.Join(dir, "image.yml"), []byte(`images: {}`), 0644)
+	// Also create overthink.yml so the local-name resolver has something
+	// to search — but we don't add "ripgrep" to it, so it's layer-only.
+	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 4\nimage: {}\n"), 0644)
 
 	got, err := ResolveDeployRef("ripgrep", dir)
 	if err != nil {
@@ -56,9 +60,10 @@ rpm:
 
 func TestResolveDeployRefAmbiguousName(t *testing.T) {
 	dir := t.TempDir()
-	// Put the same name in both image.yml and layers/ — expect an error.
-	if err := os.WriteFile(filepath.Join(dir, "image.yml"), []byte(`
-images:
+	// Put the same name in both overthink.yml and layers/ — expect an error.
+	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(`
+version: 4
+image:
   dup:
     base: fedora
 `), 0644); err != nil {
@@ -81,7 +86,7 @@ rpm:
 
 func TestResolveDeployRefUnknownName(t *testing.T) {
 	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "image.yml"), []byte(`images: {}`), 0644)
+	_ = os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte("version: 4\nimage: {}\n"), 0644)
 	_, err := ResolveDeployRef("nope", dir)
 	if err == nil {
 		t.Fatalf("expected not-found error, got nil")

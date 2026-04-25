@@ -3,12 +3,12 @@ package main
 // harness_substitute.go — ${TOKEN} substitution for the harness.
 //
 // Substitution precedence (definitive):
-//   well-known tokens (PROMPT, ITERATION, MAX_ITERATION, ...) →
-//   recipe.env[KEY] → ai.env[KEY] → os.Getenv(KEY) → ""
+//   well-known tokens (PROMPT, ITERATION, SCORE_DELTA, ...) →
+//   score.env[KEY] → ai.env[KEY] → os.Getenv(KEY) → ""
 //
 // "Well-known" is a fixed set in lookupHarnessToken below; everything
 // else falls through the env chain. The fallback maps are walked in
-// order, so a recipe.env entry overrides an ai.env entry overrides
+// order, so a score.env entry overrides an ai.env entry overrides
 // os.Getenv. Substitution is single-pass (no recursive expansion).
 
 import (
@@ -20,13 +20,13 @@ import (
 // SubstContext carries every variable Substitute can expand.
 //
 // Wire order matters: callers populate fields they know about, leave
-// the rest zero. Unknown ${X} tokens fall through the EnvChain (recipe
+// the rest zero. Unknown ${X} tokens fall through the EnvChain (score
 // then ai then os.Getenv).
 type SubstContext struct {
 	// Run identity
-	RunID      string
-	RecipeName string
-	AIName     string
+	RunID     string
+	ScoreName string
+	AIName    string
 
 	// Workspace + target
 	WorkspacePath string
@@ -36,10 +36,11 @@ type SubstContext struct {
 
 	// Iteration loop state
 	Iteration        int
-	MaxIteration     int
 	PlateauIteration int
 	PlateauCounter   int
 	BestScore        int
+	ScoreDelta       int
+	AttemptsLeft     int
 
 	// Prompt + filter
 	Prompt     string // rendered prompt text (for ${PROMPT})
@@ -52,8 +53,11 @@ type SubstContext struct {
 	// Persistent NOTES.md content (drives ${NOTES})
 	Notes string
 
-	// Recipe-defined scenarios rendered as YAML (drives ${SCENARIOS})
+	// Score-merged scenarios rendered as YAML (drives ${SCENARIOS})
 	Scenarios string
+
+	// Per-recipe-grouped block (drives ${RECIPES})
+	Recipes string
 
 	// Deployment name the harness scores against (drives ${DEPLOYMENT})
 	Deployment string
@@ -63,13 +67,12 @@ type SubstContext struct {
 	Timeout  string // per-AI resolved timeout string
 
 	// EnvChain is walked in order for any token not in the well-known
-	// set. Typical order: recipe.env, ai.env, os env (the os env is
+	// set. Typical order: score.env, ai.env, os env (the os env is
 	// implicit — Substitute calls os.Getenv after the chain is empty).
 	EnvChain []map[string]string
 }
 
-// AppendEnv appends a single env map to the chain. Convenience for the
-// loop's prompt-render step.
+// AppendEnv appends a single env map to the chain.
 func (c *SubstContext) AppendEnv(m map[string]string) {
 	if len(m) == 0 {
 		return
@@ -77,9 +80,7 @@ func (c *SubstContext) AppendEnv(m map[string]string) {
 	c.EnvChain = append(c.EnvChain, m)
 }
 
-// harnessTokenRe matches ${IDENT} where IDENT follows shell convention
-// (leading uppercase letter or underscore, then uppercase / digit /
-// underscore).
+// harnessTokenRe matches ${IDENT} where IDENT follows shell convention.
 var harnessTokenRe = regexp.MustCompile(`\$\{([A-Z_][A-Z0-9_]*)\}`)
 
 // Substitute replaces every ${TOKEN} in `in` using ctx.
@@ -94,7 +95,6 @@ func Substitute(in string, ctx *SubstContext) string {
 }
 
 // SubstituteArgv applies Substitute to every element of argv.
-// Returns a new slice; argv is not mutated.
 func SubstituteArgv(argv []string, ctx *SubstContext) []string {
 	out := make([]string, len(argv))
 	for i, a := range argv {
@@ -104,7 +104,6 @@ func SubstituteArgv(argv []string, ctx *SubstContext) []string {
 }
 
 // SubstituteEnv applies Substitute to every value in env.
-// Returns a new map; env is not mutated. Keys are not substituted.
 func SubstituteEnv(env map[string]string, ctx *SubstContext) map[string]string {
 	if env == nil {
 		return nil
@@ -122,7 +121,9 @@ func SubstituteEnv(env map[string]string, ctx *SubstContext) map[string]string {
 //  3. os.Getenv
 //  4. ""
 func lookupHarnessToken(name string, ctx *SubstContext) string {
-	// Well-known tokens first — fixed, deterministic.
+	// Well-known tokens — fixed, deterministic. Post the 2026-04 kind
+	// split: ${RECIPE_NAME} and ${MAX_ITERATION} are removed; new
+	// ${SCORE_NAME}, ${SCORE_DELTA}, ${ATTEMPTS_LEFT}, ${RECIPES} added.
 	switch name {
 	case "PROMPT":
 		return ctx.Prompt
@@ -138,26 +139,30 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 		return ctx.TargetName
 	case "RUN_ID":
 		return ctx.RunID
-	case "RECIPE_NAME":
-		return ctx.RecipeName
+	case "SCORE_NAME":
+		return ctx.ScoreName
 	case "AI_NAME":
 		return ctx.AIName
 	case "ITERATION":
 		return intTok(ctx.Iteration)
-	case "MAX_ITERATION":
-		return intTok(ctx.MaxIteration)
 	case "PLATEAU_ITERATION":
 		return intTok(ctx.PlateauIteration)
 	case "PLATEAU_COUNTER":
 		return intTok(ctx.PlateauCounter)
 	case "BEST_SCORE":
 		return intTok(ctx.BestScore)
+	case "SCORE_DELTA":
+		return intTok(ctx.ScoreDelta)
+	case "ATTEMPTS_LEFT":
+		return intTok(ctx.AttemptsLeft)
 	case "MCP_ENDPOINT":
 		return ctx.MCPEndpoint
 	case "NOTES":
 		return ctx.Notes
 	case "SCENARIOS":
 		return ctx.Scenarios
+	case "RECIPES":
+		return ctx.Recipes
 	case "DEPLOYMENT":
 		return ctx.Deployment
 	case "TAG":
@@ -168,8 +173,7 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 		return ctx.Timeout
 	}
 
-	// Env chain — first non-zero wins. (Empty string in a map means
-	// "intentionally blank, don't fall through" — we still return it.)
+	// Env chain — first non-zero wins.
 	for _, m := range ctx.EnvChain {
 		if v, ok := m[name]; ok {
 			return v

@@ -69,10 +69,13 @@ type UnifiedFile struct {
 	K8s  map[string]*K8sSpec  `yaml:"k8s,omitempty"`
 	Host map[string]*HostSpec `yaml:"host,omitempty"`
 
-	// AI catalog and harness recipes (kind:ai + kind:recipe). See
-	// ai_config.go, harness_recipe.go, /ov:harness.
+	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
+	// and harness scores (kind:score = runner config that references
+	// recipes). See ai_config.go, harness_recipe.go, harness_score_kind.go,
+	// /ov:harness.
 	AI     map[string]*AIConfig      `yaml:"ai,omitempty"`
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
+	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -183,6 +186,7 @@ type kindKeyedDoc struct {
 	// 2026-04 harness cutover.
 	AI     *AIDoc     `yaml:"ai,omitempty"`
 	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
+	Score  *ScoreDoc  `yaml:"score,omitempty"`
 }
 
 // AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
@@ -198,6 +202,13 @@ type AIDoc struct {
 type RecipeDoc struct {
 	Name          string `yaml:"name"`
 	HarnessRecipe `yaml:",inline"`
+}
+
+// ScoreDoc wraps a single HarnessScore with an explicit Name —
+// the kind:score standalone form.
+type ScoreDoc struct {
+	Name         string `yaml:"name"`
+	HarnessScore `yaml:",inline"`
 }
 
 // PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
@@ -307,11 +318,12 @@ var entityKinds = []entityKind{
 	{Key: "vm", Filename: "vm.yml"},
 	{Key: "k8s", Filename: "k8s.yml"},
 	{Key: "host", Filename: "host.yml"},
-	// 2026-04 harness cutover: `ai:` and `recipe:` kinds carry the
-	// reusable AI-CLI catalog and named harness recipes respectively.
-	// Convention file: harness.yml (carries both kinds together).
+	// 2026-04 harness cutover: `ai:`, `recipe:` (pure spec) and
+	// `score:` (runner config referencing recipes) kinds. Convention
+	// file: harness.yml (carries all three kinds together).
 	{Key: "ai", Filename: "ai.yml"},
 	{Key: "recipe", Filename: "recipe.yml"},
+	{Key: "score", Filename: "score.yml"},
 }
 
 // -----------------------------------------------------------------------------
@@ -345,6 +357,9 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		)
 	}
 	if err := validateDeploymentTree(merged.Deployments); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
+	if err := validateHarnessSemantics(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	return merged, true, nil
@@ -460,6 +475,9 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		if err != nil {
 			return fmt.Errorf("%s:doc%d: %w", abs, docIdx, err)
 		}
+		if err := validateHarnessYAMLNode(&node, fmt.Sprintf("%s:doc%d", abs, docIdx)); err != nil {
+			return err
+		}
 		switch shape {
 		case docShapeRoot:
 			var uf UnifiedFile
@@ -556,7 +574,7 @@ var rootShapeKeys = map[string]bool{
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how image/pod/vm work.
-	"ai": true, "recipe": true,
+	"ai": true, "recipe": true, "score": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.
@@ -652,6 +670,196 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 }
 
 // -----------------------------------------------------------------------------
+// Harness kind-split validation (post-classify, pre-decode).
+// -----------------------------------------------------------------------------
+
+// validateHarnessYAMLNode rejects, with hard errors pointing at
+// `ov migrate harness`, two legacy shapes that the slim post-cutover
+// HarnessRecipe / HarnessScore struct decoders would otherwise silently
+// drop:
+//
+//   1. **Fat-recipe shape**: a `recipe:` entry whose body carries any
+//      key other than {description, scenario}. Pre-cutover recipes
+//      mixed runner config (host, ai, plateau_iteration, prompt, …)
+//      with spec; post-cutover those move to `score:`.
+//
+//   2. **Residual `max_iteration:`** anywhere on `recipe:` or `score:`
+//      bodies. The post-cutover loop bound is plateau-only.
+//
+// Walks both the root-shape (recipe: { name: { ... }, name2: { ... } })
+// and the kind-keyed standalone form (top-level `recipe: { name: X,
+// description: ..., scenario: ... }`). Empty or absent keys are no-ops.
+func validateHarnessYAMLNode(node *yaml.Node, source string) error {
+	inner := node
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		inner = node.Content[0]
+	}
+	if inner == nil || inner.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(inner.Content); i += 2 {
+		k := inner.Content[i]
+		v := inner.Content[i+1]
+		if k.Kind != yaml.ScalarNode {
+			continue
+		}
+		switch k.Value {
+		case "recipe":
+			if err := validateRecipeNode(v, source); err != nil {
+				return err
+			}
+		case "score":
+			if err := validateScoreNode(v, source); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// validateRecipeNode walks either:
+//   - root-shape: a mapping of name -> body (each body validated)
+//   - kind-keyed: a mapping with `name:` + body fields at the same level
+func validateRecipeNode(v *yaml.Node, source string) error {
+	if v == nil || v.Kind != yaml.MappingNode {
+		return nil
+	}
+	if mapHasKey(v, "name") {
+		// Kind-keyed standalone form: this node IS the body (with
+		// an extra `name:` key alongside description/scenario).
+		name := ""
+		for i := 0; i+1 < len(v.Content); i += 2 {
+			if v.Content[i].Value == "name" {
+				name = v.Content[i+1].Value
+				break
+			}
+		}
+		return validateRecipeBody(v, name, source, true)
+	}
+	// Root-shape map: name -> body
+	for i := 0; i+1 < len(v.Content); i += 2 {
+		nameNode := v.Content[i]
+		body := v.Content[i+1]
+		if err := validateRecipeBody(body, nameNode.Value, source, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRecipeBody enforces the slim recipe shape and rejects
+// max_iteration. allowName=true permits a `name:` key (kind-keyed form).
+func validateRecipeBody(body *yaml.Node, name, source string, allowName bool) error {
+	if body == nil || body.Kind != yaml.MappingNode {
+		return nil
+	}
+	allowed := map[string]bool{"description": true, "scenario": true}
+	if allowName {
+		allowed["name"] = true
+	}
+	for i := 0; i+1 < len(body.Content); i += 2 {
+		k := body.Content[i].Value
+		if k == "max_iteration" {
+			return fmt.Errorf(
+				"%s: recipe %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Run: ov migrate harness",
+				source, name,
+			)
+		}
+		if !allowed[k] {
+			return fmt.Errorf(
+				"%s: recipe %q carries forbidden runner field %q. Recipes are pure spec (description + scenario only); runner fields (host/pod/vm, ai, plateau_iteration, prompt, deployment, target_image, mcp_endpoint, env, notes, recipes) live on a `kind: score` entry. Run: ov migrate harness",
+				source, name, k,
+			)
+		}
+	}
+	return nil
+}
+
+// validateScoreNode walks either:
+//   - root-shape: a mapping of name -> body
+//   - kind-keyed: a mapping with `name:` + body at the same level
+//
+// Rejects residual `max_iteration:` and a few obvious mis-spellings.
+func validateScoreNode(v *yaml.Node, source string) error {
+	if v == nil || v.Kind != yaml.MappingNode {
+		return nil
+	}
+	if mapHasKey(v, "name") {
+		name := ""
+		for i := 0; i+1 < len(v.Content); i += 2 {
+			if v.Content[i].Value == "name" {
+				name = v.Content[i+1].Value
+				break
+			}
+		}
+		return validateScoreBody(v, name, source)
+	}
+	for i := 0; i+1 < len(v.Content); i += 2 {
+		nameNode := v.Content[i]
+		body := v.Content[i+1]
+		if err := validateScoreBody(body, nameNode.Value, source); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateScoreBody rejects max_iteration on a score body. Other fields
+// are decoded permissively (HarnessScore decode will catch unknown).
+func validateScoreBody(body *yaml.Node, name, source string) error {
+	if body == nil || body.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(body.Content); i += 2 {
+		k := body.Content[i].Value
+		if k == "max_iteration" {
+			return fmt.Errorf(
+				"%s: score %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Run: ov migrate harness",
+				source, name,
+			)
+		}
+	}
+	return nil
+}
+
+// validateHarnessSemantics runs cross-reference validation on the merged
+// UnifiedFile after every include has been folded in. Catches:
+//   - score.recipes must be non-empty
+//   - score.recipes entries must not duplicate
+//   - score.recipes entries must resolve to defined recipes
+//   - score target xor (exactly one of pod/vm/host)
+//   - host: true requires disposable: true on the score
+func validateHarnessSemantics(u *UnifiedFile) error {
+	for name, score := range u.Score {
+		if score == nil {
+			continue
+		}
+		if len(score.Recipes) == 0 {
+			return fmt.Errorf("score %q: recipes: must reference at least one recipe (got empty list)", name)
+		}
+		seen := make(map[string]bool, len(score.Recipes))
+		for _, r := range score.Recipes {
+			if seen[r] {
+				return fmt.Errorf("score %q: recipes: duplicate recipe name %q", name, r)
+			}
+			seen[r] = true
+			if _, ok := u.Recipe[r]; !ok {
+				avail := SortedRecipeNames(u.Recipe)
+				return fmt.Errorf("score %q: recipes: %q does not resolve to a defined recipe (available: %s)",
+					name, r, strings.Join(avail, ", "))
+			}
+		}
+		if _, _, err := ResolveScoreTarget(score); err != nil {
+			return fmt.Errorf("score %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// -----------------------------------------------------------------------------
 // Merge helpers.
 // -----------------------------------------------------------------------------
 
@@ -742,6 +950,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeHostMap(&dst.Host, src.Host)
 	mergeAIMap(&dst.AI, src.AI)
 	mergeRecipeMap(&dst.Recipe, src.Recipe)
+	mergeScoreMap(&dst.Score, src.Score)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -785,6 +994,21 @@ func mergeRecipeMap(dst *map[string]*HarnessRecipe, src map[string]*HarnessRecip
 	}
 	if *dst == nil {
 		*dst = make(map[string]*HarnessRecipe)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// mergeScoreMap merges harness-score entries (kind:score). Root-wins.
+func mergeScoreMap(dst *map[string]*HarnessScore, src map[string]*HarnessScore) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*HarnessScore)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1025,6 +1249,9 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Recipe != nil {
 		count++
 	}
+	if kd.Score != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
 	}
@@ -1163,6 +1390,17 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Recipe[kd.Recipe.Name]; !exists {
 			spec := kd.Recipe.HarnessRecipe
 			merged.Recipe[kd.Recipe.Name] = &spec
+		}
+	case kd.Score != nil:
+		if kd.Score.Name == "" {
+			return fmt.Errorf("score: missing name")
+		}
+		if merged.Score == nil {
+			merged.Score = map[string]*HarnessScore{}
+		}
+		if _, exists := merged.Score[kd.Score.Name]; !exists {
+			spec := kd.Score.HarnessScore
+			merged.Score[kd.Score.Name] = &spec
 		}
 	}
 	_ = srcDir

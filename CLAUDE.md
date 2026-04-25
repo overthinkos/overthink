@@ -56,7 +56,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | "What does layer X do?" | `/ov-layers:<name>` |
 | "What's in image X?" | `/ov-images:<name>` |
 | Skill authoring / skill maintenance | `/ov-dev:skills` |
-| `ov benchmark *` / `benchmark:` YAML / AI-agent scoring / `ovbench/*` branches | `/ov:benchmark` |
+| `ov harness *` / `harness.yml` `recipe:`/`score:` / AI-agent scoring / `ovharness/*` branches | `/ov:harness` |
 
 Full index: `plugins/README.md` — 250+ skills. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
 
@@ -137,6 +137,8 @@ The verification loop has three rules:
 1. **Always test on a target that carries an explicit `disposable: true`.** Never experiment on a resource without the flag. If no suitable disposable target exists, create one first (`ov deploy add <name> <ref> --disposable` or mark a VM entry under `vm:` in deploy.yml and `ov vm create`). The opt-in is explicit; never assume disposability because of a name, lifecycle tag, hostname, or any other heuristic.
 2. **If a test breaks the target, `ov rebuild` it back to the committed config before doing anything else.** Never layer experiments on broken state.
 3. **After committing the real fix in source, re-verify on a FRESH `ov rebuild` of the disposable target.** A fix that passes only on a hand-patched target is not a real fix — it's a regression waiting for the next rebuild. Pasteable proof of the fresh-rebuild re-verification is the acceptance gate.
+
+**A `--dry-run` does NOT count as an R10 test.** Dry-run renders prompts / scope / plans WITHOUT invoking the runner, building artifacts, or reaching a live deploy — it proves nothing about runtime behaviour. R10 requires a FULL live run of every new or changed code path: real subprocess invocation, real container build, real deploy probes against the running target, real verb evaluation against the live system. Validators, unit tests, and dry-runs are pre-flight checks, NOT the acceptance gate. If the cutover added or changed N pieces of functionality, R10 must exercise all N end-to-end on the disposable target — pasteable runtime output for each.
 
 ### End-of-turn checklist
 

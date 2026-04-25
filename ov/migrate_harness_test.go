@@ -54,13 +54,22 @@ benchmark:
 	if !strings.Contains(bodyStr, "credential:") || strings.Contains(bodyStr, "credentials:") {
 		t.Errorf("credential field should be singular:\n%s", bodyStr)
 	}
-	// Recipe section.
+	// Recipe (spec) section.
 	if !strings.Contains(bodyStr, "recipe:") || !strings.Contains(bodyStr, "default:") {
 		t.Errorf("recipe.default missing:\n%s", bodyStr)
 	}
-	// Token rename in prompt.
-	if !strings.Contains(bodyStr, "${MAX_ITERATION}") || strings.Contains(bodyStr, "${MAX_ITERATIONS}") {
-		t.Errorf("MAX_ITERATIONS should be renamed to MAX_ITERATION:\n%s", bodyStr)
+	// Score (runner) section, with recipes: pointing back at default.
+	if !strings.Contains(bodyStr, "score:") {
+		t.Errorf("score: section missing post-cutover:\n%s", bodyStr)
+	}
+	if !strings.Contains(bodyStr, "recipes: [default]") {
+		t.Errorf("score.default.recipes: [default] missing:\n%s", bodyStr)
+	}
+	// Token rewrites in the prompt body. The 2026-04 kind split removes
+	// ${MAX_ITERATION} (loop is plateau-only) and singularises plateau.
+	// Both legacy plural and the cutover-removed singular MUST be gone.
+	if strings.Contains(bodyStr, "${MAX_ITERATIONS}") || strings.Contains(bodyStr, "${MAX_ITERATION}") {
+		t.Errorf("${MAX_ITERATION(S)} should be stripped post-cutover (loop is plateau-only):\n%s", bodyStr)
 	}
 	if !strings.Contains(bodyStr, "${PLATEAU_ITERATION}") || strings.Contains(bodyStr, "${PLATEAU_ITERATIONS}") {
 		t.Errorf("PLATEAU_ITERATIONS should be renamed:\n%s", bodyStr)

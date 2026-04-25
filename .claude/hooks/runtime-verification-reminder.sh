@@ -184,6 +184,13 @@ EVERY CHANGE THAT CAN AFFECT CONTAINERFILE GENERATION, OCI LABELS, INIT
 SYSTEMS, SERVICE STARTUP, OR DEPLOY CODE MUST BE PROVED ON A FRESH
 REBUILD OF A `disposable: true` TARGET. UNIT TESTS ARE NOT SUFFICIENT.
 A GREEN `go test ./...` PROVES ZERO RUNTIME BEHAVIOUR.
+A `--dry-run` PROVES ZERO RUNTIME BEHAVIOUR EITHER. Dry-run renders
+prompts/scope/plans without invoking the runner, building artifacts, or
+reaching a live deploy. Validators, unit tests, and dry-runs are
+pre-flight only — NEVER the acceptance gate. R10 requires a FULL live
+run that exercises every new or changed piece of functionality
+end-to-end (real subprocess, real container build, real deploy probes,
+real verb evaluation against the live target).
 
 THE VERIFICATION LOOP — NON-NEGOTIABLE:
 

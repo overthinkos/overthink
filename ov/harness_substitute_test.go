@@ -9,36 +9,40 @@ import (
 func TestSubstitute_WellKnownTokens(t *testing.T) {
 	ctx := &SubstContext{
 		RunID:            "run-1",
-		RecipeName:       "bench-claude",
+		ScoreName:        "default",
 		AIName:           "claude",
 		WorkspacePath:    "/workspace/repo",
 		TargetImage:      "fedora-coder",
 		TargetKind:       "pod",
 		TargetName:       "bench-pod",
 		Iteration:        2,
-		MaxIteration:     50,
 		PlateauIteration: 3,
 		PlateauCounter:   1,
 		BestScore:        4,
+		ScoreDelta:       2,
+		AttemptsLeft:     2,
 		MCPEndpoint:      "http://mcp.example/",
 		Notes:            "remember this",
+		Recipes:          "- recipe: tier1\n",
 		Tag:              "@smoke",
 	}
 	cases := map[string]string{
 		"${RUN_ID}":            "run-1",
-		"${RECIPE_NAME}":       "bench-claude",
+		"${SCORE_NAME}":        "default",
 		"${AI_NAME}":           "claude",
 		"${WORKSPACE}":         "/workspace/repo",
 		"${TARGET_IMAGE}":      "fedora-coder",
 		"${TARGET_KIND}":       "pod",
 		"${TARGET_NAME}":       "bench-pod",
 		"${ITERATION}":         "2",
-		"${MAX_ITERATION}":     "50",
 		"${PLATEAU_ITERATION}": "3",
 		"${PLATEAU_COUNTER}":   "1",
 		"${BEST_SCORE}":        "4",
+		"${SCORE_DELTA}":       "2",
+		"${ATTEMPTS_LEFT}":     "2",
 		"${MCP_ENDPOINT}":      "http://mcp.example/",
 		"${NOTES}":             "remember this",
+		"${RECIPES}":           "- recipe: tier1\n",
 		"${TAG}":               "@smoke",
 	}
 	for in, want := range cases {
@@ -48,40 +52,52 @@ func TestSubstitute_WellKnownTokens(t *testing.T) {
 	}
 }
 
+func TestSubstitute_RemovedTokens(t *testing.T) {
+	// ${RECIPE_NAME} and ${MAX_ITERATION} are removed in the 2026-04
+	// cutover. Tokens that aren't well-known fall through the env
+	// chain and finally to os.Getenv. Without any binding they
+	// resolve to "".
+	t.Setenv("RECIPE_NAME", "")
+	t.Setenv("MAX_ITERATION", "")
+	ctx := &SubstContext{ScoreName: "default"}
+	if got := Substitute("${RECIPE_NAME}", ctx); got != "" {
+		t.Errorf("removed ${RECIPE_NAME} should resolve empty, got %q", got)
+	}
+	if got := Substitute("${MAX_ITERATION}", ctx); got != "" {
+		t.Errorf("removed ${MAX_ITERATION} should resolve empty, got %q", got)
+	}
+}
+
 func TestSubstitute_PrecedenceChain(t *testing.T) {
 	t.Setenv("MY_VAR", "from-env")
-	recipeEnv := map[string]string{"MY_VAR": "from-recipe"}
+	scoreEnv := map[string]string{"MY_VAR": "from-score"}
 	aiEnv := map[string]string{"MY_VAR": "from-ai"}
 
-	// recipe.env wins over ai.env wins over os.Getenv
+	// score.env wins over ai.env wins over os.Getenv
 	ctx := &SubstContext{}
-	ctx.AppendEnv(recipeEnv)
+	ctx.AppendEnv(scoreEnv)
 	ctx.AppendEnv(aiEnv)
-	if got := Substitute("${MY_VAR}", ctx); got != "from-recipe" {
-		t.Errorf("recipe.env should win, got %q", got)
+	if got := Substitute("${MY_VAR}", ctx); got != "from-score" {
+		t.Errorf("score.env should win, got %q", got)
 	}
 
-	// Drop recipe.env: ai.env wins
 	ctx2 := &SubstContext{}
 	ctx2.AppendEnv(aiEnv)
 	if got := Substitute("${MY_VAR}", ctx2); got != "from-ai" {
-		t.Errorf("ai.env should win when recipe absent, got %q", got)
+		t.Errorf("ai.env should win when score absent, got %q", got)
 	}
 
-	// Drop both: os.Getenv wins
 	ctx3 := &SubstContext{}
 	if got := Substitute("${MY_VAR}", ctx3); got != "from-env" {
 		t.Errorf("os.Getenv should be last resort, got %q", got)
 	}
 
-	// Unresolved → empty
 	if got := Substitute("${UNSET_TOKEN_XYZ}", ctx3); got != "" {
 		t.Errorf("unresolved token should be empty, got %q", got)
 	}
 }
 
 func TestSubstitute_SinglePass(t *testing.T) {
-	// Token expansion containing another ${X} should NOT recurse.
 	ctx := &SubstContext{}
 	ctx.AppendEnv(map[string]string{"OUTER": "${INNER}", "INNER": "leaf"})
 	if got := Substitute("${OUTER}", ctx); got != "${INNER}" {
@@ -102,14 +118,12 @@ func TestSubstituteArgv_NoMutation(t *testing.T) {
 }
 
 func TestSubstitute_OSEnvFallthrough(t *testing.T) {
-	// Sanity: a token that's nowhere falls back to os.Getenv.
 	got := os.Getenv("PATH")
 	if got == "" {
 		t.Skip("no PATH in env")
 	}
 	ctx := &SubstContext{}
 	if want := strings.Split(got, ":"); len(want) > 0 {
-		// Just confirm we get something
 		if Substitute("${PATH}", ctx) == "" {
 			t.Error("PATH fallback failed")
 		}

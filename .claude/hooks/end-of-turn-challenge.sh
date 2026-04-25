@@ -47,6 +47,12 @@ You are about to stop. Before you do, confirm EACH of these:
   --------------------------
   [ ] Verified EVERY fix on a LIVE DISPOSABLE target (never on a
       non-disposable resource)?
+  [ ] Did the live verification actually RUN the feature
+      end-to-end? A `--dry-run`, a validator pass, or a green
+      unit-test suite does NOT satisfy R10 — only a real run that
+      invokes the runner / builds a real artifact / reaches a live
+      deploy / runs verb evaluation against the live target counts.
+      Did you exercise EVERY new or changed code path this way?
   [ ] Full RCA for every unexpected failure (no blind fix-guessing)?
   [ ] After committing the source-level fix, did you `ov rebuild`
       the disposable target from clean and re-run the full

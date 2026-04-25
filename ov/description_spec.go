@@ -160,6 +160,12 @@ type Scenario struct {
 	Steps    []Step              `yaml:"steps"                json:"steps,omitempty"`
 	Examples []map[string]string `yaml:"examples,omitempty"   json:"examples,omitempty"`
 	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
+
+	// SourceRecipe is populated by ResolveScoreRecipes when the scenario
+	// is concatenated from a recipe referenced by a score's `recipes:`
+	// list. Internal-only — never written to YAML or JSON; consumed by
+	// the ${RECIPES} renderer to group rendering by source recipe.
+	SourceRecipe string `yaml:"-" json:"-"`
 }
 
 // UnmarshalYAML accepts both `tag:` and the legacy `tags:` key during

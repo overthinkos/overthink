@@ -2,13 +2,8 @@ package main
 
 // harness_cmd.go — `ov harness` command tree (host-side dispatcher).
 //
-// Stub during the harness cutover. Sub-verbs progressively wired in
-// follow-up commits:
-//   - list-ai, list-recipe — read-only catalog inspection (functional now)
-//   - run / run-local / sync-credential — iteration drivers (stubbed)
-//   - scope / last-test-tag / self-evaluate — AI-facing helpers (stubbed)
-//   - note read / note append — NOTES.md memory subsystem (functional now)
-//   - report / list — past-run inspection (stubbed)
+// Post the 2026-04 kind split, the runner is keyed on `kind: score`.
+// `recipe:` entries are pure spec; the user invokes a score, not a recipe.
 
 import (
 	"fmt"
@@ -19,20 +14,21 @@ import (
 // HarnessCmd is the top-level `ov harness` command tree.
 type HarnessCmd struct {
 	ListAI     HarnessListAICmd     `cmd:"list-ai" help:"List configured AIs from harness.yml"`
-	ListRecipe HarnessListRecipeCmd `cmd:"list-recipe" help:"List configured recipes from harness.yml"`
-	Run        HarnessRunCmd        `cmd:"" help:"Run a harness recipe (drives an AI through iteration cycles)"`
+	ListRecipe HarnessListRecipeCmd `cmd:"list-recipe" help:"List configured recipes (spec) from harness.yml"`
+	ListScore  HarnessListScoreCmd  `cmd:"list-score" help:"List configured scores (runner config) from harness.yml"`
+	Run        HarnessRunCmd        `cmd:"" help:"Run a harness score (drives an AI through iteration cycles)"`
 	RunLocal   HarnessRunLocalCmd   `cmd:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
-	SyncCred   HarnessSyncCredCmd   `cmd:"sync-credential" help:"Copy AI credentials into the recipe's target"`
+	SyncCred   HarnessSyncCredCmd   `cmd:"sync-credential" help:"Copy AI credentials into the score's target"`
 	Scope      HarnessScopeCmd      `cmd:"scope" help:"AI-facing: print current iteration scope"`
 	LastTag    HarnessLastTagCmd    `cmd:"last-test-tag" help:"AI-facing: print prior iteration's image tag"`
 	SelfEval   HarnessSelfEvalCmd   `cmd:"self-evaluate" help:"AI-facing: rebuild current clone + run ov image test"`
-	List       HarnessListRunsCmd   `cmd:"list" help:"List past harness runs under .harness/<recipe>/"`
+	List       HarnessListRunsCmd   `cmd:"list" help:"List past harness runs under .harness/<score>/"`
 	Report     HarnessReportCmd     `cmd:"report" help:"Render a past result-<calver>.yml"`
-	Note       HarnessNoteCmd       `cmd:"note" help:"Read/append the persistent NOTES.md memory for a recipe"`
+	Note       HarnessNoteCmd       `cmd:"note" help:"Read/append the persistent NOTES.md memory for a score"`
 }
 
 // ---------------------------------------------------------------------------
-// list-ai / list-recipe — functional inspection
+// list-ai / list-recipe / list-score — functional inspection
 // ---------------------------------------------------------------------------
 
 // HarnessListAICmd implements `ov harness list-ai`.
@@ -55,7 +51,8 @@ func (c *HarnessListAICmd) Run() error {
 	return nil
 }
 
-// HarnessListRecipeCmd implements `ov harness list-recipe`.
+// HarnessListRecipeCmd implements `ov harness list-recipe` — lists pure
+// spec recipes (description + scenarios).
 type HarnessListRecipeCmd struct{}
 
 func (c *HarnessListRecipeCmd) Run() error {
@@ -75,28 +72,44 @@ func (c *HarnessListRecipeCmd) Run() error {
 	return nil
 }
 
+// HarnessListScoreCmd implements `ov harness list-score` — lists runner
+// configs (target, AI, plateau, recipes).
+type HarnessListScoreCmd struct{}
+
+func (c *HarnessListScoreCmd) Run() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	uf, _, err := LoadUnified(dir)
+	if err != nil {
+		return err
+	}
+	if uf == nil {
+		fmt.Fprintln(os.Stdout, "No overthink.yml found in current directory.")
+		return nil
+	}
+	PrintScores(os.Stdout, uf.Score)
+	return nil
+}
+
 // ---------------------------------------------------------------------------
-// Stubs — wired in follow-up implementation phases
+// run — host-side dispatcher
 // ---------------------------------------------------------------------------
 
-const harnessNotImpl = "ov harness: this verb is not yet wired in the harness cutover (migration command works; iteration loop pending)"
-
-// HarnessRunCmd is `ov harness run <recipe>`.
+// HarnessRunCmd is `ov harness run <score>`.
 type HarnessRunCmd struct {
-	Recipe string `arg:"" help:"Recipe name (from harness.yml)"`
-	AI     string `name:"ai" help:"Pick which AI to run (required if recipe.ai has more than one entry)"`
+	Score string `arg:"" help:"Score name (from harness.yml)"`
+	AI    string `name:"ai" help:"Pick which AI to run (required if score.ai has more than one entry)"`
 
-	// Mutually-exclusive target overrides. Field names avoid collision
-	// with the top-level --host flag (which re-execs over SSH); we use
-	// --on-pod / --on-vm / --on-host as the user-facing surface.
-	Pod  string `name:"on-pod" xor:"target" help:"Override recipe target with this pod deployment"`
-	VM   string `name:"on-vm" xor:"target" help:"Override recipe target with this VM"`
-	Host bool   `name:"on-host" xor:"target" help:"Override recipe target to run on the host directly"`
+	// Mutually-exclusive target overrides.
+	Pod  string `name:"on-pod" xor:"target" help:"Override score target with this pod deployment"`
+	VM   string `name:"on-vm" xor:"target" help:"Override score target with this VM"`
+	Host bool   `name:"on-host" xor:"target" help:"Override score target to run on the host directly"`
 
-	PlateauIteration int    `name:"plateau-iteration" help:"Override recipe.plateau_iteration"`
-	MaxIteration     int    `name:"max-iteration" help:"Override recipe.max_iteration"`
+	PlateauIteration int    `name:"plateau-iteration" help:"Override score.plateau_iteration"`
 	MaxScenario      int    `name:"max-scenario" help:"Cap the pending input set"`
-	Tag              string `name:"tag" help:"Override recipe.tag (Gherkin tag expression)"`
+	Tag              string `name:"tag" help:"Override score.tag (Gherkin tag expression)"`
 	DryRun           bool   `name:"dry-run" help:"Render scope+prompt without rebuild"`
 	SkipRebuild      bool   `name:"skip-rebuild" help:"Source-only scenarios"`
 	KeepRepo         bool   `name:"keep-repo" help:"Don't delete the per-run repo clone after the run (~100MB; debugging only)"`
@@ -115,41 +128,36 @@ func (c *HarnessRunCmd) Run() error {
 	if !ok || uf == nil {
 		return fmt.Errorf("ov harness run: no overthink.yml in %s", cwd)
 	}
-	recipe, err := ResolveRecipe(uf.Recipe, c.Recipe)
+	score, err := ResolveScore(uf.Score, c.Score)
 	if err != nil {
 		return err
 	}
-	// Apply CLI overrides to a recipe copy.
 	if c.Pod != "" {
-		recipe.Pod = c.Pod
-		recipe.VM = ""
-		recipe.Host = false
+		score.Pod = c.Pod
+		score.VM = ""
+		score.Host = false
 	} else if c.VM != "" {
-		recipe.VM = c.VM
-		recipe.Pod = ""
-		recipe.Host = false
+		score.VM = c.VM
+		score.Pod = ""
+		score.Host = false
 	} else if c.Host {
-		recipe.Host = true
-		recipe.Pod = ""
-		recipe.VM = ""
-		// host: requires disposable: true
-		recipe.Disposable = true
+		score.Host = true
+		score.Pod = ""
+		score.VM = ""
+		score.Disposable = true
 	}
-	tk, tn, err := ResolveRecipeTarget(recipe)
+	tk, tn, err := ResolveScoreTarget(score)
 	if err != nil {
 		return err
 	}
 
 	runID := GenerateRunID()
-	args := []string{"harness", "run-local", c.Recipe, "--run-id", runID}
+	args := []string{"harness", "run-local", c.Score, "--run-id", runID}
 	if c.AI != "" {
 		args = append(args, "--ai", c.AI)
 	}
 	if c.PlateauIteration > 0 {
 		args = append(args, "--plateau-iteration", fmt.Sprintf("%d", c.PlateauIteration))
-	}
-	if c.MaxIteration > 0 {
-		args = append(args, "--max-iteration", fmt.Sprintf("%d", c.MaxIteration))
 	}
 	if c.MaxScenario > 0 {
 		args = append(args, "--max-scenario", fmt.Sprintf("%d", c.MaxScenario))
@@ -172,8 +180,7 @@ func (c *HarnessRunCmd) Run() error {
 
 	switch tk {
 	case TargetKindHost:
-		// In-process invocation — no subprocess dispatch.
-		return runLocalInProcess(args, c.Recipe, runID, recipe, uf, cwd)
+		return runLocalInProcess(args, c.Score, runID, score, uf, cwd)
 	case TargetKindPod:
 		return dispatchToPod(tn, args)
 	case TargetKindVM:
@@ -183,10 +190,7 @@ func (c *HarnessRunCmd) Run() error {
 }
 
 // runLocalInProcess invokes HarnessRunLocalCmd in-process for host targets.
-func runLocalInProcess(args []string, recipeName, runID string, _ *HarnessRecipe, _ *UnifiedFile, cwd string) error {
-	// Re-exec our own ov binary so flag parsing matches the dispatched
-	// argv exactly. This keeps the dispatch shape identical for host
-	// and non-host targets and avoids duplicating Kong flag handling.
+func runLocalInProcess(args []string, scoreName, runID string, _ *HarnessScore, _ *UnifiedFile, cwd string) error {
 	exe, err := os.Executable()
 	if err != nil {
 		exe = "ov"
@@ -199,8 +203,6 @@ func runLocalInProcess(args []string, recipeName, runID string, _ *HarnessRecipe
 	return cmd.Run()
 }
 
-// dispatchToPod re-execs `ov harness run-local ...` inside a running
-// pod via `podman exec`.
 func dispatchToPod(podName string, args []string) error {
 	containerName := "ov-" + podName
 	full := append([]string{"exec", "-i", containerName, "ov"}, args...)
@@ -210,12 +212,9 @@ func dispatchToPod(podName string, args []string) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("podman exec %s: %w", containerName, err)
 	}
-	// Mirror artifacts back to the host.
 	return mirrorPodHarnessDir(containerName)
 }
 
-// mirrorPodHarnessDir copies .harness/ back from the pod to the host.
-// Best-effort — failure is logged non-fatally.
 func mirrorPodHarnessDir(containerName string) error {
 	cmd := exec.Command("podman", "cp", containerName+":/workspace/.harness/.", "./.harness/")
 	cmd.Stdout = os.Stdout
@@ -226,7 +225,6 @@ func mirrorPodHarnessDir(containerName string) error {
 	return nil
 }
 
-// dispatchToVM re-execs `ov harness run-local ...` inside a VM via SSH.
 func dispatchToVM(vmName string, args []string) error {
 	full := append([]string{"vm", "ssh", vmName, "--", "ov"}, args...)
 	cmd := exec.Command("ov", full...)
@@ -235,30 +233,34 @@ func dispatchToVM(vmName string, args []string) error {
 	return cmd.Run()
 }
 
-// HarnessRunLocalCmd lives in harness_runlocal_cmd.go (the in-target
-// iteration driver). The Kong tag here registers the subcommand;
-// the full struct + Run method are defined in that file.
+// ---------------------------------------------------------------------------
+// sync-credential — `ov harness sync-credential <score>`
+// ---------------------------------------------------------------------------
 
-// HarnessSyncCredCmd is `ov harness sync-credential <recipe>`.
+// HarnessSyncCredCmd is `ov harness sync-credential <score>`.
 type HarnessSyncCredCmd struct {
-	Recipe string `arg:"" help:"Recipe name"`
-	AI     string `name:"ai" help:"Sync credentials for this AI only (default: all configured)"`
+	Score string `arg:"" help:"Score name"`
+	AI    string `name:"ai" help:"Sync credentials for this AI only (default: all configured)"`
 }
 
 func (c *HarnessSyncCredCmd) Run() error { return c.RunActual() }
 
-// HarnessScopeCmd reads the active iteration's scope.yml. AI-facing.
+// ---------------------------------------------------------------------------
+// AI-facing iteration helpers
+// ---------------------------------------------------------------------------
+
+// HarnessScopeCmd reads the active iteration's scope.yml.
 type HarnessScopeCmd struct{}
 
 func (c *HarnessScopeCmd) Run() error {
-	recipe := os.Getenv("OV_HARNESS_RECIPE")
+	score := os.Getenv("OV_HARNESS_SCORE")
 	runID := os.Getenv("OV_HARNESS_RUN_ID")
 	iter := os.Getenv("OV_HARNESS_ITERATION")
-	if recipe == "" || runID == "" || iter == "" {
-		return fmt.Errorf("ov harness scope: must run inside an iteration (OV_HARNESS_RECIPE/RUN_ID/ITERATION env required)")
+	if score == "" || runID == "" || iter == "" {
+		return fmt.Errorf("ov harness scope: must run inside an iteration (OV_HARNESS_SCORE/RUN_ID/ITERATION env required)")
 	}
 	cwd, _ := os.Getwd()
-	path := fmt.Sprintf("%s/.harness/%s/runs/%s/iter%s/scope.yml", cwd, recipe, runID, iter)
+	path := fmt.Sprintf("%s/.harness/%s/runs/%s/iter%s/scope.yml", cwd, score, runID, iter)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", path, err)
@@ -285,14 +287,18 @@ func (c *HarnessLastTagCmd) Run() error {
 	return nil
 }
 
-// HarnessSelfEvalCmd is the AI-facing self-evaluation verb. Stubbed for now.
+// HarnessSelfEvalCmd is the AI-facing self-evaluation verb. Stubbed.
 type HarnessSelfEvalCmd struct{}
 
 func (c *HarnessSelfEvalCmd) Run() error {
 	return fmt.Errorf("ov harness self-evaluate: rebuilds the current per-run clone and runs `ov image test` (deferred)")
 }
 
-// HarnessListRunsCmd lists past runs across all recipes.
+// ---------------------------------------------------------------------------
+// list / report — past-run inspection
+// ---------------------------------------------------------------------------
+
+// HarnessListRunsCmd lists past runs across all scores.
 type HarnessListRunsCmd struct{}
 
 func (c *HarnessListRunsCmd) Run() error {
@@ -308,17 +314,17 @@ func (c *HarnessListRunsCmd) Run() error {
 		fmt.Println("No harness runs found under .harness/.")
 		return nil
 	}
-	fmt.Printf("%-20s  %-25s  %-10s  %s\n", "RECIPE", "RUN_ID", "STATUS", "STARTED")
+	fmt.Printf("%-20s  %-25s  %-10s  %s\n", "SCORE", "RUN_ID", "STATUS", "STARTED")
 	for _, r := range runs {
 		started := r.StartedUTC.Format("2006-01-02 15:04:05Z")
-		fmt.Printf("%-20s  %-25s  %-10s  %s\n", r.Recipe, r.RunID, r.Status, started)
+		fmt.Printf("%-20s  %-25s  %-10s  %s\n", r.Score, r.RunID, r.Status, started)
 	}
 	return nil
 }
 
 // HarnessReportCmd prints a past result-<calver>.yml.
 type HarnessReportCmd struct {
-	Recipe string `arg:"" optional:"" help:"Recipe name (default: latest)"`
+	Score  string `arg:"" optional:"" help:"Score name (default: latest)"`
 	Calver string `arg:"" optional:"" help:"Calver of the result to display (default: latest)"`
 }
 
@@ -328,8 +334,7 @@ func (c *HarnessReportCmd) Run() error {
 		return err
 	}
 	resultsRoot := fmt.Sprintf("%s/.harness", cwd)
-	if c.Recipe == "" {
-		// Pick latest recipe by mtime of its results dir.
+	if c.Score == "" {
 		entries, err := os.ReadDir(resultsRoot)
 		if err != nil {
 			return fmt.Errorf("no .harness directory in %s", cwd)
@@ -346,11 +351,11 @@ func (c *HarnessReportCmd) Run() error {
 			}
 		}
 		if newest == nil {
-			return fmt.Errorf("no recipes under %s", resultsRoot)
+			return fmt.Errorf("no scores under %s", resultsRoot)
 		}
-		c.Recipe = newest.Name()
+		c.Score = newest.Name()
 	}
-	resultsDir := fmt.Sprintf("%s/%s/results", resultsRoot, c.Recipe)
+	resultsDir := fmt.Sprintf("%s/%s/results", resultsRoot, c.Score)
 	if c.Calver == "" {
 		entries, err := os.ReadDir(resultsDir)
 		if err != nil {
@@ -368,7 +373,6 @@ func (c *HarnessReportCmd) Run() error {
 		if latest == "" {
 			return fmt.Errorf("no result files under %s", resultsDir)
 		}
-		// Strip "result-" prefix and ".yml" suffix.
 		c.Calver = latest[7 : len(latest)-4]
 	}
 	path := fmt.Sprintf("%s/result-%s.yml", resultsDir, c.Calver)
@@ -380,29 +384,33 @@ func (c *HarnessReportCmd) Run() error {
 	return err
 }
 
+// ---------------------------------------------------------------------------
+// note read / note append — persistent NOTES.md memory
+// ---------------------------------------------------------------------------
+
 // HarnessNoteCmd groups the note read/append verbs.
 type HarnessNoteCmd struct {
-	Read   HarnessNoteReadCmd   `cmd:"" help:"Print the persistent NOTES.md for a recipe"`
-	Append HarnessNoteAppendCmd `cmd:"" help:"Atomically append a note to a recipe's NOTES.md"`
+	Read   HarnessNoteReadCmd   `cmd:"" help:"Print the persistent NOTES.md for a score"`
+	Append HarnessNoteAppendCmd `cmd:"" help:"Atomically append a note to a score's NOTES.md"`
 }
 
 type HarnessNoteReadCmd struct {
-	Recipe string `arg:"" optional:"" help:"Recipe name (default: $OV_HARNESS_RECIPE)"`
+	Score string `arg:"" optional:"" help:"Score name (default: $OV_HARNESS_SCORE)"`
 }
 
 func (c *HarnessNoteReadCmd) Run() error {
-	recipe := c.Recipe
-	if recipe == "" {
-		recipe = os.Getenv("OV_HARNESS_RECIPE")
+	score := c.Score
+	if score == "" {
+		score = os.Getenv("OV_HARNESS_SCORE")
 	}
-	if recipe == "" {
-		return fmt.Errorf("ov harness note read: recipe name required (pass as arg or set OV_HARNESS_RECIPE)")
+	if score == "" {
+		return fmt.Errorf("ov harness note read: score name required (pass as arg or set OV_HARNESS_SCORE)")
 	}
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	body, err := ReadNote(dir, recipe)
+	body, err := ReadNote(dir, score)
 	if err != nil {
 		return err
 	}
@@ -415,8 +423,8 @@ func (c *HarnessNoteReadCmd) Run() error {
 }
 
 type HarnessNoteAppendCmd struct {
-	Recipe string `arg:"" help:"Recipe name (or skip and pass --recipe)"`
-	Text   string `arg:"" help:"Note text (one paragraph)"`
+	Score string `arg:"" help:"Score name (or skip and pass --score)"`
+	Text  string `arg:"" help:"Note text (one paragraph)"`
 }
 
 func (c *HarnessNoteAppendCmd) Run() error {
@@ -430,5 +438,5 @@ func (c *HarnessNoteAppendCmd) Run() error {
 	if iter == "" {
 		iter = "0"
 	}
-	return AppendNote(dir, c.Recipe, runID, iter, ai, c.Text)
+	return AppendNote(dir, c.Score, runID, iter, ai, c.Text)
 }

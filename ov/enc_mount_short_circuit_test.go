@@ -27,9 +27,11 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	}
 
 	// Deploy.yml fixture: one image with two encrypted volumes.
+	// Post schema-v4 the deployment map key is `deployment:` singular,
+	// not legacy `images:` plural.
 	dir := t.TempDir()
 	deployPath := filepath.Join(dir, "deploy.yml")
-	deployYAML := `images:
+	deployYAML := `deployment:
   testimg:
     volumes:
       - name: vol-a
@@ -95,7 +97,7 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	deployYAML := `images:
+	deployYAML := `deployment:
   testimg:
     volumes:
       - name: vol-a

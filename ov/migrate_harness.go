@@ -275,15 +275,18 @@ func ensureIncludeListed(rootNode *yaml.Node, filename string) error {
 // ---------------------------------------------------------------------------
 
 // buildHarnessYml produces the new harness.yml body from the legacy
-// benchmark block: ai: catalog from runners[], recipe.default: from the
-// prompt + plateau defaults.
+// benchmark block. Post the 2026-04 kind split, this emits THREE
+// kinds: `ai:` (catalog), `recipe:` (pure spec — empty scenarios for
+// user to fill), and `score:` (runner config that references the
+// recipe via `recipes:`).
 func buildHarnessYml(bench *legacyBenchmark) ([]byte, error) {
 	var doc strings.Builder
-	doc.WriteString(`# harness.yml — AI catalog (kind:ai) + harness recipes (kind:recipe).
+	doc.WriteString(`# harness.yml — kind:ai + kind:recipe (spec) + kind:score (runner).
 # Produced by ` + "`ov migrate harness`" + `.
 #
-# Edit recipe.default.pod / .vm / .host below to point the harness at
-# the deployment that should run iterations.
+# Edit score.default.pod / .vm / .host below to point the harness at
+# the deployment that should run iterations. Fill recipe.default.scenario
+# with the BDD scenarios the AI must make pass.
 
 ai:
 `)
@@ -337,31 +340,45 @@ ai:
 		aiList[i] = r.Name
 	}
 
-	// Apply token renames in the prompt (singular convention).
+	// Apply token renames in the prompt for the 2026-04 kind split:
+	//   ${RECIPE_NAME}     → ${SCORE_NAME}
+	//   ${MAX_ITERATIONS}  → "" (removed; loop is plateau-only)
+	//   ${MAX_ITERATION}   → "" (removed; loop is plateau-only)
+	//   ${PLATEAU_ITERATIONS} → ${PLATEAU_ITERATION}
+	//   ov benchmark       → ov harness
 	prompt := bench.Prompt
-	prompt = strings.ReplaceAll(prompt, "${MAX_ITERATIONS}", "${MAX_ITERATION}")
+	prompt = strings.ReplaceAll(prompt, "${RECIPE_NAME}", "${SCORE_NAME}")
+	prompt = strings.ReplaceAll(prompt, "${MAX_ITERATIONS}", "")
+	prompt = strings.ReplaceAll(prompt, "${MAX_ITERATION}", "")
 	prompt = strings.ReplaceAll(prompt, "${PLATEAU_ITERATIONS}", "${PLATEAU_ITERATION}")
 	prompt = strings.ReplaceAll(prompt, "ov benchmark ", "ov harness ")
-	// Prepend the canonical Memory block.
 	prompt = memoryBlockPreamble + prompt
 
 	doc.WriteString(`recipe:
   default:
     description:
       feature: "Default recipe migrated from legacy benchmark: block."
-    # Where to run this recipe — exactly ONE of pod / vm / host:
+    # Recipes are pure spec (description + scenarios). Add BDD scenarios
+    # below; the score below evaluates them every iteration.
+    scenario: []
+
+score:
+  default:
+    description:
+      feature: "Default score migrated from legacy benchmark: block."
+    # Where to run this score — exactly ONE of pod / vm / host:
     #   pod:  <name>   # name of a running pod deployment (ov start <name>)
     #   vm:   <name>   # name of a running VM (ov vm start <name>)
     #   host: true     # run on this host directly (requires disposable: true)
     pod: ""             # ← fill in the pod deployment name
     ai: ` + yamlInlineList(aiList) + `
     plateau_iteration: 3
-    max_iteration: 50
     tag: ""
     target_image: ""
     notes: true
     mcp_endpoint: "` + DefaultMCPEndpoint + `"
     env: {}
+    recipes: [default]
     prompt: |
 `)
 	for _, line := range strings.Split(strings.TrimRight(prompt, "\n"), "\n") {
@@ -381,7 +398,7 @@ convention, a fragile test, a mis-tagged scenario, a workaround that took an hou
 append a brief note via:
     ov harness note append "<one-paragraph note>"
 
-Notes are persistent across runs of recipe ${RECIPE_NAME}. Be terse. Future-you reads them.
+Notes are persistent across runs of score ${SCORE_NAME}. Be terse. Future-you reads them.
 
 `
 

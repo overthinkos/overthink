@@ -48,10 +48,14 @@ func TestDeployImageConfig_LifecycleAloneDoesNotAuthorize(t *testing.T) {
 // the same image with different disposable values must behave
 // independently (the multi-instance requirement).
 func TestMultipleInstances_IndependentFlags(t *testing.T) {
+	// Post schema-v4 (singular kinds) DeployConfig.Deployment is keyed
+	// off the `deployment:` (singular) YAML map, not the legacy plural
+	// `images:`. The resolver renamed both files (deploy.yml carries
+	// `deployment:`) — fixture follows suit.
 	yamlStr := `
 provides:
   registry: localhost
-images:
+deployment:
   fedora-coder:
     lifecycle: prod
   fedora-coder-dev:

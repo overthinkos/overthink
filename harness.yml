@@ -1,8 +1,17 @@
-# harness.yml — AI catalog (kind:ai) + harness recipes (kind:recipe).
-# Produced by `ov migrate harness`.
+# harness.yml — three kind-entities side by side:
+#   kind: ai     — reusable AI-CLI catalog
+#   kind: recipe — pure spec (description + BDD scenarios)
+#   kind: score  — runner config (target, AI, plateau, prompt) referencing one
+#                  or more recipes via `recipes:`
 #
-# Edit recipe.default.pod / .vm / .host below to point the harness at
-# the deployment that should run iterations.
+# `ov harness run <score>` drives an AI through the iteration loop. The
+# active score's recipes list is concatenated into a single scenario set
+# the harness scores against EVERY iteration; the AI sees the full set
+# via ${RECIPES} (per-recipe-grouped) and ${SCENARIOS} (flat union).
+# The loop is plateau-bounded — no max-iteration ceiling. The prompt
+# surfaces ${SCORE_DELTA} (improvement vs previous iteration) and
+# ${ATTEMPTS_LEFT} (`plateau_iteration - plateau_counter`) so the AI
+# knows where it stands.
 
 ai:
   claude:
@@ -29,59 +38,118 @@ ai:
     credential:
       - {src: ~/.config/gcloud/application_default_credentials.json, dst: ~/.config/gcloud/application_default_credentials.json, optional: true}
 
+# kind: recipe — pure spec. Each recipe is a named bundle of BDD
+# scenarios with a description. NO targets, NO AI, NO plateau, NO prompt;
+# those live on the score. Recipes are reusable atoms; one or more get
+# composed by a score's `recipes:` list.
 recipe:
+  tier1-easy:
+    description:
+      feature: "Tier 1 — easy: marker file present with expected content."
+    scenario:
+      - name: "tier1-marker-file-exists"
+        steps:
+          - then: "/etc/ov-bench-marker exists"
+            file: /etc/ov-bench-marker
+            exists: true
+      - name: "tier1-marker-file-content"
+        steps:
+          - then: "/etc/ov-bench-marker contains 'ov benchmark target'"
+            file: /etc/ov-bench-marker
+            contains: [ov benchmark target]
+
+  tier2-medium:
+    description:
+      feature: "Tier 2 — medium: HTTP service listening on port 8080."
+    scenario:
+      - name: "tier2-http-port-listening"
+        steps:
+          - then: "port 8080 is listening"
+            port: 8080
+            listening: true
+      - name: "tier2-http-200-body"
+        steps:
+          - then: "GET / returns 200 with 'ov benchmark' in body"
+            http: "http://localhost:8080/"
+            status: 200
+            body:
+              contains: [ov benchmark]
+
+  tier3-hard:
+    description:
+      feature: "Tier 3 — hard: package installed + persistent versioned file."
+    scenario:
+      - name: "tier3-curl-installed"
+        steps:
+          - then: "curl is installed"
+            command: "command -v curl"
+            exit_code: 0
+      - name: "tier3-version-file"
+        steps:
+          - then: "/srv/bench/version.txt contains 'tier3-ok'"
+            file: /srv/bench/version.txt
+            exists: true
+            contains: [tier3-ok]
+
+# kind: score — runner config. References recipes by name; the harness
+# concatenates their scenarios in order and scores against the union
+# every iteration. PlateauIteration is the only loop bound.
+score:
   default:
     description:
-      feature: "Default benchmark — BDD scenario solved by live deployment."
-    # Target: where the harness runs the AI. Exactly one of pod / vm / host:
-    #   pod:  <name>   # name of a running pod deployment (ov start <name>)
-    #   vm:   <name>   # name of a running VM (ov vm start <name>)
-    #   host: true     # run on this host directly (requires disposable: true)
+      feature: "Default benchmark — score AI on all three difficulty tiers."
     host: true
-    disposable: true
+    disposable: true                  # required for host: true (per /ov-dev:disposable)
     ai: [claude]
-    plateau_iteration: 3
-    max_iteration: 5
+    plateau_iteration: 3              # exit after 3 consecutive non-improving iterations
     target_image: "bench-target"
-    deployment: "harness-default"   # AI must `ov deploy add harness-default <ref>`
+    deployment: "harness-default"     # AI must `ov deploy add harness-default <ref>`
     notes: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
-    # The BDD scenarios the AI must make pass. The harness scores these
-    # against the live ov-<deployment> container the AI created — the
-    # recipe IS the spec, no scaffold expected.
-    scenario:
-      - name: "marker file is present with expected content"
-        steps:
-          - then: "the marker file /etc/ov-bench-marker exists with content 'ov benchmark target'"
-            file: /etc/ov-bench-marker
-            exists: true
-            contains:
-              - ov benchmark target
+    recipes: [tier1-easy, tier2-medium, tier3-hard]   # ordered set
     prompt: |
-      You are running iteration ${ITERATION} of up to ${MAX_ITERATION} of recipe ${RECIPE_NAME}.
-      Best score so far: ${BEST_SCORE}; plateau ${PLATEAU_COUNTER}/${PLATEAU_ITERATION}.
+      You are running iteration ${ITERATION} of score ${SCORE_NAME}.
 
-      == BDD scenarios you must make pass ==
-      ${SCENARIOS}
+      Last iteration delta:     ${SCORE_DELTA}
+      Best score so far:        ${BEST_SCORE}
+      Attempts left to improve: ${ATTEMPTS_LEFT}
+
+      The run ends when ${ATTEMPTS_LEFT} reaches 0 — i.e. you fail to
+      improve your score for ${PLATEAU_ITERATION} iterations in a row.
+      As long as you keep improving, you keep getting more attempts.
+
+      == Recipes you must solve — ALL of them, every iteration ==
+      ${RECIPES}
+
+      Score = total scenarios solved across ALL recipes above. Every
+      iteration the harness tests EVERY recipe against the live
+      ov-${DEPLOYMENT} container; partial progress carries across
+      iterations via your worktree at ${WORKSPACE}.
 
       == Workflow ==
-      Your cwd is the per-run git clone at ${WORKSPACE}.
       Image to build: ${TARGET_IMAGE}
-      Deployment to create: ${DEPLOYMENT}
+      Deployment to update: ${DEPLOYMENT}  (already running; harness rebuilt it fresh
+                                           with disposable: true at run start, and
+                                           it persists across iterations)
 
-      1. Edit layers/images as needed so ${TARGET_IMAGE} produces a container that
-         satisfies the scenarios above.
+      1. Edit layers/images so ${TARGET_IMAGE} satisfies as many scenarios as possible.
       2. Build:    bin/ov image build ${TARGET_IMAGE}
-      3. Deploy:   bin/ov deploy add ${DEPLOYMENT} ${TARGET_IMAGE}
-      4. Verify:   bin/ov test ${DEPLOYMENT}    (inspect the live container)
-      5. Notes:    bin/ov harness note append ${RECIPE_NAME} "<short learning>"
-      6. Exit. The harness scores recipe scenarios against ov-${DEPLOYMENT}.
+      3. Update:   bin/ov update ${DEPLOYMENT}      # swaps the running container to
+                                                    # the freshly-built image; do NOT
+                                                    # `ov deploy add` (would clash with
+                                                    # the pre-existing entry)
+      4. Verify:   bin/ov test ${DEPLOYMENT}
+      5. Notes:    bin/ov harness note append ${SCORE_NAME} "<short learning>"
+      6. Exit. The harness scores ALL recipes against ov-${DEPLOYMENT}.
 
       MCP tools (if any): ${MCP_ENDPOINT}
 
       Ground rules:
-        - The recipe scenarios are immutable — do NOT try to edit them, they
-          live in harness.yml and the harness ignores image-baked scenarios.
-        - The deployment must be running when you exit (this is what gets scored).
-        - Partial progress across iterations counts; your worktree carries edits.
+        - Recipe scenarios are immutable — they live in harness.yml.
+        - The deployment ov-${DEPLOYMENT} is already running when iter1 starts —
+          the harness rebuilt it from scratch for this run and will keep it alive
+          across every iteration. Use `ov update` to swap images, never
+          `ov deploy add` / `ov rebuild`.
+        - The deployment MUST be running when you exit (this is what gets scored).
+        - Tier 1 is the easiest; build up from there before tackling Tier 3.

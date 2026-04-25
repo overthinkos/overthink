@@ -6,7 +6,7 @@ package main
 // notes from scratch each run. When the run completes, the file is
 // preserved on disk for browsing. So:
 //
-//   .harness/<recipe>/note/<run-id>.md   one file per run
+//   .harness/<score>/note/<run-id>.md   one file per run
 //
 // During a run, OV_HARNESS_NOTES_FILE is set to the per-run path so
 // the AI's `ov harness note append` (invoked from inside the per-run
@@ -17,7 +17,7 @@ package main
 // Outside a run, `ov harness note read` defaults to the most recent
 // run's notes file. `ov harness note append` outside a run errors —
 // notes are run-scoped, ad-hoc seeding from the CLI is unsupported
-// (use `ov harness note append <recipe> <text>` only inside an
+// (use `ov harness note append <score> <text>` only inside an
 // iteration's runner.log via the env injection path).
 
 import (
@@ -40,15 +40,15 @@ import (
 //
 // Use NotePathForRun(layout) to compute the per-run path explicitly
 // inside the harness loop (where we know the run-id without env).
-func NotePath(projectDir, recipe string) string {
+func NotePath(projectDir, score string) string {
 	if override := os.Getenv("OV_HARNESS_NOTES_FILE"); override != "" {
 		return override
 	}
-	noteDir := filepath.Join(HarnessDataRoot(projectDir, recipe), "note")
+	noteDir := filepath.Join(HarnessDataRoot(projectDir, score), "note")
 	if latest := mostRecentNoteFile(noteDir); latest != "" {
 		return latest
 	}
-	// Empty recipe history — return the conventional location even
+	// Empty score history — return the conventional location even
 	// though it doesn't exist yet. Callers handle ENOENT.
 	return filepath.Join(noteDir, "scratchpad.md")
 }
@@ -97,8 +97,8 @@ func mostRecentNoteFile(noteDir string) string {
 // (when invoked inside an iteration) or the most recent run's notes
 // (outside an iteration). Empty content is NOT an error — fresh
 // runs see "".
-func ReadNote(projectDir, recipe string) (string, error) {
-	path := NotePath(projectDir, recipe)
+func ReadNote(projectDir, score string) (string, error) {
+	path := NotePath(projectDir, score)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -113,9 +113,9 @@ func ReadNote(projectDir, recipe string) (string, error) {
 // OV_HARNESS_NOTES_FILE to be set (i.e., the caller is inside a
 // harness iteration). Notes are run-scoped — ad-hoc seeding from
 // outside an iteration is intentionally unsupported.
-func AppendNote(projectDir, recipe, runID, iter, ai, text string) error {
-	if recipe == "" {
-		return fmt.Errorf("note append: recipe name required")
+func AppendNote(projectDir, score, runID, iter, ai, text string) error {
+	if score == "" {
+		return fmt.Errorf("note append: score name required")
 	}
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("note append: text required (got empty/whitespace)")

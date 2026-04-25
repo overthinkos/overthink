@@ -26,7 +26,7 @@ import (
 
 // RunLayout is the canonical set of paths for one harness run.
 //
-// All harness state lives under <ProjectDir>/.harness/<recipe>/. The
+// All harness state lives under <ProjectDir>/.harness/<score>/. The
 // directory is broadly gitignored (same pattern as .claude/memory/,
 // .claude/plans/) but stays IN the project tree so Syncthing-style
 // replication carries result files + NOTES.md memory across machines.
@@ -39,27 +39,27 @@ import (
 // project), so the host's mirrored copy is automatic.
 type RunLayout struct {
 	ProjectDir  string // project tree (workspace)
-	Recipe      string // recipe name
+	Score       string // score name
 	RunID       string // "<UTC-timestamp>-<shorthash>"
-	HarnessRoot string // <ProjectDir>/.harness/<recipe>
+	HarnessRoot string // <ProjectDir>/.harness/<score>
 	RunDir      string // <HarnessRoot>/runs/<run-id>
 	RepoDir     string // <HarnessRoot>/runs/<run-id>/repo (per-run clone)
 	Branch      string // "ovharness/<run-id>"
 }
 
 // NewRunLayout constructs a RunLayout. Generates run-id if empty.
-func NewRunLayout(projectDir, recipe, runID string) RunLayout {
+func NewRunLayout(projectDir, score, runID string) RunLayout {
 	if runID == "" {
 		runID = GenerateRunID()
 	}
-	if recipe == "" {
-		recipe = "default"
+	if score == "" {
+		score = "default"
 	}
-	root := HarnessDataRoot(projectDir, recipe)
+	root := HarnessDataRoot(projectDir, score)
 	runDir := filepath.Join(root, "runs", runID)
 	return RunLayout{
 		ProjectDir:  projectDir,
-		Recipe:      recipe,
+		Score:       score,
 		RunID:       runID,
 		HarnessRoot: root,
 		RunDir:      runDir,
@@ -69,16 +69,16 @@ func NewRunLayout(projectDir, recipe, runID string) RunLayout {
 }
 
 // HarnessDataRoot returns the absolute path to the harness data
-// directory for this (project, recipe) pair. Convention:
+// directory for this (project, score) pair. Convention:
 //
-//	<projectDir>/.harness/<recipe>
+//	<projectDir>/.harness/<score>
 //
 // In-project location is deliberate — Syncthing-style file syncs
 // replicate the durable result files + NOTES.md memory across the
 // user's machines without an extra ~/.local/share replication path.
 // .harness/ is broadly gitignored (matches .claude/memory/ pattern).
-func HarnessDataRoot(projectDir, recipe string) string {
-	return filepath.Join(projectDir, ".harness", recipe)
+func HarnessDataRoot(projectDir, score string) string {
+	return filepath.Join(projectDir, ".harness", score)
 }
 
 // GenerateRunID returns a fresh UTC-timestamp-prefixed identifier.
@@ -217,9 +217,9 @@ func resolveHeadSHA(ctx context.Context, repoDir string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// RunSummary describes one past harness run found under .harness/<recipe>/runs.
+// RunSummary describes one past harness run found under .harness/<score>/runs.
 type RunSummary struct {
-	Recipe       string
+	Score        string
 	RunID        string
 	RunDir       string
 	Status       string    // "complete" (result.{calver}.yml present) | "incomplete"
@@ -228,11 +228,11 @@ type RunSummary struct {
 	BranchExists bool
 }
 
-// ListRuns walks <projectDir>/.harness/*/runs/ across all recipes
+// ListRuns walks <projectDir>/.harness/*/runs/ across all scores
 // and returns one RunSummary per run dir. Sorted newest first.
 func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
 	base := filepath.Join(projectDir, ".harness")
-	recipes, err := os.ReadDir(base)
+	scores, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -240,7 +240,7 @@ func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
 		return nil, fmt.Errorf("read %s: %w", base, err)
 	}
 	var out []RunSummary
-	for _, rEntry := range recipes {
+	for _, rEntry := range scores {
 		if !rEntry.IsDir() {
 			continue
 		}
@@ -255,12 +255,12 @@ func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
 			}
 			runID := e.Name()
 			s := RunSummary{
-				Recipe: rEntry.Name(),
+				Score:  rEntry.Name(),
 				RunID:  runID,
 				RunDir: filepath.Join(runsDir, runID),
 			}
 			s.Status = "incomplete"
-			// Look in the per-recipe results dir for any result file.
+			// Look in the per-score results dir for any result file.
 			resultsDir := filepath.Join(base, rEntry.Name(), "results")
 			if results, err := os.ReadDir(resultsDir); err == nil {
 				for _, r := range results {

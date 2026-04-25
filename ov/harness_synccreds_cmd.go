@@ -1,9 +1,9 @@
 package main
 
-// harness_synccreds_cmd.go — host-side `ov harness sync-credential <recipe>`.
+// harness_synccreds_cmd.go — host-side `ov harness sync-credential <score>`.
 //
 // One-shot copy of AI-CLI auth material from the host's $HOME into the
-// recipe's target. Per-target dispatch:
+// score's target. Per-target dispatch:
 //   - pod: `podman cp` into the running pod
 //   - vm:  `scp` over SSH into the VM
 //   - host: no-op (credentials already in the host's $HOME)
@@ -18,13 +18,8 @@ import (
 	"strings"
 )
 
-// HarnessSyncCredCmd lives in harness_cmd.go. We attach the
-// implementation here and provide the actual struct via this file.
-//
-// The struct + its Kong tags are declared on HarnessSyncCredCmd in
-// harness_cmd.go. The Run method below replaces the stub there.
-
-// Run executes the credential sync.
+// RunActual executes the credential sync. The HarnessSyncCredCmd struct
+// + its Kong tags are declared in harness_cmd.go.
 func (c *HarnessSyncCredCmd) RunActual() error {
 	ctx := context.Background()
 
@@ -39,11 +34,11 @@ func (c *HarnessSyncCredCmd) RunActual() error {
 	if !ok || uf == nil {
 		return errors.New("harness sync-credential: no overthink.yml in current directory")
 	}
-	recipe, err := ResolveRecipe(uf.Recipe, c.Recipe)
+	score, err := ResolveScore(uf.Score, c.Score)
 	if err != nil {
 		return err
 	}
-	tk, tn, err := ResolveRecipeTarget(recipe)
+	tk, tn, err := ResolveScoreTarget(score)
 	if err != nil {
 		return err
 	}
@@ -52,10 +47,10 @@ func (c *HarnessSyncCredCmd) RunActual() error {
 	if c.AI != "" {
 		aiNames = []string{c.AI}
 	} else {
-		aiNames = recipe.AI
+		aiNames = score.AI
 	}
 	if len(aiNames) == 0 {
-		return fmt.Errorf("harness sync-credential: recipe %q has no AIs configured", c.Recipe)
+		return fmt.Errorf("harness sync-credential: score %q has no AIs configured", c.Score)
 	}
 
 	for _, aiName := range aiNames {
@@ -141,9 +136,6 @@ func syncCredentialsToPod(ctx context.Context, containerName string, mounts []Cr
 	return nil
 }
 
-// syncCredentialsToVM copies credentials over SSH using scp. The VM
-// must be running and its SSH user must be configured per the kind:vm
-// entry's ssh: block.
 func syncCredentialsToVM(ctx context.Context, vmName string, mounts []CredentialMount) error {
 	for _, m := range mounts {
 		srcAbs, err := expandHostPath(m.Src)
@@ -157,11 +149,7 @@ func syncCredentialsToVM(ctx context.Context, vmName string, mounts []Credential
 			}
 			return fmt.Errorf("credential src %q unreadable: %w", srcAbs, err)
 		}
-		// Use the VM's standard ssh alias (`ov vm ssh <name>` interface).
-		// Tilde in dst is left as-is — ssh shell expands it on the remote side.
 		dst := m.Dst
-		// scp via the configured ssh; we shell out through `ov vm ssh`
-		// to leverage its key-injection / port-forwarding setup.
 		cpCmd := exec.CommandContext(ctx, "ov", "vm", "scp", vmName, srcAbs, dst)
 		if out, err := cpCmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("ov vm scp %q -> %s:%q: %w\n%s", m.Src, vmName, dst, err, string(out))

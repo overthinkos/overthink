@@ -99,6 +99,7 @@ type HarnessRunCmd struct {
 	Tag              string `name:"tag" help:"Override recipe.tag (Gherkin tag expression)"`
 	DryRun           bool   `name:"dry-run" help:"Render scope+prompt without rebuild"`
 	SkipRebuild      bool   `name:"skip-rebuild" help:"Source-only scenarios"`
+	KeepRepo         bool   `name:"keep-repo" help:"Don't delete the per-run repo clone after the run (~100MB; debugging only)"`
 	Format           string `name:"format" enum:"text,yaml" default:"text" help:"Output format"`
 }
 
@@ -158,6 +159,9 @@ func (c *HarnessRunCmd) Run() error {
 	}
 	if c.DryRun {
 		args = append(args, "--dry-run")
+	}
+	if c.KeepRepo {
+		args = append(args, "--keep-repo")
 	}
 	if c.SkipRebuild {
 		args = append(args, "--skip-rebuild")

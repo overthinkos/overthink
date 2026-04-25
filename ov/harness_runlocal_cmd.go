@@ -37,6 +37,7 @@ type HarnessRunLocalCmd struct {
 	SkipRebuild  bool   `name:"skip-rebuild" help:"Skip per-iteration rebuild (source-only scenarios)"`
 	Format       string `enum:"text,yaml" default:"text" help:"Report format on stdout"`
 	NoLock       bool   `name:"no-lock" hidden:"" help:"Skip flock (tests only)"`
+	KeepRepo     bool   `name:"keep-repo" help:"Don't delete the per-run repo clone after the run completes (debugging only — clones are ~100MB)"`
 	ProjectDir   string `name:"project-dir" hidden:"" help:"Override project root (default: cwd or /workspace)"`
 }
 
@@ -199,6 +200,17 @@ func (c *HarnessRunLocalCmd) Run() error {
 	// Result file is written by writeReport (called inside RunHarness);
 	// re-write here with the AIVersion now populated.
 	_ = writeReport(layout, report)
+
+	// Cleanup: drop the per-run repo clone (~100MB) now that the
+	// branch has been pushed to the host's git. The full AI delta
+	// lives at ovharness/<run-id>; iter*/ logs + result + notes
+	// stay on disk. Pass --keep-repo to preserve the clone for
+	// debugging.
+	if !c.KeepRepo {
+		if err := os.RemoveAll(layout.RepoDir); err != nil {
+			fmt.Fprintf(os.Stderr, "harness: cleanup of %s failed (non-fatal): %v\n", layout.RepoDir, err)
+		}
+	}
 
 	printHarnessReport(os.Stdout, report, c.Format)
 	return nil

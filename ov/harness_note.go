@@ -1,49 +1,102 @@
 package main
 
-// harness_note.go — persistent NOTES.md memory subsystem.
+// harness_note.go — per-run notes memory subsystem.
 //
-// One Markdown file per recipe at .harness/<recipe>/note/NOTES.md,
-// shared across runs (not per-run). The harness exposes two affordances:
+// Each benchmark run starts with EMPTY notes — the AI generates fresh
+// notes from scratch each run. When the run completes, the file is
+// preserved on disk for browsing. So:
 //
-//   ov harness note read [<recipe>]   — print the file (or "(empty)")
-//   ov harness note append [<recipe>] <text>  — atomic append with a header
+//   .harness/<recipe>/note/<run-id>.md   one file per run
 //
-// Append-only at the OS level (O_APPEND|O_CREATE) — no locking needed
-// since the per-recipe flock at /workspace/.harness/.lock already
-// serialises concurrent harness runs against the same recipe. The
-// header is `## <calver> run=<run-id> iter=<k> ai=<name>` followed by
-// a blank line, the body, and a trailing blank line; chronological by
-// construction (file order = append order).
+// During a run, OV_HARNESS_NOTES_FILE is set to the per-run path so
+// the AI's `ov harness note append` (invoked from inside the per-run
+// clone, with cwd != the host project) writes to the OUTER per-run
+// file rather than a fresh per-clone copy that would die with the
+// transient clone.
+//
+// Outside a run, `ov harness note read` defaults to the most recent
+// run's notes file. `ov harness note append` outside a run errors —
+// notes are run-scoped, ad-hoc seeding from the CLI is unsupported
+// (use `ov harness note append <recipe> <text>` only inside an
+// iteration's runner.log via the env injection path).
 
 import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
-// NotePath returns the absolute path to a recipe's NOTES.md file.
+// NotePath returns the absolute path of the notes file the current
+// caller should read/write.
 //
-// During an iteration, the harness exports OV_HARNESS_NOTES_FILE so
-// that `ov harness note append/read` invocations from inside the
-// per-run clone write to the OUTER project's NOTES.md, not a fresh
-// per-clone copy that would die with the clone. Without that env
-// var (i.e., the verb invoked outside an iteration), the path
-// resolves against projectDir+recipe directly.
+//   - Inside an iteration, OV_HARNESS_NOTES_FILE env is set to the
+//     per-run notes file; honor the override.
+//   - Outside an iteration, return the most recent per-run notes
+//     file under <harness-root>/note/, or — if none yet — a stable
+//     <harness-root>/note/scratchpad.md (used by the read path; the
+//     append path errors instead).
+//
+// Use NotePathForRun(layout) to compute the per-run path explicitly
+// inside the harness loop (where we know the run-id without env).
 func NotePath(projectDir, recipe string) string {
 	if override := os.Getenv("OV_HARNESS_NOTES_FILE"); override != "" {
 		return override
 	}
-	return filepath.Join(HarnessDataRoot(projectDir, recipe), "note", "NOTES.md")
+	noteDir := filepath.Join(HarnessDataRoot(projectDir, recipe), "note")
+	if latest := mostRecentNoteFile(noteDir); latest != "" {
+		return latest
+	}
+	// Empty recipe history — return the conventional location even
+	// though it doesn't exist yet. Callers handle ENOENT.
+	return filepath.Join(noteDir, "scratchpad.md")
 }
 
-// ReadNote returns the current contents of a recipe's NOTES.md, or
-// "" if the file doesn't yet exist. The empty case is NOT an error —
-// first-run reads succeed and the AI sees an empty memory snapshot.
-//
-// The function does NOT check recipe.notes — the caller's responsibility.
-// (A disabled recipe shouldn't be calling ReadNote in the first place,
-// but we read regardless if asked.)
+// NotePathForRun returns the canonical per-run notes path under the
+// harness data root. Used by the harness loop (which knows the
+// run-id directly without env-var indirection) for both ${NOTES}
+// substitution snapshots and the OV_HARNESS_NOTES_FILE export.
+func NotePathForRun(harnessRoot, runID string) string {
+	return filepath.Join(harnessRoot, "note", runID+".md")
+}
+
+// mostRecentNoteFile returns the most recently modified <run-id>.md
+// file under noteDir, or "" if none exist. Used by the read path
+// when invoked outside an iteration.
+func mostRecentNoteFile(noteDir string) string {
+	entries, err := os.ReadDir(noteDir)
+	if err != nil {
+		return ""
+	}
+	var candidates []os.DirEntry
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if !strings.HasSuffix(e.Name(), ".md") {
+			continue
+		}
+		candidates = append(candidates, e)
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		ai, _ := candidates[i].Info()
+		aj, _ := candidates[j].Info()
+		if ai == nil || aj == nil {
+			return candidates[i].Name() > candidates[j].Name()
+		}
+		return ai.ModTime().After(aj.ModTime())
+	})
+	return filepath.Join(noteDir, candidates[0].Name())
+}
+
+// ReadNote returns the current contents of the per-run notes file
+// (when invoked inside an iteration) or the most recent run's notes
+// (outside an iteration). Empty content is NOT an error — fresh
+// runs see "".
 func ReadNote(projectDir, recipe string) (string, error) {
 	path := NotePath(projectDir, recipe)
 	data, err := os.ReadFile(path)
@@ -56,17 +109,10 @@ func ReadNote(projectDir, recipe string) (string, error) {
 	return string(data), nil
 }
 
-// AppendNote writes one note to a recipe's NOTES.md, prefixed with a
-// header line so the trail is parseable + chronologically ordered.
-//
-// Header format: `## <calver> run=<run-id> iter=<k> ai=<name>`. Empty
-// fields render as `?` so partial context (e.g. CLI invocation outside
-// an iteration) doesn't break the header layout.
-//
-// File is created if absent (with parent directory if needed). Writes
-// are O_APPEND so concurrent invocations against different recipes are
-// race-free at the OS level; same-recipe concurrency is gated by the
-// per-target flock the loop holds.
+// AppendNote writes one note to the per-run notes file. Requires
+// OV_HARNESS_NOTES_FILE to be set (i.e., the caller is inside a
+// harness iteration). Notes are run-scoped — ad-hoc seeding from
+// outside an iteration is intentionally unsupported.
 func AppendNote(projectDir, recipe, runID, iter, ai, text string) error {
 	if recipe == "" {
 		return fmt.Errorf("note append: recipe name required")
@@ -74,7 +120,10 @@ func AppendNote(projectDir, recipe, runID, iter, ai, text string) error {
 	if strings.TrimSpace(text) == "" {
 		return fmt.Errorf("note append: text required (got empty/whitespace)")
 	}
-	path := NotePath(projectDir, recipe)
+	path := os.Getenv("OV_HARNESS_NOTES_FILE")
+	if path == "" {
+		return fmt.Errorf("note append: notes are run-scoped — only supported inside a harness iteration (no OV_HARNESS_NOTES_FILE in env)")
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("note append: mkdir %s: %w", filepath.Dir(path), err)
 	}

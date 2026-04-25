@@ -120,9 +120,20 @@ func (c *HarnessRunLocalCmd) Run() error {
 		targetImage = recipe.TargetImage
 	}
 
-	preAIResults, preFingerprints, preTagFingerprints, err := collectPreAIBaselineFromDir(layout.RepoDir, targetImage)
-	if err != nil {
-		return fmt.Errorf("collect baseline: %w", err)
+	var preAIResults []ScenarioTestResult
+	var preFingerprints, preTagFingerprints map[string]string
+	if len(recipe.Scenario) > 0 {
+		// Recipe-scenario mode: synthesize the baseline from recipe
+		// scenarios directly (all marked fail, fingerprints computed
+		// from the Scenario object). The harness scores these against
+		// the live deployment ov-<recipe.deployment> after the AI
+		// builds + deploys + tests.
+		preAIResults, preFingerprints, preTagFingerprints = synthesizeRecipeBaseline(c.Recipe, recipe.Scenario)
+	} else {
+		preAIResults, preFingerprints, preTagFingerprints, err = collectPreAIBaselineFromDir(layout.RepoDir, targetImage)
+		if err != nil {
+			return fmt.Errorf("collect baseline: %w", err)
+		}
 	}
 
 	tagExpr := c.Tag

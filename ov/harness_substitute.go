@@ -52,6 +52,12 @@ type SubstContext struct {
 	// Persistent NOTES.md content (drives ${NOTES})
 	Notes string
 
+	// Recipe-defined scenarios rendered as YAML (drives ${SCENARIOS})
+	Scenarios string
+
+	// Deployment name the harness scores against (drives ${DEPLOYMENT})
+	Deployment string
+
 	// Timing
 	Deadline string // RFC3339 string, or "" when no deadline
 	Timeout  string // per-AI resolved timeout string
@@ -150,6 +156,10 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 		return ctx.MCPEndpoint
 	case "NOTES":
 		return ctx.Notes
+	case "SCENARIOS":
+		return ctx.Scenarios
+	case "DEPLOYMENT":
+		return ctx.Deployment
 	case "TAG":
 		return ctx.Tag
 	case "DEADLINE":

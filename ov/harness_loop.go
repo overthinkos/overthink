@@ -408,15 +408,25 @@ func runOneIteration(
 
 	// 2. Render + write prompt.md
 	notesSnap := opts.Notes
-	if recipeName := opts.RecipeName; recipeName != "" && opts.Recipe != nil && opts.Recipe.NotesEnabled() {
-		// Refresh per iteration so the AI sees notes the previous iter may have appended.
-		if body, _ := ReadNote(opts.ProjectDir, recipeName); body != "" {
-			notesSnap = body
+	if opts.Recipe != nil && opts.Recipe.NotesEnabled() {
+		// Per-run notes file: starts EMPTY for fresh-each-run semantics.
+		// On iteration k>1 the file may carry the AI's earlier appends.
+		runNotesPath := NotePathForRun(layout.HarnessRoot, layout.RunID)
+		if data, err := os.ReadFile(runNotesPath); err == nil {
+			notesSnap = string(data)
+		} else {
+			notesSnap = ""
 		}
 	}
 	mcp := opts.MCPEndpoint
 	if mcp == "" {
 		mcp = DefaultMCPEndpoint
+	}
+	scenariosYAML := ""
+	deploymentName := ""
+	if opts.Recipe != nil {
+		scenariosYAML = RenderRecipeScenariosYAML(opts.Recipe.Scenario)
+		deploymentName = opts.Recipe.Deployment
 	}
 	substCtx := &SubstContext{
 		RunID:            layout.RunID,
@@ -433,6 +443,8 @@ func runOneIteration(
 		BestScore:        reportSoFar.BestScore,
 		MCPEndpoint:      mcp,
 		Notes:            notesSnap,
+		Scenarios:        scenariosYAML,
+		Deployment:       deploymentName,
 		Tag:              opts.Tag,
 		Timeout:          opts.AI.Timeout,
 	}
@@ -472,21 +484,58 @@ func runOneIteration(
 		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)
 	}
 
-	// 4. Rebuild (unless --skip-rebuild). The build's --tag flag takes
-	// just the TAG portion (no `/`, no `:`); the full image ref is
-	// reconstructed for the test step. Using a "/" or ":" inside --tag
-	// makes podman build fail with "invalid reference format".
+	// 4. Score. Two paths:
+	//   - Recipe-scenario mode (recipe.Scenario non-empty): the AI is
+	//     responsible for building + deploying + testing. The harness
+	//     scores recipe.Scenario against the live ov-<deployment>
+	//     container the AI created.
+	//   - Image-baked mode (default): harness builds the iter-tag image
+	//     itself + runs `ov image test` against a disposable container.
+	useRecipeScenarios := opts.Recipe != nil && len(opts.Recipe.Scenario) > 0
 	iterTagSuffix := fmt.Sprintf("ovharness-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
-	var testOut []byte
-	if !opts.SkipRebuild {
+	var (
+		testOut             []byte
+		parsed              *TestRunResults
+		postFingerprints    map[string]string
+		postTagFingerprints map[string]string
+	)
+
+	if useRecipeScenarios {
+		testStart := time.Now()
+		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Recipe.Deployment, opts.RecipeName, opts.Recipe.Scenario)
+		iter.TestDuration = time.Since(testStart).String()
+		if scoreErr != nil {
+			// AI didn't deploy / deploy unreachable. Treat as build failure;
+			// score is unchanged (== prior iteration's score). The error is
+			// captured in runner_output already.
+			iter.BuildFailure = true
+			iter.Score = priorScore(reportSoFar)
+			iter.Scenario = priorScenarios(reportSoFar)
+			fmt.Fprintf(opts.Stderr, "iter%d: live score: %v\n", k, scoreErr)
+			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
+			}
+			_ = writeIterScore(layout, k, iter)
+			return iter, nil
+		}
+		parsed = live
+		// Re-marshal to YAML for forensic test-output.yaml.
+		if data, err := yaml.Marshal(live); err == nil {
+			testOut = data
+			_ = os.WriteFile(filepath.Join(iterDir, "test-output.yaml"), testOut, 0o644)
+		}
+		// Recipe scenarios are immutable across iterations — fingerprints
+		// don't change because the spec is the spec.
+		postFingerprints = opts.PreFingerprints
+		postTagFingerprints = opts.PreTagFingerprints
+	} else if !opts.SkipRebuild {
 		buildLog := filepath.Join(iterDir, "build.log")
 		buildDur, buildErr := buildImageFn(ctx, layout.RepoDir, opts.TargetImage, iterTagSuffix, buildLog)
 		iter.BuildDuration = buildDur.String()
 		iter.BuildLogPath = buildLog
 		if buildErr != nil {
 			iter.BuildFailure = true
-			// Score is unchanged (== prior iteration's score); no test run.
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
 			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
@@ -496,12 +545,10 @@ func runOneIteration(
 			return iter, nil
 		}
 
-		// 5. Evaluate via ov image test (full ref, not just the tag).
 		testStart := time.Now()
 		out, _, testErr := runOvImageTestFn(ctx, iterRef)
 		iter.TestDuration = time.Since(testStart).String()
 		if testErr != nil {
-			// Test runner failure; treat as build failure (score unchanged).
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
@@ -513,21 +560,27 @@ func runOneIteration(
 			return iter, nil
 		}
 		testOut = out
-		// Persist raw test output.
 		_ = os.WriteFile(filepath.Join(iterDir, "test-output.yaml"), out, 0o644)
+		// Reload fingerprints from clone for image-baked mode.
+		postSet := loadDescriptionsFromDir(layout.RepoDir, opts.TargetImage)
+		postFingerprints = FingerprintSet(postSet)
+		postTagFingerprints = collectTagFingerprints(postSet)
 	}
 
-	// 6. Parse + classify.
-	parsed, err := ParseOvTestOutput(testOut)
-	if err != nil {
-		return iter, fmt.Errorf("parse test output: %w", err)
+	// 5. Parse if not already (image-baked mode came in as raw YAML).
+	if parsed == nil {
+		p, err := ParseOvTestOutput(testOut)
+		if err != nil {
+			return iter, fmt.Errorf("parse test output: %w", err)
+		}
+		parsed = p
 	}
-
-	// Reload fingerprints from the per-run clone's current state (the
-	// AI may have edited scenario bodies; we re-scan to compute deltas).
-	postSet := loadDescriptionsFromDir(layout.RepoDir, opts.TargetImage)
-	postFingerprints := FingerprintSet(postSet)
-	postTagFingerprints := collectTagFingerprints(postSet)
+	if postFingerprints == nil {
+		postFingerprints = map[string]string{}
+	}
+	if postTagFingerprints == nil {
+		postTagFingerprints = map[string]string{}
+	}
 
 	// Classify each pre-AI scenario.
 	postByID := parsed.ScenarioByID()
@@ -830,11 +883,14 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	env["OV_HARNESS_AI"] = substCtx.AIName
 	env["OV_HARNESS_TARGET_KIND"] = substCtx.TargetKind
 	env["OV_HARNESS_TARGET_NAME"] = substCtx.TargetName
-	// OUTER project's NOTES.md, so the AI's `ov harness note append`
-	// from inside the per-run clone writes to the durable host-side
-	// memory file instead of a transient per-clone copy.
+	// Per-run notes file: <harness-root>/note/<run-id>.md. Each run
+	// gets its own file (fresh notes from scratch). The AI's
+	// `ov harness note append` from inside the per-run clone writes
+	// to this OUTER, durable per-run path instead of a transient
+	// per-clone copy.
 	if opts.Recipe != nil && opts.Recipe.NotesEnabled() {
-		env["OV_HARNESS_NOTES_FILE"] = NotePath(opts.ProjectDir, opts.RecipeName)
+		harnessRoot := HarnessDataRoot(opts.ProjectDir, opts.RecipeName)
+		env["OV_HARNESS_NOTES_FILE"] = NotePathForRun(harnessRoot, substCtx.RunID)
 	}
 	return argv, env
 }

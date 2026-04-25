@@ -84,8 +84,25 @@ type HarnessRecipe struct {
 	// through to os.Getenv).
 	Env map[string]string `yaml:"env,omitempty"`
 
+	// Scenario carries the BDD scenarios the AI must make pass. The
+	// harness scores these AGAINST the live running deployment named
+	// in Deployment — the AI is expected to build, deploy, and test
+	// the image themselves; the harness scores what they actually
+	// deployed. AI sees the scenarios via the ${SCENARIOS} prompt
+	// token (rendered as YAML).
+	Scenario []Scenario `yaml:"scenario,omitempty"`
+
+	// Deployment names the running deployment the harness scores
+	// against. The AI must `ov deploy add <Deployment> <ref>` (or
+	// equivalent) before exiting their iteration so the harness can
+	// reach `ov-<Deployment>` for scoring. Required when Scenario is
+	// non-empty.
+	Deployment string `yaml:"deployment,omitempty"`
+
 	// Prompt template. Standard ${TOKEN} substitution is applied per
 	// iteration; see harness_substitute.go for the precedence chain.
+	// Authors typically include ${SCENARIOS} so the AI sees what it
+	// must make pass.
 	Prompt string `yaml:"prompt,omitempty"`
 
 	// Notes controls the persistent NOTES.md memory subsystem.

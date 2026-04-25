@@ -14,7 +14,9 @@ layer:
       - name: marker file is present with expected content
         tags: ["@skeleton"]
         steps:
-          - given: the bench-target layer is installed
+          # Single Then step (no narrative-only Given) so the scenario
+          # has zero pending steps and Classify can return VerdictSolved
+          # when the AI's edit makes it pass.
           - then: the marker file exists with the expected content
             file: /etc/ov-bench-marker
             exists: true

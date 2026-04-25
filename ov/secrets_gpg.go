@@ -1135,12 +1135,12 @@ func (c *SecretsGpgExportKeyCmd) exportToKeystore(keyID string) error {
 // ── setup command ───────────────────────────────────────────────────
 
 type SecretsGpgSetupCmd struct {
-	Import       string `long:"import" help:"Path to key file/directory to import before setup"`
-	FromKeystore bool   `long:"from-keystore" help:"Import key from KeePassXC Secret Service"`
-	Passphrase   string `long:"passphrase" help:"GPG passphrase value (visible in shell history — prefer --prompt-passphrase)"`
-	PromptPassphrase   bool   `long:"prompt-passphrase" short:"p" help:"Prompt for passphrase securely (hidden input)"`
-	KeyID        string `long:"key-id" help:"Use specific existing key"`
-	SkipSS       bool   `long:"skip-secret-service" help:"Skip Secret Service passphrase storage"`
+	Import           string `long:"import" help:"Path to key file/directory to import before setup"`
+	FromKeystore     bool   `long:"from-keystore" help:"Import key from KeePassXC Secret Service"`
+	Passphrase       string `long:"passphrase" help:"GPG passphrase value (visible in shell history — prefer --prompt-passphrase)"`
+	PromptPassphrase bool   `long:"prompt-passphrase" short:"p" help:"Prompt for passphrase securely (hidden input)"`
+	KeyID            string `long:"key-id" help:"Use specific existing key"`
+	SkipSS           bool   `long:"skip-secret-service" help:"Skip Secret Service passphrase storage"`
 }
 
 func (c *SecretsGpgSetupCmd) Run() error {

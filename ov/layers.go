@@ -77,9 +77,9 @@ type ExtractYAML struct {
 // Data files are COPYed into /data/<volume>/[dest/] at build time and provisioned
 // into bind-backed volumes by ov config / ov update at deploy time.
 type DataYAML struct {
-	Src    string `yaml:"src"`              // source dir relative to layer dir (e.g., "data/notebooks")
-	Volume string `yaml:"volume"`           // target volume name (must match a volumes[].name in the image chain)
-	Dest   string `yaml:"dest,omitempty"`   // optional subdirectory within the volume path
+	Src    string `yaml:"src"`            // source dir relative to layer dir (e.g., "data/notebooks")
+	Volume string `yaml:"volume"`         // target volume name (must match a volumes[].name in the image chain)
+	Dest   string `yaml:"dest,omitempty"` // optional subdirectory within the volume path
 }
 
 // LayerArtifact declares a file the layer publishes back to the operator
@@ -177,14 +177,14 @@ type LayerYAML struct {
 	// tasks.write inline paths, data.src, extract, install-file detection). Defaults
 	// to "." — the directory containing this layer.yml. Relative values resolve
 	// against that directory; absolute values are used as-is.
-	Directory      string            `yaml:"directory,omitempty"`
-	Layers         []string          `yaml:"layers,omitempty"`
-	Depends        []string          `yaml:"depends,omitempty"`
-	Engine         string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
-	Env            map[string]string `yaml:"env,omitempty"`
-	PathAppend     []string          `yaml:"path_append,omitempty"`
-	Ports          []PortSpec        `yaml:"ports,omitempty"`
-	Route          *RouteYAML        `yaml:"route,omitempty"`
+	Directory  string            `yaml:"directory,omitempty"`
+	Layers     []string          `yaml:"layers,omitempty"`
+	Depends    []string          `yaml:"depends,omitempty"`
+	Engine     string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
+	Env        map[string]string `yaml:"env,omitempty"`
+	PathAppend []string          `yaml:"path_append,omitempty"`
+	Ports      []PortSpec        `yaml:"ports,omitempty"`
+	Route      *RouteYAML        `yaml:"route,omitempty"`
 	// Service is the unified service schema: a list of ServiceEntry.
 	// Each entry either reuses a packaged unit (use_packaged:) or
 	// defines a custom service (exec: ...). Init system is selected by
@@ -201,14 +201,14 @@ type LayerYAML struct {
 	PortRelay      []int             `yaml:"port_relay,omitempty"`
 	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
 	Data           []DataYAML        `yaml:"data,omitempty"`
-	EnvProvides    map[string]string `yaml:"env_provides,omitempty"`   // env vars provided to OTHER containers when this service is deployed
-	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"`   // env vars this layer MUST have from the environment
-	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`    // env vars this layer CAN optionally use
-	SecretAccepts  []EnvDependency   `yaml:"secret_accepts,omitempty"` // credential-store-backed env vars this layer CAN optionally use
+	EnvProvides    map[string]string `yaml:"env_provides,omitempty"`    // env vars provided to OTHER containers when this service is deployed
+	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"`    // env vars this layer MUST have from the environment
+	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`     // env vars this layer CAN optionally use
+	SecretAccepts  []EnvDependency   `yaml:"secret_accepts,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
 	SecretRequires []EnvDependency   `yaml:"secret_requires,omitempty"` // credential-store-backed env vars this layer MUST have
-	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"`   // MCP servers provided to OTHER containers when this service is deployed
-	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`   // MCP servers this layer MUST have from the environment
-	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`    // MCP servers this layer CAN optionally use
+	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"`    // MCP servers provided to OTHER containers when this service is deployed
+	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`    // MCP servers this layer MUST have from the environment
+	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`     // MCP servers this layer CAN optionally use
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
 	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
@@ -313,11 +313,11 @@ type Task struct {
 	Build    string `yaml:"build,omitempty"`    // builder selector, currently only "all"
 
 	// Shared modifiers — validity depends on verb
-	User    string            `yaml:"user,omitempty"`    // user context: root / ${USER} / name / uid:gid
-	Mode    string            `yaml:"mode,omitempty"`    // octal permissions
-	To      string            `yaml:"to,omitempty"`      // destination (copy, download)
-	Target  string            `yaml:"target,omitempty"`  // symlink target
-	Content string            `yaml:"content,omitempty"` // inline content for write
+	User            string   `yaml:"user,omitempty"`             // user context: root / ${USER} / name / uid:gid
+	Mode            string   `yaml:"mode,omitempty"`             // octal permissions
+	To              string   `yaml:"to,omitempty"`               // destination (copy, download)
+	Target          string   `yaml:"target,omitempty"`           // symlink target
+	Content         string   `yaml:"content,omitempty"`          // inline content for write
 	Extract         string   `yaml:"extract,omitempty"`          // archive format for download
 	Include         []string `yaml:"include,omitempty"`          // path filter for download
 	StripComponents int      `yaml:"strip_components,omitempty"` // strip N leading path components from tar entries
@@ -326,10 +326,10 @@ type Task struct {
 	// shared directory (e.g. /usr/local/bin): the default reverse uses
 	// task.To which would be the whole dir; authors declare the actual
 	// files here so teardown is clean without wiping unrelated binaries.
-	Uninstall []string `yaml:"uninstall,omitempty"`
-	Env     map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
-	Caps    string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
-	Comment string            `yaml:"comment,omitempty"` // optional Containerfile comment
+	Uninstall []string          `yaml:"uninstall,omitempty"`
+	Env       map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
+	Caps      string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
+	Comment   string            `yaml:"comment,omitempty"` // optional Containerfile comment
 }
 
 // TaskVerbs is the set of valid discriminator keys on a Task.
@@ -481,16 +481,16 @@ type Layer struct {
 	HasPixiLock       bool
 	HasExtract        bool
 	HasData           bool
-	HasEnvProvides     bool
-	HasEnvRequires     bool
-	HasEnvAccepts      bool
-	HasSecretAccepts   bool
-	HasSecretRequires  bool
-	HasMCPProvides     bool
-	HasMCPRequires     bool
-	HasMCPAccepts      bool
-	HasLibvirt         bool
-	HasTasks           bool // layer.yml has a non-empty tasks: list
+	HasEnvProvides    bool
+	HasEnvRequires    bool
+	HasEnvAccepts     bool
+	HasSecretAccepts  bool
+	HasSecretRequires bool
+	HasMCPProvides    bool
+	HasMCPRequires    bool
+	HasMCPAccepts     bool
+	HasLibvirt        bool
+	HasTasks          bool // layer.yml has a non-empty tasks: list
 
 	// Init system detection (populated by PopulateLayerInitSystems)
 	InitSystems    map[string]bool // set of init system names this layer triggers
@@ -502,9 +502,9 @@ type Layer struct {
 	RawIncludedLayers []string // original layers: refs with :version
 
 	// Remote layer metadata
-	Remote         bool   // true if from a remote repo
-	RepoPath       string // e.g. "github.com/overthinkos/overthink" (empty for local)
-	SubPathPrefix  string // e.g. "layers/" — parent directory within the repo for sibling resolution
+	Remote        bool   // true if from a remote repo
+	RepoPath      string // e.g. "github.com/overthinkos/overthink" (empty for local)
+	SubPathPrefix string // e.g. "layers/" — parent directory within the repo for sibling resolution
 
 	// Pre-populated from layer.yml
 	formatSections map[string]*PackageSection // generic format sections (rpm, deb, pac, aur, etc.)
@@ -1380,4 +1380,3 @@ func dirExists(path string) bool {
 	}
 	return info.IsDir()
 }
-

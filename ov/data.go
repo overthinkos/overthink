@@ -59,7 +59,7 @@ func (k seedKind) label() string {
 // seedTarget is the common shape used by the seeding dispatch regardless of
 // volume kind.
 type seedTarget struct {
-	bareName string   // bare volume name (no "ov-<image>-" prefix)
+	bareName string // bare volume name (no "ov-<image>-" prefix)
 	kind     seedKind
 	// mountSource is passed to -v <src>:/seed. For bind: absolute host path.
 	// For named: the full volume name (e.g. "ov-jupyter-workspace"). Podman

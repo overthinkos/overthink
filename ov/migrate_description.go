@@ -213,7 +213,7 @@ func migrateEntityMap(m *yaml.Node) bool {
 	rootShapeKeys := map[string]bool{
 		"layers": true, "images": true, "deployments": true,
 		"builders": true, "distros": true, "inits": true,
-		"vm": true, // deploy.yml-style top-level vm: map
+		"vm":   true, // deploy.yml-style top-level vm: map
 		"pods": true, "hosts": true,
 	}
 

@@ -4,8 +4,8 @@ package main
 // keyname → Linux keycode mapping for DomainSendKey.
 
 import (
-	"bytes"
 	"bufio"
+	"bytes"
 	"fmt"
 	"image"
 	"image/color"

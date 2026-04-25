@@ -9,7 +9,7 @@ func TestValidateServiceNameFound(t *testing.T) {
 	// validateServiceName calls ExtractMetadata which reads container labels at runtime,
 	// so we test the lookup logic directly via ImageMetadata.Services.
 	meta := &ImageMetadata{
-		Init:     "supervisord",
+		Init:         "supervisord",
 		ServiceNames: []string{"traefik", "testapi"},
 	}
 

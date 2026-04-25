@@ -26,11 +26,11 @@ type InitDef struct {
 	Model string `yaml:"model"`
 
 	// Fragment assembly model
-	HeaderFile       string `yaml:"header_file,omitempty"`
-	FragmentDir      string `yaml:"fragment_dir,omitempty"` // subdir under .build/<image>/
+	HeaderFile  string `yaml:"header_file,omitempty"`
+	FragmentDir string `yaml:"fragment_dir,omitempty"` // subdir under .build/<image>/
 	// FragmentTemplate removed — the unified service: schema uses
 	// ServiceSchema.ServiceTemplate, rendered per-entry via RenderService.
-	RelayTemplate    string `yaml:"relay_template,omitempty"`
+	RelayTemplate string `yaml:"relay_template,omitempty"`
 
 	// Containerfile stage
 	StageName         string `yaml:"stage_name,omitempty"`
@@ -48,7 +48,7 @@ type InitDef struct {
 
 	// Service management (ov service commands)
 	ManagementTool     string            `yaml:"management_tool,omitempty"`
-	ManagementCommands map[string]string  `yaml:"management_commands,omitempty"`
+	ManagementCommands map[string]string `yaml:"management_commands,omitempty"`
 
 	// OCI label key for service list
 	LabelKey string `yaml:"label_key,omitempty"`

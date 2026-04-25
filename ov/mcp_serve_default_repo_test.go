@@ -111,7 +111,7 @@ func runMcpServeListImages(t *testing.T, bin, cwd string, extraEnv, args []strin
 	})
 	send(map[string]any{
 		"jsonrpc": "2.0", "method": "notifications/initialized",
-		"params":  map[string]any{},
+		"params": map[string]any{},
 	})
 	send(map[string]any{
 		"jsonrpc": "2.0", "id": 2, "method": "tools/call",

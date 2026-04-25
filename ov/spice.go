@@ -215,7 +215,7 @@ func (c *SpiceScreenshotCmd) Run() error {
 // ---------------- click / mouse ----------------
 
 type SpiceClickCmd struct {
-	Vm string `arg:"" help:"VM name"`
+	Vm     string `arg:"" help:"VM name"`
 	X      int    `arg:"" help:"X coordinate"`
 	Y      int    `arg:"" help:"Y coordinate"`
 	Button string `long:"button" default:"left" help:"left, right, middle"`
@@ -266,7 +266,7 @@ func (c *SpiceMouseCmd) Run() error {
 // ---------------- type / key ----------------
 
 type SpiceTypeCmd struct {
-	Vm string `arg:"" help:"VM name"`
+	Vm   string `arg:"" help:"VM name"`
 	Text string `arg:"" help:"Text to type"`
 	spiceConnectFlags
 }
@@ -300,7 +300,7 @@ func (c *SpiceTypeCmd) Run() error {
 }
 
 type SpiceKeyCmd struct {
-	Vm string `arg:"" help:"VM name"`
+	Vm  string `arg:"" help:"VM name"`
 	Key string `arg:"" help:"Key name (e.g. Return, Escape, F2)"`
 	spiceConnectFlags
 }

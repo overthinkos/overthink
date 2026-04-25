@@ -96,8 +96,8 @@ func TestApplyPortOverridesUDP(t *testing.T) {
 
 func TestStripPortSuffix(t *testing.T) {
 	tests := []struct {
-		input    string
-		wantPort string
+		input     string
+		wantPort  string
 		wantProto string
 	}{
 		{"47998/udp", "47998", "udp"},

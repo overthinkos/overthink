@@ -17,8 +17,8 @@ import (
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type DeployConfig struct {
-	Provides   *ProvidesConfig              `yaml:"provides,omitempty"`
-	Deployment map[string]DeploymentNode    `yaml:"deployment"`
+	Provides   *ProvidesConfig           `yaml:"provides,omitempty"`
+	Deployment map[string]DeploymentNode `yaml:"deployment"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in
@@ -28,11 +28,11 @@ type DeployConfig struct {
 //
 //   - "host"        — local filesystem (HostDeployTarget + LocalDeployExecutor).
 //   - "vm"          — a libvirt/QEMU VM referenced by VmSource (VmDeployTarget
-//                     over SSHDeployExecutor).
+//     over SSHDeployExecutor).
 //   - "container"   — a podman/docker container (PodDeployTarget;
-//                     the default when Target is empty).
+//     the default when Target is empty).
 //   - "kubernetes"  — a Kustomize manifest tree (K8sDeployTarget; leaf-only,
-//                     not nestable).
+//     not nestable).
 //
 // Nested topologies compose at the executor layer: a child's DeployExecutor
 // wraps its parent's executor with a "shell jump" (podman exec, virsh
@@ -49,23 +49,23 @@ type DeployConfig struct {
 // disposable: true does not authorize destroying its children unattended —
 // each child's flag stands on its own (see /ov-dev:disposable).
 type DeploymentNode struct {
-	Version     string       `yaml:"version,omitempty"`
-	Status      string       `yaml:"status,omitempty"`     // [DEPRECATED - migrate to description.tags]
-	Info        string       `yaml:"info,omitempty"`       // [DEPRECATED - migrate to description.feature+narrative]
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
-	Tunnel     *TunnelYAML          `yaml:"tunnel,omitempty"`
-	DNS        string               `yaml:"dns,omitempty"`
-	AcmeEmail  string               `yaml:"acme_email,omitempty"`
-	Volumes    []DeployVolumeConfig `yaml:"volumes,omitempty"`
-	Ports      []string             `yaml:"ports,omitempty"`
-	Env        []string             `yaml:"env,omitempty"`
-	EnvFile    string               `yaml:"env_file,omitempty"`
-	Security   *SecurityConfig      `yaml:"security,omitempty"`
-	Network    string               `yaml:"network,omitempty"`
-	Engine     string               `yaml:"engine,omitempty"`
-	Secrets         []DeploySecretConfig `yaml:"secrets,omitempty"`
-	ForwardGpgAgent *bool                `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
-	ForwardSshAgent *bool                `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
+	Version         string                `yaml:"version,omitempty"`
+	Status          string                `yaml:"status,omitempty"`      // [DEPRECATED - migrate to description.tags]
+	Info            string                `yaml:"info,omitempty"`        // [DEPRECATED - migrate to description.feature+narrative]
+	Description     *Description          `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
+	Tunnel          *TunnelYAML           `yaml:"tunnel,omitempty"`
+	DNS             string                `yaml:"dns,omitempty"`
+	AcmeEmail       string                `yaml:"acme_email,omitempty"`
+	Volumes         []DeployVolumeConfig  `yaml:"volumes,omitempty"`
+	Ports           []string              `yaml:"ports,omitempty"`
+	Env             []string              `yaml:"env,omitempty"`
+	EnvFile         string                `yaml:"env_file,omitempty"`
+	Security        *SecurityConfig       `yaml:"security,omitempty"`
+	Network         string                `yaml:"network,omitempty"`
+	Engine          string                `yaml:"engine,omitempty"`
+	Secrets         []DeploySecretConfig  `yaml:"secrets,omitempty"`
+	ForwardGpgAgent *bool                 `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
+	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
 	Sidecars        map[string]SidecarDef `yaml:"sidecars,omitempty"`          // Sidecar container overrides
 
 	// Tests are local deploy-level overlays. They merge onto the image's
@@ -459,18 +459,18 @@ func (o *InstallOptsConfig) ApplyTo(opts EmitOpts) EmitOpts {
 
 // DeployVolumeConfig overrides the backing for a layer-declared volume.
 type DeployVolumeConfig struct {
-	Name       string `yaml:"name"`                    // matches layer volume name
-	Type       string `yaml:"type,omitempty"`           // "volume" (default), "bind", "encrypted"
-	Host       string `yaml:"host,omitempty"`           // explicit host path (bind type only, optional)
-	Path       string `yaml:"path,omitempty"`           // container path (only for deploy-only volumes not in any layer)
-	DataSeeded bool   `yaml:"data_seeded,omitempty"`    // tracks if data was provisioned from image
-	DataSource string `yaml:"data_source,omitempty"`    // image:tag that provided the data
+	Name       string `yaml:"name"`                  // matches layer volume name
+	Type       string `yaml:"type,omitempty"`        // "volume" (default), "bind", "encrypted"
+	Host       string `yaml:"host,omitempty"`        // explicit host path (bind type only, optional)
+	Path       string `yaml:"path,omitempty"`        // container path (only for deploy-only volumes not in any layer)
+	DataSeeded bool   `yaml:"data_seeded,omitempty"` // tracks if data was provisioned from image
+	DataSource string `yaml:"data_source,omitempty"` // image:tag that provided the data
 }
 
 // DeploySecretConfig overrides or provides a secret for deployment.
 type DeploySecretConfig struct {
-	Name   string `yaml:"name"`              // matches layer secret name
-	Source string `yaml:"source,omitempty"`   // "keyring" (default), "env:VAR", "file:/path"
+	Name   string `yaml:"name"`             // matches layer secret name
+	Source string `yaml:"source,omitempty"` // "keyring" (default), "env:VAR", "file:/path"
 }
 
 // DeployResources — target-agnostic resource requests. Upper bounds (limits)
@@ -1096,7 +1096,6 @@ func envKey(entry string) string {
 	return entry
 }
 
-
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {
 	Ports    []string
@@ -1277,4 +1276,3 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 	}
 	return dc
 }
-

@@ -48,11 +48,11 @@ func TestBareRef(t *testing.T) {
 
 func TestParseRemoteRef(t *testing.T) {
 	tests := []struct {
-		ref        string
-		wantRepo   string
-		wantSub    string
-		wantName   string
-		wantVer    string
+		ref      string
+		wantRepo string
+		wantSub  string
+		wantName string
+		wantVer  string
 	}{
 		{"@github.com/org/repo/layers/cuda:v1.0.0", "github.com/org/repo", "layers/cuda", "cuda", "v1.0.0"},
 		{"@github.com/org/repo/layers/image:main", "github.com/org/repo", "layers/image", "image", "main"},
@@ -272,8 +272,8 @@ func TestParseDefaultBranch(t *testing.T) {
 		{"ref: refs/heads/main\tHEAD\nabc123\tHEAD\n", "main"},
 		{"ref: refs/heads/master\tHEAD\ndef456\tHEAD\n", "master"},
 		{"ref: refs/heads/develop\tHEAD\n789abc\tHEAD\n", "develop"},
-		{"abc123\tHEAD\n", ""},     // no symref line
-		{"", ""},                    // empty output
+		{"abc123\tHEAD\n", ""}, // no symref line
+		{"", ""},               // empty output
 	}
 
 	for _, tt := range tests {
@@ -379,7 +379,7 @@ func TestDiscoverRemoteLayers(t *testing.T) {
 func TestLayerCopySource(t *testing.T) {
 	g := &Generator{
 		Layers: map[string]*Layer{
-			"pixi": {Name: "pixi", Remote: false},
+			"pixi":                             {Name: "pixi", Remote: false},
 			"github.com/test/repo/layers/cuda": {Name: "cuda", Remote: true, RepoPath: "github.com/test/repo"},
 		},
 	}

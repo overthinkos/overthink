@@ -501,7 +501,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 			ID:           sr.ScenarioID,
 			Origin:       sr.Origin,
 			Name:         sr.Name,
-			Tags:         append([]string(nil), sr.Tags...),
+			Tag:          append([]string(nil), sr.Tag...),
 			Status:       sr.Status.String(),
 			PendingSteps: sr.Pending,
 		}
@@ -518,7 +518,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 			}
 			tr.Steps = append(tr.Steps, stepRes)
 		}
-		out.Scenarios = append(out.Scenarios, tr)
+		out.Scenario = append(out.Scenario, tr)
 		out.Summary.Total++
 		switch tr.Status {
 		case "pass":

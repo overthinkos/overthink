@@ -131,7 +131,9 @@ func buildRemoteArgv(argv []string) []string {
 }
 
 // sshCmdArgs builds the full argv for the `ssh` process:
-//   ssh [-tt] <target> ov <remoteArgv...>
+//
+//	ssh [-tt] <target> ov <remoteArgv...>
+//
 // -tt allocates a pseudo-TTY when stdin is a TTY, so interactive
 // programs (prompts, pagers) work; piped stdin gets plain mode.
 func sshCmdArgs(target string, remoteArgv []string) []string {

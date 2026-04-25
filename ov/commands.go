@@ -60,10 +60,10 @@ func (c *LogsCmd) Run() error {
 
 // UpdateCmd updates an image and restarts the service if active
 type UpdateCmd struct {
-	Image    string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag      string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	Build    bool   `long:"build" help:"Force local build instead of pulling from registry"`
-	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag       string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
+	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
 	Seed      bool   `long:"seed" default:"true" negatable:"" help:"Sync data from new image into bind-backed volumes (default: true)"`
 	ForceSeed bool   `long:"force-seed" help:"Overwrite existing data in volumes (default: only add new files)"`
 	DataFrom  string `long:"data-from" help:"Sync data from this data image instead"`
@@ -237,11 +237,11 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 
 // RemoveCmd removes a service container
 type RemoveCmd struct {
-	Image       string   `arg:"" help:"Image name or remote ref"`
-	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Purge       bool     `long:"purge" help:"Also remove named volumes"`
-	KeepDeploy  bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
-	Env         []string `short:"e" long:"env" sep:"none" help:"Set env var for hooks (KEY=VALUE)"`
+	Image      string   `arg:"" help:"Image name or remote ref"`
+	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Purge      bool     `long:"purge" help:"Also remove named volumes"`
+	KeepDeploy bool     `name:"keep-deploy" help:"Keep deploy.yml entry for this image"`
+	Env        []string `short:"e" long:"env" sep:"none" help:"Set env var for hooks (KEY=VALUE)"`
 }
 
 func (c *RemoveCmd) Run() error {

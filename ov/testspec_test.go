@@ -183,10 +183,10 @@ func TestMatcher_RejectsMultiKey(t *testing.T) {
 // unresolved-refs report used by the validator.
 func TestExpandTestVars(t *testing.T) {
 	env := map[string]string{
-		"HOME":            "/home/user",
-		"HOST_PORT:6379":  "16379",
-		"VOLUME_PATH:ws":  "/tmp/ws",
-		"CONTAINER_IP":    "10.88.0.12",
+		"HOME":           "/home/user",
+		"HOST_PORT:6379": "16379",
+		"VOLUME_PATH:ws": "/tmp/ws",
+		"CONTAINER_IP":   "10.88.0.12",
 	}
 	in := "ls ${HOME} && redis-cli -h ${CONTAINER_IP} -p ${HOST_PORT:6379} ${VOLUME_PATH:ws} ${UNKNOWN} ${HOST_PORT:9999}"
 	out, missing := ExpandTestVars(in, env)
@@ -320,11 +320,11 @@ func TestMatcher_UnmarshalJSON_Shorthand(t *testing.T) {
 // one-element list. Closes the asymmetry with the YAML path.
 func TestMatcherList_UnmarshalJSON_Shorthand(t *testing.T) {
 	cases := []struct {
-		name     string
-		input    string
-		wantLen  int
-		wantOp   string
-		wantVal  any
+		name    string
+		input   string
+		wantLen int
+		wantOp  string
+		wantVal any
 	}{
 		{"array", `[{"op":"equals","value":"A"},{"op":"contains","value":"B"}]`, 2, "equals", "A"},
 		{"scalar", `"OK"`, 1, "equals", "OK"},

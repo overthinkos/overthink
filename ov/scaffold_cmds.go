@@ -164,9 +164,9 @@ func (c *ImageRefreshCmd) Run() error {
 // `ov image write <rel-path>` and `ov image cat <rel-path>`
 
 type ImageWriteCmd struct {
-	Path     string `arg:"" help:"Path under the project root (relative; .. is rejected)"`
-	Content  string `long:"content" help:"File content (mutually exclusive with --from-stdin)"`
-	FromIn   bool   `long:"from-stdin" help:"Read file content from stdin"`
+	Path    string `arg:"" help:"Path under the project root (relative; .. is rejected)"`
+	Content string `long:"content" help:"File content (mutually exclusive with --from-stdin)"`
+	FromIn  bool   `long:"from-stdin" help:"Read file content from stdin"`
 }
 
 func (c *ImageWriteCmd) Run() error {

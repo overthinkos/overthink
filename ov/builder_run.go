@@ -168,10 +168,10 @@ func UserScopeBindMounts(hostHome string) (map[string]string, error) {
 // own home paths.
 func UserScopeEnv(hostHome string) map[string]string {
 	return map[string]string{
-		"PIXI_CACHE_DIR":     filepath.Join(hostHome, ".cache", "ov", "pixi"),
-		"RATTLER_CACHE_DIR":  filepath.Join(hostHome, ".cache", "ov", "rattler"),
-		"NPM_CONFIG_PREFIX":  filepath.Join(hostHome, ".npm-global"),
-		"CARGO_HOME":         filepath.Join(hostHome, ".cargo"),
+		"PIXI_CACHE_DIR":    filepath.Join(hostHome, ".cache", "ov", "pixi"),
+		"RATTLER_CACHE_DIR": filepath.Join(hostHome, ".cache", "ov", "rattler"),
+		"NPM_CONFIG_PREFIX": filepath.Join(hostHome, ".npm-global"),
+		"CARGO_HOME":        filepath.Join(hostHome, ".cargo"),
 	}
 }
 

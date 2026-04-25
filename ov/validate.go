@@ -324,7 +324,6 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 	}
 }
 
-
 // validateLayerReferences ensures all layers referenced in images exist
 func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	for imageName, img := range cfg.Images {
@@ -349,7 +348,6 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 		}
 	}
 }
-
 
 // validateLayerContents validates each layer has required files
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {

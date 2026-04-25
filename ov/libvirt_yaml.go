@@ -74,20 +74,20 @@ type LibvirtFeatures struct {
 
 // LibvirtHyperV toggles Hyper-V enlightenments (Windows guest perf).
 type LibvirtHyperV struct {
-	Relaxed   string             `yaml:"relaxed,omitempty"`    // "on" | "off"
-	VAPIC     string             `yaml:"vapic,omitempty"`
-	Spinlocks *LibvirtSpinlocks  `yaml:"spinlocks,omitempty"`
-	VPIndex   string             `yaml:"vpindex,omitempty"`
-	Runtime   string             `yaml:"runtime,omitempty"`
-	Synic     string             `yaml:"synic,omitempty"`
-	STimer    string             `yaml:"stimer,omitempty"`
-	Reset     string             `yaml:"reset,omitempty"`
-	VendorID  *LibvirtVendorID   `yaml:"vendor_id,omitempty"`
-	Frequencies string           `yaml:"frequencies,omitempty"`
-	Reenlightenment string       `yaml:"reenlightenment,omitempty"`
-	TLBFlush  string             `yaml:"tlbflush,omitempty"`
-	IPI       string             `yaml:"ipi,omitempty"`
-	EVMCS     string             `yaml:"evmcs,omitempty"`
+	Relaxed         string            `yaml:"relaxed,omitempty"` // "on" | "off"
+	VAPIC           string            `yaml:"vapic,omitempty"`
+	Spinlocks       *LibvirtSpinlocks `yaml:"spinlocks,omitempty"`
+	VPIndex         string            `yaml:"vpindex,omitempty"`
+	Runtime         string            `yaml:"runtime,omitempty"`
+	Synic           string            `yaml:"synic,omitempty"`
+	STimer          string            `yaml:"stimer,omitempty"`
+	Reset           string            `yaml:"reset,omitempty"`
+	VendorID        *LibvirtVendorID  `yaml:"vendor_id,omitempty"`
+	Frequencies     string            `yaml:"frequencies,omitempty"`
+	Reenlightenment string            `yaml:"reenlightenment,omitempty"`
+	TLBFlush        string            `yaml:"tlbflush,omitempty"`
+	IPI             string            `yaml:"ipi,omitempty"`
+	EVMCS           string            `yaml:"evmcs,omitempty"`
 }
 
 type LibvirtSpinlocks struct {
@@ -102,25 +102,25 @@ type LibvirtVendorID struct {
 
 // LibvirtKVM toggles KVM paravirt features (e.g. hidden flag).
 type LibvirtKVM struct {
-	Hidden             string `yaml:"hidden,omitempty"` // "on" | "off"
-	HintDedicated      string `yaml:"hint_dedicated,omitempty"`
-	PollControl        string `yaml:"poll_control,omitempty"`
-	PVIPI              string `yaml:"pv_ipi,omitempty"`
-	DirtyRingSize      int    `yaml:"dirty_ring_size,omitempty"`
+	Hidden        string `yaml:"hidden,omitempty"` // "on" | "off"
+	HintDedicated string `yaml:"hint_dedicated,omitempty"`
+	PollControl   string `yaml:"poll_control,omitempty"`
+	PVIPI         string `yaml:"pv_ipi,omitempty"`
+	DirtyRingSize int    `yaml:"dirty_ring_size,omitempty"`
 }
 
 // LibvirtCPU is the CPU configuration. The renderer applies D16
 // defaults (mode: host-passthrough, check: none, +vmx/+svm auto-added
 // per host vendor for nested virt) when this struct is nil.
 type LibvirtCPU struct {
-	Mode     string                `yaml:"mode,omitempty"`     // host-passthrough (default) | host-model | custom
-	Model    string                `yaml:"model,omitempty"`    // required when Mode == custom
-	Check    string                `yaml:"check,omitempty"`    // none (default) | partial | full
+	Mode       string              `yaml:"mode,omitempty"`       // host-passthrough (default) | host-model | custom
+	Model      string              `yaml:"model,omitempty"`      // required when Mode == custom
+	Check      string              `yaml:"check,omitempty"`      // none (default) | partial | full
 	Migratable string              `yaml:"migratable,omitempty"` // "on" | "off"
-	Topology *LibvirtCPUTopology   `yaml:"topology,omitempty"`
-	Features []LibvirtCPUFeature   `yaml:"features,omitempty"`
-	Cache    *LibvirtCPUCache      `yaml:"cache,omitempty"`
-	NUMA     []LibvirtNUMACell     `yaml:"numa,omitempty"`
+	Topology   *LibvirtCPUTopology `yaml:"topology,omitempty"`
+	Features   []LibvirtCPUFeature `yaml:"features,omitempty"`
+	Cache      *LibvirtCPUCache    `yaml:"cache,omitempty"`
+	NUMA       []LibvirtNUMACell   `yaml:"numa,omitempty"`
 }
 
 type LibvirtCPUTopology struct {
@@ -158,33 +158,33 @@ type LibvirtClock struct {
 }
 
 type LibvirtTimer struct {
-	Name       string `yaml:"name"`                  // rtc | pit | hpet | tsc | kvmclock | hypervclock | armvtimer
-	Present    string `yaml:"present,omitempty"`     // "yes" | "no"
-	Track      string `yaml:"track,omitempty"`       // boot | guest | wall | realtime
-	TickPolicy string `yaml:"tickpolicy,omitempty"`  // delay | catchup | merge | discard
+	Name       string `yaml:"name"`                 // rtc | pit | hpet | tsc | kvmclock | hypervclock | armvtimer
+	Present    string `yaml:"present,omitempty"`    // "yes" | "no"
+	Track      string `yaml:"track,omitempty"`      // boot | guest | wall | realtime
+	TickPolicy string `yaml:"tickpolicy,omitempty"` // delay | catchup | merge | discard
 	Frequency  int    `yaml:"frequency,omitempty"`
-	Mode       string `yaml:"mode,omitempty"`        // auto | native | emulate | paravirt | smpsafe
+	Mode       string `yaml:"mode,omitempty"` // auto | native | emulate | paravirt | smpsafe
 }
 
 // LibvirtMemoryBacking configures backing store for guest memory.
 type LibvirtMemoryBacking struct {
-	Hugepages   *LibvirtHugepages `yaml:"hugepages,omitempty"`
-	NoSharepages *bool            `yaml:"nosharepages,omitempty"`
-	Locked      *bool             `yaml:"locked,omitempty"`
-	Source      string            `yaml:"source,omitempty"`   // file | anonymous | memfd
-	Access      string            `yaml:"access,omitempty"`   // shared | private
-	Allocation  string            `yaml:"allocation,omitempty"` // immediate | ondemand
-	Discard     *bool             `yaml:"discard,omitempty"`
+	Hugepages    *LibvirtHugepages `yaml:"hugepages,omitempty"`
+	NoSharepages *bool             `yaml:"nosharepages,omitempty"`
+	Locked       *bool             `yaml:"locked,omitempty"`
+	Source       string            `yaml:"source,omitempty"`     // file | anonymous | memfd
+	Access       string            `yaml:"access,omitempty"`     // shared | private
+	Allocation   string            `yaml:"allocation,omitempty"` // immediate | ondemand
+	Discard      *bool             `yaml:"discard,omitempty"`
 }
 
 type LibvirtHugepages struct {
-	Size     string `yaml:"size,omitempty"`      // "2M" | "1G"
-	NodeSet  string `yaml:"nodeset,omitempty"`
+	Size    string `yaml:"size,omitempty"` // "2M" | "1G"
+	NodeSet string `yaml:"nodeset,omitempty"`
 }
 
 // LibvirtMemTune provides memory limit hints to the hypervisor.
 type LibvirtMemTune struct {
-	HardLimit     string `yaml:"hard_limit,omitempty"`     // e.g. "8G"
+	HardLimit     string `yaml:"hard_limit,omitempty"` // e.g. "8G"
 	SoftLimit     string `yaml:"soft_limit,omitempty"`
 	SwapHardLimit string `yaml:"swap_hard_limit,omitempty"`
 	MinGuarantee  string `yaml:"min_guarantee,omitempty"`
@@ -192,8 +192,8 @@ type LibvirtMemTune struct {
 
 // LibvirtNUMATune pins guest memory to host NUMA nodes.
 type LibvirtNUMATune struct {
-	Memory *LibvirtNUMAMemory `yaml:"memory,omitempty"`
-	MemNodes []LibvirtMemnode `yaml:"memnodes,omitempty"`
+	Memory   *LibvirtNUMAMemory `yaml:"memory,omitempty"`
+	MemNodes []LibvirtMemnode   `yaml:"memnodes,omitempty"`
 }
 
 type LibvirtNUMAMemory struct {
@@ -203,9 +203,9 @@ type LibvirtNUMAMemory struct {
 }
 
 type LibvirtMemnode struct {
-	CellID    int    `yaml:"cellid,omitempty"`
-	Mode      string `yaml:"mode,omitempty"`
-	Nodeset   string `yaml:"nodeset,omitempty"`
+	CellID  int    `yaml:"cellid,omitempty"`
+	Mode    string `yaml:"mode,omitempty"`
+	Nodeset string `yaml:"nodeset,omitempty"`
 }
 
 // LibvirtCPUTune configures guest vCPU scheduling + pinning.
@@ -243,14 +243,14 @@ type LibvirtIOThreadPin struct {
 // root disk + ssh interface from VmSpec runtime parameters separately;
 // these are additions on top.
 type LibvirtDevices struct {
-	Emulator    string              `yaml:"emulator,omitempty"`    // path to qemu binary (e.g. /usr/bin/qemu-system-x86_64)
-	Disks       []LibvirtDisk       `yaml:"disks,omitempty"`       // additional disks beyond the root qcow2
-	Interfaces  []LibvirtInterface  `yaml:"interfaces,omitempty"`  // additional NICs beyond user-mode SSH-forwarded
-	Channels    []LibvirtChannel    `yaml:"channels,omitempty"`    // qemu-guest-agent, spice-webdav
+	Emulator    string              `yaml:"emulator,omitempty"`   // path to qemu binary (e.g. /usr/bin/qemu-system-x86_64)
+	Disks       []LibvirtDisk       `yaml:"disks,omitempty"`      // additional disks beyond the root qcow2
+	Interfaces  []LibvirtInterface  `yaml:"interfaces,omitempty"` // additional NICs beyond user-mode SSH-forwarded
+	Channels    []LibvirtChannel    `yaml:"channels,omitempty"`   // qemu-guest-agent, spice-webdav
 	Serial      []LibvirtSerial     `yaml:"serial,omitempty"`
 	Console     []LibvirtConsole    `yaml:"console,omitempty"`
 	Parallel    []LibvirtParallel   `yaml:"parallel,omitempty"`
-	Graphics    []LibvirtGraphics   `yaml:"graphics,omitempty"`    // vnc, spice, rdp
+	Graphics    []LibvirtGraphics   `yaml:"graphics,omitempty"` // vnc, spice, rdp
 	Video       []LibvirtVideo      `yaml:"video,omitempty"`
 	Audio       []LibvirtAudio      `yaml:"audio,omitempty"`
 	Sound       []LibvirtSound      `yaml:"sound,omitempty"`
@@ -274,25 +274,25 @@ type LibvirtDevices struct {
 // --- Per-device structs ---
 
 type LibvirtDisk struct {
-	Type     string            `yaml:"type,omitempty"`     // file | block | network | volume
-	Device   string            `yaml:"device,omitempty"`   // disk | cdrom | floppy | lun
-	Source   map[string]string `yaml:"source,omitempty"`   // {file: /path} | {dev: /dev/…} | {pool, volume} etc.
-	Target   map[string]string `yaml:"target,omitempty"`   // {dev: vda, bus: virtio}
-	Driver   map[string]string `yaml:"driver,omitempty"`   // {name: qemu, type: qcow2, cache: none, io: native}
+	Type     string            `yaml:"type,omitempty"`   // file | block | network | volume
+	Device   string            `yaml:"device,omitempty"` // disk | cdrom | floppy | lun
+	Source   map[string]string `yaml:"source,omitempty"` // {file: /path} | {dev: /dev/…} | {pool, volume} etc.
+	Target   map[string]string `yaml:"target,omitempty"` // {dev: vda, bus: virtio}
+	Driver   map[string]string `yaml:"driver,omitempty"` // {name: qemu, type: qcow2, cache: none, io: native}
 	Readonly *bool             `yaml:"readonly,omitempty"`
 	Serial   string            `yaml:"serial,omitempty"`
 	WWN      string            `yaml:"wwn,omitempty"`
-	Boot     int               `yaml:"boot,omitempty"`     // boot order
+	Boot     int               `yaml:"boot,omitempty"` // boot order
 }
 
 type LibvirtInterface struct {
-	Type     string            `yaml:"type,omitempty"`     // user | bridge | network | direct
-	Source   map[string]string `yaml:"source,omitempty"`   // {bridge: virbr0} | {network: default}
-	Model    string            `yaml:"model,omitempty"`    // virtio (virtio-net-pci) | e1000 | rtl8139
-	MAC      string            `yaml:"mac,omitempty"`
-	MTU      int               `yaml:"mtu,omitempty"`
-	Driver   map[string]string `yaml:"driver,omitempty"`
-	Boot     int               `yaml:"boot,omitempty"`
+	Type         string               `yaml:"type,omitempty"`   // user | bridge | network | direct
+	Source       map[string]string    `yaml:"source,omitempty"` // {bridge: virbr0} | {network: default}
+	Model        string               `yaml:"model,omitempty"`  // virtio (virtio-net-pci) | e1000 | rtl8139
+	MAC          string               `yaml:"mac,omitempty"`
+	MTU          int                  `yaml:"mtu,omitempty"`
+	Driver       map[string]string    `yaml:"driver,omitempty"`
+	Boot         int                  `yaml:"boot,omitempty"`
 	PortForwards []LibvirtPortForward `yaml:"port_forwards,omitempty"` // for type: user
 }
 
@@ -303,8 +303,8 @@ type LibvirtPortForward struct {
 }
 
 type LibvirtChannel struct {
-	Type   string `yaml:"type,omitempty"`   // virtio | spicevmc | unix | pty
-	Name   string `yaml:"name,omitempty"`   // e.g. org.qemu.guest_agent.0
+	Type   string `yaml:"type,omitempty"` // virtio | spicevmc | unix | pty
+	Name   string `yaml:"name,omitempty"` // e.g. org.qemu.guest_agent.0
 	Path   string `yaml:"path,omitempty"`
 	Source string `yaml:"source,omitempty"`
 }
@@ -327,18 +327,18 @@ type LibvirtParallel struct {
 }
 
 type LibvirtGraphics struct {
-	Type     string                   `yaml:"type"`                // vnc | spice | rdp | sdl
-	Port     int                      `yaml:"port,omitempty"`      // -1 → autoport
-	AutoPort string                   `yaml:"autoport,omitempty"`  // "yes" | "no"
-	Listen   LibvirtGraphicsListeners `yaml:"listen,omitempty"`    // scalar / map / list — see libvirt_yaml_listen.go
+	Type     string                   `yaml:"type"`               // vnc | spice | rdp | sdl
+	Port     int                      `yaml:"port,omitempty"`     // -1 → autoport
+	AutoPort string                   `yaml:"autoport,omitempty"` // "yes" | "no"
+	Listen   LibvirtGraphicsListeners `yaml:"listen,omitempty"`   // scalar / map / list — see libvirt_yaml_listen.go
 	Passwd   string                   `yaml:"passwd,omitempty"`
 	Keymap   string                   `yaml:"keymap,omitempty"`
 	GL       string                   `yaml:"gl,omitempty"` // "yes" | "no" (for 3D accel)
 }
 
 type LibvirtVideo struct {
-	Model   string `yaml:"model"`            // virtio | vga | cirrus | qxl | bochs | ramfb | none
-	VRAM    int    `yaml:"vram,omitempty"`   // kilobytes
+	Model   string `yaml:"model"`          // virtio | vga | cirrus | qxl | bochs | ramfb | none
+	VRAM    int    `yaml:"vram,omitempty"` // kilobytes
 	Heads   int    `yaml:"heads,omitempty"`
 	Accel3D *bool  `yaml:"accel3d,omitempty"`
 	Primary *bool  `yaml:"primary,omitempty"`
@@ -354,7 +354,7 @@ type LibvirtSound struct {
 }
 
 type LibvirtInput struct {
-	Type string `yaml:"type"`         // tablet | mouse | keyboard
+	Type string `yaml:"type"`          // tablet | mouse | keyboard
 	Bus  string `yaml:"bus,omitempty"` // ps2 | usb | virtio
 }
 
@@ -364,7 +364,7 @@ type LibvirtUSB struct {
 }
 
 type LibvirtRedirDev struct {
-	Bus  string `yaml:"bus,omitempty"` // usb
+	Bus  string `yaml:"bus,omitempty"`  // usb
 	Type string `yaml:"type,omitempty"` // spicevmc | tcp
 }
 
@@ -378,13 +378,13 @@ type LibvirtHostdev struct {
 }
 
 type LibvirtFilesystem struct {
-	Type     string            `yaml:"type,omitempty"`     // mount (default) | block | file | template | ram
-	Driver   string            `yaml:"driver,omitempty"`   // virtiofs | 9p | path
-	AccessMode string          `yaml:"accessmode,omitempty"` // passthrough | mapped | squash
-	Source   string            `yaml:"source"`             // host path
-	Target   string            `yaml:"target"`             // guest mount tag
-	Readonly *bool             `yaml:"readonly,omitempty"`
-	Binary   map[string]string `yaml:"binary,omitempty"`   // virtiofsd knobs
+	Type       string            `yaml:"type,omitempty"`       // mount (default) | block | file | template | ram
+	Driver     string            `yaml:"driver,omitempty"`     // virtiofs | 9p | path
+	AccessMode string            `yaml:"accessmode,omitempty"` // passthrough | mapped | squash
+	Source     string            `yaml:"source"`               // host path
+	Target     string            `yaml:"target"`               // guest mount tag
+	Readonly   *bool             `yaml:"readonly,omitempty"`
+	Binary     map[string]string `yaml:"binary,omitempty"` // virtiofsd knobs
 }
 
 type LibvirtRNG struct {
@@ -404,9 +404,9 @@ type LibvirtWatchdog struct {
 }
 
 type LibvirtMemBalloon struct {
-	Model     string `yaml:"model"`                 // virtio | none
-	Autodeflate string `yaml:"autodeflate,omitempty"`
-	Stats     map[string]int `yaml:"stats,omitempty"` // {period: 5}
+	Model       string         `yaml:"model"` // virtio | none
+	Autodeflate string         `yaml:"autodeflate,omitempty"`
+	Stats       map[string]int `yaml:"stats,omitempty"` // {period: 5}
 }
 
 type LibvirtShmem struct {
@@ -443,29 +443,29 @@ type LibvirtHub struct {
 
 // LibvirtSecLabel maps to <seclabel>. Commonly used with SELinux.
 type LibvirtSecLabel struct {
-	Type     string `yaml:"type,omitempty"`     // dynamic | static | none
-	Model    string `yaml:"model,omitempty"`    // selinux | dac | apparmor
-	Relabel  string `yaml:"relabel,omitempty"`  // "yes" | "no"
-	Label    string `yaml:"label,omitempty"`
-	BaseLabel string `yaml:"baselabel,omitempty"`
+	Type       string `yaml:"type,omitempty"`    // dynamic | static | none
+	Model      string `yaml:"model,omitempty"`   // selinux | dac | apparmor
+	Relabel    string `yaml:"relabel,omitempty"` // "yes" | "no"
+	Label      string `yaml:"label,omitempty"`
+	BaseLabel  string `yaml:"baselabel,omitempty"`
 	ImageLabel string `yaml:"imagelabel,omitempty"`
 }
 
 // LibvirtLaunchSecurity covers confidential VMs (AMD SEV/SEV-ES/SEV-SNP, Intel TDX).
 type LibvirtLaunchSecurity struct {
-	Type            string `yaml:"type,omitempty"`                // sev | sev-es | sev-snp | tdx
+	Type            string `yaml:"type,omitempty"` // sev | sev-es | sev-snp | tdx
 	CBitPos         int    `yaml:"cbitpos,omitempty"`
 	ReducedPhysBits int    `yaml:"reduced_phys_bits,omitempty"`
-	Policy          string `yaml:"policy,omitempty"`              // hex string
+	Policy          string `yaml:"policy,omitempty"` // hex string
 	DhCert          string `yaml:"dh_cert,omitempty"`
 	Session         string `yaml:"session,omitempty"`
-	KernelHashes    string `yaml:"kernel_hashes,omitempty"`       // "yes" | "no"
+	KernelHashes    string `yaml:"kernel_hashes,omitempty"` // "yes" | "no"
 }
 
 // LibvirtResource is the cgroup partition (rare; mainly for libvirt users
 // who run VMs under a named cgroup).
 type LibvirtResource struct {
-	Partition string `yaml:"partition,omitempty"`
+	Partition    string            `yaml:"partition,omitempty"`
 	FibreChannel map[string]string `yaml:"fibrechannel,omitempty"`
 }
 

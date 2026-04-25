@@ -470,7 +470,6 @@ func (c *WlFocusCmd) Run() error {
 	return nil
 }
 
-
 // FindX11WindowGeometry queries the X11 window geometry via xdotool for an XWayland window.
 // Returns the window's internal (X11-reported) width and height.
 func FindX11WindowGeometry(engine, containerName, target string) (int, int, error) {

@@ -1959,4 +1959,3 @@ func (g *Generator) layerCopySource(layerRef string) string {
 	}
 	return rel
 }
-

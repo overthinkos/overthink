@@ -296,9 +296,9 @@ func domainStateString(state libvirt.DomainState) string {
 
 // remoteVirtqemudSocketPath discovers the remote user's session
 // virtqemud socket path via the SSH connection. Probes (in order):
-//   1. $XDG_RUNTIME_DIR/libvirt/virtqemud-sock (modular libvirt ≥ 8)
-//   2. /run/user/$(id -u)/libvirt/virtqemud-sock
-//   3. $XDG_RUNTIME_DIR/libvirt/libvirt-sock (legacy monolithic)
+//  1. $XDG_RUNTIME_DIR/libvirt/virtqemud-sock (modular libvirt ≥ 8)
+//  2. /run/user/$(id -u)/libvirt/virtqemud-sock
+//  3. $XDG_RUNTIME_DIR/libvirt/libvirt-sock (legacy monolithic)
 //
 // Returns the first path that exists on the remote host.
 func remoteVirtqemudSocketPath(client *ssh.Client) (string, error) {

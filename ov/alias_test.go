@@ -132,7 +132,7 @@ func TestCollectImageAliases(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasTasks: true,
+			HasTasks:   true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
@@ -161,7 +161,7 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 	layers := map[string]*Layer{
 		"svc": {
 			Name:       "svc",
-			HasTasks: true,
+			HasTasks:   true,
 			HasAliases: true,
 			aliases:    []AliasYAML{{Name: "svc-cli", Command: "svc-cli-bin"}},
 		},
@@ -191,7 +191,7 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	}
 	layers := map[string]*Layer{
 		"svc": {
-			Name:       "svc",
+			Name:     "svc",
 			HasTasks: true,
 		},
 	}

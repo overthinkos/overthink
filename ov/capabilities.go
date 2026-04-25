@@ -81,7 +81,7 @@ var CapabilityLabelMap = map[string]string{
 	"Builds":       LabelBuilderProvides,
 
 	// Hooks
-	"Hooks":   LabelHooks,
+	"Hooks": LabelHooks,
 	// Vm / Libvirt removed in the VM hard-cutover (see labels.go).
 
 	// Skills (doc pointer)

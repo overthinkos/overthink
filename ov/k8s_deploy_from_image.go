@@ -17,15 +17,15 @@ import (
 
 // DeployFromImageOpts carries the source-less-deploy inputs.
 type DeployFromImageOpts struct {
-	Engine         string // "podman" | "docker" (auto-detected if empty)
-	ImageRef       string // fully-qualified registry/name:tag
-	DeploymentName string // optional override; defaults to the basename of ImageRef without tag
-	Instance       string // optional "image/instance" suffix
-	ClusterName    string // cluster profile name (ClusterProfile.Name)
-	Namespace      string // optional override of cluster profile's default namespace
+	Engine         string          // "podman" | "docker" (auto-detected if empty)
+	ImageRef       string          // fully-qualified registry/name:tag
+	DeploymentName string          // optional override; defaults to the basename of ImageRef without tag
+	Instance       string          // optional "image/instance" suffix
+	ClusterName    string          // cluster profile name (ClusterProfile.Name)
+	Namespace      string          // optional override of cluster profile's default namespace
 	DeployOverlay  *DeploymentNode // optional: merged from ~/.config/ov/deploy.yml
-	OutputDir      string // defaults to <cwd>/.overthink/k8s
-	ProjectDir     string // for looking up clusters/<name>.yaml
+	OutputDir      string          // defaults to <cwd>/.overthink/k8s
+	ProjectDir     string          // for looking up clusters/<name>.yaml
 }
 
 // DeployFromImage performs the source-less deploy. Returns the absolute path

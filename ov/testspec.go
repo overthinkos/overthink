@@ -102,12 +102,12 @@ type Check struct {
 	//   RetryInterval: spacing between retries; defaults to "1s"; must be ≤ Eventually.
 	//   On:            target-entity override for multi-target scenarios. Omit → use the scenario's default target.
 	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
-	//   Tags:          free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
+	//   Tag: free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
 	Capture       string   `yaml:"capture,omitempty"        json:"capture,omitempty"`
 	Eventually    string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
 	RetryInterval string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
 	On            string   `yaml:"on,omitempty"             json:"on,omitempty"`
-	Tags          []string `yaml:"tags,omitempty"           json:"tags,omitempty"`
+	Tag           []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
 
 	// Origin is populated at collection time (layer:<name>, image:<name>,
 	// deploy-default, deploy-local). Not authored in YAML, but travels in
@@ -199,26 +199,26 @@ type Check struct {
 
 	// cdp/wl/dbus/vnc-specific modifiers. Applicable sets vary per method —
 	// validate_tests.go enforces required-modifier rules per {verb, method}.
-	Tab              string   `yaml:"tab,omitempty"                json:"tab,omitempty"`                  // cdp: tab id
-	Expression       string   `yaml:"expression,omitempty"         json:"expression,omitempty"`           // cdp: eval expression
-	URL              string   `yaml:"url,omitempty"                json:"url,omitempty"`                  // cdp: open url
-	Selector         string   `yaml:"selector,omitempty"           json:"selector,omitempty"`             // cdp: click/type/wait/coords/axtree
-	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`                 // dbus: service name
-	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`                 // dbus: object path
-	Args             []string `yaml:"args,omitempty"               json:"args,omitempty"`                 // dbus: method args (type:value)
-	Artifact         string   `yaml:"artifact,omitempty"           json:"artifact,omitempty"`             // cdp/wl/vnc: output file path for screenshot / raw capture
-	ArtifactMinBytes int      `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"`   // post-run size assertion on artifact
-	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                   // wl/vnc: click/mouse x coord
-	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                   // wl/vnc: click/mouse y coord
-	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`               // wl/vnc: left/middle/right
-	Text             string   `yaml:"text,omitempty"               json:"text,omitempty"`                 // wl/vnc: type text / overlay text
-	KeyName          string   `yaml:"key,omitempty"                json:"key,omitempty"`                  // wl/vnc: key name (Return/Escape/...)
-	Combo            string   `yaml:"combo,omitempty"              json:"combo,omitempty"`                // wl: key-combo (ctrl+c)
-	Direction        string   `yaml:"direction,omitempty"          json:"direction,omitempty"`            // wl: scroll up/down/left/right
-	Amount           int      `yaml:"amount,omitempty"             json:"amount,omitempty"`               // wl: scroll amount
-	Target           string   `yaml:"target,omitempty"             json:"target,omitempty"`               // wl: focus/close/geometry/xprop target
-	Action           string   `yaml:"action,omitempty"             json:"action,omitempty"`               // wl: atspi action (tree/find/click)
-	Query            string   `yaml:"query,omitempty"              json:"query,omitempty"`                // cdp: axtree filter / wl: atspi find query
+	Tab              string   `yaml:"tab,omitempty"                json:"tab,omitempty"`                // cdp: tab id
+	Expression       string   `yaml:"expression,omitempty"         json:"expression,omitempty"`         // cdp: eval expression
+	URL              string   `yaml:"url,omitempty"                json:"url,omitempty"`                // cdp: open url
+	Selector         string   `yaml:"selector,omitempty"           json:"selector,omitempty"`           // cdp: click/type/wait/coords/axtree
+	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`               // dbus: service name
+	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`               // dbus: object path
+	Args             []string `yaml:"args,omitempty"               json:"args,omitempty"`               // dbus: method args (type:value)
+	Artifact         string   `yaml:"artifact,omitempty"           json:"artifact,omitempty"`           // cdp/wl/vnc: output file path for screenshot / raw capture
+	ArtifactMinBytes int      `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"` // post-run size assertion on artifact
+	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                  // wl/vnc: click/mouse x coord
+	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                  // wl/vnc: click/mouse y coord
+	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`             // wl/vnc: left/middle/right
+	Text             string   `yaml:"text,omitempty"               json:"text,omitempty"`               // wl/vnc: type text / overlay text
+	KeyName          string   `yaml:"key,omitempty"                json:"key,omitempty"`                // wl/vnc: key name (Return/Escape/...)
+	Combo            string   `yaml:"combo,omitempty"              json:"combo,omitempty"`              // wl: key-combo (ctrl+c)
+	Direction        string   `yaml:"direction,omitempty"          json:"direction,omitempty"`          // wl: scroll up/down/left/right
+	Amount           int      `yaml:"amount,omitempty"             json:"amount,omitempty"`             // wl: scroll amount
+	Target           string   `yaml:"target,omitempty"             json:"target,omitempty"`             // wl: focus/close/geometry/xprop target
+	Action           string   `yaml:"action,omitempty"             json:"action,omitempty"`             // wl: atspi action (tree/find/click)
+	Query            string   `yaml:"query,omitempty"              json:"query,omitempty"`              // cdp: axtree filter / wl: atspi find query
 
 	// mcp-specific modifiers. See /ov:test "Method allowlist — mcp" for which
 	// methods require which fields; enforcement in validate_tests.go.

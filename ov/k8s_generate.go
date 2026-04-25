@@ -33,13 +33,13 @@ import (
 
 // K8sGenerateOpts carries the inputs a Kustomize emit needs.
 type K8sGenerateOpts struct {
-	DeploymentName string              // map key from overthink.yml:deployments.images (base image name)
-	Instance       string              // "" for the bare overlay; non-empty for image/instance
-	ImageRef       string              // fully qualified image ref (registry/name:tag)
+	DeploymentName string // map key from overthink.yml:deployments.images (base image name)
+	Instance       string // "" for the bare overlay; non-empty for image/instance
+	ImageRef       string // fully qualified image ref (registry/name:tag)
 	Deployment     DeploymentNode
 	Capabilities   *Capabilities
 	Cluster        *K8sSpec
-	OutputDir      string              // usually <projectDir>/.overthink/k8s
+	OutputDir      string // usually <projectDir>/.overthink/k8s
 }
 
 // GenerateK8sKustomize materializes the Kustomize tree on disk. Returns the

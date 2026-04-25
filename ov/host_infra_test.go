@@ -38,9 +38,9 @@ func TestDetectHostDistroFedora43(t *testing.T) {
 
 func TestHostDistroTagsAndFormatHint(t *testing.T) {
 	tests := []struct {
-		hd       *HostDistro
-		wantTag  string
-		wantFmt  string
+		hd      *HostDistro
+		wantTag string
+		wantFmt string
 	}{
 		{
 			hd:      &HostDistro{ID: "fedora", VersionID: "43"},
@@ -71,11 +71,11 @@ func TestHostDistroTagsAndFormatHint(t *testing.T) {
 
 func TestParseGlibcVersion(t *testing.T) {
 	tests := map[string]string{
-		"ldd (GNU libc) 2.39\n":                            "2.39",
-		"ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35\n":        "2.35",
-		"ldd (GNU libc) 2.38.0\n":                          "2.38",
-		"something unexpected\n":                           "",
-		"":                                                 "",
+		"ldd (GNU libc) 2.39\n":                     "2.39",
+		"ldd (Ubuntu GLIBC 2.35-0ubuntu3.8) 2.35\n": "2.35",
+		"ldd (GNU libc) 2.38.0\n":                   "2.38",
+		"something unexpected\n":                    "",
+		"":                                          "",
 	}
 	for in, want := range tests {
 		if got := parseGlibcVersion(in); got != want {
@@ -356,12 +356,12 @@ func TestWriteAndRemoveEnvdFile(t *testing.T) {
 
 func TestShQuoteEnv(t *testing.T) {
 	tests := map[string]string{
-		"simple":              "simple",
-		"":                    "''",
-		"with spaces":         "'with spaces'",
-		"has'quote":           `'has'\''quote'`,
-		"safe-chars_1.2":      "safe-chars_1.2",
-		"$VAR":                `'$VAR'`,
+		"simple":         "simple",
+		"":               "''",
+		"with spaces":    "'with spaces'",
+		"has'quote":      `'has'\''quote'`,
+		"safe-chars_1.2": "safe-chars_1.2",
+		"$VAR":           `'$VAR'`,
 	}
 	for in, want := range tests {
 		if got := shQuoteEnv(in); got != want {

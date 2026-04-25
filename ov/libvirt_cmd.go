@@ -72,10 +72,10 @@ func (c *LibvirtListCmd) Run() error {
 	}
 
 	type row struct {
-		Name    string `json:"name"`
-		State   string `json:"state"`
-		Uuid    string `json:"uuid"`
-		Id      int32  `json:"id"`
+		Name  string `json:"name"`
+		State string `json:"state"`
+		Uuid  string `json:"uuid"`
+		Id    int32  `json:"id"`
 	}
 	var rows []row
 	for _, d := range doms {
@@ -160,14 +160,14 @@ func (c *LibvirtInfoCmd) Run() error {
 	}
 
 	out := map[string]any{
-		"vm":        c.Vm,
-		"domain":    t.DomName,
-		"state":     domainStateString(libvirt.DomainState(state)),
-		"max_mem":   maxMem,
-		"memory":    memory,
-		"cpus":      nrCPU,
-		"cpu_time":  cpuTime,
-		"graphics":  graphics,
+		"vm":              c.Vm,
+		"domain":          t.DomName,
+		"state":           domainStateString(libvirt.DomainState(state)),
+		"max_mem":         maxMem,
+		"memory":          memory,
+		"cpus":            nrCPU,
+		"cpu_time":        cpuTime,
+		"graphics":        graphics,
 		"agent_reachable": t.AgentReachable(3 * time.Second),
 	}
 
@@ -240,9 +240,9 @@ func (c *LibvirtScreenshotCmd) Run() error {
 // ---------------- send-key ----------------
 
 type LibvirtSendKeyCmd struct {
-	Vm   string `arg:"" help:"VM name"`
+	Vm   string   `arg:"" help:"VM name"`
 	Keys []string `arg:"" help:"Key names (space-separated, e.g. 'ctrl alt F2')"`
-	Hold int    `long:"hold" default:"50" help:"Hold duration in ms"`
+	Hold int      `long:"hold" default:"50" help:"Hold duration in ms"`
 	libvirtURIFlag
 }
 
@@ -436,7 +436,7 @@ func (c *LibvirtDomainXMLCmd) Run() error {
 // ---------------- console ----------------
 
 type LibvirtConsoleCmd struct {
-	Vm       string `arg:"" help:"VM name"`
+	Vm       string        `arg:"" help:"VM name"`
 	Duration time.Duration `long:"duration" default:"5s" help:"Stream for this duration, then exit"`
 	libvirtURIFlag
 }
@@ -457,7 +457,7 @@ func (c *LibvirtConsoleCmd) Run() error {
 // ---------------- events ----------------
 
 type LibvirtEventsCmd struct {
-	Vm       string `arg:"" optional:"" help:"VM name (empty = all domains)"`
+	Vm       string        `arg:"" optional:"" help:"VM name (empty = all domains)"`
 	Duration time.Duration `long:"duration" default:"10s" help:"Watch for this long"`
 	libvirtURIFlag
 }

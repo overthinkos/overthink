@@ -66,10 +66,10 @@ func summarizeDesc(kind, name string, d *Description) {
 	if feature == "" {
 		feature = "(empty)"
 	}
-	nScenarios := len(d.Scenarios)
+	nScenarios := len(d.Scenario)
 	nSkeleton := 0
-	for _, sc := range d.Scenarios {
-		for _, t := range sc.Tags {
+	for _, sc := range d.Scenario {
+		for _, t := range sc.Tag {
 			if normalizeTag(t) == "skeleton" {
 				nSkeleton++
 				break
@@ -116,9 +116,9 @@ func (c *FeaturePendingCmd) Run() error {
 		if filter != "" && filter != eid && filter != kind {
 			return
 		}
-		for _, sc := range d.Scenarios {
+		for _, sc := range d.Scenario {
 			isSkel := false
-			for _, t := range sc.Tags {
+			for _, t := range sc.Tag {
 				if normalizeTag(t) == "skeleton" {
 					isSkel = true
 					break
@@ -231,7 +231,7 @@ func ValidateDescription(d *Description, eid string) []string {
 	if strings.TrimSpace(d.Feature) == "" {
 		errs = append(errs, fmt.Sprintf("%s: description.feature is empty", eid))
 	}
-	for sIdx, sc := range d.Scenarios {
+	for sIdx, sc := range d.Scenario {
 		if strings.TrimSpace(sc.Name) == "" {
 			errs = append(errs, fmt.Sprintf("%s: scenario %d has empty name", eid, sIdx))
 		}

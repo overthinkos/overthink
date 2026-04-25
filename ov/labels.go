@@ -17,54 +17,54 @@ var ErrImageNotLocal = errors.New("image not found in local storage")
 
 // OCI label key constants (all namespaced under org.overthinkos.)
 const (
-	LabelVersion        = "org.overthinkos.version"
-	LabelImage          = "org.overthinkos.image"
-	LabelRegistry       = "org.overthinkos.registry"
-	LabelBootc          = "org.overthinkos.bootc"
-	LabelUID            = "org.overthinkos.uid"
-	LabelGID            = "org.overthinkos.gid"
-	LabelUser           = "org.overthinkos.user"
-	LabelHome           = "org.overthinkos.home"
-	LabelPorts          = "org.overthinkos.ports"
-	LabelVolumes        = "org.overthinkos.volumes"
-	LabelAliases        = "org.overthinkos.aliases"
-	LabelSecurity       = "org.overthinkos.security"
-	LabelNetwork        = "org.overthinkos.network"
+	LabelVersion  = "org.overthinkos.version"
+	LabelImage    = "org.overthinkos.image"
+	LabelRegistry = "org.overthinkos.registry"
+	LabelBootc    = "org.overthinkos.bootc"
+	LabelUID      = "org.overthinkos.uid"
+	LabelGID      = "org.overthinkos.gid"
+	LabelUser     = "org.overthinkos.user"
+	LabelHome     = "org.overthinkos.home"
+	LabelPorts    = "org.overthinkos.ports"
+	LabelVolumes  = "org.overthinkos.volumes"
+	LabelAliases  = "org.overthinkos.aliases"
+	LabelSecurity = "org.overthinkos.security"
+	LabelNetwork  = "org.overthinkos.network"
 	// Schema v4: LabelTunnel / LabelDNS / LabelAcmeEmail / LabelEngine
 	// removed — these are deployment choices with no image-declaration
 	// meaning. Deploy-time values flow through DeploymentNode →
 	// ImageMetadata, not through OCI labels.
-	LabelEnv            = "org.overthinkos.env"
-	LabelHooks          = "org.overthinkos.hooks"
+	LabelEnv   = "org.overthinkos.env"
+	LabelHooks = "org.overthinkos.hooks"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
 	// now live in vms.yml as `kind: vm` entities; no longer embedded
 	// in container image OCI labels.
-	LabelRoutes         = "org.overthinkos.routes"
-	LabelInit           = "org.overthinkos.init"
-	LabelEnvLayers      = "org.overthinkos.env_layers"
-	LabelPathAppend     = "org.overthinkos.path_append"
-	LabelPortProtos     = "org.overthinkos.port_protos"
-	LabelPortRelay      = "org.overthinkos.port_relay"
-	LabelSkills         = "org.overthinkos.skills"
-	LabelStatus         = "org.overthinkos.status"
-	LabelInfo           = "org.overthinkos.info"
-	LabelLayerVersions  = "org.overthinkos.layer_versions"
+	LabelRoutes          = "org.overthinkos.routes"
+	LabelInit            = "org.overthinkos.init"
+	LabelEnvLayers       = "org.overthinkos.env_layers"
+	LabelPathAppend      = "org.overthinkos.path_append"
+	LabelPortProtos      = "org.overthinkos.port_protos"
+	LabelPortRelay       = "org.overthinkos.port_relay"
+	LabelSkills          = "org.overthinkos.skills"
+	LabelStatus          = "org.overthinkos.status"
+	LabelInfo            = "org.overthinkos.info"
+	LabelLayerVersions   = "org.overthinkos.layer_versions"
 	LabelSecrets         = "org.overthinkos.secrets"
 	LabelPlatformDistro  = "org.overthinkos.platform.distro"
 	LabelPlatformFormats = "org.overthinkos.platform.formats"
 	LabelBuilderUses     = "org.overthinkos.builder.uses"
 	LabelBuilderProvides = "org.overthinkos.builder.provides"
-	LabelDataEntries    = "org.overthinkos.data"
-	LabelDataImage      = "org.overthinkos.data_image"
-	LabelEnvProvides    = "org.overthinkos.env_provides"
-	LabelEnvRequires    = "org.overthinkos.env_requires"
-	LabelEnvAccepts     = "org.overthinkos.env_accepts"
-	LabelSecretAccepts  = "org.overthinkos.secret_accepts"  // credential-store-backed env vars this image can optionally use
-	LabelSecretRequires = "org.overthinkos.secret_requires" // credential-store-backed env vars this image must have
-	LabelMCPProvides    = "org.overthinkos.mcp_provides"
-	LabelMCPRequires    = "org.overthinkos.mcp_requires"
-	LabelMCPAccepts     = "org.overthinkos.mcp_accepts"
-	LabelTests          = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
+	LabelDataEntries     = "org.overthinkos.data"
+	LabelDataImage       = "org.overthinkos.data_image"
+	LabelEnvProvides     = "org.overthinkos.env_provides"
+	LabelEnvRequires     = "org.overthinkos.env_requires"
+	LabelEnvAccepts      = "org.overthinkos.env_accepts"
+	LabelSecretAccepts   = "org.overthinkos.secret_accepts"  // credential-store-backed env vars this image can optionally use
+	LabelSecretRequires  = "org.overthinkos.secret_requires" // credential-store-backed env vars this image must have
+	LabelMCPProvides     = "org.overthinkos.mcp_provides"
+	LabelMCPRequires     = "org.overthinkos.mcp_requires"
+	LabelMCPAccepts      = "org.overthinkos.mcp_accepts"
+	LabelTests           = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (layer/image/deploy).
@@ -125,63 +125,63 @@ type CapabilityService struct {
 
 // LabelDataEntry represents a data mapping stored in the org.overthinkos.data label.
 type LabelDataEntry struct {
-	Volume  string `json:"volume"`          // target volume name
-	Staging string `json:"staging"`         // path inside image (/data/<volume>/[dest/])
-	Layer   string `json:"layer"`           // source layer name
-	Dest    string `json:"dest,omitempty"`  // optional subdirectory within volume
+	Volume  string `json:"volume"`         // target volume name
+	Staging string `json:"staging"`        // path inside image (/data/<volume>/[dest/])
+	Layer   string `json:"layer"`          // source layer name
+	Dest    string `json:"dest,omitempty"` // optional subdirectory within volume
 }
 
 // ImageMetadata is the runtime-relevant config extracted from image labels.
 type ImageMetadata struct {
-	Image          string
-	Registry       string
-	Bootc          bool
-	UID            int
-	GID            int
-	User           string
-	Home           string
-	Ports          []string
-	Volumes        []VolumeMount
-	Aliases        []CollectedAlias
-	Security       SecurityConfig
-	Network        string
-	Tunnel         *TunnelYAML // populated from deploy.yml overlay (not labels)
-	DNS            string
-	AcmeEmail      string
-	Env            []string
-	Hooks          *HooksConfig
+	Image     string
+	Registry  string
+	Bootc     bool
+	UID       int
+	GID       int
+	User      string
+	Home      string
+	Ports     []string
+	Volumes   []VolumeMount
+	Aliases   []CollectedAlias
+	Security  SecurityConfig
+	Network   string
+	Tunnel    *TunnelYAML // populated from deploy.yml overlay (not labels)
+	DNS       string
+	AcmeEmail string
+	Env       []string
+	Hooks     *HooksConfig
 	// Vm / Libvirt: removed in the VM hard-cutover. VM config lives on
 	// `kind: vm` entities in vms.yml (VmSpec / LibvirtDomain), not on
 	// container image OCI labels.
 	Routes         []LabelRoute
-	Init           string            // active init system name ("supervisord", "systemd", "")
+	Init           string              // active init system name ("supervisord", "systemd", "")
 	Services       []CapabilityService // structured per-entry service specs (LabelServices); source-less deploy reads these
-	ServiceNames   []string          // per-init service names (LabelInit companion); used by `ov service status/restart`
+	ServiceNames   []string            // per-init service names (LabelInit companion); used by `ov service status/restart`
 	EnvLayers      map[string]string
 	PathAppend     []string
 	Engine         string
-	PortProtos     map[int]string    // container port -> protocol ("http" or "tcp")
-	PortRelay      []int             // ports with socat relay (eth0 -> loopback)
-	Skills         string            // skill documentation URL
-	Status         string            // effective status (working, testing, broken)
-	Info           string            // aggregated status info
-	LayerVersions  map[string]string // layer name -> CalVer version
-	Secrets        []LabelSecret     // secret requirements (metadata only, no values)
-	Distro         []string          // distro identity tags (org.overthinkos.platform.distro)
-	BuildFormats   []string          // package formats installed (org.overthinkos.platform.formats)
-	Builder        map[string]string // format → builder image (org.overthinkos.builder.uses)
-	Builds         []string          // builder capability: formats this image can build (org.overthinkos.builder.provides)
-	DataEntries    []LabelDataEntry  // data staging entries for deploy-time provisioning
-	DataImage      bool              // true if this is a data-only image (FROM scratch)
-	EnvProvides    map[string]string // env vars provided to other containers (service discovery templates)
-	EnvRequires    []EnvDependency   // env vars image must have from the environment
-	EnvAccepts     []EnvDependency   // env vars image can optionally use
-	SecretAccepts  []EnvDependency   // credential-store-backed env vars image can optionally use
-	SecretRequires []EnvDependency   // credential-store-backed env vars image must have
-	MCPProvides    []MCPServerYAML   // MCP servers provided to other containers (service discovery templates)
-	MCPRequires    []EnvDependency   // MCP servers image must have from the environment
-	MCPAccepts     []EnvDependency   // MCP servers image can optionally use
-	Tests          *LabelTestSet    // three-section (layer/image/deploy) declarative test spec
+	PortProtos     map[int]string       // container port -> protocol ("http" or "tcp")
+	PortRelay      []int                // ports with socat relay (eth0 -> loopback)
+	Skills         string               // skill documentation URL
+	Status         string               // effective status (working, testing, broken)
+	Info           string               // aggregated status info
+	LayerVersions  map[string]string    // layer name -> CalVer version
+	Secrets        []LabelSecret        // secret requirements (metadata only, no values)
+	Distro         []string             // distro identity tags (org.overthinkos.platform.distro)
+	BuildFormats   []string             // package formats installed (org.overthinkos.platform.formats)
+	Builder        map[string]string    // format → builder image (org.overthinkos.builder.uses)
+	Builds         []string             // builder capability: formats this image can build (org.overthinkos.builder.provides)
+	DataEntries    []LabelDataEntry     // data staging entries for deploy-time provisioning
+	DataImage      bool                 // true if this is a data-only image (FROM scratch)
+	EnvProvides    map[string]string    // env vars provided to other containers (service discovery templates)
+	EnvRequires    []EnvDependency      // env vars image must have from the environment
+	EnvAccepts     []EnvDependency      // env vars image can optionally use
+	SecretAccepts  []EnvDependency      // credential-store-backed env vars image can optionally use
+	SecretRequires []EnvDependency      // credential-store-backed env vars image must have
+	MCPProvides    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
+	MCPRequires    []EnvDependency      // MCP servers image must have from the environment
+	MCPAccepts     []EnvDependency      // MCP servers image can optionally use
+	Tests          *LabelTestSet        // three-section (layer/image/deploy) declarative test spec
 	Description    *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
 }
 

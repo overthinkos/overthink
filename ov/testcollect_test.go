@@ -18,7 +18,7 @@ func TestCollectTests_Sections(t *testing.T) {
 		"redis": {
 			Name: "redis",
 			tests: []Check{
-				{Port: 6379, Listening: ptrBool(true)},               // build-scope default
+				{Port: 6379, Listening: ptrBool(true)},                   // build-scope default
 				{HTTP: "http://${CONTAINER_IP}/health", Scope: "deploy"}, // deploy-scope
 			},
 		},

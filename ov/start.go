@@ -9,15 +9,15 @@ import (
 
 // StartCmd launches a container with supervisord in the background
 type StartCmd struct {
-	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag        string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env        []string `short:"e" long:"env" sep:"none" help:"Set container env var (direct mode only)"`
-	EnvFile    string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
-	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Port       []string `short:"p" help:"Remap host port (direct mode only)"`
-	VolumeFlag []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
-	Bind       []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
+	Image           string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (direct mode only)"`
+	EnvFile         string   `long:"env-file" help:"Load env vars from file (direct mode only)"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Port            []string `short:"p" help:"Remap host port (direct mode only)"`
+	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
+	Bind            []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -196,7 +196,6 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	return nil
 }
-
 
 func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 	exists, err := quadletExistsInstance(c.Image, c.Instance)

@@ -379,7 +379,7 @@ func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePack
 // We resolve the systemd InitDef + the ServiceEntry from layer.yml
 // lazily and call RenderService to populate the step. Without this,
 // the install command below would execute with an empty path and
-// produce `install: cannot overwrite directory '' with non-directory
+// produce `install: cannot overwrite directory ” with non-directory
 // '/dev/stdin'` — the symptom observed on k3s-vm.
 func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts) error {
 	if s.UnitText == "" || s.UnitPath == "" {

@@ -13,11 +13,11 @@ import (
 // podman/docker inspect schema — we read the JSON the engine produces, we
 // do not construct it.
 type ContainerInspection struct {
-	Name            string             `json:"Name"`
-	Config          InspectConfig      `json:"Config"`
-	HostConfig      InspectHostConfig  `json:"HostConfig"`
-	NetworkSettings InspectNetwork     `json:"NetworkSettings"`
-	Mounts          []InspectMount     `json:"Mounts"`
+	Name            string            `json:"Name"`
+	Config          InspectConfig     `json:"Config"`
+	HostConfig      InspectHostConfig `json:"HostConfig"`
+	NetworkSettings InspectNetwork    `json:"NetworkSettings"`
+	Mounts          []InspectMount    `json:"Mounts"`
 }
 
 // InspectHostConfig carries the fields inside the "HostConfig" object that
@@ -49,8 +49,8 @@ type InspectConfig struct {
 // the default network uses the per-network form; docker bridge uses the
 // top-level form.
 type InspectNetwork struct {
-	IPAddress string                         `json:"IPAddress"`
-	Networks  map[string]InspectNetworkBind  `json:"Networks"`
+	IPAddress string                        `json:"IPAddress"`
+	Networks  map[string]InspectNetworkBind `json:"Networks"`
 	// Ports keys are like "6379/tcp"; values are nil when unexposed or
 	// a slice of bindings when published.
 	Ports map[string][]InspectPortBind `json:"Ports"`

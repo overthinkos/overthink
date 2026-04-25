@@ -17,7 +17,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 			Origin:     "layer:sshd",
 			ScenarioID: "desc:layer:sshd:0",
 			Name:       "SSH server reachable",
-			Tags:       []string{"smoke"},
+			Tag:        []string{"smoke"},
 			Status:     TestPass,
 			Pending:    0,
 			Steps: []StepResult{
@@ -76,27 +76,27 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	if parsed.Mode != "image" {
 		t.Errorf("parsed mode: %q", parsed.Mode)
 	}
-	if len(parsed.Scenarios) != 2 {
-		t.Fatalf("want 2 scenarios, got %d", len(parsed.Scenarios))
+	if len(parsed.Scenario) != 2 {
+		t.Fatalf("want 2 scenarios, got %d", len(parsed.Scenario))
 	}
-	if parsed.Scenarios[0].ID != "desc:layer:sshd:0" {
-		t.Errorf("scenario[0].ID: %q", parsed.Scenarios[0].ID)
+	if parsed.Scenario[0].ID != "desc:layer:sshd:0" {
+		t.Errorf("scenario[0].ID: %q", parsed.Scenario[0].ID)
 	}
-	if parsed.Scenarios[0].Status != "pass" {
-		t.Errorf("scenario[0].Status: %q", parsed.Scenarios[0].Status)
+	if parsed.Scenario[0].Status != "pass" {
+		t.Errorf("scenario[0].Status: %q", parsed.Scenario[0].Status)
 	}
-	if parsed.Scenarios[1].Status != "fail" {
-		t.Errorf("scenario[1].Status: %q", parsed.Scenarios[1].Status)
+	if parsed.Scenario[1].Status != "fail" {
+		t.Errorf("scenario[1].Status: %q", parsed.Scenario[1].Status)
 	}
-	if parsed.Scenarios[1].PendingSteps != 1 {
-		t.Errorf("scenario[1].PendingSteps: %d", parsed.Scenarios[1].PendingSteps)
+	if parsed.Scenario[1].PendingSteps != 1 {
+		t.Errorf("scenario[1].PendingSteps: %d", parsed.Scenario[1].PendingSteps)
 	}
 	// Summary derivation (producer set totals).
 	if parsed.Summary.Total != 2 || parsed.Summary.Pass != 1 || parsed.Summary.Fail != 1 {
 		t.Errorf("summary: %+v", parsed.Summary)
 	}
 	// Pending step flag propagates.
-	foo := parsed.Scenarios[1]
+	foo := parsed.Scenario[1]
 	if len(foo.Steps) != 1 {
 		t.Fatalf("foo.Steps: %d", len(foo.Steps))
 	}

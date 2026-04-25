@@ -280,12 +280,12 @@ func TestLayersProvidedByImage(t *testing.T) {
 
 func TestExpandLayers(t *testing.T) {
 	layers := map[string]*Layer{
-		"pipewire":         {Name: "pipewire", HasTasks: true},
-		"wayvnc":           {Name: "wayvnc", HasTasks: true},
-		"chrome":           {Name: "chrome", HasTasks: true},
-		"waybar":           {Name: "waybar", HasTasks: true},
-		"sway-desktop":     {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
-		"openclaw":         {Name: "openclaw", HasTasks: true},
+		"pipewire":     {Name: "pipewire", HasTasks: true},
+		"wayvnc":       {Name: "wayvnc", HasTasks: true},
+		"chrome":       {Name: "chrome", HasTasks: true},
+		"waybar":       {Name: "waybar", HasTasks: true},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
+		"openclaw":     {Name: "openclaw", HasTasks: true},
 	}
 
 	// Basic expansion
@@ -369,10 +369,10 @@ func TestExpandLayersWithContent(t *testing.T) {
 
 func TestResolveLayerOrderWithComposition(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":         {Name: "pixi", HasTasks: true},
-		"python":       {Name: "python", HasTasks: true, Depends: []string{"pixi"}},
-		"supervisord":  {Name: "supervisord", HasTasks: true, Depends: []string{"python"}},
-		"svc-stack":    {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
+		"pixi":        {Name: "pixi", HasTasks: true},
+		"python":      {Name: "python", HasTasks: true, Depends: []string{"pixi"}},
+		"supervisord": {Name: "supervisord", HasTasks: true, Depends: []string{"python"}},
+		"svc-stack":   {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
 	}
 
 	order, err := ResolveLayerOrder([]string{"svc-stack"}, layers, nil)

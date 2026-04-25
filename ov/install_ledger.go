@@ -127,13 +127,13 @@ type DeployRecord struct {
 // created, repo changes) so reversal doesn't need to re-compile the
 // plan from layer.yml.
 type LayerRecord struct {
-	Layer         string        `json:"layer"`
-	Version       string        `json:"version,omitempty"`
-	DeployedBy    []string      `json:"deployed_by"`              // set of deploy IDs
-	DeployedAt    string        `json:"deployed_at"`
-	BuilderImage  string        `json:"builder_image,omitempty"`
-	Steps         []StepRecord  `json:"steps,omitempty"`          // completed steps, in install order
-	ReverseOps    []ReverseOp   `json:"reverse_ops,omitempty"`    // precomputed ops for teardown
+	Layer        string       `json:"layer"`
+	Version      string       `json:"version,omitempty"`
+	DeployedBy   []string     `json:"deployed_by"` // set of deploy IDs
+	DeployedAt   string       `json:"deployed_at"`
+	BuilderImage string       `json:"builder_image,omitempty"`
+	Steps        []StepRecord `json:"steps,omitempty"`       // completed steps, in install order
+	ReverseOps   []ReverseOp  `json:"reverse_ops,omitempty"` // precomputed ops for teardown
 }
 
 // StepRecord is a thin summary of a completed InstallStep that the

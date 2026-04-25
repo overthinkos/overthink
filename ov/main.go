@@ -41,34 +41,34 @@ type CLI struct {
 	// with --dir.
 	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read image.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
-	Alias    AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
-	Cmd      CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
-	Config   ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
-	Deploy   DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Doctor   DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Image    ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
-	Layer    LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
-	Logs     LogsCmd         `cmd:"" help:"Show service container logs"`
-	Mcp      McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
-	Migrate  MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
-	Rebuild  RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
-	Remove   RemoveCmd       `cmd:"" help:"Remove service container"`
-	Secrets  SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
-	Service  ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
-	Settings SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
-	Shell    ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
-	Ssh      SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
-	Start    StartCmd        `cmd:"" help:"Start a container as a background service"`
-	Status   StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
-	Stop     StopCmd         `cmd:"" help:"Stop a running service container"`
-	Test     TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
-	Feature    FeatureCmd    `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
-	Benchmark  BenchmarkCmd  `cmd:"" help:"Iterate an AI agent against BDD scenarios until it plateaus"`
-	Tmux     TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Udev     UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update   UpdateCmd       `cmd:"" help:"Update image and restart if active"`
-	Version  VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
-	Vm       VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
+	Alias     AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
+	Cmd       CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
+	Config    ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Deploy    DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Doctor    DoctorCmd       `cmd:"" help:"Show host dependency status"`
+	Image     ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
+	Layer     LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
+	Logs      LogsCmd         `cmd:"" help:"Show service container logs"`
+	Mcp       McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
+	Migrate   MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
+	Rebuild   RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
+	Remove    RemoveCmd       `cmd:"" help:"Remove service container"`
+	Secrets   SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
+	Service   ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
+	Settings  SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	Shell     ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
+	Ssh       SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
+	Start     StartCmd        `cmd:"" help:"Start a container as a background service"`
+	Status    StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
+	Stop      StopCmd         `cmd:"" help:"Stop a running service container"`
+	Test      TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
+	Feature   FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
+	Harness HarnessCmd `cmd:"" help:"Drive AI agents through iteration cycles against BDD scenarios (benchmark + development recipes)"`
+	Tmux      TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
+	Udev      UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Update    UpdateCmd       `cmd:"" help:"Update image and restart if active"`
+	Version   VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
+	Vm        VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
 }
 
 // GenerateCmd generates Containerfiles

@@ -235,11 +235,11 @@ func (c *VNCClient) vncAuth(password string) error {
 
 // VeNCrypt security type constants.
 const (
-	vencryptTLSNone  uint32 = 257
-	vencryptTLSVnc   uint32 = 258
-	vencryptTLSPlain uint32 = 259
-	vencryptX509None uint32 = 260
-	vencryptX509Vnc  uint32 = 261
+	vencryptTLSNone   uint32 = 257
+	vencryptTLSVnc    uint32 = 258
+	vencryptTLSPlain  uint32 = 259
+	vencryptX509None  uint32 = 260
+	vencryptX509Vnc   uint32 = 261
 	vencryptX509Plain uint32 = 262
 )
 

@@ -40,14 +40,14 @@ func (c *spiceConnector) SpiceConnect(compress bool) (net.Conn, error) {
 // spiceDriver captures display/cursor updates into concurrent-safe
 // fields. The CLI reads them back for screenshot/cursor verbs.
 type spiceDriver struct {
-	mu          sync.Mutex
-	displayImg  image.Image
-	cursorImg   image.Image
-	cursorX     uint16
-	cursorY     uint16
-	inputsRef   *spice.ChInputs
-	mainRef     *spice.ChMain
-	clipWanted  map[spice.SpiceClipboardSelection][]spice.SpiceClipboardFormat
+	mu         sync.Mutex
+	displayImg image.Image
+	cursorImg  image.Image
+	cursorX    uint16
+	cursorY    uint16
+	inputsRef  *spice.ChInputs
+	mainRef    *spice.ChMain
+	clipWanted map[spice.SpiceClipboardSelection][]spice.SpiceClipboardFormat
 }
 
 func newSpiceDriver() *spiceDriver {

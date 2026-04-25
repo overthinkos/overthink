@@ -56,8 +56,8 @@ type LibvirtGraphicsListeners []LibvirtGraphicsListen
 // UnmarshalYAML accepts:
 //   - scalar string → one address listener
 //   - mapping       → one listener (type inferred from Address if
-//                     unset: "address" when Address non-empty, else
-//                     required explicit type)
+//     unset: "address" when Address non-empty, else
+//     required explicit type)
 //   - sequence      → list of listeners (each a mapping)
 func (ll *LibvirtGraphicsListeners) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {

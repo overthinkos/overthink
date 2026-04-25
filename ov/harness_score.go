@@ -1,6 +1,6 @@
 package main
 
-// benchmark_score.go — scoring primitives for `ov benchmark`.
+// benchmark_score.go — scoring primitives for `ov harness`.
 //
 // Exported surface:
 //   - ParseOvTestOutput(yaml) (*TestRunResults, error)
@@ -13,7 +13,7 @@ package main
 //       Seven-way classifier comparing pre-AI baseline to post-iteration.
 //
 // All types are YAML-tagged so they can be persisted verbatim into
-// `.benchmark/<run-id>/iter<k>/score.yml` and `report.yml` without a
+// `.harness/<run-id>/iter<k>/score.yml` and `report.yml` without a
 // parallel JSON shape.
 //
 // Dependencies: Scenario / LabelDescriptionSet / ScenarioID from
@@ -42,7 +42,7 @@ import (
 type TestRunResults struct {
 	Image     string                `yaml:"image,omitempty"`
 	Mode      string                `yaml:"mode,omitempty"` // "image" | "run"
-	Scenarios []ScenarioTestResult  `yaml:"scenarios,omitempty"`
+	Scenario []ScenarioTestResult  `yaml:"scenario,omitempty"`
 	Summary   TestRunSummary        `yaml:"summary"`
 }
 
@@ -53,7 +53,7 @@ type ScenarioTestResult struct {
 	ID           string             `yaml:"id"`
 	Origin       string             `yaml:"origin,omitempty"`
 	Name         string             `yaml:"name,omitempty"`
-	Tags         []string           `yaml:"tags,omitempty"`
+	Tag         []string           `yaml:"tag,omitempty"`
 	Status       string             `yaml:"status"` // "pass" | "fail" | "skip"
 	PendingSteps int                `yaml:"pending_steps"`
 	Steps        []StepTestResult   `yaml:"steps,omitempty"`
@@ -73,7 +73,7 @@ type StepTestResult struct {
 
 // TestRunSummary mirrors the summary block emitted by `ov image test
 // --format yaml`. Totals are authoritative; the benchmark re-derives
-// per-status counts from Scenarios but relies on Summary.Total as a
+// per-status counts from Scenario but relies on Summary.Total as a
 // sanity check.
 type TestRunSummary struct {
 	Total int `yaml:"total"`
@@ -105,8 +105,8 @@ func ParseOvTestOutput(b []byte) (*TestRunResults, error) {
 	}
 	// The producer MAY omit summary; re-derive so downstream callers see
 	// consistent counts. When present, trust the producer.
-	if r.Summary.Total == 0 && len(r.Scenarios) > 0 {
-		r.Summary = deriveSummary(r.Scenarios)
+	if r.Summary.Total == 0 && len(r.Scenario) > 0 {
+		r.Summary = deriveSummary(r.Scenario)
 	}
 	return &r, nil
 }
@@ -137,7 +137,7 @@ func (r *TestRunResults) ScenarioByID() map[string]ScenarioTestResult {
 	if r == nil {
 		return out
 	}
-	for _, sc := range r.Scenarios {
+	for _, sc := range r.Scenario {
 		out[sc.ID] = sc
 	}
 	return out
@@ -172,7 +172,7 @@ func canonicalizeScenario(s Scenario) string {
 	// semantic (changing it would change scenario meaning), so a
 	// reordering MUST change the fingerprint.
 	clone := deepCloneScenario(s)
-	sort.Strings(clone.Tags)
+	sort.Strings(clone.Tag)
 	for i := range clone.Steps {
 		// Check.Matching tags etc. are not part of the Check struct, so
 		// there is no nested tag list to sort here. Step text is canonical
@@ -194,7 +194,7 @@ func canonicalizeScenario(s Scenario) string {
 		// yaml.Marshal cannot realistically fail on a well-formed
 		// Scenario — every field is a basic type. Fall back to a
 		// bespoke formatting that still hashes deterministically.
-		return fmt.Sprintf("MARSHAL_ERR:%s:%d:%d", clone.Name, len(clone.Tags), len(clone.Steps))
+		return fmt.Sprintf("MARSHAL_ERR:%s:%d:%d", clone.Name, len(clone.Tag), len(clone.Steps))
 	}
 	return string(out)
 }
@@ -221,7 +221,7 @@ func sortedCopy(m map[string]string) map[string]string {
 func deepCloneScenario(s Scenario) Scenario {
 	c := Scenario{
 		Name:     s.Name,
-		Tags:     append([]string(nil), s.Tags...),
+		Tag:     append([]string(nil), s.Tag...),
 		Steps:    append([]Step(nil), s.Steps...),
 		OnFail:   append([]Step(nil), s.OnFail...),
 		Examples: nil,
@@ -253,7 +253,7 @@ func FingerprintSet(set *LabelDescriptionSet) map[string]string {
 	}
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Description.Scenarios {
+			for sIdx, scenario := range ld.Description.Scenario {
 				expanded := ExpandScenario(scenario)
 				for _, es := range expanded {
 					id := ScenarioID(ld.Origin, sIdx, es.RowIndex)
@@ -335,7 +335,7 @@ type ScenarioState struct {
 	// TagFingerprint is a separate fingerprint of ONLY the tag set,
 	// so we can distinguish "body unchanged, tags edited" (retagged)
 	// from "body changed entirely" (tampered). Computed by the caller
-	// via FingerprintTags(s.Tags).
+	// via FingerprintTags(s.Tag).
 	TagFingerprint string
 }
 
@@ -345,7 +345,7 @@ type ScenarioState struct {
 // Priority order (first match wins):
 //  1. Post-only scenario        -> VerdictAdded
 //  2. Body fingerprint changed + post pass -> VerdictTampered
-//  3. Tags-only changed         -> VerdictRetagged
+//  3. Tag-only changed         -> VerdictRetagged
 //  4. Baseline pass + post fail -> VerdictRegressed
 //  5. Baseline fail + post pass + no pending + same fingerprint -> VerdictSolved
 //  6. Pending-step count decreased, or status improved but not fully green -> VerdictPartial

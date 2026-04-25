@@ -497,6 +497,7 @@ func renameRootKeyReport(doc *yaml.Node, oldKey, newKey string) (bool, error) {
 //  1. Bump `version: 1` → `version: 2` (or insert `version: 2` when absent).
 //  2. Drop `vms.yml` from the `includes:` sequence.
 //  3. Reject an unexpected shape rather than silently succeeding.
+//
 // Returns true when the node tree was modified.
 func rewriteOverthink(doc *yaml.Node) (bool, error) {
 	root := mappingOf(doc)

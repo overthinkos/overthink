@@ -188,11 +188,11 @@ func TestComputeIntermediates_SimpleBranch(t *testing.T) {
 
 func TestComputeIntermediates_SharedPrefix(t *testing.T) {
 	layers := map[string]*Layer{
-		"pixi":         {Name: "pixi", Depends: nil, HasTasks: true},
-		"python":       {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
-		"supervisord":  {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
-		"testapi":      {Name: "testapi", Depends: []string{"supervisord"}, HasPixiToml: true},
-		"openclaw":     {Name: "openclaw", Depends: []string{"supervisord"}, HasPackageJson: true},
+		"pixi":        {Name: "pixi", Depends: nil, HasTasks: true},
+		"python":      {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
+		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
+		"testapi":     {Name: "testapi", Depends: []string{"supervisord"}, HasPixiToml: true},
+		"openclaw":    {Name: "openclaw", Depends: []string{"supervisord"}, HasPackageJson: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -458,8 +458,8 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 		"python":          {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
 		"supervisord":     {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
 		"build-toolchain": {Name: "build-toolchain", Depends: nil, HasTasks: true},
-		"cuda":     {Name: "cuda", Depends: nil, HasTasks: true},
-		"python-ml":   {Name: "python-ml", Depends: []string{"pixi", "cuda"}, HasPixiToml: true},
+		"cuda":            {Name: "cuda", Depends: nil, HasTasks: true},
+		"python-ml":       {Name: "python-ml", Depends: []string{"pixi", "cuda"}, HasPixiToml: true},
 		"jupyter":         {Name: "jupyter", Depends: []string{"python-ml", "supervisord"}, HasPixiToml: true},
 		"comfyui":         {Name: "comfyui", Depends: []string{"python-ml", "supervisord"}, HasTasks: true},
 		"ollama":          {Name: "ollama", Depends: []string{"cuda", "supervisord"}, HasTasks: true},
@@ -533,7 +533,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 			"builder":         {Layers: []string{"pixi", "nodejs", "build-toolchain"}},
 			"fedora":          {Layers: []string{}},
 			"nvidia":          {Base: "fedora", Layers: []string{"cuda"}},
-			"python-ml":   {Base: "nvidia", Layers: []string{"python-ml"}},
+			"python-ml":       {Base: "nvidia", Layers: []string{"python-ml"}},
 			"jupyter":         {Base: "python-ml", Layers: []string{"jupyter"}},
 			"comfyui":         {Base: "python-ml", Layers: []string{"comfyui"}},
 			"ollama":          {Base: "nvidia", Layers: []string{"ollama"}},
@@ -945,12 +945,12 @@ func TestPixiBoundLayers(t *testing.T) {
 		"jupyter-ml": {
 			Name: "jupyter-ml", HasPixiToml: true, HasTasks: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
-			Depends: []string{"cuda", "supervisord"},
+			Depends:        []string{"cuda", "supervisord"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
-			Depends: []string{"cuda", "supervisord"},
+			Depends:        []string{"cuda", "supervisord"},
 		},
 		"cuda":        {Name: "cuda", HasTasks: true},
 		"supervisord": {Name: "supervisord", HasTasks: true},
@@ -985,29 +985,29 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	// The intermediate generator must NOT extract unsloth into an intermediate
 	// because it needs the pixi environment from the final image.
 	layers := map[string]*Layer{
-		"dbus":       {Name: "dbus", HasTasks: true},
-		"ov":         {Name: "ov", HasTasks: true},
-		"llama-cpp":  {Name: "llama-cpp", HasTasks: true},
-		"unsloth":    {Name: "unsloth", HasTasks: true, HasEnv: true, HasVolumes: true},
-		"notebook-templates": {Name: "notebook-templates", HasData: true},
+		"dbus":                {Name: "dbus", HasTasks: true},
+		"ov":                  {Name: "ov", HasTasks: true},
+		"llama-cpp":           {Name: "llama-cpp", HasTasks: true},
+		"unsloth":             {Name: "unsloth", HasTasks: true, HasEnv: true, HasVolumes: true},
+		"notebook-templates":  {Name: "notebook-templates", HasData: true},
 		"notebook-finetuning": {Name: "notebook-finetuning", HasData: true},
 		"jupyter-ml": {
 			Name: "jupyter-ml", HasPixiToml: true, HasTasks: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
-			Depends: []string{"cuda", "supervisord"},
-			HasPorts: true,
+			Depends:        []string{"cuda", "supervisord"},
+			HasPorts:       true,
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", HasPixiToml: true,
 			IncludedLayers: []string{"llama-cpp", "unsloth"},
-			Depends: []string{"cuda", "supervisord"},
-			HasPorts: true,
+			Depends:        []string{"cuda", "supervisord"},
+			HasPorts:       true,
 		},
 		"agent-forwarding": {Name: "agent-forwarding", HasTasks: true},
-		"cuda":        {Name: "cuda", HasTasks: true},
-		"pixi":        {Name: "pixi", HasTasks: true},
-		"python":      {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
-		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
+		"cuda":             {Name: "cuda", HasTasks: true},
+		"pixi":             {Name: "pixi", HasTasks: true},
+		"python":           {Name: "python", Depends: []string{"pixi"}, HasPixiToml: true},
+		"supervisord":      {Name: "supervisord", Depends: []string{"python"}, HasPixiToml: true},
 	}
 
 	images := map[string]*ResolvedImage{
@@ -1031,19 +1031,19 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 		"jupyter-ml": {
 			Name: "jupyter-ml", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
+			Tag:    "v1", Registry: "r", FullTag: "r/jupyter-ml:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"jupyter-ml-notebook": {
 			Name: "jupyter-ml-notebook", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
+			Tag:    "v1", Registry: "r", FullTag: "r/jupyter-ml-notebook:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"unsloth-studio": {
 			Name: "unsloth-studio", Base: "nvidia", IsExternalBase: false,
 			Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"},
-			Tag: "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
+			Tag:    "v1", Registry: "r", FullTag: "r/unsloth-studio:v1", Pkg: "rpm",
 			Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 	}
@@ -1051,12 +1051,12 @@ func TestComputeIntermediates_PixiBoundNotExtracted(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{Registry: "r", Build: BuildFormats{"rpm"}, Builder: BuilderMap{"pixi": "builder", "npm": "builder"}},
 		Images: map[string]ImageConfig{
-			"builder": {Layers: []string{"pixi"}},
-			"fedora":  {Layers: []string{}},
-			"nvidia":  {Base: "fedora", Layers: []string{"cuda"}},
-			"jupyter-ml":            {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"}},
+			"builder":             {Layers: []string{"pixi"}},
+			"fedora":              {Layers: []string{}},
+			"nvidia":              {Base: "fedora", Layers: []string{"cuda"}},
+			"jupyter-ml":          {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "dbus", "ov"}},
 			"jupyter-ml-notebook": {Base: "nvidia", Layers: []string{"agent-forwarding", "jupyter-ml", "notebook-templates", "notebook-finetuning", "dbus", "ov"}},
-			"unsloth-studio":           {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"}},
+			"unsloth-studio":      {Base: "nvidia", Layers: []string{"agent-forwarding", "unsloth-studio", "notebook-finetuning", "dbus", "ov"}},
 		},
 	}
 

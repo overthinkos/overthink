@@ -38,19 +38,19 @@ import (
 // ---------------------------------------------------------------------------
 
 type K8sCmd struct {
-	Nodes         K8sNodesCmd         `cmd:"" help:"List cluster nodes (name + Ready status per line)"`
-	WaitNodes     K8sWaitNodesCmd     `cmd:"" name:"wait-nodes" help:"Block until N nodes are Ready (or a named node is Ready)"`
-	Pods          K8sPodsCmd          `cmd:"" help:"List pods (optionally scoped by namespace and/or label selector)"`
-	WaitReady     K8sWaitReadyCmd     `cmd:"" name:"wait-ready" help:"Block until a resource reaches its Ready condition"`
-	Ingress       K8sIngressCmd       `cmd:"" help:"List ingresses (class / host / backend per line)"`
-	IngressClass  K8sIngressClassCmd  `cmd:"" name:"ingressclass" help:"List ingress classes (name + default flag per line)"`
-	StorageClass  K8sStorageClassCmd  `cmd:"" name:"storageclass" help:"List storage classes (name + default flag per line)"`
-	Service       K8sServiceCmd       `cmd:"" help:"List services (ns/name type clusterIP externalIP per line)"`
-	LbExternalIP  K8sLbExternalIPCmd  `cmd:"" name:"lb-external-ip" help:"Print the ServiceLB-assigned external IP for a LoadBalancer service"`
-	Addons        K8sAddonsCmd        `cmd:"" help:"Roll-up health check: Traefik + ServiceLB + local-path-provisioner all Ready"`
-	Apply         K8sApplyCmd         `cmd:"" help:"Apply a manifest file (YAML, possibly multi-doc) via server-side dynamic client"`
-	Delete        K8sDeleteCmd        `cmd:"" help:"Delete resources declared in a manifest file (mirror of apply)"`
-	Raw           K8sRawCmd           `cmd:"" help:"GET/list/describe an arbitrary resource by kind/name/namespace"`
+	Nodes        K8sNodesCmd        `cmd:"" help:"List cluster nodes (name + Ready status per line)"`
+	WaitNodes    K8sWaitNodesCmd    `cmd:"" name:"wait-nodes" help:"Block until N nodes are Ready (or a named node is Ready)"`
+	Pods         K8sPodsCmd         `cmd:"" help:"List pods (optionally scoped by namespace and/or label selector)"`
+	WaitReady    K8sWaitReadyCmd    `cmd:"" name:"wait-ready" help:"Block until a resource reaches its Ready condition"`
+	Ingress      K8sIngressCmd      `cmd:"" help:"List ingresses (class / host / backend per line)"`
+	IngressClass K8sIngressClassCmd `cmd:"" name:"ingressclass" help:"List ingress classes (name + default flag per line)"`
+	StorageClass K8sStorageClassCmd `cmd:"" name:"storageclass" help:"List storage classes (name + default flag per line)"`
+	Service      K8sServiceCmd      `cmd:"" help:"List services (ns/name type clusterIP externalIP per line)"`
+	LbExternalIP K8sLbExternalIPCmd `cmd:"" name:"lb-external-ip" help:"Print the ServiceLB-assigned external IP for a LoadBalancer service"`
+	Addons       K8sAddonsCmd       `cmd:"" help:"Roll-up health check: Traefik + ServiceLB + local-path-provisioner all Ready"`
+	Apply        K8sApplyCmd        `cmd:"" help:"Apply a manifest file (YAML, possibly multi-doc) via server-side dynamic client"`
+	Delete       K8sDeleteCmd       `cmd:"" help:"Delete resources declared in a manifest file (mirror of apply)"`
+	Raw          K8sRawCmd          `cmd:"" help:"GET/list/describe an arbitrary resource by kind/name/namespace"`
 }
 
 // ---------------------------------------------------------------------------
@@ -58,14 +58,14 @@ type K8sCmd struct {
 // ---------------------------------------------------------------------------
 
 // k8sClusterFlags carries the cluster-selection flags. Resolution priority:
-//   1. --kubeconfig <path> overrides everything (raw file pointer).
-//   2. --cluster <name> loads a ClusterProfile — its KubeconfigContext
-//      names the kubeconfig context to activate. Kubeconfig path defaults
-//      to $KUBECONFIG then ~/.kube/config.
-//   3. --context <ctx> overrides the context from step 2 (or selects one
-//      in the default kubeconfig when --cluster is omitted).
-//   4. If nothing is given, the current-context of the default kubeconfig
-//      is used (same behavior as kubectl with no flags).
+//  1. --kubeconfig <path> overrides everything (raw file pointer).
+//  2. --cluster <name> loads a ClusterProfile — its KubeconfigContext
+//     names the kubeconfig context to activate. Kubeconfig path defaults
+//     to $KUBECONFIG then ~/.kube/config.
+//  3. --context <ctx> overrides the context from step 2 (or selects one
+//     in the default kubeconfig when --cluster is omitted).
+//  4. If nothing is given, the current-context of the default kubeconfig
+//     is used (same behavior as kubectl with no flags).
 type k8sClusterFlags struct {
 	Cluster    string `long:"cluster" help:"ClusterProfile name (looked up via LoadClusterProfile)"`
 	Context    string `long:"context" help:"kubeconfig context name — overrides cluster profile context"`
@@ -121,15 +121,15 @@ func (f *k8sClusterFlags) dynamicClient() (dynamic.Interface, error) {
 // resource kind to probe is a one-line addition, and so the dynamic-client
 // calls below stay legible.
 var (
-	gvrNodes         = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
-	gvrPods          = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
-	gvrServices      = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
-	gvrIngresses     = schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}
-	gvrIngressClass  = schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingressclasses"}
-	gvrStorageClass  = schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}
-	gvrDeployments   = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
-	gvrDaemonSets    = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}
-	gvrStatefulSets  = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
+	gvrNodes        = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "nodes"}
+	gvrPods         = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
+	gvrServices     = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
+	gvrIngresses    = schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingresses"}
+	gvrIngressClass = schema.GroupVersionResource{Group: "networking.k8s.io", Version: "v1", Resource: "ingressclasses"}
+	gvrStorageClass = schema.GroupVersionResource{Group: "storage.k8s.io", Version: "v1", Resource: "storageclasses"}
+	gvrDeployments  = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	gvrDaemonSets   = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}
+	gvrStatefulSets = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
 )
 
 // parseTimeout interprets a Kong-supplied duration string like "120s" or

@@ -279,7 +279,7 @@ func TestNormalizeCgroupSize(t *testing.T) {
 		{"512m", "512M"},
 		{"64k", "64K"},
 		{"1t", "1T"},
-		{"6G", "6G"},   // already uppercase
+		{"6G", "6G"}, // already uppercase
 		{"512M", "512M"},
 		{"1024", "1024"}, // raw bytes, no suffix
 		{"  2g  ", "2G"},
@@ -358,7 +358,7 @@ func TestGenerateQuadletWithPrivileged(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName: "runner",
 		ImageRef:  "ghcr.io/test/runner:latest",
-		Home: "/workspace",
+		Home:      "/workspace",
 		Security:  SecurityConfig{Privileged: true},
 	}
 	content := generateQuadlet(cfg)
@@ -374,7 +374,7 @@ func TestGenerateQuadletWithCapAdd(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName: "builder",
 		ImageRef:  "ghcr.io/test/builder:latest",
-		Home: "/workspace",
+		Home:      "/workspace",
 		Security: SecurityConfig{
 			CapAdd:      []string{"SYS_ADMIN"},
 			Devices:     []string{"/dev/fuse"},

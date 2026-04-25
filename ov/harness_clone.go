@@ -1,12 +1,12 @@
 package main
 
-// benchmark_clone.go — per-run clone lifecycle + iteration commit + push-back.
+// harness_clone.go — per-run clone lifecycle + iteration commit + push-back.
 //
-// Replaces the host-side worktree subsystem. The new model: the pod's
-// `ov benchmark run-local` clones /workspace into a per-run scratch
-// dir (.benchmark/<run-id>/repo) on a fresh ovbench/<run-id> branch.
-// Per-iteration commits land in that clone. At end of run the branch
-// pushes back to the bind-mounted host repo for an audit trail.
+// The harness's per-target driver clones the project's bind-mounted
+// /workspace (or $PWD on host targets) into a per-run scratch dir on a
+// fresh ovharness/<run-id> branch. Per-iteration commits land in that
+// clone. At end of run the branch pushes back to the project repo for
+// an audit trail.
 //
 // All operations shell out to git; no external git library.
 
@@ -24,32 +24,33 @@ import (
 	"time"
 )
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-// RunLayout is the canonical set of paths for one benchmark run,
-// rooted at ProjectDir. Inside the pod, ProjectDir == /workspace.
+// RunLayout is the canonical set of paths for one harness run, rooted
+// at ProjectDir/.harness/<recipe>/runs/<run-id>.
 type RunLayout struct {
-	ProjectDir string // project root containing .benchmark/
+	ProjectDir string // project root containing .harness/
+	Recipe     string // recipe name (drives the namespace under .harness/)
 	RunID      string // "<UTC-timestamp>-<shorthash>"
-	RunDir     string // <ProjectDir>/.benchmark/<run-id>
-	RepoDir    string // <ProjectDir>/.benchmark/<run-id>/repo  (per-run clone)
-	Branch     string // "ovbench/<run-id>"
+	RunDir     string // <ProjectDir>/.harness/<recipe>/runs/<run-id>
+	RepoDir    string // <ProjectDir>/.harness/<recipe>/runs/<run-id>/repo
+	Branch     string // "ovharness/<run-id>"
 }
 
-// NewRunLayout constructs a RunLayout from projectDir. Generates run-id if empty.
-func NewRunLayout(projectDir, runID string) RunLayout {
+// NewRunLayout constructs a RunLayout. Generates run-id if empty.
+func NewRunLayout(projectDir, recipe, runID string) RunLayout {
 	if runID == "" {
 		runID = GenerateRunID()
 	}
-	runDir := filepath.Join(projectDir, ".benchmark", runID)
+	if recipe == "" {
+		recipe = "default"
+	}
+	runDir := filepath.Join(projectDir, ".harness", recipe, "runs", runID)
 	return RunLayout{
 		ProjectDir: projectDir,
+		Recipe:     recipe,
 		RunID:      runID,
 		RunDir:     runDir,
 		RepoDir:    filepath.Join(runDir, "repo"),
-		Branch:     "ovbench/" + runID,
+		Branch:     "ovharness/" + runID,
 	}
 }
 
@@ -68,18 +69,13 @@ func (l RunLayout) IterDir(k int) string {
 	return filepath.Join(l.RunDir, fmt.Sprintf("iter%d", k))
 }
 
-// ---------------------------------------------------------------------------
-// Clone lifecycle
-// ---------------------------------------------------------------------------
+// ResultsDir returns the per-recipe results directory (sibling of runs/).
+func (l RunLayout) ResultsDir() string {
+	return filepath.Join(l.ProjectDir, ".harness", l.Recipe, "results")
+}
 
 // CreateRunClone creates a per-run scratch clone at l.RepoDir on a
-// fresh branch ovbench/<run-id>. Source: l.ProjectDir (the bind-mounted
-// /workspace inside the pod). Uses --no-local for true content-only
-// copy (no hardlinks back to the host repo's .git, so the AI can't
-// accidentally pollute host refs from inside the pod).
-//
-// Submodules are initialized + updated so the AI sees the same
-// `plugins/` skill set as a normal checkout.
+// fresh branch ovharness/<run-id>. Source: l.ProjectDir.
 func CreateRunClone(ctx context.Context, l RunLayout) error {
 	if err := os.MkdirAll(l.RunDir, 0o755); err != nil {
 		return fmt.Errorf("create run dir %s: %w", l.RunDir, err)
@@ -103,12 +99,9 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 		return fmt.Errorf("git submodule update --init --recursive in %s: %w\n%s", l.RepoDir, err, string(out))
 	}
 
-	// Set a benchmark-local git identity so per-iteration `git commit` works
-	// without depending on a global ~/.gitconfig (which the pod typically
-	// doesn't have). These configs live only in the per-run clone.
 	for _, kv := range [][2]string{
-		{"user.email", "benchmark@overthinkos.local"},
-		{"user.name", "ov benchmark"},
+		{"user.email", "harness@overthinkos.local"},
+		{"user.name", "ov harness"},
 	} {
 		c := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "config", kv[0], kv[1])
 		if out, err := c.CombinedOutput(); err != nil {
@@ -116,14 +109,7 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 		}
 	}
 
-	// Mirror untracked working-tree artifacts that the build needs but
-	// that aren't in git history. `git clone --no-local` only copies
-	// tracked files, so:
-	//   - `bin/ov` (built by `task build:ov`, gitignored)
-	//   - `layers/ov/bin/ov` (the same binary, copied for the in-image
-	//     `ov` build stage via `COPY layers/ov/ /`)
-	// are both missing from the clone, and the bench / fedora-coder
-	// builds fail on the COPY of /bin/ov.
+	// Mirror untracked working-tree artifacts the build needs.
 	for _, sub := range []string{"bin", "layers/ov/bin"} {
 		src := filepath.Join(l.ProjectDir, sub)
 		st, err := os.Stat(src)
@@ -143,14 +129,7 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 	return nil
 }
 
-// PushBranchToHost pushes the per-run branch back to the bind-mounted
-// host repo at /workspace. Best-effort: any push failure is the caller's
-// to log non-fatally — the on-disk artifacts under .benchmark/<run-id>/
-// are already preserved via the bind-mount.
-//
-// Uses file:// transport to keep the operation rootless and credential-free.
-// `--force-with-lease` is intentionally omitted: the branch is unique to
-// this run and should never collide with anything in the host repo.
+// PushBranchToHost pushes the per-run branch back to ProjectDir's git.
 func PushBranchToHost(ctx context.Context, l RunLayout) error {
 	target := "file://" + l.ProjectDir
 	cmd := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "push", target, l.Branch)
@@ -161,13 +140,8 @@ func PushBranchToHost(ctx context.Context, l RunLayout) error {
 	return nil
 }
 
-// ---------------------------------------------------------------------------
-// Per-iteration commits
-// ---------------------------------------------------------------------------
-
-// CommitIterationInRepo stages all changes in the per-run clone and
-// creates a commit on the ovbench branch. Hooks RUN — there is no
-// --no-verify. --allow-empty is on so no-op iterations leave a marker.
+// CommitIterationInRepo stages all changes + commits with the standard
+// message. Hooks run; --allow-empty is on so no-op iterations leave a marker.
 func CommitIterationInRepo(ctx context.Context, l RunLayout, k int, score int, solvedIDs []string) (string, error) {
 	addCmd := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "add", "-A")
 	if out, err := addCmd.CombinedOutput(); err != nil {
@@ -177,8 +151,7 @@ func CommitIterationInRepo(ctx context.Context, l RunLayout, k int, score int, s
 	commitCmd := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "commit", "--allow-empty", "-m", msg)
 	out, err := commitCmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git commit (iter%d) rejected (likely by pre-commit hook): %w\n%s",
-			k, err, string(out))
+		return "", fmt.Errorf("git commit (iter%d) rejected: %w\n%s", k, err, string(out))
 	}
 	sha, err := resolveHeadSHA(ctx, l.RepoDir)
 	if err != nil {
@@ -210,57 +183,68 @@ func resolveHeadSHA(ctx context.Context, repoDir string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// ---------------------------------------------------------------------------
-// Run enumeration (host-side, reads .benchmark/ that was mirrored back)
-// ---------------------------------------------------------------------------
-
-// RunSummary describes one past benchmark run found under .benchmark/.
+// RunSummary describes one past harness run found under .harness/<recipe>/runs.
 type RunSummary struct {
+	Recipe       string
 	RunID        string
 	RunDir       string
-	Status       string    // "complete" (report.yml present) | "incomplete"
-	StartedUTC   time.Time // parsed from RunID when possible
-	HasRepo      bool      // true iff repo/ directory exists
-	BranchExists bool      // true iff ovbench/<run-id> still exists in projectDir
+	Status       string    // "complete" (result.{calver}.yml present) | "incomplete"
+	StartedUTC   time.Time // parsed from RunID
+	HasRepo      bool
+	BranchExists bool
 }
 
-// ListRuns walks <projectDir>/.benchmark and returns one RunSummary
-// per directory with a parsable run-id shape. Sorted newest first.
+// ListRuns walks <projectDir>/.harness/*/runs/ across all recipes and
+// returns one RunSummary per run dir. Sorted newest first.
 func ListRuns(ctx context.Context, projectDir string) ([]RunSummary, error) {
-	base := filepath.Join(projectDir, ".benchmark")
-	entries, err := os.ReadDir(base)
+	base := filepath.Join(projectDir, ".harness")
+	recipes, err := os.ReadDir(base)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read %s: %w", base, err)
 	}
-
 	var out []RunSummary
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, rEntry := range recipes {
+		if !rEntry.IsDir() {
 			continue
 		}
-		runID := e.Name()
-		s := RunSummary{
-			RunID:  runID,
-			RunDir: filepath.Join(base, runID),
+		runsDir := filepath.Join(base, rEntry.Name(), "runs")
+		entries, err := os.ReadDir(runsDir)
+		if err != nil {
+			continue
 		}
-		if _, err := os.Stat(filepath.Join(s.RunDir, "report.yml")); err == nil {
-			s.Status = "complete"
-		} else {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			runID := e.Name()
+			s := RunSummary{
+				Recipe: rEntry.Name(),
+				RunID:  runID,
+				RunDir: filepath.Join(runsDir, runID),
+			}
 			s.Status = "incomplete"
+			// Look in the per-recipe results dir for any result file.
+			resultsDir := filepath.Join(base, rEntry.Name(), "results")
+			if results, err := os.ReadDir(resultsDir); err == nil {
+				for _, r := range results {
+					if strings.HasPrefix(r.Name(), "result.") && strings.HasSuffix(r.Name(), ".yml") {
+						s.Status = "complete"
+						break
+					}
+				}
+			}
+			if st, err := os.Stat(filepath.Join(s.RunDir, "repo")); err == nil && st.IsDir() {
+				s.HasRepo = true
+			}
+			s.BranchExists = branchExists(ctx, projectDir, "ovharness/"+runID)
+			s.StartedUTC = parseRunIDTimestamp(runID)
+			out = append(out, s)
 		}
-		if st, err := os.Stat(filepath.Join(s.RunDir, "repo")); err == nil && st.IsDir() {
-			s.HasRepo = true
-		}
-		s.BranchExists = branchExists(ctx, projectDir, "ovbench/"+runID)
-		s.StartedUTC = parseRunIDTimestamp(runID)
-		out = append(out, s)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].StartedUTC.After(out[j].StartedUTC)
-	})
+	sort.Slice(out, func(i, j int) bool { return out[i].StartedUTC.After(out[j].StartedUTC) })
 	return out, nil
 }
 

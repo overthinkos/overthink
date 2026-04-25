@@ -115,14 +115,14 @@ func dbusNotifyLocal(title, body string) error {
 
 	obj := conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications")
 	call := obj.Call("org.freedesktop.Notifications.Notify", 0,
-		"ov",                          // app_name
-		uint32(0),                     // replaces_id
-		"",                            // app_icon
-		title,                         // summary
-		body,                          // body
-		[]string{},                    // actions
-		map[string]dbus.Variant{},     // hints
-		int32(-1),                     // expire_timeout (-1 = default)
+		"ov",                      // app_name
+		uint32(0),                 // replaces_id
+		"",                        // app_icon
+		title,                     // summary
+		body,                      // body
+		[]string{},                // actions
+		map[string]dbus.Variant{}, // hints
+		int32(-1),                 // expire_timeout (-1 = default)
 	)
 	return call.Err
 }

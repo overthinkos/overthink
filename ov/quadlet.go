@@ -10,32 +10,32 @@ import (
 
 // QuadletConfig holds the parameters for generating a quadlet .container file
 type QuadletConfig struct {
-	ImageName   string              // image name from image.yml (e.g. "fedora-test")
-	ImageRef    string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
-	Home        string              // container home directory (for WorkingDir resolution)
-	Ports       []string            // port mappings from image.yml (e.g. ["8000:8000", "8080:8080"])
-	Volumes     []VolumeMount       // named volumes from layer.yml declarations
-	BindMounts  []ResolvedBindMount // bind-backed volumes from deploy config
-	GPU         bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
-	BindAddress string              // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
-	Tunnel      *TunnelConfig       // tunnel configuration (nil if no tunnel)
-	UID         int                 // container user UID (for UserNS keep-id mapping)
-	GID         int                 // container user GID (for UserNS keep-id mapping)
-	Env         []string            // runtime env vars (KEY=VALUE pairs)
-	EnvFile     string              // absolute path to env file for EnvironmentFile= directive
-	Instance    string              // instance name for running multiple containers of same image
-	Security       SecurityConfig      // container security options
-	Network        string              // container network mode (e.g. "host", "none")
-	Version        string              // image definition version (CalVer)
-	Status         string              // effective status (working, testing, broken)
-	Info           string              // status description
-	Secrets        []CollectedSecret   // container secrets (podman Secret= directives)
-	Entrypoint     []string            // init system entrypoint (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
-	OvBin          string              // absolute path to ov binary (for ExecStartPre)
-	EncryptedMounts bool               // true when any bind mount is encrypted
-	KeyringBackend  bool               // true when credential store is Secret Service (keyring)
-	PodName        string              // non-empty when this container belongs to a pod (sidecar mode)
-	Sidecars       []ResolvedSidecar   // sidecar definitions (used to detect tailscale sidecar for tunnel)
+	ImageName       string              // image name from image.yml (e.g. "fedora-test")
+	ImageRef        string              // full image reference (e.g. "ghcr.io/overthinkos/fedora-test:latest")
+	Home            string              // container home directory (for WorkingDir resolution)
+	Ports           []string            // port mappings from image.yml (e.g. ["8000:8000", "8080:8080"])
+	Volumes         []VolumeMount       // named volumes from layer.yml declarations
+	BindMounts      []ResolvedBindMount // bind-backed volumes from deploy config
+	GPU             bool                // enable GPU passthrough via CDI (AddDevice=nvidia.com/gpu=all)
+	BindAddress     string              // host bind address for port publishing (e.g. "127.0.0.1" or "0.0.0.0")
+	Tunnel          *TunnelConfig       // tunnel configuration (nil if no tunnel)
+	UID             int                 // container user UID (for UserNS keep-id mapping)
+	GID             int                 // container user GID (for UserNS keep-id mapping)
+	Env             []string            // runtime env vars (KEY=VALUE pairs)
+	EnvFile         string              // absolute path to env file for EnvironmentFile= directive
+	Instance        string              // instance name for running multiple containers of same image
+	Security        SecurityConfig      // container security options
+	Network         string              // container network mode (e.g. "host", "none")
+	Version         string              // image definition version (CalVer)
+	Status          string              // effective status (working, testing, broken)
+	Info            string              // status description
+	Secrets         []CollectedSecret   // container secrets (podman Secret= directives)
+	Entrypoint      []string            // init system entrypoint (e.g., ["supervisord", "-n", "-c", "/etc/supervisord.conf"])
+	OvBin           string              // absolute path to ov binary (for ExecStartPre)
+	EncryptedMounts bool                // true when any bind mount is encrypted
+	KeyringBackend  bool                // true when credential store is Secret Service (keyring)
+	PodName         string              // non-empty when this container belongs to a pod (sidecar mode)
+	Sidecars        []ResolvedSidecar   // sidecar definitions (used to detect tailscale sidecar for tunnel)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.

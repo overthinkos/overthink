@@ -115,15 +115,15 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 //
 // Semantics by target:
 //
-//   host:       children share the parent venue (host applies layers
-//               in-place). Child executor = parentExec or
-//               LocalDeployExecutor at the root.
-//   container:  wrap parent with NestedExecutor{JumpPodmanExec}.
-//   vm:         wrap parent with NestedExecutor{JumpSSH} when parent
-//               is non-nil; otherwise the child executor is a plain
-//               SSHExecutor built from the VM's deploy state.
-//   kubernetes: children are K8s manifests — not executed. Returns
-//               nil + error when non-empty Children.
+//	host:       children share the parent venue (host applies layers
+//	            in-place). Child executor = parentExec or
+//	            LocalDeployExecutor at the root.
+//	container:  wrap parent with NestedExecutor{JumpPodmanExec}.
+//	vm:         wrap parent with NestedExecutor{JumpSSH} when parent
+//	            is non-nil; otherwise the child executor is a plain
+//	            SSHExecutor built from the VM's deploy state.
+//	kubernetes: children are K8s manifests — not executed. Returns
+//	            nil + error when non-empty Children.
 //
 // Returns (parentExec, nil) for nodes with no children — no
 // composition needed.

@@ -9,10 +9,10 @@ layer:
       so baseline always fails. An AI solves it by adding a write: task
       to this layer.yml that creates /etc/ov-bench-marker containing the
       string "ov benchmark target".
-    tags: [bench, throwaway]
-    scenarios:
+    tag: [bench, throwaway]
+    scenario:
       - name: marker file is present with expected content
-        tags: ["@skeleton"]
+        tag: ["@skeleton"]
         steps:
           # Single Then step (no narrative-only Given) so the scenario
           # has zero pending steps and Classify can return VerdictSolved

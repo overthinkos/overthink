@@ -117,19 +117,19 @@ type InstallContext struct {
 
 // BuildStageContext provides data to builder stage templates.
 type BuildStageContext struct {
-	BuilderRef   string
-	StageName    string
-	LayerStage   string // scratch stage name for COPY --from
-	CopySrc      string // build context path for layer files (e.g., "layers/python")
-	UID          int
-	GID          int
-	Home         string
-	User         string
-	Manifest     string
-	HasLockFile  bool
-	InstallCmd   string
-	ManylinuxFix string
-	CacheMounts  []CacheMountDef
+	BuilderRef     string
+	StageName      string
+	LayerStage     string // scratch stage name for COPY --from
+	CopySrc        string // build context path for layer files (e.g., "layers/python")
+	UID            int
+	GID            int
+	Home           string
+	User           string
+	Manifest       string
+	HasLockFile    bool
+	InstallCmd     string
+	ManylinuxFix   string
+	CacheMounts    []CacheMountDef
 	Packages       []string // for config-detected builders (aur)
 	Options        []string // for config-detected builders (aur)
 	HasBuildScript bool     // true if layer has a build script (e.g., build.sh)

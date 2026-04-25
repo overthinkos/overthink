@@ -144,8 +144,8 @@ func TestOCITargetEmitRepoChange(t *testing.T) {
 // elision. Returns Venue=VenueSkip and marker content in its Kind.
 type fakeSkipStep struct{}
 
-func (f *fakeSkipStep) Kind() StepKind     { return "FAKE" }
-func (f *fakeSkipStep) Scope() Scope       { return ScopeUser }
-func (f *fakeSkipStep) Venue() Venue       { return VenueSkip }
-func (f *fakeSkipStep) RequiresGate() Gate { return GateNone }
+func (f *fakeSkipStep) Kind() StepKind       { return "FAKE" }
+func (f *fakeSkipStep) Scope() Scope         { return ScopeUser }
+func (f *fakeSkipStep) Venue() Venue         { return VenueSkip }
+func (f *fakeSkipStep) RequiresGate() Gate   { return GateNone }
 func (f *fakeSkipStep) Reverse() []ReverseOp { return nil }

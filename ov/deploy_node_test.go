@@ -23,8 +23,8 @@ func makeTree() map[string]DeploymentNode {
 			},
 		},
 		"arch": {
-			Target:   "vm",
-			Vm: "arch",
+			Target: "vm",
+			Vm:     "arch",
 		},
 	}
 }

@@ -48,10 +48,11 @@ bin/
 ov/ov
 output/
 
-# ov benchmark runs (each run gets its own subdir under .benchmark/<run-id>/
+# ov benchmark runs (each run gets its own subdir under .harness/<run-id>/
 # containing a dedicated git worktree + iteration artifacts; worktrees are
 # tracked via git-worktree metadata, not .gitignore).
 .benchmark/
+.harness/
 
 # Screenshots and temporary images
 *.png

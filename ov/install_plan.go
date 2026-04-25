@@ -186,31 +186,31 @@ const (
 type ReverseOpKind string
 
 const (
-	ReverseOpPackageRemove   ReverseOpKind = "package-remove"
-	ReverseOpCargoUninstall  ReverseOpKind = "cargo-uninstall"
-	ReverseOpNpmUninstallG   ReverseOpKind = "npm-uninstall-g"
-	ReverseOpPixiEnvRemove   ReverseOpKind = "pixi-env-remove"
-	ReverseOpRmFileSystem    ReverseOpKind = "rm-file-system"
-	ReverseOpRmFileUser      ReverseOpKind = "rm-file-user"
-	ReverseOpRmDirRecursive  ReverseOpKind = "rm-dir-recursive"
-	ReverseOpServiceDisable  ReverseOpKind = "service-disable"
-	ReverseOpServiceRemove   ReverseOpKind = "service-remove"
-	ReverseOpRemoveDropin    ReverseOpKind = "remove-dropin"
-	ReverseOpRestoreEnabled  ReverseOpKind = "restore-enabled"
-	ReverseOpRemoveManaged   ReverseOpKind = "remove-managed-block"
-	ReverseOpRemoveEnvdFile  ReverseOpKind = "remove-envd-file"
-	ReverseOpRemoveRepoFile  ReverseOpKind = "remove-repo-file"
-	ReverseOpCoprDisable     ReverseOpKind = "copr-disable"
+	ReverseOpPackageRemove  ReverseOpKind = "package-remove"
+	ReverseOpCargoUninstall ReverseOpKind = "cargo-uninstall"
+	ReverseOpNpmUninstallG  ReverseOpKind = "npm-uninstall-g"
+	ReverseOpPixiEnvRemove  ReverseOpKind = "pixi-env-remove"
+	ReverseOpRmFileSystem   ReverseOpKind = "rm-file-system"
+	ReverseOpRmFileUser     ReverseOpKind = "rm-file-user"
+	ReverseOpRmDirRecursive ReverseOpKind = "rm-dir-recursive"
+	ReverseOpServiceDisable ReverseOpKind = "service-disable"
+	ReverseOpServiceRemove  ReverseOpKind = "service-remove"
+	ReverseOpRemoveDropin   ReverseOpKind = "remove-dropin"
+	ReverseOpRestoreEnabled ReverseOpKind = "restore-enabled"
+	ReverseOpRemoveManaged  ReverseOpKind = "remove-managed-block"
+	ReverseOpRemoveEnvdFile ReverseOpKind = "remove-envd-file"
+	ReverseOpRemoveRepoFile ReverseOpKind = "remove-repo-file"
+	ReverseOpCoprDisable    ReverseOpKind = "copr-disable"
 )
 
 // ReverseOp is a single teardown action. Serialized into the ledger so
 // uninstall can reverse a deploy without re-reading layer.yml.
 type ReverseOp struct {
 	Kind    ReverseOpKind     `json:"kind"`
-	Format  string            `json:"format,omitempty"`   // package format for package-remove (rpm/deb/pac)
-	Targets []string          `json:"targets,omitempty"`  // package names, file paths, env names, …
-	Scope   Scope             `json:"scope,omitempty"`    // system vs user for disambiguation
-	Extra   map[string]string `json:"extra,omitempty"`    // op-specific details (e.g. unit name, layer name)
+	Format  string            `json:"format,omitempty"`  // package format for package-remove (rpm/deb/pac)
+	Targets []string          `json:"targets,omitempty"` // package names, file paths, env names, …
+	Scope   Scope             `json:"scope,omitempty"`   // system vs user for disambiguation
+	Extra   map[string]string `json:"extra,omitempty"`   // op-specific details (e.g. unit name, layer name)
 }
 
 // ---------------------------------------------------------------------------
@@ -375,7 +375,7 @@ func (s *BuilderStep) Scope() Scope {
 	return ScopeUser
 }
 
-func (s *BuilderStep) Venue() Venue     { return VenueContainerBuilder }
+func (s *BuilderStep) Venue() Venue       { return VenueContainerBuilder }
 func (s *BuilderStep) RequiresGate() Gate { return GateNone }
 
 func (s *BuilderStep) Reverse() []ReverseOp {
@@ -554,7 +554,7 @@ func (s *FileStep) Scope() Scope {
 	return ScopeUser
 }
 
-func (s *FileStep) Venue() Venue     { return VenueHostNative }
+func (s *FileStep) Venue() Venue       { return VenueHostNative }
 func (s *FileStep) RequiresGate() Gate { return GateNone }
 
 func (s *FileStep) Reverse() []ReverseOp {

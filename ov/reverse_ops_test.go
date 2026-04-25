@@ -9,9 +9,9 @@ import (
 
 // mockReverseExecutor always dry-runs for testing.
 type mockReverseExecutor struct {
-	dryRun          bool
-	keepRepo        bool
-	keepServices    bool
+	dryRun       bool
+	keepRepo     bool
+	keepServices bool
 }
 
 func (m *mockReverseExecutor) reverseDryRun() bool          { return m.dryRun }

@@ -108,14 +108,14 @@ func splitOsReleaseLine(line string) (key, val string, ok bool) {
 // canonical name so layer tag-section matching and build.yml
 // format-lookup both succeed.
 var distroIDAliases = map[string]string{
-	"arch":       "archlinux",
-	"archarm":    "archlinux",
-	"manjaro":    "archlinux",
+	"arch":        "archlinux",
+	"archarm":     "archlinux",
+	"manjaro":     "archlinux",
 	"endeavouros": "archlinux",
-	"almalinux":  "fedora",
-	"rocky":      "fedora",
-	"centos":     "fedora",
-	"rhel":       "fedora",
+	"almalinux":   "fedora",
+	"rocky":       "fedora",
+	"centos":      "fedora",
+	"rhel":        "fedora",
 }
 
 // populateTags derives HostDistro.Tags from the other fields. The

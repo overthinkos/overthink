@@ -33,19 +33,19 @@ type DeployAddCmd struct {
 	AddLayer []string `long:"add-layer" help:"Extra layer to apply on top of the base image (repeatable)"`
 
 	// Plan-level flags.
-	Tag     string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	DryRun  bool   `long:"dry-run" help:"Print the plan without executing"`
-	Format  string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
-	Pull    bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
-	Verify  bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
+	Tag    string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	DryRun bool   `long:"dry-run" help:"Print the plan without executing"`
+	Format string `long:"format" default:"table" enum:"table,json" help:"Output format for --dry-run"`
+	Pull   bool   `long:"pull" help:"Force re-fetch of remote refs / image pull"`
+	Verify bool   `long:"verify" help:"Re-run layer tests: on the host after install"`
 
 	// Host-only gates.
-	WithServices       bool   `long:"with-services" help:"Install systemd services (host target only)"`
-	AllowRepoChanges   bool   `long:"allow-repo-changes" help:"Allow repo config mutations (host target only)"`
-	AllowRootTasks     bool   `long:"allow-root-tasks" help:"Allow arbitrary root cmd: tasks (host target only)"`
-	SkipIncompatible   bool   `long:"skip-incompatible" help:"Skip layers without host-matching format (host target only)"`
-	BuilderImage       string `long:"builder-image" help:"Override the compile builder image"`
-	AssumeYes          bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
+	WithServices     bool   `long:"with-services" help:"Install systemd services (host target only)"`
+	AllowRepoChanges bool   `long:"allow-repo-changes" help:"Allow repo config mutations (host target only)"`
+	AllowRootTasks   bool   `long:"allow-root-tasks" help:"Allow arbitrary root cmd: tasks (host target only)"`
+	SkipIncompatible bool   `long:"skip-incompatible" help:"Skip layers without host-matching format (host target only)"`
+	BuilderImage     string `long:"builder-image" help:"Override the compile builder image"`
+	AssumeYes        bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
 
 	// Disposable + lifecycle classification (see /ov-dev:disposable).
 	// --disposable writes `disposable: true` into the deploy.yml
@@ -60,11 +60,11 @@ type DeployAddCmd struct {
 type DeployDelCmd struct {
 	Name string `arg:"" help:"Deploy name (literal 'host' or a container deploy name)"`
 
-	AssumeYes        bool `long:"yes" short:"y" help:"Skip confirmation prompts"`
-	KeepRepoChanges  bool `long:"keep-repo-changes" help:"Don't revert repo config even at zero refcount"`
-	KeepServices     bool `long:"keep-services" help:"Don't disable systemd units (just stop tracking)"`
-	KeepImage        bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
-	DryRun           bool `long:"dry-run" help:"Print the teardown plan without executing"`
+	AssumeYes       bool `long:"yes" short:"y" help:"Skip confirmation prompts"`
+	KeepRepoChanges bool `long:"keep-repo-changes" help:"Don't revert repo config even at zero refcount"`
+	KeepServices    bool `long:"keep-services" help:"Don't disable systemd units (just stop tracking)"`
+	KeepImage       bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
+	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
 	// Runner is populated by runVmDel / runHostDel etc. to route reverse
 	// ops to the right privilege context. Nil falls back to the local-exec

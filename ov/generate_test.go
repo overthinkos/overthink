@@ -49,7 +49,7 @@ func TestGenerateTraefikRoutes(t *testing.T) {
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"traefik": {
-				Name:       "traefik",
+				Name:     "traefik",
 				HasTasks: true,
 			},
 			"svc": {
@@ -108,10 +108,10 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 		Config:   &Config{},
 		Layers: map[string]*Layer{
 			"svc": {
-				Name:       "svc",
-				HasRoute:   true,
+				Name:     "svc",
+				HasRoute: true,
 				HasTasks: true,
-				route:      &RouteConfig{Host: "svc.localhost", Port: "9090"},
+				route:    &RouteConfig{Host: "svc.localhost", Port: "9090"},
 			},
 		},
 		Images: map[string]*ResolvedImage{
@@ -235,7 +235,7 @@ func TestGenerateRelayInitFragments(t *testing.T) {
 		BuildDir: tmpDir,
 		Layers: map[string]*Layer{
 			"socat": {
-				Name:       "socat",
+				Name:     "socat",
 				HasTasks: true,
 			},
 			"chrome": {

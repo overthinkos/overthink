@@ -183,7 +183,7 @@ func fmtOctal(mode uint32) string {
 
 // deployShellQuote wraps a string in single-quotes for safe embedding in a
 // bash script. Handles embedded single quotes via the standard
-// 'foo'\''bar' trick.
+// 'foo'\”bar' trick.
 func deployShellQuote(s string) string {
 	// Empty string → ''
 	if s == "" {

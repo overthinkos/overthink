@@ -77,9 +77,9 @@ const (
 // NestedJump describes one hop into a nested environment. The Target
 // string's meaning depends on Kind:
 //
-//   JumpPodmanExec / JumpDockerExec: container name.
-//   JumpSSH:                         "user@host:port" (port optional).
-//   JumpVirshConsole:                libvirt domain name.
+//	JumpPodmanExec / JumpDockerExec: container name.
+//	JumpSSH:                         "user@host:port" (port optional).
+//	JumpVirshConsole:                libvirt domain name.
 type NestedJump struct {
 	Kind   JumpKind
 	Target string

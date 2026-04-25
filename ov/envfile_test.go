@@ -248,8 +248,8 @@ func TestResolveEnvVarsNoProxyNormalized(t *testing.T) {
 
 func TestResolveEnvVarsWithGlobalEnv(t *testing.T) {
 	got, err := ResolveEnvVars(
-		[]string{"GLOBAL=yes", "SHARED=global"},   // global env (lowest priority)
-		[]string{"DEPLOY=yes", "SHARED=deploy"},     // per-image deploy env
+		[]string{"GLOBAL=yes", "SHARED=global"}, // global env (lowest priority)
+		[]string{"DEPLOY=yes", "SHARED=deploy"}, // per-image deploy env
 		"",
 		"",
 		"",

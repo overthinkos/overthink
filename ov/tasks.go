@@ -58,7 +58,7 @@ func taskUnresolvedRefs(s string, known map[string]bool) []string {
 }
 
 // shellSingleQuote quotes s for safe embedding in bash-c '...' by escaping
-// embedded single quotes via the standard '\'' trick.
+// embedded single quotes via the standard '\” trick.
 func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
 }

@@ -52,16 +52,16 @@ var forceTTY bool
 
 // ShellCmd starts a bash shell in a container image
 type ShellCmd struct {
-	Image      string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag        string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	Command   string   `short:"c" help:"Command to execute instead of interactive shell"`
-	Build      bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	TTY        bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
-	Env        []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
-	EnvFile    string   `long:"env-file" help:"Load env vars from file"`
-	Instance   string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	VolumeFlag []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
-	Bind       []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
+	Image           string   `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	Command         string   `short:"c" help:"Command to execute instead of interactive shell"`
+	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	TTY             bool     `long:"tty" help:"Force TTY allocation (for automation tools that lack a real terminal)"`
+	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE)"`
+	EnvFile         string   `long:"env-file" help:"Load env vars from file"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path])"`
+	Bind            []string `long:"bind" help:"Bind volume to host path (name or name=path)"`
 	AutoDetectFlags `embed:""`
 }
 

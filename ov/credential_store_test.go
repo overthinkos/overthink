@@ -8,9 +8,9 @@ import (
 
 // mockStore implements CredentialStore for testing.
 type mockStore struct {
-	name    string
-	data    map[string]map[string]string // service -> key -> value
-	setErr  error
+	name   string
+	data   map[string]map[string]string // service -> key -> value
+	setErr error
 }
 
 func newMockStore(name string) *mockStore {
@@ -300,8 +300,8 @@ func TestConfigFileStoreVNCAndSecretIsolation(t *testing.T) {
 func TestPlaintextCredentialEntriesCompositeKeys(t *testing.T) {
 	cfg := &RuntimeConfig{
 		VncPasswords: map[string]string{
-			"my-image":                         "vncpass",
-			"ov/secret/ov-immich-db-password":  "dbpass",
+			"my-image":                        "vncpass",
+			"ov/secret/ov-immich-db-password": "dbpass",
 		},
 	}
 	entries := PlaintextCredentialEntries(cfg)

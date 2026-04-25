@@ -110,11 +110,11 @@ func resolveQcow2Path(image string) (string, error) {
 
 // VmCreateCmd creates a VM from a QCOW2 disk image.
 type VmCreateCmd struct {
-	Image    string `arg:"" help:"Image name"`
-	Ram      string `long:"ram" help:"Override RAM size (e.g. 4G, 8192M)"`
-	Cpus     int    `long:"cpus" help:"Override CPU count"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
-	SshKey   string `long:"ssh-key" default:"auto" help:"SSH public key: path to .pub file, 'auto' (default ~/.ssh key), 'generate', or 'none'"`
+	Image           string `arg:"" help:"Image name"`
+	Ram             string `long:"ram" help:"Override RAM size (e.g. 4G, 8192M)"`
+	Cpus            int    `long:"cpus" help:"Override CPU count"`
+	Instance        string `short:"i" long:"instance" help:"Instance name"`
+	SshKey          string `long:"ssh-key" default:"auto" help:"SSH public key: path to .pub file, 'auto' (default ~/.ssh key), 'generate', or 'none'"`
 	AutoDetectFlags `embed:""`
 }
 

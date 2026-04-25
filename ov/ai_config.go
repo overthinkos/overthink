@@ -1,0 +1,270 @@
+package main
+
+// ai_config.go — `kind: ai` entity (the reusable AI-CLI catalog).
+//
+// One entry per AI CLI (claude, codex, gemini, ...). Each entry is the
+// *invocation contract*: how to launch the CLI, how to authenticate it,
+// how to capture its version, and how long to let it run.
+//
+// Recipes (`kind: recipe` in harness_recipe.go) reference AIs by name and
+// inherit nothing from them — recipes carry the prompt + plateau policy,
+// AIs carry the binary contract. A new AI is added once and reused by
+// every recipe; a new recipe doesn't need to redeclare its AIs.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os/exec"
+	"sort"
+	"strings"
+	"text/tabwriter"
+	"time"
+)
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// AIConfig is one entry under the top-level `ai:` map. Authoring shape:
+//
+//	ai:
+//	  claude:
+//	    description:
+//	      feature: "Anthropic Claude Code CLI"
+//	    command: [claude, -p, "${PROMPT}"]
+//	    prompt_via: argv
+//	    version_command: [claude, --version]
+//	    timeout: 30m
+//	    credential:
+//	      - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}
+type AIConfig struct {
+	Description    *Description      `yaml:"description,omitempty"`
+	Command        []string          `yaml:"command"`
+	PromptVia      string            `yaml:"prompt_via,omitempty"`
+	VersionCommand []string          `yaml:"version_command,omitempty"`
+	Timeout        string            `yaml:"timeout,omitempty"`
+	Env            map[string]string `yaml:"env,omitempty"`
+	WorkingDir     string            `yaml:"working_dir,omitempty"`
+	Credential     []CredentialMount `yaml:"credential,omitempty"`
+}
+
+// CredentialMount names one host file whose contents are synced into the
+// target deployment BEFORE the first AI invocation. `~` in dst resolves
+// against the target's $HOME.
+//
+// Defined here (not in benchmark_config.go any more) — this is the
+// canonical location going forward.
+type CredentialMount struct {
+	Src      string `yaml:"src"`
+	Dst      string `yaml:"dst"`
+	Mode     string `yaml:"mode,omitempty"`     // "copy" (default) | "bind"
+	Optional bool   `yaml:"optional,omitempty"` // missing src: warn, don't fail
+}
+
+// DefaultAITimeout is the Go-level default applied by ResolveAI when an
+// AI entry's `timeout:` field is empty.
+const DefaultAITimeout = "30m"
+
+// ---------------------------------------------------------------------------
+// Sentinel errors
+// ---------------------------------------------------------------------------
+
+var (
+	// ErrNoAIs fires when the project has no `ai:` map (no AIs configured).
+	ErrNoAIs = errors.New("harness: no AIs configured (add a 'ai:' map to harness.yml)")
+
+	// ErrAINotFound fires when the requested AI name is absent from the catalog.
+	ErrAINotFound = errors.New("harness: ai not found")
+)
+
+// ---------------------------------------------------------------------------
+// Resolution + defaults
+// ---------------------------------------------------------------------------
+
+// ResolveAI returns the named AI entry, or the sole entry if name == "" and
+// exactly one is configured. Applies Go-level defaults:
+//   - Timeout: "30m" when empty
+//   - PromptVia: "argv" when empty
+//
+// Returns a *copy* so callers can mutate without poisoning the catalog.
+func ResolveAI(catalog map[string]*AIConfig, name string) (*AIConfig, string, error) {
+	if len(catalog) == 0 {
+		return nil, "", ErrNoAIs
+	}
+
+	apply := func(ai AIConfig) *AIConfig {
+		out := ai
+		if out.Timeout == "" {
+			out.Timeout = DefaultAITimeout
+		}
+		if out.PromptVia == "" {
+			out.PromptVia = "argv"
+		}
+		return &out
+	}
+
+	if name == "" {
+		if len(catalog) > 1 {
+			return nil, "", fmt.Errorf("harness: multiple AIs configured (%s); pass --ai NAME to pick one",
+				strings.Join(SortedAINames(catalog), ", "))
+		}
+		// Exactly one entry — pick it.
+		for k, v := range catalog {
+			return apply(*v), k, nil
+		}
+	}
+
+	ai, ok := catalog[name]
+	if !ok {
+		return nil, "", fmt.Errorf("%w: %q (available: %s)",
+			ErrAINotFound, name, strings.Join(SortedAINames(catalog), ", "))
+	}
+	return apply(*ai), name, nil
+}
+
+// SortedAINames returns AI names in alphabetical order. Useful for
+// deterministic error messages and stable test expectations.
+func SortedAINames(catalog map[string]*AIConfig) []string {
+	out := make([]string, 0, len(catalog))
+	for k := range catalog {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ParseAITimeout parses the AI's Timeout field with the Go-level default
+// applied for empty strings. Exposed so harness_loop can apply the same
+// default consistently.
+func ParseAITimeout(s string) (time.Duration, error) {
+	if s == "" {
+		s = DefaultAITimeout
+	}
+	return time.ParseDuration(s)
+}
+
+// ---------------------------------------------------------------------------
+// Version capture
+// ---------------------------------------------------------------------------
+
+// VersionResult is the captured outcome of one `version_command:` run.
+// On success, Stdout is the trimmed first line of stdout. On failure,
+// Stdout is empty and Error is non-empty (e.g. "exit status 127: command not found").
+type VersionResult struct {
+	Stdout string `yaml:"stdout,omitempty" json:"stdout,omitempty"`
+	Error  string `yaml:"error,omitempty"  json:"error,omitempty"`
+}
+
+// String renders the version for the result file's ai_version: block.
+// Successful captures show the trimmed stdout; failures show "error: <...>".
+func (v VersionResult) String() string {
+	if v.Error != "" {
+		return "error: " + v.Error
+	}
+	return v.Stdout
+}
+
+// CaptureVersion runs the AI's `version_command:` via the supplied
+// executor's Run callback (LocalExecutor / NestedExecutor / SSHExecutor).
+// Returns a VersionResult capturing trimmed stdout or the error string.
+//
+// Failure of the version command is NOT fatal to a harness run — the
+// loop carries on and records the failure in result.<calver>.yml under
+// `ai_version:` so future readers can see what broke.
+//
+// run is `func(ctx, argv []string) (stdout, stderr string, err error)`.
+// The harness loop adapts each executor to this signature so AI version
+// capture is independent of the executor implementation.
+func CaptureVersion(
+	ctx context.Context,
+	ai *AIConfig,
+	run func(ctx context.Context, argv []string) (string, string, error),
+) VersionResult {
+	if len(ai.VersionCommand) == 0 {
+		return VersionResult{Error: "version_command: not configured"}
+	}
+	stdout, stderr, err := run(ctx, ai.VersionCommand)
+	if err != nil {
+		// Surface stderr in the error message when present; helps users
+		// debug "claude --version" failures (e.g., binary not on PATH).
+		msg := err.Error()
+		if s := strings.TrimSpace(stderr); s != "" {
+			msg = msg + ": " + s
+		}
+		return VersionResult{Error: msg}
+	}
+	first := firstNonEmptyLine(stdout)
+	if first == "" {
+		return VersionResult{Error: "version_command: produced empty output"}
+	}
+	return VersionResult{Stdout: first}
+}
+
+// LocalCaptureVersion is a convenience wrapper that runs the version
+// command on the host directly (for `host: true` recipes). Exposed so
+// the host-target preflight + the per-AI capture share one path.
+func LocalCaptureVersion(ctx context.Context, ai *AIConfig) VersionResult {
+	return CaptureVersion(ctx, ai, func(ctx context.Context, argv []string) (string, string, error) {
+		if len(argv) == 0 {
+			return "", "", errors.New("argv empty")
+		}
+		cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+		var stdout, stderr strings.Builder
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		return stdout.String(), stderr.String(), err
+	})
+}
+
+// firstNonEmptyLine returns the first non-empty line of s with surrounding
+// whitespace trimmed. Used to normalize multi-line --version output
+// (some CLIs print "Foo CLI" + version on separate lines).
+func firstNonEmptyLine(s string) string {
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
+// ---------------------------------------------------------------------------
+// Listing
+// ---------------------------------------------------------------------------
+
+// PrintAIs writes a human-readable table of configured AIs to w.
+// Used by `ov harness list-ai`.
+func PrintAIs(w io.Writer, catalog map[string]*AIConfig) {
+	if len(catalog) == 0 {
+		fmt.Fprintln(w, "No AIs configured. Add a 'ai:' map to harness.yml.")
+		return
+	}
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tCOMMAND\tVERSION_COMMAND\tTIMEOUT\tPROMPT_VIA\tCREDENTIAL")
+	for _, name := range SortedAINames(catalog) {
+		ai := catalog[name]
+		timeout := ai.Timeout
+		if timeout == "" {
+			timeout = DefaultAITimeout + " (default)"
+		}
+		promptVia := ai.PromptVia
+		if promptVia == "" {
+			promptVia = "argv (default)"
+		}
+		cmd := strings.Join(ai.Command, " ")
+		if len(cmd) > 50 {
+			cmd = cmd[:47] + "..."
+		}
+		ver := strings.Join(ai.VersionCommand, " ")
+		if ver == "" {
+			ver = "(none)"
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d\n",
+			name, cmd, ver, timeout, promptVia, len(ai.Credential))
+	}
+	_ = tw.Flush()
+}

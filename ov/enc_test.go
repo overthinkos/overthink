@@ -159,7 +159,7 @@ func TestQuadletWithBindMounts(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Home:   "/home/user/project",
+		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "data", HostPath: "/home/user/data", ContPath: "/home/user/.myapp", Encrypted: false},
@@ -181,7 +181,7 @@ func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Home:   "/home/user/project",
+		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
@@ -214,7 +214,7 @@ func TestQuadletWithEncryptedBindMountsKdbx(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Home:   "/home/user/project",
+		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
 		BindMounts: []ResolvedBindMount{
 			{Name: "secrets", HostPath: "/data/enc/ov-myapp-secrets/plain", ContPath: "/home/user/.secrets", Encrypted: true},
@@ -244,7 +244,7 @@ func TestQuadletWithoutEncryptedMounts(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
-		Home:   "/home/user/project",
+		Home:        "/home/user/project",
 		BindAddress: "127.0.0.1",
 	}
 

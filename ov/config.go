@@ -107,34 +107,34 @@ type ImageConfig struct {
 	// with a remediation hint pointing at `ov migrate description`.
 	// Internal read sites continue to reference these fields; they are
 	// always "" post-migration.
-	Status string `yaml:"status,omitempty"`
-	Info   string `yaml:"info,omitempty"`
-	Base      string        `yaml:"base,omitempty"`
-	Bootc     bool          `yaml:"bootc,omitempty"`
-	Platforms []string      `yaml:"platforms,omitempty"`
-	Tag       string        `yaml:"tag,omitempty"`
-	Registry  string        `yaml:"registry,omitempty"`
-	Distro    []string      `yaml:"distro,omitempty"`       // distro tags ["fedora:43", "fedora"] — first-match for packages
-	Build     BuildFormats  `yaml:"build,omitempty"`        // package formats ["rpm"] — all installed in order
-	Layers    []string      `yaml:"layers,omitempty"`
-	Ports     []string      `yaml:"ports,omitempty"`    // runtime port mappings ["host:container"]
-	User       string        `yaml:"user,omitempty"`         // username (default: "user")
-	UID        *int          `yaml:"uid,omitempty"`          // user ID (default: 1000)
-	GID        *int          `yaml:"gid,omitempty"`          // group ID (default: 1000)
-	UserPolicy string        `yaml:"user_policy,omitempty"`  // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
-	Merge     *MergeConfig  `yaml:"merge,omitempty"`    // layer merge settings
-	Aliases    []AliasConfig     `yaml:"aliases,omitempty"`      // command aliases
-	Builder    BuilderMap        `yaml:"builder,omitempty"`      // build type → builder image (pixi, npm, cargo, aur)
-	Builds     []string          `yaml:"builds,omitempty"`       // what this builder image can build (pixi, npm, cargo, aur)
+	Status     string        `yaml:"status,omitempty"`
+	Info       string        `yaml:"info,omitempty"`
+	Base       string        `yaml:"base,omitempty"`
+	Bootc      bool          `yaml:"bootc,omitempty"`
+	Platforms  []string      `yaml:"platforms,omitempty"`
+	Tag        string        `yaml:"tag,omitempty"`
+	Registry   string        `yaml:"registry,omitempty"`
+	Distro     []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
+	Build      BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
+	Layers     []string      `yaml:"layers,omitempty"`
+	Ports      []string      `yaml:"ports,omitempty"`       // runtime port mappings ["host:container"]
+	User       string        `yaml:"user,omitempty"`        // username (default: "user")
+	UID        *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
+	GID        *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
+	UserPolicy string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
+	Merge      *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
+	Aliases    []AliasConfig `yaml:"aliases,omitempty"`     // command aliases
+	Builder    BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
+	Builds     []string      `yaml:"builds,omitempty"`      // what this builder image can build (pixi, npm, cargo, aur)
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
 	// DeploymentNode and flow through to consumers via ImageMetadata.
-	Env        []string          `yaml:"env,omitempty"`          // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
-	EnvFile    string            `yaml:"env_file,omitempty"`     // path to env file for runtime injection
-	Security   *SecurityConfig   `yaml:"security,omitempty"`     // container security options — declaration of required capabilities
-	Network    string            `yaml:"network,omitempty"`      // container network mode — declaration of required/recommended mode
-	Init         string            `yaml:"init,omitempty"`          // explicit init system override ("supervisord", "systemd", "")
-	DataImage    bool              `yaml:"data_image,omitempty"`    // true = scratch-based data-only image (no runtime, no init)
+	Env       []string        `yaml:"env,omitempty"`        // runtime env vars (KEY=VALUE) — declaration of vars the image consumes
+	EnvFile   string          `yaml:"env_file,omitempty"`   // path to env file for runtime injection
+	Security  *SecurityConfig `yaml:"security,omitempty"`   // container security options — declaration of required capabilities
+	Network   string          `yaml:"network,omitempty"`    // container network mode — declaration of required/recommended mode
+	Init      string          `yaml:"init,omitempty"`       // explicit init system override ("supervisord", "systemd", "")
+	DataImage bool            `yaml:"data_image,omitempty"` // true = scratch-based data-only image (no runtime, no init)
 
 	// Tests are image-level declarative checks (cross-layer invariants).
 	// Entries without explicit scope default to "build" and land in the
@@ -162,21 +162,21 @@ func boolPtr(v bool) *bool {
 
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedImage struct {
-	Name      string
-	Version   string `json:"version,omitempty"`  // CalVer version from image.yml
-	Status    string `json:"status,omitempty"`   // effective status (worst of image + layers)
-	Info      string `json:"info,omitempty"`     // aggregated info from image + layers
-	Base      string   // Resolved base (external OCI ref or internal image name)
-	Bootc     bool
-	Platforms []string
-	Tag       string
-	Registry  string
+	Name         string
+	Version      string `json:"version,omitempty"` // CalVer version from image.yml
+	Status       string `json:"status,omitempty"`  // effective status (worst of image + layers)
+	Info         string `json:"info,omitempty"`    // aggregated info from image + layers
+	Base         string // Resolved base (external OCI ref or internal image name)
+	Bootc        bool
+	Platforms    []string
+	Tag          string
+	Registry     string
 	Pkg          string   // primary build format (first entry in BuildFormats) — for cache mounts, bootstrap
 	Distro       []string // resolved distro tags: ["fedora:43", "fedora"]
 	BuildFormats []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
 	Tags         []string // union: ["all"] + Distro + BuildFormats — for task matching
-	Layers    []string
-	Ports     []string // runtime port mappings
+	Layers       []string
+	Ports        []string // runtime port mappings
 
 	// User configuration
 	User string // username

@@ -70,10 +70,10 @@ images:
 		key  string
 		want bool
 	}{
-		{"fedora-coder", false},         // lifecycle: prod, no disposable → false
-		{"fedora-coder-dev", false},     // lifecycle: dev, no disposable → STILL false
-		{"fedora-coder-qa", true},       // explicit disposable: true
-		{"fedora-coder-scratch", true},  // explicit disposable: true
+		{"fedora-coder", false},        // lifecycle: prod, no disposable → false
+		{"fedora-coder-dev", false},    // lifecycle: dev, no disposable → STILL false
+		{"fedora-coder-qa", true},      // explicit disposable: true
+		{"fedora-coder-scratch", true}, // explicit disposable: true
 	}
 	for _, tc := range tests {
 		e, ok := cfg.Deployment[tc.key]
@@ -85,4 +85,3 @@ images:
 		}
 	}
 }
-

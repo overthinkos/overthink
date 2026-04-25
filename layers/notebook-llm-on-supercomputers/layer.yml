@@ -8,7 +8,7 @@ layer:
     feature: LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)
     narrative: |-
       LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)
-    scenarios:
+    scenario:
       - name: 'TODO: describe LLMs on Supercomputers course notebooks (TU Wien AI Factory Austria)'
-        tags: [skeleton]
+        tag: [skeleton]
         steps: []

@@ -196,11 +196,11 @@ func TestResolveDeployRefRemoteBareRepo(t *testing.T) {
 
 func TestTranslateAtVersion(t *testing.T) {
 	tests := map[string]string{
-		"github.com/foo/bar":                                            "github.com/foo/bar",
-		"github.com/foo/bar/layers/x":                                   "github.com/foo/bar/layers/x",
-		"github.com/foo/bar/layers/x@main":                              "github.com/foo/bar/layers/x:main",
-		"github.com/foo/bar/layers/x@v1.2.3":                            "github.com/foo/bar/layers/x:v1.2.3",
-		"github.com/foo/bar@main/layers/x":                              "github.com/foo/bar:main/layers/x",
+		"github.com/foo/bar":                 "github.com/foo/bar",
+		"github.com/foo/bar/layers/x":        "github.com/foo/bar/layers/x",
+		"github.com/foo/bar/layers/x@main":   "github.com/foo/bar/layers/x:main",
+		"github.com/foo/bar/layers/x@v1.2.3": "github.com/foo/bar/layers/x:v1.2.3",
+		"github.com/foo/bar@main/layers/x":   "github.com/foo/bar:main/layers/x",
 	}
 	for in, want := range tests {
 		if got := translateAtVersion(in); got != want {

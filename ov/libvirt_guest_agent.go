@@ -194,11 +194,11 @@ func (a *GuestAgent) NetworkInterfaces() ([]GuestNetworkInterface, error) {
 
 // Disks returns the guest's block devices (QGA >= 5.2).
 type GuestDisk struct {
-	Name       string `json:"name"`
-	Partition  bool   `json:"partition,omitempty"`
-	Alias      string `json:"alias,omitempty"`
-	BusType    string `json:"bus-type,omitempty"`
-	Serial     string `json:"serial,omitempty"`
+	Name       string   `json:"name"`
+	Partition  bool     `json:"partition,omitempty"`
+	Alias      string   `json:"alias,omitempty"`
+	BusType    string   `json:"bus-type,omitempty"`
+	Serial     string   `json:"serial,omitempty"`
 	Dependents []string `json:"dependents,omitempty"`
 }
 
@@ -212,11 +212,11 @@ func (a *GuestAgent) Disks() ([]GuestDisk, error) {
 
 // FSInfo returns mounted filesystem info.
 type GuestFS struct {
-	Name       string   `json:"name"`
-	Mountpoint string   `json:"mountpoint"`
-	Type       string   `json:"type"`
-	UsedBytes  uint64   `json:"used-bytes,omitempty"`
-	TotalBytes uint64   `json:"total-bytes,omitempty"`
+	Name       string           `json:"name"`
+	Mountpoint string           `json:"mountpoint"`
+	Type       string           `json:"type"`
+	UsedBytes  uint64           `json:"used-bytes,omitempty"`
+	TotalBytes uint64           `json:"total-bytes,omitempty"`
 	Disk       []map[string]any `json:"disk,omitempty"`
 }
 
@@ -230,8 +230,8 @@ func (a *GuestAgent) FSInfo() ([]GuestFS, error) {
 
 // VCPUs returns guest-side vCPU online state.
 type GuestVCPU struct {
-	LogicalID uint `json:"logical-id"`
-	Online    bool `json:"online"`
+	LogicalID  uint `json:"logical-id"`
+	Online     bool `json:"online"`
 	CanOffline bool `json:"can-offline"`
 }
 
@@ -345,9 +345,9 @@ func (a *GuestAgent) FileRead(path string) ([]byte, error) {
 	var all []byte
 	for {
 		var resp struct {
-			Count    int    `json:"count"`
-			BufB64   string `json:"buf-b64"`
-			EOF      bool   `json:"eof"`
+			Count  int    `json:"count"`
+			BufB64 string `json:"buf-b64"`
+			EOF    bool   `json:"eof"`
 		}
 		if err := a.Call("guest-file-read", map[string]any{
 			"handle": handle,
@@ -384,7 +384,7 @@ func (a *GuestAgent) FileWrite(path string, data []byte) error {
 
 	b64 := base64Encode(data)
 	var resp struct {
-		Count int `json:"count"`
+		Count int  `json:"count"`
 		EOF   bool `json:"eof"`
 	}
 	if err := a.Call("guest-file-write", map[string]any{

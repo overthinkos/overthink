@@ -458,7 +458,7 @@ func TestLayerPortRelay(t *testing.T) {
 
 func TestLayerPortRelayNone(t *testing.T) {
 	layer := &Layer{
-		Name:       "basic",
+		Name:     "basic",
 		HasTasks: true,
 	}
 
@@ -500,4 +500,3 @@ func TestRouteLayers(t *testing.T) {
 		t.Errorf("RouteLayers()[0].Name = %q, want %q", routes[0].Name, "webservice")
 	}
 }
-

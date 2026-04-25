@@ -30,32 +30,37 @@ import (
 // Opts + state types
 // ---------------------------------------------------------------------------
 
-// BenchmarkOpts are the resolved inputs to a run, populated by
-// BenchmarkRunCmd.Run before calling RunBenchmark.
-type BenchmarkOpts struct {
-	ProjectDir        string
-	Deployment        string
-	DeploymentNode    *DeploymentNode
-	Runner            *BenchmarkRunner
-	Prompt            string // template text; per-iter substitution at render time
-	TargetImage       string
-	Tags              string
-	PlateauIterations int
-	MaxIterations     int // 0 = unbounded (except by plateau)
-	MaxScenarios     int
-	NoMCP             bool
-	NoIsolate         bool
-	DryRun            bool
-	SkipRebuild       bool
-	RebuildBaseline   bool
-	Format            string // "text" | "yaml"
-	Stdout            *os.File
-	Stderr            *os.File
+// HarnessOpts are the resolved inputs to a run, populated by
+// BenchmarkRunCmd.Run before calling RunHarness.
+type HarnessOpts struct {
+	ProjectDir       string
+	RecipeName       string
+	Recipe           *HarnessRecipe
+	TargetKind       string // "pod" | "vm" | "host"
+	TargetName       string // pod or vm name (empty when host)
+	AIName           string
+	AI               *AIConfig
+	Prompt           string // template text; per-iter substitution at render time
+	TargetImage      string
+	Tag              string
+	PlateauIteration int
+	MaxIteration     int // 0 = unbounded (except by plateau)
+	MaxScenario      int
+	MCPEndpoint      string
+	Notes            string // ${NOTES} snapshot at run start
+	NoMCP            bool
+	NoIsolate        bool
+	DryRun           bool
+	SkipRebuild      bool
+	RebuildBaseline  bool
+	Format           string // "text" | "yaml"
+	Stdout           *os.File
+	Stderr           *os.File
 
-	// PreAIScenarios is the frozen set of scenarios the benchmark is
+	// PreAIScenario is the frozen set of scenarios the benchmark is
 	// scored against. Populated from CollectDescriptions at Phase B.
 	// Changes to descriptions post-iteration don't alter this set.
-	PreAIScenarios []ScenarioTestResult
+	PreAIScenario []ScenarioTestResult
 
 	// PreFingerprints maps ScenarioID -> body fingerprint at baseline.
 	PreFingerprints map[string]string
@@ -74,8 +79,8 @@ type IterationState struct {
 	TestDuration       string                     `yaml:"test_duration,omitempty"`
 	RunnerDuration     string                     `yaml:"runner_duration,omitempty"`
 	CommitSHA          string                     `yaml:"commit_sha,omitempty"`
-	Scenarios          []ScenarioVerdict          `yaml:"scenarios,omitempty"`
-	AddedScenarios     []string                   `yaml:"added_scenarios,omitempty"`
+	Scenario          []ScenarioVerdict          `yaml:"scenario,omitempty"`
+	AddedScenario     []string                   `yaml:"added_scenario,omitempty"`
 }
 
 // ScenarioVerdict is one scenario's post-iteration outcome.
@@ -91,23 +96,36 @@ type ScenarioVerdict struct {
 	PendingPost     int     `yaml:"pending_post,omitempty"`
 }
 
-// FinalReport is the aggregate persisted to report.yml.
+// FinalReport is the aggregate persisted to result.{calver}.yml.
 type FinalReport struct {
-	RunID              string            `yaml:"run_id"`
-	TargetDeployment   string            `yaml:"target_deployment"`
-	TargetImage        string            `yaml:"target_image"`
-	Runner             string            `yaml:"runner"`
-	PlateauIterations  int               `yaml:"plateau_iterations"`
-	MaxIterations      int               `yaml:"max_iterations"`
-	StartedUTC         string            `yaml:"started_utc"`
-	FinishedUTC        string            `yaml:"finished_utc"`
-	ExitReason         string            `yaml:"exit_reason"` // plateau | ceiling | solved-all | interrupted | dry-run
-	IterationsRun      int               `yaml:"iterations_run"`
-	BestScore          int               `yaml:"best_score"`
-	BestIteration      int               `yaml:"best_iteration"`
-	Summary            ReportSummary     `yaml:"summary"`
-	Iterations         []IterationState  `yaml:"iterations,omitempty"`
-	FinalScenarios     []ScenarioVerdict `yaml:"scenarios,omitempty"`
+	Schema           int               `yaml:"schema"`
+	Recipe           string            `yaml:"recipe"`
+	Calver           string            `yaml:"calver"`
+	RunID            string            `yaml:"run_id"`
+	AI               string            `yaml:"ai"`
+	AIVersion        map[string]string `yaml:"ai_version,omitempty"`
+	Where            ReportWhere       `yaml:"where"`
+	TargetImage      string            `yaml:"target_image,omitempty"`
+	Tag              string            `yaml:"tag,omitempty"`
+	PlateauIteration int               `yaml:"plateau_iteration"`
+	MaxIteration     int               `yaml:"max_iteration"`
+	MCPEndpoint      string            `yaml:"mcp_endpoint,omitempty"`
+	StartedUTC       string            `yaml:"started_utc"`
+	FinishedUTC      string            `yaml:"finished_utc"`
+	ExitReason       string            `yaml:"exit_reason"` // plateau | ceiling | solved-all | interrupted | dry-run
+	IterationsRun    int               `yaml:"iterations_run"`
+	BestScore        int               `yaml:"best_score"`
+	BestIteration    int               `yaml:"best_iteration"`
+	OvharnessBranch  string            `yaml:"ovharness_branch,omitempty"`
+	Summary          ReportSummary     `yaml:"summary"`
+	Iterations       []IterationState  `yaml:"iteration,omitempty"`
+	FinalScenario    []ScenarioVerdict `yaml:"final_scenario,omitempty"`
+}
+
+// ReportWhere identifies the target a run executed against.
+type ReportWhere struct {
+	Kind string `yaml:"kind"`           // pod | vm | host
+	Name string `yaml:"name,omitempty"` // pod or vm name; absent for host
 }
 
 // ReportSummary is the aggregate metrics panel.
@@ -217,34 +235,40 @@ func mergeOsEnv(env map[string]string) []string {
 }
 
 // ---------------------------------------------------------------------------
-// RunBenchmark — the main entry point
+// RunHarness — the main entry point
 // ---------------------------------------------------------------------------
 
-// RunBenchmark executes the iteration loop against opts and returns
+// RunHarness executes the iteration loop against opts and returns
 // the final report. Caller is responsible for creating the per-run
 // clone and for collecting the pre-AI baseline (those happen in
 // BenchmarkRunLocalCmd.Run, inside the pod).
-func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout) (*FinalReport, error) {
+func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*FinalReport, error) {
 	started := time.Now().UTC()
 	report := &FinalReport{
-		RunID:             layout.RunID,
-		TargetDeployment:  opts.Deployment,
-		TargetImage:       opts.TargetImage,
-		Runner:            opts.Runner.Name,
-		PlateauIterations: opts.PlateauIterations,
-		MaxIterations:     opts.MaxIterations,
-		StartedUTC:        started.Format(time.RFC3339),
+		Schema:           1,
+		Recipe:           opts.RecipeName,
+		Calver:           ComputeCalVer(),
+		RunID:            layout.RunID,
+		AI:               opts.AIName,
+		Where:            ReportWhere{Kind: opts.TargetKind, Name: opts.TargetName},
+		TargetImage:      opts.TargetImage,
+		Tag:              opts.Tag,
+		PlateauIteration: opts.PlateauIteration,
+		MaxIteration:     opts.MaxIteration,
+		MCPEndpoint:      opts.MCPEndpoint,
+		OvharnessBranch:  layout.Branch,
+		StartedUTC:       started.Format(time.RFC3339),
 	}
 
 	plateauCounter := 0
 	bestScore := 0
 	bestIteration := 0
-	preIDs := scenarioIDSet(opts.PreAIScenarios)
+	preIDs := scenarioIDSet(opts.PreAIScenario)
 
 	// Iteration loop.
-	for k := 1; opts.MaxIterations == 0 || k <= opts.MaxIterations; k++ {
+	for k := 1; opts.MaxIteration == 0 || k <= opts.MaxIteration; k++ {
 		// Compute still-unsolved.
-		unsolved := stillUnsolved(opts.PreAIScenarios, report.Iterations)
+		unsolved := stillUnsolved(opts.PreAIScenario, report.Iterations)
 		if len(unsolved) == 0 && k > 1 {
 			report.ExitReason = "solved-all"
 			break
@@ -279,13 +303,13 @@ func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout) (*F
 		_ = writeIterScore(layout, k, report.Iterations[len(report.Iterations)-1])
 
 		// Plateau exit.
-		if plateauCounter >= opts.PlateauIterations {
+		if plateauCounter >= opts.PlateauIteration {
 			report.ExitReason = "plateau"
 			break
 		}
 
 		// Ceiling exit.
-		if opts.MaxIterations != 0 && k >= opts.MaxIterations {
+		if opts.MaxIteration != 0 && k >= opts.MaxIteration {
 			report.ExitReason = "ceiling"
 			break
 		}
@@ -305,9 +329,9 @@ func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout) (*F
 	// Aggregate per-scenario final verdicts (from the LAST iteration's
 	// scenario verdicts, plus `added` scenarios from the final reload).
 	if n := len(report.Iterations); n > 0 {
-		report.FinalScenarios = report.Iterations[n-1].Scenarios
+		report.FinalScenario = report.Iterations[n-1].Scenario
 	}
-	report.Summary = computeSummary(report.FinalScenarios, len(preIDs))
+	report.Summary = computeSummary(report.FinalScenario, len(preIDs))
 
 	// Persist the report.
 	if err := writeReport(layout, report); err != nil {
@@ -331,7 +355,7 @@ func stillUnsolved(pre []ScenarioTestResult, iters []IterationState) []ScenarioT
 	// Build a map of latest verdict per scenario ID.
 	latest := make(map[string]Verdict)
 	for _, it := range iters {
-		for _, v := range it.Scenarios {
+		for _, v := range it.Scenario {
 			latest[v.ID] = v.Verdict
 		}
 	}
@@ -357,7 +381,7 @@ func stillUnsolved(pre []ScenarioTestResult, iters []IterationState) []ScenarioT
 // runOneIteration drives a single pass through Phase E of the flow.
 func runOneIteration(
 	ctx context.Context,
-	opts BenchmarkOpts,
+	opts HarnessOpts,
 	layout RunLayout,
 	k int,
 	unsolved []ScenarioTestResult,
@@ -376,19 +400,40 @@ func runOneIteration(
 	}
 
 	// 2. Render + write prompt.md
+	notesSnap := opts.Notes
+	if recipeName := opts.RecipeName; recipeName != "" && opts.Recipe != nil && opts.Recipe.NotesEnabled() {
+		// Refresh per iteration so the AI sees notes the previous iter may have appended.
+		if body, _ := ReadNote(opts.ProjectDir, recipeName); body != "" {
+			notesSnap = body
+		}
+	}
+	mcp := opts.MCPEndpoint
+	if mcp == "" {
+		mcp = DefaultMCPEndpoint
+	}
 	substCtx := &SubstContext{
-		RunID:             layout.RunID,
-		WorkspacePath:     layout.RepoDir,
-		TargetImage:       opts.TargetImage,
-		TargetDeployment:  opts.Deployment,
-		Iteration:         k,
-		MaxIterations:     opts.MaxIterations,
-		PlateauIterations: opts.PlateauIterations,
-		PlateauCounter:    computePlateauSoFar(reportSoFar),
-		BestScore:         reportSoFar.BestScore,
-		MCPEndpoint:       InPodMCPEndpoint,
-		Tags:              opts.Tags,
-		Timeout:           opts.Runner.Timeout,
+		RunID:            layout.RunID,
+		RecipeName:       opts.RecipeName,
+		AIName:           opts.AIName,
+		WorkspacePath:    layout.RepoDir,
+		TargetImage:      opts.TargetImage,
+		TargetKind:       opts.TargetKind,
+		TargetName:       opts.TargetName,
+		Iteration:        k,
+		MaxIteration:     opts.MaxIteration,
+		PlateauIteration: opts.PlateauIteration,
+		PlateauCounter:   computePlateauSoFar(reportSoFar),
+		BestScore:        reportSoFar.BestScore,
+		MCPEndpoint:      mcp,
+		Notes:            notesSnap,
+		Tag:              opts.Tag,
+		Timeout:          opts.AI.Timeout,
+	}
+	if opts.Recipe != nil {
+		substCtx.AppendEnv(opts.Recipe.Env)
+	}
+	if opts.AI != nil {
+		substCtx.AppendEnv(opts.AI.Env)
 	}
 	promptText := Substitute(opts.Prompt, substCtx)
 	if err := writePrompt(layout, k, promptText); err != nil {
@@ -405,7 +450,7 @@ func runOneIteration(
 	runnerLog := filepath.Join(iterDir, "runner.log")
 
 	// Apply per-runner timeout.
-	timeout, _ := ParseRunnerTimeout(opts.Runner.Timeout)
+	timeout, _ := ParseAITimeout(opts.AI.Timeout)
 	runnerCtx, cancelRunner := context.WithTimeout(ctx, timeout)
 	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog)
 	cancelRunner()
@@ -420,7 +465,7 @@ func runOneIteration(
 	// just the TAG portion (no `/`, no `:`); the full image ref is
 	// reconstructed for the test step. Using a "/" or ":" inside --tag
 	// makes podman build fail with "invalid reference format".
-	iterTagSuffix := fmt.Sprintf("ovbench-%s-iter%d", layout.RunID, k)
+	iterTagSuffix := fmt.Sprintf("ovharness-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var testOut []byte
 	if !opts.SkipRebuild {
@@ -431,7 +476,7 @@ func runOneIteration(
 			iter.BuildFailure = true
 			// Score is unchanged (== prior iteration's score); no test run.
 			iter.Score = priorScore(reportSoFar)
-			iter.Scenarios = priorScenarios(reportSoFar)
+			iter.Scenario = priorScenarios(reportSoFar)
 			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}
@@ -447,7 +492,7 @@ func runOneIteration(
 			// Test runner failure; treat as build failure (score unchanged).
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
-			iter.Scenarios = priorScenarios(reportSoFar)
+			iter.Scenario = priorScenarios(reportSoFar)
 			fmt.Fprintf(opts.Stderr, "iter%d: ov image test: %v\n", k, testErr)
 			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
@@ -474,7 +519,7 @@ func runOneIteration(
 
 	// Classify each pre-AI scenario.
 	postByID := parsed.ScenarioByID()
-	for _, pre := range opts.PreAIScenarios {
+	for _, pre := range opts.PreAIScenario {
 		preState := ScenarioState{
 			Present:        true,
 			Fingerprint:    opts.PreFingerprints[pre.ID],
@@ -493,7 +538,7 @@ func runOneIteration(
 			}
 		}
 		v := Classify(preState, postState)
-		iter.Scenarios = append(iter.Scenarios, ScenarioVerdict{
+		iter.Scenario = append(iter.Scenario, ScenarioVerdict{
 			ID:              pre.ID,
 			Origin:          pre.Origin,
 			Verdict:         v,
@@ -510,15 +555,15 @@ func runOneIteration(
 	}
 
 	// Identify `added` scenarios (present post but not in pre).
-	preIDs := scenarioIDSet(opts.PreAIScenarios)
+	preIDs := scenarioIDSet(opts.PreAIScenario)
 	for id := range postByID {
 		if !preIDs[id] {
-			iter.AddedScenarios = append(iter.AddedScenarios, id)
+			iter.AddedScenario = append(iter.AddedScenario, id)
 		}
 	}
 
 	// 7. Commit iteration on the worktree branch.
-	solvedIDs := collectSolvedIDs(iter.Scenarios)
+	solvedIDs := collectSolvedIDs(iter.Scenario)
 	if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
 		fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 	}
@@ -535,7 +580,7 @@ func runOneIteration(
 // and stashes the SHA. Errors are non-fatal — the commit step is
 // audit-trail; a hook abort doesn't invalidate the iteration's scoring.
 func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState) error {
-	solved := collectSolvedIDs(iter.Scenarios)
+	solved := collectSolvedIDs(iter.Scenario)
 	sha, err := CommitIterationInRepo(ctx, layout, k, iter.Score, solved)
 	if err != nil {
 		return err
@@ -568,7 +613,7 @@ func priorScenarios(r *FinalReport) []ScenarioVerdict {
 	if r == nil || len(r.Iterations) == 0 {
 		return nil
 	}
-	return r.Iterations[len(r.Iterations)-1].Scenarios
+	return r.Iterations[len(r.Iterations)-1].Scenario
 }
 
 // computePlateauSoFar returns the plateau counter value going into iter k+1.
@@ -583,19 +628,21 @@ func computePlateauSoFar(r *FinalReport) int {
 // Scope rendering
 // ---------------------------------------------------------------------------
 
-// Scope is the YAML-serializable form of /workspace/.benchmark/scope.yml.
-type BenchmarkScope struct {
-	RunID             string               `yaml:"run_id"`
-	Iteration         int                  `yaml:"iteration"`
-	MaxIterations     int                  `yaml:"max_iterations"`
-	PlateauIterations int                  `yaml:"plateau_iterations"`
-	PlateauCounter    int                  `yaml:"plateau_counter"`
-	BestScore         int                  `yaml:"best_score"`
-	TargetImage       string               `yaml:"target_image"`
-	TargetDeployment  string               `yaml:"target_deployment"`
-	Tags              string               `yaml:"tags,omitempty"`
-	History           []ScopeHistoryEntry  `yaml:"history,omitempty"`
-	Scenarios         []ScopeScenario      `yaml:"scenarios,omitempty"`
+// Scope is the YAML-serializable form of /workspace/.harness/scope.yml.
+type HarnessScope struct {
+	RunID            string              `yaml:"run_id"`
+	Recipe           string              `yaml:"recipe,omitempty"`
+	AI               string              `yaml:"ai,omitempty"`
+	Iteration        int                 `yaml:"iteration"`
+	MaxIteration     int                 `yaml:"max_iteration"`
+	PlateauIteration int                 `yaml:"plateau_iteration"`
+	PlateauCounter   int                 `yaml:"plateau_counter"`
+	BestScore        int                 `yaml:"best_score"`
+	TargetImage      string              `yaml:"target_image"`
+	Where            ReportWhere         `yaml:"where"`
+	Tag              string              `yaml:"tag,omitempty"`
+	History          []ScopeHistoryEntry `yaml:"history,omitempty"`
+	Scenario         []ScopeScenario     `yaml:"scenario,omitempty"`
 }
 
 // ScopeHistoryEntry summarizes one past iteration for the AI.
@@ -625,29 +672,31 @@ type ScopeScenarioTrajectory struct {
 }
 
 // renderScope builds the Scope that iteration k will see.
-func renderScope(opts BenchmarkOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []ScenarioTestResult) *BenchmarkScope {
-	s := &BenchmarkScope{
-		RunID:             layout.RunID,
-		Iteration:         k,
-		MaxIterations:     opts.MaxIterations,
-		PlateauIterations: opts.PlateauIterations,
-		PlateauCounter:    computePlateauSoFar(reportSoFar),
-		BestScore:         reportSoFar.BestScore,
-		TargetImage:       opts.TargetImage,
-		TargetDeployment:  opts.Deployment,
-		Tags:              opts.Tags,
+func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalReport, unsolved []ScenarioTestResult) *HarnessScope {
+	s := &HarnessScope{
+		RunID:            layout.RunID,
+		Recipe:           opts.RecipeName,
+		AI:               opts.AIName,
+		Iteration:        k,
+		MaxIteration:     opts.MaxIteration,
+		PlateauIteration: opts.PlateauIteration,
+		PlateauCounter:   computePlateauSoFar(reportSoFar),
+		BestScore:        reportSoFar.BestScore,
+		TargetImage:      opts.TargetImage,
+		Where:            ReportWhere{Kind: opts.TargetKind, Name: opts.TargetName},
+		Tag:              opts.Tag,
 	}
 	for _, h := range reportSoFar.Iterations {
 		s.History = append(s.History, ScopeHistoryEntry{
 			K:                   h.K,
 			Score:               h.Score,
-			SolvedIDs:           collectSolvedIDs(h.Scenarios),
+			SolvedIDs:           collectSolvedIDs(h.Scenario),
 			Runtime:             h.RunnerDuration,
 			PlateauCounterAfter: h.PlateauCounterAfter,
 		})
 	}
 	for _, u := range unsolved {
-		s.Scenarios = append(s.Scenarios, ScopeScenario{
+		s.Scenario = append(s.Scenario, ScopeScenario{
 			ID:              u.ID,
 			Origin:          u.Origin,
 			BaselineVerdict: u.Status,
@@ -658,9 +707,9 @@ func renderScope(opts BenchmarkOpts, layout RunLayout, k int, reportSoFar *Final
 }
 
 // writeScope writes scope.yml to iter<k>/ AND mirrors to the per-run
-// clone at <RepoDir>/.benchmark/scope.yml (the path `ov benchmark scope`
+// clone at <RepoDir>/.harness/scope.yml (the path `ov benchmark scope`
 // reads from inside the pod when the AI's cwd is the clone).
-func writeScope(layout RunLayout, k int, s *BenchmarkScope) error {
+func writeScope(layout RunLayout, k int, s *HarnessScope) error {
 	data, err := yaml.Marshal(s)
 	if err != nil {
 		return err
@@ -698,13 +747,42 @@ func writeIterScore(layout RunLayout, k int, state IterationState) error {
 	return os.WriteFile(filepath.Join(layout.IterDir(k), "score.yml"), data, 0o644)
 }
 
-// writeReport writes the aggregated report.yml.
+// writeReport writes the aggregated result.{calver}.yml under
+// .harness/<recipe>/results/. The Calver is set on the FinalReport at
+// RunHarness entry; if missing for any reason, generate one now.
 func writeReport(layout RunLayout, r *FinalReport) error {
+	if r.Calver == "" {
+		r.Calver = ComputeCalVer()
+	}
+	if r.Recipe == "" {
+		r.Recipe = layout.Recipe
+	}
+	if r.Schema == 0 {
+		r.Schema = 1
+	}
 	data, err := yaml.Marshal(r)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(layout.RunDir, "report.yml"), data, 0o644)
+	if err := os.MkdirAll(layout.ResultsDir(), 0o755); err != nil {
+		return err
+	}
+	resultPath := filepath.Join(layout.ResultsDir(), "result."+r.Calver+".yml")
+	return os.WriteFile(resultPath, data, 0o644)
+}
+
+// printHarnessReport renders a summary of the run to stdout for the
+// host-side caller. Mirrors the legacy printReport behavior.
+func printHarnessReport(w *os.File, r *FinalReport, format string) {
+	if format == "yaml" {
+		data, _ := yaml.Marshal(r)
+		_, _ = w.Write(data)
+		return
+	}
+	fmt.Fprintf(w, "harness: recipe=%s ai=%s exit=%s iterations=%d best=%d/%d\n",
+		r.Recipe, r.AI, r.ExitReason, r.IterationsRun, r.BestScore, r.Summary.Input)
+	fmt.Fprintf(w, "  result: .harness/%s/results/result.%s.yml\n", r.Recipe, r.Calver)
+	fmt.Fprintf(w, "  branch: %s\n", r.OvharnessBranch)
 }
 
 // ---------------------------------------------------------------------------
@@ -713,24 +791,28 @@ func writeReport(layout RunLayout, r *FinalReport) error {
 
 // renderRunnerInvocation prepares the argv + env the dispatcher will
 // execute, per the runner's prompt_via mode.
-func renderRunnerInvocation(opts BenchmarkOpts, substCtx *SubstContext, promptText, iterDir string) ([]string, map[string]string) {
+func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText, iterDir string) ([]string, map[string]string) {
 	// Write prompt-file if the runner uses that delivery mode.
-	if opts.Runner.PromptVia == "file" {
+	if opts.AI.PromptVia == "file" {
 		path := filepath.Join(iterDir, "prompt-arg.md")
 		_ = os.WriteFile(path, []byte(promptText), 0o644)
 		substCtx.PromptFile = path
 	}
-	if opts.Runner.PromptVia == "argv" || opts.Runner.PromptVia == "" {
+	if opts.AI.PromptVia == "argv" || opts.AI.PromptVia == "" {
 		substCtx.Prompt = promptText
 	}
 
-	argv := SubstituteArgv(opts.Runner.Command, substCtx)
-	env := SubstituteEnv(opts.Runner.Env, substCtx)
+	argv := SubstituteArgv(opts.AI.Command, substCtx)
+	env := SubstituteEnv(opts.AI.Env, substCtx)
 	if env == nil {
 		env = make(map[string]string)
 	}
-	env["OV_BENCHMARK_RUN_ID"] = substCtx.RunID
-	env["OV_BENCHMARK_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
+	env["OV_HARNESS_RUN_ID"] = substCtx.RunID
+	env["OV_HARNESS_ITERATION"] = fmt.Sprintf("%d", substCtx.Iteration)
+	env["OV_HARNESS_RECIPE"] = substCtx.RecipeName
+	env["OV_HARNESS_AI"] = substCtx.AIName
+	env["OV_HARNESS_TARGET_KIND"] = substCtx.TargetKind
+	env["OV_HARNESS_TARGET_NAME"] = substCtx.TargetName
 	return argv, env
 }
 
@@ -746,11 +828,11 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 	}
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Description.Scenarios {
+			for sIdx, scenario := range ld.Description.Scenario {
 				expanded := ExpandScenario(scenario)
 				for _, es := range expanded {
 					id := ScenarioID(ld.Origin, sIdx, es.RowIndex)
-					out[id] = FingerprintTags(es.Tags)
+					out[id] = FingerprintTags(es.Tag)
 				}
 			}
 		}
@@ -797,7 +879,7 @@ func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
 // dispatches here.
 //
 // Path resolution: prefers the per-run clone's mirror at
-// /workspace/.benchmark/<run-id>/repo/.benchmark/scope.yml, with
+// /workspace/.harness/<run-id>/repo/.harness/scope.yml, with
 // fallbacks for the AI's possibly-different cwd and a host-side run.
 func ResolveAndPrintScope(projectDir string, stdout *os.File) error {
 	var candidates []string
@@ -836,7 +918,7 @@ func ResolveLastTestTag(targetImage string, stdout *os.File) error {
 	if iter <= 1 {
 		return fmt.Errorf("benchmark: no prior iteration on iter %d", iter)
 	}
-	tag := fmt.Sprintf("ghcr.io/overthinkos/%s:ovbench-%s-iter%d", targetImage, runID, iter-1)
+	tag := fmt.Sprintf("ghcr.io/overthinkos/%s:ovharness-%s-iter%d", targetImage, runID, iter-1)
 	fmt.Fprintln(stdout, tag)
 	return nil
 }

@@ -13,18 +13,18 @@ import (
 // Semantics:
 //
 //   - eventually:  outer retry cap (parsed as time.Duration).
-//                  Defaults the returned TestResult to Attempts=1 when
-//                  unset (handler runs exactly once, unchanged).
+//     Defaults the returned TestResult to Attempts=1 when
+//     unset (handler runs exactly once, unchanged).
 //   - retry_interval: sleep between retries. Defaults to 1s.
-//                     Must be ≤ eventually or the loop would sleep past
-//                     the deadline on the first miss.
+//     Must be ≤ eventually or the loop would sleep past
+//     the deadline on the first miss.
 //   - PASS semantics: the FIRST attempt that returns TestPass wins;
-//                     its stdout/captures/message are what propagate.
+//     its stdout/captures/message are what propagate.
 //   - FAIL semantics: the LAST attempt before deadline is returned,
-//                     ensuring authors see the most recent failure
-//                     detail rather than a stale first-attempt error.
+//     ensuring authors see the most recent failure
+//     detail rather than a stale first-attempt error.
 //   - SKIP semantics: treated the same as FAIL for retry purposes —
-//                     skips aren't actionable to retry against.
+//     skips aren't actionable to retry against.
 //
 // Variable expansion: the handler re-runs from the same expanded check
 // each attempt. The caller must expand variables BEFORE calling

@@ -23,30 +23,30 @@ type ImageConfigCmd struct {
 // ImageConfigSetupCmd configures an image: generates quadlet, provisions secrets,
 // initializes and mounts encrypted volumes.
 type ImageConfigSetupCmd struct {
-	Image       string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
-	Tag         string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
-	Build       bool     `long:"build" help:"Force local build instead of pulling from registry"`
-	Env         []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE), merged with existing vars"`
-	Clean       bool     `short:"c" long:"clean" help:"Replace all env vars instead of merging (clean slate)"`
-	EnvFile     string   `long:"env-file" help:"Load env vars from file"`
-	Instance    string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
-	Port        []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
-	KeepMounted bool     `long:"keep-mounted" help:"Keep encrypted volumes mounted after setup"`
-	Password    string   `long:"password" default:"auto" enum:"auto,manual" help:"auto: generate secrets (default), manual: prompt for each"`
-	VolumeFlag  []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
-	Bind        []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
-	Encrypt     []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
-	MemoryMax     string `long:"memory-max" help:"Cgroup memory.max hard OOM limit (e.g. 6g, 500m). Persists to deploy.yml."`
-	MemoryHigh    string `long:"memory-high" help:"Cgroup memory.high soft limit — reclaim pressure before OOM. Persists to deploy.yml."`
-	MemorySwapMax string `long:"memory-swap-max" help:"Cgroup memory.swap.max ceiling. Persists to deploy.yml."`
-	Cpus          string `long:"cpus" help:"CPU quota in cores (e.g. 2.5 for 2.5 cores). Persists to deploy.yml."`
-	Seed        bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
-	ForceSeed   bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
-	DataFrom    string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
-	UpdateAll    bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
-	SshKey       string   `long:"ssh-key" help:"SSH public key: 'auto' (default ~/.ssh key), path to .pub file, 'generate', or 'none'"`
-	Sidecar      []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
-	ListSidecars bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
+	Image           string   `arg:"" optional:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Tag             string   `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
+	Build           bool     `long:"build" help:"Force local build instead of pulling from registry"`
+	Env             []string `short:"e" long:"env" sep:"none" help:"Set container env var (KEY=VALUE), merged with existing vars"`
+	Clean           bool     `short:"c" long:"clean" help:"Replace all env vars instead of merging (clean slate)"`
+	EnvFile         string   `long:"env-file" help:"Load env vars from file"`
+	Instance        string   `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Port            []string `short:"p" help:"Remap host port (newHost:containerPort, e.g., 5901:5900)"`
+	KeepMounted     bool     `long:"keep-mounted" help:"Keep encrypted volumes mounted after setup"`
+	Password        string   `long:"password" default:"auto" enum:"auto,manual" help:"auto: generate secrets (default), manual: prompt for each"`
+	VolumeFlag      []string `long:"volume" short:"v" help:"Configure volume backing (name:type[:path]). Type: volume|bind|encrypted"`
+	Bind            []string `long:"bind" help:"Shorthand: configure volume as bind mount (name or name=path)"`
+	Encrypt         []string `long:"encrypt" help:"Shorthand: configure volume as encrypted (gocryptfs)"`
+	MemoryMax       string   `long:"memory-max" help:"Cgroup memory.max hard OOM limit (e.g. 6g, 500m). Persists to deploy.yml."`
+	MemoryHigh      string   `long:"memory-high" help:"Cgroup memory.high soft limit — reclaim pressure before OOM. Persists to deploy.yml."`
+	MemorySwapMax   string   `long:"memory-swap-max" help:"Cgroup memory.swap.max ceiling. Persists to deploy.yml."`
+	Cpus            string   `long:"cpus" help:"CPU quota in cores (e.g. 2.5 for 2.5 cores). Persists to deploy.yml."`
+	Seed            bool     `long:"seed" default:"true" negatable:"" help:"Seed bind-backed volumes with data from image (default: true)"`
+	ForceSeed       bool     `long:"force-seed" help:"Re-seed even if target directory is not empty"`
+	DataFrom        string   `long:"data-from" help:"Seed data from this data image instead of the target image"`
+	UpdateAll       bool     `long:"update-all" help:"Regenerate quadlets for all other deployed images to pick up env_provides changes"`
+	SshKey          string   `long:"ssh-key" help:"SSH public key: 'auto' (default ~/.ssh key), path to .pub file, 'generate', or 'none'"`
+	Sidecar         []string `long:"sidecar" help:"Attach sidecar (from built-in templates, e.g. 'tailscale')"`
+	ListSidecars    bool     `long:"list-sidecars" help:"List available sidecar templates and exit"`
 	AutoDetectFlags `embed:""`
 }
 
@@ -684,7 +684,6 @@ skipDataProvision:
 
 	return nil
 }
-
 
 // ImageConfigStatusCmd shows encrypted volume status.
 type ImageConfigStatusCmd struct {

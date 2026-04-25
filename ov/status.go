@@ -25,16 +25,16 @@ type ToolStatus struct {
 type ContainerStatus struct {
 	Image     string       `json:"image"`
 	Instance  string       `json:"instance,omitempty"`
-	Status    string       `json:"status"`              // "running", "stopped", "failed", "enabled", "exited"
-	Uptime    string       `json:"uptime,omitempty"`    // "Up 3 days" or ""
-	Container string       `json:"container"`           // ov-<image>[-<instance>]
-	Ports     []string     `json:"ports,omitempty"`     // configured port mappings
-	Devices   []string     `json:"devices,omitempty"`   // device paths / CDI devices
-	Tools     []ToolStatus `json:"tools,omitempty"`     // live tool probe results
-	Volumes   []string     `json:"volumes,omitempty"`   // volume summaries
-	Network   string       `json:"network,omitempty"`   // network mode
-	Tunnel    string       `json:"tunnel,omitempty"`    // tunnel summary
-	RunMode   string       `json:"run_mode"`            // "quadlet" or "direct"
+	Status    string       `json:"status"`            // "running", "stopped", "failed", "enabled", "exited"
+	Uptime    string       `json:"uptime,omitempty"`  // "Up 3 days" or ""
+	Container string       `json:"container"`         // ov-<image>[-<instance>]
+	Ports     []string     `json:"ports,omitempty"`   // configured port mappings
+	Devices   []string     `json:"devices,omitempty"` // device paths / CDI devices
+	Tools     []ToolStatus `json:"tools,omitempty"`   // live tool probe results
+	Volumes   []string     `json:"volumes,omitempty"` // volume summaries
+	Network   string       `json:"network,omitempty"` // network mode
+	Tunnel    string       `json:"tunnel,omitempty"`  // tunnel summary
+	RunMode   string       `json:"run_mode"`          // "quadlet" or "direct"
 }
 
 // StatusCmd shows the status of service containers.
@@ -72,10 +72,10 @@ type ContainerPSEntry struct {
 
 // podmanPSEntry matches Podman's JSON format.
 type podmanPSEntry struct {
-	Names  []string      `json:"Names"`
-	Status string        `json:"Status"`
-	State  string        `json:"State"`
-	Ports  []podmanPort  `json:"Ports"`
+	Names  []string     `json:"Names"`
+	Status string       `json:"Status"`
+	State  string       `json:"State"`
+	Ports  []podmanPort `json:"Ports"`
 }
 
 type podmanPort struct {

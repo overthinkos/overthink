@@ -45,12 +45,12 @@ type CheckGroup struct {
 
 // HardwareInfo holds device detection results for JSON output.
 type HardwareInfo struct {
-	GPU            bool           `json:"gpu"`
-	AMDGPU         bool           `json:"amd_gpu"`
-	AMDGFXVersion  string         `json:"amd_gfx_version,omitempty"`
-	GPUFlags       []string       `json:"gpu_flags"`
-	Devices        []DeviceInfo   `json:"devices"`
-	ContainerFlags []string       `json:"container_flags"`
+	GPU            bool         `json:"gpu"`
+	AMDGPU         bool         `json:"amd_gpu"`
+	AMDGFXVersion  string       `json:"amd_gfx_version,omitempty"`
+	GPUFlags       []string     `json:"gpu_flags"`
+	Devices        []DeviceInfo `json:"devices"`
+	ContainerFlags []string     `json:"container_flags"`
 }
 
 // DeviceInfo describes a single detected/absent device.
@@ -197,9 +197,9 @@ func vmChecks(distro Distro) []CheckResult {
 func checkVirtiofsd(distro Distro) CheckResult {
 	if path, err := exec_LookPath("virtiofsd"); err == nil {
 		return CheckResult{
-			Name:    "virtiofsd",
-			Status:  CheckOK,
-			Detail:  path,
+			Name:   "virtiofsd",
+			Status: CheckOK,
+			Detail: path,
 		}
 	}
 	// Check non-PATH locations where distros install virtiofsd

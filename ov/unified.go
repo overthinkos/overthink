@@ -46,20 +46,20 @@ const MaxIncludeDepth = 8
 // root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
 // `ov migrate merge-vms` for the one-shot migration from v1.
 type UnifiedFile struct {
-	Version     int                     `yaml:"version,omitempty"`
-	Includes    []string                `yaml:"includes,omitempty"`
-	Discover    *DiscoverConfig         `yaml:"discover,omitempty"`
-	Distros     map[string]*DistroDef   `yaml:"distros,omitempty"`
-	Builders    map[string]*BuilderDef  `yaml:"builders,omitempty"`
-	Inits       map[string]*InitDef     `yaml:"inits,omitempty"`
-	Defaults    ImageConfig             `yaml:"defaults,omitempty"`
-	Images      map[string]ImageConfig  `yaml:"images,omitempty"`
+	Version  int                    `yaml:"version,omitempty"`
+	Includes []string               `yaml:"includes,omitempty"`
+	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
+	Distros  map[string]*DistroDef  `yaml:"distros,omitempty"`
+	Builders map[string]*BuilderDef `yaml:"builders,omitempty"`
+	Inits    map[string]*InitDef    `yaml:"inits,omitempty"`
+	Defaults ImageConfig            `yaml:"defaults,omitempty"`
+	Images   map[string]ImageConfig `yaml:"images,omitempty"`
 	// Schema v4 singular alias. Populated by ImageSingular during YAML
 	// unmarshal; merged into Images post-load via normalizeAliases.
-	ImageSingular map[string]ImageConfig `yaml:"image,omitempty"`
-	Layers      map[string]*InlineLayer `yaml:"layers,omitempty"`
-	VM          map[string]*VmSpec      `yaml:"vm,omitempty"`
-	Deployments *DeploymentsSection     `yaml:"deployments,omitempty"`
+	ImageSingular map[string]ImageConfig  `yaml:"image,omitempty"`
+	Layers        map[string]*InlineLayer `yaml:"layers,omitempty"`
+	VM            map[string]*VmSpec      `yaml:"vm,omitempty"`
+	Deployments   *DeploymentsSection     `yaml:"deployments,omitempty"`
 	// Schema v4 singular alias for Deployments. Populated via
 	// DeploymentSingular; merged post-load.
 	DeploymentSingular map[string]DeploymentNode `yaml:"deployment,omitempty"`
@@ -69,9 +69,10 @@ type UnifiedFile struct {
 	K8s  map[string]*K8sSpec  `yaml:"k8s,omitempty"`
 	Host map[string]*HostSpec `yaml:"host,omitempty"`
 
-	// Benchmark: runner configuration + prompt template for `ov benchmark`.
-	// See benchmark_config.go + /ov:benchmark.
-	Benchmark *BenchmarkConfig `yaml:"benchmark,omitempty"`
+	// AI catalog and harness recipes (kind:ai + kind:recipe). See
+	// ai_config.go, harness_recipe.go, /ov:harness.
+	AI     map[string]*AIConfig      `yaml:"ai,omitempty"`
+	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -154,7 +155,7 @@ func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
 // authored/in-repo defaults; ~/.config/ov/deploy.yml is the per-machine overlay.
 type DeploymentsSection struct {
 	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
-	Provides *ProvidesConfig              `yaml:"provides,omitempty"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
 	Images   map[string]DeploymentNode `yaml:"images,omitempty"`
 }
 
@@ -179,6 +180,24 @@ type kindKeyedDoc struct {
 	Pod  *PodDoc  `yaml:"pod,omitempty"`
 	K8s  *K8sDoc  `yaml:"k8s,omitempty"`
 	Host *HostDoc `yaml:"host,omitempty"`
+	// 2026-04 harness cutover.
+	AI     *AIDoc     `yaml:"ai,omitempty"`
+	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
+}
+
+// AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
+// standalone form. Bundles of `kind: ai` + `name: <name>` documents
+// can be concatenated via YAML --- separators in harness.yml.
+type AIDoc struct {
+	Name     string `yaml:"name"`
+	AIConfig `yaml:",inline"`
+}
+
+// RecipeDoc wraps a single HarnessRecipe with an explicit Name —
+// the kind:recipe standalone form.
+type RecipeDoc struct {
+	Name          string `yaml:"name"`
+	HarnessRecipe `yaml:",inline"`
 }
 
 // PodDoc wraps a single PodSpec with an explicit Name — the kind:pod
@@ -230,7 +249,7 @@ type ImageDoc struct {
 
 // DeploymentDoc wraps a single DeploymentNode.
 type DeploymentDoc struct {
-	Name              string `yaml:"name"`
+	Name           string `yaml:"name"`
 	DeploymentNode `yaml:",inline"`
 }
 
@@ -288,6 +307,11 @@ var entityKinds = []entityKind{
 	{Key: "vm", Filename: "vm.yml"},
 	{Key: "k8s", Filename: "k8s.yml"},
 	{Key: "host", Filename: "host.yml"},
+	// 2026-04 harness cutover: `ai:` and `recipe:` kinds carry the
+	// reusable AI-CLI catalog and named harness recipes respectively.
+	// Convention file: harness.yml (carries both kinds together).
+	{Key: "ai", Filename: "ai.yml"},
+	{Key: "recipe", Filename: "recipe.yml"},
 }
 
 // -----------------------------------------------------------------------------
@@ -529,8 +553,10 @@ var rootShapeKeys = map[string]bool{
 	// legacy aliases accepted for transitional compatibility; migration
 	// rewrites them:
 	"images": true, "deployments": true,
-	// benchmark: runner config for `ov benchmark`.
-	"benchmark": true,
+	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
+	// root-shape collection-map keys (in addition to being valid
+	// kind-keyed forms). Mirrors how image/pod/vm work.
+	"ai": true, "recipe": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.
@@ -570,9 +596,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	hasRoot, hasKind := false, false
 	var keys []string
 	hasLegacyVmsKey := false
+	hasLegacyBenchmarkKey := false
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
+		if k == "benchmark" {
+			hasLegacyBenchmarkKey = true
+		}
 		// Schema v4: the target-template kind keys (image/pod/vm/k8s/host/
 		// deployment) overlap with root-shape map keys. Disambiguate by
 		// value inspection — kind-keyed single-entity form has a `name:`
@@ -600,6 +630,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	if hasLegacyVmsKey {
 		return 0, fmt.Errorf(
 			"the `vms:` root key was renamed to `vm:` (singular) in schema v2. Run: ov migrate merge-vms",
+		)
+	}
+	// Legacy `benchmark:` root key — replaced by kind:ai + kind:recipe
+	// in the 2026-04 harness cutover.
+	if hasLegacyBenchmarkKey {
+		return 0, fmt.Errorf(
+			"the `benchmark:` root key is no longer accepted. AI catalog and harness recipes are now kind-entities (kind:ai, kind:recipe) living in harness.yml. Run: ov migrate harness",
 		)
 	}
 	switch {
@@ -703,6 +740,8 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergePodMap(&dst.Pod, src.Pod)
 	mergeK8sMap(&dst.K8s, src.K8s)
 	mergeHostMap(&dst.Host, src.Host)
+	mergeAIMap(&dst.AI, src.AI)
+	mergeRecipeMap(&dst.Recipe, src.Recipe)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -715,6 +754,37 @@ func mergeDistroMap(dst *map[string]*DistroDef, src map[string]*DistroDef) {
 	}
 	if *dst == nil {
 		*dst = make(map[string]*DistroDef)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// mergeAIMap merges AI-catalog entries (kind:ai). Root-wins: existing dst
+// keys are preserved; src keys are only added if dst doesn't have them.
+func mergeAIMap(dst *map[string]*AIConfig, src map[string]*AIConfig) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*AIConfig)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+// mergeRecipeMap merges harness-recipe entries (kind:recipe). Root-wins.
+func mergeRecipeMap(dst *map[string]*HarnessRecipe, src map[string]*HarnessRecipe) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*HarnessRecipe)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -949,6 +1019,12 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Host != nil {
 		count++
 	}
+	if kd.AI != nil {
+		count++
+	}
+	if kd.Recipe != nil {
+		count++
+	}
 	if count > 1 {
 		return fmt.Errorf("ambiguous kind-keyed document: multiple kind wrappers set")
 	}
@@ -1065,6 +1141,28 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Host[kd.Host.Name]; !exists {
 			spec := kd.Host.HostSpec
 			merged.Host[kd.Host.Name] = &spec
+		}
+	case kd.AI != nil:
+		if kd.AI.Name == "" {
+			return fmt.Errorf("ai: missing name")
+		}
+		if merged.AI == nil {
+			merged.AI = map[string]*AIConfig{}
+		}
+		if _, exists := merged.AI[kd.AI.Name]; !exists {
+			spec := kd.AI.AIConfig
+			merged.AI[kd.AI.Name] = &spec
+		}
+	case kd.Recipe != nil:
+		if kd.Recipe.Name == "" {
+			return fmt.Errorf("recipe: missing name")
+		}
+		if merged.Recipe == nil {
+			merged.Recipe = map[string]*HarnessRecipe{}
+		}
+		if _, exists := merged.Recipe[kd.Recipe.Name]; !exists {
+			spec := kd.Recipe.HarnessRecipe
+			merged.Recipe[kd.Recipe.Name] = &spec
 		}
 	}
 	_ = srcDir

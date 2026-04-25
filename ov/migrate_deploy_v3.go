@@ -208,7 +208,7 @@ func rewriteDeploymentImages(imagesNode *yaml.Node, r *MigrateResult) {
 			if imagesNode.Content[i].Value == rn.from {
 				imagesNode.Content[i].Value = rn.to
 				r.Transforms = append(r.Transforms, fmt.Sprintf("deployments.images: %s → %s", rn.from, rn.to))
-		r.Mutations++
+				r.Mutations++
 				break
 			}
 		}

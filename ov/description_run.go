@@ -25,7 +25,7 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 	var out []ScenarioResult
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Description.Scenarios {
+			for sIdx, scenario := range ld.Description.Scenario {
 				expanded := ExpandScenario(scenario)
 				for _, es := range expanded {
 					if filter != nil && !matchScenario(es, filter) {
@@ -47,7 +47,7 @@ type ScenarioResult struct {
 	Origin     string       `json:"origin"`      // "layer:redis" etc.
 	ScenarioID string       `json:"scenario_id"` // ScenarioID(origin, idx[, row])
 	Name       string       `json:"name"`        // post-substitution scenario name
-	Tags       []string     `json:"tags,omitempty"`
+	Tag        []string     `json:"tag,omitempty"`
 	Steps      []StepResult `json:"steps"`
 	OnFail     []StepResult `json:"on_fail,omitempty"`
 	Status     TestStatus   `json:"status"` // overall (fail if any step failed)
@@ -71,7 +71,7 @@ func matchScenario(es ExpandedScenario, filter *TagExpr) bool {
 	if filter == nil {
 		return true
 	}
-	return filter.Match(es.Tags)
+	return filter.Match(es.Tag)
 }
 
 // runOneScenario executes one expanded scenario: sets up a fresh
@@ -93,7 +93,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 		Origin:     origin,
 		ScenarioID: scenarioID,
 		Name:       es.Name,
-		Tags:       append([]string(nil), es.Tags...),
+		Tag:        append([]string(nil), es.Tag...),
 		Status:     TestPass,
 	}
 

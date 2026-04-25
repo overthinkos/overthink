@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-
 // pixiBoundLayers identifies layers that have install files (user.yml/root.yml)
 // but depend on a pixi environment from their including parent meta-layer.
 // These layers must NOT be extracted into auto-intermediates because the
@@ -40,7 +39,7 @@ func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
 
 // trieNode represents a node in the layer prefix trie.
 type trieNode struct {
-	layer    string                // layer at this position ("" for root)
+	layer    string               // layer at this position ("" for root)
 	children map[string]*trieNode // layer name → child node
 	images   []string             // user-defined images terminating here
 }

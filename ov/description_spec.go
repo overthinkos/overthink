@@ -20,6 +20,7 @@ package main
 //     matcher / modifier from ov/testspec.go works in scenarios unchanged.
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -35,41 +36,111 @@ import (
 //	  narrative: |
 //	    The redis layer installs redis-server and exposes a Redis-protocol
 //	    endpoint on port 6379.
-//	  tags: [cache, service]
-//	  scenarios: [...]
+//	  tag: [cache, service]
+//	  scenario: [...]
+//
+// Singular-key convention: post-2026-04 cutover, every YAML key under
+// description and every collection field on Description / Scenario uses
+// the singular form (`scenario:`, `tag:`). The UnmarshalYAML shim below
+// also accepts the legacy plural keys (`scenarios:`, `tags:`) for one
+// release of overlap; layer.yml files in this repo are migrated by
+// `ov migrate harness`.
 type Description struct {
 	Feature   string     `yaml:"feature"              json:"feature"`
 	Narrative string     `yaml:"narrative,omitempty"  json:"narrative,omitempty"`
-	Tags      []string   `yaml:"tags,omitempty"       json:"tags,omitempty"`
-	Scenarios []Scenario `yaml:"scenarios,omitempty"  json:"scenarios,omitempty"`
+	Tag       []string   `yaml:"tag,omitempty"        json:"tag,omitempty"`
+	Scenario  []Scenario `yaml:"scenario,omitempty"   json:"scenario,omitempty"`
 }
 
-// UnmarshalYAML accepts both the canonical mapping form (feature +
-// narrative + scenarios) AND a scalar shorthand (a single-line
-// description that populates Feature only, leaving Scenarios empty).
+// UnmarshalYAML accepts:
 //
-// The scalar form preserves pre-existing `description: "..."` usage
-// across layer.yml files — same polymorphic pattern MatcherList uses.
-// It is NOT a compatibility shim in the forbidden sense: it is how a
-// structured type handles its own shorthand, idiomatic with the rest
-// of the codebase's YAML surfaces.
+//   - the canonical mapping form (feature + narrative + scenario)
+//   - a scalar shorthand (a single-line description that populates
+//     Feature only, leaving Scenario empty); preserves pre-existing
+//     `description: "..."` usage across layer.yml files
+//   - the legacy plural keys (`scenarios:`, `tags:`) — accept-both
+//     transitional shim removed at the close of the harness cutover
+//     once `ov migrate harness` has rewritten every consumer.
 func (d *Description) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		d.Feature = node.Value
 		return nil
 	case yaml.MappingNode:
-		// Plain decode into an auxiliary type so we don't recurse.
-		type raw Description
-		var r raw
-		if err := node.Decode(&r); err != nil {
-			return err
+		// Walk the mapping by hand so we can map BOTH `scenario:` and
+		// `scenarios:` (and `tag:` / `tags:`) into the singular fields
+		// during the migration window. The map walk also gives us the
+		// node positions for clearer error messages.
+		if len(node.Content)%2 != 0 {
+			return fmt.Errorf("description: malformed mapping node (odd content count)")
 		}
-		*d = Description(r)
+		for i := 0; i < len(node.Content); i += 2 {
+			k := node.Content[i]
+			v := node.Content[i+1]
+			if k.Kind != yaml.ScalarNode {
+				return fmt.Errorf("description: non-scalar mapping key at line %d", k.Line)
+			}
+			switch k.Value {
+			case "feature":
+				if err := v.Decode(&d.Feature); err != nil {
+					return fmt.Errorf("description.feature: %w", err)
+				}
+			case "narrative":
+				if err := v.Decode(&d.Narrative); err != nil {
+					return fmt.Errorf("description.narrative: %w", err)
+				}
+			case "tag", "tags":
+				if err := v.Decode(&d.Tag); err != nil {
+					return fmt.Errorf("description.%s: %w", k.Value, err)
+				}
+			case "scenario", "scenarios":
+				if err := v.Decode(&d.Scenario); err != nil {
+					return fmt.Errorf("description.%s: %w", k.Value, err)
+				}
+			default:
+				return fmt.Errorf("description: unknown key %q at line %d (expected: feature, narrative, tag, scenario)", k.Value, k.Line)
+			}
+		}
 		return nil
 	default:
 		return fmt.Errorf("description: unsupported YAML kind %d (expected scalar or mapping)", node.Kind)
 	}
+}
+
+// UnmarshalJSON mirrors UnmarshalYAML's accept-both behavior for the
+// `org.overthinkos.description` OCI label. Images built BEFORE the
+// 2026-04 singular cutover carry the old plural keys (`scenarios`,
+// `tags`) in their JSON-encoded label payload; this shim lets the
+// harness read them without requiring every image to be rebuilt
+// before it can be scored.
+func (d *Description) UnmarshalJSON(data []byte) error {
+	// Use a string→RawMessage view so we can map both plural and
+	// singular keys into the same target field.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for k, v := range raw {
+		switch k {
+		case "feature":
+			if err := json.Unmarshal(v, &d.Feature); err != nil {
+				return fmt.Errorf("description.feature: %w", err)
+			}
+		case "narrative":
+			if err := json.Unmarshal(v, &d.Narrative); err != nil {
+				return fmt.Errorf("description.narrative: %w", err)
+			}
+		case "tag", "tags":
+			if err := json.Unmarshal(v, &d.Tag); err != nil {
+				return fmt.Errorf("description.%s: %w", k, err)
+			}
+		case "scenario", "scenarios":
+			if err := json.Unmarshal(v, &d.Scenario); err != nil {
+				return fmt.Errorf("description.%s: %w", k, err)
+			}
+		}
+	}
+	return nil
 }
 
 // Scenario is a single BDD scenario. A scenario with a non-empty Examples
@@ -79,12 +150,89 @@ func (d *Description) UnmarshalYAML(node *yaml.Node) error {
 // OnFail steps run exactly once when any Step in this scenario fails;
 // they are author-deliberate (no implicit defaults) and each OnFail step
 // can carry its own On: target for multi-service diagnostics.
+//
+// YAML keys are singular post-2026-04 (`tag:` not `tags:`) — the custom
+// UnmarshalYAML below accepts the legacy plural form for the duration of
+// the harness cutover migration window.
 type Scenario struct {
 	Name     string              `yaml:"name"                 json:"name"`
-	Tags     []string            `yaml:"tags,omitempty"       json:"tags,omitempty"`
+	Tag      []string            `yaml:"tag,omitempty"        json:"tag,omitempty"`
 	Steps    []Step              `yaml:"steps"                json:"steps,omitempty"`
 	Examples []map[string]string `yaml:"examples,omitempty"   json:"examples,omitempty"`
 	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
+}
+
+// UnmarshalYAML accepts both `tag:` and the legacy `tags:` key during
+// the cutover migration window. Removed once every layer.yml has been
+// rewritten by `ov migrate harness`.
+func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("scenario: expected mapping, got YAML kind %d", node.Kind)
+	}
+	if len(node.Content)%2 != 0 {
+		return fmt.Errorf("scenario: malformed mapping node (odd content count)")
+	}
+	for i := 0; i < len(node.Content); i += 2 {
+		k := node.Content[i]
+		v := node.Content[i+1]
+		if k.Kind != yaml.ScalarNode {
+			return fmt.Errorf("scenario: non-scalar mapping key at line %d", k.Line)
+		}
+		switch k.Value {
+		case "name":
+			if err := v.Decode(&s.Name); err != nil {
+				return fmt.Errorf("scenario.name: %w", err)
+			}
+		case "tag", "tags":
+			if err := v.Decode(&s.Tag); err != nil {
+				return fmt.Errorf("scenario.%s: %w", k.Value, err)
+			}
+		case "steps":
+			if err := v.Decode(&s.Steps); err != nil {
+				return fmt.Errorf("scenario.steps: %w", err)
+			}
+		case "examples":
+			if err := v.Decode(&s.Examples); err != nil {
+				return fmt.Errorf("scenario.examples: %w", err)
+			}
+		case "on_fail":
+			if err := v.Decode(&s.OnFail); err != nil {
+				return fmt.Errorf("scenario.on_fail: %w", err)
+			}
+		default:
+			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, steps, examples, on_fail)", k.Value, k.Line)
+		}
+	}
+	return nil
+}
+
+// UnmarshalJSON mirrors UnmarshalYAML's accept-both behavior for OCI
+// label payloads built before the 2026-04 singular cutover. Reads
+// both `tag` (singular) and `tags` (legacy plural) into Scenario.Tag.
+func (s *Scenario) UnmarshalJSON(data []byte) error {
+	// Avoid infinite recursion via a local alias type.
+	type rawScenario struct {
+		Name      string              `json:"name"`
+		Tag       []string            `json:"tag,omitempty"`
+		Tags      []string            `json:"tags,omitempty"`
+		Steps     []Step              `json:"steps,omitempty"`
+		Examples  []map[string]string `json:"examples,omitempty"`
+		OnFail    []Step              `json:"on_fail,omitempty"`
+	}
+	var r rawScenario
+	if err := json.Unmarshal(data, &r); err != nil {
+		return err
+	}
+	s.Name = r.Name
+	if len(r.Tag) > 0 {
+		s.Tag = r.Tag
+	} else if len(r.Tags) > 0 {
+		s.Tag = r.Tags
+	}
+	s.Steps = r.Steps
+	s.Examples = r.Examples
+	s.OnFail = r.OnFail
+	return nil
 }
 
 // Step is a single BDD step. Exactly one of Given/When/Then/And/But must
@@ -95,9 +243,9 @@ type Scenario struct {
 // YAML inline-embed: `yaml:",inline"` on the embedded Check promotes every
 // Check field to the Step's top level at parse time, so authors write
 //
-//	- then: the server replies with PONG
-//	  command: redis-cli ping
-//	  stdout: PONG
+//   - then: the server replies with PONG
+//     command: redis-cli ping
+//     stdout: PONG
 //
 // rather than having to nest Check fields under a sub-map.
 type Step struct {

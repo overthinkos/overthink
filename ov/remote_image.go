@@ -10,13 +10,13 @@ import (
 // RemoteImageContext holds the resolved state of a remote image reference.
 // It contains everything needed to pull/build and run the image.
 type RemoteImageContext struct {
-	Ref        ParsedRef
-	CacheDir   string
-	Config     *Config
-	Resolved   *ResolvedImage
-	Layers     map[string]*Layer
-	ImageRef   string // registry/name:tag for pull
-	ImageName  string // short name (e.g. "openclaw-browser")
+	Ref       ParsedRef
+	CacheDir  string
+	Config    *Config
+	Resolved  *ResolvedImage
+	Layers    map[string]*Layer
+	ImageRef  string // registry/name:tag for pull
+	ImageName string // short name (e.g. "openclaw-browser")
 }
 
 // ResolveRemoteImage resolves a remote image reference to a full context.

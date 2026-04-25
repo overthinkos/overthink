@@ -24,7 +24,7 @@ func generateRandomHex(bytes int) string {
 type SecretYAML struct {
 	Name   string `yaml:"name"`             // unique secret name
 	Target string `yaml:"target,omitempty"` // container mount path (default: /run/secrets/<name>)
-	Env    string `yaml:"env,omitempty"`     // fallback env var name
+	Env    string `yaml:"env,omitempty"`    // fallback env var name
 }
 
 // LabelSecret represents a secret requirement in an OCI image label.

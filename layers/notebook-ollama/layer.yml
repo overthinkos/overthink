@@ -8,7 +8,7 @@ layer:
     feature: Ollama integration notebook collection
     narrative: |-
       Ollama integration notebook collection
-    scenarios:
+    scenario:
       - name: 'TODO: describe Ollama integration notebook collection'
-        tags: [skeleton]
+        tag: [skeleton]
         steps: []

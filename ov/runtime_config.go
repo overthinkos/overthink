@@ -16,23 +16,23 @@ var configPermWarningOnce sync.Once
 
 // RuntimeConfig represents the user-level runtime configuration (~/.config/ov/config.yml)
 type RuntimeConfig struct {
-	Engine               EngineConfig      `yaml:"engine"`
-	RunMode              string            `yaml:"run_mode,omitempty"`
-	AutoEnable           *bool             `yaml:"auto_enable,omitempty"`
-	BindAddress          string            `yaml:"bind_address,omitempty"`
-	EncryptedStoragePath string            `yaml:"encrypted_storage_path,omitempty"`
-	VolumesPath          string            `yaml:"volumes_path,omitempty"`
-	SecretBackend        string            `yaml:"secret_backend,omitempty"`     // "auto", "keyring", "kdbx", "config"
-	SecretsKdbxPath      string            `yaml:"secrets_kdbx_path,omitempty"`  // Path to .kdbx database file
-	SecretsKdbxKeyFile   string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
-	KdbxCache            *bool             `yaml:"kdbx_cache,omitempty"`            // Cache kdbx password in kernel keyring (default: true)
-	KdbxCacheTimeout     int               `yaml:"kdbx_cache_timeout,omitempty"`    // Kernel keyring TTL in seconds (default: 3600)
-	ForwardGpgAgent      *bool             `yaml:"forward_gpg_agent,omitempty"`     // Forward host GPG agent socket into containers (default: true)
-	ForwardSshAgent      *bool             `yaml:"forward_ssh_agent,omitempty"`     // Forward host SSH agent socket into containers (default: true)
-	Vm                   RuntimeVmConfig   `yaml:"vm,omitempty"`
-	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`             // VNC passwords keyed by image[-instance]
-	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`              // Shadow index: names of keys stored in keyring (no values)
-	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"`  // Preferred Secret Service collection label; empty means use default alias then iterate.
+	Engine                 EngineConfig      `yaml:"engine"`
+	RunMode                string            `yaml:"run_mode,omitempty"`
+	AutoEnable             *bool             `yaml:"auto_enable,omitempty"`
+	BindAddress            string            `yaml:"bind_address,omitempty"`
+	EncryptedStoragePath   string            `yaml:"encrypted_storage_path,omitempty"`
+	VolumesPath            string            `yaml:"volumes_path,omitempty"`
+	SecretBackend          string            `yaml:"secret_backend,omitempty"`        // "auto", "keyring", "kdbx", "config"
+	SecretsKdbxPath        string            `yaml:"secrets_kdbx_path,omitempty"`     // Path to .kdbx database file
+	SecretsKdbxKeyFile     string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
+	KdbxCache              *bool             `yaml:"kdbx_cache,omitempty"`            // Cache kdbx password in kernel keyring (default: true)
+	KdbxCacheTimeout       int               `yaml:"kdbx_cache_timeout,omitempty"`    // Kernel keyring TTL in seconds (default: 3600)
+	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty"`     // Forward host GPG agent socket into containers (default: true)
+	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty"`     // Forward host SSH agent socket into containers (default: true)
+	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty"`
+	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`            // VNC passwords keyed by image[-instance]
+	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`             // Shadow index: names of keys stored in keyring (no values)
+	KeyringCollectionLabel string            `yaml:"keyring_collection_label,omitempty"` // Preferred Secret Service collection label; empty means use default alias then iterate.
 	// HostAliases maps short names (e.g. "o") to SSH targets (e.g.
 	// "atrawog@o.atrawog.org"). Consulted by ov's --host flag when
 	// re-execing commands on remote machines. Set via
@@ -676,9 +676,9 @@ func ResetConfigValue(key string) error {
 
 // configKeySource describes where a config value comes from.
 type configKeySource struct {
-	Key      string
-	Value    string
-	Source   string // "env", "config", "default"
+	Key    string
+	Value  string
+	Source string // "env", "config", "default"
 }
 
 // ListConfigValues returns all config keys with their resolved values and sources.

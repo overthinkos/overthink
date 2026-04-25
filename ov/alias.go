@@ -404,4 +404,3 @@ func (c *ListAliasesCmd) Run() error {
 	}
 	return nil
 }
-

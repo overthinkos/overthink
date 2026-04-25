@@ -45,11 +45,11 @@ func TestDownloadScriptTarGzWithStrip(t *testing.T) {
 func TestDownloadScriptAutoDetectExtract(t *testing.T) {
 	// Without explicit extract:, URL suffix drives the format.
 	tests := map[string]string{
-		"https://example.com/a.tar.gz":  "tar -xzf",
-		"https://example.com/b.tgz":     "tar -xzf",
-		"https://example.com/c.tar.xz":  "tar -xJf",
-		"https://example.com/d.tar.zst": "tar --zstd -xf",
-		"https://example.com/e.zip":     "unzip",
+		"https://example.com/a.tar.gz":   "tar -xzf",
+		"https://example.com/b.tgz":      "tar -xzf",
+		"https://example.com/c.tar.xz":   "tar -xJf",
+		"https://example.com/d.tar.zst":  "tar --zstd -xf",
+		"https://example.com/e.zip":      "unzip",
 		"https://example.com/install.sh": "chmod +x",
 	}
 	for url, sentinel := range tests {

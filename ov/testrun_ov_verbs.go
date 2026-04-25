@@ -233,7 +233,7 @@ var libvirtMethods = map[string]methodSpec{
 	"passwd":     {path: []string{"libvirt", "passwd"}, required: []string{"Text"}, posArgs: posText},
 	// qmp takes a QMP method name + optional JSON args. Text holds the
 	// method name (Command would collide with the command: verb).
-	"qmp": {path: []string{"libvirt", "qmp"}, required: []string{"Text"}, posArgs: posLibvirtQmp},
+	"qmp":        {path: []string{"libvirt", "qmp"}, required: []string{"Text"}, posArgs: posLibvirtQmp},
 	"domain-xml": {path: []string{"libvirt", "domain-xml"}},
 	"console":    {path: []string{"libvirt", "console"}},
 	"events":     {path: []string{"libvirt", "events"}},
@@ -251,8 +251,8 @@ var libvirtMethods = map[string]methodSpec{
 	"guest/vcpus":      {path: []string{"libvirt", "guest", "vcpus"}},
 	// guest/exec runs a command via qemu-guest-agent inside the VM. Text holds
 	// the full command line (Command would collide with the command: verb).
-	"guest/exec": {path: []string{"libvirt", "guest", "exec"}, required: []string{"Text"}, posArgs: posText},
-	"guest/fstrim":     {path: []string{"libvirt", "guest", "fstrim"}},
+	"guest/exec":   {path: []string{"libvirt", "guest", "exec"}, required: []string{"Text"}, posArgs: posText},
+	"guest/fstrim": {path: []string{"libvirt", "guest", "fstrim"}},
 
 	// Snapshot subgroup — Target holds the snapshot name.
 	"snapshot/list":   {path: []string{"libvirt", "snapshot", "list"}},
@@ -417,17 +417,17 @@ func k8sClusterArgs(c *Check) []string {
 // run before this point.
 // ---------------------------------------------------------------------------
 
-func posTab(c *Check) []string               { return []string{c.Tab} }
-func posURL(c *Check) []string               { return []string{c.URL} }
-func posText(c *Check) []string              { return []string{c.Text} }
-func posKeyName(c *Check) []string           { return []string{c.KeyName} }
-func posCombo(c *Check) []string             { return []string{c.Combo} }
-func posTarget(c *Check) []string            { return []string{c.Target} }
-func posCommand(c *Check) []string           { return []string{c.Command} }
-func posArtifact(c *Check) []string          { return []string{c.Artifact} }
-func posTabExpression(c *Check) []string     { return []string{c.Tab, c.Expression} }
-func posTabSelector(c *Check) []string       { return []string{c.Tab, c.Selector} }
-func posTabSelectorText(c *Check) []string   { return []string{c.Tab, c.Selector, c.Text} }
+func posTab(c *Check) []string             { return []string{c.Tab} }
+func posURL(c *Check) []string             { return []string{c.URL} }
+func posText(c *Check) []string            { return []string{c.Text} }
+func posKeyName(c *Check) []string         { return []string{c.KeyName} }
+func posCombo(c *Check) []string           { return []string{c.Combo} }
+func posTarget(c *Check) []string          { return []string{c.Target} }
+func posCommand(c *Check) []string         { return []string{c.Command} }
+func posArtifact(c *Check) []string        { return []string{c.Artifact} }
+func posTabExpression(c *Check) []string   { return []string{c.Tab, c.Expression} }
+func posTabSelector(c *Check) []string     { return []string{c.Tab, c.Selector} }
+func posTabSelectorText(c *Check) []string { return []string{c.Tab, c.Selector, c.Text} }
 func posTabQuery(c *Check) []string {
 	if c.Query == "" {
 		return []string{c.Tab}

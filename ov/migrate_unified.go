@@ -24,10 +24,10 @@ import (
 
 // MigrateUnifiedOpts carries the migration-command inputs.
 type MigrateUnifiedOpts struct {
-	Dir         string // project dir containing build.yml/image.yml (and layers/)
-	Monolithic  bool   // emit one flat overthink.yml instead of includes: set
-	DryRun      bool   // if true, print plan without writing files
-	RewriteLayers bool // if true, rewrite layer.yml files into kind-keyed form
+	Dir           string // project dir containing build.yml/image.yml (and layers/)
+	Monolithic    bool   // emit one flat overthink.yml instead of includes: set
+	DryRun        bool   // if true, print plan without writing files
+	RewriteLayers bool   // if true, rewrite layer.yml files into kind-keyed form
 }
 
 // MigrateUnified performs the migration and returns the list of files it
@@ -327,9 +327,9 @@ func rewriteLayerFiles(layersDir string, dryRun bool) ([]string, error) {
 }
 
 // rewriteOneLayerFile rewrites a layer.yml to the canonical unified form:
-//   1. Wrapped under `layer: {name: <dir>, ...body}`.
-//   2. Schema: `service:` (singular, list) — legacy forms (`services:` plural,
-//      `service: |RAW_INI|`, `system_services: [names]`) are converted.
+//  1. Wrapped under `layer: {name: <dir>, ...body}`.
+//  2. Schema: `service:` (singular, list) — legacy forms (`services:` plural,
+//     `service: |RAW_INI|`, `system_services: [names]`) are converted.
 //
 // Idempotent: running on an already-migrated file is a no-op.
 func rewriteOneLayerFile(path, name string, dryRun bool) error {

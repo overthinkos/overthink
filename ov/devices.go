@@ -18,11 +18,11 @@ type AutoDetectFlags struct {
 
 // DetectedDevices holds the results of host device auto-detection.
 type DetectedDevices struct {
-	GPU            bool     // NVIDIA GPU detected (use CDI/--gpus)
-	AMDGPU         bool     // AMD GPU detected (/dev/kfd + video/render groups)
-	AMDGFXVersion  string   // AMD GFX version for HSA_OVERRIDE_GFX_VERSION (e.g. "10.3.0")
-	RenderNode     string   // First /dev/dri/renderD* path for DRINODE/DRI_NODE
-	Devices        []string // Other device paths to pass via --device
+	GPU           bool     // NVIDIA GPU detected (use CDI/--gpus)
+	AMDGPU        bool     // AMD GPU detected (/dev/kfd + video/render groups)
+	AMDGFXVersion string   // AMD GFX version for HSA_OVERRIDE_GFX_VERSION (e.g. "10.3.0")
+	RenderNode    string   // First /dev/dri/renderD* path for DRINODE/DRI_NODE
+	Devices       []string // Other device paths to pass via --device
 }
 
 // DetectGPU checks whether an NVIDIA GPU is available by running nvidia-smi.

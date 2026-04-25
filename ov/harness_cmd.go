@@ -27,7 +27,7 @@ type HarnessCmd struct {
 	LastTag    HarnessLastTagCmd    `cmd:"last-test-tag" help:"AI-facing: print prior iteration's image tag"`
 	SelfEval   HarnessSelfEvalCmd   `cmd:"self-evaluate" help:"AI-facing: rebuild current clone + run ov image test"`
 	List       HarnessListRunsCmd   `cmd:"list" help:"List past harness runs under .harness/<recipe>/"`
-	Report     HarnessReportCmd     `cmd:"report" help:"Render a past result.<calver>.yml"`
+	Report     HarnessReportCmd     `cmd:"report" help:"Render a past result-<calver>.yml"`
 	Note       HarnessNoteCmd       `cmd:"note" help:"Read/append the persistent NOTES.md memory for a recipe"`
 }
 
@@ -312,7 +312,7 @@ func (c *HarnessListRunsCmd) Run() error {
 	return nil
 }
 
-// HarnessReportCmd prints a past result.<calver>.yml.
+// HarnessReportCmd prints a past result-<calver>.yml.
 type HarnessReportCmd struct {
 	Recipe string `arg:"" optional:"" help:"Recipe name (default: latest)"`
 	Calver string `arg:"" optional:"" help:"Calver of the result to display (default: latest)"`
@@ -355,7 +355,7 @@ func (c *HarnessReportCmd) Run() error {
 		var latest string
 		for _, e := range entries {
 			n := e.Name()
-			if len(n) > 7 && n[:7] == "result." && n[len(n)-4:] == ".yml" {
+			if len(n) > 7 && n[:7] == "result-" && n[len(n)-4:] == ".yml" {
 				if n > latest {
 					latest = n
 				}
@@ -364,10 +364,10 @@ func (c *HarnessReportCmd) Run() error {
 		if latest == "" {
 			return fmt.Errorf("no result files under %s", resultsDir)
 		}
-		// Strip "result." prefix and ".yml" suffix.
+		// Strip "result-" prefix and ".yml" suffix.
 		c.Calver = latest[7 : len(latest)-4]
 	}
-	path := fmt.Sprintf("%s/result.%s.yml", resultsDir, c.Calver)
+	path := fmt.Sprintf("%s/result-%s.yml", resultsDir, c.Calver)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err

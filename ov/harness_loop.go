@@ -103,7 +103,7 @@ type ScenarioVerdict struct {
 	PendingPost     int     `yaml:"pending_post,omitempty"`
 }
 
-// FinalReport is the aggregate persisted to result.{calver}.yml.
+// FinalReport is the aggregate persisted to result-{calver}.yml.
 type FinalReport struct {
 	Schema           int               `yaml:"schema"`
 	Recipe           string            `yaml:"recipe"`
@@ -759,7 +759,7 @@ func writeIterScore(layout RunLayout, k int, state IterationState) error {
 	return os.WriteFile(filepath.Join(layout.IterDir(k), "score.yml"), data, 0o644)
 }
 
-// writeReport writes the aggregated result.{calver}.yml under
+// writeReport writes the aggregated result-{calver}.yml under
 // .harness/<recipe>/results/. The Calver is set on the FinalReport at
 // RunHarness entry; if missing for any reason, generate one now.
 func writeReport(layout RunLayout, r *FinalReport) error {
@@ -779,7 +779,7 @@ func writeReport(layout RunLayout, r *FinalReport) error {
 	if err := os.MkdirAll(layout.ResultsDir(), 0o755); err != nil {
 		return err
 	}
-	resultPath := filepath.Join(layout.ResultsDir(), "result."+r.Calver+".yml")
+	resultPath := filepath.Join(layout.ResultsDir(), "result-"+r.Calver+".yml")
 	return os.WriteFile(resultPath, data, 0o644)
 }
 
@@ -793,7 +793,7 @@ func printHarnessReport(w *os.File, r *FinalReport, format string) {
 	}
 	fmt.Fprintf(w, "harness: recipe=%s ai=%s exit=%s iterations=%d best=%d/%d\n",
 		r.Recipe, r.AI, r.ExitReason, r.IterationsRun, r.BestScore, r.Summary.Input)
-	fmt.Fprintf(w, "  result: .harness/%s/results/result.%s.yml\n", r.Recipe, r.Calver)
+	fmt.Fprintf(w, "  result: .harness/%s/results/result-%s.yml\n", r.Recipe, r.Calver)
 	fmt.Fprintf(w, "  branch: %s\n", r.OvharnessBranch)
 }
 
@@ -802,7 +802,12 @@ func printHarnessReport(w *os.File, r *FinalReport, format string) {
 // ---------------------------------------------------------------------------
 
 // renderRunnerInvocation prepares the argv + env the dispatcher will
-// execute, per the runner's prompt_via mode.
+// execute, per the runner's prompt_via mode. Also sets per-iteration
+// env vars (OV_HARNESS_*) including OV_HARNESS_NOTES_FILE — needed
+// because the AI runs with cwd = the per-run clone, but
+// `ov harness note append/read` invocations from the AI must write
+// to the OUTER project's NOTES.md (not a fresh per-clone copy that
+// would die with the transient clone).
 func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText, iterDir string) ([]string, map[string]string) {
 	// Write prompt-file if the runner uses that delivery mode.
 	if opts.AI.PromptVia == "file" {
@@ -825,6 +830,12 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	env["OV_HARNESS_AI"] = substCtx.AIName
 	env["OV_HARNESS_TARGET_KIND"] = substCtx.TargetKind
 	env["OV_HARNESS_TARGET_NAME"] = substCtx.TargetName
+	// OUTER project's NOTES.md, so the AI's `ov harness note append`
+	// from inside the per-run clone writes to the durable host-side
+	// memory file instead of a transient per-clone copy.
+	if opts.Recipe != nil && opts.Recipe.NotesEnabled() {
+		env["OV_HARNESS_NOTES_FILE"] = NotePath(opts.ProjectDir, opts.RecipeName)
+	}
 	return argv, env
 }
 

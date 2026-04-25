@@ -22,11 +22,18 @@ import (
 	"strings"
 )
 
-// NotePath returns the absolute path to a recipe's NOTES.md file
-// under the harness data root (outside the project tree, in the
-// user's data dir — see HarnessDataRoot in harness_clone.go for the
-// path resolver).
+// NotePath returns the absolute path to a recipe's NOTES.md file.
+//
+// During an iteration, the harness exports OV_HARNESS_NOTES_FILE so
+// that `ov harness note append/read` invocations from inside the
+// per-run clone write to the OUTER project's NOTES.md, not a fresh
+// per-clone copy that would die with the clone. Without that env
+// var (i.e., the verb invoked outside an iteration), the path
+// resolves against projectDir+recipe directly.
 func NotePath(projectDir, recipe string) string {
+	if override := os.Getenv("OV_HARNESS_NOTES_FILE"); override != "" {
+		return override
+	}
 	return filepath.Join(HarnessDataRoot(projectDir, recipe), "note", "NOTES.md")
 }
 

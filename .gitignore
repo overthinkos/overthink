@@ -48,11 +48,15 @@ bin/
 ov/ov
 output/
 
-# ov benchmark runs (each run gets its own subdir under .harness/<run-id>/
-# containing a dedicated git worktree + iteration artifacts; worktrees are
-# tracked via git-worktree metadata, not .gitignore).
+# Legacy `ov benchmark` cache (replaced by .harness/ — pre-2026-04 runs).
 .benchmark/
-.harness/
+
+# `ov harness` artifacts. Granular ignores so result files and persistent
+# NOTES.md memory ARE tracked in git (durable record of what each AI
+# scored / learned across runs); only the bulky transient pieces are
+# ignored — per-run git clones, build/runner logs, and the per-recipe lock.
+.harness/*/runs/
+.harness/*/.lock
 
 # Screenshots and temporary images
 *.png

@@ -126,12 +126,24 @@ type ReportSummary struct {
 // Subprocess seams (test hooks)
 // ---------------------------------------------------------------------------
 
+// findOvForBenchmark returns the path to the ov binary the benchmark
+// should re-invoke for sub-commands. Prefers os.Executable() so the
+// harness's own build is used — the host's `/usr/bin/ov` may be older
+// and lack flags this binary depends on (e.g., `ov image test
+// --format yaml`). Falls back to "ov" on PATH if os.Executable fails.
+func findOvForBenchmark() string {
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return exe
+	}
+	return "ov"
+}
+
 // buildImageFn builds the target image from the worktree into tag. It
 // returns the build's wall-clock duration and any error. Swappable for
 // tests via fake implementations.
 var buildImageFn = func(ctx context.Context, worktreeDir, image, tag, logPath string) (time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, "ov", "-C", worktreeDir,
+	cmd := exec.CommandContext(ctx, findOvForBenchmark(), "-C", worktreeDir,
 		"image", "build", image, "--tag", tag)
 	if logPath != "" {
 		f, err := os.Create(logPath)
@@ -149,7 +161,7 @@ var buildImageFn = func(ctx context.Context, worktreeDir, image, tag, logPath st
 // and returns the raw YAML bytes + duration. Swappable for tests.
 var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, "ov", "image", "test", tag, "--format", "yaml")
+	cmd := exec.CommandContext(ctx, findOvForBenchmark(), "image", "test", tag, "--format", "yaml")
 	out, err := cmd.Output()
 	return out, time.Since(start), err
 }
@@ -376,12 +388,16 @@ func runOneIteration(
 		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)
 	}
 
-	// 4. Rebuild (unless --skip-rebuild).
-	iterTag := fmt.Sprintf("ovbench/%s-iter%d:%s", layout.RunID, k, opts.TargetImage)
+	// 4. Rebuild (unless --skip-rebuild). The build's --tag flag takes
+	// just the TAG portion (no `/`, no `:`); the full image ref is
+	// reconstructed for the test step. Using a "/" or ":" inside --tag
+	// makes podman build fail with "invalid reference format".
+	iterTagSuffix := fmt.Sprintf("ovbench-%s-iter%d", layout.RunID, k)
+	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var testOut []byte
 	if !opts.SkipRebuild {
 		buildLog := filepath.Join(iterDir, "build.log")
-		buildDur, buildErr := buildImageFn(ctx, layout.WorktreeDir, opts.TargetImage, iterTag, buildLog)
+		buildDur, buildErr := buildImageFn(ctx, layout.WorktreeDir, opts.TargetImage, iterTagSuffix, buildLog)
 		iter.BuildDuration = buildDur.String()
 		if buildErr != nil {
 			iter.BuildFailure = true
@@ -395,9 +411,9 @@ func runOneIteration(
 			return iter, nil
 		}
 
-		// 5. Evaluate via ov image test.
+		// 5. Evaluate via ov image test (full ref, not just the tag).
 		testStart := time.Now()
-		out, _, testErr := runOvImageTestFn(ctx, iterTag)
+		out, _, testErr := runOvImageTestFn(ctx, iterRef)
 		iter.TestDuration = time.Since(testStart).String()
 		if testErr != nil {
 			// Test runner failure; treat as build failure (score unchanged).
@@ -806,7 +822,7 @@ func ResolveLastTestTag(targetImage string, stdout *os.File) error {
 	if iter <= 1 {
 		return fmt.Errorf("benchmark: no prior iteration on iter %d", iter)
 	}
-	tag := fmt.Sprintf("ovbench/%s-iter%d:%s", runID, iter-1, targetImage)
+	tag := fmt.Sprintf("ghcr.io/overthinkos/%s:ovbench-%s-iter%d", targetImage, runID, iter-1)
 	fmt.Fprintln(stdout, tag)
 	return nil
 }

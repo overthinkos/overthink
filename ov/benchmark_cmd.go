@@ -291,8 +291,13 @@ func collectFromWorktree(layout RunLayout, imageName string) *LabelDescriptionSe
 	if err != nil || cfg == nil {
 		return nil
 	}
-	// CollectDescriptions takes the full layer map; load it.
-	layers, err := ScanLayers(filepath.Join(layout.WorktreeDir, "layers"))
+	// CollectDescriptions takes the full layer map; load it. ScanLayers
+	// takes the PROJECT dir (it runs LoadUnified internally to pick up
+	// layers: blocks inside overthink.yml), not the layers/ subdir —
+	// passing the subdir makes LoadUnified fail to find overthink.yml
+	// and the legacy fallback looks for <dir>/layers which doesn't
+	// exist, yielding an empty map.
+	layers, err := ScanLayers(layout.WorktreeDir)
 	if err != nil {
 		return nil
 	}

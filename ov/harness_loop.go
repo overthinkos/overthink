@@ -70,18 +70,32 @@ type HarnessOpts struct {
 }
 
 // IterationState captures one iteration's outputs.
+//
+// RunnerOutput inlines the AI's stdout/stderr (captured from
+// runner.log). Capped at maxInlineRunnerBytes; longer transcripts are
+// truncated with a marker line and the full file remains on disk under
+// .harness/<recipe>/runs/<run-id>/iter<k>/runner.log.
 type IterationState struct {
-	K                  int                        `yaml:"k"`
-	Score              int                        `yaml:"score"`
-	PlateauCounterAfter int                       `yaml:"plateau_counter_after"`
-	BuildFailure       bool                       `yaml:"build_failure,omitempty"`
-	BuildDuration      string                     `yaml:"build_duration,omitempty"`
-	TestDuration       string                     `yaml:"test_duration,omitempty"`
-	RunnerDuration     string                     `yaml:"runner_duration,omitempty"`
-	CommitSHA          string                     `yaml:"commit_sha,omitempty"`
-	Scenario          []ScenarioVerdict          `yaml:"scenario,omitempty"`
-	AddedScenario     []string                   `yaml:"added_scenario,omitempty"`
+	K                   int               `yaml:"k"`
+	Score               int               `yaml:"score"`
+	PlateauCounterAfter int               `yaml:"plateau_counter_after"`
+	BuildFailure        bool              `yaml:"build_failure,omitempty"`
+	BuildDuration       string            `yaml:"build_duration,omitempty"`
+	TestDuration        string            `yaml:"test_duration,omitempty"`
+	RunnerDuration      string            `yaml:"runner_duration,omitempty"`
+	RunnerOutput        string            `yaml:"runner_output,omitempty"`
+	RunnerLogPath       string            `yaml:"runner_log_path,omitempty"`
+	BuildLogPath        string            `yaml:"build_log_path,omitempty"`
+	CommitSHA           string            `yaml:"commit_sha,omitempty"`
+	Scenario            []ScenarioVerdict `yaml:"scenario,omitempty"`
+	AddedScenario       []string          `yaml:"added_scenario,omitempty"`
 }
+
+// maxInlineRunnerBytes is the cap on inlined runner stdout/stderr in
+// the result file. Output longer than this is truncated to a head/tail
+// pair joined by a marker so the result file stays human-scannable
+// even on a chatty AI; the full transcript stays on disk.
+const maxInlineRunnerBytes = 8192
 
 // ScenarioVerdict is one scenario's post-iteration outcome.
 type ScenarioVerdict struct {
@@ -455,6 +469,10 @@ func runOneIteration(
 	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog)
 	cancelRunner()
 	iter.RunnerDuration = runnerDur.String()
+	iter.RunnerLogPath = runnerLog
+	if data, err := os.ReadFile(runnerLog); err == nil {
+		iter.RunnerOutput = capInlineOutput(data, maxInlineRunnerBytes)
+	}
 	if runnerErr != nil {
 		// Log-only; runner failures don't abort the loop (the plateau
 		// counter will catch a persistent bad runner).
@@ -472,6 +490,7 @@ func runOneIteration(
 		buildLog := filepath.Join(iterDir, "build.log")
 		buildDur, buildErr := buildImageFn(ctx, layout.RepoDir, opts.TargetImage, iterTagSuffix, buildLog)
 		iter.BuildDuration = buildDur.String()
+		iter.BuildLogPath = buildLog
 		if buildErr != nil {
 			iter.BuildFailure = true
 			// Score is unchanged (== prior iteration's score); no test run.
@@ -843,6 +862,26 @@ func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 // ---------------------------------------------------------------------------
 // Summary aggregation
 // ---------------------------------------------------------------------------
+
+// capInlineOutput trims a captured runner transcript to maxBytes,
+// preserving head + tail joined by an explicit truncation marker so
+// the result file stays scannable on a chatty AI. Output already
+// under the cap returns verbatim. The full transcript remains on
+// disk at iter<k>/runner.log for forensic reconstruction.
+func capInlineOutput(data []byte, maxBytes int) string {
+	if maxBytes <= 0 || len(data) <= maxBytes {
+		return string(data)
+	}
+	half := (maxBytes - 64) / 2
+	if half < 1 {
+		return string(data[:maxBytes])
+	}
+	head := string(data[:half])
+	tail := string(data[len(data)-half:])
+	marker := fmt.Sprintf("\n\n…[truncated %d bytes — full transcript at runner.log]…\n\n",
+		len(data)-2*half)
+	return head + marker + tail
+}
 
 // computeSummary tallies per-verdict counts from the final scenario set.
 func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {

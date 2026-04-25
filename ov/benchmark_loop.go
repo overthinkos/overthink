@@ -138,12 +138,11 @@ func findOvForBenchmark() string {
 	return "ov"
 }
 
-// buildImageFn builds the target image from the worktree into tag. It
-// returns the build's wall-clock duration and any error. Swappable for
-// tests via fake implementations.
-var buildImageFn = func(ctx context.Context, worktreeDir, image, tag, logPath string) (time.Duration, error) {
+// buildImageFn builds the target image from the per-run repo into tag.
+// Returns the build's wall-clock duration and any error. Swappable for tests.
+var buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string) (time.Duration, error) {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, findOvForBenchmark(), "-C", worktreeDir,
+	cmd := exec.CommandContext(ctx, findOvForBenchmark(), "-C", repoDir,
 		"image", "build", image, "--tag", tag)
 	if logPath != "" {
 		f, err := os.Create(logPath)
@@ -166,14 +165,21 @@ var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Durat
 	return out, time.Since(start), err
 }
 
-// runRunnerFn dispatches the runner into the target deploy and waits
-// for it to exit. Returns duration + error. Swappable for tests.
-var runRunnerFn = func(ctx context.Context, d Dispatcher, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
+// runRunnerFn invokes the runner directly inside the pod. cwd is set to
+// the per-run repo clone (layout.RepoDir). env is merged into os.Environ
+// (overrides win). Swappable for tests.
+//
+// No more Dispatcher abstraction: this command always runs *inside* the
+// pod (under `ov benchmark run-local`), so the runner is just a local
+// exec — no podman exec, no ssh, no host/pod marshaling.
+var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
 	start := time.Now()
-	cmd, err := d.Build(ctx, layout, argv, env)
-	if err != nil {
-		return 0, err
+	if len(argv) == 0 {
+		return 0, fmt.Errorf("benchmark: runner has empty command")
 	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = layout.RepoDir
+	cmd.Env = mergeOsEnv(env)
 	if logPath != "" {
 		f, ferr := os.Create(logPath)
 		if ferr == nil {
@@ -182,8 +188,32 @@ var runRunnerFn = func(ctx context.Context, d Dispatcher, layout RunLayout, argv
 			defer f.Close()
 		}
 	}
-	err = cmd.Run()
+	err := cmd.Run()
 	return time.Since(start), err
+}
+
+// mergeOsEnv returns os.Environ() merged with overrides from env.
+// Overrides win on key collision.
+func mergeOsEnv(env map[string]string) []string {
+	if len(env) == 0 {
+		return os.Environ()
+	}
+	out := append([]string(nil), os.Environ()...)
+	for k, v := range env {
+		prefix := k + "="
+		replaced := false
+		for i, e := range out {
+			if strings.HasPrefix(e, prefix) {
+				out[i] = prefix + v
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			out = append(out, prefix+v)
+		}
+	}
+	return out
 }
 
 // ---------------------------------------------------------------------------
@@ -191,10 +221,10 @@ var runRunnerFn = func(ctx context.Context, d Dispatcher, layout RunLayout, argv
 // ---------------------------------------------------------------------------
 
 // RunBenchmark executes the iteration loop against opts and returns
-// the final report. It does NOT create the worktree or run baseline
-// evaluation — those are Phase B/C concerns owned by the caller
-// (BenchmarkRunCmd.Run).
-func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout, dispatcher Dispatcher) (*FinalReport, error) {
+// the final report. Caller is responsible for creating the per-run
+// clone and for collecting the pre-AI baseline (those happen in
+// BenchmarkRunLocalCmd.Run, inside the pod).
+func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout) (*FinalReport, error) {
 	started := time.Now().UTC()
 	report := &FinalReport{
 		RunID:             layout.RunID,
@@ -220,7 +250,7 @@ func RunBenchmark(ctx context.Context, opts BenchmarkOpts, layout RunLayout, dis
 			break
 		}
 
-		iterState, err := runOneIteration(ctx, opts, layout, dispatcher, k, unsolved, report)
+		iterState, err := runOneIteration(ctx, opts, layout, k, unsolved, report)
 		if err != nil {
 			// A genuine infrastructure error (not a build/test failure) aborts.
 			return report, fmt.Errorf("iter%d: %w", k, err)
@@ -329,7 +359,6 @@ func runOneIteration(
 	ctx context.Context,
 	opts BenchmarkOpts,
 	layout RunLayout,
-	dispatcher Dispatcher,
 	k int,
 	unsolved []ScenarioTestResult,
 	reportSoFar *FinalReport,
@@ -347,10 +376,9 @@ func runOneIteration(
 	}
 
 	// 2. Render + write prompt.md
-	mcpEndpoint, _ := dispatcher.MCPEndpoint(ctx)
 	substCtx := &SubstContext{
 		RunID:             layout.RunID,
-		WorkspacePath:     dispatcher.WorkspacePath(layout),
+		WorkspacePath:     layout.RepoDir,
 		TargetImage:       opts.TargetImage,
 		TargetDeployment:  opts.Deployment,
 		Iteration:         k,
@@ -358,7 +386,7 @@ func runOneIteration(
 		PlateauIterations: opts.PlateauIterations,
 		PlateauCounter:    computePlateauSoFar(reportSoFar),
 		BestScore:         reportSoFar.BestScore,
-		MCPEndpoint:       mcpEndpoint,
+		MCPEndpoint:       InPodMCPEndpoint,
 		Tags:              opts.Tags,
 		Timeout:           opts.Runner.Timeout,
 	}
@@ -379,7 +407,7 @@ func runOneIteration(
 	// Apply per-runner timeout.
 	timeout, _ := ParseRunnerTimeout(opts.Runner.Timeout)
 	runnerCtx, cancelRunner := context.WithTimeout(ctx, timeout)
-	runnerDur, runnerErr := runRunnerFn(runnerCtx, dispatcher, layout, runnerArgv, runnerEnv, runnerLog)
+	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog)
 	cancelRunner()
 	iter.RunnerDuration = runnerDur.String()
 	if runnerErr != nil {
@@ -397,7 +425,7 @@ func runOneIteration(
 	var testOut []byte
 	if !opts.SkipRebuild {
 		buildLog := filepath.Join(iterDir, "build.log")
-		buildDur, buildErr := buildImageFn(ctx, layout.WorktreeDir, opts.TargetImage, iterTagSuffix, buildLog)
+		buildDur, buildErr := buildImageFn(ctx, layout.RepoDir, opts.TargetImage, iterTagSuffix, buildLog)
 		iter.BuildDuration = buildDur.String()
 		if buildErr != nil {
 			iter.BuildFailure = true
@@ -438,9 +466,9 @@ func runOneIteration(
 		return iter, fmt.Errorf("parse test output: %w", err)
 	}
 
-	// Reload fingerprints from the current worktree state (scenarios
-	// may have been edited).
-	postSet := loadWorktreeDescriptions(opts, layout)
+	// Reload fingerprints from the per-run clone's current state (the
+	// AI may have edited scenario bodies; we re-scan to compute deltas).
+	postSet := loadDescriptionsFromDir(layout.RepoDir, opts.TargetImage)
 	postFingerprints := FingerprintSet(postSet)
 	postTagFingerprints := collectTagFingerprints(postSet)
 
@@ -503,12 +531,12 @@ func runOneIteration(
 	return iter, nil
 }
 
-// commitIterationBestEffort commits the iteration and stashes the SHA.
-// Errors are non-fatal — the commit step is audit-trail; a hook abort
-// doesn't invalidate the iteration's scoring.
+// commitIterationBestEffort commits the iteration in the per-run clone
+// and stashes the SHA. Errors are non-fatal — the commit step is
+// audit-trail; a hook abort doesn't invalidate the iteration's scoring.
 func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState) error {
 	solved := collectSolvedIDs(iter.Scenarios)
-	sha, err := CommitIteration(ctx, layout, k, iter.Score, solved)
+	sha, err := CommitIterationInRepo(ctx, layout, k, iter.Score, solved)
 	if err != nil {
 		return err
 	}
@@ -629,9 +657,9 @@ func renderScope(opts BenchmarkOpts, layout RunLayout, k int, reportSoFar *Final
 	return s
 }
 
-// writeScope writes scope.yml to iter<k>/ AND mirrors to the worktree
-// at <worktree>/.benchmark/scope.yml (the path `ov benchmark scope`
-// reads from inside the deploy).
+// writeScope writes scope.yml to iter<k>/ AND mirrors to the per-run
+// clone at <RepoDir>/.benchmark/scope.yml (the path `ov benchmark scope`
+// reads from inside the pod when the AI's cwd is the clone).
 func writeScope(layout RunLayout, k int, s *BenchmarkScope) error {
 	data, err := yaml.Marshal(s)
 	if err != nil {
@@ -641,8 +669,7 @@ func writeScope(layout RunLayout, k int, s *BenchmarkScope) error {
 	if err := os.WriteFile(iterPath, data, 0o644); err != nil {
 		return err
 	}
-	// Mirror into the worktree. Ensure dir exists.
-	mirrorDir := filepath.Join(layout.WorktreeDir, ".benchmark")
+	mirrorDir := filepath.Join(layout.RepoDir, ".benchmark")
 	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
 		return err
 	}
@@ -655,7 +682,7 @@ func writePrompt(layout RunLayout, k int, text string) error {
 	if err := os.WriteFile(iterPath, []byte(text), 0o644); err != nil {
 		return err
 	}
-	mirrorDir := filepath.Join(layout.WorktreeDir, ".benchmark")
+	mirrorDir := filepath.Join(layout.RepoDir, ".benchmark")
 	if err := os.MkdirAll(mirrorDir, 0o755); err != nil {
 		return err
 	}
@@ -711,20 +738,6 @@ func renderRunnerInvocation(opts BenchmarkOpts, substCtx *SubstContext, promptTe
 // Post-AI description reload + tag-fingerprint collection
 // ---------------------------------------------------------------------------
 
-// loadWorktreeDescriptions re-collects the target image's description
-// set from the worktree's current state. Swappable for tests via
-// this package-level var. The real implementation calls the unified
-// loader; the test fakes return a canned LabelDescriptionSet.
-//
-// A nil return is treated by FingerprintSet / collectTagFingerprints
-// as "no scenarios" (both return empty maps on nil input).
-var loadWorktreeDescriptions = func(opts BenchmarkOpts, layout RunLayout) *LabelDescriptionSet {
-	// Real implementation deferred to the CLI wiring in benchmark_cmd.go.
-	// The package-var swap lets unit tests inject fake data without
-	// going through the full unified loader.
-	return nil
-}
-
 // collectTagFingerprints mirrors FingerprintSet but for tags only.
 func collectTagFingerprints(set *LabelDescriptionSet) map[string]string {
 	out := make(map[string]string)
@@ -779,22 +792,23 @@ func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
 // ---------------------------------------------------------------------------
 
 // ResolveAndPrintScope reads OV_BENCHMARK_RUN_ID from the environment,
-// locates the active scope.yml, and writes its contents to out. The
-// AI-facing `ov benchmark scope` command dispatches here.
+// locates the active scope.yml inside the per-run clone, and writes
+// its contents to out. The AI-facing `ov benchmark scope` command
+// dispatches here.
 //
-// Path resolution: /workspace/.benchmark/scope.yml is the canonical
-// mirror path (written per-iteration by writeScope), reachable both
-// from inside a pod/vm deploy and from the host when OV_PROJECT_DIR
-// is set to the project root.
+// Path resolution: prefers the per-run clone's mirror at
+// /workspace/.benchmark/<run-id>/repo/.benchmark/scope.yml, with
+// fallbacks for the AI's possibly-different cwd and a host-side run.
 func ResolveAndPrintScope(projectDir string, stdout *os.File) error {
-	// Prefer the per-run worktree-mirrored scope.yml path.
-	candidates := []string{
-		"/workspace/.benchmark/scope.yml",
-	}
+	var candidates []string
 	runID := os.Getenv("OV_BENCHMARK_RUN_ID")
 	if runID != "" {
-		candidates = append(candidates, filepath.Join(projectDir, ".benchmark", runID, "worktree", ".benchmark", "scope.yml"))
+		candidates = append(candidates,
+			filepath.Join("/workspace", ".benchmark", runID, "repo", ".benchmark", "scope.yml"),
+			filepath.Join(projectDir, ".benchmark", runID, "repo", ".benchmark", "scope.yml"),
+		)
 	}
+	// Fallback: if cwd IS the per-run repo (common when AI is invoked from there).
 	candidates = append(candidates, filepath.Join(projectDir, ".benchmark", "scope.yml"))
 
 	for _, p := range candidates {

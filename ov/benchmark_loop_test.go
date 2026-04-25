@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,33 +14,24 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Test scaffolding — fake subprocess seams
+// Test scaffolding — fake subprocess seams (post-refactor: no Dispatcher,
+// no loadWorktreeDescriptions seam — runRunnerFn now takes (ctx, layout, ...).
 // ---------------------------------------------------------------------------
 
-// fakeLoopState holds the per-iteration outputs the fakes emit.
 type fakeLoopState struct {
-	// Per-iteration scenario statuses. Index i is iteration i+1.
-	// Each inner slice is the post-AI status for every scenario.
-	iterStatuses [][]string
-	// Build failures per iteration (1-indexed sparse).
-	buildFailures map[int]bool
-	// Iteration counter — how many times runOvImageTestFn fired.
-	testInvocations int
-	// Capture scenarios per iteration (key = iter).
+	iterStatuses     [][]string
+	buildFailures    map[int]bool
+	testInvocations  int
 	perIterScenarios map[int][]ScenarioTestResult
 }
 
-// setupFakeLoop installs fakes for buildImageFn, runOvImageTestFn,
-// runRunnerFn, loadWorktreeDescriptions. Returns a cleanup func.
 func setupFakeLoop(t *testing.T, state *fakeLoopState, scenarios []ScenarioTestResult) func() {
 	t.Helper()
 	origBuild := buildImageFn
 	origTest := runOvImageTestFn
 	origRunner := runRunnerFn
-	origLoad := loadWorktreeDescriptions
 
-	buildImageFn = func(ctx context.Context, worktreeDir, image, tag, logPath string) (time.Duration, error) {
-		// Derive iter from tag: ovbench/<id>-iter<k>:<image>
+	buildImageFn = func(ctx context.Context, repoDir, image, tag, logPath string) (time.Duration, error) {
 		k := extractIterFromTag(tag)
 		if state.buildFailures != nil && state.buildFailures[k] {
 			return 100 * time.Millisecond, fmt.Errorf("fake build failure iter%d", k)
@@ -53,14 +45,11 @@ func setupFakeLoop(t *testing.T, state *fakeLoopState, scenarios []ScenarioTestR
 		if state.perIterScenarios != nil {
 			iterScenarios = state.perIterScenarios[k]
 		} else if k-1 < len(state.iterStatuses) {
-			// Fall back to the per-status vector with the frozen scenario set.
 			statuses := state.iterStatuses[k-1]
 			for i, s := range scenarios {
 				if i < len(statuses) {
 					s.Status = statuses[i]
 					if s.Status == "pass" {
-						// Passing scenarios have no pending steps —
-						// this is the invariant Classify relies on.
 						s.PendingSteps = 0
 					}
 				}
@@ -69,33 +58,25 @@ func setupFakeLoop(t *testing.T, state *fakeLoopState, scenarios []ScenarioTestR
 		} else {
 			iterScenarios = scenarios
 		}
-		r := TestRunResults{
-			Scenarios: iterScenarios,
-		}
+		r := TestRunResults{Scenarios: iterScenarios}
 		out, _ := yaml.Marshal(r)
 		return out, 50 * time.Millisecond, nil
 	}
-	runRunnerFn = func(ctx context.Context, d Dispatcher, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
-		// No-op — just record the invocation via log file presence.
+	runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
 		if logPath != "" {
 			_ = os.WriteFile(logPath, []byte("fake-runner\n"), 0o644)
 		}
 		return 300 * time.Millisecond, nil
-	}
-	loadWorktreeDescriptions = func(opts BenchmarkOpts, layout RunLayout) *LabelDescriptionSet {
-		return nil
 	}
 
 	return func() {
 		buildImageFn = origBuild
 		runOvImageTestFn = origTest
 		runRunnerFn = origRunner
-		loadWorktreeDescriptions = origLoad
 	}
 }
 
 func extractIterFromTag(tag string) int {
-	// Shape: ovbench/<id>-iter<k>:<image>
 	idx := strings.Index(tag, "-iter")
 	if idx < 0 {
 		return 0
@@ -110,8 +91,6 @@ func extractIterFromTag(tag string) int {
 	return k
 }
 
-// makeTestScenarios returns a small pre-AI scenario set with pre-computed
-// fingerprints for deterministic classification.
 func makeTestScenarios() ([]ScenarioTestResult, map[string]string, map[string]string) {
 	scenarios := []ScenarioTestResult{
 		{ID: "desc:layer:sshd:0", Origin: "layer:sshd", Name: "A", Status: "fail", PendingSteps: 1},
@@ -131,22 +110,65 @@ func makeTestScenarios() ([]ScenarioTestResult, map[string]string, map[string]st
 	return scenarios, fps, tagFps
 }
 
-// setupOpts builds a BenchmarkOpts ready for RunBenchmark.
-func setupOpts(t *testing.T, projectDir string, plateau, maxIter int) (BenchmarkOpts, RunLayout, Dispatcher) {
+// initFakeRepo creates a project dir with a minimal git repo and clones
+// it into the per-run scratch path, simulating what CreateRunClone does
+// inside the pod. Returns (projectDir, layout) ready for RunBenchmark.
+func initFakeRepo(t *testing.T) (string, RunLayout) {
 	t.Helper()
-	ctx := context.Background()
-	layout := NewRunLayout(projectDir, "test-"+t.Name())
-	if err := CreateWorktree(ctx, layout); err != nil {
-		t.Fatalf("CreateWorktree: %v", err)
+	projectDir := t.TempDir()
+	mustGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = projectDir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, string(out))
+		}
 	}
+	mustGit("init", "--quiet", "--initial-branch=main")
+	mustGit("config", "user.email", "test@example.com")
+	mustGit("config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(projectDir, "seed"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mustGit("add", ".")
+	mustGit("commit", "--quiet", "-m", "init", "--allow-empty")
+
+	layout := NewRunLayout(projectDir, "test-"+t.Name())
+	if err := os.MkdirAll(layout.RunDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Minimal "clone": copy the .git tree + working files into RepoDir.
+	// Real CreateRunClone shells out to `git clone`; for unit tests we
+	// just replicate its post-state.
+	if err := os.MkdirAll(layout.RepoDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cloneCmd := exec.Command("git", "clone", "--quiet", "--no-local", projectDir, layout.RepoDir)
+	if out, err := cloneCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git clone: %v\n%s", err, string(out))
+	}
+	branchCmd := exec.Command("git", "-C", layout.RepoDir, "checkout", "-b", layout.Branch)
+	if out, err := branchCmd.CombinedOutput(); err != nil {
+		t.Fatalf("git checkout -b: %v\n%s", err, string(out))
+	}
+	cfgEmail := exec.Command("git", "-C", layout.RepoDir, "config", "user.email", "test@example.com")
+	_ = cfgEmail.Run()
+	cfgName := exec.Command("git", "-C", layout.RepoDir, "config", "user.name", "test")
+	_ = cfgName.Run()
+
+	return projectDir, layout
+}
+
+// setupOpts builds a BenchmarkOpts ready for RunBenchmark.
+func setupOpts(t *testing.T, plateau, maxIter int) (BenchmarkOpts, RunLayout) {
+	t.Helper()
+	_, layout := initFakeRepo(t)
 
 	scenarios, fps, tagFps := makeTestScenarios()
 
 	opts := BenchmarkOpts{
-		ProjectDir:         projectDir,
+		ProjectDir:         layout.RepoDir,
 		Deployment:         "test-deploy",
-		DeploymentNode:     &DeploymentNode{Target: "host"},
-		Runner:             &BenchmarkRunner{Name: "stub", Command: []string{"echo"}, Timeout: "1m"},
+		Runner:             &BenchmarkRunner{Name: "stub", Command: []string{"true"}, Timeout: "1m"},
 		Prompt:             "fake prompt",
 		TargetImage:        "fedora-ov",
 		PlateauIterations:  plateau,
@@ -157,8 +179,7 @@ func setupOpts(t *testing.T, projectDir string, plateau, maxIter int) (Benchmark
 		PreFingerprints:    fps,
 		PreTagFingerprints: tagFps,
 	}
-	d := &hostDispatcher{node: opts.DeploymentNode, name: opts.Deployment}
-	return opts, layout, d
+	return opts, layout
 }
 
 // ---------------------------------------------------------------------------
@@ -166,11 +187,8 @@ func setupOpts(t *testing.T, projectDir string, plateau, maxIter int) (Benchmark
 // ---------------------------------------------------------------------------
 
 func TestRunBenchmark_PlateauAfterNoProgress(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, d := setupOpts(t, projectDir, 3, 50)
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 3, 50)
 
-	// Stub: scenarios never change — all fail every iteration.
 	state := &fakeLoopState{
 		iterStatuses: [][]string{
 			{"fail", "fail", "fail"},
@@ -182,14 +200,13 @@ func TestRunBenchmark_PlateauAfterNoProgress(t *testing.T) {
 	cleanup := setupFakeLoop(t, state, opts.PreAIScenarios)
 	defer cleanup()
 
-	report, err := RunBenchmark(context.Background(), opts, layout, d)
+	report, err := RunBenchmark(context.Background(), opts, layout)
 	if err != nil {
 		t.Fatalf("RunBenchmark: %v", err)
 	}
 	if report.ExitReason != "plateau" {
 		t.Errorf("exit_reason: got %q, want plateau", report.ExitReason)
 	}
-	// 1 initial iteration setting best=0 then 3 consecutive non-improving = 4 iterations total.
 	if report.IterationsRun < 3 {
 		t.Errorf("iterations_run: got %d, want at least 3", report.IterationsRun)
 	}
@@ -199,12 +216,8 @@ func TestRunBenchmark_PlateauAfterNoProgress(t *testing.T) {
 }
 
 func TestRunBenchmark_ImprovementDefeatsPlateau(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, d := setupOpts(t, projectDir, 3, 50)
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 3, 50)
 
-	// iter1: scenario 0 passes (score=1)
-	// iter2-4: same state (plateau counter increments 3x → stop at iter4)
 	state := &fakeLoopState{
 		iterStatuses: [][]string{
 			{"pass", "fail", "fail"},
@@ -216,7 +229,7 @@ func TestRunBenchmark_ImprovementDefeatsPlateau(t *testing.T) {
 	cleanup := setupFakeLoop(t, state, opts.PreAIScenarios)
 	defer cleanup()
 
-	report, err := RunBenchmark(context.Background(), opts, layout, d)
+	report, err := RunBenchmark(context.Background(), opts, layout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -232,11 +245,8 @@ func TestRunBenchmark_ImprovementDefeatsPlateau(t *testing.T) {
 }
 
 func TestRunBenchmark_IncrementalProgress(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, d := setupOpts(t, projectDir, 2, 50)
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 2, 50)
 
-	// iter1: score=1; iter2: score=2; iter3: score=2; iter4: score=2 → plateau(2)
 	state := &fakeLoopState{
 		iterStatuses: [][]string{
 			{"pass", "fail", "fail"},
@@ -248,7 +258,7 @@ func TestRunBenchmark_IncrementalProgress(t *testing.T) {
 	cleanup := setupFakeLoop(t, state, opts.PreAIScenarios)
 	defer cleanup()
 
-	report, err := RunBenchmark(context.Background(), opts, layout, d)
+	report, err := RunBenchmark(context.Background(), opts, layout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,11 +274,8 @@ func TestRunBenchmark_IncrementalProgress(t *testing.T) {
 }
 
 func TestRunBenchmark_CeilingStopsBeforePlateau(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, d := setupOpts(t, projectDir, 10, 2) // plateau large, ceiling small
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 10, 2)
 
-	// Always improving, but max-iterations=2 cuts it short.
 	state := &fakeLoopState{
 		iterStatuses: [][]string{
 			{"pass", "fail", "fail"},
@@ -278,7 +285,7 @@ func TestRunBenchmark_CeilingStopsBeforePlateau(t *testing.T) {
 	cleanup := setupFakeLoop(t, state, opts.PreAIScenarios)
 	defer cleanup()
 
-	report, err := RunBenchmark(context.Background(), opts, layout, d)
+	report, err := RunBenchmark(context.Background(), opts, layout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -291,9 +298,7 @@ func TestRunBenchmark_CeilingStopsBeforePlateau(t *testing.T) {
 }
 
 func TestRunBenchmark_BuildFailureDoesNotCrash(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, d := setupOpts(t, projectDir, 2, 50)
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 2, 50)
 
 	state := &fakeLoopState{
 		iterStatuses: [][]string{
@@ -301,23 +306,21 @@ func TestRunBenchmark_BuildFailureDoesNotCrash(t *testing.T) {
 			{"pass", "fail", "fail"},
 			{"pass", "fail", "fail"},
 		},
-		buildFailures: map[int]bool{2: true}, // iter2 build fails
+		buildFailures: map[int]bool{2: true},
 	}
 	cleanup := setupFakeLoop(t, state, opts.PreAIScenarios)
 	defer cleanup()
 
-	report, err := RunBenchmark(context.Background(), opts, layout, d)
+	report, err := RunBenchmark(context.Background(), opts, layout)
 	if err != nil {
 		t.Fatalf("RunBenchmark should not fail on build-failure: %v", err)
 	}
-	// iter2 should have BuildFailure=true.
 	if len(report.Iterations) < 2 {
 		t.Fatalf("want >= 2 iterations, got %d", len(report.Iterations))
 	}
 	if !report.Iterations[1].BuildFailure {
 		t.Errorf("iter2 should have BuildFailure=true")
 	}
-	// Score should NOT regress (carried forward).
 	if report.Iterations[1].Score != report.Iterations[0].Score {
 		t.Errorf("iter2 score should equal iter1 on build failure: got %d, want %d",
 			report.Iterations[1].Score, report.Iterations[0].Score)
@@ -329,9 +332,7 @@ func TestRunBenchmark_BuildFailureDoesNotCrash(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRenderScope_IncludesHistory(t *testing.T) {
-	projectDir := initGitRepo(t)
-	opts, layout, _ := setupOpts(t, projectDir, 3, 50)
-	defer func() { _ = RemoveWorktree(context.Background(), layout) }()
+	opts, layout := setupOpts(t, 3, 50)
 
 	report := &FinalReport{
 		BestScore: 2,
@@ -345,7 +346,7 @@ func TestRenderScope_IncludesHistory(t *testing.T) {
 			}, PlateauCounterAfter: 0},
 		},
 	}
-	unsolved := opts.PreAIScenarios[2:] // still-unsolved list for iter 3
+	unsolved := opts.PreAIScenarios[2:]
 
 	scope := renderScope(opts, layout, 3, report, unsolved)
 	if len(scope.History) != 2 {
@@ -359,14 +360,8 @@ func TestRenderScope_IncludesHistory(t *testing.T) {
 	}
 }
 
-func TestWriteScope_MirrorsToWorktree(t *testing.T) {
-	projectDir := initGitRepo(t)
-	layout := NewRunLayout(projectDir, "scope-mirror-test")
-	ctx := context.Background()
-	if err := CreateWorktree(ctx, layout); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = RemoveWorktree(ctx, layout) }()
+func TestWriteScope_MirrorsToRepoDir(t *testing.T) {
+	_, layout := initFakeRepo(t)
 
 	if err := os.MkdirAll(layout.IterDir(1), 0o755); err != nil {
 		t.Fatal(err)
@@ -375,13 +370,11 @@ func TestWriteScope_MirrorsToWorktree(t *testing.T) {
 	if err := writeScope(layout, 1, scope); err != nil {
 		t.Fatal(err)
 	}
-	// Per-iter copy.
 	if _, err := os.Stat(filepath.Join(layout.IterDir(1), "scope.yml")); err != nil {
 		t.Errorf("iter1 scope.yml missing: %v", err)
 	}
-	// Mirrored copy in worktree.
-	if _, err := os.Stat(filepath.Join(layout.WorktreeDir, ".benchmark", "scope.yml")); err != nil {
-		t.Errorf("worktree scope.yml missing: %v", err)
+	if _, err := os.Stat(filepath.Join(layout.RepoDir, ".benchmark", "scope.yml")); err != nil {
+		t.Errorf("repo .benchmark/scope.yml missing: %v", err)
 	}
 }
 
@@ -413,21 +406,15 @@ func TestComputeSummary_Tally(t *testing.T) {
 // ResolveAndPrintScope + ResolveLastTestTag
 // ---------------------------------------------------------------------------
 
-func TestResolveAndPrintScope_ReadsWorktreeMirror(t *testing.T) {
-	projectDir := initGitRepo(t)
-	runID := "scope-read-test"
-	layout := NewRunLayout(projectDir, runID)
-	ctx := context.Background()
-	if err := CreateWorktree(ctx, layout); err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = RemoveWorktree(ctx, layout) }()
+func TestResolveAndPrintScope_ReadsRepoMirror(t *testing.T) {
+	projectDir, layout := initFakeRepo(t)
+	runID := layout.RunID
 
-	mirror := filepath.Join(layout.WorktreeDir, ".benchmark")
+	mirror := filepath.Join(layout.RepoDir, ".benchmark")
 	if err := os.MkdirAll(mirror, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	expected := []byte("run_id: scope-read-test\niteration: 4\n")
+	expected := []byte("run_id: " + runID + "\niteration: 4\n")
 	if err := os.WriteFile(filepath.Join(mirror, "scope.yml"), expected, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -465,7 +452,7 @@ func TestResolveLastTestTag(t *testing.T) {
 	}
 	tmpOut.Close()
 	got, _ := os.ReadFile(tmpOut.Name())
-	want := "ovbench/abc-iter2:fedora-ov\n"
+	want := "ghcr.io/overthinkos/fedora-ov:ovbench-abc-iter2\n"
 	if string(got) != want {
 		t.Errorf("tag: got %q, want %q", string(got), want)
 	}

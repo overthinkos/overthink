@@ -32,52 +32,56 @@ ai:
 recipe:
   default:
     description:
-      feature: "Default recipe migrated from legacy benchmark: block."
-    # Where to run this recipe — exactly ONE of pod / vm / host:
+      feature: "Default benchmark — BDD scenario solved by live deployment."
+    # Target: where the harness runs the AI. Exactly one of pod / vm / host:
     #   pod:  <name>   # name of a running pod deployment (ov start <name>)
     #   vm:   <name>   # name of a running VM (ov vm start <name>)
     #   host: true     # run on this host directly (requires disposable: true)
-    pod: ""             # ← fill in the pod deployment name
-    ai: [claude, codex, gemini]
+    host: true
+    disposable: true
+    ai: [claude]
     plateau_iteration: 3
-    max_iteration: 50
-    tag: ""
-    target_image: ""
+    max_iteration: 5
+    target_image: "bench-target"
+    deployment: "harness-default"   # AI must `ov deploy add harness-default <ref>`
     notes: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
+    # The BDD scenarios the AI must make pass. The harness scores these
+    # against the live ov-<deployment> container the AI created — the
+    # recipe IS the spec, no scaffold expected.
+    scenario:
+      - name: "marker file is present with expected content"
+        steps:
+          - then: "the marker file /etc/ov-bench-marker exists with content 'ov benchmark target'"
+            file: /etc/ov-bench-marker
+            exists: true
+            contains:
+              - ov benchmark target
     prompt: |
-      == Memory ==
-      Notes from previous runs (read-only context — do not edit by hand):
-      
-      ${NOTES}
-      
-      If you discover something worth remembering for future runs of this recipe — a subtle
-      convention, a fragile test, a mis-tagged scenario, a workaround that took an hour to find —
-      append a brief note via:
-          ov harness note append "<one-paragraph note>"
-      
-      Notes are persistent across runs of recipe ${RECIPE_NAME}. Be terse. Future-you reads them.
-      
-      You are benchmarking BDD-scenario-solving inside an overthink project.
-      This is iteration ${ITERATION} of up to ${MAX_ITERATION}. Your current
-      best score is ${BEST_SCORE}; plateau counter is ${PLATEAU_COUNTER} of
-      ${PLATEAU_ITERATION}.
-      
-      Your cwd is the git worktree at ${WORKSPACE}. Edits you make are
-      captured per-iteration as git commits on branch ovbench/${RUN_ID}.
-      
-      MCP tools: ${MCP_ENDPOINT} (if non-empty — 190 tools).
-      
-      Read scope:              ov harness scope
-      Inspect scenario:        ov feature list <origin>
-      Validate edits:          ov feature validate <origin>
-      See prior test output:   ov image test $(ov harness last-test-tag) --format yaml
-      
+      You are running iteration ${ITERATION} of up to ${MAX_ITERATION} of recipe ${RECIPE_NAME}.
+      Best score so far: ${BEST_SCORE}; plateau ${PLATEAU_COUNTER}/${PLATEAU_ITERATION}.
+
+      == BDD scenarios you must make pass ==
+      ${SCENARIOS}
+
+      == Workflow ==
+      Your cwd is the per-run git clone at ${WORKSPACE}.
+      Image to build: ${TARGET_IMAGE}
+      Deployment to create: ${DEPLOYMENT}
+
+      1. Edit layers/images as needed so ${TARGET_IMAGE} produces a container that
+         satisfies the scenarios above.
+      2. Build:    bin/ov image build ${TARGET_IMAGE}
+      3. Deploy:   bin/ov deploy add ${DEPLOYMENT} ${TARGET_IMAGE}
+      4. Verify:   bin/ov test ${DEPLOYMENT}    (inspect the live container)
+      5. Notes:    bin/ov harness note append ${RECIPE_NAME} "<short learning>"
+      6. Exit. The harness scores recipe scenarios against ov-${DEPLOYMENT}.
+
+      MCP tools (if any): ${MCP_ENDPOINT}
+
       Ground rules:
-        - Do NOT edit scenario text (fingerprint change = tampered, not solved).
-        - Do NOT add new scenarios (they don't count).
-        - Partial progress counts.
-        - Across iterations, your worktree keeps prior edits.
-      
-      Exit when done with this iteration.
+        - The recipe scenarios are immutable — do NOT try to edit them, they
+          live in harness.yml and the harness ignores image-baked scenarios.
+        - The deployment must be running when you exit (this is what gets scored).
+        - Partial progress across iterations counts; your worktree carries edits.

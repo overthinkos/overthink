@@ -30,38 +30,6 @@ ai:
       - {src: ~/.config/gcloud/application_default_credentials.json, dst: ~/.config/gcloud/application_default_credentials.json, optional: true}
 
 recipe:
-  r10-solve:
-    description:
-      feature: "R10 verification — host target solving the bench-target scenario."
-    host: true
-    disposable: true
-    ai: [claude]
-    plateau_iteration: 1
-    max_iteration: 1
-    target_image: "bench-target"
-    notes: false
-    mcp_endpoint: ""
-    env: {}
-    prompt: |
-      You are running iteration ${ITERATION} of the ov harness against the
-      bench-target image. The single failing BDD scenario is:
-
-         Then the marker file /etc/ov-bench-marker exists with content "ov benchmark target"
-
-      Your cwd is ${WORKSPACE} (a per-run git clone). Edit the file
-      layers/bench-target-layer/layer.yml — under its existing tasks: list,
-      add a write: task that creates /etc/ov-bench-marker with the exact
-      content "ov benchmark target". The task should look like:
-
-         - write: /etc/ov-bench-marker
-           user: root
-           mode: "0644"
-           content: |
-             ov benchmark target
-
-      Just make that one edit and exit. Do NOT touch the description block
-      (changing scenario text counts as tampering, not solving).
-
   default:
     description:
       feature: "Default recipe migrated from legacy benchmark: block."

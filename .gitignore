@@ -48,15 +48,16 @@ bin/
 ov/ov
 output/
 
-# Legacy `ov benchmark` cache (replaced by .harness/ — pre-2026-04 runs).
+# Legacy `ov benchmark` cache (pre-2026-04 — runs were under the project tree).
 .benchmark/
 
-# `ov harness` artifacts. Granular ignores so result files and persistent
-# NOTES.md memory ARE tracked in git (durable record of what each AI
-# scored / learned across runs); only the bulky transient pieces are
-# ignored — per-run git clones, build/runner logs, and the per-recipe lock.
-.harness/*/runs/
-.harness/*/.lock
+# `ov harness` artifacts MUST NOT appear in the project tree. The
+# harness writes result files, NOTES.md memory, and per-run worktrees
+# under $XDG_DATA_HOME/ov/harness/<project-fp>/<recipe>/ (default
+# ~/.local/share/ov/harness/...) — workspace and worktree are kept
+# strictly separate. This rule is defensive: any legacy code path
+# that writes back to a project-tree .harness/ stays ignored.
+.harness/
 
 # Screenshots and temporary images
 *.png

@@ -19,7 +19,9 @@ func TestReadNote_Empty(t *testing.T) {
 }
 
 func TestAppendNote_HeaderAndOrdering(t *testing.T) {
-	dir := t.TempDir()
+	dataRoot := t.TempDir()
+	t.Setenv("OV_HARNESS_DATA_ROOT", dataRoot)
+	dir := t.TempDir() // workspace (project) — not where notes live now
 	if err := AppendNote(dir, "rec", "run-1", "1", "claude", "first note"); err != nil {
 		t.Fatal(err)
 	}
@@ -30,7 +32,6 @@ func TestAppendNote_HeaderAndOrdering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Both notes should appear in order, each with a header.
 	if !strings.Contains(body, "first note") || !strings.Contains(body, "second note") {
 		t.Errorf("missing notes in output:\n%s", body)
 	}
@@ -39,14 +40,19 @@ func TestAppendNote_HeaderAndOrdering(t *testing.T) {
 	if idx1 == -1 || idx2 == -1 || idx1 >= idx2 {
 		t.Errorf("ordering wrong: idx1=%d idx2=%d", idx1, idx2)
 	}
-	// Headers should mention iter=1 and iter=2.
 	if !strings.Contains(body, "iter=1") || !strings.Contains(body, "iter=2") {
 		t.Errorf("headers should record iter=N; got:\n%s", body)
 	}
-	// File lives at .harness/rec/note/NOTES.md
-	expected := filepath.Join(dir, ".harness", "rec", "note", "NOTES.md")
+	// With OV_HARNESS_DATA_ROOT override the file lives at
+	// $OV_HARNESS_DATA_ROOT/rec/note/NOTES.md (no project pollution).
+	expected := filepath.Join(dataRoot, "rec", "note", "NOTES.md")
 	if _, err := os.Stat(expected); err != nil {
 		t.Errorf("expected file at %s: %v", expected, err)
+	}
+	// Project workspace MUST NOT have a .harness/ directory — the
+	// whole point of the harness data root refactor.
+	if _, err := os.Stat(filepath.Join(dir, ".harness")); err == nil {
+		t.Errorf("harness must NOT pollute the project workspace; found %s/.harness", dir)
 	}
 }
 
@@ -67,10 +73,16 @@ func TestAppendNote_RequiresRecipe(t *testing.T) {
 	}
 }
 
-func TestNotePath(t *testing.T) {
+func TestNotePath_UnderHarnessDataRoot(t *testing.T) {
+	// With override, the path is fully deterministic.
+	t.Setenv("OV_HARNESS_DATA_ROOT", "/tmp/harness-data")
 	got := NotePath("/proj", "bench")
-	want := "/proj/.harness/bench/note/NOTES.md"
+	want := "/tmp/harness-data/bench/note/NOTES.md"
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+	// Confirm it's NOT under the project tree.
+	if strings.Contains(got, "/proj/.harness") {
+		t.Errorf("note path must not pollute the workspace: %q", got)
 	}
 }

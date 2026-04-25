@@ -22,11 +22,12 @@ import (
 	"strings"
 )
 
-// NotePath returns the absolute path to a recipe's NOTES.md file.
-// projectDir is the cwd-resolved overthink project root; recipe is
-// the recipe name as it appears in harness.yml's recipe: map.
+// NotePath returns the absolute path to a recipe's NOTES.md file
+// under the harness data root (outside the project tree, in the
+// user's data dir — see HarnessDataRoot in harness_clone.go for the
+// path resolver).
 func NotePath(projectDir, recipe string) string {
-	return filepath.Join(projectDir, ".harness", recipe, "note", "NOTES.md")
+	return filepath.Join(HarnessDataRoot(projectDir, recipe), "note", "NOTES.md")
 }
 
 // ReadNote returns the current contents of a recipe's NOTES.md, or

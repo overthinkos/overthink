@@ -1,0 +1,191 @@
+package main
+
+import (
+	"strings"
+	"testing"
+)
+
+// TestResolveDeployChain_FlatContainer verifies a single-segment pod path
+// produces a one-hop NestedExecutor with JumpPodmanExec into "ov-<name>".
+func TestResolveDeployChain_FlatContainer(t *testing.T) {
+	roots := map[string]DeploymentNode{
+		"redis": {Target: "pod"},
+	}
+	leaf, chain, err := ResolveDeployChain(roots, "redis", LocalDeployExecutor{})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if leaf == nil || leaf.Target != "pod" {
+		t.Fatalf("unexpected leaf: %+v", leaf)
+	}
+	venue := chain.Venue()
+	// Expect: nested:podman-exec:ov-redis/local
+	if !strings.Contains(venue, "podman-exec:ov-redis") {
+		t.Errorf("venue %q does not contain podman-exec:ov-redis", venue)
+	}
+}
+
+// TestResolveDeployChain_VmFlat verifies a single-segment vm path returns
+// a plain SSHExecutor (no NestedExecutor wrapper at the root level).
+func TestResolveDeployChain_VmFlat(t *testing.T) {
+	roots := map[string]DeploymentNode{
+		"bench-vm": {
+			Target: "vm",
+			VmState: &VmDeployState{
+				SshUser:    "arch",
+				SshPort:    2222,
+				SshKeyPath: "/tmp/fake-key",
+			},
+		},
+	}
+	_, chain, err := ResolveDeployChain(roots, "bench-vm", LocalDeployExecutor{})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	venue := chain.Venue()
+	// Expect: ssh://arch@127.0.0.1:2222
+	if !strings.Contains(venue, "ssh://arch@") {
+		t.Errorf("venue %q does not contain ssh://arch@", venue)
+	}
+}
+
+// TestResolveDeployChain_VmInnerPod is the critical multi-hop case: a
+// pod nested inside a VM. Must produce a chain where the leaf hop is
+// JumpPodmanExec into the flattened name "ov-bench-vm_inner".
+func TestResolveDeployChain_VmInnerPod(t *testing.T) {
+	innerNode := &DeploymentNode{Target: "pod"}
+	roots := map[string]DeploymentNode{
+		"bench-vm": {
+			Target: "vm",
+			VmState: &VmDeployState{
+				SshUser:    "arch",
+				SshPort:    2222,
+				SshKeyPath: "/tmp/fake-key",
+			},
+			Nested: map[string]*DeploymentNode{
+				"inner": innerNode,
+			},
+		},
+	}
+	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner", LocalDeployExecutor{})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if leaf != innerNode {
+		t.Errorf("leaf mismatch: got %+v, want %+v", leaf, innerNode)
+	}
+	venue := chain.Venue()
+	// Expect chain ending with podman-exec:ov-bench-vm_inner
+	if !strings.Contains(venue, "podman-exec:ov-bench-vm_inner") {
+		t.Errorf("venue %q does not contain podman-exec:ov-bench-vm_inner (flattened nested name)", venue)
+	}
+	// And the chain should also contain the SSH hop earlier.
+	if !strings.Contains(venue, "ssh:") {
+		t.Errorf("venue %q does not contain ssh hop", venue)
+	}
+}
+
+// TestResolveDeployChain_ThreeDeep stacks three hops:
+// vm → inner-pod → nested-pod. Verifies arbitrary depth works.
+func TestResolveDeployChain_ThreeDeep(t *testing.T) {
+	deepNode := &DeploymentNode{Target: "pod"}
+	innerNode := &DeploymentNode{
+		Target: "pod",
+		Nested: map[string]*DeploymentNode{
+			"deeper": deepNode,
+		},
+	}
+	roots := map[string]DeploymentNode{
+		"bench-vm": {
+			Target: "vm",
+			VmState: &VmDeployState{
+				SshUser:    "arch",
+				SshPort:    2222,
+				SshKeyPath: "/tmp/fake-key",
+			},
+			Nested: map[string]*DeploymentNode{
+				"inner": innerNode,
+			},
+		},
+	}
+	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner.deeper", LocalDeployExecutor{})
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if leaf != deepNode {
+		t.Errorf("leaf mismatch")
+	}
+	venue := chain.Venue()
+	// Expect chain: ...podman-exec:ov-bench-vm_inner_deeper / podman-exec:ov-bench-vm_inner / ssh: ...
+	if !strings.Contains(venue, "podman-exec:ov-bench-vm_inner_deeper") {
+		t.Errorf("venue %q does not contain leaf hop podman-exec:ov-bench-vm_inner_deeper", venue)
+	}
+	if !strings.Contains(venue, "podman-exec:ov-bench-vm_inner") {
+		t.Errorf("venue %q does not contain intermediate hop podman-exec:ov-bench-vm_inner", venue)
+	}
+}
+
+// TestResolveDeployChain_UnknownRoot returns a clear error with the
+// "available deployments" hint.
+func TestResolveDeployChain_UnknownRoot(t *testing.T) {
+	roots := map[string]DeploymentNode{
+		"redis": {Target: "pod"},
+		"web":   {Target: "pod"},
+	}
+	_, _, err := ResolveDeployChain(roots, "missing", LocalDeployExecutor{})
+	if err == nil {
+		t.Fatal("expected error for unknown root")
+	}
+	if !strings.Contains(err.Error(), "missing") {
+		t.Errorf("error %q does not mention missing name", err)
+	}
+	if !strings.Contains(err.Error(), "available deployments") {
+		t.Errorf("error %q does not include did-you-mean hint", err)
+	}
+}
+
+// TestResolveDeployChain_UnknownNestedChild returns a hint about
+// available nested children.
+func TestResolveDeployChain_UnknownNestedChild(t *testing.T) {
+	roots := map[string]DeploymentNode{
+		"vm": {
+			Target: "vm",
+			VmState: &VmDeployState{
+				SshUser:    "arch",
+				SshPort:    2222,
+				SshKeyPath: "/tmp/fake-key",
+			},
+			Nested: map[string]*DeploymentNode{
+				"inner-app": {Target: "pod"},
+			},
+		},
+	}
+	_, _, err := ResolveDeployChain(roots, "vm.missing-child", LocalDeployExecutor{})
+	if err == nil {
+		t.Fatal("expected error for unknown nested child")
+	}
+	if !strings.Contains(err.Error(), "missing-child") {
+		t.Errorf("error %q does not mention missing-child", err)
+	}
+	if !strings.Contains(err.Error(), "available nested children") {
+		t.Errorf("error %q does not include nested-children hint", err)
+	}
+}
+
+// TestImageChain produces a JumpPodmanRun chain.
+func TestImageChain(t *testing.T) {
+	chain := ImageChain("podman", "fedora-coder:latest")
+	venue := chain.Venue()
+	if !strings.Contains(venue, "podman-run:fedora-coder:latest") {
+		t.Errorf("venue %q does not contain podman-run hop", venue)
+	}
+}
+
+// TestContainerChain produces a JumpPodmanExec chain into the literal name.
+func TestContainerChain(t *testing.T) {
+	chain := ContainerChain("podman", "ov-redis")
+	venue := chain.Venue()
+	if !strings.Contains(venue, "podman-exec:ov-redis") {
+		t.Errorf("venue %q does not contain podman-exec:ov-redis", venue)
+	}
+}

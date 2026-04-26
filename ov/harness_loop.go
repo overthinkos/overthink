@@ -414,7 +414,7 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 			break
 		}
 
-		iterState, err := runOneIteration(ctx, opts, layout, k, unsolved, report, prevScore, plateauCounter)
+		iterState, err := runOneIteration(ctx, opts, layout, k, unsolved, report, prevScore, plateauCounter, started)
 		if err != nil {
 			return report, fmt.Errorf("iter%d: %w", k, err)
 		}
@@ -523,6 +523,7 @@ func runOneIteration(
 	reportSoFar *FinalReport,
 	prevScore int,
 	plateauCounterEntering int,
+	benchmarkStart time.Time,
 ) (iter IterationState, err error) {
 	iter = IterationState{K: k, Phase: opts.Phase}
 	iterStart := time.Now().UTC()
@@ -713,6 +714,7 @@ func runOneIteration(
 			wd := &ProgressWatchdog{
 				CheckInterval:        checkInterval,
 				NoImprovementTimeout: noImpTimeout,
+				BenchmarkStart:       benchmarkStart,
 				Probe: func(probeCtx context.Context) (int, int, error) {
 					live, err := RunRecipeScenariosLive(probeCtx, deployment, scoreName, scoringScenarios)
 					if err != nil {
@@ -721,15 +723,31 @@ func runOneIteration(
 					return live.Summary.Pass, live.Summary.Total, nil
 				},
 				OnTick: func(elapsed time.Duration, score, total int, lastImprovedAt time.Time) {
+					// All user-facing timestamps render as offsets from the
+					// benchmark's run-start (`+Nm0s into the run`) instead
+					// of wall-clock HH:MM:SS — operators read run-relative
+					// times far more easily than absolute clock times when
+					// reasoning about plateau windows + watchdog timeouts.
+					// `elapsed` here is RUN-elapsed (since RunHarness's
+					// `started`), not iter-elapsed, so the operator sees a
+					// monotonic offset that grows across phases. Idle (time
+					// since last improvement) is an additional duration
+					// because that's what predicts the no-improvement
+					// watchdog firing.
+					runElapsed := time.Since(benchmarkStart).Round(time.Second)
 					var deltaInfo string
 					if !lastImprovedAt.IsZero() {
-						deltaInfo = " (last improvement at " + lastImprovedAt.Format("15:04:05") + ")"
+						idle := time.Since(lastImprovedAt).Round(time.Second)
+						lastImprovedRunOffset := lastImprovedAt.Sub(benchmarkStart).Round(time.Second)
+						deltaInfo = fmt.Sprintf(" (last improvement %s ago, at +%s into the run)",
+							idle, lastImprovedRunOffset)
 					} else {
 						deltaInfo = " (no improvement observed yet)"
 					}
+					_ = elapsed // kept for callback signature stability; runElapsed is canonical
 					fmt.Fprintf(stderr,
-						"harness: progress [phase %d/%d iter %d] elapsed %s — current score %d/%d%s\n",
-						phase, phaseTotal, iterK, elapsed.Round(time.Second), score, total, deltaInfo)
+						"harness: progress [phase %d/%d iter %d] +%s into the run — current score %d/%d%s\n",
+						phase, phaseTotal, iterK, runElapsed, score, total, deltaInfo)
 					// Persist the same observation into the iteration
 					// record so result-{calver}.yml carries the score
 					// timeline as a structured field (not just an

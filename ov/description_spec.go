@@ -377,29 +377,11 @@ func (s *Step) IsPending() bool {
 //
 // Mirrors LabelTestSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
-type LabelDescriptionSet struct {
-	Layer  []LabeledDescription `json:"layer,omitempty"`
-	Image  []LabeledDescription `json:"image,omitempty"`
-	Deploy []LabeledDescription `json:"deploy,omitempty"`
-}
-
-// LabeledDescription is a Description with its collection-time origin
-// annotation. Origin follows the `layer:<name>` / `image:<name>` /
-// `deploy-default` / `deploy-local` convention already in use by
-// LabelTestSet entries' Origin field.
-type LabeledDescription struct {
-	Origin      string      `json:"origin"`
-	Description Description `json:"description"`
-}
-
-// IsEmpty returns true if no section has any descriptions. Used by label
-// emission to omit the label entirely when there are none.
-func (s *LabelDescriptionSet) IsEmpty() bool {
-	if s == nil {
-		return true
-	}
-	return len(s.Layer) == 0 && len(s.Image) == 0 && len(s.Deploy) == 0
-}
+// LabelDescriptionSet and LabeledDescription were relocated to
+// labelset.go in the 2026-04 BDD/test/harness surface-cleanup cutover,
+// alongside the new LabelSet aggregate that wraps both LabelTestSet and
+// LabelDescriptionSet. See labelset.go for the type definitions and
+// IsEmpty method.
 
 // ---------------------------------------------------------------------------
 // Scenario Outline expansion

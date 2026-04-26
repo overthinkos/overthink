@@ -68,6 +68,28 @@ type DeployExecutor interface {
 	// semantics. Used by layer_artifacts.go to publish files back to the
 	// operator after deploy completion.
 	GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error)
+
+	// RunCapture executes a single shell command (or short bash script) on
+	// the venue and returns stdout/stderr/exit/err separately. Used by the
+	// declarative test runner (testrun.go) to probe target state without
+	// the streamed-output ergonomics of RunSystem/RunUser. No root
+	// escalation — callers add `sudo` explicitly when needed; mirrors the
+	// previous test-time Executor.Exec semantics. After the executor-
+	// hierarchy cutover (2026-04), this is the single capture-output
+	// method used by every probe across `ov test`, `ov image test`, and
+	// `ov harness` scoring.
+	RunCapture(ctx context.Context, script string) (stdout, stderr string, exit int, err error)
+
+	// Kind returns a coarse classification of the venue used by the test
+	// runner for reporting and skip decisions. Values:
+	//   "host"      — LocalDeployExecutor (operator's machine)
+	//   "container" — NestedExecutor with JumpPodmanExec / JumpDockerExec
+	//   "image"     — NestedExecutor with JumpPodmanRun / JumpDockerRun
+	//                 (disposable container per invocation)
+	//   "vm"        — SSHExecutor or NestedExecutor with JumpSSH/JumpVirshConsole
+	// Replaces the test-time Executor.Kind() method deleted in the
+	// 2026-04 executor-hierarchy cutover.
+	Kind() string
 }
 
 // LocalDeployExecutor implements DeployExecutor against the invoking user's shell
@@ -132,6 +154,58 @@ func (LocalDeployExecutor) GetFile(ctx context.Context, remotePath string, asRoo
 		return nil, wrapReadErr(err, remotePath, stderr.String())
 	}
 	return stdout.Bytes(), nil
+}
+
+// RunCapture executes a shell command on the local host and returns
+// captured stdout/stderr/exit. Mirrors the deleted ContainerExecutor /
+// ImageExecutor / VmTestExecutor behaviour from the pre-cutover test-
+// time interface — callers (testrun.go verbs) get the same return
+// shape via the unified DeployExecutor interface.
+func (LocalDeployExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+	cmd := exec.CommandContext(ctx, "bash", "-c", script)
+	return runCaptureCmd(cmd)
+}
+
+// Kind reports "host" — LocalDeployExecutor's commands run on the
+// operator's machine.
+func (LocalDeployExecutor) Kind() string { return "host" }
+
+// runCaptureCmd is the shared output-capture helper. Identical behaviour
+// to the pre-cutover testrun.go's runCapture (which lived on the now-
+// deleted Executor interface): exit codes are NOT errors, only spawn
+// failures are. Lives here so SSHExecutor / NestedExecutor implementations
+// can share it without circular imports.
+func runCaptureCmd(cmd *exec.Cmd) (string, string, int, error) {
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+	if err != nil {
+		var ee *exec.ExitError
+		if asExitErrorDeploy(err, &ee) {
+			return stdout.String(), stderr.String(), ee.ExitCode(), nil
+		}
+		return stdout.String(), stderr.String(), -1, err
+	}
+	return stdout.String(), stderr.String(), 0, nil
+}
+
+// asExitErrorDeploy unwraps to *exec.ExitError. Local copy of the helper
+// in testrun.go to avoid an import cycle once the test-time Executor is
+// removed.
+func asExitErrorDeploy(err error, ee **exec.ExitError) bool {
+	for err != nil {
+		if e, ok := err.(*exec.ExitError); ok {
+			*ee = e
+			return true
+		}
+		u, ok := err.(interface{ Unwrap() error })
+		if !ok {
+			return false
+		}
+		err = u.Unwrap()
+	}
+	return false
 }
 
 // wrapReadErr is a small wrap helper so every executor's GetFile returns

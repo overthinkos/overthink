@@ -55,6 +55,16 @@ type ProgressWatchdog struct {
 	CheckInterval        time.Duration // default 5m (caller applies)
 	NoImprovementTimeout time.Duration // default 30m (caller applies)
 
+	// BenchmarkStart anchors all user-facing time displays to the
+	// benchmark's run-start instant. When set (the harness_loop.go
+	// caller passes the run's `started` time here), every absolute
+	// timestamp the watchdog formats becomes a `+Nm0s` offset from
+	// this anchor. Pre-2026-04 the watchdog formatted clock times
+	// (HH:MM:SS) which forced operators to compute deltas mentally
+	// against the run start. When zero, the watchdog falls back to
+	// per-iteration "iter started at HH:MM:SS" framing.
+	BenchmarkStart time.Time
+
 	// Probe samples the current iter score. Required.
 	Probe Prober
 
@@ -134,7 +144,7 @@ func (w *ProgressWatchdog) Run(ctx context.Context) {
 				reason := fmt.Sprintf(
 					"no scoring progress for %s (last improvement %s, current score %d/%d)",
 					idle.Round(time.Second),
-					lastImprovedSuffix(lastImprovedAt, start),
+					w.lastImprovedSuffix(lastImprovedAt, start),
 					score, total,
 				)
 				w.OnTimeout(reason)
@@ -146,12 +156,26 @@ func (w *ProgressWatchdog) Run(ctx context.Context) {
 	}
 }
 
-// lastImprovedSuffix renders the lastImprovedAt timestamp as either
-// "at HH:MM:SS" (if any improvement was observed) or "never observed
-// (iteration started at HH:MM:SS)". Used by OnTimeout reason strings.
-func lastImprovedSuffix(lastImprovedAt, start time.Time) string {
+// lastImprovedSuffix renders the lastImprovedAt timestamp relative to
+// the benchmark start when w.BenchmarkStart is set, e.g. "at +13m45s
+// since benchmark start". When BenchmarkStart is zero, falls back to
+// the legacy "at HH:MM:SS" / "iteration started at HH:MM:SS" format.
+//
+// Post-2026-04 the harness emits ALL user-facing time displays as
+// run-relative offsets so operators can read "how far into the run did
+// X happen?" without computing deltas against wall clocks.
+func (w *ProgressWatchdog) lastImprovedSuffix(lastImprovedAt, start time.Time) string {
+	if !w.BenchmarkStart.IsZero() {
+		if lastImprovedAt.IsZero() {
+			return fmt.Sprintf("never observed (iter started +%s into the run)",
+				start.Sub(w.BenchmarkStart).Round(time.Second))
+		}
+		return fmt.Sprintf("at +%s into the run",
+			lastImprovedAt.Sub(w.BenchmarkStart).Round(time.Second))
+	}
 	if lastImprovedAt.IsZero() {
-		return fmt.Sprintf("never observed (iteration started at %s)", start.Format("15:04:05"))
+		return fmt.Sprintf("never observed (iteration started at %s)",
+			start.Format("15:04:05"))
 	}
 	return "at " + lastImprovedAt.Format("15:04:05")
 }

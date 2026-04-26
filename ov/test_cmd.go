@@ -119,7 +119,7 @@ func (c *TestRunCmd) Run() error {
 		return nil
 	}
 
-	runner := NewRunner(&ContainerExecutor{Engine: engine, ContainerName: containerName}, resolver, RunModeTest)
+	runner := NewRunner(ContainerChain(engine, containerName), resolver, RunModeTest)
 	runner.Image = c.Image
 	runner.Instance = c.Instance
 	runner.Distros = meta.Distro
@@ -317,7 +317,20 @@ func (c *TestRunCmd) runVm() error {
 	}
 
 	host := "127.0.0.1"
-	executor := &VmTestExecutor{User: user, Host: host, Port: port, KeyPath: keyPath}
+	var executor DeployExecutor = &SSHExecutor{User: user, Host: host, Port: port, KeyPath: keyPath}
+
+	// 2026-04 cutover: when c.Image is dotted ("vm.inner-pod"), walk
+	// the deploy tree and construct the full chain via ResolveDeployChain
+	// so leaf tests run inside the leaf's actual venue. Pre-cutover this
+	// path was silently single-hop SSH — `command: id` for a pod-in-vm
+	// leaf returned the VM's user, not the inner pod's.
+	if strings.Contains(c.Image, ".") {
+		if roots, _ := resolveTreeRoot(dir); roots != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, LocalDeployExecutor{}); chainErr == nil && chain != nil {
+				executor = chain
+			}
+		}
+	}
 
 	env := map[string]string{
 		"IMAGE":          c.Image,
@@ -398,7 +411,7 @@ func (c *ImageTestCmd) Run() error {
 	//     Layer/image tests are build-time invariants; a running container
 	//     is unnecessary and could mask differences between the built image
 	//     and its deployed state.
-	var executor Executor
+	var executor DeployExecutor
 	var resolver *TestVarResolver
 	var liveContainer string
 	mode := RunModeImageTest
@@ -412,7 +425,7 @@ func (c *ImageTestCmd) Run() error {
 		candidate := containerNameInstance(imageName, "")
 		if containerRunning(engineBin, candidate) {
 			liveContainer = candidate
-			executor = &ContainerExecutor{Engine: rt.RunEngine, ContainerName: candidate}
+			executor = ContainerChain(rt.RunEngine, candidate)
 			// Runtime var resolver populates HOST_PORT, INSTANCE, etc. from
 			// the live container's inspect output. Load deploy.yml overlay
 			// so deploy-overridden settings (e.g. remapped ports) win.
@@ -429,7 +442,7 @@ func (c *ImageTestCmd) Run() error {
 	}
 
 	if executor == nil {
-		executor = &ImageExecutor{Engine: rt.RunEngine, ImageRef: imageRef}
+		executor = ImageChain(rt.RunEngine, imageRef)
 		resolver = ResolveTestVarsBuild(meta)
 	}
 
@@ -601,7 +614,7 @@ func formatResults(results []TestResult, format string) int {
 // we can pull labels from the image (not the container, which podman inspect
 // does not propagate labels from by default).
 func containerImageRef(engine, containerName string) (string, error) {
-	out, _, exit, err := runCapture(exec.Command(EngineBinary(engine), "inspect", "--format", "{{.Config.Image}}", containerName))
+	out, _, exit, err := runCaptureCmd(exec.Command(EngineBinary(engine), "inspect", "--format", "{{.Config.Image}}", containerName))
 	if err != nil {
 		return "", fmt.Errorf("inspecting container %s: %w", containerName, err)
 	}

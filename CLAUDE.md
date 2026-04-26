@@ -182,6 +182,22 @@ un-testable. That is FORBIDDEN.**
   re-plan mid-execution. "Too large" is the state you plan against
   BEFORE approval (the "Exception" clause below — only usable BEFORE
   approval); never a valid post-approval reason to stop.
+- **Premature R10 launch.** Starting any LIVE artifact-producing or
+  artifact-consuming command — `ov rebuild`, `ov image build`,
+  `ov harness run`, `ov vm build/create`, `ov deploy add` against a
+  live target — while ANY implementation task in the active cutover is
+  still `pending` or `in_progress`. R10 runs ONCE, AT THE END, against
+  the FINAL code. Kicking off a rebuild "in background while I finish
+  task X" is INEXCUSABLE: it burns minutes-to-hours of compute on an
+  artifact that MUST be discarded the moment the next implementation
+  task lands, and it tempts the second-order violation of committing
+  the half-migrated state because "the rebuild already passed". The
+  ONLY between-task verifications permitted are cheap smoke (compile,
+  unit tests, schema validation) — anything that requires building or
+  running a live artifact is R10-class and FORBIDDEN until every
+  implementation task is `completed`. If you catch yourself with a
+  live rebuild running while tasks remain open: KILL the job, reset
+  R10 to pending, finish the implementation, THEN run R10 once.
 
 **What this policy permits — equally precisely:**
 
@@ -253,6 +269,98 @@ command surface.
   requires image builds".
 - Declaring any confidence higher than `syntax check only` without a
   fresh-rebuild R10 re-verification on every affected target.
+- **Premature R10 launch — starting `ov rebuild`, `ov image build`,
+  `ov harness run`, `ov vm build`, or any live deploy with implementation
+  tasks still open in the cutover.** R10 is the final gate, not a parallel
+  track. Backgrounding the rebuild "while finishing task N" is INEXCUSABLE
+  — every R10-class action you start before the LAST task completes is a
+  protocol violation from the first tool call.
+
+---
+
+## Post-Execution Policies — what happens AFTER R10 passes
+
+These rules cover the gap between "R10 verified" and "user picks up the
+next task". Every step below is sequential — do them in order, do not
+skip, do not parallelize.
+
+### After R10 passes (and only after)
+
+1. **Commit.** ONE atomic commit covering the entire cutover — every Go
+   edit, every YAML edit, every skill-doc edit, every new test, every
+   deletion, in a single `git commit`. Multiple commits are FORBIDDEN
+   for the same cutover (they re-introduce the intermediate-state
+   problem the cutover policy exists to prevent). Use Conventional
+   Commits with the `!` breaking-change marker for any cutover that
+   removes a public API surface.
+2. **AI attribution trailer.** EVERY commit ships with
+   `Assisted-by: Claude (<confidence>)`. The confidence tier is
+   determined by what was actually proven (see CLAUDE.md "AI
+   Attribution" table). If R10 ran and passed end-to-end on every
+   affected disposable target → `fully tested and validated`. If R10
+   was abbreviated for any reason (any target skipped, any phase not
+   exercised) → `analysed on a live system` AT BEST. NEVER invent a
+   higher tier than the proof supports.
+3. **Push only if the user asked you to push.** A successful R10 +
+   commit is NOT implicit authorization to push to a remote. The user
+   must say "push" / "and push" / "commit and push" explicitly in
+   THIS plan's authorization. Otherwise the commit lands locally and
+   the user runs `git push` themselves. NEVER force-push to `main`.
+4. **Working-tree cleanliness.** After commit, `git status` must be
+   clean (no uncommitted changes from the cutover). Untracked files
+   that aren't part of the cutover (test artifacts, build outputs)
+   should already be in `.gitignore`; if they aren't, that's a
+   FOLLOW-UP cutover, not part of this one.
+5. **Report.** Final message states: what was committed (commit
+   subject + hash), confidence tier with the proof that supports it,
+   and whether anything was pushed. Pasted R10 output (both
+   exploratory and fresh-rebuild) is part of the report.
+
+### If R10 fails
+
+R10 failure is NOT a stopping point — it's a return-to-implementation
+signal. The plan is not done.
+
+1. **Run `/ov-dev:root-cause-analyzer` BEFORE attempting any fix.**
+   Blind retry is FORBIDDEN. R10 caught a real regression; understand
+   it first.
+2. **Fix in the same working tree.** No "I'll address this in a
+   follow-up PR" — the cutover policy explicitly forbids that. Fix +
+   re-run R10 in the same conversation, against the same uncommitted
+   tree.
+3. **Re-run R10 from scratch.** Not just the failing piece — the
+   FULL R10 against a fresh `ov rebuild`. A fix that survives only
+   the targeted re-run but breaks something else is a regression in
+   waiting.
+4. **Only commit when R10 passes end-to-end on the FINAL code.** No
+   commits of half-fixed states.
+
+### What is NOT post-execution
+
+- **Starting the next cutover.** Each cutover ends with the commit.
+  Picking up "the next thing on the plan that didn't fit" is FORBIDDEN
+  — it would create another mid-cutover state. If there is more work,
+  the user authorizes a NEW plan.
+- **Backporting / cherry-picking.** Out of scope for the post-
+  execution flow. If needed, the user opens a follow-up.
+- **Documenting "what would have been Phase 2".** The cutover either
+  completed or it didn't. Phase 2 is a forbidden concept.
+
+### The post-execution checklist
+
+Before declaring the turn done, every YES:
+
+- [ ] R10 passed on EVERY affected disposable target (not just one)?
+- [ ] R10 ran AGAINST THE FINAL CODE (not an intermediate state)?
+- [ ] Both exploratory and fresh-rebuild R10 outputs pasted into the
+      conversation?
+- [ ] ONE atomic commit, with the AI-attribution trailer at the
+      tier the proof supports (no inflation)?
+- [ ] `git status` clean after commit?
+- [ ] If pushed: the user explicitly authorized pushing in this
+      plan's authorization?
+- [ ] No "Phase 2 / TODO / will do next time" deferred work
+      surfaced in this plan?
 
 ## Where things are documented
 

@@ -116,28 +116,49 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 	// scenario's verdict for depends_on resolution.
 	verdictByKey := make(map[scenarioKey]string, len(scenarios))
 
+	// Pre-resolve the deployment tree once per call. Dotted scenario.Pod
+	// values (e.g. "bench-vm.inner.nested-redis") are walked through this
+	// tree by ResolveDeployChain to build multi-hop executor chains. Flat
+	// pod names (e.g. "redis") that aren't in the tree fall through to
+	// ContainerChain — same single-hop semantics as the pre-cutover code.
+	// A nil tree (no project deploy.yml in cwd) is fine: the fallback path
+	// kicks in for every scenario.
+	cwd, _ := os.Getwd()
+	deployRoots, _ := resolveTreeRoot(cwd)
+
 	for _, bucket := range buckets {
 		if len(bucket) == 0 {
 			continue
 		}
 		pod := bucket[0].Pod
-		containerName := "ov-" + pod
 
-		// Reachability check is per-bucket. If unreachable, every
-		// scenario in this bucket records a "not reachable" fail —
-		// EXCEPT scenarios whose deps are already known-failed, which
-		// still record a dep-unmet skip (a more informative verdict).
-		reachableErr := containerRunningForScoring(ctx, containerName)
+		// Resolve scenario.Pod to a DeployExecutor chain. Dotted paths
+		// route through ResolveDeployChain (multi-hop); flat names
+		// fall back to ContainerChain (single-hop into "ov-<pod>"),
+		// preserving the pre-cutover harness behaviour exactly.
+		chainExec, chainErr := resolveScoringChain(deployRoots, pod)
+
+		// Reachability check via the chain itself: a tiny `echo ok`
+		// proves the executor stack actually reaches the leaf venue.
+		// For multi-hop chains this exercises every hop the real
+		// probes will use.
+		reachableErr := chainErr
+		if reachableErr == nil {
+			out, _, exit, err := chainExec.RunCapture(ctx, "echo ok")
+			if err != nil {
+				reachableErr = fmt.Errorf("chain %q unreachable: %w", chainExec.Venue(), err)
+			} else if exit != 0 {
+				reachableErr = fmt.Errorf("chain %q probe non-zero (%d): %s", chainExec.Venue(), exit, strings.TrimSpace(out))
+			}
+		}
 		if reachableErr != nil {
 			fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, reachableErr)
 		}
 
-		var exec *ContainerExecutor
 		var runner *Runner
 		if reachableErr == nil {
-			exec = &ContainerExecutor{Engine: "podman", ContainerName: containerName}
 			resolver := &TestVarResolver{}
-			runner = NewRunner(exec, resolver, RunModeTest)
+			runner = NewRunner(chainExec, resolver, RunModeTest)
 			runner.Image = pod
 		}
 
@@ -346,7 +367,37 @@ func stableScenarioIDsByKey(scenarios []Scenario) map[scenarioKey]string {
 	return out
 }
 
+// resolveScoringChain returns the DeployExecutor chain that reaches
+// `pod`. Selection rules:
+//
+//   - pod contains a dot AND `roots` resolves it → ResolveDeployChain
+//     (multi-hop chain through the deployment tree).
+//   - pod is a flat name OR not in the tree → ContainerChain
+//     (single-hop into "ov-<pod>"); preserves the pre-cutover behaviour.
+//
+// A nil tree (no deploy.yml in cwd) always falls through to ContainerChain
+// — the harness loop running inside bench-pod with no nested infra still
+// scores flat pods exactly like before.
+func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExecutor, error) {
+	if strings.Contains(pod, ".") && roots != nil {
+		_, chain, err := ResolveDeployChain(roots, pod, LocalDeployExecutor{})
+		if err == nil {
+			return chain, nil
+		}
+		// Dotted but unresolvable — surface a hard error so the
+		// recipe author sees the chain construction failure rather
+		// than a silent fall-back to a non-existent ov-foo.bar
+		// container.
+		return nil, fmt.Errorf("scenario.pod %q is dotted but does not resolve through deploy tree: %w", pod, err)
+	}
+	// Flat pod or no tree — single-hop into "ov-<pod>", same shape
+	// as the pre-cutover hardcoded ContainerExecutor.
+	return ContainerChain("podman", "ov-"+pod), nil
+}
+
 // containerRunningForScoring confirms <containerName> is running.
+// Retained for callers that need a single-container reachability probe
+// outside the chain-driven scoring loop.
 func containerRunningForScoring(ctx context.Context, containerName string) error {
 	out, err := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
 	if err != nil {

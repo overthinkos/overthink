@@ -340,6 +340,19 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 		cf.WriteString(overlayLabel)
 	}
 
+	// Restore base image's USER directive. The overlay set `USER root`
+	// up at line ~324 so package installs work; without restoration,
+	// USER=root leaks into the resulting image and breaks every
+	// downstream invariant that depends on the base running as a
+	// non-root user (rootless nested podman, claude's
+	// --dangerously-skip-permissions, etc.). Symptom of the regression
+	// before this fix: bench-pod with add_layers: [virtualization]
+	// flipped from uid=1000 to uid=0, breaking the harness's claude
+	// invocation across every iteration.
+	if baseMeta, err := ExtractMetadata(t.Engine, t.BaseImage); err == nil && baseMeta != nil && baseMeta.User != "" && baseMeta.User != "root" {
+		fmt.Fprintf(&cf, "\nUSER %s\n", baseMeta.User)
+	}
+
 	cfPath := filepath.Join(dir, "Containerfile")
 	if err := os.WriteFile(cfPath, cf.Bytes(), 0644); err != nil {
 		return err

@@ -15,9 +15,22 @@ import (
 // resolver+executor pair. Classical `tests:` runs leave TargetResolver
 // nil and never hit the multi-target path.
 //
-// Scenario ordering is document order; features are iterated in
-// LabelDescriptionSet section order (layer → image → deploy). Outline
-// scenarios fan out to one ScenarioResult per Examples row.
+// Scenario ordering: by default document order, but `depends_on:` between
+// scenarios in the same description triggers a topological sort (post-
+// 2026-04 BDD/test/harness surface-cleanup cutover — scenario_topo.go's
+// topoSortByDeclarationOrder is now the shared sorter for both BDD
+// descriptions and harness recipes). Tie-breaking by declaration index
+// preserves the document-order intuition unless a dep forces reordering.
+// Cycle errors are recorded as a fail verdict on every cyclic scenario
+// in the affected description, then the non-cyclic remainder runs
+// normally — matches the harness's "score the non-cyclic subset" policy
+// from RunRecipeScenariosLive.
+//
+// Features are iterated in LabelDescriptionSet section order
+// (layer → image → deploy). Outline scenarios fan out to one
+// ScenarioResult per Examples row. Outline expansion happens AFTER the
+// topo-sort (sort orders the parent scenarios; outline rows inherit
+// their parent's position).
 func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filter *TagExpr, strict bool) []ScenarioResult {
 	if set == nil {
 		return nil
@@ -25,7 +38,14 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 	var out []ScenarioResult
 	for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
 		for _, ld := range sec {
-			for sIdx, scenario := range ld.Description.Scenario {
+			ordered, cyclicByName := topoSortDescription(ld.Description.Scenario)
+			for sIdx, scenario := range ordered {
+				if cyclicByName[scenario.Name] {
+					// Cyclic scenario — emit a fail verdict so reporters
+					// surface it, then skip its actual execution.
+					out = append(out, cyclicScenarioResult(ld.Origin, sIdx, scenario))
+					continue
+				}
 				expanded := ExpandScenario(scenario)
 				for _, es := range expanded {
 					if filter != nil && !matchScenario(es, filter) {
@@ -38,6 +58,53 @@ func RunScenarios(ctx context.Context, r *Runner, set *LabelDescriptionSet, filt
 		}
 	}
 	return out
+}
+
+// topoSortDescription sorts a single description's scenarios via
+// topoSortByDeclarationOrder (scenario_topo.go). On cycle, returns the
+// declaration-order slice unchanged AND a name set of the scenarios
+// involved in the cycle so the caller can emit fail verdicts for them
+// without aborting the whole description.
+//
+// Pre-2026-04 BDD descriptions had no depends_on semantics; this is
+// additive for any description that doesn't author depends_on (the
+// topo-sort then degenerates to declaration order, identical output).
+func topoSortDescription(scenarios []Scenario) ([]Scenario, map[string]bool) {
+	if len(scenarios) == 0 {
+		return scenarios, nil
+	}
+	sorted, err := topoSortByDeclarationOrder(scenarios)
+	if err == nil {
+		return sorted, nil
+	}
+	// Cycle detected — fall back to declaration order, mark cyclic
+	// scenarios so the caller skips their execution with a fail verdict.
+	cyclicByName := map[string]bool{}
+	if ce, ok := err.(*CycleError); ok {
+		for _, n := range ce.Cycle {
+			cyclicByName[n] = true
+		}
+	}
+	return scenarios, cyclicByName
+}
+
+// cyclicScenarioResult emits a single fail-verdict ScenarioResult for a
+// scenario rejected by cycle detection. No steps run; the name appears
+// in reports so the user can fix the depends_on graph.
+func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
+	return ScenarioResult{
+		Origin:     origin,
+		ScenarioID: ScenarioID(origin, sIdx, -1),
+		Name:       sc.Name,
+		Tag:        append([]string(nil), sc.Tag...),
+		Status:     TestFail,
+		Steps: []StepResult{{
+			Result: TestResult{
+				Status:  TestFail,
+				Message: "scenario participates in a depends_on cycle — see validation output",
+			},
+		}},
+	}
 }
 
 // ScenarioResult is the summary of one scenario's execution, including

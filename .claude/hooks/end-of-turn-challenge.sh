@@ -43,6 +43,25 @@ You are about to stop. Before you do, confirm EACH of these:
   [ ] Migration command (if the cutover added one) verified
       idempotent on at least one test fixture?
 
+  R10 IS LAST — NEVER A PARALLEL TRACK (CLAUDE.md Law 5)
+  -------------------------------------------------------
+  [ ] R10 was the LAST step you took, AFTER every implementation
+      task moved to `completed`. If you started ANY R10-class
+      action (`ov rebuild`, `ov image build`, `ov harness run`,
+      `ov vm build/create`, `ov deploy add` against a live target,
+      `ov start`, `ov update`) while ANY task was still `pending`
+      or `in_progress` — that is "premature R10 launch", a hard
+      protocol violation. KILL the in-flight job, reset R10 to
+      pending, finish the remaining tasks, THEN run R10 once
+      against the final code.
+  [ ] You did NOT use `run_in_background: true` on any R10-class
+      action while implementation tasks were open. Backgrounding
+      it is the same violation as foregrounding it.
+  [ ] You did NOT mark the R10 task `in_progress` before EVERY
+      implementation task was `completed`. The R10 task is the
+      final one in the sequence; it cannot legitimately overlap
+      any implementation task.
+
   LIVE VERIFICATION (R1–R10)
   --------------------------
   [ ] Verified EVERY fix on a LIVE DISPOSABLE target (never on a
@@ -73,6 +92,38 @@ You are about to stop. Before you do, confirm EACH of these:
       affected target has its R1–R10 six-point proof pasted.
       If ANY target is missing, downgrade to
       `analysed on a live system` AT BEST.
+
+  POST-EXECUTION POLICIES (CLAUDE.md "Post-Execution Policies")
+  -------------------------------------------------------------
+  Apply ONLY when R10 has actually passed against the final code.
+  Skip this whole block otherwise — premature commit/push is a
+  separate violation class.
+
+  [ ] Both R10 outputs (exploratory + fresh-rebuild) pasted into
+      the conversation? Without the paste the user cannot verify
+      and the attribution must downgrade.
+  [ ] ONE atomic commit covering the entire cutover? Multiple
+      commits for the same cutover are FORBIDDEN — they recreate
+      the intermediate-state problem the cutover policy prevents.
+  [ ] Commit trailer contains exactly `Assisted-by: Claude (<tier>)`
+      where <tier> is one of {fully tested and validated, analysed
+      on a live system, syntax check only}? Inflating the tier
+      beyond what the proof supports is ATTRIBUTION FRAUD.
+  [ ] If you ran `git push`: did the user explicitly authorize
+      pushing in this plan's authorization? "Commit + push"
+      requires the user to have said "push" / "and push" /
+      equivalent. A successful R10 + commit is NOT implicit
+      push authorization.
+  [ ] If you pushed: NEVER `--force` to main, NEVER `--no-verify`
+      bypass of hooks unless the user explicitly demanded it.
+  [ ] After the commit, `git status` is clean for files this
+      cutover touched? Untracked artifacts unrelated to this
+      cutover are a follow-up, not part of it.
+  [ ] You are NOT about to start a new cutover unprompted? Each
+      cutover ends at its commit. If there is more work, the
+      user authorizes the NEXT plan.
+  [ ] You are NOT writing a "what's next" / "anything else?"
+      offer to keep going? The plan ended. Stop.
 
 If YES to all: stop is fine.
 

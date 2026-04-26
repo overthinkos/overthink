@@ -72,6 +72,17 @@ const (
 	// for emergency-only shell access (used when the guest is
 	// unreachable over SSH). Best-effort; primarily a diagnostic path.
 	JumpVirshConsole
+
+	// JumpPodmanRun spawns a fresh disposable container per invocation
+	// via `podman run --rm <Target> bash`. Replaces the deleted
+	// ImageExecutor — `ov image test` (build-section) uses this jump
+	// to get the same "ephemeral image probe" semantics through the
+	// unified chain primitive. Each call starts a new container; state
+	// does NOT persist across calls.
+	JumpPodmanRun
+
+	// JumpDockerRun is the docker counterpart of JumpPodmanRun.
+	JumpDockerRun
 )
 
 // NestedJump describes one hop into a nested environment. The Target
@@ -106,6 +117,10 @@ func (j NestedJump) String() string {
 		return "ssh:" + j.Target
 	case JumpVirshConsole:
 		return "virsh:" + j.Target
+	case JumpPodmanRun:
+		return "podman-run:" + j.Target
+	case JumpDockerRun:
+		return "docker-run:" + j.Target
 	}
 	return "jump?"
 }
@@ -169,6 +184,43 @@ func (n *NestedExecutor) RunBuilder(ctx context.Context, opts BuilderRunOpts) ([
 		return nil, fmt.Errorf("NestedExecutor: nil Parent")
 	}
 	return n.Parent.RunBuilder(ctx, opts)
+}
+
+// RunCapture executes a script inside the nested venue and returns
+// stdout/stderr/exit. The wrapped script is forwarded to the parent's
+// own RunCapture, so multi-hop chains compose: bench-pod (host) →
+// VM (ssh) → inner-pod (podman exec) → nested-pod (podman exec)
+// stacks four heredocs and captures the deepest stdout.
+//
+// asRoot is hard-coded to false here: test verbs probe state and add
+// `sudo` explicitly when needed (matching the pre-cutover Executor.Exec
+// semantics). Adding root escalation would silently change probe
+// behaviour for every existing test.
+func (n *NestedExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+	wrapped, err := wrapWithJump(n.Jump, script, false /*root*/)
+	if err != nil {
+		return "", "", -1, err
+	}
+	if n.Parent == nil {
+		return "", "", -1, fmt.Errorf("NestedExecutor: nil Parent")
+	}
+	return n.Parent.RunCapture(ctx, wrapped)
+}
+
+// Kind reports the venue's coarse classification, derived from the
+// LEAF jump (this NestedExecutor's own Jump). The parent chain doesn't
+// affect Kind because tests care about what their probe lands in, not
+// the path taken to reach it.
+func (n *NestedExecutor) Kind() string {
+	switch n.Jump.Kind {
+	case JumpPodmanExec, JumpDockerExec:
+		return "container"
+	case JumpPodmanRun, JumpDockerRun:
+		return "image"
+	case JumpSSH, JumpVirshConsole:
+		return "vm"
+	}
+	return "unknown"
 }
 
 // PutFile transfers a file from the invoking host into the nested
@@ -267,6 +319,22 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 		cmd := fmt.Sprintf("%s exec -i %s %s %s", engine, extras, deployShellQuote(jump.Target), shell)
 		return fmt.Sprintf("%s <<'%s'\n%s\n%s\n", cmd, delim, script, delim), nil
 
+	case JumpPodmanRun, JumpDockerRun:
+		// Disposable container per invocation: `<engine> run --rm
+		// <imageref> bash`. State doesn't persist across calls — same
+		// semantics as the deleted ImageExecutor. The image ref is in
+		// jump.Target. --entrypoint='' clears any baked entrypoint so
+		// bash actually runs (matches the pre-cutover ImageExecutor
+		// shape).
+		engine := "podman"
+		if jump.Kind == JumpDockerRun {
+			engine = "docker"
+		}
+		extras := strings.Join(escapeTokens(jump.ExtraArgs), " ")
+		cmd := fmt.Sprintf("%s run --rm -i --entrypoint= %s %s %s",
+			engine, extras, deployShellQuote(jump.Target), shell)
+		return fmt.Sprintf("%s <<'%s'\n%s\n%s\n", cmd, delim, script, delim), nil
+
 	case JumpSSH:
 		user, host, port := parseSSHTarget(jump.Target)
 		if host == "" {
@@ -363,6 +431,10 @@ func copyIntoJumpCommand(jump NestedJump, stagePath, remotePath string, mode uin
 			keyArg, portArg, quote(stagePath), target, installCmd), nil
 	}
 
+	switch jump.Kind {
+	case JumpPodmanRun, JumpDockerRun:
+		return "", fmt.Errorf("NestedJump: PutFile is not supported for disposable-container jumps (JumpPodmanRun/JumpDockerRun) — files cannot persist across `run --rm` invocations")
+	}
 	return "", fmt.Errorf("NestedJump: PutFile not supported for JumpKind %d", jump.Kind)
 }
 

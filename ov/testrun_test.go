@@ -26,7 +26,10 @@ type fakeResponse struct {
 	err         error
 }
 
-func (f *fakeExecutor) Exec(ctx context.Context, cmd string) (string, string, int, error) {
+// fakeExecutor implements DeployExecutor (post-2026-04 cutover). Only
+// RunCapture is exercised by the tests below; the other interface methods
+// return zero values so the type still satisfies the interface contract.
+func (f *fakeExecutor) RunCapture(ctx context.Context, cmd string) (string, string, int, error) {
 	f.calls = append(f.calls, cmd)
 	for _, r := range f.responses {
 		if strings.HasPrefix(cmd, r.matchPrefix) || strings.Contains(cmd, r.matchPrefix) {
@@ -36,7 +39,21 @@ func (f *fakeExecutor) Exec(ctx context.Context, cmd string) (string, string, in
 	return "", "no fake response registered for: " + cmd, 127, nil
 }
 
-func (f *fakeExecutor) Kind() string { return "fake" }
+func (f *fakeExecutor) Kind() string  { return "fake" }
+func (f *fakeExecutor) Venue() string { return "fake" }
+
+// Stubs satisfying the rest of DeployExecutor — never called by these tests.
+func (f *fakeExecutor) RunSystem(_ context.Context, _ string, _ EmitOpts) error    { return nil }
+func (f *fakeExecutor) RunUser(_ context.Context, _ string, _ EmitOpts) error      { return nil }
+func (f *fakeExecutor) RunBuilder(_ context.Context, _ BuilderRunOpts) ([]byte, error) {
+	return nil, nil
+}
+func (f *fakeExecutor) PutFile(_ context.Context, _, _ string, _ uint32, _ bool, _ EmitOpts) error {
+	return nil
+}
+func (f *fakeExecutor) GetFile(_ context.Context, _ string, _ bool, _ EmitOpts) ([]byte, error) {
+	return nil, nil
+}
 
 func newFakeRunner(t *testing.T, mode RunMode) (*Runner, *fakeExecutor) {
 	t.Helper()

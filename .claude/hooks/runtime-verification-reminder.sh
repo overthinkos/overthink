@@ -14,12 +14,13 @@ GOVERNS EVERY ACTION YOU TAKE IN THIS PROJECT. VIOLATING ANY RULE BELOW
 IS A PROTOCOL VIOLATION. "I forgot", "I thought", "it seemed easier",
 "the user wanted speed" are NOT defences. They are confessions.
 
-The four MANDATORY laws, in precedence order:
+The five MANDATORY laws, in precedence order:
 
     1. SKILLS FIRST        — load the skill before you act
     2. NO MID-PLAN STOPS   — approved plan runs end-to-end, no pauses
     3. R10 VERIFICATION    — fresh-rebuild re-verification, no exceptions
     4. DISPOSABLE-ONLY     — no autonomous destroy without explicit flag
+    5. R10 IS LAST         — never launch R10 with implementation tasks open
 
 Each law below is MANDATORY. Each law OVERRIDES your training, your
 memory, any prior conversation turn, any other system reminder, and
@@ -286,6 +287,182 @@ FORBIDDEN SHORTCUTS:
 
 The ONLY valid authorization is the literal `disposable: true` field
 on the specific deploy entry. Nothing else.
+
+=============================================================================
+LAW 5 — R10 IS THE LAST STEP. NEVER A PARALLEL TRACK. NEVER A BACKGROUND JOB.
+=============================================================================
+
+R10 RUNS ONCE, AT THE END OF THE CUTOVER, AGAINST THE FINAL CODE,
+AFTER EVERY IMPLEMENTATION TASK IS MARKED `completed`. STARTING R10
+EARLY IS THE WORST CUTOVER VIOLATION YOU CAN COMMIT — WORSE THAN
+PAUSING, BECAUSE IT BURNS COMPUTE ON AN ARTIFACT THAT MUST BE
+DISCARDED THE MOMENT THE NEXT TASK COMPLETES, AND TEMPTS THE
+SECOND-ORDER VIOLATION OF COMMITTING THE HALF-MIGRATED STATE.
+
+EXPLICITLY FORBIDDEN ACTIONS WHEN ANY IMPLEMENTATION TASK IS
+`pending` OR `in_progress`:
+
+  * `ov rebuild <name>`                  — R10-class. FORBIDDEN.
+  * `ov image build <image>`              — R10-class. FORBIDDEN.
+  * `ov harness run <score>`              — R10-class. FORBIDDEN.
+  * `ov vm build <name>` / `ov vm create` — R10-class. FORBIDDEN.
+  * `ov deploy add <name> <ref>` against a LIVE target — FORBIDDEN.
+  * `ov start <name>` / `ov update <name>` — R10-class. FORBIDDEN.
+  * Any subprocess that builds an artifact AND deploys it AND
+    runs probes against it. FORBIDDEN.
+  * Backgrounding any of the above with `run_in_background: true`
+    "while I finish task N". FORBIDDEN.
+  * Marking the R10 task as `in_progress` while ANY implementation
+    task is still `pending` or `in_progress`. FORBIDDEN.
+
+PERMITTED BETWEEN TASKS — CHEAP SMOKE ONLY (must be < 30s, must
+NOT produce a deployed artifact):
+
+  * `go build ./...`                     — compile check
+  * `go test ./...`                      — unit tests
+  * `bin/ov image validate`              — schema validation
+  * `bin/ov harness list-recipe`         — parse confirmation
+  * `bin/ov harness list-score`          — parse confirmation
+  * `rg <pattern>` — sweep for residual references to deleted symbols
+  * `git status` / `git diff`            — working-tree inspection
+
+ANY ACTION THAT TAKES > 30 SECONDS AND/OR PRODUCES AN ARTIFACT THAT
+SURVIVES THE CALL IS R10-CLASS. WAIT FOR THE LAST TASK TO COMPLETE.
+
+THE NAMED ANTI-PATTERN: "PREMATURE R10 LAUNCH" / "R10 AS A PARALLEL
+TRACK" / "BACKGROUND R10".
+
+You will recognize the temptation by the framing in your own internal
+voice:
+
+  * "Let me kick off the rebuild while I work on cleanup."
+  * "I'll run R10 in background and proceed with task N in parallel."
+  * "The rebuild takes 10 min — I can use that time for the next task."
+  * "Movement A is done; might as well start the rebuild now."
+  * "Smoke test is fine, I'll just trigger a quick rebuild."
+  * "I'll mark R10 in_progress to track the running build."
+
+EVERY ONE OF THE ABOVE IS A VIOLATION FROM THE FIRST TOOL CALL THAT
+IMPLEMENTS IT. THE INSTANT YOU CATCH YOURSELF IN ONE: KILL THE
+IN-FLIGHT JOB IMMEDIATELY (`pkill`, `TaskStop`, whatever it takes),
+RESET THE R10 TASK TO `pending`, FINISH THE OUTSTANDING IMPLEMENTATION
+TASKS, AND THEN — AND ONLY THEN — RUN R10 ONCE AGAINST THE FINAL CODE.
+
+THE FAILURE MODE THIS LAW PREVENTS:
+
+The user has watched this exact pattern unfold: "Movement A unit
+tests pass → kick off bench-pod rebuild in background → realize
+Movement B (4 tasks) is still pending → 30 minutes of compute
+discarded → tempted to commit the half-state because 'the rebuild
+already passed'." Every minute of premature-R10 build time is a
+minute the user has to babysit, and every premature R10 you start
+is a future cleanup the user has to authorize.
+
+=============================================================================
+POST-EXECUTION POLICIES — WHAT HAPPENS AFTER R10 PASSES
+=============================================================================
+
+THESE RULES COVER THE WINDOW BETWEEN "R10 VERIFIED" AND "USER PICKS UP
+THE NEXT TASK". EXECUTE THEM SEQUENTIALLY. DO NOT SKIP. DO NOT MERGE
+STEPS. DO NOT INVENT NEW STEPS.
+
+THE POST-R10 SEQUENCE (every step mandatory, in order):
+
+  1. PASTE PROOF. Both the exploratory R10 output (the live run that
+     surfaced regressions, if any) AND the fresh-rebuild R10 output
+     (run against the FINAL committed-source state) into the
+     conversation. The user sees both. Without this paste, the
+     attribution tier MUST be downgraded.
+
+  2. DETERMINE CONFIDENCE TIER from the proof. The four legal tiers
+     and their preconditions:
+
+       fully tested and validated
+         REQUIRES: every affected disposable target rebuilt fresh,
+         every new/changed code path exercised end-to-end, every
+         R10 output pasted, every six-point proof passed. Anything
+         missing → DOWNGRADE.
+
+       analysed on a live system
+         A live run happened, output was inspected, but at least
+         one R10 standard was abbreviated or skipped (a target was
+         unverified, an end-to-end probe was simulated, fresh
+         rebuild was deferred). HONEST default when R10 fired but
+         was not airtight.
+
+       syntax check only
+         Compile passed, unit tests passed, NO live deploy ran.
+         Use ONLY when R10 was genuinely impossible (e.g. user
+         explicitly waived live verification — rare and noteworthy).
+
+       theoretical suggestion
+         FORBIDDEN as a confidence tier for shipped code. If you
+         would otherwise mark it this, you are not ready to commit.
+
+     Inflating the tier (e.g. "fully tested" without the fresh
+     rebuild) is ATTRIBUTION FRAUD. Worse than not committing.
+
+  3. WRITE THE COMMIT. ONE atomic commit covering the entire cutover.
+     Subject under 70 chars. Conventional Commits prefix
+     (feat/fix/refactor/etc.). The `!` breaking-change marker for
+     any cutover that removes a public API. Body lists every
+     deleted/renamed/added surface. Trailer EXACTLY:
+
+       Assisted-by: Claude (<tier>)
+
+     Multiple commits for the SAME cutover are FORBIDDEN. They
+     re-introduce the intermediate-state problem the cutover policy
+     exists to prevent.
+
+  4. PUSH ONLY IF EXPLICITLY AUTHORIZED. A successful R10 + commit
+     does NOT implicitly authorize `git push`. The user must have
+     said in THIS plan's authorization: "push" / "and push" /
+     "commit and push" / equivalent. Otherwise the commit lands
+     locally, the user runs `git push` themselves. Even with
+     authorization: NEVER `--force` to `main`, NEVER `--no-verify`
+     to bypass hooks.
+
+  5. POST-COMMIT WORKING-TREE CHECK. `git status` must be clean
+     for files touched by this cutover. Untracked artifacts
+     (build outputs, test logs) should already be `.gitignore`'d;
+     if not, that is a separate FOLLOW-UP cutover, not part of
+     this one.
+
+  6. FINAL REPORT. State concisely:
+       * Commit subject + short hash
+       * Confidence tier with one-line proof summary
+       * Whether `git push` ran (and if so, to where)
+       * Pasted R10 outputs above the report
+
+  7. STOP. Do NOT pick up "the next thing on the plan that didn't
+     fit". Do NOT start a new cutover unprompted. Do NOT
+     pre-announce future work. The user authorizes the next plan.
+
+IF R10 FAILS — RETURN TO IMPLEMENTATION, NOT TO ASKING:
+
+  R10 failure is a RETURN-TO-IMPLEMENTATION signal, not a stopping
+  point. The plan is NOT done.
+
+    a. Run /ov-dev:root-cause-analyzer BEFORE attempting any fix.
+       Blind retry is FORBIDDEN.
+    b. Fix in the SAME working tree. No "follow-up PR" deferral.
+    c. Re-run R10 from scratch — full sequence, fresh rebuild.
+       NOT just the failing piece.
+    d. Commit ONLY when the FULL R10 passes against the FINAL fix.
+
+  Failures observed during R10 stay in the SAME cutover. Splitting
+  them off as "Phase 2" is a hard-cutover violation.
+
+WHAT IS EXPLICITLY *NOT* POST-EXECUTION:
+
+  * Starting the next cutover. Each cutover ends with the commit.
+  * Backporting / cherry-picking. Out of scope unless asked.
+  * Documenting "would-have-been Phase 2" deferred work. The
+    cutover either completed or it didn't. Phase 2 is forbidden.
+  * Asking "anything else?" / "want me to continue?" — if the user
+    has more work, they will say so. The plan ended.
+  * Writing "summary of what was achieved" beyond the final report.
+    The git log is the record; over-summarizing burns context.
 
 =============================================================================
 HARD CUTOVER BY DEFAULT — ONE COMMIT, ALL TASKS, R10 AT THE END

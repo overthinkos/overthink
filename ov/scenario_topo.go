@@ -1,24 +1,34 @@
 package main
 
-// harness_score_deps.go — scenario-level dependency resolution.
+// scenario_topo.go — scenario-level dependency resolution.
 //
-// Two helpers used by RunRecipeScenariosLive:
+// Renamed from harness_score_deps.go in the 2026-04 BDD/test/harness
+// surface-cleanup cutover. The topo-sort helper was originally
+// harness-only; it's now shared with the BDD path
+// (description_run.go) so `depends_on:` in layer/image descriptions
+// is honored uniformly. Bucketing-by-pod stays harness-specific
+// (BDD descriptions have no multi-pod model).
+//
+// Two helpers:
 //
 //   - topoSortByDeclarationOrder: walks scenarios in dependency-respecting
 //     order. Tie-breaks (no edge between two scenarios) by declaration
 //     index, so recipes read top-to-bottom unless a depends_on: forces
 //     reordering. Returns *CycleError on cycle (reusing graph.go's type).
+//     Used by both RunRecipeScenariosLive (harness scoring, cross-pod
+//     buckets) and RunScenarios (BDD execution within a description).
 //
 //   - groupConsecutiveByPod: splits a topo-sorted slice into maximal
 //     runs of same-pod scenarios. The scorer runs one `podman exec`
 //     per bucket, so this preserves bucketed-execution efficiency
 //     while honoring cross-pod dependency edges (a single pod may
 //     legitimately span multiple buckets when a cross-pod dep splits
-//     it).
+//     it). Harness-only.
 //
 // Validation (cycles, unknown depends_on, cross-recipe references) lives
-// in validateHarnessSemantics — these helpers assume input has already
-// passed validation; cycle detection here is defensive (fail-loud).
+// in validateHarnessSemantics + ValidateScenarios (scenario_validate.go)
+// — these helpers assume input has already passed validation; cycle
+// detection here is defensive (fail-loud).
 
 import "sort"
 

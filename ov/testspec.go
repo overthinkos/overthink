@@ -490,24 +490,10 @@ func (ml *MatcherList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// LabelTestSet is the three-section structure embedded in the
-// org.overthinkos.tests OCI label: layer-contributed checks, image-level
-// checks, and deploy-default checks. See the design decision in the plan
-// file for why deploy defaults travel with the image.
-type LabelTestSet struct {
-	Layer  []Check `json:"layer,omitempty"`
-	Image  []Check `json:"image,omitempty"`
-	Deploy []Check `json:"deploy,omitempty"`
-}
-
-// IsEmpty returns true if no section has any checks. Used by label emission
-// to omit the label entirely when there are no tests to ship.
-func (s *LabelTestSet) IsEmpty() bool {
-	if s == nil {
-		return true
-	}
-	return len(s.Layer) == 0 && len(s.Image) == 0 && len(s.Deploy) == 0
-}
+// LabelTestSet was relocated to labelset.go in the 2026-04
+// BDD/test/harness surface-cleanup cutover, alongside the new LabelSet
+// aggregate that wraps both LabelTestSet and LabelDescriptionSet. See
+// labelset.go for the type definition and IsEmpty method.
 
 // ---------------------------------------------------------------------------
 // Variable expansion (extended grammar shared with tasks)

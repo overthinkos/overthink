@@ -74,110 +74,20 @@ const (
 	RunModeImageTest
 )
 
-// Executor runs a shell command against some target (running container,
-// disposable container, or the host) and returns its output. Every verb
-// that needs to inspect target state ultimately goes through Exec so
-// tests can swap a fake executor in.
-type Executor interface {
-	Exec(ctx context.Context, cmd string) (stdout, stderr string, exit int, err error)
-	Kind() string // "container", "image", "host" — for reporting
-}
-
-// ContainerExecutor runs via `<engine> exec <name> sh -c …` against a
-// running container.
-type ContainerExecutor struct {
-	Engine, ContainerName string
-}
-
-func (c *ContainerExecutor) Kind() string { return "container" }
-
-func (c *ContainerExecutor) Exec(ctx context.Context, cmd string) (string, string, int, error) {
-	binary := EngineBinary(c.Engine)
-	ecmd := exec.CommandContext(ctx, binary, "exec", c.ContainerName, "sh", "-c", cmd)
-	return runCapture(ecmd)
-}
-
-// ImageExecutor runs via `<engine> run --rm <imageRef> sh -c …`. Each Exec
-// call starts a fresh disposable container — slow but semantically clean
-// for build-time validation of what the image contains.
-type ImageExecutor struct {
-	Engine, ImageRef string
-}
-
-func (i *ImageExecutor) Kind() string { return "image" }
-
-func (i *ImageExecutor) Exec(ctx context.Context, cmd string) (string, string, int, error) {
-	binary := EngineBinary(i.Engine)
-	ecmd := exec.CommandContext(ctx, binary, "run", "--rm", "--entrypoint=", i.ImageRef, "sh", "-c", cmd)
-	return runCapture(ecmd)
-}
-
-// VmTestExecutor runs command: checks inside a VM guest over SSH.
-// Mirrors the container-side ContainerExecutor but dials sshd instead of
-// podman's exec socket. Fields are populated from the deploy.yml VmDeployState
-// (written by VmDeployTarget on first apply).
+// Executor + ContainerExecutor + ImageExecutor + VmTestExecutor were
+// deleted in the 2026-04 executor-hierarchy cutover. The runner now
+// uses DeployExecutor (deploy_executor.go) directly — chains for
+// nested topologies (host → ssh-vm → podman-exec-pod → podman-exec-
+// nested-pod) come from ResolveDeployChain (deploy_chain.go). Every
+// former call site of `r.Exec.RunCapture(ctx, cmd)` became
+// `r.Exec.RunCapture(ctx, cmd)` with identical (stdout, stderr, exit,
+// err) return semantics.
 //
-// Invariant: scripts execute as the SSH user (typically `arch` on cloud-image
-// VMs); tests that need root should prefix `sudo -n`.
-type VmTestExecutor struct {
-	User, Host, KeyPath string
-	Port                int
-}
-
-func (v *VmTestExecutor) Kind() string { return "vm" }
-
-func (v *VmTestExecutor) Exec(ctx context.Context, script string) (string, string, int, error) {
-	args := []string{
-		"-i", v.KeyPath,
-		"-p", strconv.Itoa(v.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=/dev/null",
-		"-o", "LogLevel=ERROR",
-		"-o", "ConnectTimeout=10",
-		"-o", "BatchMode=yes",
-		v.User + "@" + v.Host,
-		"bash", "-s",
-	}
-	cmd := exec.CommandContext(ctx, "ssh", args...)
-	cmd.Stdin = strings.NewReader(script)
-	return runCapture(cmd)
-}
-
-// runCapture executes cmd, returning stdout, stderr, exit status, and any
-// non-exit error (e.g. the binary could not be started).
-func runCapture(cmd *exec.Cmd) (string, string, int, error) {
-	var stdout, stderr strings.Builder
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	err := cmd.Run()
-	exit := 0
-	if err != nil {
-		var ee *exec.ExitError
-		if asExitError(err, &ee) {
-			exit = ee.ExitCode()
-			return stdout.String(), stderr.String(), exit, nil // exit codes are not errors here
-		}
-		return stdout.String(), stderr.String(), -1, err
-	}
-	return stdout.String(), stderr.String(), exit, nil
-}
-
-// asExitError is a small helper to avoid an errors.As import dance in
-// runCapture while still unwrapping through any wrap layers the stdlib adds.
-func asExitError(err error, ee **exec.ExitError) bool {
-	for err != nil {
-		if e, ok := err.(*exec.ExitError); ok {
-			*ee = e
-			return true
-		}
-		u, ok := err.(interface{ Unwrap() error })
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
-}
+// The `runCapture(cmd *exec.Cmd)` helper that used to live here moved
+// to deploy_executor.go as `runCaptureCmd` so every DeployExecutor
+// implementation can share it. asExitError moved alongside as
+// asExitErrorDeploy. Both are package-private and used by
+// LocalDeployExecutor.RunCapture / SSHExecutor.RunCapture.
 
 // Runner wires together the execution context for one pass of checks.
 //
@@ -186,7 +96,7 @@ func asExitError(err error, ee **exec.ExitError) bool {
 // They are empty under RunModeImageTest, which causes those verbs to skip
 // with a clear message — they need a running container with port mappings.
 type Runner struct {
-	Exec        Executor
+	Exec        DeployExecutor
 	Resolver    *TestVarResolver
 	Mode        RunMode
 	HTTPClient  *http.Client
@@ -219,13 +129,15 @@ type Runner struct {
 	// — typically a map of deployment/image names to pre-initialized
 	// executors. Returning (nil, nil, nil) means "unknown target"; the
 	// runner then reports the step as FAIL with a clear message.
-	TargetResolver func(target string) (*TestVarResolver, Executor, error)
+	TargetResolver func(target string) (*TestVarResolver, DeployExecutor, error)
 }
 
-// NewRunner constructs a Runner with sensible defaults. Caller passes an
-// Executor appropriate for the mode (ContainerExecutor for RunModeTest,
-// ImageExecutor for RunModeImageTest).
-func NewRunner(exec Executor, resolver *TestVarResolver, mode RunMode) *Runner {
+// NewRunner constructs a Runner with sensible defaults. Caller passes a
+// DeployExecutor appropriate for the mode — typically the chain returned
+// by ResolveDeployChain (deploy_chain.go). For RunModeTest probes against
+// a single running container, that's NestedExecutor{Parent: Local, Jump:
+// PodmanExec{ov-name}}; for RunModeImageTest, ImageChain(engine, ref).
+func NewRunner(exec DeployExecutor, resolver *TestVarResolver, mode RunMode) *Runner {
 	return &Runner{
 		Exec:        exec,
 		Resolver:    resolver,
@@ -461,7 +373,7 @@ func (r *Runner) runFile(ctx context.Context, c *Check) TestResult {
 else
   printf "exists=0|||||\n"
 fi`, shellSingleQuote(path))
-	stdout, stderr, exit, err := r.Exec.Exec(ctx, probe)
+	stdout, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe failed: %v (stderr: %s)", err, stderr)
 	}
@@ -515,7 +427,7 @@ fi`, shellSingleQuote(path))
 		}
 	}
 	if c.Sha256 != "" {
-		out, _, exit, err := r.Exec.Exec(ctx, fmt.Sprintf("sha256sum %s", shellSingleQuote(path)))
+		out, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf("sha256sum %s", shellSingleQuote(path)))
 		if err != nil || exit != 0 {
 			return failf(c, "sha256 probe exit %d err %v", exit, err)
 		}
@@ -530,7 +442,7 @@ fi`, shellSingleQuote(path))
 
 // readFile returns a file's contents from the target via Exec.
 func (r *Runner) readFile(ctx context.Context, path string) (string, error) {
-	out, stderr, exit, err := r.Exec.Exec(ctx, "cat "+shellSingleQuote(path))
+	out, stderr, exit, err := r.Exec.RunCapture(ctx, "cat "+shellSingleQuote(path))
 	if err != nil {
 		return "", err
 	}
@@ -594,7 +506,7 @@ func (r *Runner) runPort(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(
 		`(ss -tlnH 2>/dev/null || netstat -tln 2>/dev/null) | awk '{print $4}' | grep -E ':%d$' >/dev/null`,
 		c.Port)
-	_, stderr, exit, err := r.Exec.Exec(ctx, probe)
+	_, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe failed: %v (%s)", err, stderr)
 	}
@@ -651,13 +563,13 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) TestResult {
 	var exit int
 	var err error
 	if inContainer {
-		stdout, stderr, exit, err = r.Exec.Exec(ctx, c.Command)
+		stdout, stderr, exit, err = r.Exec.RunCapture(ctx, c.Command)
 	} else {
 		if r.Mode == RunModeImageTest {
 			return skipf(c, "host-side command not meaningful under ov image test")
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", c.Command)
-		stdout, stderr, exit, err = runCapture(cmd)
+		stdout, stderr, exit, err = runCaptureCmd(cmd)
 	}
 	if err != nil {
 		return failf(c, "execution error: %v", err)
@@ -750,7 +662,7 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Check) TestResult {
 	if c.AllowInsecure {
 		cmd = "curl -sSk -o /tmp/.ov-test-body -w '%{http_code}' " + shellSingleQuote(c.HTTP)
 	}
-	stdout, stderr, exit, err := r.Exec.Exec(ctx, cmd)
+	stdout, stderr, exit, err := r.Exec.RunCapture(ctx, cmd)
 	if err != nil || exit != 0 {
 		return failf(c, "curl exit %d err %v (%s)", exit, err, trimPreview(stderr))
 	}
@@ -762,7 +674,7 @@ func (r *Runner) runHTTPInContainer(ctx context.Context, c *Check) TestResult {
 		return failf(c, "status=%d, want %d", code, c.Status)
 	}
 	if len(c.Body) > 0 {
-		body, _, exit, err := r.Exec.Exec(ctx, "cat /tmp/.ov-test-body")
+		body, _, exit, err := r.Exec.RunCapture(ctx, "cat /tmp/.ov-test-body")
 		if err != nil || exit != 0 {
 			return failf(c, "reading body: exit=%d err=%v", exit, err)
 		}

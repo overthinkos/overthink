@@ -673,7 +673,7 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		return failf(c, "%s: %s: %v", verb, method, err)
 	}
 	cmd := exec.CommandContext(ctx, ovBinary, argv...)
-	stdout, stderr, exit, execErr := runCapture(cmd)
+	stdout, stderr, exit, execErr := runCaptureCmd(cmd)
 	if execErr != nil {
 		return failf(c, "%s: %s: execution error: %v", verb, method, execErr)
 	}

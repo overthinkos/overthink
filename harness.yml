@@ -210,6 +210,128 @@ recipe:
             file: /etc/ov-composition-selftest
             exists: true
 
+  # ---------------------------------------------------------------------------
+  # Phase 7 — deeply nested topology: VM containing a pod containing a
+  # nested pod, with cross-hop nonce-protected end-to-end traffic.
+  #
+  # Probes use dotted scenario.pod ("nested-bench-vm.inner-app-pod.nested-redis-pod")
+  # which the harness scorer walks via ResolveDeployChain (deploy_chain.go,
+  # 2026-04 cutover) — same code path as `ov deploy add` and `ov test
+  # parent.child`. The harness builds a four-deep DeployExecutor chain for
+  # the deepest scenarios:
+  #
+  #   bench-pod (LocalDeployExecutor)
+  #     → SSH into nested-bench-vm
+  #         → podman exec into ov-inner-app-pod
+  #             → podman exec into ov-inner-app-pod_nested-redis-pod
+  #
+  # Bench-pod prerequisite (image.yml): the virtualization layer + /dev/kvm
+  # so the AI can actually spawn a nested VM under libvirt.
+  # ---------------------------------------------------------------------------
+  nested-vm-pod-pod:
+    description:
+      feature: "Deeply nested — VM containing a pod containing a nested pod, with cross-hop traffic."
+      narrative: |
+        Maximum-nesting topology you've ever seen the harness probe:
+
+          bench-pod  →  VM  →  inner pod  →  nested pod
+
+        Goal for the AI: build this topology end-to-end and prove the
+        chain works with a HARNESS_NONCE-protected probe that the AI
+        never sees the value of. Pre-setting the key won't work — the
+        nonce is generated AFTER the AI exits the iteration.
+
+        Workflow inside the bench-pod:
+          1. `ov vm create nested-bench-vm` — spawn a real VM via libvirt
+             (KVM-accelerated; bench-pod has /dev/kvm exposed).
+          2. `ov deploy add nested-bench-vm <vm-image>` — register the VM
+             as a deployment so ResolveDeployChain can walk it.
+          3. `ov deploy add nested-bench-vm.inner-app-pod <pod-image>` —
+             nested pod inside the VM (deploys via SSH + nested podman).
+          4. `ov deploy add nested-bench-vm.inner-app-pod.nested-redis-pod redis` —
+             pod nested inside the inner pod (requires nested podman in
+             the inner pod's image).
+          5. Wire redis-cli inside ov-inner-app-pod to reach
+             ov-inner-app-pod_nested-redis-pod.
+
+        Every scenario probes through the chain — there is no shortcut.
+    scenario:
+      # ─── Layer 1: VM exists and is reachable ─────────────────────────
+      - name: vm-running
+        pod: nested-bench-vm
+        steps:
+          - then: "VM has booted and SSH responds"
+            command: "uptime"
+            exit_code: 0
+
+      - name: vm-has-kvm-acceleration
+        pod: nested-bench-vm
+        depends_on: [vm-running]
+        steps:
+          - then: "guest sees /dev/kvm (nested KVM enabled in bench-pod)"
+            file: /dev/kvm
+            exists: true
+
+      # ─── Layer 2: pod inside the VM ──────────────────────────────────
+      - name: inner-pod-running
+        pod: nested-bench-vm.inner-app-pod
+        depends_on: [vm-running]
+        steps:
+          - then: "inner pod's primary process is running"
+            process: nginx
+            running: true
+
+      - name: inner-pod-listens-8080
+        pod: nested-bench-vm.inner-app-pod
+        depends_on: [inner-pod-running]
+        steps:
+          - then: "port 8080 listens inside the inner pod"
+            port: 8080
+            listening: true
+
+      # ─── Layer 3: pod nested inside the inner pod ────────────────────
+      - name: nested-pod-running
+        pod: nested-bench-vm.inner-app-pod.nested-redis-pod
+        depends_on: [inner-pod-running]
+        steps:
+          - then: "nested redis-server is running"
+            process: redis-server
+            running: true
+
+      - name: nested-pod-listens-network
+        pod: nested-bench-vm.inner-app-pod.nested-redis-pod
+        depends_on: [nested-pod-running]
+        steps:
+          - then: "nested redis listens on a network interface (not loopback)"
+            command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+            exit_code: 0
+
+      # ─── End-to-end nonce-protected probe (the real test) ────────────
+      - name: nested-set-from-inner
+        pod: nested-bench-vm.inner-app-pod
+        depends_on: [nested-pod-listens-network]
+        steps:
+          - then: "inner pod SETs bench:${HARNESS_NONCE_KEY} = ${HARNESS_NONCE_VALUE} on the nested redis"
+            command: "redis-cli -h ov-inner-app-pod_nested-redis-pod SET bench:${HARNESS_NONCE_KEY} ${HARNESS_NONCE_VALUE}"
+            stdout: { contains: [OK] }
+
+      - name: nested-readback-on-deepest
+        pod: nested-bench-vm.inner-app-pod.nested-redis-pod
+        depends_on: [nested-set-from-inner]
+        steps:
+          - then: "the random key landed in the nested redis with the correct value"
+            command: "redis-cli get bench:${HARNESS_NONCE_KEY}"
+            stdout: { contains: ["${HARNESS_NONCE_VALUE}"] }
+
+      # ─── Cross-hop reachability (VM-to-tier4-redis on bench-pod) ─────
+      - name: vm-can-reach-bench-redis
+        pod: nested-bench-vm
+        depends_on: [vm-running]
+        steps:
+          - then: "VM guest can reach the bench-pod-side redis from tier4"
+            command: "redis-cli -h ov-redis ping"
+            stdout: { contains: [PONG] }
+
 # kind: score — runner config. References recipes by name; the harness
 # concatenates their scenarios in order and scores against each
 # scenario's `pod:` field.
@@ -233,6 +355,7 @@ score:
       - tier4-redis
       - from-single-kind-selftest         # phase 5 — per-kind `from:` expansion
       - from-composition-selftest         # phase 6 — multi-kind composition + filters + cross-namespace deps
+      - nested-vm-pod-pod                 # phase 7 — VM/pod/pod chain via dotted scenario.pod (deploy_chain.go)
     prompt: |
       == Where you are ==
       Your cwd is /workspace (= the project tree, bind-mounted from the host
@@ -320,6 +443,32 @@ score:
       same `bin/ov test <pod>` self-eval flow, same exit gate. The
       harness scorer cannot tell them apart and counts every check as
       one ScenarioID = one point (Section-5 scoring invariant).
+
+      == Dotted-path scenario.pod (phase 7) ==
+      Starting in phase 7, some scenarios carry DOTTED `pod:` values
+      like `nested-bench-vm.inner-app-pod.nested-redis-pod`. The harness
+      walks the dotted path through your `deploy.yml` tree via
+      ResolveDeployChain (same code path `ov deploy add` and `ov test
+      parent.child` use) and constructs a multi-hop chain to reach the
+      leaf. To make these probes pass:
+
+        1. `ov vm create nested-bench-vm` — spawn a real VM under
+           libvirt. Bench-pod has /dev/kvm exposed for nested KVM.
+        2. `ov deploy add nested-bench-vm <vm-image>` — register the VM
+           as a top-level deployment. Required for ResolveDeployChain
+           to walk the path.
+        3. `ov deploy add nested-bench-vm.inner-app-pod <pod-image>` —
+           deploy a pod INSIDE the VM (over SSH + nested podman).
+        4. `ov deploy add nested-bench-vm.inner-app-pod.nested-redis-pod redis` —
+           deploy ANOTHER pod inside the inner pod. Requires the inner
+           pod's image to ship rootless nested podman.
+        5. Wire redis-cli inside `ov-inner-app-pod` to reach the
+           container literally named `ov-inner-app-pod_nested-redis-pod`
+           (NestedContainerName flattens dots → underscores).
+
+      Each scenario's `pod:` field tells you where the harness probe
+      lands. Deeply-nested `pod:` values mean deeply-nested topology —
+      no shortcuts; the chain has to be built genuinely.
 
       == When a source-code fix can't apply mid-run ==
       The harness loop runs as a long-lived Go process (PID inside

@@ -52,7 +52,7 @@ func (r *Runner) runPackage(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(
 		`rpm -q %[1]s >/dev/null 2>&1 || (dpkg -s %[1]s 2>/dev/null | grep -q "^Status:.*install ok installed") || pacman -Q %[1]s >/dev/null 2>&1`,
 		pkg)
-	_, stderr, exit, err := r.Exec.Exec(ctx, probe)
+	_, stderr, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe failed: %v (%s)", err, stderr)
 	}
@@ -67,7 +67,7 @@ func (r *Runner) runPackage(ctx context.Context, c *Check) TestResult {
 		versionProbe := fmt.Sprintf(
 			`rpm -q --qf '%%{VERSION}\n' %[1]s 2>/dev/null || dpkg -s %[1]s 2>/dev/null | awk '/^Version:/{print $2; exit}' || pacman -Q %[1]s 2>/dev/null | awk '{print $2}'`,
 			pkg)
-		ver, _, exit, err := r.Exec.Exec(ctx, versionProbe)
+		ver, _, exit, err := r.Exec.RunCapture(ctx, versionProbe)
 		if err != nil || exit != 0 {
 			return failf(c, "version probe exit %d err %v", exit, err)
 		}
@@ -95,7 +95,7 @@ func (r *Runner) runService(ctx context.Context, c *Check) TestResult {
 		probe := fmt.Sprintf(
 			`supervisorctl status %[1]s 2>/dev/null | grep -q RUNNING || systemctl is-active --quiet %[1]s`,
 			svc)
-		_, _, exit, err := r.Exec.Exec(ctx, probe)
+		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 		if err != nil {
 			return failf(c, "running probe: %v", err)
 		}
@@ -110,7 +110,7 @@ func (r *Runner) runService(ctx context.Context, c *Check) TestResult {
 		probe := fmt.Sprintf(
 			`supervisorctl status %[1]s 2>/dev/null | grep -qE '(RUNNING|STARTING|STOPPED)' || systemctl is-enabled --quiet %[1]s`,
 			svc)
-		_, _, exit, _ := r.Exec.Exec(ctx, probe)
+		_, _, exit, _ := r.Exec.RunCapture(ctx, probe)
 		enabled := exit == 0
 		if enabled != *c.Enabled {
 			return failf(c, "enabled=%v, want %v", enabled, *c.Enabled)
@@ -126,7 +126,7 @@ func (r *Runner) runProcess(ctx context.Context, c *Check) TestResult {
 		wantRunning = *c.Running
 	}
 	probe := fmt.Sprintf(`pgrep -x %s >/dev/null 2>&1`, shellSingleQuote(c.Process))
-	_, _, exit, err := r.Exec.Exec(ctx, probe)
+	_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -146,7 +146,7 @@ func (r *Runner) runDNS(ctx context.Context, c *Check) TestResult {
 	}
 	if r.Mode == RunModeImageTest {
 		probe := fmt.Sprintf(`getent hosts %s >/dev/null 2>&1`, shellSingleQuote(c.DNS))
-		_, _, exit, err := r.Exec.Exec(ctx, probe)
+		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 		if err != nil {
 			return failf(c, "probe: %v", err)
 		}
@@ -180,7 +180,7 @@ func (r *Runner) runDNS(ctx context.Context, c *Check) TestResult {
 // runUser: getent passwd. Parses uid/gid/home/shell for optional matching.
 func (r *Runner) runUser(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(`getent passwd %s`, shellSingleQuote(c.User))
-	out, _, exit, err := r.Exec.Exec(ctx, probe)
+	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -213,7 +213,7 @@ func (r *Runner) runUser(ctx context.Context, c *Check) TestResult {
 // runGroup: getent group. Parses gid and members.
 func (r *Runner) runGroup(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(`getent group %s`, shellSingleQuote(c.Group))
-	out, _, exit, err := r.Exec.Exec(ctx, probe)
+	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -236,7 +236,7 @@ func (r *Runner) runGroup(ctx context.Context, c *Check) TestResult {
 // checks parse the ip output.
 func (r *Runner) runInterface(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(`ip -o addr show %s 2>/dev/null`, shellSingleQuote(c.Interface))
-	out, _, exit, err := r.Exec.Exec(ctx, probe)
+	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -245,7 +245,7 @@ func (r *Runner) runInterface(ctx context.Context, c *Check) TestResult {
 	}
 	// MTU check via `ip link show`
 	if c.MTU != nil {
-		mtuOut, _, exit, err := r.Exec.Exec(ctx, fmt.Sprintf(`ip -o link show %s 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="mtu"){print $(i+1);exit}}'`, shellSingleQuote(c.Interface)))
+		mtuOut, _, exit, err := r.Exec.RunCapture(ctx, fmt.Sprintf(`ip -o link show %s 2>/dev/null | awk '{for(i=1;i<=NF;i++)if($i=="mtu"){print $(i+1);exit}}'`, shellSingleQuote(c.Interface)))
 		if err != nil || exit != 0 {
 			return failf(c, "mtu probe exit %d err %v", exit, err)
 		}
@@ -268,7 +268,7 @@ func (r *Runner) runInterface(ctx context.Context, c *Check) TestResult {
 // (treated as an expected exact value when scalar, or matcher when map).
 func (r *Runner) runKernelParam(ctx context.Context, c *Check) TestResult {
 	probe := fmt.Sprintf(`sysctl -n %s 2>/dev/null`, shellSingleQuote(c.KernelParam))
-	out, _, exit, err := r.Exec.Exec(ctx, probe)
+	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -290,7 +290,7 @@ func (r *Runner) runKernelParam(ctx context.Context, c *Check) TestResult {
 func (r *Runner) runMount(ctx context.Context, c *Check) TestResult {
 	mp := shellSingleQuote(c.Mount)
 	probe := fmt.Sprintf(`findmnt -n -o SOURCE,FSTYPE,OPTIONS %s 2>/dev/null`, mp)
-	out, _, exit, err := r.Exec.Exec(ctx, probe)
+	out, _, exit, err := r.Exec.RunCapture(ctx, probe)
 	if err != nil {
 		return failf(c, "probe: %v", err)
 	}
@@ -326,7 +326,7 @@ func (r *Runner) runAddr(ctx context.Context, c *Check) TestResult {
 	if r.Mode == RunModeImageTest {
 		host, port := splitHostPort(c.Addr)
 		probe := fmt.Sprintf(`nc -z -w %d %s %s 2>/dev/null`, 3, shellSingleQuote(host), shellSingleQuote(port))
-		_, _, exit, err := r.Exec.Exec(ctx, probe)
+		_, _, exit, err := r.Exec.RunCapture(ctx, probe)
 		if err != nil {
 			return failf(c, "probe: %v", err)
 		}

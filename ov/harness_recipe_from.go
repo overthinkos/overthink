@@ -29,12 +29,25 @@ import (
 // HarnessRecipeFrom is one entry under a recipe's `from:` block. It pulls
 // tests out of an existing entity (layer / image / pod / vm) and lets the
 // expander turn them into synthetic scenarios on the recipe.
+//
+// `source:` (added 2026-04 BDD/test/harness cleanup cutover) selects
+// what gets imported:
+//   - "tests" (default) — flat Check list from `tests:` / `deploy_tests:`
+//     blocks. Each surviving Check expands to ONE synthetic Scenario
+//     with ONE Step. Invariant: 1 Check = 1 ScenarioID = 1 point.
+//   - "description" — rich Scenarios from the entity's `description:`
+//     block, preserving Steps, DependsOn, OnFail. Invariant: 1
+//     imported Scenario = 1 ScenarioID = 1 point.
+//
+// Only `kind: layer` and `kind: image` carry descriptions today;
+// `source: description` with kind=pod or kind=vm fails validation.
 type HarnessRecipeFrom struct {
 	Kind         string   `yaml:"kind"`                     // layer | image | pod | vm
 	Name         string   `yaml:"name"`                     // entity name (matches uf.Layers/Images/Pod/VM)
 	Pod          string   `yaml:"pod"`                      // harness container name (becomes scenario.pod)
-	Select       []string `yaml:"select,omitempty"`         // optional allow-list of test ids
-	Exclude      []string `yaml:"exclude,omitempty"`        // optional deny-list of test ids
+	Source       string   `yaml:"source,omitempty"`         // tests (default) | description
+	Select       []string `yaml:"select,omitempty"`         // optional allow-list (Check.ID for tests, Scenario.Name for description)
+	Exclude      []string `yaml:"exclude,omitempty"`        // optional deny-list (same matching as Select)
 	Scope        []string `yaml:"scope,omitempty"`          // optional section filter (default: layer + image + deploy)
 	Prefix       string   `yaml:"prefix,omitempty"`         // optional scenario-name prefix
 	SkipLiveOnly *bool    `yaml:"skip_live_only,omitempty"` // optional; default true (drops live-only verbs)
@@ -72,42 +85,71 @@ func ExpandRecipeFrom(uf *UnifiedFile, layers map[string]*Layer, recipeName stri
 			return err
 		}
 
-		checks, err := collectChecksForFrom(uf, layers, from)
-		if err != nil {
-			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): %w", recipeName, fromIdx, from.Kind, from.Name, err)
-		}
-
-		// Filter pipeline: scope → live-only → select → exclude.
-		checks = filterByScope(checks, from.Scope)
-		if from.skipLiveOnlyEffective() {
-			checks = filterDropLiveOnly(checks)
-		}
-		checks = filterBySelect(checks, from.Select, from.Kind, from.Prefix)
-		checks = filterByExclude(checks, from.Exclude, from.Kind, from.Prefix)
-
-		if len(checks) == 0 {
-			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): no tests survived the filter pipeline (scope/select/exclude/live-only) — check filter ids and `scope:` against the source entity",
-				recipeName, fromIdx, from.Kind, from.Name)
-		}
-
-		for idx, c := range checks {
-			name := synthScenarioName(from.Prefix, from.Kind, c, idx)
-			if used[name] {
-				return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): synthesized scenario name %q collides with an existing scenario in the same recipe — set a distinct `prefix:` on this from-entry or rename the conflicting hand-written scenario",
-					recipeName, fromIdx, from.Kind, from.Name, name)
+		switch from.sourceEffective() {
+		case "description":
+			scenarios, err := collectScenariosForFromDescription(uf, layers, from)
+			if err != nil {
+				return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q source=description): %w", recipeName, fromIdx, from.Kind, from.Name, err)
 			}
-			used[name] = true
+			scenarios = filterScenariosBySelect(scenarios, from.Select, from.Prefix)
+			scenarios = filterScenariosByExclude(scenarios, from.Exclude, from.Prefix)
+			if len(scenarios) == 0 {
+				return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q source=description): no scenarios survived the filter pipeline (select/exclude) — check filter names against the source entity's description: scenarios",
+					recipeName, fromIdx, from.Kind, from.Name)
+			}
+			for _, sc := range scenarios {
+				name := scenarioImportName(from.Prefix, sc.Name)
+				if used[name] {
+					return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q source=description): imported scenario name %q collides with an existing scenario in the same recipe — set a distinct `prefix:` or rename the conflicting hand-written scenario",
+						recipeName, fromIdx, from.Kind, from.Name, name)
+				}
+				used[name] = true
+				// Clone the scenario, overriding pod (the recipe's chosen
+				// harness container) and stamping the scoped name.
+				cloned := sc
+				cloned.Name = name
+				cloned.Pod = from.Pod
+				imported = append(imported, cloned)
+			}
 
-			imported = append(imported, Scenario{
-				Name: name,
-				Pod:  from.Pod,
-				Steps: []Step{
-					{
-						Then:  stepNarrative(c),
-						Check: c,
+		default: // "tests" or empty
+			checks, err := collectChecksForFrom(uf, layers, from)
+			if err != nil {
+				return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): %w", recipeName, fromIdx, from.Kind, from.Name, err)
+			}
+
+			// Filter pipeline: scope → live-only → select → exclude.
+			checks = filterByScope(checks, from.Scope)
+			if from.skipLiveOnlyEffective() {
+				checks = filterDropLiveOnly(checks)
+			}
+			checks = filterBySelect(checks, from.Select, from.Kind, from.Prefix)
+			checks = filterByExclude(checks, from.Exclude, from.Kind, from.Prefix)
+
+			if len(checks) == 0 {
+				return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): no tests survived the filter pipeline (scope/select/exclude/live-only) — check filter ids and `scope:` against the source entity",
+					recipeName, fromIdx, from.Kind, from.Name)
+			}
+
+			for idx, c := range checks {
+				name := synthScenarioName(from.Prefix, from.Kind, c, idx)
+				if used[name] {
+					return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): synthesized scenario name %q collides with an existing scenario in the same recipe — set a distinct `prefix:` on this from-entry or rename the conflicting hand-written scenario",
+						recipeName, fromIdx, from.Kind, from.Name, name)
+				}
+				used[name] = true
+
+				imported = append(imported, Scenario{
+					Name: name,
+					Pod:  from.Pod,
+					Steps: []Step{
+						{
+							Then:  stepNarrative(c),
+							Check: c,
+						},
 					},
-				},
-			})
+				})
+			}
 		}
 	}
 
@@ -157,7 +199,117 @@ func validateFromEntryShape(recipeName string, idx int, from HarnessRecipeFrom) 
 				recipeName, idx, from.Kind, from.Name, s)
 		}
 	}
+	switch from.Source {
+	case "", "tests":
+		// default — flat-Check import path
+	case "description":
+		// Only layer/image carry descriptions today. pod/vm
+		// descriptions could be added later but are absent.
+		if from.Kind != "layer" && from.Kind != "image" {
+			return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): source=description is only valid for kind=layer or kind=image (pod and vm don't carry description: blocks)",
+				recipeName, idx, from.Kind, from.Name)
+		}
+	default:
+		return fmt.Errorf("recipe %q: from[%d] (kind=%s name=%q): invalid source %q (one of: tests, description)",
+			recipeName, idx, from.Kind, from.Name, from.Source)
+	}
 	return nil
+}
+
+// sourceEffective returns the effective `source:` value with default "tests".
+func (f HarnessRecipeFrom) sourceEffective() string {
+	if f.Source == "" {
+		return "tests"
+	}
+	return f.Source
+}
+
+// collectScenariosForFromDescription returns the unfiltered Scenario list
+// for a `source: description` entry. Layer kinds read the layer's own
+// description; image kinds walk the layer chain via CollectDescriptions.
+func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Layer, from HarnessRecipeFrom) ([]Scenario, error) {
+	switch from.Kind {
+	case "layer":
+		layer, ok := layers[from.Name]
+		if !ok {
+			return nil, fmt.Errorf("layer %q not found (available: %s)", from.Name, sortedMapKeys(layers))
+		}
+		if layer.description == nil {
+			return nil, fmt.Errorf("layer %q has no description: block to import scenarios from", from.Name)
+		}
+		return append([]Scenario(nil), layer.description.Scenario...), nil
+
+	case "image":
+		_, ok := uf.Images[from.Name]
+		if !ok {
+			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
+		}
+		cfg := uf.ProjectConfig()
+		set := CollectDescriptions(cfg, layers, from.Name)
+		if set == nil {
+			return nil, fmt.Errorf("image %q produced no descriptions (no layer in the chain has a description: block)", from.Name)
+		}
+		// Flatten the three sections into one slice. Authors who want
+		// section-specific behaviour can use kind: layer instead.
+		var out []Scenario
+		for _, sec := range [][]LabeledDescription{set.Layer, set.Image, set.Deploy} {
+			for _, ld := range sec {
+				out = append(out, ld.Description.Scenario...)
+			}
+		}
+		return out, nil
+	}
+	return nil, fmt.Errorf("unhandled kind %q for source=description", from.Kind)
+}
+
+// filterScenariosBySelect, when `select` is non-empty, keeps only
+// scenarios whose Name (or prefixed name) appears in the select list.
+// Mirrors filterBySelect but operates on Scenario.Name (not Check.ID).
+func filterScenariosBySelect(scenarios []Scenario, sel []string, prefix string) []Scenario {
+	if len(sel) == 0 {
+		return scenarios
+	}
+	want := map[string]bool{}
+	for _, s := range sel {
+		want[s] = true
+	}
+	out := make([]Scenario, 0, len(scenarios))
+	for _, sc := range scenarios {
+		if want[sc.Name] || want[scenarioImportName(prefix, sc.Name)] {
+			out = append(out, sc)
+		}
+	}
+	return out
+}
+
+// filterScenariosByExclude drops scenarios whose Name (or prefixed name)
+// appears in the exclude list. Applied AFTER select.
+func filterScenariosByExclude(scenarios []Scenario, excl []string, prefix string) []Scenario {
+	if len(excl) == 0 {
+		return scenarios
+	}
+	deny := map[string]bool{}
+	for _, e := range excl {
+		deny[e] = true
+	}
+	out := make([]Scenario, 0, len(scenarios))
+	for _, sc := range scenarios {
+		if deny[sc.Name] || deny[scenarioImportName(prefix, sc.Name)] {
+			continue
+		}
+		out = append(out, sc)
+	}
+	return out
+}
+
+// scenarioImportName returns the recipe-scoped name for an imported
+// scenario (source: description). Mirrors synthScenarioName for the
+// description path: prefix-name when prefix is set, name otherwise.
+func scenarioImportName(prefix, name string) string {
+	if prefix != "" {
+		return prefix + "-" + name
+	}
+	return name
 }
 
 // collectChecksForFrom returns the unfiltered `[]Check` for a from entry,

@@ -176,6 +176,21 @@ func (e *SSHExecutor) GetFile(ctx context.Context, remotePath string, asRoot boo
 	return stdout.Bytes(), nil
 }
 
+// RunCapture executes a script on the guest and returns captured
+// stdout/stderr/exit. Mirrors the deleted VmTestExecutor.Exec semantics:
+// no automatic root escalation (callers that need root prefix sudo).
+func (e *SSHExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+	args := e.sshBaseArgs()
+	args = append(args, "bash", "-s")
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	cmd.Stdin = strings.NewReader(script)
+	return runCaptureCmd(cmd)
+}
+
+// Kind reports "vm" — SSHExecutor targets a guest reachable over SSH
+// (cloud_image VMs, bootc VMs).
+func (e *SSHExecutor) Kind() string { return "vm" }
+
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
 // connect, error on timeout. Used by VmDeployTarget right after

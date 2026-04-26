@@ -15,7 +15,16 @@ ai:
   claude:
     description:
       feature: "Anthropic Claude Code CLI — autonomous coding agent."
-    command: [claude, -p, --dangerously-skip-permissions, "${PROMPT}"]
+    # --verbose + --output-format stream-json emit one JSON object per
+    # message in the agent loop (system / assistant / user / tool_use /
+    # tool_result / result). The harness parses each line, embeds it
+    # into result-{calver}.yml under iteration[].runner_event, and tees
+    # the raw NDJSON to .harness/<score>/runs/<run-id>/iter<k>/runner.ndjson
+    # for byte-exact debugging. See plugins/ov/skills/harness/SKILL.md
+    # "stream-json runner output" for the wire format.
+    command: [claude, -p, --verbose, --output-format, stream-json,
+              --dangerously-skip-permissions, "${PROMPT}"]
+    output_format: stream-json
     version_command: [claude, --version]
     credential:
       - {src: ~/.claude/.credentials.json, dst: ~/.claude/.credentials.json}

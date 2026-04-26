@@ -58,7 +58,29 @@ type AIConfig struct {
 	// See plugins/ov/skills/harness/SKILL.md "Score-progress watchdog".
 	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty"`
 	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty"`
+
+	// OutputFormat declares the structured-output mode the AI's stdout
+	// emits. Empty means plain text (stdout+stderr merged into runner.log
+	// — codex/gemini default). "stream-json" means newline-delimited
+	// JSON (one event per line — claude with `--output-format stream-json
+	// --verbose`); the harness splits stdout/stderr, parses each line
+	// into a RunnerEvent, and embeds the event timeline into the
+	// per-iteration record in result-{calver}.yml. Validated in
+	// validateHarnessSemantics; only "" and "stream-json" are accepted.
+	OutputFormat string `yaml:"output_format,omitempty"`
 }
+
+// AIOutputFormat* constants enumerate the legal values of
+// AIConfig.OutputFormat. The validator in validateHarnessSemantics
+// rejects anything else with a list-of-legal-values hint.
+const (
+	AIOutputFormatPlain      = ""
+	AIOutputFormatStreamJSON = "stream-json"
+)
+
+// validAIOutputFormats lists every legal value of OutputFormat for the
+// validator's "available: ..." hint.
+var validAIOutputFormats = []string{AIOutputFormatPlain, AIOutputFormatStreamJSON}
 
 // DefaultProgressCheckInterval / DefaultProgressNoImprovementTimeout are
 // the Go-level defaults the harness loop applies when an AI's

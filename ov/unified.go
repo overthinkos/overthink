@@ -947,6 +947,19 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 		}
 	}
 
+	for name, ai := range u.AI {
+		if ai == nil {
+			continue
+		}
+		switch ai.OutputFormat {
+		case AIOutputFormatPlain, AIOutputFormatStreamJSON:
+			// ok
+		default:
+			return fmt.Errorf("ai %q: output_format: %q is not a legal value (allowed: %q, %q)",
+				name, ai.OutputFormat, AIOutputFormatPlain, AIOutputFormatStreamJSON)
+		}
+	}
+
 	for name, score := range u.Score {
 		if score == nil {
 			continue

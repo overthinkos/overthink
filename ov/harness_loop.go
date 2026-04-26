@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -100,9 +101,24 @@ type HarnessOpts struct {
 
 // IterationState captures one iteration's outputs.
 //
-// RunnerOutput inlines the FULL AI stdout/stderr from runner.log —
-// no truncation. The full transcript also stays on disk under
-// .harness/<score>/runs/<run-id>/iter<k>/runner.log for cross-reference.
+// For AIs with OutputFormat="" (plain), RunnerOutput inlines the FULL
+// AI stdout/stderr from runner.log — no truncation. For AIs with
+// OutputFormat="stream-json", stdout (NDJSON) is parsed line-by-line
+// into RunnerEvent and stderr lands in a sibling file referenced by
+// RunnerStderrPath; RunnerOutput is left empty in that mode because
+// RunnerEvent is the structured equivalent. The raw NDJSON is also
+// kept on disk at iter<k>/runner.ndjson for byte-exact debugging.
+//
+// StartedUTC / FinishedUTC / IterationDuration are absolute timestamps
+// for the whole iteration body (build + runner + scoring) so a reader
+// of result-{calver}.yml can reconstruct the wall-clock timeline.
+// RunnerCommand captures the post-substitution argv that was actually
+// exec'd (e.g. with ${PROMPT} expanded to the rendered prompt text).
+//
+// WatchdogSample is the score-progress timeline: one entry per
+// CheckInterval tick (default 5m), each carrying (at_utc, elapsed,
+// score, total, last_improved_at). This is what answers "what score
+// did the AI reach when?" — cross-reference at_utc with StartedUTC.
 type IterationState struct {
 	K                   int               `yaml:"k"`
 	Phase               int               `yaml:"phase,omitempty"`
@@ -110,15 +126,49 @@ type IterationState struct {
 	ScoreDelta          int               `yaml:"score_delta"`
 	PlateauCounterAfter int               `yaml:"plateau_counter_after"`
 	BuildFailure        bool              `yaml:"build_failure,omitempty"`
+	StartedUTC          string            `yaml:"started_utc,omitempty"`
+	FinishedUTC         string            `yaml:"finished_utc,omitempty"`
+	IterationDuration   string            `yaml:"iteration_duration,omitempty"`
 	BuildDuration       string            `yaml:"build_duration,omitempty"`
 	TestDuration        string            `yaml:"test_duration,omitempty"`
 	RunnerDuration      string            `yaml:"runner_duration,omitempty"`
+	RunnerCommand       []string          `yaml:"runner_command,omitempty"`
 	RunnerOutput        string            `yaml:"runner_output,omitempty"`
 	RunnerLogPath       string            `yaml:"runner_log_path,omitempty"`
+	RunnerNdjsonPath    string            `yaml:"runner_ndjson_path,omitempty"`
+	RunnerStderrPath    string            `yaml:"runner_stderr_path,omitempty"`
+	RunnerEvent         []RunnerEvent     `yaml:"runner_event,omitempty"`
+	WatchdogSample      []WatchdogSample  `yaml:"watchdog_sample,omitempty"`
 	BuildLogPath        string            `yaml:"build_log_path,omitempty"`
 	CommitSHA           string            `yaml:"commit_sha,omitempty"`
 	Scenario            []ScenarioVerdict `yaml:"scenario,omitempty"`
 	AddedScenario       []string          `yaml:"added_scenario,omitempty"`
+}
+
+// RunnerEvent is one parsed line from a stream-json AI runner's stdout.
+// AtUTC is the wall-clock moment the line was read (RFC3339); Type is
+// the top-level "type" field of the JSON object when present (claude
+// emits "system", "assistant", "user", "result", etc.); Raw is the
+// complete parsed JSON object so callers don't lose any fields. On a
+// malformed JSON line the parser stores
+// `Raw: {"_parse_error": <msg>, "_line": <raw bytes>}` and leaves Type
+// empty — partial output survives rather than aborting the loop.
+type RunnerEvent struct {
+	AtUTC string         `yaml:"at_utc"`
+	Type  string         `yaml:"type,omitempty"`
+	Raw   map[string]any `yaml:"raw"`
+}
+
+// WatchdogSample is one tick of the score-progress watchdog (default
+// 5m cadence). The harness loop appends one of these per OnTick fired
+// during a stream-json or plain iteration that runs in recipe-mode.
+// LastImprovedAt is empty until the AI has scored at least once.
+type WatchdogSample struct {
+	AtUTC          string `yaml:"at_utc"`
+	Elapsed        string `yaml:"elapsed"`
+	Score          int    `yaml:"score"`
+	Total          int    `yaml:"total"`
+	LastImprovedAt string `yaml:"last_improved_at,omitempty"`
 }
 
 // ScenarioVerdict is one scenario's post-iteration outcome.
@@ -234,8 +284,29 @@ var runOvImageTestFn = func(ctx context.Context, tag string) ([]byte, time.Durat
 	return out, time.Since(start), err
 }
 
-// runRunnerFn invokes the runner inside the active target.
-var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env map[string]string, logPath string) (time.Duration, error) {
+// RunnerStreamConfig customizes runRunnerFn's stdout/stderr handling
+// for AIs that emit structured output. When OutputFormat is empty, the
+// runner uses the legacy merged-stream path (stdout+stderr → logPath).
+// When OutputFormat is "stream-json", stdout is teed to NdjsonPath
+// AND parsed line-by-line into RunnerEvents dispatched to OnEvent;
+// stderr is written to StderrPath.
+//
+// The merged-stream path is preserved verbatim for codex / gemini and
+// any AI without explicit stream-json support — switching the AI's
+// output_format flips the entire stdout pipeline atomically.
+type RunnerStreamConfig struct {
+	OutputFormat string             // "" | "stream-json"
+	NdjsonPath   string             // stream-json only — raw NDJSON tee
+	StderrPath   string             // stream-json only — separate stderr file
+	OnEvent      func(RunnerEvent)  // stream-json only — called per parsed line
+}
+
+// runRunnerFn invokes the runner inside the active target. When
+// stream is non-nil and stream.OutputFormat == "stream-json", stdout
+// is streamed through a streamJSONSink (tee + parse) and stderr is
+// written to stream.StderrPath. Otherwise stdout+stderr merge into
+// logPath as before.
+var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env map[string]string, logPath string, stream *RunnerStreamConfig) (time.Duration, error) {
 	start := time.Now()
 	if len(argv) == 0 {
 		return 0, fmt.Errorf("harness: runner has empty command")
@@ -243,6 +314,24 @@ var runRunnerFn = func(ctx context.Context, layout RunLayout, argv []string, env
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = layout.RepoDir
 	cmd.Env = mergeOsEnv(env)
+
+	if stream != nil && stream.OutputFormat == AIOutputFormatStreamJSON {
+		sink, err := newStreamJSONSink(stream.NdjsonPath, stream.OnEvent)
+		if err != nil {
+			return 0, fmt.Errorf("harness: open ndjson sink: %w", err)
+		}
+		defer sink.Close()
+		stderrFile, err := os.Create(stream.StderrPath)
+		if err != nil {
+			return 0, fmt.Errorf("harness: open stderr file: %w", err)
+		}
+		defer stderrFile.Close()
+		cmd.Stdout = sink
+		cmd.Stderr = stderrFile
+		runErr := cmd.Run()
+		return time.Since(start), runErr
+	}
+
 	if logPath != "" {
 		f, ferr := os.Create(logPath)
 		if ferr == nil {
@@ -434,8 +523,25 @@ func runOneIteration(
 	reportSoFar *FinalReport,
 	prevScore int,
 	plateauCounterEntering int,
-) (IterationState, error) {
-	iter := IterationState{K: k, Phase: opts.Phase}
+) (iter IterationState, err error) {
+	iter = IterationState{K: k, Phase: opts.Phase}
+	iterStart := time.Now().UTC()
+	iter.StartedUTC = iterStart.Format(time.RFC3339)
+	// Stamp FinishedUTC + IterationDuration on every return path —
+	// success and failure alike. omitempty means failed-early returns
+	// (mkdir / scope-write / prompt-write) still produce sensible
+	// records. Named return values make this a single closure rather
+	// than five copies sprinkled through the function body.
+	defer func() {
+		finished := time.Now().UTC()
+		iter.FinishedUTC = finished.Format(time.RFC3339)
+		iter.IterationDuration = finished.Sub(iterStart).String()
+	}()
+	// iterMu serializes appends to iter.RunnerEvent (from the parser
+	// goroutine in stream-json mode) and iter.WatchdogSample (from the
+	// watchdog goroutine). Both writers use this same lock — straight
+	// sync.Mutex is sufficient since this is per-iteration scope.
+	var iterMu sync.Mutex
 	iterDir := layout.IterDir(k)
 	if err := os.MkdirAll(iterDir, 0o755); err != nil {
 		return iter, fmt.Errorf("mkdir iter%d: %w", k, err)
@@ -624,6 +730,22 @@ func runOneIteration(
 					fmt.Fprintf(stderr,
 						"harness: progress [phase %d/%d iter %d] elapsed %s — current score %d/%d%s\n",
 						phase, phaseTotal, iterK, elapsed.Round(time.Second), score, total, deltaInfo)
+					// Persist the same observation into the iteration
+					// record so result-{calver}.yml carries the score
+					// timeline as a structured field (not just an
+					// ephemeral stderr line).
+					sample := WatchdogSample{
+						AtUTC:   time.Now().UTC().Format(time.RFC3339),
+						Elapsed: elapsed.Round(time.Second).String(),
+						Score:   score,
+						Total:   total,
+					}
+					if !lastImprovedAt.IsZero() {
+						sample.LastImprovedAt = lastImprovedAt.UTC().Format(time.RFC3339)
+					}
+					iterMu.Lock()
+					iter.WatchdogSample = append(iter.WatchdogSample, sample)
+					iterMu.Unlock()
 				},
 				OnTickError: func(err error) {
 					fmt.Fprintf(stderr,
@@ -646,15 +768,46 @@ func runOneIteration(
 		}
 	}
 
-	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog)
+	// Capture the post-substitution argv so result-{calver}.yml shows
+	// what was actually exec'd (with ${PROMPT} expanded to the rendered
+	// prompt text). Useful for replaying a problem run by hand.
+	iter.RunnerCommand = append([]string(nil), runnerArgv...)
+
+	// Build the runner stream configuration. For AIs with
+	// output_format: stream-json, stdout (NDJSON) is parsed into
+	// RunnerEvents and stderr is split into a sibling file. For all
+	// other AIs, stream is nil → legacy merged-stream path.
+	var streamCfg *RunnerStreamConfig
+	if opts.AI != nil && opts.AI.OutputFormat == AIOutputFormatStreamJSON {
+		ndjsonPath := filepath.Join(iterDir, "runner.ndjson")
+		stderrPath := filepath.Join(iterDir, "runner.stderr.log")
+		streamCfg = &RunnerStreamConfig{
+			OutputFormat: AIOutputFormatStreamJSON,
+			NdjsonPath:   ndjsonPath,
+			StderrPath:   stderrPath,
+			OnEvent: func(ev RunnerEvent) {
+				iterMu.Lock()
+				iter.RunnerEvent = append(iter.RunnerEvent, ev)
+				iterMu.Unlock()
+			},
+		}
+		iter.RunnerNdjsonPath = ndjsonPath
+		iter.RunnerStderrPath = stderrPath
+	}
+
+	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog, streamCfg)
 	cancelRunner()
 	if watchdogStarted {
 		<-watchdogDone // ensure watchdog goroutine exits before iter completes
 	}
 	iter.RunnerDuration = runnerDur.String()
-	iter.RunnerLogPath = runnerLog
-	if data, err := os.ReadFile(runnerLog); err == nil {
-		iter.RunnerOutput = string(data)
+	if streamCfg == nil {
+		// Plain runners merge stdout+stderr into runner.log; inline it
+		// into the result for backward compatibility.
+		iter.RunnerLogPath = runnerLog
+		if data, err := os.ReadFile(runnerLog); err == nil {
+			iter.RunnerOutput = string(data)
+		}
 	}
 	if runnerErr != nil {
 		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)

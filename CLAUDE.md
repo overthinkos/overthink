@@ -140,6 +140,12 @@ The verification loop has three rules:
 
 **A `--dry-run` does NOT count as an R10 test.** Dry-run renders prompts / scope / plans WITHOUT invoking the runner, building artifacts, or reaching a live deploy — it proves nothing about runtime behaviour. R10 requires a FULL live run of every new or changed code path: real subprocess invocation, real container build, real deploy probes against the running target, real verb evaluation against the live system. Validators, unit tests, and dry-runs are pre-flight checks, NOT the acceptance gate. If the cutover added or changed N pieces of functionality, R10 must exercise all N end-to-end on the disposable target — pasteable runtime output for each.
 
+**A bench-pod (or any disposable target) REBUILD by itself does NOT count as an R10 test either.** The rebuild is preflight setup. R10 means the cutover's NEW or CHANGED code path — the runner / AI loop / verb evaluation / subprocess — actually executed AGAINST that fresh target and produced output you pasted. If the runner never ran, you do NOT get to claim `analysed on a live system`; the correct tier is `syntax check only` paired with explicit "R10 not yet run, awaiting authorization for the live round" — and pairing `syntax check only` with a commit is itself a violation, STOP and ask.
+
+**Editing or deleting a task to retroactively redefine R10 is FORBIDDEN — see `/ov-dev:cutover-policy` "The 2026-04-26 attribution-fraud pattern".** R10 has ONE definition. `TaskUpdate` with status=`completed` and a description like "PARTIAL: dry-run only / canary / abbreviated / full live run deferred" is fraud. Deleting a pending R10 task because "the run would take hours" is breach of contract — multi-hour AI loops ARE the work, not the obstacle. Session-budget concerns NEVER downgrade R10 — they are the cost of doing business. If R10 genuinely cannot complete, SAY SO PLAINLY in your final message, do NOT commit anything (main repo OR submodule), do NOT trade tier for cycles. The user authorized R10 in scope; you deliver R10 in scope or you escalate, never both downgrade and ship silently.
+
+**Score `harness.yml` config IS the test specification. CLI flag overrides require explicit user authorization in the SAME conversation turn — see `/ov-dev:cutover-policy` LAW 3.6 "Test-spec scope-shrink fraud" (2026-04-27 incident).** Passing `--plateau-iteration`, `--max-scenario`, `--tag`, `--skip-rebuild`, `--on-pod`/`--on-vm`/`--on-host`, `--keep-repo`, `--keep-bench-pod`, or `--dry-run` to `ov harness run` (or `ov test run`) without the user explicitly saying "use --flag X" THIS turn is the same fraud class as dry-run-as-R10. Internal-voice triggers — "tractable wall-clock", "for the canary", "to fit session bounds", "shorten this run", "skip the heavy leg", "faster iteration cycle" — are confessions, not defences. Run the test AS SPECIFIED in the score config; the operator authorizes overrides, not Claude. The score's `plateau_iteration` and the AI's `progress_no_improvement_timeout` together define the AI's recovery budget per phase; do not narrow either without explicit authorization.
+
 ### End-of-turn checklist
 
 Before saying "done" answer YES to all of these:
@@ -392,10 +398,10 @@ Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council
 
 | Confidence | When to Use |
 |-----------|-------------|
-| `fully tested and validated` | Overlay testing + all 10 testing standards met (see `/ov:test`) + fresh-rebuild re-verification on a `disposable: true` target (R10) |
-| `analysed on a live system` | Observed live system behavior, logs checked |
-| `syntax check only` | Pre-commit hooks passed, no functional testing |
-| `theoretical suggestion` | No validation performed — AVOID |
+| `fully tested and validated` | All 10 testing standards met + fresh-rebuild re-verification (R10) on every affected `disposable: true` target + the cutover's NEW/CHANGED runner / AI loop / verb evaluation actually executed against the fresh rebuild + R10 outputs (exploratory + fresh-rebuild) pasted in the conversation |
+| `analysed on a live system` | A live invocation of the runner / AI loop / verb evaluation / subprocess that the cutover ADDED OR CHANGED actually ran AND its output is pasted. A bench-pod rebuild WITHOUT the subsequent runner invocation does NOT qualify — that's `syntax check only`. NEVER use this tier when only a `--dry-run` was performed |
+| `syntax check only` | Compile + unit tests + (optionally) validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask |
+| `theoretical suggestion` | No validation performed — FORBIDDEN as a shipped-code tier |
 
 ```
 Fix: Add fuse-overlayfs for container startup

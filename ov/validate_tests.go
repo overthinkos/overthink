@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -180,6 +181,32 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 	if spec.artifact && c.Artifact == "" {
 		errs.Add("%s: %s: %s is an artifact-producing method; set artifact: <path>", loc, verb, method)
 	}
+
+	if c.ArtifactMinDimensions != "" {
+		if !spec.artifact {
+			errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_dimensions is not applicable", loc, verb, method)
+		} else if !validWxH(c.ArtifactMinDimensions) {
+			errs.Add("%s: %s: %s: artifact_min_dimensions must be %q form with positive ints, got %q", loc, verb, method, "WxH", c.ArtifactMinDimensions)
+		}
+	}
+	if c.ArtifactNotUniform && !spec.artifact {
+		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_not_uniform is not applicable", loc, verb, method)
+	}
+	if c.ArtifactMinCastEvents > 0 && !spec.artifact {
+		errs.Add("%s: %s: %s is not an artifact-producing method; artifact_min_cast_events is not applicable", loc, verb, method)
+	}
+}
+
+// validWxH reports whether s parses as "<int>x<int>" with both ints > 0.
+// Used by validators of artifact_min_dimensions / artifact_dimensions style fields.
+func validWxH(s string) bool {
+	parts := strings.SplitN(s, "x", 2)
+	if len(parts) != 2 {
+		return false
+	}
+	w, err1 := strconv.Atoi(parts[0])
+	h, err2 := strconv.Atoi(parts[1])
+	return err1 == nil && err2 == nil && w > 0 && h > 0
 }
 
 // collectCheckRefs returns every ${NAME[:arg]} key referenced across every

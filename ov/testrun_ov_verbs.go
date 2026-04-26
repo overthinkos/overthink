@@ -1,8 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"image"
+	_ "image/jpeg" // register JPEG decoder for image.DecodeConfig / image.Decode
+	_ "image/png"  // register PNG decoder for image.DecodeConfig / image.Decode
 	"os"
 	"os/exec"
 	"strconv"
@@ -693,18 +698,159 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		return failf(c, "%s: %s: stderr: %v (got: %s)", verb, method, err, trimPreview(stderr))
 	}
 
-	if spec.artifact && c.ArtifactMinBytes > 0 {
-		info, err := os.Stat(c.Artifact)
-		if err != nil {
-			return failf(c, "%s: %s: artifact %q not found after run: %v", verb, method, c.Artifact, err)
+	if spec.artifact {
+		if c.ArtifactMinBytes > 0 {
+			info, err := os.Stat(c.Artifact)
+			if err != nil {
+				return failf(c, "%s: %s: artifact %q not found after run: %v", verb, method, c.Artifact, err)
+			}
+			if info.Size() < int64(c.ArtifactMinBytes) {
+				return failf(c, "%s: %s: artifact %q size %d < required min_bytes %d",
+					verb, method, c.Artifact, info.Size(), c.ArtifactMinBytes)
+			}
 		}
-		if info.Size() < int64(c.ArtifactMinBytes) {
-			return failf(c, "%s: %s: artifact %q size %d < required min_bytes %d",
-				verb, method, c.Artifact, info.Size(), c.ArtifactMinBytes)
+		if c.ArtifactMinDimensions != "" {
+			if err := assertArtifactMinDimensions(c.Artifact, c.ArtifactMinDimensions); err != nil {
+				return failf(c, "%s: %s: %v", verb, method, err)
+			}
+		}
+		if c.ArtifactNotUniform {
+			if err := assertArtifactNotUniform(c.Artifact); err != nil {
+				return failf(c, "%s: %s: %v", verb, method, err)
+			}
+		}
+		if c.ArtifactMinCastEvents > 0 {
+			if err := assertArtifactMinCastEvents(c.Artifact, c.ArtifactMinCastEvents); err != nil {
+				return failf(c, "%s: %s: %v", verb, method, err)
+			}
 		}
 	}
 
 	return passf(c, fmt.Sprintf("%s %s: exit=%d", verb, method, exit))
+}
+
+// assertArtifactMinDimensions decodes the artifact's image header (PNG/JPEG)
+// and fails if width or height is below the "WxH" requirement. Cheap — uses
+// image.DecodeConfig which reads only the header, not the full pixel data.
+func assertArtifactMinDimensions(path, wxh string) error {
+	parts := strings.SplitN(wxh, "x", 2)
+	if len(parts) != 2 {
+		return fmt.Errorf("artifact_min_dimensions: bad format %q (want WxH)", wxh)
+	}
+	wantW, err := strconv.Atoi(parts[0])
+	if err != nil || wantW <= 0 {
+		return fmt.Errorf("artifact_min_dimensions: bad width %q", parts[0])
+	}
+	wantH, err := strconv.Atoi(parts[1])
+	if err != nil || wantH <= 0 {
+		return fmt.Errorf("artifact_min_dimensions: bad height %q", parts[1])
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("artifact %q open: %v", path, err)
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return fmt.Errorf("artifact %q decode-config: %v", path, err)
+	}
+	if cfg.Width < wantW || cfg.Height < wantH {
+		return fmt.Errorf("artifact %q dimensions %dx%d < required min %dx%d",
+			path, cfg.Width, cfg.Height, wantW, wantH)
+	}
+	return nil
+}
+
+// assertArtifactNotUniform decodes the full image and samples pixels at 100
+// deterministic positions; fails if every sampled pixel shares the same RGBA.
+// Catches all-black / all-white / blank-canvas screenshot failures that
+// artifact_min_bytes alone would pass (a 100KB all-black PNG has the same
+// byte profile as a real screenshot of similar dimensions).
+func assertArtifactNotUniform(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("artifact %q open: %v", path, err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return fmt.Errorf("artifact %q decode: %v", path, err)
+	}
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+	if w <= 0 || h <= 0 {
+		return fmt.Errorf("artifact %q has zero-size bounds %dx%d", path, w, h)
+	}
+	// Sample 100 pixels on a 10x10 stride. For very small images this still
+	// covers every pixel because step rounds up via max(1, dim/10).
+	stepX := w / 10
+	if stepX < 1 {
+		stepX = 1
+	}
+	stepY := h / 10
+	if stepY < 1 {
+		stepY = 1
+	}
+	var firstR, firstG, firstB, firstA uint32
+	first := true
+	for py := bounds.Min.Y; py < bounds.Max.Y; py += stepY {
+		for px := bounds.Min.X; px < bounds.Max.X; px += stepX {
+			r, g, b, a := img.At(px, py).RGBA()
+			if first {
+				firstR, firstG, firstB, firstA = r, g, b, a
+				first = false
+				continue
+			}
+			if r != firstR || g != firstG || b != firstB || a != firstA {
+				return nil // found a varying pixel — not uniform
+			}
+		}
+	}
+	return fmt.Errorf("artifact %q is uniformly one color (RGBA=%d,%d,%d,%d) — likely a blank/black/white screenshot",
+		path, firstR>>8, firstG>>8, firstB>>8, firstA>>8)
+}
+
+// assertArtifactMinCastEvents validates an asciinema .cast file as having
+// at least the requested number of event lines. The cast format is one
+// JSON object per line: line 1 is a header object {"version":2, "width":..,
+// "height":.., ...}, subsequent non-empty lines are event arrays
+// [time_offset, "o"|"i", payload]. Fails if header is missing/malformed
+// or fewer than minEvents non-empty event lines follow.
+func assertArtifactMinCastEvents(path string, minEvents int) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("artifact %q open: %v", path, err)
+	}
+	defer f.Close()
+	scan := bufio.NewScanner(f)
+	// asciinema events can be long; bump the buffer so a 1MB single line
+	// does not silently truncate the count.
+	scan.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	if !scan.Scan() {
+		return fmt.Errorf("artifact %q is empty (expected asciinema cast header on line 1)", path)
+	}
+	var header map[string]any
+	if err := json.Unmarshal(scan.Bytes(), &header); err != nil {
+		return fmt.Errorf("artifact %q line 1: not a JSON object (asciinema header expected): %v", path, err)
+	}
+	if _, ok := header["version"]; !ok {
+		return fmt.Errorf("artifact %q line 1: JSON object missing %q field (not an asciinema cast header)", path, "version")
+	}
+	events := 0
+	for scan.Scan() {
+		if len(strings.TrimSpace(scan.Text())) == 0 {
+			continue
+		}
+		events++
+		if events >= minEvents {
+			return nil // reached the required count; stop reading
+		}
+	}
+	if err := scan.Err(); err != nil {
+		return fmt.Errorf("artifact %q scan: %v", path, err)
+	}
+	return fmt.Errorf("artifact %q has %d events, want >= %d", path, events, minEvents)
 }
 
 // checkRequiredFields returns an error naming any required field that is

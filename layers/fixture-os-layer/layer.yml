@@ -1,0 +1,45 @@
+layer:
+  name: fixture-os-layer
+  description:
+    feature: fixture-os — predictable system-state fixture for harness phase 1
+    narrative: |
+      Writes /etc/ov-fixture-os-marker containing the predetermined
+      content marker, and registers a long-lived bash service so that
+      `pgrep -x bash` succeeds. Combined with a fedora base + supervisord
+      this satisfies every scenario in the single-pod-system-state recipe.
+
+  rpm:
+    packages:
+      - bash
+      - procps-ng
+      - iproute
+
+  tasks:
+    - mkdir: /etc
+      user: root
+      mode: "0755"
+    - write: /etc/ov-fixture-os-marker
+      user: root
+      mode: "0644"
+      content: |
+        ov-fixture-os-content-marker
+
+  service:
+    - name: fixture-os-bash
+      exec: "/usr/bin/bash -c 'while true; do sleep 60; done'"
+      restart: always
+      priority: 50
+      enable: true
+      scope: system
+
+  tests:
+    - id: fixture-os-marker-exists
+      file: /etc/ov-fixture-os-marker
+      exists: true
+    - id: fixture-os-marker-content
+      file: /etc/ov-fixture-os-marker
+      contains:
+        - ov-fixture-os-content-marker
+    - id: fixture-os-bash-installed
+      package: bash
+      installed: true

@@ -206,8 +206,11 @@ type Check struct {
 	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`               // dbus: service name
 	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`               // dbus: object path
 	Args             []string `yaml:"args,omitempty"               json:"args,omitempty"`               // dbus: method args (type:value)
-	Artifact         string   `yaml:"artifact,omitempty"           json:"artifact,omitempty"`           // cdp/wl/vnc: output file path for screenshot / raw capture
-	ArtifactMinBytes int      `yaml:"artifact_min_bytes,omitempty" json:"artifact_min_bytes,omitempty"` // post-run size assertion on artifact
+	Artifact              string `yaml:"artifact,omitempty"                json:"artifact,omitempty"`                // cdp/wl/vnc: output file path for screenshot / raw capture
+	ArtifactMinBytes      int    `yaml:"artifact_min_bytes,omitempty"      json:"artifact_min_bytes,omitempty"`      // post-run size assertion on artifact
+	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"` // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)
+	ArtifactNotUniform    bool   `yaml:"artifact_not_uniform,omitempty"    json:"artifact_not_uniform,omitempty"`    // post-run "image is not uniformly one color" assertion (full decode + pixel sampling)
+	ArtifactMinCastEvents int    `yaml:"artifact_min_cast_events,omitempty" json:"artifact_min_cast_events,omitempty"` // post-run asciinema .cast event-line count assertion
 	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                  // wl/vnc: click/mouse x coord
 	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                  // wl/vnc: click/mouse y coord
 	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`             // wl/vnc: left/middle/right

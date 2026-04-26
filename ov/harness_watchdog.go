@@ -119,8 +119,20 @@ func (w *ProgressWatchdog) Run(ctx context.Context) {
 				// regress. We just skip this tick.
 				continue
 			}
-			improved := score > bestScore
-			if improved {
+			// First probe ever (sentinel bestScore == -1): RECORD the
+			// baseline but do NOT call it an improvement. Otherwise a
+			// run that opens with score 0 would emit
+			// "last improvement 0s ago" at the very first tick — which
+			// is technically true (0 > -1) but semantically wrong; the
+			// score has not improved, the watchdog has just observed
+			// the baseline. Same trap fires when a phase boundary
+			// preserves passing scenarios from earlier phases: the
+			// first probe of the new phase sees a non-zero score that
+			// reflects PRIOR work, not improvement during this iter.
+			// Treating the first probe as baseline-only fixes both.
+			if bestScore < 0 {
+				bestScore = score
+			} else if score > bestScore {
 				bestScore = score
 				lastImprovedAt = time.Now()
 			}

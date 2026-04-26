@@ -13,6 +13,14 @@ layer:
       - iproute
       - procps-ng
 
+  service:
+    - name: keep-alive
+      exec: "/usr/bin/sleep infinity"
+      restart: always
+      priority: 10
+      enable: true
+      scope: system
+
   tests:
     - id: harness-redis-client-cli
       file: /usr/bin/redis-cli

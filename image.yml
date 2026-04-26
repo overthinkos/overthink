@@ -1003,6 +1003,18 @@ image:
             - 18765:18765
 
     # ov harness `default` score — per-pod target images.
+    bench-fixture-os:
+        base: fedora
+        layers:
+            - supervisord
+            - fixture-os-layer
+    bench-fixture-web:
+        base: fedora
+        layers:
+            - supervisord
+            - fixture-web-layer
+        ports:
+            - 8080:8080
     bench-tier1:
         base: fedora
         layers:
@@ -1034,7 +1046,24 @@ image:
     bench-redis-client:
         base: fedora
         layers:
+            - supervisord
             - harness-redis-client-layer
+    # mcp-protocol-probe: minimal Streamable-HTTP MCP server stub (deploys as `fixture-mcp`).
+    bench-fixture-mcp:
+        base: fedora
+        layers:
+            - supervisord
+            - harness-mcp-fixture-layer
+        ports:
+            - 8888:8888
+    # kubernetes-cluster: fake k8s API server (deploys as `fixture-k8s`).
+    bench-fixture-k8s:
+        base: fedora
+        layers:
+            - supervisord
+            - harness-k8s-fixture-layer
+        ports:
+            - 6443:6443
     # phase5 selftest: minimal sshd-only image for selftest-layer pod.
     bench-selftest-layer:
         base: fedora

@@ -363,12 +363,12 @@ func runProgressiveHarness(
 			phasesCompleted++
 		}
 
-		// Stop the whole run if the phase was interrupted via ctx.
-		if ctx.Err() != nil {
-			overallExitReason = "interrupted"
+		// Decide whether the run continues to the next phase, or ends here.
+		// Logic extracted into decideOverallExit for unit-testability.
+		if reason, shouldBreak := decideOverallExit(ctx.Err(), phaseReport.ExitReason); shouldBreak {
+			overallExitReason = reason
 			break
 		}
-		// Otherwise plateau or solved-all — both advance to next phase.
 	}
 
 	if overallExitReason == "" {
@@ -383,6 +383,40 @@ func runProgressiveHarness(
 	}
 	finalizeMasterReport(master, phasesCompleted, overallExitReason)
 	return master, nil
+}
+
+// decideOverallExit determines whether the progressive phase loop in
+// runProgressiveHarness should END now or CONTINUE to the next phase,
+// based on the phase that just completed. Returns the overall exit
+// reason to record on the master report (when ending) and whether to
+// break the phase loop.
+//
+// The contract:
+//
+//   - ctx-cancelled phases yield "interrupted" + break (operator killed
+//     the run; no further phases should be attempted).
+//   - plateau-exited phases yield "plateau" + break (the AI exhausted
+//     its per-phase recovery budget — plateau_iteration consecutive
+//     zero-delta iters, each up to progress_no_improvement_timeout. End
+//     the run here so the score reflects what the AI ACTUALLY
+//     accomplished before stalling, not what it could have stumbled
+//     into on later phases that it never had to actually engage with).
+//   - solved-all phases yield "" + continue (the AI completed the
+//     phase's scenarios; the curriculum keeps unlocking).
+//
+// Pre-2026-04-27 plateau also continued to the next phase. That
+// silently let the AI "skip past" any phase it stalled on and rack up
+// easier wins later. The /ov-dev:cutover-policy hard-cutover that
+// landed today changed plateau to end-the-run; this helper exists so
+// that decision is unit-testable without a full RunHarness fixture.
+func decideOverallExit(ctxErr error, phaseExitReason string) (overallExitReason string, shouldBreak bool) {
+	if ctxErr != nil {
+		return "interrupted", true
+	}
+	if phaseExitReason == "plateau" {
+		return "plateau", true
+	}
+	return "", false
 }
 
 // resolvePhaseScenarios returns the merged scenario list for the first

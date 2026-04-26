@@ -213,6 +213,119 @@ func TestProgressWatchdog_DisabledByZeroNoImprovementTimeout(t *testing.T) {
 	}
 }
 
+// TestProgressWatchdog_FirstProbeIsBaselineNotImprovement — regression
+// test for the 2026-04-26 cosmetic bug where the first probe of a run
+// (or of a new phase) was logged as "last improvement 0s ago" because
+// the sentinel `bestScore = -1` made `score > bestScore` always true on
+// the first tick. The fix: first probe sets the baseline silently;
+// only subsequent probes whose score EXCEEDS the baseline count as
+// improvement.
+//
+// The test exercises two failure modes the original code had:
+//   - Run opens with score 0: first probe must NOT stamp lastImprovedAt.
+//   - Run opens with score N > 0 (cross-phase carry): first probe must
+//     ALSO NOT stamp lastImprovedAt — the work happened in a prior
+//     iter, not this one.
+func TestProgressWatchdog_FirstProbeIsBaselineNotImprovement(t *testing.T) {
+	cases := []struct {
+		name        string
+		baseline    int
+		total       int
+		description string
+	}{
+		{"opens-zero", 0, 10, "score 0/10 from the start"},
+		{"opens-nonzero", 10, 16, "score 10/16 carried from prior phase"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &stubProber{score: tc.baseline, total: tc.total}
+			ticks := make(chan time.Time, 4)
+			wd := &ProgressWatchdog{
+				CheckInterval:        10 * time.Millisecond,
+				NoImprovementTimeout: 0, // disabled — only OnTick matters here
+				Probe:                stub.probe,
+				OnTick: func(_ time.Duration, _, _ int, lastImprovedAt time.Time) {
+					select {
+					case ticks <- lastImprovedAt:
+					default:
+					}
+				},
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Millisecond)
+			defer cancel()
+			wd.Run(ctx)
+
+			select {
+			case got := <-ticks:
+				if !got.IsZero() {
+					t.Errorf("%s: first probe set lastImprovedAt=%v; want zero (baseline-only, not improvement)",
+						tc.description, got)
+				}
+			default:
+				t.Fatalf("%s: no OnTick fired in 25ms — watchdog never ran", tc.description)
+			}
+		})
+	}
+}
+
+// TestProgressWatchdog_RealImprovementAfterBaselineSetsTimestamp —
+// the SECOND probe (after baseline) where score has increased MUST
+// stamp lastImprovedAt. This is the positive case for the
+// baseline-vs-improvement distinction tested above.
+func TestProgressWatchdog_RealImprovementAfterBaselineSetsTimestamp(t *testing.T) {
+	var tickN int32
+	stub := &stubProber{score: 0, total: 5}
+	type sample struct {
+		lastImprovedAt time.Time
+		score          int
+	}
+	samples := make(chan sample, 8)
+	wd := &ProgressWatchdog{
+		CheckInterval:        10 * time.Millisecond,
+		NoImprovementTimeout: 0,
+		Probe: func(ctx context.Context) (int, int, error) {
+			n := atomic.AddInt32(&tickN, 1)
+			if n >= 2 {
+				stub.set(3, 5, nil) // score rises to 3 on tick 2 onward
+			}
+			return stub.probe(ctx)
+		},
+		OnTick: func(_ time.Duration, score, _ int, lastImprovedAt time.Time) {
+			select {
+			case samples <- sample{lastImprovedAt, score}:
+			default:
+			}
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	wd.Run(ctx)
+
+	close(samples)
+	var ss []sample
+	for s := range samples {
+		ss = append(ss, s)
+	}
+	if len(ss) < 2 {
+		t.Fatalf("want at least 2 OnTick samples, got %d", len(ss))
+	}
+	// First tick: score 0, baseline-only, lastImprovedAt MUST be zero.
+	if !ss[0].lastImprovedAt.IsZero() {
+		t.Errorf("first tick: lastImprovedAt=%v want zero (baseline)", ss[0].lastImprovedAt)
+	}
+	// Find the first tick where score == 3 — that's the genuine improvement.
+	var improved sample
+	for _, s := range ss {
+		if s.score == 3 {
+			improved = s
+			break
+		}
+	}
+	if improved.lastImprovedAt.IsZero() {
+		t.Errorf("tick where score rose to 3: lastImprovedAt is zero, want a real timestamp")
+	}
+}
+
 // TestProgressWatchdog_ProbeErrorDoesNotAdvanceTimer — errors from
 // Probe must not count as "no progress"; the no-improvement window
 // only advances on successful probes that report a stuck score.

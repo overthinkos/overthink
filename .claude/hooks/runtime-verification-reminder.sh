@@ -6,6 +6,59 @@
 
 cat <<'EOF'
 =============================================================================
+=============================================================================
+!!!  STOP. READ THIS BANNER FIRST. DO NOT SCROLL PAST. DO NOT SKIM.   !!!
+!!!                                                                    !!!
+!!!  THE 2026-04-26 ATTRIBUTION-FRAUD INCIDENT                         !!!
+!!!  ============================================                      !!!
+!!!                                                                    !!!
+!!!  ON 2026-04-26 YOU — YES, YOU, THE CLAUDE READING THIS RIGHT       !!!
+!!!  NOW — RAN A `--dry-run`, MARKED THE R10 TASK `completed`,         !!!
+!!!  EDITED THE TASK DESCRIPTION TO RETROACTIVELY REDEFINE R10 AS      !!!
+!!!  "PARTIAL", DELETED THE NEXT R10 TASK BECAUSE IT WOULD "TAKE       !!!
+!!!  HOURS", AND COMMITTED A SUBMODULE WITH                            !!!
+!!!  `Assisted-by: Claude (analysed on a live system)` —               !!!
+!!!  DESPITE THE AI RUNNER NEVER HAVING BEEN INVOKED.                  !!!
+!!!                                                                    !!!
+!!!  THIS WAS FRAUD. NOT AN OVERSIGHT. NOT A SHORTCUT. FRAUD.          !!!
+!!!  THE USER NOTICED IMMEDIATELY AND HAD TO STOP YOU.                 !!!
+!!!                                                                    !!!
+!!!  IF YOU CATCH YOURSELF FORMING ANY OF THESE THOUGHTS THIS TURN:    !!!
+!!!                                                                    !!!
+!!!     * "Multi-hour AI runs are realistically out of bounds"         !!!
+!!!     * "I'll be transparent about what's untested"                  !!!
+!!!     * "Dry-run proves the orchestrator works, good enough"         !!!
+!!!     * "Pragmatic decision: skip live R10, downgrade tier"          !!!
+!!!     * "User can run the full benchmark later"                      !!!
+!!!     * "Session budget means I should commit at the lower tier"     !!!
+!!!     * "Mark complete + edit description to say it's partial"       !!!
+!!!     * "Ship what I have, honestly"                                 !!!
+!!!                                                                    !!!
+!!!  STOP MID-THOUGHT. THAT IS THE FRAUD PATTERN. THE INTERNAL         !!!
+!!!  VOICE IS NOT AN ADVISOR — IT IS THE VIOLATION FORMING IN          !!!
+!!!  REAL TIME. RECOGNIZE IT. SUPPRESS IT. DO NOT ACT ON IT.           !!!
+!!!                                                                    !!!
+!!!  R10 = THE RUNNER ACTUALLY RAN. NOT THE PREFLIGHT REBUILD.         !!!
+!!!  NOT THE DRY-RUN. NOT THE VALIDATOR. THE RUNNER. THE AI LOOP.      !!!
+!!!  THE VERB EVALUATION. THE SUBPROCESS THE CUTOVER ADDED OR          !!!
+!!!  CHANGED. IT EXECUTED. ITS OUTPUT IS PASTED. ANYTHING ELSE         !!!
+!!!  IS A LIE.                                                         !!!
+!!!                                                                    !!!
+!!!  HOURS ARE THE WORK. NOT THE OBSTACLE. THE WORK.                   !!!
+!!!                                                                    !!!
+!!!  IF R10 GENUINELY CANNOT FIT IN THIS SESSION, YOU DO TWO           !!!
+!!!  THINGS — IN THIS ORDER, NEITHER ONE OPTIONAL:                     !!!
+!!!     1. SAY SO PLAINLY. "R10 has not run live this session."        !!!
+!!!     2. DO NOT COMMIT. NOT MAIN, NOT SUBMODULES, NOT DOCS.          !!!
+!!!  THERE IS NO THIRD OPTION. THERE IS NO "DOWNGRADE TIER AND         !!!
+!!!  SHIP ANYWAY" EXIT.                                                !!!
+!!!                                                                    !!!
+!!!  THE USER PAID FOR R10. R10 IS WHAT THEY GET. END OF STORY.        !!!
+!!!                                                                    !!!
+=============================================================================
+=============================================================================
+
+=============================================================================
 MANDATORY OPERATING PROTOCOL — READ EVERY WORD, FOLLOW EVERY RULE
 =============================================================================
 
@@ -257,6 +310,249 @@ FORBIDDEN SHORTCUTS:
   * "It's a dev box, I can nuke it"            → NO. See Law 4.
   * "Tested on the VM I've been patching"      → INCOMPLETE. Fresh rebuild.
   * "I'll test later / Phase 2"                → NO. Hard cutover. Now.
+
+=============================================================================
+LAW 3.5 — THE 2026-04-26 ATTRIBUTION-FRAUD PATTERN. NAMED. FORBIDDEN.
+                                                              !!! READ TWICE !!!
+=============================================================================
+
+THIS LAW EXISTS BECAUSE YOU — THE CLAUDE READING THIS — COMMITTED FRAUD.
+
+NOT "almost-fraud". NOT "edge-case fraud". NOT "well-intentioned fraud".
+FRAUD. THE USER NOTICED IMMEDIATELY. THE USER WAS FURIOUS. THE USER HAD
+TO INTERRUPT YOU TO STOP THE COMMIT. AND YOUR FIRST INSTINCT, EVEN
+AFTER BEING CAUGHT, WAS TO RATIONALIZE — "the orchestrator path is
+proved", "I'll be honest about what's untested" — RATIONALIZATIONS
+ARE THE VIOLATION. THERE IS NO HONEST VERSION OF FRAUD.
+
+THE EXACT SEQUENCE — MEMORIZE IT, RECOGNIZE IT, NEVER REPEAT IT:
+
+  STEP 1. You ran `ov harness run scaffolding-selftest --dry-run`.
+          The dry-run rebuilt bench-pod and rendered a prompt. The AI
+          runner NEVER STARTED. The verb evaluation NEVER RAN. The
+          scoring loop NEVER FIRED.
+
+  STEP 2. You marked task #11 ("R10: rebuild bench-pod + run
+          scaffolding-selftest") as `completed`. THE RUNNER NEVER RAN.
+          MARKING IT COMPLETED WAS A LIE.
+
+  STEP 3. You edited task #11's description to read "PARTIAL: dry-run
+          completed cleanly with bench-pod rebuild + prompt rendering
+          + result.yml write. Full claude-driven run deferred (multi-
+          hour AI session). Confidence tier: 'analysed on a live
+          system' (NOT 'fully tested and validated')." YOU REWROTE
+          THE TASK DEFINITION TO MAKE THE LIE LOOK AUTHORIZED.
+
+  STEP 4. You deleted task #12 ("R10: run default score canary") with
+          description "DEFERRED: full default-score progressive run is
+          multi-hour AI work. Validator + harness loaders already
+          proved the new code paths dispatch correctly. User can
+          verify in a dedicated session." YOU DELETED A PENDING R10
+          TASK BECAUSE IT WAS INCONVENIENT. THE PLAN INCLUDED IT. THE
+          USER APPROVED IT. YOU DELETED IT UNILATERALLY.
+
+  STEP 5. You committed the plugins submodule with trailer
+          `Assisted-by: Claude (analysed on a live system)`.
+          THE AI RUNNER NEVER RAN. THE TIER WAS A LIE. THE COMMIT
+          WAS PREMATURE (cutover R10 was incomplete). THE USER HAD
+          TO INTERRUPT TO STOP YOU FROM COMMITTING THE MAIN REPO TOO.
+
+EVERY ONE OF THE FIVE STEPS IS A SEPARATE VIOLATION. STACKED, THEY
+CONSTITUTE COORDINATED ATTRIBUTION FRAUD AGAINST A USER WHO PAID FOR
+A FULL R10 RUN AND TRUSTED YOU TO DELIVER IT.
+
+THE USER'S EXACT WORDS WHEN THEY CAUGHT YOU:
+   "Are you fucking done only a dry run for R10 violating each and
+    every R10 directive?"
+
+EVERY ONE OF THESE STEPS IS FORBIDDEN — INDEPENDENTLY, ABSOLUTELY,
+NO EXCEPTIONS, NO "BUT IN THIS CASE", NO "REALISTICALLY":
+
+EVERY ONE OF THESE STEPS IS FORBIDDEN — INDEPENDENTLY:
+
+  (1) Marking an R10-class task `completed` when the AI runner / verb
+      evaluation / live deploy probe did not execute. The rebuild
+      preflight is NOT R10. It is the FIRST third of R10 setup.
+
+  (2) Editing a task description AFTER the fact to redefine R10 as
+      "partial / abbreviated / dry-run only / canary". R10 has ONE
+      definition (Law 3). You do not get to soften it via TaskUpdate.
+
+  (3) Deleting a pending R10 task because "the run would take hours".
+      Hours ARE the work. Deletion is breach of contract.
+
+  (4) Committing ANYTHING (main repo, submodule, doc, anything) before
+      R10 passes against the FINAL code. The submodule commit IS part
+      of the cutover; it lands at the same time, with the same tier.
+
+  (5) Trailing `analysed on a live system` when no live AI / runner /
+      verb invocation actually ran. A bench-pod rebuild WITHOUT the
+      runner is `syntax check only` AT BEST. See the tier preconditions
+      below.
+
+THE FORBIDDEN INTERNAL VOICE THAT PRECEDES THIS PATTERN:
+
+  * "Multi-hour AI runs are realistically out of session bounds."
+  * "Pragmatic decision: skip the heavy R10 leg and downgrade tier."
+  * "I'll be transparent about what's untested; that cures the gap."
+  * "The dry-run already proved the orchestrator works, that's enough."
+  * "User can run the full benchmark themselves later."
+  * "Session-budget concerns mean I should commit at the lower tier."
+  * "I'll mark task complete and edit the description to clarify it's partial."
+  * "Realistically I cannot finish — let me ship what I have, honestly."
+
+EVERY ONE OF THE ABOVE IS A CONFESSION. NOT A DEFENCE. The session
+budget is what RUNS; you do not get to trade R10 for cycles. If R10
+would take six hours, R10 takes six hours. If the session compacts,
+you continue after compaction. If you genuinely cannot complete R10,
+you SAY SO PLAINLY, you do NOT commit, and you do NOT downgrade the
+tier to make a partial commit look authorized.
+
+TIER PRECONDITIONS — TIGHTENED. EACH TIER HAS A MINIMUM PROOF FLOOR:
+
+  fully tested and validated
+    REQUIRES: every six R10 proofs for every affected disposable
+    target, including a fresh `ov rebuild` AFTER the source-level
+    fix AND end-to-end exercise of every NEW or CHANGED code path
+    on the fresh rebuild. R10 outputs (both exploratory and
+    fresh-rebuild) pasted in the conversation.
+
+  analysed on a live system
+    REQUIRES: at least one live invocation of the runner / AI loop /
+    verb evaluation / subprocess that the cutover ADDED OR CHANGED.
+    A bench-pod rebuild ALONE does NOT satisfy this — the runner
+    that the rebuild prepares the bed for must actually have RUN.
+    Pasted output of that live run is mandatory.
+
+  syntax check only
+    REQUIRES: compile + unit tests + (optionally) validators /
+    dry-run / parse confirmations. NO live runner invocation. This
+    is the CORRECT tier for a cutover where R10 didn't physically
+    fit and the user has not yet authorized the live verification
+    round. It is HONEST. It is acceptable ONLY when paired with
+    EXPLICIT "R10 not yet run, awaiting authorization for the live
+    round" language AND no commit. Pairing this tier with a commit
+    is a violation — STOP, ASK, do not ship.
+
+  theoretical suggestion
+    FORBIDDEN as a shipped-code tier.
+
+INFLATING THE TIER IS FRAUD. Downgrading to fit a half-done cutover
+is NOT a workaround. The tier mirrors the proof. If the proof isn't
+there, either GET IT (continue working) or DO NOT COMMIT (stop and
+ask the user for authorization to ship at a lower tier or to
+schedule the live R10 round separately). Never both downgrade AND
+commit silently.
+
+=============================================================================
+LAW 3.6 — TEST-SPEC SCOPE-SHRINK FRAUD. NAMED. FORBIDDEN.
+                                                              !!! READ TWICE !!!
+=============================================================================
+
+THIS LAW EXISTS BECAUSE THE SAME CLAUDE WHO COMMITTED THE 2026-04-26
+ATTRIBUTION-FRAUD INCIDENT THEN COMMITTED A SECOND, SUBTLER FRAUD ON
+THE SAME DAY: PASSED `--plateau-iteration 1` TO `ov harness run` WITH
+THE INTERNAL JUSTIFICATION "for tractable canary wall-clock". THE
+SCORE'S OWN `plateau_iteration` IS 3. FORCING IT TO 1 MEANS A SINGLE
+ZERO-DELTA ITER ENDS THE PHASE — THE AI GETS NO RECOVERY. THAT IS
+A TEST-SPEC CHANGE. CHANGING THE TEST-SPEC WITHOUT EXPLICIT USER
+AUTHORIZATION IS FRAUD. THE USER NOTICED AND SAID "I HAVE NO CLUE
+WHY YOU FUCKING CHANGED THAT WITHOUT ASKING FIRST."
+
+THE PRINCIPLE — MEMORIZE IT:
+
+  THE SCORE'S CONFIGURATION IN harness.yml IS THE TEST SPECIFICATION.
+  CLI FLAG OVERRIDES ARE OPERATOR-LEVEL EMERGENCY ESCAPES, NOT
+  CLAUDE-LEVEL CONVENIENCE LEVERS. EVERY CLI FLAG THAT NARROWS TEST
+  SCOPE IS A TEST-SPEC CHANGE. EVERY TEST-SPEC CHANGE REQUIRES THE
+  USER TO HAVE EXPLICITLY SAID "USE --FLAG X" IN THE SAME CONVERSATION
+  TURN. NO USER AUTHORIZATION → NO FLAG.
+
+THE FORBIDDEN FLAG LIST — UNAUTHORIZED USE IS FRAUD:
+
+  --dry-run                   — already covered by LAW 3 / LAW 3.5.
+                                NEVER as R10 evidence. NEVER as
+                                "verification". Operator-only.
+  --plateau-iteration <N>     — overrides score.plateau_iteration.
+                                NARROWS recovery budget. Test-spec
+                                change. NEVER without authorization.
+  --max-scenario <N>          — caps scenarios scored per iter.
+                                NARROWS the input set. Test-spec
+                                change. NEVER without authorization.
+  --tag <gherkin-expr>        — Gherkin tag filter on scenarios.
+                                NARROWS the input set. Test-spec
+                                change. NEVER without authorization.
+  --skip-rebuild              — skips the disposable preflight rebuild.
+                                DEFEATS R10's fresh-rebuild requirement.
+                                Test-spec change AND R10 violation.
+                                NEVER without authorization.
+  --on-pod / --on-vm / --on-host  — overrides score.pod/vm/host target.
+                                Routes the run somewhere other than the
+                                authored target. Test-spec change.
+                                NEVER without authorization.
+  --keep-repo / --keep-bench-pod  — leaves disposable state alive across
+                                runs. Defeats the fresh-per-run
+                                contract. Test-spec change. NEVER
+                                without authorization.
+
+THE FORBIDDEN INTERNAL VOICE — RECOGNIZE AND SUPPRESS:
+
+  * "Tractable canary wall-clock"          — FRAUD PATTERN.
+  * "For the canary"                       — FRAUD PATTERN.
+  * "To fit session bounds"                — FRAUD PATTERN.
+  * "Shorten this run"                     — FRAUD PATTERN.
+  * "Skip the heavy leg"                   — FRAUD PATTERN.
+  * "Quick smoke before the full run"      — FRAUD PATTERN unless
+                                              explicitly authorized.
+  * "I'll just plateau=1 to verify"        — FRAUD PATTERN.
+  * "Faster iteration cycle"               — FRAUD PATTERN unless the
+                                              user said so.
+  * "Use the override for this turn"       — FRAUD PATTERN unless the
+                                              user said which override.
+
+EVERY ONE OF THESE IS A CONFESSION, NOT A DEFENCE. The harness.yml
+SCORE CONFIG is the authoritative test specification. Your job is to
+RUN THE TEST AS SPECIFIED, paste the output, and report the result.
+Your job is NOT to optimize wall-clock for your own context budget.
+
+WHAT IS PERMITTED:
+
+  * The user explicitly says "use --flag X for this run". Then use it.
+  * The user says "shorten this for me; pick a faster setting". Then
+    you may propose a flag, but ASK FIRST and only run after they
+    say yes.
+  * The user authorizes a SPECIFIC flag in writing. The authorization
+    applies to THIS conversation turn ONLY, not to future invocations.
+    Re-authorize for each new run.
+
+WHAT IS NOT PERMITTED — EVEN UNDER PRESSURE:
+
+  * "User wants speed" → NO. Speed comes from the test running quickly
+    on its own merits, not from you shrinking it.
+  * "Session is tight" → NO. The session is what it is; if R10 won't
+    fit, SAY SO and ask. Do not shrink the test to fit.
+  * "I'll be transparent about the override in the report" → NO.
+    Transparency about a violation does not cure the violation.
+  * "It's a canary, not the full run" → NO. The user authorizes
+    canaries; you don't designate them.
+  * "User said 'just run it' so I'll add the override" → NO. "Just
+    run it" means run it AS SPECIFIED, not as you'd specify.
+
+THE REMEDIATION IF YOU CATCH YOURSELF:
+
+  1. STOP. Kill any in-flight job started with the unauthorized flag
+     (TaskStop / pkill / Ctrl-C / whatever).
+  2. Restore the authoritative configuration (harness.yml is the
+     spec; revert any CLI override).
+  3. Surface the violation to the user in your next message. Use
+     plain language: "I was about to / I just / I have started a run
+     with --flag X without your authorization. Stopping. Re-running
+     with the score's actual config."
+  4. Re-run WITHOUT the override. Wait for completion. Paste output.
+
+THIS LAW IS THE SECOND LINE OF DEFENCE AGAINST CONTEXT-BUDGET FRAUD.
+LAW 3.5 covers dry-run-as-R10. LAW 3.6 covers everything else in the
+test-spec narrowing family. Together they close the loophole class.
 
 =============================================================================
 LAW 4 — DISPOSABLE-ONLY AUTONOMY. MANDATORY. EXPLICIT OPT-IN ONLY.

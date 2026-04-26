@@ -58,12 +58,26 @@ layer:
       scope: deploy
       mcp: ping
       timeout: 10s
+    # Assert every JupyterLab MCP tool name is present in list-tools.
+    # See plugins/ov-layers/skills/jupyter-mcp/SKILL.md for the
+    # documented 13-tool surface this MCP server provides.
     - id: mcp-jupyter-list-tools
       scope: deploy
       mcp: list-tools
       stdout:
+        - contains: list_notebooks
+        - contains: get_notebook
+        - contains: create_notebook
+        - contains: open_notebook_session
+        - contains: close_notebook_session
+        - contains: get_cell
+        - contains: update_cell
         - contains: insert_cell
+        - contains: delete_cell
         - contains: execute_cell
+        - contains: get_active_sessions
+        - contains: get_active_users
+        - contains: watch_notebook
     - id: mcp-jupyter-list-notebooks
       scope: deploy
       mcp: call

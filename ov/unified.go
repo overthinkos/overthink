@@ -359,10 +359,99 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := validateDeploymentTree(merged.Deployments); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
+	if err := expandRecipeFromIfNeeded(merged, dir); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	if err := validateHarnessSemantics(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	return merged, true, nil
+}
+
+// expandRecipeFromIfNeeded resolves every recipe's `from:` directives
+// into synthetic scenarios via ExpandRecipeFrom. Runs only when at least
+// one recipe declares `from:` — otherwise we skip the discover/project
+// pass entirely, preserving zero-cost loading for non-composing projects.
+//
+// Hooked between validateDeploymentTree and validateHarnessSemantics so
+// the latter sees the synthesized scenarios and can apply its existing
+// pod-required + depends_on intra-recipe rules to the post-expansion
+// flat scenario list uniformly.
+//
+// Also enforces the cross-recipe-score rule: a recipe with any
+// `kind: vm` import can only be referenced by scores that target that
+// VM via `vm:` (per-scenario execution against a VM uses the score's
+// SSH path, not `podman exec ov-<pod>`).
+func expandRecipeFromIfNeeded(merged *UnifiedFile, dir string) error {
+	needed := false
+	for _, r := range merged.Recipe {
+		if r != nil && len(r.From) > 0 {
+			needed = true
+			break
+		}
+	}
+	if !needed {
+		return nil
+	}
+	if err := merged.ApplyDiscover(dir); err != nil {
+		return fmt.Errorf("apply discover (for from: expansion): %w", err)
+	}
+	layers, err := merged.ProjectLayers(dir)
+	if err != nil {
+		return fmt.Errorf("project layers (for from: expansion): %w", err)
+	}
+	// recipe-name → set of vm names imported into that recipe.
+	vmImportsByRecipe := map[string]map[string]bool{}
+	for name, recipe := range merged.Recipe {
+		if recipe == nil {
+			continue
+		}
+		for _, from := range recipe.From {
+			if from.Kind == "vm" && from.Name != "" {
+				if vmImportsByRecipe[name] == nil {
+					vmImportsByRecipe[name] = map[string]bool{}
+				}
+				vmImportsByRecipe[name][from.Name] = true
+			}
+		}
+		if err := ExpandRecipeFrom(merged, layers, name, recipe); err != nil {
+			return err
+		}
+	}
+	// Cross-validate: any score referencing a vm-importing recipe MUST
+	// target the same VM via `vm:`. Pod- or host-targeted scores can't
+	// reach VM-side tests through `podman exec`.
+	for scoreName, score := range merged.Score {
+		if score == nil {
+			continue
+		}
+		for _, recipeName := range score.Recipes {
+			vmSet := vmImportsByRecipe[recipeName]
+			if len(vmSet) == 0 {
+				continue
+			}
+			if score.VM == "" {
+				return fmt.Errorf("score %q references recipe %q which imports tests from kind:vm (%s) — the score MUST target the VM via `vm: <name>` (current target: pod=%q host=%v); per-scenario execution against a VM uses the score's SSH path, not podman exec",
+					scoreName, recipeName, joinStringSet(vmSet), score.Pod, score.Host)
+			}
+			if !vmSet[score.VM] {
+				return fmt.Errorf("score %q targets vm %q but references recipe %q which imports tests from a different vm (%s) — vm-import recipes can only be scored against the same VM they import from",
+					scoreName, score.VM, recipeName, joinStringSet(vmSet))
+			}
+		}
+	}
+	return nil
+}
+
+// joinStringSet returns a sorted comma-joined string of map keys, for
+// human-readable error messages.
+func joinStringSet(m map[string]bool) string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ", ")
 }
 
 // validateDeploymentTree enforces structural invariants on the
@@ -756,7 +845,7 @@ func validateRecipeBody(body *yaml.Node, name, source string, allowName bool) er
 	if body == nil || body.Kind != yaml.MappingNode {
 		return nil
 	}
-	allowed := map[string]bool{"description": true, "scenario": true}
+	allowed := map[string]bool{"description": true, "scenario": true, "from": true}
 	if allowName {
 		allowed["name"] = true
 	}

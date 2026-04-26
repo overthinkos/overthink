@@ -34,6 +34,13 @@ import (
 type HarnessRecipe struct {
 	Description *Description `yaml:"description,omitempty"`
 
+	// From carries optional `kind: layer|image|pod|vm` import directives
+	// that get expanded at load time into synthetic Scenario entries.
+	// See harness_recipe_from.go (ExpandRecipeFrom). After expansion this
+	// slice is cleared and recipe.Scenario contains the imports first
+	// followed by hand-written scenarios.
+	From []HarnessRecipeFrom `yaml:"from,omitempty"`
+
 	// Scenario carries the BDD scenarios the score will evaluate this
 	// recipe against. The harness scores these against the live running
 	// deployment named in the active score's `deployment:` field.

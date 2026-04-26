@@ -19,6 +19,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -62,65 +63,109 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 	// common case (no cross-pod deps) while honoring cross-pod
 	// dependencies when they exist (a single pod may legitimately span
 	// multiple buckets).
+	//
+	// On *CycleError: rather than wiping the entire phase score (the
+	// pre-2026-04 behavior), score the non-cyclic subset normally and
+	// emit a per-scenario fail verdict for each cyclic scenario at the
+	// end. Preserves Section-5 invariant (1 Check = 1 ScenarioID = 1
+	// point — cyclic scenarios just get a deterministic fail verdict
+	// instead of being invisibly subsumed by a phase-wide BuildFailure).
+	// Non-cycle errors still propagate up.
 	sorted, err := topoSortByDeclarationOrder(scenarios)
+	cyclicKeys := map[scenarioKey]bool{}
 	if err != nil {
-		return nil, fmt.Errorf("scoring scenarios: %w", err)
+		var ce *CycleError
+		if errors.As(err, &ce) {
+			for _, n := range ce.Cycle {
+				for _, sc := range scenarios {
+					if sc.Name == n {
+						cyclicKeys[keyOf(sc)] = true
+					}
+				}
+			}
+			fmt.Fprintf(os.Stderr,
+				"score live: dependency cycle detected (%d scenarios) — scoring non-cyclic scenarios; cyclic scenarios will be reported as fail verdicts\n",
+				len(cyclicKeys))
+			sorted = filterOutCyclic(scenarios, cyclicKeys)
+		} else {
+			return nil, fmt.Errorf("scoring scenarios: %w", err)
+		}
 	}
 	buckets := groupConsecutiveByPod(sorted)
 
 	// IDs used by ScenarioTestResult must match the IDs that
 	// synthesizeScoreBaseline emits — those use a per-pod sIdx counter
 	// indexed against scenario declaration order in the recipe (NOT
-	// topo-sort order). Compute a stable name -> ID map up front so
-	// the runtime path can attach the matching ID regardless of the
-	// post-topo execution order.
-	idByName := stableScenarioIDsByName(scenarios)
+	// topo-sort order). Compute a stable (SourceRecipe, Name) → ID map
+	// up front so the runtime path can attach the matching ID
+	// regardless of the post-topo execution order. Keyed by
+	// scenarioKey so cross-recipe duplicate names (e.g. multiple
+	// recipes importing "sshd-binary") don't collide.
+	idByKey := stableScenarioIDsByKey(scenarios)
 
 	out := &TestRunResults{
 		Image: "score:" + scoreName,
 		Mode:  "run",
 	}
 
-	// verdictByName tracks the live status of each scenario as buckets
+	// verdictByKey tracks the live status of each scenario as buckets
 	// run, so cross-bucket depends_on cascades work. Values: "pass" |
 	// "fail" | "skipped". Anything other than "pass" blocks dependents.
-	verdictByName := make(map[string]string, len(scenarios))
+	// Keyed by (SourceRecipe, Name) so cross-recipe duplicate names
+	// don't fight over a single map entry — each recipe sees its own
+	// scenario's verdict for depends_on resolution.
+	verdictByKey := make(map[scenarioKey]string, len(scenarios))
 
 	for _, bucket := range buckets {
-		// Filter the bucket: any scenario whose depends_on contains a
-		// non-passing entry is recorded as skipped without probing.
-		// firstUnmetDep treats unknown-name as blocked — defensive
-		// against topo-sort/validator misbehavior. validateHarness-
-		// Semantics catches dangling refs at load time so this branch
-		// shouldn't fire in well-formed configs.
-		var probe []Scenario
-		for _, sc := range bucket {
-			blocked := firstUnmetDep(sc, verdictByName)
-			if blocked != "" {
-				out.Scenario = append(out.Scenario, skippedResult(sc, idByName[sc.Name], blocked))
-				out.Summary.Total++
-				out.Summary.Skip++
-				verdictByName[sc.Name] = "skipped"
-				continue
-			}
-			probe = append(probe, sc)
-		}
-
-		if len(probe) == 0 {
+		if len(bucket) == 0 {
 			continue
 		}
-
-		pod := probe[0].Pod
+		pod := bucket[0].Pod
 		containerName := "ov-" + pod
 
-		if err := containerRunningForScoring(ctx, containerName); err != nil {
-			// Container missing → record per-scenario "not reachable"
-			// fail-status verdicts with no steps; continue to next bucket.
-			for _, sc := range probe {
+		// Reachability check is per-bucket. If unreachable, every
+		// scenario in this bucket records a "not reachable" fail —
+		// EXCEPT scenarios whose deps are already known-failed, which
+		// still record a dep-unmet skip (a more informative verdict).
+		reachableErr := containerRunningForScoring(ctx, containerName)
+		if reachableErr != nil {
+			fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, reachableErr)
+		}
+
+		var exec *ContainerExecutor
+		var runner *Runner
+		if reachableErr == nil {
+			exec = &ContainerExecutor{Engine: "podman", ContainerName: containerName}
+			resolver := &TestVarResolver{}
+			runner = NewRunner(exec, resolver, RunModeTest)
+			runner.Image = pod
+		}
+
+		// Process scenarios sequentially within the bucket. The dep
+		// check uses the LIVE verdictByKey, which is updated after
+		// every probe — so an intra-bucket dep (handwritten depends_on
+		// imported sshd-binary in the same composition-app pod) is
+		// satisfied as soon as the dep scenario passes earlier in the
+		// loop. Pre-batching the dep check (the prior shape) caused
+		// false dep-unmet skips for every intra-bucket dep because
+		// verdictByKey was empty when the bucket loop started.
+		for _, sc := range bucket {
+			blocked := firstUnmetDep(sc, verdictByKey)
+			if blocked != "" {
+				out.Scenario = append(out.Scenario, skippedResult(sc, idByKey[keyOf(sc)], blocked))
+				out.Summary.Total++
+				out.Summary.Skip++
+				verdictByKey[keyOf(sc)] = "skipped"
+				continue
+			}
+
+			if reachableErr != nil {
+				// Container missing → record per-scenario "not reachable"
+				// fail-status verdicts with no steps; continue.
 				expanded := ExpandScenario(sc)
 				for _, es := range expanded {
 					tr := ScenarioTestResult{
-						ID:           idByName[sc.Name],
+						ID:           idByKey[keyOf(sc)],
 						Origin:       "pod:" + pod,
 						Name:         es.Name,
 						Tag:          append([]string(nil), es.Tag...),
@@ -131,43 +176,23 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 					out.Summary.Total++
 					out.Summary.Fail++
 				}
-				verdictByName[sc.Name] = "fail"
+				verdictByKey[keyOf(sc)] = "fail"
+				continue
 			}
-			fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, err)
-			continue
-		}
 
-		exec := &ContainerExecutor{Engine: "podman", ContainerName: containerName}
-		resolver := &TestVarResolver{}
-		runner := NewRunner(exec, resolver, RunModeTest)
-		runner.Image = pod
-
-		set := &LabelDescriptionSet{
-			Layer: []LabeledDescription{{
-				Origin: "pod:" + pod,
-				Description: Description{
-					Feature:  fmt.Sprintf("Score scenarios for pod %s", pod),
-					Scenario: probe,
-				},
-			}},
-		}
-		results := RunScenarios(ctx, runner, set, nil, false)
-
-		// Map runner results back to scenarios by name (the runner
-		// preserves declaration order within `probe`; results align by
-		// scenario index inside the LabelDescriptionSet — but to be
-		// robust we match on Name).
-		resultByName := make(map[string]ScenarioResult, len(results))
-		for _, sr := range results {
-			resultByName[sr.Name] = sr
-		}
-		for _, sc := range probe {
-			sr, ok := resultByName[sc.Name]
-			if !ok {
-				// Runner skipped this scenario somehow — shouldn't happen
-				// for a well-formed recipe; surface as fail.
+			set := &LabelDescriptionSet{
+				Layer: []LabeledDescription{{
+					Origin: "pod:" + pod,
+					Description: Description{
+						Feature:  fmt.Sprintf("Score scenarios for pod %s", pod),
+						Scenario: []Scenario{sc},
+					},
+				}},
+			}
+			results := RunScenarios(ctx, runner, set, nil, false)
+			if len(results) == 0 {
 				tr := ScenarioTestResult{
-					ID:     idByName[sc.Name],
+					ID:     idByKey[keyOf(sc)],
 					Origin: "pod:" + pod,
 					Name:   sc.Name,
 					Status: "fail",
@@ -175,11 +200,12 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 				out.Scenario = append(out.Scenario, tr)
 				out.Summary.Total++
 				out.Summary.Fail++
-				verdictByName[sc.Name] = "fail"
+				verdictByKey[keyOf(sc)] = "fail"
 				continue
 			}
+			sr := results[0]
 			tr := ScenarioTestResult{
-				ID:           idByName[sc.Name],
+				ID:           idByKey[keyOf(sc)],
 				Origin:       sr.Origin,
 				Name:         sr.Name,
 				Tag:          append([]string(nil), sr.Tag...),
@@ -204,17 +230,62 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 			switch tr.Status {
 			case "pass":
 				out.Summary.Pass++
-				verdictByName[sc.Name] = "pass"
+				verdictByKey[keyOf(sc)] = "pass"
 			case "fail":
 				out.Summary.Fail++
-				verdictByName[sc.Name] = "fail"
+				verdictByKey[keyOf(sc)] = "fail"
 			case "skip":
 				out.Summary.Skip++
-				verdictByName[sc.Name] = "fail" // skipped-by-runner ≠ depends-skipped
+				verdictByKey[keyOf(sc)] = "fail" // skipped-by-runner ≠ depends-skipped
 			}
 		}
 	}
+
+	// After the bucket loop: emit per-scenario fail verdicts for any
+	// scenarios excluded from sorting because they belong to a
+	// dependency cycle. Done in declaration order so the result slice
+	// is deterministic. Section-5 invariant preserved: each Check still
+	// contributes exactly one ScenarioID; cyclic scenarios just get a
+	// deterministic fail verdict instead of disappearing into a
+	// phase-wide BuildFailure.
+	if len(cyclicKeys) > 0 {
+		for _, sc := range scenarios {
+			if !cyclicKeys[keyOf(sc)] {
+				continue
+			}
+			out.Scenario = append(out.Scenario, ScenarioTestResult{
+				ID:            idByKey[keyOf(sc)],
+				Origin:        "pod:" + sc.Pod,
+				Name:          sc.Name,
+				Tag:           append([]string(nil), sc.Tag...),
+				Status:        "fail",
+				PendingSteps:  0,
+				SkippedReason: "cycle: scenario is part of a depends_on cycle",
+			})
+			out.Summary.Total++
+			out.Summary.Fail++
+			verdictByKey[keyOf(sc)] = "fail"
+		}
+	}
 	return out, nil
+}
+
+// filterOutCyclic returns the input slice with every scenario whose
+// scenarioKey is in cyclicKeys removed. Order is preserved. Used by
+// RunRecipeScenariosLive when topoSortByDeclarationOrder reports a
+// *CycleError to score the non-cyclic subset normally.
+func filterOutCyclic(scenarios []Scenario, cyclicKeys map[scenarioKey]bool) []Scenario {
+	if len(cyclicKeys) == 0 {
+		return scenarios
+	}
+	out := make([]Scenario, 0, len(scenarios))
+	for _, sc := range scenarios {
+		if cyclicKeys[keyOf(sc)] {
+			continue
+		}
+		out = append(out, sc)
+	}
+	return out
 }
 
 // skippedResult builds a depends-on-cascade skip result for one
@@ -232,20 +303,27 @@ func skippedResult(sc Scenario, id, blockedBy string) ScenarioTestResult {
 	}
 }
 
-// stableScenarioIDsByName returns a name -> scenario-ID map computed
-// from the scenarios in declaration order, using the SAME bucketing
-// scheme as synthesizeScoreBaseline (per-pod sIdx counter + ExpandScenario
-// for row index). Topo-sort and bucket-grouping reorder execution but
-// MUST NOT shift IDs — otherwise baseline IDs (computed pre-AI) would
-// not match runtime IDs and every scenario would mis-classify as
-// Tampered (pre.Present=true, post.Present=false).
+// stableScenarioIDsByKey returns a (SourceRecipe, Name) → scenario-ID
+// map computed from the scenarios in declaration order, using the
+// SAME bucketing scheme as synthesizeScoreBaseline (per-pod sIdx
+// counter + ExpandScenario for row index). Topo-sort and
+// bucket-grouping reorder execution but MUST NOT shift IDs —
+// otherwise baseline IDs (computed pre-AI) would not match runtime
+// IDs and every scenario would mis-classify as Tampered
+// (pre.Present=true, post.Present=false).
+//
+// Keying by scenarioKey (rather than just Name) handles the
+// composition case where two recipes import a scenario with the same
+// name targeting the same pod — without the SourceRecipe scope, the
+// second scenario's ID would overwrite the first's and runtime
+// verdicts would attach to the wrong scenario.
 //
 // For non-outline scenarios, ExpandScenario returns a single entry
 // with RowIndex=-1 → ScenarioID produces "desc:<origin>:<sIdx>" (no
 // :row<n> suffix), which is what synthesizeScoreBaseline emits.
 // Outline scenarios produce one ID per expanded row.
-func stableScenarioIDsByName(scenarios []Scenario) map[string]string {
-	out := make(map[string]string, len(scenarios))
+func stableScenarioIDsByKey(scenarios []Scenario) map[scenarioKey]string {
+	out := make(map[scenarioKey]string, len(scenarios))
 	bucketIdx := map[string]int{}
 	for _, sc := range scenarios {
 		origin := "pod:" + sc.Pod
@@ -255,7 +333,7 @@ func stableScenarioIDsByName(scenarios []Scenario) map[string]string {
 		if len(expanded) == 0 {
 			// Non-expandable scenario; use RowIndex=-1 to match the
 			// non-outline path in synthesizeScoreBaseline.
-			out[sc.Name] = ScenarioID(origin, sIdx, -1)
+			out[keyOf(sc)] = ScenarioID(origin, sIdx, -1)
 			continue
 		}
 		// First-row ID (sufficient for non-outline scenarios where
@@ -263,7 +341,7 @@ func stableScenarioIDsByName(scenarios []Scenario) map[string]string {
 		// first row's ID under the scenario name — outline expansions
 		// are handled within RunScenarios at probe time and matched by
 		// scenario Name).
-		out[sc.Name] = ScenarioID(origin, sIdx, expanded[0].RowIndex)
+		out[keyOf(sc)] = ScenarioID(origin, sIdx, expanded[0].RowIndex)
 	}
 	return out
 }

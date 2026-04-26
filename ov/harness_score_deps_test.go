@@ -179,14 +179,17 @@ func names(scs []Scenario) []string {
 
 func TestFirstUnmetDep_NoDepsReturnsEmpty(t *testing.T) {
 	sc := Scenario{Name: "x"}
-	if blocked := firstUnmetDep(sc, map[string]string{}); blocked != "" {
+	if blocked := firstUnmetDep(sc, map[scenarioKey]string{}); blocked != "" {
 		t.Errorf("scenario with no deps should never be blocked, got %q", blocked)
 	}
 }
 
 func TestFirstUnmetDep_AllDepsPassReturnsEmpty(t *testing.T) {
 	sc := Scenario{Name: "x", DependsOn: []string{"a", "b"}}
-	verdicts := map[string]string{"a": "pass", "b": "pass"}
+	verdicts := map[scenarioKey]string{
+		{recipe: "", name: "a"}: "pass",
+		{recipe: "", name: "b"}: "pass",
+	}
 	if blocked := firstUnmetDep(sc, verdicts); blocked != "" {
 		t.Errorf("all deps pass → not blocked, got %q", blocked)
 	}
@@ -194,7 +197,11 @@ func TestFirstUnmetDep_AllDepsPassReturnsEmpty(t *testing.T) {
 
 func TestFirstUnmetDep_FirstFailedDepIsBlocking(t *testing.T) {
 	sc := Scenario{Name: "x", DependsOn: []string{"a", "b", "c"}}
-	verdicts := map[string]string{"a": "pass", "b": "fail", "c": "pass"}
+	verdicts := map[scenarioKey]string{
+		{recipe: "", name: "a"}: "pass",
+		{recipe: "", name: "b"}: "fail",
+		{recipe: "", name: "c"}: "pass",
+	}
 	if blocked := firstUnmetDep(sc, verdicts); blocked != "b" {
 		t.Errorf("expected blocked='b' (first non-pass dep), got %q", blocked)
 	}
@@ -203,23 +210,47 @@ func TestFirstUnmetDep_FirstFailedDepIsBlocking(t *testing.T) {
 func TestFirstUnmetDep_SkippedDepCascades(t *testing.T) {
 	// Transitive cascade: A failed → B was skipped → C depends on B,
 	// gets skipped too. firstUnmetDep should report "b" because
-	// verdictByName[b] == "skipped".
+	// verdictByKey[b] == "skipped".
 	sc := Scenario{Name: "c", DependsOn: []string{"b"}}
-	verdicts := map[string]string{"a": "fail", "b": "skipped"}
+	verdicts := map[scenarioKey]string{
+		{recipe: "", name: "a"}: "fail",
+		{recipe: "", name: "b"}: "skipped",
+	}
 	if blocked := firstUnmetDep(sc, verdicts); blocked != "b" {
 		t.Errorf("skipped dep should block dependent, got %q", blocked)
 	}
 }
 
 func TestFirstUnmetDep_UnknownDepBlocks(t *testing.T) {
-	// Defensive: a dep not yet in verdictByName means topo-sort
+	// Defensive: a dep not yet in verdictByKey means topo-sort
 	// processed out of order (or scoring is racing). Block — safer
 	// than running unblocked. validateHarnessSemantics catches
 	// dangling deps at load time, so this branch shouldn't fire in
 	// well-formed configs.
 	sc := Scenario{Name: "x", DependsOn: []string{"missing"}}
-	verdicts := map[string]string{}
+	verdicts := map[scenarioKey]string{}
 	if blocked := firstUnmetDep(sc, verdicts); blocked != "missing" {
 		t.Errorf("unknown dep should block, got %q", blocked)
+	}
+}
+
+// TestFirstUnmetDep_CrossRecipeNameCollisionScopedByRecipe verifies the
+// composition-feature regression: two recipes can both define a
+// scenario named "shared-dep". A scenario in recipe A depending on
+// "shared-dep" must look up recipe A's verdict, NOT recipe B's. Without
+// SourceRecipe-scoped lookup, a cross-recipe verdict could unblock
+// (or wrongly block) a dependent scenario in another recipe.
+func TestFirstUnmetDep_CrossRecipeNameCollisionScopedByRecipe(t *testing.T) {
+	verdicts := map[scenarioKey]string{
+		{recipe: "recipe-a", name: "shared-dep"}: "fail", // A's shared-dep failed
+		{recipe: "recipe-b", name: "shared-dep"}: "pass", // B's shared-dep passed
+	}
+	scA := Scenario{Name: "x", SourceRecipe: "recipe-a", DependsOn: []string{"shared-dep"}}
+	if blocked := firstUnmetDep(scA, verdicts); blocked != "shared-dep" {
+		t.Errorf("recipe-a's dependent should see recipe-a's failed shared-dep; got %q", blocked)
+	}
+	scB := Scenario{Name: "y", SourceRecipe: "recipe-b", DependsOn: []string{"shared-dep"}}
+	if blocked := firstUnmetDep(scB, verdicts); blocked != "" {
+		t.Errorf("recipe-b's dependent should see recipe-b's passing shared-dep; got %q", blocked)
 	}
 }

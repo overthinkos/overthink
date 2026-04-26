@@ -48,7 +48,27 @@ type AIConfig struct {
 	Env            map[string]string `yaml:"env,omitempty"`
 	WorkingDir     string            `yaml:"working_dir,omitempty"`
 	Credential     []CredentialMount `yaml:"credential,omitempty"`
+
+	// ProgressCheckInterval / ProgressNoImprovementTimeout drive the
+	// score-progress watchdog. Hidden from the AI by construction — they
+	// only affect the harness Go process. Empty defaults to 5m / 30m.
+	// Set ProgressNoImprovementTimeout to "0s" to disable watchdog
+	// termination (e.g. for fully-unbounded development sessions); set
+	// ProgressCheckInterval to "0s" to disable periodic logging too.
+	// See plugins/ov/skills/harness/SKILL.md "Score-progress watchdog".
+	ProgressCheckInterval        string `yaml:"progress_check_interval,omitempty"`
+	ProgressNoImprovementTimeout string `yaml:"progress_no_improvement_timeout,omitempty"`
 }
+
+// DefaultProgressCheckInterval / DefaultProgressNoImprovementTimeout are
+// the Go-level defaults the harness loop applies when an AI's
+// progress_* fields are empty strings. Per the user spec for Round 3:
+// poll every 5 minutes; terminate after 30 minutes of no scoring
+// improvement. Both configurable per-AI via the yaml fields above.
+const (
+	DefaultProgressCheckInterval        = 5 * time.Minute
+	DefaultProgressNoImprovementTimeout = 30 * time.Minute
+)
 
 // CredentialMount names one host file whose contents are synced into the
 // target deployment BEFORE the first AI invocation. `~` in dst resolves
@@ -64,8 +84,12 @@ type CredentialMount struct {
 }
 
 // DefaultAITimeout is the Go-level default applied by ResolveAI when an
-// AI entry's `timeout:` field is empty.
-const DefaultAITimeout = "30m"
+// AI entry's `timeout:` field is empty. Empty string = no per-iteration
+// timeout (the harness loop is plateau-bounded, not wall-clock-bounded;
+// the score's prompt promises "Take all the time you need" and the
+// runner must honor that). Authors who DO want a wall-clock cap can
+// set `ai.<name>.timeout: 30m` (or any Go duration) on their AI entry.
+const DefaultAITimeout = ""
 
 // ---------------------------------------------------------------------------
 // Sentinel errors
@@ -85,7 +109,7 @@ var (
 
 // ResolveAI returns the named AI entry, or the sole entry if name == "" and
 // exactly one is configured. Applies Go-level defaults:
-//   - Timeout: "30m" when empty
+//   - Timeout: "" (no per-iteration wall-clock cap) when empty
 //   - PromptVia: "argv" when empty
 //
 // Returns a *copy* so callers can mutate without poisoning the catalog.
@@ -135,12 +159,19 @@ func SortedAINames(catalog map[string]*AIConfig) []string {
 	return out
 }
 
-// ParseAITimeout parses the AI's Timeout field with the Go-level default
-// applied for empty strings. Exposed so harness_loop can apply the same
-// default consistently.
+// ParseAITimeout parses the AI's Timeout field. Empty string (the
+// default) returns 0 — meaning "no wall-clock cap on the runner".
+// Callers in harness_loop should branch on `dur == 0` to skip
+// `context.WithTimeout` entirely (use plain `context.WithCancel`)
+// so the runner inherits the parent context's cancellation only.
+// Plateau detection is the bound, not wall clock.
+//
+// Authors who DO want a per-iteration cap (e.g., for cost control on
+// shared infrastructure) can set `ai.<name>.timeout: 30m` (or any
+// Go duration) on their AI entry; that path still uses the timeout.
 func ParseAITimeout(s string) (time.Duration, error) {
 	if s == "" {
-		s = DefaultAITimeout
+		return 0, nil
 	}
 	return time.ParseDuration(s)
 }

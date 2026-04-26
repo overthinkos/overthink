@@ -140,6 +140,67 @@ recipe:
             command: "redis-cli get bench:${HARNESS_NONCE_KEY}"
             stdout: { contains: ["${HARNESS_NONCE_VALUE}"] }
 
+  # ---------------------------------------------------------------------------
+  # Self-test recipes for the `from:` composition primitive.
+  # These exercise per-kind expansion and multi-kind composition end-to-end
+  # against real entities in this repo (sshd layer + arch-coder image).
+  # See plugins/ov/skills/harness/SKILL.md "Composition with from:" for
+  # the authoring reference.
+  # ---------------------------------------------------------------------------
+
+  from-single-kind-selftest:
+    description:
+      feature: |
+        Self-test of per-kind `from:` expansion. Pulls 2 specific tests
+        from the sshd layer and 1 from the arch-coder image in
+        ISOLATION (each onto its own dedicated harness container).
+        Failure here means per-kind expansion is broken.
+    from:
+      - kind: layer
+        name: sshd
+        pod:  selftest-layer
+        select: [sshd-binary, sshd-wrapper]
+      - kind: image
+        name: arch-coder
+        pod:  selftest-image
+        scope: [image]
+        select: [arch-coder-ov]
+
+  from-composition-selftest:
+    description:
+      feature: |
+        Self-test of multi-kind composition: TWO `from:` entries onto
+        the SAME container (composition-app), filter pipeline with
+        select+exclude, plus a hand-written scenario whose
+        `depends_on:` crosses the imported/hand-written namespace
+        boundary. Failure here means composition wiring or
+        namespace resolution is broken.
+    from:
+      # Two from: entries onto the SAME pod — composition demonstration.
+      - kind: layer
+        name: sshd
+        pod:  composition-app
+        select: [sshd-binary]
+      - kind: image
+        name: arch-coder
+        pod:  composition-app                # SAME pod as the layer above
+        scope: [image]
+        select: [arch-coder-ov, arch-coder-languages]
+        exclude: [arch-coder-languages]      # exercise the exclude filter
+        prefix: img                           # → "img-arch-coder-ov" scenario name
+    scenario:
+      # Hand-written scenario that depends_on an imported test —
+      # exercises cross-namespace dep resolution (Section-5 invariant:
+      # imported and hand-written scenarios share one ScenarioID
+      # namespace).
+      - name: composition-handwritten-probe
+        pod: composition-app
+        depends_on: [sshd-binary]            # ← imported scenario name
+        steps:
+          - then: "marker file written during composition self-test is present"
+            file: /etc/ov-composition-selftest
+            exists: true
+
 # kind: score — runner config. References recipes by name; the harness
 # concatenates their scenarios in order and scores against each
 # scenario's `pod:` field.
@@ -156,7 +217,13 @@ score:
     notes: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
-    recipes: [tier1-easy, tier2-medium, tier3-hard, tier4-redis]
+    recipes:
+      - tier1-easy
+      - tier2-medium
+      - tier3-hard
+      - tier4-redis
+      - from-single-kind-selftest         # phase 5 — per-kind `from:` expansion
+      - from-composition-selftest         # phase 6 — multi-kind composition + filters + cross-namespace deps
     prompt: |
       == Where you are ==
       Your cwd is /workspace (= the project tree, bind-mounted from the host
@@ -234,3 +301,27 @@ score:
       Informational hints (NOT requirements):
         ${TARGET_IMAGE}    conventional image name (your call to use it)
         ${DEPLOYMENT}      conventional primary pod name (your call to use it)
+
+      == Composition-derived scenarios (phases 5 + 6) ==
+      Starting in phase 5, some scenarios listed under ${SCENARIOS} are
+      AUTO-GENERATED from existing layer/image entity tests via the
+      recipe's `from:` block (see plugins/ov/skills/harness/SKILL.md
+      "Composition with from:"). Treat them IDENTICALLY to hand-written
+      scenarios — same `pod:` semantics, same `depends_on:` namespace,
+      same `bin/ov test <pod>` self-eval flow, same exit gate. The
+      harness scorer cannot tell them apart and counts every check as
+      one ScenarioID = one point (Section-5 scoring invariant).
+
+      == When a source-code fix can't apply mid-run ==
+      The harness loop runs as a long-lived Go process (PID inside
+      bench-pod). Source fixes you make to /workspace/ov/*.go and
+      `go build -o ../bin/ov` rebuilds appear on disk via the
+      bind-mount, BUT the running harness PID has the OLD binary
+      mmap'd and CANNOT hot-reload Go code. Your fix takes effect on
+      the NEXT `ov harness run <score>` invocation — not the current
+      one. Recommended response: record the fix via
+      `bin/ov harness note append default "<short note>"` and exit
+      this iteration cleanly; the next run will fork a fresh PID and
+      pick up the new binary. Do NOT loop iterations 3+ trying to
+      make the running PID see your on-disk fix; the score won't
+      change this run.

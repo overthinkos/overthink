@@ -1035,3 +1035,20 @@ image:
         base: fedora
         layers:
             - harness-redis-client-layer
+    # phase5 selftest: minimal sshd-only image for selftest-layer pod.
+    bench-selftest-layer:
+        base: fedora
+        layers:
+            - sshd
+    # phase5 selftest: minimal ov-only image for selftest-image pod.
+    bench-selftest-image:
+        base: fedora
+        layers:
+            - ov
+    # phase6 selftest: combines sshd + ov + composition marker for composition-app pod.
+    bench-composition-app:
+        base: fedora
+        layers:
+            - sshd
+            - ov
+            - bench-composition-layer

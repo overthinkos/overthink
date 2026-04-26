@@ -25,8 +25,14 @@ func TestResolveAI_SoleAIImplicit(t *testing.T) {
 	if name != "claude" {
 		t.Errorf("name=%q, want claude", name)
 	}
+	// DefaultAITimeout is "" (no wall-clock cap); the runner uses
+	// context.WithCancel instead of context.WithTimeout when empty.
+	// Plateau detection is the loop bound, not wall clock.
 	if ai.Timeout != DefaultAITimeout {
-		t.Errorf("default timeout not applied: got %q", ai.Timeout)
+		t.Errorf("default timeout not applied: got %q (want empty)", ai.Timeout)
+	}
+	if ai.Timeout != "" {
+		t.Errorf("expected empty Timeout default; got %q", ai.Timeout)
 	}
 	if ai.PromptVia != "argv" {
 		t.Errorf("default prompt_via not applied: got %q", ai.PromptVia)
@@ -85,13 +91,17 @@ func TestVersionResultString(t *testing.T) {
 }
 
 func TestParseAITimeout(t *testing.T) {
+	// Empty timeout → 0 (no wall-clock cap). harness_loop branches on
+	// `dur == 0` and uses context.WithCancel instead of WithTimeout,
+	// honoring the "Take all the time you need" prompt promise.
 	d, err := ParseAITimeout("")
 	if err != nil {
-		t.Fatalf("default timeout failed: %v", err)
+		t.Fatalf("default (empty) timeout failed: %v", err)
 	}
-	if d.Minutes() != 30 {
-		t.Errorf("default 30m parse: got %v", d)
+	if d != 0 {
+		t.Errorf("default timeout should be 0 (no cap); got %v", d)
 	}
+	// Explicit cap still works for authors who want one.
 	d2, err := ParseAITimeout("5m")
 	if err != nil || d2.Minutes() != 5 {
 		t.Errorf("explicit timeout: got %v, err=%v", d2, err)

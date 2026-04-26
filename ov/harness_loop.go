@@ -559,10 +559,98 @@ func runOneIteration(
 	runnerArgv, runnerEnv := renderRunnerInvocation(opts, substCtx, promptText, iterDir)
 	runnerLog := filepath.Join(iterDir, "runner.log")
 
+	// Per-iteration wall-clock cap is OPT-IN via `ai.<name>.timeout:`.
+	// Empty (the default) → no cap; the runner inherits the parent
+	// context's cancellation only and runs until the AI exits or the
+	// user interrupts. The plateau counter is the loop bound, not wall
+	// clock. The score's prompt promises "Take all the time you need" —
+	// honoring that promise is the harness's job.
 	timeout, _ := ParseAITimeout(opts.AI.Timeout)
-	runnerCtx, cancelRunner := context.WithTimeout(ctx, timeout)
+	var runnerCtx context.Context
+	var cancelRunner context.CancelFunc
+	if timeout > 0 {
+		runnerCtx, cancelRunner = context.WithTimeout(ctx, timeout)
+	} else {
+		runnerCtx, cancelRunner = context.WithCancel(ctx)
+	}
+
+	// Score-progress watchdog. Hidden from the AI by construction —
+	// runs in this Go process, never appears in the AI's prompt or any
+	// tool the AI invokes. Probes the live deployments via
+	// RunRecipeScenariosLive every CheckInterval; reports the current
+	// score to host stderr; terminates the runner if the score has not
+	// improved in NoImprovementTimeout. Plateau detection (across
+	// iterations) and this watchdog (within an iteration) are
+	// orthogonal — both bound the run, neither penalizes legitimately
+	// long iterations that ARE making progress.
+	//
+	// Watchdog only applies in recipe-mode (when ScoringScenarios is
+	// non-empty). Image-test mode runs scoring after the runner exits,
+	// so there's no live-score signal to poll.
+	watchdogStarted := false
+	var watchdogDone chan struct{}
+	if len(opts.ScoringScenarios) > 0 {
+		checkInterval, _ := ParseAITimeout(opts.AI.ProgressCheckInterval)
+		if checkInterval == 0 {
+			checkInterval = DefaultProgressCheckInterval
+		}
+		noImpTimeout, _ := ParseAITimeout(opts.AI.ProgressNoImprovementTimeout)
+		if noImpTimeout == 0 {
+			noImpTimeout = DefaultProgressNoImprovementTimeout
+		}
+		if checkInterval > 0 {
+			scoringScenarios := opts.ScoringScenarios
+			deployment := opts.Score.Deployment
+			scoreName := opts.ScoreName
+			phase, phaseTotal, iterK := opts.Phase, opts.PhaseTotal, k
+			stderr := opts.Stderr
+			wd := &ProgressWatchdog{
+				CheckInterval:        checkInterval,
+				NoImprovementTimeout: noImpTimeout,
+				Probe: func(probeCtx context.Context) (int, int, error) {
+					live, err := RunRecipeScenariosLive(probeCtx, deployment, scoreName, scoringScenarios)
+					if err != nil {
+						return 0, 0, err
+					}
+					return live.Summary.Pass, live.Summary.Total, nil
+				},
+				OnTick: func(elapsed time.Duration, score, total int, lastImprovedAt time.Time) {
+					var deltaInfo string
+					if !lastImprovedAt.IsZero() {
+						deltaInfo = " (last improvement at " + lastImprovedAt.Format("15:04:05") + ")"
+					} else {
+						deltaInfo = " (no improvement observed yet)"
+					}
+					fmt.Fprintf(stderr,
+						"harness: progress [phase %d/%d iter %d] elapsed %s — current score %d/%d%s\n",
+						phase, phaseTotal, iterK, elapsed.Round(time.Second), score, total, deltaInfo)
+				},
+				OnTickError: func(err error) {
+					fmt.Fprintf(stderr,
+						"harness: progress [phase %d/%d iter %d] probe error (continuing): %v\n",
+						phase, phaseTotal, iterK, err)
+				},
+				OnTimeout: func(reason string) {
+					fmt.Fprintf(stderr,
+						"harness: watchdog [phase %d/%d iter %d] terminating AI runner — %s\n",
+						phase, phaseTotal, iterK, reason)
+					cancelRunner()
+				},
+			}
+			watchdogDone = make(chan struct{})
+			watchdogStarted = true
+			go func() {
+				wd.Run(runnerCtx)
+				close(watchdogDone)
+			}()
+		}
+	}
+
 	runnerDur, runnerErr := runRunnerFn(runnerCtx, layout, runnerArgv, runnerEnv, runnerLog)
 	cancelRunner()
+	if watchdogStarted {
+		<-watchdogDone // ensure watchdog goroutine exits before iter completes
+	}
 	iter.RunnerDuration = runnerDur.String()
 	iter.RunnerLogPath = runnerLog
 	if data, err := os.ReadFile(runnerLog); err == nil {

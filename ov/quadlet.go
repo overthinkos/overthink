@@ -83,7 +83,21 @@ func generateQuadlet(cfg QuadletConfig) string {
 			b.WriteString(fmt.Sprintf("PublishPort=%s\n", localizePort(port, cfg.BindAddress)))
 		}
 	}
+	// A bind mount that targets the same container path as a named
+	// volume is an OVERRIDE — emit only the bind, drop the named
+	// volume. Without this filter, podman rejects the unit at start
+	// time with "duplicate mount destination" (e.g. when deploy.yml
+	// pins a `project` volume to a host bind at /workspace and the
+	// image's volume label also declares the named `project` volume
+	// at /workspace).
+	bindPaths := make(map[string]bool, len(cfg.BindMounts))
+	for _, bm := range cfg.BindMounts {
+		bindPaths[bm.ContPath] = true
+	}
 	for _, vol := range cfg.Volumes {
+		if bindPaths[vol.ContainerPath] {
+			continue
+		}
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
 	}
 	for _, bm := range cfg.BindMounts {

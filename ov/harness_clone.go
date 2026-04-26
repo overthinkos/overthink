@@ -45,6 +45,12 @@ type RunLayout struct {
 	RunDir      string // <HarnessRoot>/runs/<run-id>
 	RepoDir     string // <HarnessRoot>/runs/<run-id>/repo (per-run clone)
 	Branch      string // "ovharness/<run-id>"
+	// Phase, when > 0, segregates iteration dirs under
+	// <RunDir>/phase<Phase>/iter<k>/. Set by the progressive caller
+	// before each phase-RunHarness call. Zero = single-phase
+	// (legacy/non-progressive) runs that write iter dirs directly
+	// under RunDir/iter<k>/.
+	Phase int
 }
 
 // NewRunLayout constructs a RunLayout. Generates run-id if empty.
@@ -91,8 +97,14 @@ func GenerateRunID() string {
 	return ts + "-" + hex.EncodeToString(buf)
 }
 
-// IterDir returns the path for iteration k under this run.
+// IterDir returns the path for iteration k under this run. When the
+// layout's Phase is > 0 (progressive scoring), paths are segregated
+// under phase<Phase>/iter<k> so each phase has its own iter1/, iter2/,
+// etc. without colliding across phase boundaries.
 func (l RunLayout) IterDir(k int) string {
+	if l.Phase > 0 {
+		return filepath.Join(l.RunDir, fmt.Sprintf("phase%d", l.Phase), fmt.Sprintf("iter%d", k))
+	}
 	return filepath.Join(l.RunDir, fmt.Sprintf("iter%d", k))
 }
 

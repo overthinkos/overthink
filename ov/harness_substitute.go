@@ -12,9 +12,13 @@ package main
 // os.Getenv. Substitution is single-pass (no recursive expansion).
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"regexp"
+
+	"gopkg.in/yaml.v3"
 )
 
 // SubstContext carries every variable Substitute can expand.
@@ -58,6 +62,13 @@ type SubstContext struct {
 
 	// Per-recipe-grouped block (drives ${RECIPES})
 	Recipes string
+
+	// Progressive-scoring phase state. Populated when score.progressive
+	// is true; zero-valued and ignored otherwise.
+	Phase         int    // 1-indexed current phase number
+	PhaseTotal    int    // total number of phases (== len(score.Recipes))
+	PhaseRecipes  string // comma-joined in-scope recipe names for this phase
+	PhaseIntro    string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
 
 	// Deployment name the harness scores against (drives ${DEPLOYMENT})
 	Deployment string
@@ -163,6 +174,14 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 		return ctx.Scenarios
 	case "RECIPES":
 		return ctx.Recipes
+	case "PHASE":
+		return intTok(ctx.Phase)
+	case "PHASE_TOTAL":
+		return intTok(ctx.PhaseTotal)
+	case "PHASE_RECIPES":
+		return ctx.PhaseRecipes
+	case "PHASE_INTRO":
+		return ctx.PhaseIntro
 	case "DEPLOYMENT":
 		return ctx.Deployment
 	case "TAG":
@@ -187,4 +206,87 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 // intTok stringifies an int for substitution.
 func intTok(n int) string {
 	return fmt.Sprintf("%d", n)
+}
+
+// ---------------------------------------------------------------------------
+// ${HARNESS_NONCE_<NAME>} substitution — per-run randomized nonces that
+// the AI never sees. Recipe authors use these tokens in scenarios that
+// require cross-pod traffic at scoring time (e.g., redis-cli SET) so the
+// AI cannot pre-set the expected key/value via shortcut paths
+// (`podman exec` into the target pod, hardcoding values). Generation
+// happens at HarnessRunLocalCmd entry; substitution happens in-place
+// on a copy of the merged scenarios that flows ONLY into baseline
+// synthesis + per-iter scoring (never into ${SCENARIOS}/${RECIPES}
+// prompt rendering).
+// ---------------------------------------------------------------------------
+
+// nonceTokenRe matches ${HARNESS_NONCE_<NAME>} where NAME is uppercase
+// alphanumeric + underscore.
+var nonceTokenRe = regexp.MustCompile(`\$\{HARNESS_NONCE_([A-Z0-9_]+)\}`)
+
+// GenerateHarnessNonces walks the scenarios via yaml.Marshal, finds every
+// unique ${HARNESS_NONCE_<NAME>} reference, and assigns each NAME a fresh
+// 16-hex-char value drawn from crypto/rand (64 bits of entropy —
+// brute-force-infeasible).
+//
+// Returns an empty map if no nonce tokens are found.
+func GenerateHarnessNonces(scenarios []Scenario) (map[string]string, error) {
+	data, err := yaml.Marshal(scenarios)
+	if err != nil {
+		return nil, fmt.Errorf("marshal scenarios for nonce discovery: %w", err)
+	}
+	nonces := map[string]string{}
+	for _, m := range nonceTokenRe.FindAllSubmatch(data, -1) {
+		name := string(m[1])
+		if _, seen := nonces[name]; seen {
+			continue
+		}
+		buf := make([]byte, 8) // 8 bytes → 16 hex chars
+		if _, err := rand.Read(buf); err != nil {
+			return nil, fmt.Errorf("generate nonce %q: %w", name, err)
+		}
+		nonces[name] = hex.EncodeToString(buf)
+	}
+	return nonces, nil
+}
+
+// SubstituteScenarioNonces returns a new slice of scenarios with all
+// ${HARNESS_NONCE_<NAME>} tokens replaced by nonces[NAME]. Implemented
+// via yaml round-trip with regex replacement on the marshaled bytes —
+// reuses Scenario's existing UnmarshalYAML for fidelity.
+//
+// Tokens whose NAME isn't in the map are left untouched (will surface
+// at scoring time as failed verbs — visibility, not silent corruption).
+//
+// Re-stamps Scenario.SourceRecipe after round-trip (yaml:"-" so it
+// would otherwise drop).
+func SubstituteScenarioNonces(scenarios []Scenario, nonces map[string]string) ([]Scenario, error) {
+	if len(nonces) == 0 {
+		return scenarios, nil
+	}
+	data, err := yaml.Marshal(scenarios)
+	if err != nil {
+		return nil, fmt.Errorf("marshal scenarios: %w", err)
+	}
+	substituted := nonceTokenRe.ReplaceAllFunc(data, func(match []byte) []byte {
+		sub := nonceTokenRe.FindSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		name := string(sub[1])
+		if v, ok := nonces[name]; ok {
+			return []byte(v)
+		}
+		return match
+	})
+	var out []Scenario
+	if err := yaml.Unmarshal(substituted, &out); err != nil {
+		return nil, fmt.Errorf("unmarshal substituted scenarios: %w", err)
+	}
+	for i := range out {
+		if i < len(scenarios) {
+			out[i].SourceRecipe = scenarios[i].SourceRecipe
+		}
+	}
+	return out, nil
 }

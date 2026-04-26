@@ -1,0 +1,19 @@
+layer:
+  name: harness-redis-client-layer
+  description:
+    feature: harness-redis-client — installs redis-cli for cross-pod redis access
+    narrative: |
+      Provides /usr/bin/redis-cli so the harness can run
+      `redis-cli -h ov-redis SET ...` and verify cross-pod connectivity.
+      No redis service is started in this image — it acts purely as a client.
+
+  rpm:
+    packages:
+      - redis
+      - iproute
+      - procps-ng
+
+  tests:
+    - id: harness-redis-client-cli
+      file: /usr/bin/redis-cli
+      exists: true

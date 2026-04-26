@@ -54,9 +54,12 @@ type ScenarioTestResult struct {
 	Origin       string             `yaml:"origin,omitempty"`
 	Name         string             `yaml:"name,omitempty"`
 	Tag         []string           `yaml:"tag,omitempty"`
-	Status       string             `yaml:"status"` // "pass" | "fail" | "skip"
+	Status       string             `yaml:"status"` // "pass" | "fail" | "skip" | "skipped"
 	PendingSteps int                `yaml:"pending_steps"`
 	Steps        []StepTestResult   `yaml:"steps,omitempty"`
+	// SkippedReason is set when Status == "skipped" — the depends_on
+	// upstream that didn't pass. Format: "dep-unmet: <upstream-name>".
+	SkippedReason string `yaml:"skipped_reason,omitempty"`
 }
 
 // StepTestResult is the per-step detail inside a ScenarioTestResult.
@@ -309,13 +312,19 @@ const (
 	// pre-AI baseline set. The AI added a new scenario. Reported in a
 	// separate section of the report; contributes 0 to the score.
 	VerdictAdded Verdict = "added"
+
+	// VerdictSkipped — the scenario was not probed because one of its
+	// `depends_on:` scenarios did not pass at scoring time. Surfaces a
+	// dependency-cascade failure visibly so the AI knows which upstream
+	// scenario blocked this one. Does NOT count toward solved.
+	VerdictSkipped Verdict = "skipped"
 )
 
 // AllVerdicts lists every verdict in reporting order. Useful for test
 // matrices and for emitting YAML summaries with stable key order.
 var AllVerdicts = []Verdict{
 	VerdictSolved, VerdictPartial, VerdictUnchanged, VerdictRegressed,
-	VerdictTampered, VerdictRetagged, VerdictAdded,
+	VerdictTampered, VerdictRetagged, VerdictAdded, VerdictSkipped,
 }
 
 // ScenarioState summarizes one scenario's state at a point in time
@@ -351,6 +360,14 @@ type ScenarioState struct {
 //  6. Pending-step count decreased, or status improved but not fully green -> VerdictPartial
 //  7. Otherwise                 -> VerdictUnchanged
 func Classify(pre, post ScenarioState) Verdict {
+	// 0. Skipped: the scoring path explicitly emitted status="skipped"
+	// for this scenario because a `depends_on:` upstream did not pass.
+	// Short-circuit before any other classification — nothing was
+	// probed, fingerprints are baseline placeholders, and the verdict
+	// must propagate to dependents at the scorer level.
+	if post.Status == "skipped" {
+		return VerdictSkipped
+	}
 	// 1. Added: present post-iteration only. pre.Present == false.
 	if !pre.Present && post.Present {
 		return VerdictAdded

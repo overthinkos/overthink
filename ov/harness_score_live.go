@@ -1,154 +1,269 @@
 package main
 
 // harness_score_live.go — score the merged scenario set against the
-// live deployment the AI created.
+// live deployments inside the bench-pod's nested podman.
 //
-// Post the 2026-04 kind split, the harness scores `MergedScenarios`
-// (the concatenation of every recipe in score.recipes, in order, each
-// scenario carrying its SourceRecipe stamp). When merged scenarios are
-// non-empty, the harness DOES NOT build + `ov image test` against a
-// disposable image-test container; instead:
+// Post the 2026-04 pod-cutover, EVERY recipe scenario carries a
+// `pod:` field naming the container its steps probe. The harness:
 //
-//  1. AI is given the scenarios via ${SCENARIOS} + ${RECIPES} in its
-//     prompt
-//  2. AI builds + deploys + tests the image themselves
-//  3. After AI exits, harness opens a Runner against ov-<deployment>
-//     and runs MergedScenarios via RunScenarios
-//  4. The result feeds the same 7-way Classify pipeline as today
+//  1. AI sees the scenarios via ${SCENARIOS}/${RECIPES} in its prompt.
+//  2. AI builds whatever images each pod needs and `ov deploy add`s
+//     each pod by name inside bench-pod's nested podman.
+//  3. After the AI exits, this code groups scenarios by their `Pod`
+//     field and runs each group's scenarios against `ov-<pod>` via
+//     a fresh ContainerExecutor.
+//  4. The result feeds the same 7-way Classify pipeline as today.
 //
-// Image-baked scenarios in the deployment's OCI labels are IGNORED —
-// the score's recipe set IS the spec.
+// One field, one container per scenario. No defaults, no fallbacks.
 
 import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-// RunRecipeScenariosLive scores `scenarios` against the running
-// deployment named `deployment` (= container `ov-<deployment>`).
-// Returns a TestRunResults shaped exactly like ParseOvTestOutput
-// would, so the existing scorer (Classify, fingerprints, summary)
-// consumes it unchanged.
+// RunRecipeScenariosLive scores `scenarios` against the live containers
+// they target via their `Pod` field. Returns a TestRunResults shaped
+// like ParseOvTestOutput's, so the existing scorer (Classify,
+// fingerprints, summary) consumes it unchanged.
 //
-// `scoreName` is the active score name; per-scenario Origin is derived
-// from each scenario's SourceRecipe stamp (`recipe:<source-recipe>`).
-// Scenarios without SourceRecipe stamps fall back to `score:<scoreName>`.
+// Scenarios are grouped by their `Pod` field; each group runs against
+// a separate `ContainerExecutor{ContainerName: "ov-" + pod}`. If a
+// pod's container isn't reachable, every scenario in that bucket
+// returns a "not reachable" verdict (status: fail, no steps); the
+// remaining buckets are still scored.
 //
-// Function name retained for callsite stability across the cutover.
+// `scoreName` and `deployment` parameters are kept on the signature
+// for callsite stability but only `scoreName` is used (for narrative
+// labelling). The legacy `deployment` argument is now ignored —
+// scoring follows scenario.Pod, never score.deployment.
 func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, scenarios []Scenario) (*TestRunResults, error) {
-	if deployment == "" {
-		return nil, fmt.Errorf("score.deployment required for live scoring")
-	}
+	_ = deployment // legacy parameter, no longer consulted
+
 	if len(scenarios) == 0 {
 		return &TestRunResults{}, nil
 	}
-	containerName := "ov-" + deployment
-	if err := containerRunningForScoring(ctx, containerName); err != nil {
-		return nil, err
+
+	// Defensive pod check (validator catches this earlier; double-tap).
+	for _, sc := range scenarios {
+		if sc.Pod == "" {
+			return nil, fmt.Errorf("scenario %q has empty pod field — validator should have rejected this; refusing to score", sc.Name)
+		}
 	}
 
-	exec := &ContainerExecutor{Engine: "podman", ContainerName: containerName}
-	resolver := &TestVarResolver{}
-	runner := NewRunner(exec, resolver, RunModeTest)
-	runner.Image = deployment
-
-	// Bucket scenarios by SourceRecipe so each LabeledDescription has
-	// the right Origin tag for downstream test-output traceability.
-	set := &LabelDescriptionSet{
-		Layer: bucketScenariosByRecipe(scenarios, scoreName),
+	// Topologically sort by depends_on, tie-break by declaration order,
+	// then group consecutive same-pod runs into execution buckets. This
+	// preserves the one-`podman exec`-per-bucket efficiency in the
+	// common case (no cross-pod deps) while honoring cross-pod
+	// dependencies when they exist (a single pod may legitimately span
+	// multiple buckets).
+	sorted, err := topoSortByDeclarationOrder(scenarios)
+	if err != nil {
+		return nil, fmt.Errorf("scoring scenarios: %w", err)
 	}
-	results := RunScenarios(ctx, runner, set, nil, false)
+	buckets := groupConsecutiveByPod(sorted)
+
+	// IDs used by ScenarioTestResult must match the IDs that
+	// synthesizeScoreBaseline emits — those use a per-pod sIdx counter
+	// indexed against scenario declaration order in the recipe (NOT
+	// topo-sort order). Compute a stable name -> ID map up front so
+	// the runtime path can attach the matching ID regardless of the
+	// post-topo execution order.
+	idByName := stableScenarioIDsByName(scenarios)
 
 	out := &TestRunResults{
-		Image: containerName,
+		Image: "score:" + scoreName,
 		Mode:  "run",
 	}
-	for _, sr := range results {
-		tr := ScenarioTestResult{
-			ID:           sr.ScenarioID,
-			Origin:       sr.Origin,
-			Name:         sr.Name,
-			Tag:          append([]string(nil), sr.Tag...),
-			Status:       sr.Status.String(),
-			PendingSteps: sr.Pending,
-		}
-		for _, sp := range sr.Steps {
-			step := StepTestResult{
-				Keyword: sp.Keyword,
-				Text:    sp.Text,
-				StepID:  sp.StepID,
-				Status:  sp.Result.Status.String(),
-				Verb:    sp.Result.Verb,
+
+	// verdictByName tracks the live status of each scenario as buckets
+	// run, so cross-bucket depends_on cascades work. Values: "pass" |
+	// "fail" | "skipped". Anything other than "pass" blocks dependents.
+	verdictByName := make(map[string]string, len(scenarios))
+
+	for _, bucket := range buckets {
+		// Filter the bucket: any scenario whose depends_on contains a
+		// non-passing entry is recorded as skipped without probing.
+		// firstUnmetDep treats unknown-name as blocked — defensive
+		// against topo-sort/validator misbehavior. validateHarness-
+		// Semantics catches dangling refs at load time so this branch
+		// shouldn't fire in well-formed configs.
+		var probe []Scenario
+		for _, sc := range bucket {
+			blocked := firstUnmetDep(sc, verdictByName)
+			if blocked != "" {
+				out.Scenario = append(out.Scenario, skippedResult(sc, idByName[sc.Name], blocked))
+				out.Summary.Total++
+				out.Summary.Skip++
+				verdictByName[sc.Name] = "skipped"
+				continue
 			}
-			if sp.Result.Verb == "" {
-				step.Pending = true
-			}
-			tr.Steps = append(tr.Steps, step)
+			probe = append(probe, sc)
 		}
-		out.Scenario = append(out.Scenario, tr)
-		out.Summary.Total++
-		switch tr.Status {
-		case "pass":
-			out.Summary.Pass++
-		case "fail":
-			out.Summary.Fail++
-		case "skip":
-			out.Summary.Skip++
+
+		if len(probe) == 0 {
+			continue
+		}
+
+		pod := probe[0].Pod
+		containerName := "ov-" + pod
+
+		if err := containerRunningForScoring(ctx, containerName); err != nil {
+			// Container missing → record per-scenario "not reachable"
+			// fail-status verdicts with no steps; continue to next bucket.
+			for _, sc := range probe {
+				expanded := ExpandScenario(sc)
+				for _, es := range expanded {
+					tr := ScenarioTestResult{
+						ID:           idByName[sc.Name],
+						Origin:       "pod:" + pod,
+						Name:         es.Name,
+						Tag:          append([]string(nil), es.Tag...),
+						Status:       "fail",
+						PendingSteps: 0,
+					}
+					out.Scenario = append(out.Scenario, tr)
+					out.Summary.Total++
+					out.Summary.Fail++
+				}
+				verdictByName[sc.Name] = "fail"
+			}
+			fmt.Fprintf(os.Stderr, "score live: pod %q unreachable: %v\n", pod, err)
+			continue
+		}
+
+		exec := &ContainerExecutor{Engine: "podman", ContainerName: containerName}
+		resolver := &TestVarResolver{}
+		runner := NewRunner(exec, resolver, RunModeTest)
+		runner.Image = pod
+
+		set := &LabelDescriptionSet{
+			Layer: []LabeledDescription{{
+				Origin: "pod:" + pod,
+				Description: Description{
+					Feature:  fmt.Sprintf("Score scenarios for pod %s", pod),
+					Scenario: probe,
+				},
+			}},
+		}
+		results := RunScenarios(ctx, runner, set, nil, false)
+
+		// Map runner results back to scenarios by name (the runner
+		// preserves declaration order within `probe`; results align by
+		// scenario index inside the LabelDescriptionSet — but to be
+		// robust we match on Name).
+		resultByName := make(map[string]ScenarioResult, len(results))
+		for _, sr := range results {
+			resultByName[sr.Name] = sr
+		}
+		for _, sc := range probe {
+			sr, ok := resultByName[sc.Name]
+			if !ok {
+				// Runner skipped this scenario somehow — shouldn't happen
+				// for a well-formed recipe; surface as fail.
+				tr := ScenarioTestResult{
+					ID:     idByName[sc.Name],
+					Origin: "pod:" + pod,
+					Name:   sc.Name,
+					Status: "fail",
+				}
+				out.Scenario = append(out.Scenario, tr)
+				out.Summary.Total++
+				out.Summary.Fail++
+				verdictByName[sc.Name] = "fail"
+				continue
+			}
+			tr := ScenarioTestResult{
+				ID:           idByName[sc.Name],
+				Origin:       sr.Origin,
+				Name:         sr.Name,
+				Tag:          append([]string(nil), sr.Tag...),
+				Status:       sr.Status.String(),
+				PendingSteps: sr.Pending,
+			}
+			for _, sp := range sr.Steps {
+				step := StepTestResult{
+					Keyword: sp.Keyword,
+					Text:    sp.Text,
+					StepID:  sp.StepID,
+					Status:  sp.Result.Status.String(),
+					Verb:    sp.Result.Verb,
+				}
+				if sp.Result.Verb == "" {
+					step.Pending = true
+				}
+				tr.Steps = append(tr.Steps, step)
+			}
+			out.Scenario = append(out.Scenario, tr)
+			out.Summary.Total++
+			switch tr.Status {
+			case "pass":
+				out.Summary.Pass++
+				verdictByName[sc.Name] = "pass"
+			case "fail":
+				out.Summary.Fail++
+				verdictByName[sc.Name] = "fail"
+			case "skip":
+				out.Summary.Skip++
+				verdictByName[sc.Name] = "fail" // skipped-by-runner ≠ depends-skipped
+			}
 		}
 	}
 	return out, nil
 }
 
-// bucketScenariosByRecipe groups scenarios by their SourceRecipe stamp.
-// Each non-empty SourceRecipe gets its own LabeledDescription with
-// Origin = "recipe:<source-recipe>"; unstamped scenarios share an
-// "score:<scoreName>" group.
+// skippedResult builds a depends-on-cascade skip result for one
+// scenario. Status "skipped" (distinct from runner-side "skip") is
+// recognized by Classify and surfaces as VerdictSkipped.
+func skippedResult(sc Scenario, id, blockedBy string) ScenarioTestResult {
+	return ScenarioTestResult{
+		ID:            id,
+		Origin:        "pod:" + sc.Pod,
+		Name:          sc.Name,
+		Tag:           append([]string(nil), sc.Tag...),
+		Status:        "skipped",
+		PendingSteps:  0,
+		SkippedReason: "dep-unmet: " + blockedBy,
+	}
+}
+
+// stableScenarioIDsByName returns a name -> scenario-ID map computed
+// from the scenarios in declaration order, using the SAME bucketing
+// scheme as synthesizeScoreBaseline (per-pod sIdx counter + ExpandScenario
+// for row index). Topo-sort and bucket-grouping reorder execution but
+// MUST NOT shift IDs — otherwise baseline IDs (computed pre-AI) would
+// not match runtime IDs and every scenario would mis-classify as
+// Tampered (pre.Present=true, post.Present=false).
 //
-// Order is preserved within each bucket; bucket order matches first
-// appearance in the input slice (so the AI sees scenarios in the same
-// order they were authored in score.recipes).
-func bucketScenariosByRecipe(scenarios []Scenario, scoreName string) []LabeledDescription {
-	type bucket struct {
-		origin    string
-		feature   string
-		scenarios []Scenario
-	}
-	buckets := []*bucket{}
-	idx := map[string]*bucket{}
+// For non-outline scenarios, ExpandScenario returns a single entry
+// with RowIndex=-1 → ScenarioID produces "desc:<origin>:<sIdx>" (no
+// :row<n> suffix), which is what synthesizeScoreBaseline emits.
+// Outline scenarios produce one ID per expanded row.
+func stableScenarioIDsByName(scenarios []Scenario) map[string]string {
+	out := make(map[string]string, len(scenarios))
+	bucketIdx := map[string]int{}
 	for _, sc := range scenarios {
-		key := sc.SourceRecipe
-		if key == "" {
-			key = "_score_"
+		origin := "pod:" + sc.Pod
+		sIdx := bucketIdx[origin]
+		bucketIdx[origin]++
+		expanded := ExpandScenario(sc)
+		if len(expanded) == 0 {
+			// Non-expandable scenario; use RowIndex=-1 to match the
+			// non-outline path in synthesizeScoreBaseline.
+			out[sc.Name] = ScenarioID(origin, sIdx, -1)
+			continue
 		}
-		b, ok := idx[key]
-		if !ok {
-			b = &bucket{}
-			if sc.SourceRecipe != "" {
-				b.origin = "recipe:" + sc.SourceRecipe
-				b.feature = fmt.Sprintf("Recipe %s scenarios", sc.SourceRecipe)
-			} else {
-				b.origin = "score:" + scoreName
-				b.feature = fmt.Sprintf("Score %s scenarios", scoreName)
-			}
-			idx[key] = b
-			buckets = append(buckets, b)
-		}
-		b.scenarios = append(b.scenarios, sc)
-	}
-	out := make([]LabeledDescription, 0, len(buckets))
-	for _, b := range buckets {
-		out = append(out, LabeledDescription{
-			Origin: b.origin,
-			Description: Description{
-				Feature:  b.feature,
-				Scenario: b.scenarios,
-			},
-		})
+		// First-row ID (sufficient for non-outline scenarios where
+		// expanded[0].RowIndex == -1; outline scenarios emit only the
+		// first row's ID under the scenario name — outline expansions
+		// are handled within RunScenarios at probe time and matched by
+		// scenario Name).
+		out[sc.Name] = ScenarioID(origin, sIdx, expanded[0].RowIndex)
 	}
 	return out
 }
@@ -157,44 +272,42 @@ func bucketScenariosByRecipe(scenarios []Scenario, scoreName string) []LabeledDe
 func containerRunningForScoring(ctx context.Context, containerName string) error {
 	out, err := exec.CommandContext(ctx, "podman", "inspect", "--format", "{{.State.Running}}", containerName).CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("score live: container %q not reachable — the AI was supposed to `ov deploy add %s ...` before exiting: %w\n%s",
-			containerName, strings.TrimPrefix(containerName, "ov-"), err, string(out))
+		return fmt.Errorf("container %q not reachable: %w\n%s",
+			containerName, err, string(out))
 	}
 	if !strings.Contains(string(out), "true") {
-		return fmt.Errorf("score live: container %q exists but is not running — AI did not start the deployment", containerName)
+		return fmt.Errorf("container %q exists but is not running", containerName)
 	}
 	return nil
 }
 
 // synthesizeScoreBaseline builds the pre-AI baseline from the merged
-// scenario set. Each scenario's Origin tracks its SourceRecipe stamp
-// so per-iteration verdicts can be attributed back to the source
-// recipe in the result file.
+// scenario set, bucketing scenarios by their `Pod` field. Each scenario
+// is marked status: fail at baseline (nothing's deployed yet); IDs use
+// per-pod sIdx so they match the runtime IDs produced by RunScenarios
+// inside RunRecipeScenariosLive (which also buckets by Pod).
 //
-// All scenarios are marked status: fail — nothing's been deployed yet.
-// Fingerprints are computed from the scenario YAML so post-iteration
-// fingerprint comparison works (recipes are immutable; pre == post).
-//
-// **Per-source-recipe sIdx**: ScenarioIDs MUST match the runtime IDs
-// produced by RunScenarios (which iterates each LabeledDescription's
-// scenario list independently with sIdx 0..N). So we bucket scenarios
-// by SourceRecipe and assign sIdx within each bucket — exactly mirroring
-// what bucketScenariosByRecipe + RunScenarios do at scoring time.
-// Indexing the flat merged slice would produce IDs that no runtime
-// verdict references, mis-classifying every non-first-bucket scenario
-// as Tampered and triggering a false solved-all exit.
+// Without per-pod bucketing the baseline IDs would index against the
+// flat merged list (sIdx 0..N) and never match runtime IDs (sIdx
+// 0..M per pod) — every non-first-bucket scenario would mis-classify
+// as Tampered (pre.Present=true, post.Present=false), triggering a
+// false solved-all exit.
 func synthesizeScoreBaseline(scoreName string, scenarios []Scenario) ([]ScenarioTestResult, map[string]string, map[string]string) {
+	_ = scoreName // legacy parameter, kept for callsite stability
+
 	var out []ScenarioTestResult
 	fps := make(map[string]string)
 	tagFps := make(map[string]string)
 
-	// Per-bucket sIdx counter, keyed by origin string.
+	// Per-pod sIdx counter — must match the bucketing in
+	// RunRecipeScenariosLive so baseline IDs == runtime IDs.
 	bucketIdx := map[string]int{}
 	for _, scenario := range scenarios {
-		origin := "score:" + scoreName
-		if scenario.SourceRecipe != "" {
-			origin = "recipe:" + scenario.SourceRecipe
+		if scenario.Pod == "" {
+			// Validator should reject; defensive skip.
+			continue
 		}
+		origin := "pod:" + scenario.Pod
 		sIdx := bucketIdx[origin]
 		bucketIdx[origin]++
 

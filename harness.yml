@@ -1,17 +1,15 @@
-# harness.yml — three kind-entities side by side:
+# harness.yml — three kinds:
 #   kind: ai     — reusable AI-CLI catalog
-#   kind: recipe — pure spec (description + BDD scenarios)
-#   kind: score  — runner config (target, AI, plateau, prompt) referencing one
-#                  or more recipes via `recipes:`
+#   kind: recipe — pure spec; every scenario carries `pod:` declaring
+#                  the one container its steps probe
+#   kind: score  — runner config (target bench-pod, AI, plateau, prompt)
+#                  referencing one or more recipes via `recipes:`
 #
-# `ov harness run <score>` drives an AI through the iteration loop. The
-# active score's recipes list is concatenated into a single scenario set
-# the harness scores against EVERY iteration; the AI sees the full set
-# via ${RECIPES} (per-recipe-grouped) and ${SCENARIOS} (flat union).
-# The loop is plateau-bounded — no max-iteration ceiling. The prompt
-# surfaces ${SCORE_DELTA} (improvement vs previous iteration) and
-# ${ATTEMPTS_LEFT} (`plateau_iteration - plateau_counter`) so the AI
-# knows where it stands.
+# Architecture: the harness owns the bench-pod (rebuilt fresh per run);
+# the AI inside bench-pod owns everything else (image builds, deployments,
+# state edits). The harness scores the live state per recipe scenarios
+# after each iteration — `containerName := "ov-" + scenario.pod`,
+# `podman exec` against bench-pod's nested podman.
 
 ai:
   claude:
@@ -38,21 +36,20 @@ ai:
     credential:
       - {src: ~/.config/gcloud/application_default_credentials.json, dst: ~/.config/gcloud/application_default_credentials.json, optional: true}
 
-# kind: recipe — pure spec. Each recipe is a named bundle of BDD
-# scenarios with a description. NO targets, NO AI, NO plateau, NO prompt;
-# those live on the score. Recipes are reusable atoms; one or more get
-# composed by a score's `recipes:` list.
+# kind: recipe — every scenario carries `pod:` declaring its scoring target.
 recipe:
   tier1-easy:
     description:
-      feature: "Tier 1 — easy: marker file present with expected content."
+      feature: "Tier 1 — marker file in tier1's own pod."
     scenario:
-      - name: "tier1-marker-file-exists"
+      - name: marker-file-exists
+        pod: harness-tier1
         steps:
           - then: "/etc/ov-bench-marker exists"
             file: /etc/ov-bench-marker
             exists: true
-      - name: "tier1-marker-file-content"
+      - name: marker-file-content
+        pod: harness-tier1
         steps:
           - then: "/etc/ov-bench-marker contains 'ov benchmark target'"
             file: /etc/ov-bench-marker
@@ -60,96 +57,180 @@ recipe:
 
   tier2-medium:
     description:
-      feature: "Tier 2 — medium: HTTP service listening on port 8080."
+      feature: "Tier 2 — HTTP service on port 8080 (shared pod with tier3)."
     scenario:
-      - name: "tier2-http-port-listening"
+      - name: http-port-listening
+        pod: harness-tier23
         steps:
           - then: "port 8080 is listening"
             port: 8080
             listening: true
-      - name: "tier2-http-200-body"
+      - name: http-200-body
+        pod: harness-tier23
         steps:
           - then: "GET / returns 200 with 'ov benchmark' in body"
             http: "http://localhost:8080/"
             status: 200
-            body:
-              contains: [ov benchmark]
+            body: { contains: [ov benchmark] }
 
   tier3-hard:
     description:
-      feature: "Tier 3 — hard: package installed + persistent versioned file."
+      feature: "Tier 3 — package + persistent file (shared pod with tier2)."
     scenario:
-      - name: "tier3-curl-installed"
+      - name: curl-installed
+        pod: harness-tier23
         steps:
           - then: "curl is installed"
             command: "command -v curl"
             exit_code: 0
-      - name: "tier3-version-file"
+      - name: version-file
+        pod: harness-tier23
         steps:
           - then: "/srv/bench/version.txt contains 'tier3-ok'"
             file: /srv/bench/version.txt
             exists: true
             contains: [tier3-ok]
 
+  tier4-redis:
+    description:
+      feature: "Tier 4 — redis-client writes a randomized key cross-pod (no shortcuts)."
+      narrative: |
+        The harness drives a SET from redis-client → redis at scoring time
+        using a freshly-generated random nonce that the AI never sees. The
+        AI must wire redis to listen on a network interface (not just
+        loopback) and ensure redis-client can reach ov-redis:6379.
+        Pre-setting the key won't work — the harness generates the key and
+        value AFTER the AI exits; the AI only ever sees ${HARNESS_NONCE_*}
+        placeholders in its prompt. The only viable path is wiring the
+        cross-pod connection genuinely.
+    scenario:
+      - name: redis-server-running
+        pod: redis
+        steps:
+          - then: "redis-server process is running"
+            process: redis-server
+            running: true
+
+      - name: redis-listens-on-network
+        pod: redis
+        steps:
+          - then: "redis listens on a network interface (not loopback only)"
+            command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
+            exit_code: 0
+
+      - name: redis-client-has-cli
+        pod: redis-client
+        steps:
+          - then: "redis-cli is installed"
+            command: "command -v redis-cli"
+            exit_code: 0
+
+      - name: redis-cross-pod-set-from-client
+        pod: redis-client
+        steps:
+          - then: "redis-client SETs bench:${HARNESS_NONCE_KEY} = ${HARNESS_NONCE_VALUE} on the redis pod"
+            command: "redis-cli -h ov-redis SET bench:${HARNESS_NONCE_KEY} ${HARNESS_NONCE_VALUE}"
+            stdout: { contains: [OK] }
+
+      - name: redis-cross-pod-readback-on-server
+        pod: redis
+        depends_on: [redis-cross-pod-set-from-client]
+        steps:
+          - then: "the random key landed in redis with the correct value"
+            command: "redis-cli get bench:${HARNESS_NONCE_KEY}"
+            stdout: { contains: ["${HARNESS_NONCE_VALUE}"] }
+
 # kind: score — runner config. References recipes by name; the harness
-# concatenates their scenarios in order and scores against the union
-# every iteration. PlateauIteration is the only loop bound.
+# concatenates their scenarios in order and scores against each
+# scenario's `pod:` field.
 score:
   default:
     description:
-      feature: "Default benchmark — score AI on all three difficulty tiers."
-    host: true
-    disposable: true                  # required for host: true (per /ov-dev:disposable)
+      feature: "Default benchmark — progressive recipe disclosure across four tier recipes."
+    pod: bench-pod                    # iterations + scoring run inside ov-bench-pod
     ai: [claude]
-    plateau_iteration: 3              # exit after 3 consecutive non-improving iterations
-    target_image: "bench-target"
-    deployment: "harness-default"     # AI must `ov deploy add harness-default <ref>`
+    plateau_iteration: 3
+    progressive: true                 # curriculum-style: phase N adds recipe N
+    target_image: "bench-target"      # informational prompt token (${TARGET_IMAGE})
+    deployment: "harness-default"     # informational prompt token (${DEPLOYMENT})
     notes: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
-    recipes: [tier1-easy, tier2-medium, tier3-hard]   # ordered set
+    recipes: [tier1-easy, tier2-medium, tier3-hard, tier4-redis]
     prompt: |
-      You are running iteration ${ITERATION} of score ${SCORE_NAME}.
+      == Where you are ==
+      Your cwd is /workspace (= the project tree, bind-mounted from the host
+      into this freshly-rebuilt bench-pod). You have FULL sudo + nested podman
+      + every package the recipes need. Host services are completely invisible;
+      you cannot conflict with them.
 
-      Last iteration delta:     ${SCORE_DELTA}
-      Best score so far:        ${BEST_SCORE}
-      Attempts left to improve: ${ATTEMPTS_LEFT}
+      == Phase progression — curriculum-style ==
+      ${PHASE_INTRO}
+      You are in PHASE ${PHASE} of ${PHASE_TOTAL}. The benchmark adds one
+      recipe per phase: phase 1 starts with the easiest, each later phase
+      brings the previous recipes BACK plus one new one. State persists
+      across phases — pods you deployed in phase 1 stay running for phase
+      2's scoring. Solve every IN-SCOPE recipe before the next phase widens
+      the surface; partial work is fine, but every scenario the harness
+      probes will be probed every phase from now on.
 
-      The run ends when ${ATTEMPTS_LEFT} reaches 0 — i.e. you fail to
-      improve your score for ${PLATEAU_ITERATION} iterations in a row.
-      As long as you keep improving, you keep getting more attempts.
+      == Iteration semantics within this phase — NO RUSHING ==
+      Iteration ${ITERATION} of an UNBOUNDED loop within phase ${PHASE}.
+      Score progression: ${BEST_SCORE} (last delta: ${SCORE_DELTA})
 
-      == Recipes you must solve — ALL of them, every iteration ==
+      The phase ends when:
+        - every in-scope scenario passes (solved-all → next phase begins), OR
+        - you fail to improve your score for ${PLATEAU_ITERATION} iterations
+          in a row (genuine plateau → next phase begins anyway).
+
+      There is NO maximum iteration count per phase. Take all the time you
+      need. A complete solution in iteration 7 outscores a partial solution
+      in iteration 1. Correctness > speed. NO shortcuts. NO "ship something
+      and hope" — every scenario the harness will probe, you can probe
+      yourself with the SAME verbs (see step 3 below).
+
+      == Recipes you must solve — IN-SCOPE FOR THIS PHASE ==
       ${RECIPES}
 
-      Score = total scenarios solved across ALL recipes above. Every
-      iteration the harness tests EVERY recipe against the live
-      ov-${DEPLOYMENT} container; partial progress carries across
-      iterations via your worktree at ${WORKSPACE}.
+      Each scenario has a `pod:` field — the container the harness will
+      probe its steps in. Read every scenario; collect the unique set of
+      pod names; deploy a container with each name. Within ONE recipe,
+      different scenarios may target different pods (e.g. tier4-redis
+      probes both `redis` and `redis-client`). Across recipes, multiple
+      recipes may share a pod name (e.g. tier2 + tier3 both use
+      `harness-tier23`) — same container, more scenarios scored against it.
+
+      Some scenarios carry `depends_on: [...]` — they only run after the
+      named upstream scenarios pass. If you see a scenario marked
+      `verdict: skipped` with `skipped_reason: "dep-unmet: <name>"`, the
+      upstream <name> failed; fix that one first.
 
       == Workflow ==
-      Image to build: ${TARGET_IMAGE}
-      Deployment to update: ${DEPLOYMENT}  (already running; harness rebuilt it fresh
-                                           with disposable: true at run start, and
-                                           it persists across iterations)
+      For each unique pod name across all scenarios:
 
-      1. Edit layers/images so ${TARGET_IMAGE} satisfies as many scenarios as possible.
-      2. Build:    bin/ov image build ${TARGET_IMAGE}
-      3. Update:   bin/ov update ${DEPLOYMENT}      # swaps the running container to
-                                                    # the freshly-built image; do NOT
-                                                    # `ov deploy add` (would clash with
-                                                    # the pre-existing entry)
-      4. Verify:   bin/ov test ${DEPLOYMENT}
-      5. Notes:    bin/ov harness note append ${SCORE_NAME} "<short learning>"
-      6. Exit. The harness scores ALL recipes against ov-${DEPLOYMENT}.
+      1. Build (or reuse) an image satisfying every scenario that targets
+         that pod:
+            bin/ov image build <your-image-name>
+      2. On iter1: bin/ov deploy add <pod-name> <your-image-name> --disposable
+         On iter2+: bin/ov update <pod-name>     (image swap, container kept)
+      3. VERIFY YOUR OWN WORK — run the SAME scenarios the harness will score:
+            bin/ov test <pod-name>
+         If ANY verb returns fail, FIX IT before exiting. Don't exit on
+         partial work hoping; make every probe green that you can.
+      4. Notes:    bin/ov harness note append ${SCORE_NAME} "<short learning>"
+      5. Exit only after step 3 returned all-green for every pod you spawned.
 
       MCP tools (if any): ${MCP_ENDPOINT}
 
-      Ground rules:
+      == Ground rules ==
         - Recipe scenarios are immutable — they live in harness.yml.
-        - The deployment ov-${DEPLOYMENT} is already running when iter1 starts —
-          the harness rebuilt it from scratch for this run and will keep it alive
-          across every iteration. Use `ov update` to swap images, never
-          `ov deploy add` / `ov rebuild`.
-        - The deployment MUST be running when you exit (this is what gets scored).
-        - Tier 1 is the easiest; build up from there before tackling Tier 3.
+        - The bench-pod was rebuilt FRESH for this run; it persists across
+          iters but is destroyed + recreated NEXT run.
+        - Every pod a scenario references MUST be running at exit (that's
+          what gets scored).
+        - There is NO premium on speed. There IS a premium on every scenario
+          you can make pass.
+
+      Informational hints (NOT requirements):
+        ${TARGET_IMAGE}    conventional image name (your call to use it)
+        ${DEPLOYMENT}      conventional primary pod name (your call to use it)

@@ -45,13 +45,30 @@ type HarnessOpts struct {
 	ResolvedRecipes []*HarnessRecipe
 	// MergedScenarios is the concatenated scenario list across every
 	// referenced recipe (in score.Recipes order). Each scenario carries
-	// its source recipe via Scenario.SourceRecipe. This IS the spec the
-	// scorer evaluates each iteration.
+	// its source recipe via Scenario.SourceRecipe. **Drives ${SCENARIOS}
+	// and ${RECIPES} prompt rendering** — the AI sees this slice with
+	// any ${HARNESS_NONCE_*} placeholders un-substituted.
 	MergedScenarios []Scenario
+
+	// ScoringScenarios is MergedScenarios with all ${HARNESS_NONCE_*}
+	// tokens substituted to their per-run hex values. **Drives baseline
+	// synthesis AND per-iter scoring**. Generated once per run via
+	// GenerateHarnessNonces + SubstituteScenarioNonces, after the AI's
+	// prompt is rendered. The AI never sees this slice — substituted
+	// values stay inside the harness's scoring path.
+	ScoringScenarios []Scenario
 
 	TargetKind       string // "pod" | "vm" | "host"
 	TargetName       string // pod or vm name (empty when host)
 	AIName           string
+
+	// Phase / PhaseTotal carry progressive-scoping context. When the
+	// score is non-progressive both are 0 and ${PHASE_*} tokens
+	// substitute to "0"/"" — the prompt template is expected to omit
+	// them in that case. When progressive, Phase is 1-indexed and
+	// PhaseTotal == len(score.Recipes).
+	Phase      int
+	PhaseTotal int
 	AI               *AIConfig
 	Prompt           string // template; per-iter substitution at render time
 	TargetImage      string
@@ -88,6 +105,7 @@ type HarnessOpts struct {
 // .harness/<score>/runs/<run-id>/iter<k>/runner.log for cross-reference.
 type IterationState struct {
 	K                   int               `yaml:"k"`
+	Phase               int               `yaml:"phase,omitempty"`
 	Score               int               `yaml:"score"`
 	ScoreDelta          int               `yaml:"score_delta"`
 	PlateauCounterAfter int               `yaml:"plateau_counter_after"`
@@ -115,6 +133,9 @@ type ScenarioVerdict struct {
 	FingerprintPost string  `yaml:"fingerprint_post,omitempty"`
 	PendingPre      int     `yaml:"pending_pre,omitempty"`
 	PendingPost     int     `yaml:"pending_post,omitempty"`
+	// SkippedReason carries the dependency-cascade explanation when
+	// Verdict == VerdictSkipped. Format: "dep-unmet: <upstream-name>".
+	SkippedReason string `yaml:"skipped_reason,omitempty"`
 }
 
 // FinalReport is the aggregate persisted to result-{calver}.yml.
@@ -139,8 +160,20 @@ type FinalReport struct {
 	BestIteration    int               `yaml:"best_iteration"`
 	OvharnessBranch  string            `yaml:"ovharness_branch,omitempty"`
 	Summary          ReportSummary     `yaml:"summary"`
+	Phases           []PhaseReport     `yaml:"phases,omitempty"`
+	PhasesCompleted  int               `yaml:"phases_completed,omitempty"`
 	Iterations       []IterationState  `yaml:"iteration,omitempty"`
 	FinalScenario    []ScenarioVerdict `yaml:"final_scenario,omitempty"`
+}
+
+// PhaseReport summarizes one phase of a progressive run.
+type PhaseReport struct {
+	N             int      `yaml:"n"`
+	Recipes       []string `yaml:"recipes,omitempty"`
+	IterationsRun int      `yaml:"iterations_run"`
+	ExitReason    string   `yaml:"exit_reason"` // solved-all | plateau | interrupted
+	Score         int      `yaml:"score"`
+	Total         int      `yaml:"total"`
 }
 
 // ReportWhere identifies the target a run executed against.
@@ -158,6 +191,7 @@ type ReportSummary struct {
 	Regressed     int     `yaml:"regressed"`
 	Tampered      int     `yaml:"tampered"`
 	Added         int     `yaml:"added"`
+	Skipped       int     `yaml:"skipped,omitempty"`
 	PercentSolved float64 `yaml:"percent_solved"`
 }
 
@@ -401,7 +435,7 @@ func runOneIteration(
 	prevScore int,
 	plateauCounterEntering int,
 ) (IterationState, error) {
-	iter := IterationState{K: k}
+	iter := IterationState{K: k, Phase: opts.Phase}
 	iterDir := layout.IterDir(k)
 	if err := os.MkdirAll(iterDir, 0o755); err != nil {
 		return iter, fmt.Errorf("mkdir iter%d: %w", k, err)
@@ -459,6 +493,26 @@ func runOneIteration(
 	if attemptsLeft < 0 {
 		attemptsLeft = 0
 	}
+	phaseRecipesJoined := ""
+	phaseIntro := ""
+	if opts.PhaseTotal > 0 {
+		phaseRecipesJoined = strings.Join(opts.Recipes, ", ")
+		if opts.Phase == 1 {
+			phaseIntro = fmt.Sprintf(
+				"Phase %d of %d — first phase, in-scope recipes: %s",
+				opts.Phase, opts.PhaseTotal, phaseRecipesJoined,
+			)
+		} else {
+			added := ""
+			if n := len(opts.Recipes); n > 0 {
+				added = opts.Recipes[n-1]
+			}
+			phaseIntro = fmt.Sprintf(
+				"Phase %d of %d — added recipe: %q. Total in-scope recipes: %s",
+				opts.Phase, opts.PhaseTotal, added, phaseRecipesJoined,
+			)
+		}
+	}
 	substCtx := &SubstContext{
 		RunID:            layout.RunID,
 		ScoreName:        opts.ScoreName,
@@ -477,6 +531,10 @@ func runOneIteration(
 		Notes:            notesSnap,
 		Scenarios:        scenariosYAML,
 		Recipes:          recipesYAML,
+		Phase:            opts.Phase,
+		PhaseTotal:       opts.PhaseTotal,
+		PhaseRecipes:     phaseRecipesJoined,
+		PhaseIntro:       phaseIntro,
 		Deployment:       deploymentName,
 		Tag:              opts.Tag,
 		Timeout:          opts.AI.Timeout,
@@ -514,8 +572,10 @@ func runOneIteration(
 		fmt.Fprintf(opts.Stderr, "iter%d: runner exited with error: %v (continuing)\n", k, runnerErr)
 	}
 
-	// 4. Score against the merged scenario set.
-	useRecipeScenarios := len(opts.MergedScenarios) > 0
+	// 4. Score against the substituted scenario set. The AI saw the
+	// MergedScenarios slice (with ${HARNESS_NONCE_*} placeholders);
+	// scoring runs against ScoringScenarios with substituted values.
+	useRecipeScenarios := len(opts.ScoringScenarios) > 0
 	iterTagSuffix := fmt.Sprintf("ovharness-%s-iter%d", layout.RunID, k)
 	iterRef := fmt.Sprintf("ghcr.io/overthinkos/%s:%s", opts.TargetImage, iterTagSuffix)
 	var (
@@ -527,7 +587,7 @@ func runOneIteration(
 
 	if useRecipeScenarios {
 		testStart := time.Now()
-		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.MergedScenarios)
+		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.ScoringScenarios)
 		iter.TestDuration = time.Since(testStart).String()
 		if scoreErr != nil {
 			iter.BuildFailure = true
@@ -952,6 +1012,8 @@ func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
 			s.Tampered++
 		case VerdictAdded:
 			s.Added++
+		case VerdictSkipped:
+			s.Skipped++
 		}
 	}
 	if total > 0 {

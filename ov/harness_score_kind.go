@@ -55,6 +55,16 @@ type HarnessScore struct {
 	// plateau detection (loop runs until ctx cancelled or solved-all).
 	PlateauIteration int `yaml:"plateau_iteration,omitempty"`
 
+	// Progressive enables curriculum-style phase scoping. When true,
+	// the harness runs phases in score.recipes order: phase 1 shows
+	// only recipes[0]; phase N shows recipes[0..N-1]. Each phase has
+	// its own iteration loop bounded by plateau_iteration; phases
+	// advance on solved-all OR plateau. State (deployed pods,
+	// fingerprints, NOTES.md) carries across phase boundaries.
+	// Default: false (single-pass behavior — all recipes visible
+	// from iter1, one iteration loop, single result.yml shape).
+	Progressive bool `yaml:"progressive,omitempty"`
+
 	// Gherkin tag filter expression.
 	Tag string `yaml:"tag,omitempty"`
 

@@ -161,11 +161,30 @@ type Scenario struct {
 	Examples []map[string]string `yaml:"examples,omitempty"   json:"examples,omitempty"`
 	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
 
+	// Pod is the container name this scenario's steps probe. Used by
+	// kind:recipe scenarios in the harness; required at validation time
+	// for any scenario inside a `recipe:` block. Layer- and image-baked
+	// scenarios do not set this (their target is the image-baked test
+	// runner). The harness scoring code does
+	// `containerName := "ov-" + scenario.Pod` and dispatches every step
+	// in this scenario through `podman exec ov-<pod>`.
+	Pod string `yaml:"pod,omitempty" json:"pod,omitempty"`
+
 	// SourceRecipe is populated by ResolveScoreRecipes when the scenario
 	// is concatenated from a recipe referenced by a score's `recipes:`
 	// list. Internal-only — never written to YAML or JSON; consumed by
 	// the ${RECIPES} renderer to group rendering by source recipe.
 	SourceRecipe string `yaml:"-" json:"-"`
+
+	// DependsOn names other scenarios within the same recipe that must
+	// have passed before this scenario runs. Used by the harness scorer
+	// to topologically order execution across pod buckets — a scenario
+	// in pod B depending on a scenario in pod A forces A's bucket to
+	// run first. If any dep is fail/skipped at scoring time, this
+	// scenario is marked status="skipped" with no probes executed.
+	// Scope is intra-recipe only; cross-recipe references are rejected
+	// by validateHarnessSemantics.
+	DependsOn []string `yaml:"depends_on,omitempty" json:"depends_on,omitempty"`
 }
 
 // UnmarshalYAML accepts both `tag:` and the legacy `tags:` key during
@@ -205,8 +224,16 @@ func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 			if err := v.Decode(&s.OnFail); err != nil {
 				return fmt.Errorf("scenario.on_fail: %w", err)
 			}
+		case "pod":
+			if err := v.Decode(&s.Pod); err != nil {
+				return fmt.Errorf("scenario.pod: %w", err)
+			}
+		case "depends_on":
+			if err := v.Decode(&s.DependsOn); err != nil {
+				return fmt.Errorf("scenario.depends_on: %w", err)
+			}
 		default:
-			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, steps, examples, on_fail)", k.Value, k.Line)
+			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, pod, depends_on, steps, examples, on_fail)", k.Value, k.Line)
 		}
 	}
 	return nil
@@ -218,12 +245,13 @@ func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 func (s *Scenario) UnmarshalJSON(data []byte) error {
 	// Avoid infinite recursion via a local alias type.
 	type rawScenario struct {
-		Name      string              `json:"name"`
-		Tag       []string            `json:"tag,omitempty"`
-		Tags      []string            `json:"tags,omitempty"`
-		Steps     []Step              `json:"steps,omitempty"`
-		Examples  []map[string]string `json:"examples,omitempty"`
-		OnFail    []Step              `json:"on_fail,omitempty"`
+		Name     string              `json:"name"`
+		Tag      []string            `json:"tag,omitempty"`
+		Tags     []string            `json:"tags,omitempty"`
+		Pod      string              `json:"pod,omitempty"`
+		Steps    []Step              `json:"steps,omitempty"`
+		Examples []map[string]string `json:"examples,omitempty"`
+		OnFail   []Step              `json:"on_fail,omitempty"`
 	}
 	var r rawScenario
 	if err := json.Unmarshal(data, &r); err != nil {
@@ -235,6 +263,7 @@ func (s *Scenario) UnmarshalJSON(data []byte) error {
 	} else if len(r.Tags) > 0 {
 		s.Tag = r.Tags
 	}
+	s.Pod = r.Pod
 	s.Steps = r.Steps
 	s.Examples = r.Examples
 	s.OnFail = r.OnFail

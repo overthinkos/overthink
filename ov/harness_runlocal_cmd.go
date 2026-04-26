@@ -20,9 +20,9 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 // HarnessRunLocalCmd drives the iteration loop in the chosen target.
@@ -81,10 +81,35 @@ func (c *HarnessRunLocalCmd) Run() error {
 		return err
 	}
 
-	// Resolve the score's `recipes:` list against the recipe catalog.
-	mergedScenarios, resolvedRecipes, err := ResolveScoreRecipes(score, uf.Recipe)
+	// Resolve the score's `recipes:` list against the recipe catalog —
+	// FULL scope (used in non-progressive mode and for the global
+	// nonce set in progressive mode).
+	fullMergedScenarios, fullResolvedRecipes, err := ResolveScoreRecipes(score, uf.Recipe)
 	if err != nil {
 		return fmt.Errorf("score %q: %w", c.Score, err)
+	}
+
+	// Generate per-run nonces and substitute into a SECOND scenarios
+	// slice for scoring. The AI sees the un-substituted slice via
+	// ${SCENARIOS}/${RECIPES} prompt tokens (placeholders only); the
+	// substituted slice flows into baseline synthesis + per-iter
+	// scoring so probes carry real nonce values that the AI cannot
+	// have pre-set. See SubstituteScenarioNonces in harness_substitute.go.
+	//
+	// Nonces are generated ONCE over the FULL recipe set so they're
+	// stable across phases (a scenario in tier4 sees the same nonce
+	// in phase 4 regardless of which phase introduced tier4).
+	nonces, err := GenerateHarnessNonces(fullMergedScenarios)
+	if err != nil {
+		return fmt.Errorf("generate harness nonces: %w", err)
+	}
+	if len(nonces) > 0 {
+		names := make([]string, 0, len(nonces))
+		for name := range nonces {
+			names = append(names, name)
+		}
+		fmt.Fprintf(os.Stderr,
+			"harness: generated %d per-run nonce(s): %v\n", len(nonces), names)
 	}
 
 	// AI selection — score.AI is the eligible list; --ai picks one.
@@ -127,25 +152,12 @@ func (c *HarnessRunLocalCmd) Run() error {
 		targetImage = score.TargetImage
 	}
 
-	// Pre-flight: ensure the score's deployment is FRESH and DISPOSABLE.
-	// The deployment must exist in deploy.yml with `disposable: true`
-	// (per /ov-dev:disposable, no auto-derivation — explicit opt-in).
-	// The harness explicitly builds the target image fresh from host
-	// source, then uses `ov rebuild --reuse-image` to recreate the
-	// container without re-triggering the (intentionally-failing) layer
-	// scenario tests. The fresh container persists for the duration of
-	// the run; the AI's per-iteration `ov update` swaps the image
-	// without destroying the container. Next run rebuilds fresh again.
-	if score.Deployment != "" && !c.DryRun {
-		if err := ensureFreshDisposableDeployment(ctx, projectDir, score.Deployment, targetImage); err != nil {
-			return fmt.Errorf("preflight deploy %q: %w", score.Deployment, err)
-		}
-	}
-
-	// Synthesize the pre-AI baseline from the merged scenario set.
-	// All scenarios start fail; fingerprints come from the scenario
-	// YAML so post-iteration fingerprint comparison works.
-	preAIResults, preFingerprints, preTagFingerprints := synthesizeScoreBaseline(c.Score, mergedScenarios)
+	// No in-pod preflight: the harness only owns the bench-pod itself
+	// (rebuilt fresh per run by the host-side preflight in harness_cmd.go).
+	// Inside bench-pod, the AI is on its own — it builds whatever images
+	// each scenario needs, creates each pod a scenario references via
+	// `ov deploy add`, and modifies state until scenarios pass. The
+	// harness scoring code probes per scenario.Pod after the AI exits.
 
 	tagExpr := c.Tag
 	if tagExpr == "" {
@@ -165,35 +177,35 @@ func (c *HarnessRunLocalCmd) Run() error {
 
 	aiVer := LocalCaptureVersion(ctx, ai)
 
-	opts := HarnessOpts{
-		ProjectDir:         projectDir,
-		ScoreName:          c.Score,
-		Score:              score,
-		Recipes:            append([]string(nil), score.Recipes...),
-		ResolvedRecipes:    resolvedRecipes,
-		MergedScenarios:    mergedScenarios,
-		TargetKind:         string(tk),
-		TargetName:         tn,
-		AIName:             aiName,
-		AI:                 ai,
-		Prompt:             score.Prompt,
-		TargetImage:        targetImage,
-		Tag:                tagExpr,
-		PlateauIteration:   plateau,
-		MaxScenario:        c.MaxScenario,
-		MCPEndpoint:        mcp,
-		Notes:              notesSnap,
-		DryRun:             c.DryRun,
-		SkipRebuild:        c.SkipRebuild,
-		Format:             c.Format,
-		Stdout:             os.Stdout,
-		Stderr:             os.Stderr,
-		PreAIScenario:      preAIResults,
-		PreFingerprints:    preFingerprints,
-		PreTagFingerprints: preTagFingerprints,
+	// commonOpts captures everything that doesn't change across phases.
+	commonOpts := HarnessOpts{
+		ProjectDir:       projectDir,
+		ScoreName:        c.Score,
+		Score:            score,
+		TargetKind:       string(tk),
+		TargetName:       tn,
+		AIName:           aiName,
+		AI:               ai,
+		Prompt:           score.Prompt,
+		TargetImage:      targetImage,
+		Tag:              tagExpr,
+		PlateauIteration: plateau,
+		MaxScenario:      c.MaxScenario,
+		MCPEndpoint:      mcp,
+		Notes:            notesSnap,
+		DryRun:           c.DryRun,
+		SkipRebuild:      c.SkipRebuild,
+		Format:           c.Format,
+		Stdout:           os.Stdout,
+		Stderr:           os.Stderr,
 	}
 
-	report, err := RunHarness(ctx, opts, layout)
+	var report *FinalReport
+	if score.Progressive {
+		report, err = runProgressiveHarness(ctx, layout, commonOpts, score, uf.Recipe, fullMergedScenarios, fullResolvedRecipes, nonces)
+	} else {
+		report, err = runSinglePhaseHarness(ctx, layout, commonOpts, score, fullMergedScenarios, fullResolvedRecipes, nonces)
+	}
 	if err != nil {
 		return err
 	}
@@ -213,6 +225,190 @@ func (c *HarnessRunLocalCmd) Run() error {
 
 	printHarnessReport(os.Stdout, report, c.Format)
 	return nil
+}
+
+// runSinglePhaseHarness wraps the legacy non-progressive path: one
+// merged scenario set, one RunHarness call, one FinalReport.
+func runSinglePhaseHarness(
+	ctx context.Context,
+	layout RunLayout,
+	commonOpts HarnessOpts,
+	score *HarnessScore,
+	mergedScenarios []Scenario,
+	resolvedRecipes []*HarnessRecipe,
+	nonces map[string]string,
+) (*FinalReport, error) {
+	scoringScenarios, err := SubstituteScenarioNonces(mergedScenarios, nonces)
+	if err != nil {
+		return nil, fmt.Errorf("substitute harness nonces: %w", err)
+	}
+	preAIResults, preFingerprints, preTagFingerprints := synthesizeScoreBaseline(commonOpts.ScoreName, scoringScenarios)
+	opts := commonOpts
+	opts.Recipes = append([]string(nil), score.Recipes...)
+	opts.ResolvedRecipes = resolvedRecipes
+	opts.MergedScenarios = mergedScenarios
+	opts.ScoringScenarios = scoringScenarios
+	opts.PreAIScenario = preAIResults
+	opts.PreFingerprints = preFingerprints
+	opts.PreTagFingerprints = preTagFingerprints
+	return RunHarness(ctx, opts, layout)
+}
+
+// runProgressiveHarness implements curriculum-style phase execution.
+// Phases iterate over score.Recipes incrementally: phase 1 uses
+// recipes[0:1], phase 2 uses recipes[0:2], ... phase N uses all
+// recipes. Each phase runs its own iteration loop (RunHarness) with a
+// fresh per-phase baseline, exits on solved-all OR plateau, and the
+// next phase begins with state still in place (no preflight reset).
+//
+// State across phases:
+//   - The bench-pod, nested-podman containers, and bind-mounted
+//     /workspace are NOT touched between phases — the AI's deployed
+//     pods stay running, fingerprints persist, NOTES.md persists.
+//   - Nonces are run-scoped (generated once over the full recipe set)
+//     so a tier4 nonce in phase 4 is the same value across iters
+//     within phase 4.
+//   - Per-phase Iterations are concatenated into the master report
+//     in run order; each iter carries its Phase number.
+func runProgressiveHarness(
+	ctx context.Context,
+	layout RunLayout,
+	commonOpts HarnessOpts,
+	score *HarnessScore,
+	recipeCatalog map[string]*HarnessRecipe,
+	fullMergedScenarios []Scenario,
+	fullResolvedRecipes []*HarnessRecipe,
+	nonces map[string]string,
+) (*FinalReport, error) {
+	totalPhases := len(score.Recipes)
+	if totalPhases == 0 {
+		return nil, fmt.Errorf("score %q: progressive: true requires non-empty recipes:", commonOpts.ScoreName)
+	}
+
+	master := &FinalReport{
+		Schema:           1,
+		Score:            commonOpts.ScoreName,
+		Recipes:          append([]string(nil), score.Recipes...),
+		Calver:           ComputeCalVer(),
+		RunID:            layout.RunID,
+		AI:               commonOpts.AIName,
+		Where:            ReportWhere{Kind: commonOpts.TargetKind, Name: commonOpts.TargetName},
+		TargetImage:      commonOpts.TargetImage,
+		Tag:              commonOpts.Tag,
+		PlateauIteration: commonOpts.PlateauIteration,
+		MCPEndpoint:      commonOpts.MCPEndpoint,
+		OvharnessBranch:  layout.Branch,
+		StartedUTC:       time.Now().UTC().Format(time.RFC3339),
+	}
+
+	phasesCompleted := 0
+	overallExitReason := ""
+
+	for n := 1; n <= totalPhases; n++ {
+		phaseRecipes := append([]string(nil), score.Recipes[:n]...)
+		phaseMerged, phaseResolved, err := resolvePhaseScenarios(score, recipeCatalog, n)
+		if err != nil {
+			return master, fmt.Errorf("phase %d: %w", n, err)
+		}
+		phaseScoring, err := SubstituteScenarioNonces(phaseMerged, nonces)
+		if err != nil {
+			return master, fmt.Errorf("phase %d: substitute nonces: %w", n, err)
+		}
+		preAIResults, preFingerprints, preTagFingerprints := synthesizeScoreBaseline(commonOpts.ScoreName, phaseScoring)
+
+		fmt.Fprintf(os.Stderr, "harness: phase %d/%d — recipes %v (%d scenarios)\n",
+			n, totalPhases, phaseRecipes, len(phaseMerged))
+
+		phaseLayout := layout
+		phaseLayout.Phase = n
+
+		phaseOpts := commonOpts
+		phaseOpts.Recipes = phaseRecipes
+		phaseOpts.ResolvedRecipes = phaseResolved
+		phaseOpts.MergedScenarios = phaseMerged
+		phaseOpts.ScoringScenarios = phaseScoring
+		phaseOpts.PreAIScenario = preAIResults
+		phaseOpts.PreFingerprints = preFingerprints
+		phaseOpts.PreTagFingerprints = preTagFingerprints
+		phaseOpts.Phase = n
+		phaseOpts.PhaseTotal = totalPhases
+
+		phaseReport, err := RunHarness(ctx, phaseOpts, phaseLayout)
+		if err != nil {
+			// Surface the partial master state with whatever has been
+			// completed so far.
+			finalizeMasterReport(master, phasesCompleted, "interrupted")
+			return master, fmt.Errorf("phase %d: %w", n, err)
+		}
+
+		// Merge phase results into the master report.
+		for i := range phaseReport.Iterations {
+			phaseReport.Iterations[i].Phase = n
+		}
+		master.Iterations = append(master.Iterations, phaseReport.Iterations...)
+		master.Phases = append(master.Phases, PhaseReport{
+			N:             n,
+			Recipes:       phaseRecipes,
+			IterationsRun: phaseReport.IterationsRun,
+			ExitReason:    phaseReport.ExitReason,
+			Score:         phaseReport.BestScore,
+			Total:         len(phaseMerged),
+		})
+		master.BestScore = phaseReport.BestScore
+		master.BestIteration = len(master.Iterations)
+		master.IterationsRun = len(master.Iterations)
+		master.FinalScenario = phaseReport.FinalScenario
+
+		if phaseReport.ExitReason == "solved-all" {
+			phasesCompleted++
+		}
+
+		// Stop the whole run if the phase was interrupted via ctx.
+		if ctx.Err() != nil {
+			overallExitReason = "interrupted"
+			break
+		}
+		// Otherwise plateau or solved-all — both advance to next phase.
+	}
+
+	if overallExitReason == "" {
+		// All phases attempted. Last phase's exit reason becomes the
+		// run-level exit reason (matches the user's natural reading:
+		// "did the FINAL phase end clean?").
+		if len(master.Phases) > 0 {
+			overallExitReason = master.Phases[len(master.Phases)-1].ExitReason
+		} else {
+			overallExitReason = "interrupted"
+		}
+	}
+	finalizeMasterReport(master, phasesCompleted, overallExitReason)
+	return master, nil
+}
+
+// resolvePhaseScenarios returns the merged scenario list for the first
+// `phaseN` recipes of `score.Recipes` (1-indexed phaseN). Each appended
+// scenario is stamped with its source recipe name (matching
+// ResolveScoreRecipes behavior). Returns the resolved recipe pointers
+// in the same order, for the ${RECIPES} renderer.
+func resolvePhaseScenarios(score *HarnessScore, recipeCatalog map[string]*HarnessRecipe, phaseN int) ([]Scenario, []*HarnessRecipe, error) {
+	if phaseN <= 0 || phaseN > len(score.Recipes) {
+		return nil, nil, fmt.Errorf("invalid phase %d (have %d recipes)", phaseN, len(score.Recipes))
+	}
+	subscore := *score
+	subscore.Recipes = append([]string(nil), score.Recipes[:phaseN]...)
+	return ResolveScoreRecipes(&subscore, recipeCatalog)
+}
+
+// finalizeMasterReport stamps the closing fields on a progressive
+// master report after all phases have run.
+func finalizeMasterReport(master *FinalReport, phasesCompleted int, exitReason string) {
+	master.PhasesCompleted = phasesCompleted
+	master.ExitReason = exitReason
+	master.FinishedUTC = time.Now().UTC().Format(time.RFC3339)
+	if master.Calver == "" {
+		master.Calver = ComputeCalVer()
+	}
+	master.Summary = computeSummary(master.FinalScenario, len(master.FinalScenario))
 }
 
 // acquireHarnessLock takes an exclusive flock on the per-score lock file.
@@ -235,79 +431,6 @@ func acquireHarnessLock(projectDir, score string) (func(), error) {
 		_ = f.Close()
 		_ = os.Remove(path)
 	}, nil
-}
-
-// ensureFreshDisposableDeployment guarantees that the score's
-// deployment is registered in deploy.yml with `disposable: true` and
-// that the container is freshly rebuilt from a freshly-built image
-// before iter1.
-//
-// Implementation note: we don't use `ov rebuild <name>` directly because
-// rebuild does `ov image build` + `ov image test` internally, and bench
-// targets ship intentionally-unsolved layer-baked scenarios (the whole
-// point of a benchmark target is that scenarios fail until the AI
-// solves them). So we build the image ourselves, then `ov rebuild
-// --reuse-image` to skip the test-of-unsolved-baseline.
-//
-// Contract:
-//   - Hard error if the deployment is not registered (hint: ov deploy add)
-//   - Hard error if the deployment is not marked disposable (per the
-//     /ov-dev:disposable explicit-opt-in rule — never auto-flipped)
-//   - On success, the container is fresh from a clean image and ready
-//     to be scored against. It persists for the rest of the run; the
-//     AI's per-iteration `ov update <name>` swaps the image without
-//     destroying the container. Next harness run rebuilds again.
-func ensureFreshDisposableDeployment(ctx context.Context, projectDir, name, targetImage string) error {
-	cfg, err := LoadDeployConfig()
-	if err != nil {
-		return fmt.Errorf("load deploy.yml: %w", err)
-	}
-	if cfg == nil {
-		return fmt.Errorf("no deploy.yml found — run `ov deploy add %s <ref> --disposable` first", name)
-	}
-	entry, ok := cfg.Deployment[name]
-	if !ok {
-		return fmt.Errorf(
-			"deployment %q is not registered in deploy.yml. The harness needs a pre-existing deployment to rebuild fresh per run. Run: ov deploy add %s <image-or-layer-ref> --disposable",
-			name, name,
-		)
-	}
-	if !entry.IsDisposable() {
-		return fmt.Errorf(
-			"deployment %q is registered but not marked `disposable: true`. The harness performs an `ov rebuild` per run, which is autonomous-destroy semantics — explicit opt-in is required (see /ov-dev:disposable). Edit ~/.config/ov/deploy.yml: under `deployment.%s`, add `disposable: true`",
-			name, name,
-		)
-	}
-	if targetImage == "" {
-		return fmt.Errorf(
-			"deployment %q: harness preflight needs score.target_image to know which image to build. Set `target_image:` on the score in harness.yml",
-			name,
-		)
-	}
-
-	ov := findOvForBenchmark()
-
-	// 1. Build the target image fresh from host source.
-	fmt.Fprintf(os.Stderr, "harness: preflight build of image %q (fresh from host source)\n", targetImage)
-	build := exec.CommandContext(ctx, ov, "-C", projectDir, "image", "build", targetImage)
-	build.Stdout = os.Stderr
-	build.Stderr = os.Stderr
-	if err := build.Run(); err != nil {
-		return fmt.Errorf("ov image build %s: %w", targetImage, err)
-	}
-
-	// 2. Rebuild the deployment with --reuse-image (skip the redundant
-	//    build-then-test step that ov rebuild does internally; the test
-	//    against the unsolved baseline scenarios would always fail).
-	fmt.Fprintf(os.Stderr, "harness: preflight rebuild of disposable deployment %q (fresh-per-run)\n", name)
-	rebuild := exec.CommandContext(ctx, ov, "-C", projectDir, "rebuild", "--reuse-image", name)
-	rebuild.Stdout = os.Stderr
-	rebuild.Stderr = os.Stderr
-	if err := rebuild.Run(); err != nil {
-		return fmt.Errorf("ov rebuild --reuse-image %s: %w", name, err)
-	}
-	fmt.Fprintf(os.Stderr, "harness: deployment %q is fresh and running; persists for the duration of this run\n", name)
-	return nil
 }
 
 // loadDescriptionsFromDir is retained for the (deprecated) image-baked

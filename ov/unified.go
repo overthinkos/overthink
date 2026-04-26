@@ -832,7 +832,32 @@ func validateScoreBody(body *yaml.Node, name, source string) error {
 //   - score.recipes entries must resolve to defined recipes
 //   - score target xor (exactly one of pod/vm/host)
 //   - host: true requires disposable: true on the score
+//   - every scenario in every recipe MUST set `pod:` (the scoring target)
+//   - scenario.depends_on entries must reference scenarios within the
+//     same recipe (intra-recipe scope) and form an acyclic graph
 func validateHarnessSemantics(u *UnifiedFile) error {
+	// Every kind:recipe scenario must declare `pod:`. The harness scoring
+	// code does `containerName := "ov-" + scenario.Pod`; without `pod:`,
+	// we have no scoring target. Layer- and image-baked scenarios are NOT
+	// subject to this rule (they live outside the recipe: map).
+	for name, recipe := range u.Recipe {
+		if recipe == nil {
+			continue
+		}
+		for i, sc := range recipe.Scenario {
+			if sc.Pod == "" {
+				identifier := sc.Name
+				if identifier == "" {
+					identifier = fmt.Sprintf("scenario[%d]", i)
+				}
+				return fmt.Errorf("recipe %q: scenario %q: missing required `pod:` field — every scenario in a recipe must declare the container name its steps probe (the harness has no default scoring target)", name, identifier)
+			}
+		}
+		if err := validateRecipeScenarioDependencies(name, recipe); err != nil {
+			return err
+		}
+	}
+
 	for name, score := range u.Score {
 		if score == nil {
 			continue
@@ -855,6 +880,55 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 		if _, _, err := ResolveScoreTarget(score); err != nil {
 			return fmt.Errorf("score %q: %w", name, err)
 		}
+	}
+	return nil
+}
+
+// validateRecipeScenarioDependencies enforces that every entry in
+// scenario.depends_on resolves to another scenario within the SAME
+// recipe (intra-recipe scope) and that the resulting dependency graph
+// has no cycles. Surfaces fuzzy "did you mean" hints for typos and
+// the cycle path for cycles.
+func validateRecipeScenarioDependencies(recipeName string, recipe *HarnessRecipe) error {
+	if recipe == nil || len(recipe.Scenario) == 0 {
+		return nil
+	}
+	// Build the in-recipe scenario name set + duplicate check.
+	names := make([]string, 0, len(recipe.Scenario))
+	known := make(map[string]bool, len(recipe.Scenario))
+	for i, sc := range recipe.Scenario {
+		if sc.Name == "" {
+			return fmt.Errorf("recipe %q: scenario[%d]: missing required `name:` field (depends_on resolution requires unique scenario names)", recipeName, i)
+		}
+		if known[sc.Name] {
+			return fmt.Errorf("recipe %q: duplicate scenario name %q (each scenario name must be unique within a recipe for depends_on resolution)", recipeName, sc.Name)
+		}
+		known[sc.Name] = true
+		names = append(names, sc.Name)
+	}
+	// Validate every depends_on entry resolves intra-recipe.
+	for _, sc := range recipe.Scenario {
+		for _, dep := range sc.DependsOn {
+			if dep == sc.Name {
+				return fmt.Errorf("recipe %q: scenario %q: depends_on cannot reference itself (%q)", recipeName, sc.Name, dep)
+			}
+			if !known[dep] {
+				suggestion := findSimilarName(dep, names)
+				if suggestion != "" {
+					return fmt.Errorf("recipe %q: scenario %q: depends_on: unknown scenario %q (did you mean %q?). Cross-recipe depends_on is not supported — the referenced scenario must live in the same recipe", recipeName, sc.Name, dep, suggestion)
+				}
+				return fmt.Errorf("recipe %q: scenario %q: depends_on: unknown scenario %q. Cross-recipe depends_on is not supported — the referenced scenario must live in the same recipe (available scenarios in this recipe: %s)", recipeName, sc.Name, dep, strings.Join(names, ", "))
+			}
+		}
+	}
+	// Cycle detection — defer to topoSortByDeclarationOrder which
+	// returns *CycleError on cycle. We don't need the sorted output
+	// here, just the error.
+	if _, err := topoSortByDeclarationOrder(recipe.Scenario); err != nil {
+		if cycleErr, ok := err.(*CycleError); ok {
+			return fmt.Errorf("recipe %q: scenario depends_on cycle: %s", recipeName, strings.Join(cycleErr.Cycle, " -> "))
+		}
+		return fmt.Errorf("recipe %q: depends_on resolution failed: %w", recipeName, err)
 	}
 	return nil
 }

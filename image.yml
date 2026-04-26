@@ -1001,3 +1001,37 @@ image:
             - bench-target-layer
         ports:
             - 18765:18765
+
+    # ov harness `default` score — per-pod target images.
+    bench-tier1:
+        base: fedora
+        layers:
+            - bench-tier1-layer
+    bench-tier23:
+        base: fedora
+        layers:
+            - supervisord
+            - bench-tier23-layer
+        ports:
+            - 8080:8080
+    bench-redis:
+        base: fedora
+        layers:
+            - supervisord
+            - redis
+            - bench-redis-init-layer
+        ports:
+            - 6379:6379
+    # tier4-redis: server bound to 0.0.0.0 for cross-pod access (deploys as `redis`).
+    bench-redis-server:
+        base: fedora
+        layers:
+            - supervisord
+            - harness-redis-server-layer
+        ports:
+            - 6379:6379
+    # tier4-redis: client pod with redis-cli only (deploys as `redis-client`).
+    bench-redis-client:
+        base: fedora
+        layers:
+            - harness-redis-client-layer

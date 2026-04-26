@@ -178,6 +178,64 @@ func (c *HarnessRunCmd) Run() error {
 		args = append(args, "--format", c.Format)
 	}
 
+	// Per-run freshness for pod targets: if the bench-pod is marked
+	// disposable, restart its systemd quadlet unit so the container is
+	// destroyed (`--rm` flag in the quadlet) and recreated from scratch
+	// before dispatching. The bench-pod IS the harness's sole disposable
+	// resource — everything inside (deployments, images, AI work) is
+	// the AI's job and lives inside the pod's nested podman, all
+	// destroyed when the pod's container layer is wiped on restart.
+	//
+	// We deliberately do NOT use `ov rebuild` here: rebuild regenerates
+	// the systemd quadlet via `ov config`, and the current generator
+	// emits the image's default named volume AND the deploy.yml bind
+	// override at the same mount path (a pre-existing dedup bug). Going
+	// through systemctl restart uses the existing on-disk quadlet
+	// unchanged.
+	if tk == TargetKindPod {
+		if cfg, _ := LoadDeployConfig(); cfg != nil {
+			if entry, ok := cfg.Deployment[tn]; ok && entry.IsDisposable() {
+				unit := "ov-" + tn + ".service"
+				container := "ov-" + tn
+				fmt.Fprintf(os.Stderr,
+					"harness: preflight restart of disposable bench-pod %q (fresh-per-run)\n", tn)
+				cmd := exec.Command("systemctl", "--user", "restart", unit)
+				cmd.Stdout = os.Stderr
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("preflight restart of %s: %w", unit, err)
+				}
+				// The restart wipes the container's writable layer (the
+				// `--rm` flag in the quadlet means restart = destroy +
+				// recreate). Re-sync the host's fresh ov binary AND
+				// claude credentials into the pod so the in-pod harness
+				// has the latest code AND can authenticate. Without
+				// these, the AI invocation fails with auth errors and
+				// the in-pod ov falls back to the (older) image-baked
+				// version which lacks post-cutover commands.
+				ready := exec.Command("podman", "inspect", "--format", "{{.State.Running}}", container)
+				_ = ready.Run()
+				if exe, err := os.Executable(); err == nil && exe != "" {
+					sync := exec.Command("podman", "cp", exe, container+":/usr/local/bin/ov")
+					sync.Stdout = os.Stderr
+					sync.Stderr = os.Stderr
+					if err := sync.Run(); err != nil {
+						return fmt.Errorf("preflight sync of ov binary into %s: %w", container, err)
+					}
+				}
+				// Re-sync AI credentials (claude creds, etc.) into the
+				// freshly-restarted pod. Use the host's just-built ov
+				// binary so the sync logic itself is post-cutover.
+				credSync := exec.Command(findOvForBenchmark(), "harness", "sync-cred", c.Score)
+				credSync.Stdout = os.Stderr
+				credSync.Stderr = os.Stderr
+				if err := credSync.Run(); err != nil {
+					return fmt.Errorf("preflight sync of credentials for score %q: %w", c.Score, err)
+				}
+			}
+		}
+	}
+
 	switch tk {
 	case TargetKindHost:
 		return runLocalInProcess(args, c.Score, runID, score, uf, cwd)

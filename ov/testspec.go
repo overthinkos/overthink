@@ -265,6 +265,16 @@ func (c *Check) Kind() (string, error) {
 }
 
 // verbsSet returns the list of verb discriminators that are currently non-zero.
+//
+// Note on `command:` field: when an `ov-verb` (cdp / wl / dbus / vnc / mcp /
+// record / spice / libvirt / k8s) is set, `command:` is interpreted as a
+// MODIFIER (e.g. the argv for `libvirt: guest/exec`), NOT a verb of its own.
+// Otherwise (no ov-verb set), `command:` is the verb discriminator selecting
+// `runCommand` to shell out via the executor. The recipe-author surface
+// stays:
+//   command: "uname -s"      # alone → command verb
+//   libvirt: guest/exec
+//   command: "uname -s"      # paired → modifier for guest/exec argv
 func (c *Check) verbsSet() []string {
 	var set []string
 	if c.File != "" {
@@ -282,7 +292,12 @@ func (c *Check) verbsSet() []string {
 	if c.Process != "" {
 		set = append(set, "process")
 	}
-	if c.Command != "" {
+	// Treat `command:` as a verb only when no ov-verb is set; otherwise it's
+	// a modifier (e.g. argv for libvirt:guest/exec).
+	hasOvVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
+		c.Mcp != "" || c.Record != "" || c.Spice != "" || c.Libvirt != "" ||
+		c.K8s != ""
+	if c.Command != "" && !hasOvVerb {
 		set = append(set, "command")
 	}
 	if c.HTTP != "" {

@@ -322,13 +322,13 @@ func TestValidateTests_LibvirtRejectedInBuildScope(t *testing.T) {
 	}
 }
 
-func TestValidateTests_LibvirtGuestExecRequiresText(t *testing.T) {
+func TestValidateTests_LibvirtGuestExecRequiresCommand(t *testing.T) {
 	layers := map[string]*Layer{
 		"vm": {Name: "vm", tests: []Check{{Libvirt: "guest/exec", Scope: "deploy"}}},
 	}
 	got := runValidateTests(t, &Config{Images: map[string]ImageConfig{}}, layers)
-	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "text") {
-		t.Errorf("expected libvirt: guest/exec text-required error: %s", got)
+	if !strings.Contains(got, "libvirt") || !strings.Contains(got, "command") {
+		t.Errorf("expected libvirt: guest/exec command-required error: %s", got)
 	}
 }
 
@@ -359,7 +359,7 @@ func TestValidateTests_LibvirtClean(t *testing.T) {
 			{Libvirt: "info", Scope: "deploy"},
 			{Libvirt: "screenshot", Artifact: "/tmp/v.png", Scope: "deploy"},
 			{Libvirt: "guest/ping", Scope: "deploy"},
-			{Libvirt: "guest/exec", Text: "uname -r", Scope: "deploy"},
+			{Libvirt: "guest/exec", Command: "uname -r", Scope: "deploy"},
 			{Libvirt: "snapshot/create", Target: "pre-upgrade", Scope: "deploy"},
 			{Libvirt: "qmp", Text: "query-status", Scope: "deploy"},
 			{Libvirt: "send-key", KeyName: "ctrl alt F2", Scope: "deploy"},

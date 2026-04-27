@@ -8,7 +8,11 @@ import (
 	"bytes"
 	"fmt"
 	"image"
+	_ "image/png"
 	"image/color"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -21,11 +25,32 @@ import (
 //
 // QEMU's VNC screenshot returns PPM P6 (raw RGB) by default. We
 // parse the header, then decode each pixel from three bytes.
+//
+// Some libvirt + virtio-gpu combinations return PNG via the RPC stream
+// rather than PPM (the format the underlying QEMU monitor produces is
+// driver-dependent). go-libvirt v0.0.0-20260217 has a known issue
+// where the RPC stream-finish framing fails on these payloads with
+// "xdr:DecodeUint: EOF while decoding 4 bytes" — the screenshot data
+// arrives but the stream's terminator XDR doesn't decode. As a
+// pragmatic fallback we shell out to `virsh -c qemu:///session
+// screenshot <name>` (uses the C client's stream impl, which is
+// stable) and decode whatever PNG/PPM it writes via image.Decode.
 func captureDomainScreenshot(l *libvirt.Libvirt, dom libvirt.Domain, screen uint) (image.Image, error) {
 	var buf bytes.Buffer
 	mime, err := l.DomainScreenshot(dom, &buf, uint32(screen), 0)
 	if err != nil {
-		return nil, fmt.Errorf("DomainScreenshot: %w", err)
+		// Fallback path: virsh screenshot writes PNG/PPM by inspecting
+		// the QEMU return MIME — works on virtio-gpu where go-libvirt's
+		// stream framing breaks. Domain name comes from the handle's
+		// Name field directly (no extra RPC needed).
+		if dom.Name == "" {
+			return nil, fmt.Errorf("DomainScreenshot: %w (and Domain.Name is empty)", err)
+		}
+		img, ferr := captureDomainScreenshotViaVirsh(dom.Name)
+		if ferr != nil {
+			return nil, fmt.Errorf("DomainScreenshot: %w (virsh fallback: %v)", err, ferr)
+		}
+		return img, nil
 	}
 	_ = mime // "image/x-portable-pixmap" normally; we parse PPM regardless
 
@@ -118,6 +143,37 @@ func readPPMToken(r *bufio.Reader) (string, error) {
 		out = append(out, b)
 		skipWhitespace = false
 	}
+}
+
+// captureDomainScreenshotViaVirsh shells out to `virsh -c qemu:///session
+// screenshot <name> <tmpfile>`, decodes whatever PNG/PPM the C client
+// writes, and returns the resulting image.Image. Fallback for the
+// go-libvirt DomainScreenshot RPC-stream issue described above.
+func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
+	tmp, err := os.CreateTemp("", "ov-libvirt-screenshot-*.png")
+	if err != nil {
+		return nil, fmt.Errorf("creating tempfile: %w", err)
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	defer os.Remove(tmpPath)
+	defer os.Remove(filepath.Join(filepath.Dir(tmpPath), "ov-libvirt-screenshot-temp.ppm"))
+
+	cmd := exec.Command("virsh", "-c", "qemu:///session", "screenshot", domName, tmpPath)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("virsh screenshot %s: %w (output: %s)", domName, err, strings.TrimSpace(string(out)))
+	}
+	f, err := os.Open(tmpPath)
+	if err != nil {
+		return nil, fmt.Errorf("opening virsh screenshot output: %w", err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		return nil, fmt.Errorf("decoding virsh screenshot output: %w", err)
+	}
+	return img, nil
 }
 
 // ---------------- keymap ----------------

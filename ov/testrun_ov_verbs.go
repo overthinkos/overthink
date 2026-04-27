@@ -254,9 +254,11 @@ var libvirtMethods = map[string]methodSpec{
 	"guest/disks":      {path: []string{"libvirt", "guest", "disks"}},
 	"guest/fsinfo":     {path: []string{"libvirt", "guest", "fsinfo"}},
 	"guest/vcpus":      {path: []string{"libvirt", "guest", "vcpus"}},
-	// guest/exec runs a command via qemu-guest-agent inside the VM. Text holds
-	// the full command line (Command would collide with the command: verb).
-	"guest/exec":   {path: []string{"libvirt", "guest", "exec"}, required: []string{"Text"}, posArgs: posText},
+	// guest/exec runs a command via qemu-guest-agent inside the VM. Reuses the
+	// `command:` field as a sub-modifier (verbsSet treats it as a modifier when
+	// libvirt: is set). The string is split on whitespace into argv (no shell
+	// metacharacter handling — guest-exec wants a real argv list).
+	"guest/exec":   {path: []string{"libvirt", "guest", "exec"}, required: []string{"Command"}, posArgs: posCommandFields},
 	"guest/fstrim": {path: []string{"libvirt", "guest", "fstrim"}},
 
 	// Snapshot subgroup — Target holds the snapshot name.
@@ -584,6 +586,26 @@ func posRecordCmd(c *Check) []string {
 // "ctrl alt F2" maps to three separate argv slots.
 func posKeyNameSplit(c *Check) []string {
 	return strings.Fields(c.KeyName)
+}
+
+// posCommandFields splits c.Command on whitespace into argv slots. Used for
+// libvirt:guest/exec where the recipe surface is `command: "uname -s"` and
+// the QEMU guest-agent wants a real argv list (no shell, no metachars).
+// Prefixes `--` so kong does not interpret embedded `-flag`-like tokens
+// (e.g. `-s` in `uname -s`, `-fsS` in `curl -fsS …`) as CLI flags of the
+// outer `ov test libvirt guest exec` invocation.
+// For commands containing real shell metacharacters (pipes, redirects,
+// quoted spaces), use `command: "sh -c '<full command>'"` so the recipe-side
+// argv is `sh`, `-c`, `<full command>`.
+func posCommandFields(c *Check) []string {
+	fields := strings.Fields(c.Command)
+	if len(fields) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(fields)+1)
+	out = append(out, "--")
+	out = append(out, fields...)
+	return out
 }
 
 // LibvirtQmp takes a method name + optional JSON args string. Text holds the

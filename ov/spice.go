@@ -149,6 +149,9 @@ func (c *SpiceStatusCmd) Run() error {
 	// Wait briefly for channels to enumerate.
 	_ = s.WaitForInputs(2 * time.Second)
 
+	// Mirror cdp/wl/vnc status: emit "SPICE: ok" so probes can match
+	// on `ok` for "handshake completed" without coupling to addr text.
+	fmt.Println("SPICE:     ok")
 	fmt.Printf("connected: %s\n", s.addr)
 	if s.Display() != nil {
 		b := s.Display().Bounds()

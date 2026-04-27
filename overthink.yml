@@ -1596,3 +1596,33 @@ inits:
                 {{- else}}
                 WantedBy=multi-user.target
                 {{- end}}
+
+# fixture-vm — phase 7 (vm-control-libvirt-spice). The libvirt domain
+# `ov-fixture-vm` is defined externally (not via `ov vm build`); this
+# entity exists so `ov test libvirt info fixture-vm` and
+# `ov test spice * fixture-vm` resolve their session-libvirt domain.
+vm:
+    fixture-vm:
+        source:
+            kind: cloud_image
+            url: https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/nocloud_alpine-3.23.0-x86_64-bios-cloudinit-r0.qcow2
+        disk_size: 4G
+        ram: 1G
+        cpus: 2
+        firmware: bios
+        network:
+            mode: user
+        ssh:
+            port: 2222
+            key_source: none
+        libvirt:
+            devices:
+                graphics:
+                    - type: spice
+                      listen:
+                        - type: address
+                          address: 127.0.0.1
+                video:
+                    - model: virtio
+                      heads: 1
+                      accel3d: false

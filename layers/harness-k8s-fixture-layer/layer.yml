@@ -177,6 +177,7 @@ layer:
 
         DEPLOY_TRAEFIK = make_deployment("traefik")
         DEPLOY_LOCAL_PATH = make_deployment("local-path-provisioner")
+        DEPLOY_COREDNS = make_deployment("coredns")
         DS_SVCLB_TRAEFIK = make_daemonset("svclb-traefik")
 
 
@@ -222,15 +223,24 @@ layer:
                 return 200, DEPLOY_TRAEFIK
             if base == "/apis/apps/v1/namespaces/kube-system/deployments/local-path-provisioner":
                 return 200, DEPLOY_LOCAL_PATH
+            if base == "/apis/apps/v1/namespaces/kube-system/deployments/coredns":
+                return 200, DEPLOY_COREDNS
             if base == "/apis/apps/v1/namespaces/kube-system/daemonsets/svclb-traefik":
                 return 200, DS_SVCLB_TRAEFIK
 
             # Generic kube-system list/Get fallbacks for any other addon-style probe
             if base == "/apis/apps/v1/namespaces/kube-system/deployments":
                 return 200, list_response("apps/v1", "DeploymentList",
-                                          [DEPLOY_TRAEFIK, DEPLOY_LOCAL_PATH])
+                                          [DEPLOY_TRAEFIK, DEPLOY_LOCAL_PATH, DEPLOY_COREDNS])
             if base == "/apis/apps/v1/namespaces/kube-system/daemonsets":
                 return 200, list_response("apps/v1", "DaemonSetList", [DS_SVCLB_TRAEFIK])
+
+            # Generic kube-system Deployment GET fallback — return a Ready
+            # Deployment named after the path. Lets the recipe's wait-ready
+            # probes survive future drift in the addon set.
+            m = re.match(r"^/apis/apps/v1/namespaces/kube-system/deployments/([A-Za-z0-9_.\-]+)$", base)
+            if m:
+                return 200, make_deployment(m.group(1))
 
             # Discovery — minimal so dynamic-client doesn't bail on a hard 404.
             if base == "/api":

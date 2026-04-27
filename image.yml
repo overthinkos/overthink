@@ -6,6 +6,7 @@ defaults:
     build:
         - rpm
     merge:
+        auto: true
         max_mb: 128
     builder:
         cargo: fedora-builder
@@ -80,6 +81,7 @@ image:
               scope: deploy
               reachable: true
     arch-ov:
+        enabled: false
         base: archlinux
         layers:
             - agent-forwarding
@@ -94,6 +96,7 @@ image:
             - 2222:2222
             - 18765:18765
     arch-test:
+        enabled: false
         base: archlinux
         build:
             - pac
@@ -169,6 +172,7 @@ image:
             - os-config
             - os-system-files
     comfyui:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -180,6 +184,7 @@ image:
         ports:
             - 8188:8188
     debian:
+        enabled: false
         base: debian:13
         distro:
             - debian:13
@@ -195,6 +200,7 @@ image:
             - npm
             - cargo
     debian-builder:
+        enabled: false
         base: debian
         layers:
             - pixi
@@ -205,6 +211,7 @@ image:
             - npm
             - cargo
     debian-coder:
+        enabled: false
         base: debian
         layers:
             - agent-forwarding
@@ -361,6 +368,7 @@ image:
         layers:
             - rpmfusion
     fedora-ov:
+        enabled: false
         base: fedora
         layers:
             - agent-forwarding
@@ -371,6 +379,7 @@ image:
             - container-nesting
             - nvidia
     fedora-remote:
+        enabled: false
         base: quay.io/fedora/fedora:43
         platforms:
             - linux/amd64
@@ -406,6 +415,7 @@ image:
               scope: deploy
               filetype: directory
     githubrunner:
+        enabled: false
         base: fedora
         platforms:
             - linux/amd64
@@ -430,6 +440,7 @@ image:
               scope: deploy
               running: true
     hermes-playwright:
+        enabled: false
         base: fedora
         layers:
             - agent-forwarding
@@ -438,6 +449,7 @@ image:
             - dbus
             - ov
     immich:
+        enabled: false
         base: fedora-nonfree
         platforms:
             - linux/amd64
@@ -510,6 +522,7 @@ image:
               id: jupyter-mcp-extension-enabled
               exit_status: 0
     jupyter-ml:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -522,6 +535,7 @@ image:
         ports:
             - 8888:8888
     jupyter-ml-notebook:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -546,6 +560,7 @@ image:
             - nvidia
             - cuda
     ollama:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -557,6 +572,7 @@ image:
         ports:
             - 11434:11434
     openclaw:
+        enabled: false
         base: fedora
         layers:
             - agent-forwarding
@@ -624,6 +640,7 @@ image:
             - 9222:9222
             - 9224:9224
     openclaw-ollama:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -637,6 +654,7 @@ image:
             - 18789:18789
             - 11434:11434
     openclaw-ollama-sway-browser:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -669,6 +687,7 @@ image:
             - 9222:9222
             - 9224:9224
     openwebui:
+        enabled: false
         base: fedora
         layers:
             - agent-forwarding
@@ -687,6 +706,7 @@ image:
               in_container: true
               exit_status: 0
     python-ml:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -717,6 +737,7 @@ image:
               scope: deploy
               reachable: true
     selkies-desktop-bootc:
+        enabled: false
         base: quay.io/fedora/fedora-bootc:43
         bootc: true
         platforms:
@@ -742,6 +763,7 @@ image:
               id: selkies-desktop-bootc-binaries
               exit_status: 0
     selkies-desktop-nvidia:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -875,6 +897,7 @@ image:
               artifact: /tmp/sway-browser-vnc-fb.png
               artifact_min_bytes: 5000
     ubuntu:
+        enabled: false
         base: ubuntu:24.04
         distro:
             - ubuntu:24.04
@@ -891,6 +914,7 @@ image:
             - npm
             - cargo
     ubuntu-builder:
+        enabled: false
         base: ubuntu
         layers:
             - pixi
@@ -901,6 +925,7 @@ image:
             - npm
             - cargo
     ubuntu-coder:
+        enabled: false
         base: ubuntu
         layers:
             - agent-forwarding
@@ -967,6 +992,7 @@ image:
               scope: deploy
               reachable: true
     unsloth-studio:
+        enabled: false
         base: nvidia
         platforms:
             - linux/amd64
@@ -1016,10 +1042,12 @@ image:
         ports:
             - 8080:8080
     bench-tier1:
+        enabled: false
         base: fedora
         layers:
             - bench-tier1-layer
     bench-tier23:
+        enabled: false
         base: fedora
         layers:
             - supervisord
@@ -1027,6 +1055,7 @@ image:
         ports:
             - 8080:8080
     bench-redis:
+        enabled: false
         base: fedora
         layers:
             - supervisord

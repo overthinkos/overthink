@@ -438,8 +438,11 @@ recipe:
         pod: fixture-k8s
         depends_on: [fixture-k8s-nodes-ready]
         steps:
-          - then: "all system pods reach Ready"
+          - then: "the kube-system coredns Deployment reaches Ready"
             k8s: wait-ready
+            k8s_kind: Deployment
+            name: coredns
+            namespace: kube-system
 
       - name: fixture-k8s-storage-class-present
         pod: fixture-k8s
@@ -474,8 +477,9 @@ recipe:
         pod: fixture-k8s
         depends_on: [fixture-k8s-nodes-listed]
         steps:
-          - then: "a raw API call returns a JSON document with a predetermined kind field"
+          - then: "a raw API call to the /nodes resource returns a JSON document with a kind field"
             k8s: raw
+            k8s_resource: nodes
             stdout: { contains: ["kind"] }
 
   # ─────────────────────────────────────────────────────────────────────

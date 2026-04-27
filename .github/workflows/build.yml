@@ -1,80 +1,9 @@
-name: Build and Push Images
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
-
-permissions:
-  contents: read
-  packages: write
-
-jobs:
-  test:
-    runs-on: [self-hosted, overthink]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build ov
-        run: go build -o "$GITHUB_WORKSPACE/bin/ov" .
-        working-directory: ov
-
-      - name: Run tests
-        run: go test ./...
-        working-directory: ov
-
-      - name: Validate configuration
-        run: bin/ov image validate
-
-      - name: Verify generation
-        run: bin/ov image generate
-
-  build:
-    needs: test
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, overthink]
-    timeout-minutes: 180
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build ov
-        run: go build -o "$GITHUB_WORKSPACE/bin/ov" .
-        working-directory: ov
-
-      - name: Stage ov binary for ov layer
-        run: mkdir -p layers/ov/bin && cp bin/ov layers/ov/bin/ov
-
-      - name: Log in to GHCR
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Build and push all images
-        run: bin/ov image build --push
-
-      - name: Delete package versions older than 24h
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-        run: |
-          set -euo pipefail
-          cutoff=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ)
-
-          gh api orgs/overthinkos/packages?package_type=container --paginate --jq '.[].name' | while read pkg; do
-            echo "--- Checking $pkg ---"
-            gh api "orgs/overthinkos/packages/container/$pkg/versions" --paginate \
-              --jq '.[] | "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"' | while read id updated tags; do
-              if [[ "$updated" < "$cutoff" ]]; then
-                echo "Deleting version $id (updated: $updated, tags: $tags)"
-                gh api --method DELETE "orgs/overthinkos/packages/container/$pkg/versions/$id" || true
-              fi
-            done
-          done
-
-      - name: Prune images older than 24h
-        if: always()
-        run: podman image prune -af --filter "until=24h" || true
+# Deprecated 2026-04-27 — image publishing moved to `task push`.
+#
+# This workflow used to auto-build and push every image to
+# ghcr.io/overthinkos on every push to main. That coupled CI
+# state to the registry contents in ways that made stale
+# artifacts hard to reason about. Run `task push` from a clean
+# working tree when you want to republish.
+#
+# See Taskfile.yml `push` task and CLAUDE.md for the new flow.

@@ -154,3 +154,104 @@ func TestSSHExecutor_Venue(t *testing.T) {
 		t.Errorf("Venue = %q, want %q", e.Venue(), want)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// 2026-04-27 cutover: heredoc-delim uniqueness + env-var propagation
+// ---------------------------------------------------------------------------
+
+// TestNestedExecutor_ThreeLevelNesting_DelimitersUnique verifies the
+// heredoc delim collision fix: at 3 levels of nesting (outer → mid →
+// inner), each wrap layer must use a DIFFERENT delim or the outer
+// bash terminates its heredoc on the first occurrence and the
+// trailing closing delims become bare commands → exit 127.
+func TestNestedExecutor_ThreeLevelNesting_DelimitersUnique(t *testing.T) {
+	innerJump := NestedJump{Kind: JumpPodmanExec, Target: "deepest"}
+	midJump := NestedJump{Kind: JumpPodmanExec, Target: "middle"}
+	outerJump := NestedJump{Kind: JumpPodmanExec, Target: "outermost"}
+
+	innerScript := `echo hello`
+	midScript, err := wrapWithJump(innerJump, innerScript, false)
+	if err != nil {
+		t.Fatalf("inner wrap: %v", err)
+	}
+	outerScript, err := wrapWithJump(midJump, midScript, false)
+	if err != nil {
+		t.Fatalf("mid wrap: %v", err)
+	}
+	final, err := wrapWithJump(outerJump, outerScript, false)
+	if err != nil {
+		t.Fatalf("outer wrap: %v", err)
+	}
+
+	// Collect delim closing tokens at line start (open delims appear
+	// in `<<'<delim>'` form on the heredoc-opening line and don't
+	// start with the delim text). Three nesting levels → three
+	// distinct close-delims at line start, each appearing exactly
+	// once (the matching close for its open). Also verify each
+	// distinct close-delim's open delim appears exactly once
+	// elsewhere in the script (in `<<'<delim>'` form).
+	closeDelims := map[string]int{}
+	for _, line := range strings.Split(final, "\n") {
+		l := strings.TrimSpace(line)
+		if strings.HasPrefix(l, "OV_NESTED_SCRIPT_EOF") && !strings.Contains(l, " ") {
+			closeDelims[l]++
+		}
+	}
+	if len(closeDelims) < 3 {
+		t.Errorf("expected at least 3 distinct close-delims for 3-level nesting; got %d distinct: %v\n--- script ---\n%s",
+			len(closeDelims), closeDelims, final)
+	}
+	for d, n := range closeDelims {
+		if n != 1 {
+			t.Errorf("close-delim %q appears %d times, want 1", d, n)
+		}
+		// And its matching open should appear exactly once.
+		openMarker := "<<'" + d + "'"
+		if got := strings.Count(final, openMarker); got != 1 {
+			t.Errorf("open marker %q appears %d times, want 1", openMarker, got)
+		}
+	}
+}
+
+// TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir verifies the
+// load-bearing libvirt-session-socket fix: when XDG_RUNTIME_DIR is
+// set in the parent environ, wrapWithJump emits a `--env
+// XDG_RUNTIME_DIR=...` flag in the podman exec invocation so the
+// libvirt session-socket lookup succeeds inside the nested container.
+func TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "/home/user/.local/share/ov-runtime")
+	t.Setenv("DISPLAY", "")
+	t.Setenv("WAYLAND_DISPLAY", "")
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
+
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "fixture-vm"}, `ov test libvirt info fixture-vm`, false)
+	if err != nil {
+		t.Fatalf("wrapWithJump: %v", err)
+	}
+	if !strings.Contains(wrapped, "--env") {
+		t.Errorf("expected `--env` flag in podman exec invocation; got:\n%s", wrapped)
+	}
+	if !strings.Contains(wrapped, "XDG_RUNTIME_DIR=/home/user/.local/share/ov-runtime") {
+		t.Errorf("expected XDG_RUNTIME_DIR propagation; got:\n%s", wrapped)
+	}
+}
+
+// TestNestedExecutor_EnvVarsPropagated_DisplayWayland verifies that
+// the other display-related env vars in the allowlist are also
+// propagated.
+func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+	t.Setenv("DISPLAY", ":1")
+	t.Setenv("WAYLAND_DISPLAY", "wayland-2")
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
+
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "ov-fixture-desktop"}, `ov test wl status fixture-desktop`, false)
+	if err != nil {
+		t.Fatalf("wrapWithJump: %v", err)
+	}
+	for _, expect := range []string{"DISPLAY=:1", "WAYLAND_DISPLAY=wayland-2"} {
+		if !strings.Contains(wrapped, expect) {
+			t.Errorf("expected propagation of %q; got:\n%s", expect, wrapped)
+		}
+	}
+}

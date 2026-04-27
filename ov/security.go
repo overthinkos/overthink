@@ -47,6 +47,15 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 			// vanishingly rare and surface immediately at rebuild.
 			merged.CgroupNS = sec.CgroupNS
 		}
+		if sec.IpcMode != "" {
+			// Same last-writer semantics as CgroupNS. The bench-pod
+			// declares ipc_mode: host so the nested-podman child can
+			// share /dev/shm with the host (chrome / large-shm
+			// workloads). When this is set, the quadlet generator
+			// MUST drop the ShmSize directive — podman rejects the
+			// combination at runtime.
+			merged.IpcMode = sec.IpcMode
+		}
 		merged.CapAdd = appendUnique(merged.CapAdd, sec.CapAdd...)
 		merged.Devices = appendUnique(merged.Devices, sec.Devices...)
 		merged.SecurityOpt = appendUnique(merged.SecurityOpt, sec.SecurityOpt...)
@@ -74,6 +83,9 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 		merged.Privileged = img.Security.Privileged
 		if img.Security.CgroupNS != "" {
 			merged.CgroupNS = img.Security.CgroupNS
+		}
+		if img.Security.IpcMode != "" {
+			merged.IpcMode = img.Security.IpcMode
 		}
 		if len(img.Security.CapAdd) > 0 {
 			merged.CapAdd = appendUnique(merged.CapAdd, img.Security.CapAdd...)
@@ -126,7 +138,16 @@ func appendUnique(dst []string, items ...string) []string {
 }
 
 // SecurityArgs returns the container run arguments for the given security config.
+//
+// Note on the ShmSize+IpcMode interaction: podman rejects `--shm-size`
+// when the IPC namespace is shared with the host (`--ipc=host`)
+// because the host's /dev/shm is shared in-kernel and sized by the
+// host kernel; an explicit shm-size on the container makes no sense
+// in that case and yields a runtime error like "cannot set shmsize
+// when running in the {host} IPC Namespace". Same logic applies to
+// the quadlet generator's ShmSize= directive elsewhere.
 func SecurityArgs(sec SecurityConfig) []string {
+	emitShmSize := sec.ShmSize != "" && !ipcModeBlocksShmSize(sec.IpcMode)
 	if sec.Privileged {
 		args := []string{"--privileged"}
 		// Pass security_opt even when privileged — nested containers need
@@ -138,7 +159,10 @@ func SecurityArgs(sec SecurityConfig) []string {
 		if sec.CgroupNS != "" {
 			args = append(args, "--cgroupns", sec.CgroupNS)
 		}
-		if sec.ShmSize != "" {
+		if sec.IpcMode != "" {
+			args = append(args, "--ipc", sec.IpcMode)
+		}
+		if emitShmSize {
 			args = append(args, "--shm-size", sec.ShmSize)
 		}
 		args = append(args, resourceCapArgs(sec)...)
@@ -160,11 +184,24 @@ func SecurityArgs(sec SecurityConfig) []string {
 	if sec.CgroupNS != "" {
 		args = append(args, "--cgroupns", sec.CgroupNS)
 	}
-	if sec.ShmSize != "" {
+	if sec.IpcMode != "" {
+		args = append(args, "--ipc", sec.IpcMode)
+	}
+	if emitShmSize {
 		args = append(args, "--shm-size", sec.ShmSize)
 	}
 	args = append(args, resourceCapArgs(sec)...)
 	return args
+}
+
+// ipcModeBlocksShmSize reports whether the IPC namespace mode forces
+// the shm-size directive to be omitted (podman rejects shm-size when
+// the IPC namespace is shared with the host kernel).
+//
+// Currently only "host" qualifies. "shareable" / "private" / "" all
+// allow per-container shm-size sizing.
+func ipcModeBlocksShmSize(ipcMode string) bool {
+	return ipcMode == "host"
 }
 
 // resourceCapArgs returns the podman run flags for memory and CPU caps.

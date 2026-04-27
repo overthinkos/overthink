@@ -24,9 +24,30 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
+
+// RunScoringOpts carries optional knobs into RunRecipeScenariosLive.
+// Zero value preserves pre-2026-04-27 behaviour (re-probe everything,
+// no freshness gate). Populated by the harness orchestrator at iter
+// scoring time to:
+//
+//   - Activate AI-artifact validation mode for the seven state-
+//     dependent capture probes (cdp/wl/vnc/libvirt/spice screenshot,
+//     spice cursor, record stop) when score.validate_ai_artifacts is
+//     true. ALL OTHER probes still re-run independently.
+//
+//   - Provide an iteration-start floor for the freshness mtime gate.
+//     Artifacts must have mtime ≥ IterStartTime or the probe fails
+//     with a clear stale-artifact error — this is the load-bearing
+//     anti-deception mechanism that prevents the AI from pre-staging
+//     or carrying-forward doctored artifact files.
+type RunScoringOpts struct {
+	ValidateAiArtifacts bool
+	IterStartTime       time.Time
+}
 
 // RunRecipeScenariosLive scores `scenarios` against the live containers
 // they target via their `Pod` field. Returns a TestRunResults shaped
@@ -43,7 +64,7 @@ import (
 // for callsite stability but only `scoreName` is used (for narrative
 // labelling). The legacy `deployment` argument is now ignored —
 // scoring follows scenario.Pod, never score.deployment.
-func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, scenarios []Scenario) (*TestRunResults, error) {
+func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, scenarios []Scenario, opts RunScoringOpts) (*TestRunResults, error) {
 	_ = deployment // legacy parameter, no longer consulted
 
 	if len(scenarios) == 0 {
@@ -160,6 +181,15 @@ func RunRecipeScenariosLive(ctx context.Context, deployment, scoreName string, s
 			resolver := &TestVarResolver{}
 			runner = NewRunner(chainExec, resolver, RunModeTest)
 			runner.Image = pod
+			// Propagate score-level AI-artifact validation policy +
+			// iter-start freshness floor into the runner. The runner
+			// uses these in runOvVerb's artifact-producing branch to
+			// decide whether to re-execute the probe (default: yes,
+			// always) or validate the AI's iteration artifact (when
+			// the flag is set AND the verb/method is in the narrow
+			// state-dependent allowlist artifactValidatableMethods).
+			runner.ValidateAiArtifacts = opts.ValidateAiArtifacts
+			runner.IterStartTime = opts.IterStartTime
 		}
 
 		// Process scenarios sequentially within the bucket. The dep

@@ -247,3 +247,27 @@ func TestShortNameMatchesRef(t *testing.T) {
 		}
 	}
 }
+
+// TestPosK8sRaw_JsonFlagThreaded covers the 2026-04-27 cutover's
+// `json: true` recipe modifier passthrough into the underlying
+// `ov test k8s raw --json` invocation. List-mode default emits
+// `<namespace>/<name>` per line; --json emits the full JSON List
+// document for recipes that author `stdout: { contains: kind }`.
+func TestPosK8sRaw_JsonFlagThreaded(t *testing.T) {
+	withJSON := posK8sRaw(&Check{K8sResource: "nodes", JSON: true})
+	foundJSON := false
+	for _, a := range withJSON {
+		if a == "--json" {
+			foundJSON = true
+		}
+	}
+	if !foundJSON {
+		t.Errorf("expected `--json` flag in argv when Check.JSON=true; got %v", withJSON)
+	}
+	withoutJSON := posK8sRaw(&Check{K8sResource: "nodes", JSON: false})
+	for _, a := range withoutJSON {
+		if a == "--json" {
+			t.Errorf("expected NO `--json` flag when Check.JSON=false; got %v", withoutJSON)
+		}
+	}
+}

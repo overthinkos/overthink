@@ -30,7 +30,33 @@ layer:
       user: root
       mode: "0644"
       content: |
-        ov-fixture-web-content-marker
+        <!DOCTYPE html>
+        <html>
+        <head>
+        <title>fixture-web</title>
+        <style>
+        body { margin: 0; padding: 0; min-height: 100vh; background: linear-gradient(135deg, #2a4d8f 0%, #c93a4a 50%, #f0b94b 100%); font-family: monospace; color: #fff; }
+        .box { padding: 60px; }
+        h1 { font-size: 56px; color: #ffeb3b; text-shadow: 4px 4px 0 #000; }
+        p { font-size: 28px; line-height: 1.6; background: rgba(0,0,0,0.7); padding: 20px; border: 4px solid #00e5ff; border-radius: 10px; }
+        .swatch { display: inline-block; width: 100px; height: 100px; margin: 10px; border: 3px solid #fff; }
+        </style>
+        </head>
+        <body>
+        <div class="box">
+        <h1>ov-fixture-web</h1>
+        <p>ov-fixture-web-content-marker</p>
+        <div>
+        <span class="swatch" style="background:#e91e63"></span>
+        <span class="swatch" style="background:#4caf50"></span>
+        <span class="swatch" style="background:#2196f3"></span>
+        <span class="swatch" style="background:#ffc107"></span>
+        <span class="swatch" style="background:#9c27b0"></span>
+        <span class="swatch" style="background:#ff5722"></span>
+        </div>
+        </div>
+        </body>
+        </html>
     - write: /etc/nginx/nginx.conf
       user: root
       mode: "0644"

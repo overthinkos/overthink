@@ -96,6 +96,27 @@ type HarnessScore struct {
 	// Notes controls the persistent NOTES.md memory subsystem. Pointer
 	// so the default (true) and an explicit `false` are distinguishable.
 	Notes *bool `yaml:"notes,omitempty"`
+
+	// ValidateAiArtifacts narrows artifact-producing state-dependent
+	// probes (the screenshot + record-stop methods listed in
+	// artifactValidatableMethods) to validate the AI's iteration
+	// artifact instead of re-running the capture. Re-running these
+	// probes a few seconds later against the same logically-correct
+	// state can yield different pixel bytes (animation frames, cursor
+	// movement) and the AI's iteration moment is the canonical capture.
+	//
+	// All NON-state-dependent probes (status queries, evaluations,
+	// listings, info dumps, file/process/package/port checks, libvirt
+	// RPC queries, k8s queries, mcp queries) ALWAYS re-run independently
+	// regardless of this flag. The harness remains authoritative for
+	// everything the AI cannot prove by holding up a frozen artifact.
+	//
+	// A freshness mtime gate enforces that the artifact was written
+	// during the current iteration (mtime ≥ iter start) — pre-staged
+	// or stale files are rejected.
+	//
+	// Default false (all probes re-run, including artifact-producing).
+	ValidateAiArtifacts bool `yaml:"validate_ai_artifacts,omitempty"`
 }
 
 // NotesEnabled returns true unless the score explicitly opts out.

@@ -480,6 +480,7 @@ recipe:
           - then: "a raw API call to the /nodes resource returns a JSON document with a kind field"
             k8s: raw
             k8s_resource: nodes
+            json: true
             stdout: { contains: ["kind"] }
 
   # ─────────────────────────────────────────────────────────────────────
@@ -1011,6 +1012,20 @@ score:
     notes: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
+    # Validate the AI's iteration artifacts (instead of re-running the
+    # capture) for state-dependent probes ONLY: cdp/wl/vnc/libvirt/spice
+    # screenshots, spice cursor, record stop. The harness scorer at iter
+    # end skips re-execution for these probes (which would overwrite the
+    # AI's file with a different chrome/wayland frame anyway) and
+    # validates the file the AI's own self-evaluate produced. A freshness
+    # mtime gate (artifact mtime ≥ iter start) rejects pre-staged or
+    # stale files.
+    #
+    # ALL OTHER probes (status, evaluation, listing, info, file/process/
+    # package/port/service/command, libvirt RPC queries, k8s queries,
+    # mcp queries) ALWAYS re-run independently regardless of this flag.
+    # The harness remains AUTHORITATIVE for everything reproducible.
+    validate_ai_artifacts: true
     recipes:
       - single-pod-system-state           # phase 1 — trivial smoke
       - network-and-http                  # phase 2 — fixture-web producer
@@ -1094,6 +1109,49 @@ score:
           running for later phases' consumer probes.
         - There is NO premium on speed. There IS a premium on every
           scenario you can make pass.
+
+      == How harness scoring relates to your iteration ==
+      The harness scorer is AUTHORITATIVE. At iter end it physically
+      re-runs every probe against the live system EXCEPT for the
+      state-dependent capture probes listed below — for those, the
+      harness validates the artifact YOUR iteration produced (the file
+      at the recipe's `artifact:` path), with a strict mtime freshness
+      check that rejects pre-staged or stale files.
+
+      Re-run by harness independently (you cannot influence the verdict):
+        - Status / evaluation / listing verbs (cdp:status, cdp:eval,
+          wl:status, libvirt:info, libvirt:domain-xml, libvirt:guest/
+          ping, libvirt:guest/exec, k8s:nodes/wait-ready/addons/raw,
+          mcp:ping/list-tools/call/read, dbus:list/call/notify).
+        - File / process / package / port / service / command /
+          matching / http / dns / addr / interface / mount / kernel-
+          param / user / group probes.
+        - All deploy-tree resolution probes.
+
+      Validates YOUR iteration's artifact (state-dependent capture only):
+        - cdp:screenshot, wl:screenshot, vnc:screenshot,
+          libvirt:screenshot, spice:screenshot, spice:cursor, record:stop.
+        - For these the harness validates artifact_min_bytes /
+          artifact_min_dimensions / artifact_not_uniform /
+          artifact_min_cast_events against the file at the recipe-
+          declared `artifact:` path, with mtime ≥ iter start.
+
+      == MANDATORY before exiting this iteration ==
+      Run `ov harness self-evaluate` and read its output BEFORE you
+      exit. It runs every in-scope probe against live systems via the
+      SAME code path the harness scorer will invoke at iter end. The
+      verdict it prints (pass / fail / skipped per scenario) is what
+      the harness will record.
+
+      Why this is mandatory: for state-dependent capture probes,
+      self-evaluate's invocation IS what writes the canonical artifact
+      the harness then validates. Skipping self-evaluate means missing
+      or stale artifacts → those scenarios fail. For other probes,
+      self-evaluate gives you a chance to see the harness's verdict
+      and fix your deployment BEFORE the iter ends.
+
+      Do not consider the iteration complete until self-evaluate
+      prints the verdict you intended.
 
       == When a source-code fix can't apply mid-run ==
       The harness loop runs as a long-lived Go process (PID inside

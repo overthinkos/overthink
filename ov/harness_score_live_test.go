@@ -74,7 +74,7 @@ func TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation(t *testi
 		{Name: "b", Pod: "test-pod", SourceRecipe: "r1", DependsOn: []string{"a"},
 			Steps: []Step{{Then: "y", Check: Check{File: "/b"}}}},
 	}
-	res, err := RunRecipeScenariosLive(context.Background(), "", "test-score", scenarios)
+	res, err := RunRecipeScenariosLive(context.Background(), "", "test-score", scenarios, RunScoringOpts{})
 	if err != nil {
 		t.Fatalf("CycleError must NOT propagate per Fix D — got error: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation(t *testi
 // TestRunRecipeScenariosLive_NonCycleEmptyInputReturnsEarly is a
 // regression on the empty-input fast path.
 func TestRunRecipeScenariosLive_NonCycleEmptyInputReturnsEarly(t *testing.T) {
-	res, err := RunRecipeScenariosLive(context.Background(), "", "test-score", nil)
+	res, err := RunRecipeScenariosLive(context.Background(), "", "test-score", nil, RunScoringOpts{})
 	if err != nil {
 		t.Fatalf("nil scenarios should not error: %v", err)
 	}

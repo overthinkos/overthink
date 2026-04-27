@@ -83,6 +83,14 @@ type Check struct {
 	K8sResource string `yaml:"k8s_resource,omitempty" json:"k8s_resource,omitempty"`
 	K8sGroup    string `yaml:"k8s_group,omitempty"    json:"k8s_group,omitempty"`
 	K8sVersion  string `yaml:"k8s_version,omitempty"  json:"k8s_version,omitempty"`
+	// JSON modifies the `k8s: raw` verb's list-mode output: when true,
+	// the underlying `ov test k8s raw` invocation passes --json so the
+	// full Kubernetes List object (with .kind, .apiVersion, .items[])
+	// is emitted instead of the default `<namespace>/<name>` per
+	// line. Recipe authors expecting `stdout: { contains: "kind" }`
+	// against the JSON document need this flag — the default
+	// names-only list is back-compat-preserved.
+	JSON bool `yaml:"json,omitempty" json:"json,omitempty"`
 
 	// Shared modifiers
 	ID          string `yaml:"id,omitempty"           json:"id,omitempty"`

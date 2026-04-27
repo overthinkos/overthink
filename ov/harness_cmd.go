@@ -7,6 +7,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -427,11 +428,117 @@ func (c *HarnessLastTagCmd) Run() error {
 	return nil
 }
 
-// HarnessSelfEvalCmd is the AI-facing self-evaluation verb. Stubbed.
+// HarnessSelfEvalCmd implements `ov harness self-evaluate` — the AI's
+// canonical self-verification path during a harness iteration.
+//
+// Behavior: invokes the SAME RunRecipeScenariosLive function the
+// end-of-iter harness scorer calls, against the SAME in-scope recipe
+// scenarios for the current phase, against the AI's live deployments.
+// Output is a per-scenario verdict table (pass / fail / skipped).
+// Exit 0 if every in-scope scenario passes, non-zero otherwise.
+//
+// Anti-deception properties:
+//
+//   - Reads `harness.yml` from the project tree (cwd → LoadUnified),
+//     NOT from the per-iter repo clone the AI works in. Edits the AI
+//     might make to `.harness/<run>/repo/harness.yml` do not change
+//     what self-evaluate evaluates — the same load path the harness
+//     scorer uses governs both.
+//
+//   - Always invokes RunRecipeScenariosLive with RunScoringOpts{}
+//     (zero value: ValidateAiArtifacts=false, IterStartTime=zero) so
+//     EVERY probe physically executes against live systems. This is
+//     what produces the canonical artifacts the harness scorer then
+//     validates in `validate_ai_artifacts: true` mode. If self-eval
+//     honored the flag, artifacts would never exist and the freshness
+//     gate would always fail.
+//
+//   - The `score.ValidateAiArtifacts` field is intentionally ignored
+//     here: self-evaluate's job is to PRODUCE artifacts via fresh
+//     execution, not to consume them.
 type HarnessSelfEvalCmd struct{}
 
 func (c *HarnessSelfEvalCmd) Run() error {
-	return fmt.Errorf("ov harness self-evaluate: rebuilds the current per-run clone and runs `ov image test` (deferred)")
+	score := os.Getenv("OV_HARNESS_SCORE")
+	runID := os.Getenv("OV_HARNESS_RUN_ID")
+	iter := os.Getenv("OV_HARNESS_ITERATION")
+	phaseStr := os.Getenv("OV_HARNESS_PHASE")
+	if score == "" || runID == "" || iter == "" {
+		return fmt.Errorf("ov harness self-evaluate: must run inside an iteration (OV_HARNESS_SCORE/RUN_ID/ITERATION env required)")
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	// Load harness.yml from the project tree, NOT from the per-iter
+	// repo clone the AI works in. This is the load-bearing
+	// anti-deception property: AI edits to the per-iter clone don't
+	// change what self-evaluate sees, because the harness scorer at
+	// iter end uses the same project-tree path.
+	uf, ok, err := LoadUnified(cwd)
+	if err != nil {
+		return fmt.Errorf("ov harness self-evaluate: load harness.yml: %w", err)
+	}
+	if !ok || uf == nil {
+		return fmt.Errorf("ov harness self-evaluate: no harness.yml at project root %s — self-evaluate must run from a directory with a project tree containing harness.yml (typically /workspace inside the bench-pod)", cwd)
+	}
+	resolvedScore, err := ResolveScore(uf.Score, score)
+	if err != nil {
+		return fmt.Errorf("ov harness self-evaluate: resolve score %q: %w", score, err)
+	}
+
+	// Determine the in-scope recipe set: progressive scores reveal
+	// recipes per phase; non-progressive scores show all at once.
+	var phase int
+	if phaseStr != "" {
+		fmt.Sscanf(phaseStr, "%d", &phase)
+	}
+	var scenarios []Scenario
+	if resolvedScore.Progressive && phase > 0 {
+		scenarios, _, err = resolvePhaseScenarios(resolvedScore, uf.Recipe, phase)
+	} else {
+		scenarios, _, err = ResolveScoreRecipes(resolvedScore, uf.Recipe)
+	}
+	if err != nil {
+		return fmt.Errorf("ov harness self-evaluate: resolve scenarios: %w", err)
+	}
+	if len(scenarios) == 0 {
+		fmt.Fprintln(os.Stdout, "ov harness self-evaluate: no in-scope scenarios for this phase")
+		return nil
+	}
+
+	// Always-execute mode (RunScoringOpts zero value): no
+	// validate-ai-artifacts shortcut, no freshness gate. Every probe
+	// re-runs against live systems, producing fresh artifacts at the
+	// recipe-declared `artifact:` paths.
+	ctx := context.Background()
+	live, err := RunRecipeScenariosLive(ctx, resolvedScore.Deployment, score, scenarios, RunScoringOpts{})
+	if err != nil {
+		return fmt.Errorf("ov harness self-evaluate: live scoring: %w", err)
+	}
+
+	// Print verdict table — same fields the orchestrator's scorer
+	// records into result-<calver>.yml. The AI reads stdout to see
+	// pass/fail/skipped per scenario.
+	fmt.Fprintf(os.Stdout, "self-evaluate: score=%s phase=%d iter=%s run=%s\n", score, phase, iter, runID)
+	fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", "SCENARIO", "STATUS", "DETAIL")
+	failed := 0
+	for _, sc := range live.Scenario {
+		detail := ""
+		if sc.SkippedReason != "" {
+			detail = sc.SkippedReason
+		}
+		fmt.Fprintf(os.Stdout, "%-50s  %-7s  %s\n", sc.Name, sc.Status, detail)
+		if sc.Status != "pass" && sc.Status != "skip" {
+			failed++
+		}
+	}
+	fmt.Fprintf(os.Stdout, "summary: %d/%d pass, %d fail, %d skip (total %d)\n",
+		live.Summary.Pass, live.Summary.Total, live.Summary.Fail, live.Summary.Skip, live.Summary.Total)
+	if failed > 0 {
+		return fmt.Errorf("self-evaluate: %d scenario(s) failed", failed)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

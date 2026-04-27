@@ -738,6 +738,7 @@ type K8sRawCmd struct {
 	Resource  string `long:"resource" required:"" help:"Plural resource name (e.g., pods, deployments, ingresses)"`
 	Name      string `long:"name" help:"Specific resource name (empty = list)"`
 	Namespace string `long:"namespace" short:"n" help:"Namespace (empty = cluster-scoped or all-namespaces)"`
+	JSON      bool   `long:"json" help:"In list-mode emit the full JSON document (List object with .items array) instead of one '<namespace>/<name>' per line. Single-resource mode (--name set) always emits JSON. Recipe authors matching on JSON document text need this flag."`
 	k8sClusterFlags
 }
 
@@ -769,6 +770,18 @@ func (c *K8sRawCmd) Run() error {
 		}
 		return list.Items[i].GetName() < list.Items[j].GetName()
 	})
+	if c.JSON {
+		// Emit the full Kubernetes List object so recipe authors who
+		// match on JSON document text (e.g. `stdout: { contains:
+		// "kind" }`) get the structured form. Mirrors the single-
+		// resource path's writeUnstructuredJSON shape — the List's
+		// `.kind` will be e.g. "NodeList", `.apiVersion` "v1",
+		// `.items[]` carries each Unstructured.
+		return writeJSON(os.Stdout, list.Object)
+	}
+	// Default list-mode output (preserved for back-compat): one
+	// `<namespace>/<name>` per line. Recipes that want JSON must set
+	// the `json: true` modifier (or use --json directly via the CLI).
 	for _, u := range list.Items {
 		if u.GetNamespace() != "" {
 			fmt.Printf("%s/%s\n", u.GetNamespace(), u.GetName())

@@ -130,6 +130,24 @@ type Runner struct {
 	// executors. Returning (nil, nil, nil) means "unknown target"; the
 	// runner then reports the step as FAIL with a clear message.
 	TargetResolver func(target string) (*TestVarResolver, DeployExecutor, error)
+
+	// ValidateAiArtifacts, when true, narrows artifact-producing
+	// state-dependent probes (the screenshot + record-stop methods in
+	// artifactValidatableMethods) to validate the AI's iteration
+	// artifact instead of re-running the capture. See HarnessScore's
+	// field of the same name for the design rationale. Always false in
+	// `ov harness self-evaluate` invocations, regardless of score
+	// config — self-evaluate's job is to actually produce the
+	// artifacts that the harness scorer then validates.
+	ValidateAiArtifacts bool
+
+	// IterStartTime is the freshness floor for AI-artifact mtime
+	// checks. Set by the harness scorer when constructing the runner.
+	// Zero value = no freshness check (validators only see file
+	// existence + content). Non-zero = artifact mtime MUST be ≥ this
+	// time or the probe fails with the stale-artifact anti-deception
+	// error.
+	IterStartTime time.Time
 }
 
 // NewRunner constructs a Runner with sensible defaults. Caller passes a

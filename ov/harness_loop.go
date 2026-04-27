@@ -716,7 +716,10 @@ func runOneIteration(
 				NoImprovementTimeout: noImpTimeout,
 				BenchmarkStart:       benchmarkStart,
 				Probe: func(probeCtx context.Context) (int, int, error) {
-					live, err := RunRecipeScenariosLive(probeCtx, deployment, scoreName, scoringScenarios)
+					live, err := RunRecipeScenariosLive(probeCtx, deployment, scoreName, scoringScenarios, RunScoringOpts{
+						ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
+						IterStartTime:       iterStart,
+					})
 					if err != nil {
 						return 0, 0, err
 					}
@@ -846,7 +849,10 @@ func runOneIteration(
 
 	if useRecipeScenarios {
 		testStart := time.Now()
-		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.ScoringScenarios)
+		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.ScoringScenarios, RunScoringOpts{
+			ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
+			IterStartTime:       iterStart,
+		})
 		iter.TestDuration = time.Since(testStart).String()
 		if scoreErr != nil {
 			iter.BuildFailure = true
@@ -1221,6 +1227,11 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	env["OV_HARNESS_AI"] = substCtx.AIName
 	env["OV_HARNESS_TARGET_KIND"] = substCtx.TargetKind
 	env["OV_HARNESS_TARGET_NAME"] = substCtx.TargetName
+	// OV_HARNESS_PHASE is the 1-indexed phase number (0 when the score
+	// is single-pass / non-progressive). `ov harness self-evaluate`
+	// uses this to resolve the in-scope recipes for the current phase
+	// the same way the orchestrator's scorer does.
+	env["OV_HARNESS_PHASE"] = fmt.Sprintf("%d", substCtx.Phase)
 	if opts.Score != nil && opts.Score.NotesEnabled() {
 		harnessRoot := HarnessDataRoot(opts.ProjectDir, opts.ScoreName)
 		env["OV_HARNESS_NOTES_FILE"] = NotePathForRun(harnessRoot, substCtx.RunID)

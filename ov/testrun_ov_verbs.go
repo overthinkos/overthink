@@ -12,7 +12,45 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// artifactValidatableMethods lists the verb/method pairs that
+// `validate_ai_artifacts: true` swaps to AI-artifact validation. ALL
+// OTHER methods always re-run via the harness's own subprocess — the
+// harness is authoritative for non-state-dependent probes (status,
+// evaluation, listing, info, file/process/package/port/service/etc.).
+//
+// The justification for each entry is "re-running this probe a few
+// seconds later against the same logically-correct state can yield
+// different bytes" — chrome paints at vsync, wayland frame timing,
+// VNC/RFB framebuffer at re-capture moment, libvirt/SPICE display
+// surfaces, terminal recordings (asciinema cast files become final
+// once `record stop` finalizes them).
+//
+// Anti-deception properties around this allowlist:
+//
+//   - The set of `spec.artifact == true` methods must be the SAME as
+//     this allowlist. Drift is caught at compile/test time by
+//     TestArtifactValidatableMethods_MatchesArtifactProducingMethodSpecs.
+//
+//   - When validate_ai_artifacts is true AND the method is in this
+//     allowlist, runOvVerb skips subprocess execution and runs the
+//     post-run validators (artifact_min_bytes / artifact_min_dimensions
+//     / artifact_not_uniform / artifact_min_cast_events) against the
+//     existing file at the recipe-declared `artifact:` path.
+//
+//   - The freshness mtime gate (artifact mtime ≥ Runner.IterStartTime)
+//     prevents pre-staged or stale files from passing.
+var artifactValidatableMethods = map[string]bool{
+	"cdp/screenshot":     true,
+	"wl/screenshot":      true,
+	"vnc/screenshot":     true,
+	"libvirt/screenshot": true,
+	"spice/screenshot":   true,
+	"spice/cursor":       true,
+	"record/stop":        true,
+}
 
 // testrun_ov_verbs.go implements the cdp/wl/dbus/vnc test verbs. Each verb
 // is a thin wrapper around the corresponding `ov test <verb> <method>` CLI
@@ -398,6 +436,13 @@ func posK8sRaw(c *Check) []string {
 	if c.Namespace != "" {
 		args = append(args, "--namespace", c.Namespace)
 	}
+	if c.JSON {
+		// Recipe `json: true` → `--json` flag on the underlying
+		// `ov test k8s raw` invocation. List-mode then emits the
+		// full Kubernetes List JSON document instead of one
+		// `<namespace>/<name>` per line.
+		args = append(args, "--json")
+	}
 	return args
 }
 
@@ -681,6 +726,58 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		return failf(c, "%s: %s: %v", verb, method, err)
 	}
 
+	// Branch: AI-artifact validation mode for state-dependent capture
+	// probes ONLY. Activated when score.validate_ai_artifacts is set
+	// AND the verb/method is in the narrow artifactValidatableMethods
+	// allowlist. The harness scorer skips the subprocess re-execution
+	// (which would overwrite the AI's iteration artifact and capture a
+	// different chrome/wayland/etc. moment) and instead validates the
+	// AI-produced file at the recipe-declared `artifact:` path.
+	//
+	// The freshness mtime gate enforces that the file was written
+	// during the current iteration — pre-staged or stale files are
+	// rejected with a clear actionable error. This is the load-bearing
+	// anti-deception mechanism.
+	//
+	// stdout/stderr/exit_status matchers are incompatible with this
+	// mode: without re-running the command there is no captured
+	// output to match against. Authors hitting this combination need
+	// to either remove the matchers or split into separate scenarios.
+	key := verb + "/" + method
+	if r.ValidateAiArtifacts && artifactValidatableMethods[key] {
+		if c.Stdout != nil || c.Stderr != nil || c.ExitStatus != nil {
+			return failf(c,
+				"%s: %s: validate_ai_artifacts skips command execution; "+
+					"stdout/stderr/exit_status matchers cannot be evaluated — "+
+					"remove them or split into a separate scenario", verb, method)
+		}
+		info, err := os.Stat(c.Artifact)
+		if err != nil {
+			return failf(c,
+				"%s: %s: validate_ai_artifacts requires the AI to have produced %q "+
+					"during its iteration (e.g. via `ov harness self-evaluate`); "+
+					"file not found: %v", verb, method, c.Artifact, err)
+		}
+		if !r.IterStartTime.IsZero() && info.ModTime().Before(r.IterStartTime) {
+			return failf(c,
+				"%s: %s: artifact %q is stale (mtime %s, iter started %s) — "+
+					"the AI must produce this artifact during the current iteration; "+
+					"pre-staged or carried-forward files are not accepted",
+				verb, method, c.Artifact,
+				info.ModTime().UTC().Format(time.RFC3339),
+				r.IterStartTime.UTC().Format(time.RFC3339))
+		}
+		// Run the artifact validators against the existing AI-produced
+		// file. Identical pipeline to the post-execution branch below;
+		// validators inspect the binary content and dimensions
+		// independently of who wrote the file.
+		if err := runArtifactValidators(c); err != nil {
+			return failf(c, "%s: %s: %v", verb, method, err)
+		}
+		return passf(c, fmt.Sprintf("%s %s: validated AI-produced artifact at %s (mtime %s)",
+			verb, method, c.Artifact, info.ModTime().UTC().Format(time.RFC3339)))
+	}
+
 	// Build argv: ["test"] + spec.path + [image?] + spec.posArgs(c) + ["-i", instance]
 	// spec.skipImage=true elides the image/deploy-name positional (used by
 	// k8s verbs that operate against a cluster instead of an image).
@@ -721,34 +818,46 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 	}
 
 	if spec.artifact {
-		if c.ArtifactMinBytes > 0 {
-			info, err := os.Stat(c.Artifact)
-			if err != nil {
-				return failf(c, "%s: %s: artifact %q not found after run: %v", verb, method, c.Artifact, err)
-			}
-			if info.Size() < int64(c.ArtifactMinBytes) {
-				return failf(c, "%s: %s: artifact %q size %d < required min_bytes %d",
-					verb, method, c.Artifact, info.Size(), c.ArtifactMinBytes)
-			}
-		}
-		if c.ArtifactMinDimensions != "" {
-			if err := assertArtifactMinDimensions(c.Artifact, c.ArtifactMinDimensions); err != nil {
-				return failf(c, "%s: %s: %v", verb, method, err)
-			}
-		}
-		if c.ArtifactNotUniform {
-			if err := assertArtifactNotUniform(c.Artifact); err != nil {
-				return failf(c, "%s: %s: %v", verb, method, err)
-			}
-		}
-		if c.ArtifactMinCastEvents > 0 {
-			if err := assertArtifactMinCastEvents(c.Artifact, c.ArtifactMinCastEvents); err != nil {
-				return failf(c, "%s: %s: %v", verb, method, err)
-			}
+		if err := runArtifactValidators(c); err != nil {
+			return failf(c, "%s: %s: %v", verb, method, err)
 		}
 	}
 
 	return passf(c, fmt.Sprintf("%s %s: exit=%d", verb, method, exit))
+}
+
+// runArtifactValidators is the shared post-validator pipeline used by
+// both code paths in runOvVerb: (a) after the harness's own subprocess
+// exec produced the file, and (b) after the freshness mtime gate
+// confirmed the AI's file is fresh in validate_ai_artifacts mode.
+// Returns nil on all-pass or the first validator's error.
+func runArtifactValidators(c *Check) error {
+	if c.ArtifactMinBytes > 0 {
+		info, err := os.Stat(c.Artifact)
+		if err != nil {
+			return fmt.Errorf("artifact %q not found: %v", c.Artifact, err)
+		}
+		if info.Size() < int64(c.ArtifactMinBytes) {
+			return fmt.Errorf("artifact %q size %d < required min_bytes %d",
+				c.Artifact, info.Size(), c.ArtifactMinBytes)
+		}
+	}
+	if c.ArtifactMinDimensions != "" {
+		if err := assertArtifactMinDimensions(c.Artifact, c.ArtifactMinDimensions); err != nil {
+			return err
+		}
+	}
+	if c.ArtifactNotUniform {
+		if err := assertArtifactNotUniform(c.Artifact); err != nil {
+			return err
+		}
+	}
+	if c.ArtifactMinCastEvents > 0 {
+		if err := assertArtifactMinCastEvents(c.Artifact, c.ArtifactMinCastEvents); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // assertArtifactMinDimensions decodes the artifact's image header (PNG/JPEG)

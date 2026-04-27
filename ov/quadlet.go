@@ -162,8 +162,16 @@ func generateQuadlet(cfg QuadletConfig) string {
 	for _, group := range cfg.Security.GroupAdd {
 		b.WriteString(fmt.Sprintf("GroupAdd=%s\n", group))
 	}
-	if cfg.Security.ShmSize != "" && cfg.PodName == "" {
-		// In pod mode, ShmSize is set on the pod (infra container owns /dev/shm)
+	if cfg.Security.IpcMode != "" {
+		// PodmanArgs=--ipc=<mode>: emit BEFORE ShmSize so the gate
+		// below sees the same value podman will receive at runtime.
+		b.WriteString(fmt.Sprintf("PodmanArgs=--ipc=%s\n", cfg.Security.IpcMode))
+	}
+	if cfg.Security.ShmSize != "" && cfg.PodName == "" && !ipcModeBlocksShmSize(cfg.Security.IpcMode) {
+		// In pod mode, ShmSize is set on the pod (infra container owns /dev/shm).
+		// When IPC=host, podman REJECTS shm_size because the host's /dev/shm
+		// is shared in-kernel; emit no ShmSize directive in that case (the
+		// host's /dev/shm size already governs the in-container view).
 		b.WriteString(fmt.Sprintf("ShmSize=%s\n", cfg.Security.ShmSize))
 	}
 	if len(cfg.BindMounts) > 0 {

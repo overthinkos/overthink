@@ -73,6 +73,64 @@ func TestSecurityArgsShmSizeWithPrivileged(t *testing.T) {
 	}
 }
 
+// TestSecurityArgsShmSizeDroppedWhenIpcHost covers the 2026-04-27 fix
+// for the shm_size + ipc=host conflict: when IpcMode is "host", the
+// kernel-level /dev/shm is shared with the host and podman REJECTS
+// `--shm-size` with a runtime error. The fix drops the flag.
+func TestSecurityArgsShmSizeDroppedWhenIpcHost(t *testing.T) {
+	args := SecurityArgs(SecurityConfig{ShmSize: "1g", IpcMode: "host"})
+	for _, a := range args {
+		if a == "--shm-size" {
+			t.Errorf("expected no `--shm-size` flag when IpcMode=host; got %v", args)
+		}
+	}
+	// `--ipc host` MUST be present.
+	foundIpc := false
+	for i, a := range args {
+		if a == "--ipc" && i+1 < len(args) && args[i+1] == "host" {
+			foundIpc = true
+		}
+	}
+	if !foundIpc {
+		t.Errorf("expected `--ipc host` flag; got %v", args)
+	}
+}
+
+// TestSecurityArgsShmSizeRetainedWhenIpcPrivate verifies the gate
+// only fires for IpcMode=host — other values (private, shareable,
+// empty) keep the flag.
+func TestSecurityArgsShmSizeRetainedWhenIpcPrivate(t *testing.T) {
+	args := SecurityArgs(SecurityConfig{ShmSize: "1g", IpcMode: "private"})
+	foundShm := false
+	for i, a := range args {
+		if a == "--shm-size" && i+1 < len(args) && args[i+1] == "1g" {
+			foundShm = true
+		}
+	}
+	if !foundShm {
+		t.Errorf("expected `--shm-size 1g` flag with IpcMode=private; got %v", args)
+	}
+}
+
+// TestIpcModeBlocksShmSize is the helper-level check for the gate.
+// Only "host" should trigger the drop.
+func TestIpcModeBlocksShmSize(t *testing.T) {
+	cases := []struct {
+		ipc  string
+		want bool
+	}{
+		{"host", true},
+		{"private", false},
+		{"shareable", false},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := ipcModeBlocksShmSize(tc.ipc); got != tc.want {
+			t.Errorf("ipcModeBlocksShmSize(%q) = %v, want %v", tc.ipc, got, tc.want)
+		}
+	}
+}
+
 func TestMaxShmSize(t *testing.T) {
 	tests := []struct {
 		a, b, want string

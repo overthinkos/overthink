@@ -297,16 +297,41 @@ func (n *NestedExecutor) GetFile(ctx context.Context, remotePath string, asRoot 
 // environment when run by the parent executor. The return value is a
 // single bash invocation (parent's shell) that internally invokes the
 // child shell with the script fed via stdin.
+//
+// Heredoc-delim uniqueness across nesting depths: the delim is
+// derived by counting how many `OV_NESTED_SCRIPT_EOF` tokens already
+// appear in the inner script. A 3-deep chain stacks three heredocs,
+// each needing a DIFFERENT terminator — otherwise the OUTERMOST bash
+// terminates its heredoc on the first occurrence (the innermost
+// open) and the trailing closing delims are interpreted as
+// commands. The count-and-suffix approach guarantees each level uses
+// a delim absent from its inner content.
+//
+// Env-var propagation across container hops: when the jump kind is
+// JumpPodmanExec / JumpDockerExec, a curated allowlist of session-
+// related env vars (XDG_RUNTIME_DIR, DISPLAY, WAYLAND_DISPLAY,
+// DBUS_SESSION_BUS_ADDRESS) is propagated via `--env KEY=VALUE` flags
+// when set in the parent's environ. This is critical for libvirt
+// session-socket lookup (libvirt: verbs find their socket at
+// $XDG_RUNTIME_DIR/libvirt/libvirt-sock) and for any Wayland/X11
+// verb that consults DISPLAY / WAYLAND_DISPLAY.
 func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 	shell := "bash"
 	if asRoot {
 		shell = "sudo bash"
 	}
 
-	// The script is passed via a heredoc, base64-encoded, to avoid
-	// shell-quoting interactions with the user's script body.
-	// Heredoc delimiter is chosen so it's very unlikely to collide.
-	delim := "OV_NESTED_SCRIPT_EOF"
+	// Choose a heredoc delimiter that does NOT already appear in the
+	// inner script. For a non-nested call (script has zero inner
+	// delims), use the bare base name. For a wrapping call (inner
+	// already contains N copies of the base, from prior wrapWithJump
+	// invocations at deeper levels), append a counter suffix so the
+	// outer's open+close pair is distinct from every inner pair.
+	baseDelim := "OV_NESTED_SCRIPT_EOF"
+	delim := baseDelim
+	if n := strings.Count(script, baseDelim); n > 0 {
+		delim = fmt.Sprintf("%s_%d", baseDelim, n)
+	}
 
 	switch jump.Kind {
 	case JumpPodmanExec, JumpDockerExec:
@@ -314,9 +339,24 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 		if jump.Kind == JumpDockerExec {
 			engine = "docker"
 		}
+		// Propagate session-related env vars across the container hop
+		// so verbs that need them (libvirt session-socket lookup,
+		// wayland/X11 display, dbus session bus) work the same as the
+		// AI's manually-exported equivalent. Empty values are skipped.
+		envFlags := buildContainerEnvFlags()
 		extras := strings.Join(escapeTokens(jump.ExtraArgs), " ")
 		// stdin-attached exec so the heredoc reaches the nested shell.
-		cmd := fmt.Sprintf("%s exec -i %s %s %s", engine, extras, deployShellQuote(jump.Target), shell)
+		// Layout: `<engine> exec -i [--env KEY=VALUE …] [extras] <target> <shell>`
+		var execParts []string
+		execParts = append(execParts, engine, "exec", "-i")
+		if envFlags != "" {
+			execParts = append(execParts, envFlags)
+		}
+		if extras != "" {
+			execParts = append(execParts, extras)
+		}
+		execParts = append(execParts, deployShellQuote(jump.Target), shell)
+		cmd := strings.Join(execParts, " ")
 		return fmt.Sprintf("%s <<'%s'\n%s\n%s\n", cmd, delim, script, delim), nil
 
 	case JumpPodmanRun, JumpDockerRun:
@@ -471,6 +511,52 @@ func parsePositiveInt(s string) (int, error) {
 		n = n*10 + int(c-'0')
 	}
 	return n, nil
+}
+
+// containerEnvPropagationKeys is the curated allowlist of environment
+// variables that wrapWithJump propagates across container hops via
+// `--env KEY=VALUE` flags. The list is small + load-bearing:
+//
+//   - XDG_RUNTIME_DIR: libvirt session-socket lookup
+//     ($XDG_RUNTIME_DIR/libvirt/libvirt-sock). Without this, every
+//     `ov test libvirt …` invocation inside a nested container fails
+//     with "Cannot connect to socket" because the in-container
+//     default ($XDG_RUNTIME_DIR=/run/user/1000) doesn't match the
+//     host's pinned location ($HOME/.local/share/ov-runtime).
+//   - DISPLAY: X11 / XWayland display selection.
+//   - WAYLAND_DISPLAY: wayland compositor socket selection.
+//   - DBUS_SESSION_BUS_ADDRESS: per-user dbus session bus path.
+//
+// Only NON-EMPTY values are propagated — an unset env in the parent
+// stays unset in the child, preserving the existing in-container
+// defaults for verbs that don't need the parent's session.
+//
+// The allowlist is deliberately narrow. New entries should require
+// explicit justification (a verb that needs them, an actual
+// reproducible bug from a canary).
+var containerEnvPropagationKeys = []string{
+	"XDG_RUNTIME_DIR",
+	"DISPLAY",
+	"WAYLAND_DISPLAY",
+	"DBUS_SESSION_BUS_ADDRESS",
+}
+
+// buildContainerEnvFlags returns a space-separated string of `--env
+// KEY=VALUE` flags for the curated allowlist, suitable for inlining
+// into a `<engine> exec ...` command. Returns "" when none of the
+// allowlisted vars are set in the parent environ — the caller then
+// emits a no-flags exec line, matching the pre-2026-04-27 behaviour
+// when no propagation is needed.
+func buildContainerEnvFlags() string {
+	var flags []string
+	for _, key := range containerEnvPropagationKeys {
+		val := os.Getenv(key)
+		if val == "" {
+			continue
+		}
+		flags = append(flags, "--env", deployShellQuote(key+"="+val))
+	}
+	return strings.Join(flags, " ")
 }
 
 // escapeTokens wraps each token in single quotes for safe embedding in

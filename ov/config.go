@@ -58,6 +58,7 @@ type SecurityConfig struct {
 	CapAdd      []string `yaml:"cap_add,omitempty" json:"cap_add,omitempty"`
 	Devices     []string `yaml:"devices,omitempty" json:"devices,omitempty"`
 	SecurityOpt []string `yaml:"security_opt,omitempty" json:"security_opt,omitempty"`
+	IpcMode     string   `yaml:"ipc_mode,omitempty" json:"ipc_mode,omitempty"`   // --ipc=<value>: "host" | "private" | "shareable" | "". When "host", podman REJECTS shm_size (the host's /dev/shm is shared in-kernel, sized by the host); the quadlet generator drops ShmSize= directives in that case.
 	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
 	Mounts      []string `yaml:"mounts,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")

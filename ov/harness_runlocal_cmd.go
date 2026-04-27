@@ -21,9 +21,44 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 )
+
+// pinPersistentXDGRuntimeDir relocates `XDG_RUNTIME_DIR` to a persistent
+// path under `$HOME` when the current value points at a transient
+// `/run/user/<uid>` tmpfs. Crun stores per-container status files at
+// `$XDG_RUNTIME_DIR/crun/<id>/status`; if that location is wiped while
+// containers are still running, every subsequent `podman exec` against
+// those containers fails with "container does not exist" — even though
+// the container processes are alive. Forensic evidence from the
+// 2026-04-27 N canary: `/run/user/1000` disappeared between phases 6
+// and 7, breaking the harness's per-iter `RunRecipeScenariosLive`
+// probes for every pre-existing pod. Pinning to `$HOME/.local/share/ov-runtime`
+// (a regular directory on the bench-pod's persistent overlay) survives
+// whatever wipes the tmpfs.
+//
+// Only relocates when XDG_RUNTIME_DIR is empty or a `/run/user/...`
+// path; explicit overrides are respected.
+func pinPersistentXDGRuntimeDir() error {
+	current := os.Getenv("XDG_RUNTIME_DIR")
+	if current != "" && !strings.HasPrefix(current, "/run/user/") {
+		return nil
+	}
+	home := os.Getenv("HOME")
+	if home == "" {
+		home = "/home/user"
+	}
+	persistent := filepath.Join(home, ".local", "share", "ov-runtime")
+	if err := os.MkdirAll(persistent, 0o700); err != nil {
+		return fmt.Errorf("creating persistent runtime dir %s: %w", persistent, err)
+	}
+	if err := os.Setenv("XDG_RUNTIME_DIR", persistent); err != nil {
+		return fmt.Errorf("setting XDG_RUNTIME_DIR=%s: %w", persistent, err)
+	}
+	return nil
+}
 
 // HarnessRunLocalCmd drives the iteration loop in the chosen target.
 type HarnessRunLocalCmd struct {
@@ -50,6 +85,16 @@ func HarnessLockPath(projectDir, score string) string {
 
 func (c *HarnessRunLocalCmd) Run() error {
 	ctx := context.Background()
+
+	// Pin XDG_RUNTIME_DIR to a persistent location BEFORE any podman
+	// operation runs. Every child process the harness spawns — the AI's
+	// claude subprocess, its bash subshells, the per-iter probe path's
+	// `podman exec` calls — inherits this env. With it pinned, crun
+	// status files live on the bench-pod's overlay (persistent) rather
+	// than `/run/user/1000` (transient).
+	if err := pinPersistentXDGRuntimeDir(); err != nil {
+		return err
+	}
 
 	projectDir := c.ProjectDir
 	if projectDir == "" {

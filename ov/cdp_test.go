@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -342,4 +345,126 @@ func TestCdpCmdSubcommands(t *testing.T) {
 	_ = cmd.Coords
 	_ = cmd.Axtree
 	_ = cmd.Status
+}
+
+// TestResolveTabWS_NumericIndex covers the resolveTabWS dual-path contract:
+// numeric strings (e.g. "1") resolve as 1-based indices into type:page tabs;
+// non-numeric strings fall through to the existing UUID-match path. The
+// numeric path filters out non-page tabs (service-workers, dedicated-workers,
+// iframes) so authors can rely on stable 1-based positions in `tab: "1"`
+// recipe authoring without knowing Chrome-assigned UUIDs.
+func TestResolveTabWS_NumericIndex(t *testing.T) {
+	type tabFixture struct {
+		ID                   string
+		Type                 string
+		WebSocketDebuggerURL string
+	}
+
+	cases := []struct {
+		name       string
+		tabs       []tabFixture
+		input      string
+		wantSubstr string // "" expects an error containing wantErrSubstr
+		wantErr    string
+	}{
+		{
+			name: "numeric 1 with one page tab",
+			tabs: []tabFixture{
+				{ID: "abc-uuid-page", Type: "page", WebSocketDebuggerURL: "ws://x/abc"},
+			},
+			input:      "1",
+			wantSubstr: "ws://x/abc",
+		},
+		{
+			name: "numeric 2 picks second page tab",
+			tabs: []tabFixture{
+				{ID: "first", Type: "page", WebSocketDebuggerURL: "ws://x/first"},
+				{ID: "second", Type: "page", WebSocketDebuggerURL: "ws://x/second"},
+			},
+			input:      "2",
+			wantSubstr: "ws://x/second",
+		},
+		{
+			name: "numeric 1 skips non-page tabs",
+			tabs: []tabFixture{
+				{ID: "sw", Type: "service_worker", WebSocketDebuggerURL: "ws://x/sw"},
+				{ID: "iframe", Type: "iframe", WebSocketDebuggerURL: "ws://x/iframe"},
+				{ID: "page", Type: "page", WebSocketDebuggerURL: "ws://x/page"},
+			},
+			input:      "1",
+			wantSubstr: "ws://x/page",
+		},
+		{
+			name: "numeric out of range falls through to UUID-match (not found)",
+			tabs: []tabFixture{
+				{ID: "first", Type: "page", WebSocketDebuggerURL: "ws://x/first"},
+				{ID: "second", Type: "page", WebSocketDebuggerURL: "ws://x/second"},
+			},
+			input:   "5",
+			wantErr: "tab 5 not found",
+		},
+		{
+			name: "UUID match still works",
+			tabs: []tabFixture{
+				{ID: "abc", Type: "page", WebSocketDebuggerURL: "ws://x/abc"},
+			},
+			input:      "abc",
+			wantSubstr: "ws://x/abc",
+		},
+		{
+			name: "UUID no match returns not-found",
+			tabs: []tabFixture{
+				{ID: "first", Type: "page", WebSocketDebuggerURL: "ws://x/first"},
+			},
+			input:   "nope",
+			wantErr: "tab nope not found",
+		},
+		{
+			name: "zero is not a valid 1-based index",
+			tabs: []tabFixture{
+				{ID: "first", Type: "page", WebSocketDebuggerURL: "ws://x/first"},
+			},
+			input:   "0",
+			wantErr: "tab 0 not found",
+		},
+		{
+			name: "negative integer falls through to UUID-match (not found)",
+			tabs: []tabFixture{
+				{ID: "first", Type: "page", WebSocketDebuggerURL: "ws://x/first"},
+			},
+			input:   "-1",
+			wantErr: "tab -1 not found",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/json" {
+					http.NotFound(w, r)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(tc.tabs)
+			}))
+			defer srv.Close()
+
+			got, err := resolveTabWS(srv.URL, tc.input)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("expected error containing %q, got %q", tc.wantErr, got)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Errorf("error = %q, want containing %q", err.Error(), tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.wantSubstr {
+				t.Errorf("got %q, want %q", got, tc.wantSubstr)
+			}
+		})
+	}
 }

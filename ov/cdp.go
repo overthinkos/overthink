@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -369,6 +370,28 @@ func resolveTabWS(devtoolsURL, tabID string) (string, error) {
 		return "", fmt.Errorf("parsing tab list: %w", err)
 	}
 
+	// Recipe authors and CLI users write `tab: "1"` (1-based human counting)
+	// to mean "the first page tab". Chrome assigns hex/UUID tab IDs that
+	// nobody can predict, so the numeric index path is the practical
+	// authoring contract. Falls through to UUID-match if the integer
+	// doesn't resolve, preserving the original behavior for callers that
+	// DO have the UUID in hand.
+	if idx, err := strconv.Atoi(tabID); err == nil && idx >= 1 {
+		var pages []devToolsTab
+		for _, tab := range tabs {
+			if tab.Type == "page" {
+				pages = append(pages, tab)
+			}
+		}
+		if idx <= len(pages) {
+			tab := pages[idx-1]
+			if tab.WebSocketDebuggerURL == "" {
+				return "", fmt.Errorf("tab #%d has no WebSocket debugger URL", idx)
+			}
+			return tab.WebSocketDebuggerURL, nil
+		}
+	}
+
 	for _, tab := range tabs {
 		if tab.ID == tabID {
 			if tab.WebSocketDebuggerURL == "" {
@@ -542,8 +565,17 @@ func (c *CdpScreenshotCmd) Run() error {
 	}
 	defer client.Close()
 
+	// Bring the tab to foreground and force a repaint before capture.
+	// Without this, a tab that is in the background (or that Chrome has
+	// suspended via memory-saver) returns a uniformly blank surface from
+	// Page.captureScreenshot — text/eval still work via Runtime.evaluate
+	// but the rendering buffer is empty. Errors here are non-fatal: the
+	// captureScreenshot call below remains the source of truth.
+	_, _ = client.Call("Page.bringToFront", map[string]any{})
+
 	result, err := client.Call("Page.captureScreenshot", map[string]any{
-		"format": "png",
+		"format":      "png",
+		"fromSurface": true,
 	})
 	if err != nil {
 		return fmt.Errorf("capturing screenshot: %w", err)

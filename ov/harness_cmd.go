@@ -6,9 +6,12 @@ package main
 // `recipe:` entries are pure spec; the user invokes a score, not a recipe.
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
+	"strconv"
 )
 
 // HarnessCmd is the top-level `ov harness` command tree.
@@ -240,9 +243,9 @@ func (c *HarnessRunCmd) Run() error {
 	case TargetKindHost:
 		return runLocalInProcess(args, c.Score, runID, score, uf, cwd)
 	case TargetKindPod:
-		return dispatchToPod(tn, args)
+		return dispatchToPod(tn, c.Score, args)
 	case TargetKindVM:
-		return dispatchToVM(tn, args)
+		return dispatchToVM(tn, c.Score, args)
 	}
 	return fmt.Errorf("unsupported target kind: %s", tk)
 }
@@ -261,13 +264,11 @@ func runLocalInProcess(args []string, scoreName, runID string, _ *HarnessScore, 
 	return cmd.Run()
 }
 
-func dispatchToPod(podName string, args []string) error {
+func dispatchToPod(podName, scoreName string, args []string) error {
 	containerName := "ov-" + podName
 	full := append([]string{"exec", "-i", containerName, "ov"}, args...)
 	cmd := exec.Command("podman", full...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	if err := runWithPhaseResync(cmd, scoreName); err != nil {
 		return fmt.Errorf("podman exec %s: %w", containerName, err)
 	}
 	return mirrorPodHarnessDir(containerName)
@@ -283,12 +284,93 @@ func mirrorPodHarnessDir(containerName string) error {
 	return nil
 }
 
-func dispatchToVM(vmName string, args []string) error {
+func dispatchToVM(vmName, scoreName string, args []string) error {
 	full := append([]string{"vm", "ssh", vmName, "--", "ov"}, args...)
 	cmd := exec.Command("ov", full...)
-	cmd.Stdout = os.Stdout
+	return runWithPhaseResync(cmd, scoreName)
+}
+
+// harnessPhaseRe matches the orchestrator's per-phase boundary marker:
+//
+//	harness: phase N/M — recipes [...] (K scenarios)
+//
+// Captures phase number N. Progress lines have the form
+// `harness: progress [phase N/M iter K] ...` and are deliberately not
+// matched — only the boundary line should trigger a credential resync.
+var harnessPhaseRe = regexp.MustCompile(`^harness: phase (\d+)/\d+ —`)
+
+// phaseResyncFn is the credential-resync hook invoked by
+// runWithPhaseResync at every phase boundary (N >= 2). Default invokes
+// `ov harness sync-cred <score>` from the host. Tests override to record
+// calls without spawning subprocesses.
+var phaseResyncFn = func(scoreName string, phase int) error {
+	cmd := exec.Command(findOvForBenchmark(), "harness", "sync-cred", scoreName)
+	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// runWithPhaseResync runs cmd, forwarding stdout to os.Stdout, while
+// watching stderr for the orchestrator's phase-boundary marker. On each
+// new phase number N >= 2 it calls phaseResyncFn(scoreName, N) in a
+// goroutine to refresh AI credentials on the target before iter 1's
+// claude subprocess spawns.
+//
+// Why: the bench-pod's `~/.claude/.credentials.json` is a one-shot copy
+// taken by the host preflight. Anthropic OAuth access tokens are
+// short-lived (typically ~8h, often less if the copy was already aged
+// at run start). A long phase 4 — which can hold the AI for ~50 min on
+// the watchdog — easily lets the in-pod token expire. After that, every
+// claude spawn in subsequent phases bails with HTTP 401 and the run
+// plateaus without ever exercising later phases.
+//
+// Phase 1 is intentionally skipped: HarnessRunCmd.Run's preflight has
+// already run `ov harness sync-cred` immediately before dispatch, so
+// phase 1's claude has the freshest possible credentials.
+//
+// The resync runs concurrently with the orchestrator's per-phase
+// preflight (synthesize baseline, render scope, etc.) so the
+// `podman cp` typically completes before iter 1's claude actually
+// spawns. If the race goes the other way, only iter 1 of the affected
+// phase fails authentication; the resync wins by iter 2 and plateau
+// detection (plateau_iteration >= 2) keeps the phase alive.
+func runWithPhaseResync(cmd *exec.Cmd, scoreName string) error {
+	cmd.Stdout = os.Stdout
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	seen := map[int]bool{1: true} // preflight already covered phase 1
+	scanner := bufio.NewScanner(stderrPipe)
+	scanner.Buffer(make([]byte, 1024*1024), 4*1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fmt.Fprintln(os.Stderr, line)
+		m := harnessPhaseRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		n, err := strconv.Atoi(m[1])
+		if err != nil || seen[n] {
+			continue
+		}
+		seen[n] = true
+		go func(phase int) {
+			fmt.Fprintf(os.Stderr,
+				"harness: phase %d boundary — resyncing AI credentials before iter 1\n",
+				phase)
+			if err := phaseResyncFn(scoreName, phase); err != nil {
+				fmt.Fprintf(os.Stderr,
+					"harness: credential resync at phase %d failed (continuing): %v\n",
+					phase, err)
+			}
+		}(n)
+	}
+	return cmd.Wait()
 }
 
 // ---------------------------------------------------------------------------

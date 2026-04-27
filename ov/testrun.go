@@ -739,7 +739,11 @@ func formatHeaders(h http.Header) string {
 
 // matchAll returns nil if every matcher succeeds against the value. The first
 // failure wins (reports the specific unmet expectation).
-func matchAll(value string, matchers MatcherList) error {
+//
+// Takes []Matcher rather than MatcherList so callers can pass any named slice
+// type whose underlying element is Matcher (e.g. ContainsList) without an
+// explicit conversion at every call site.
+func matchAll(value string, matchers []Matcher) error {
 	for _, m := range matchers {
 		if err := matchOne(value, m); err != nil {
 			return err

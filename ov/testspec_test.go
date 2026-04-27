@@ -358,3 +358,128 @@ func TestTestVarRefPattern_BackwardCompatible(t *testing.T) {
 		t.Errorf("got %v, want %v", got, want)
 	}
 }
+
+// TestContainsList_BareSequenceDefaultsToContains validates the field-semantic
+// fix for `contains: [...]` on file probes. Pre-2026-04-27, MatcherList's
+// SequenceNode branch unconditionally promoted bare scalars to Op="equals",
+// which made `contains: ["X"]` ask "does the entire content EQUAL X" — wrong
+// for a field literally named contains. ContainsList preserves the
+// authored Op for explicit operator-map elements while defaulting bare
+// scalars/sequences to Op="contains".
+func TestContainsList_BareSequenceDefaultsToContains(t *testing.T) {
+	tests := []struct {
+		name      string
+		yaml      string
+		wantLen   int
+		wantOps   []string
+		wantValue []any
+	}{
+		{
+			name:      "bare scalar promotes to contains",
+			yaml:      `contains: foo`,
+			wantLen:   1,
+			wantOps:   []string{"contains"},
+			wantValue: []any{"foo"},
+		},
+		{
+			name:      "bare sequence promotes each element to contains",
+			yaml:      `contains: [foo, bar]`,
+			wantLen:   2,
+			wantOps:   []string{"contains", "contains"},
+			wantValue: []any{"foo", "bar"},
+		},
+		{
+			name:      "explicit equals map keeps Op=equals",
+			yaml:      "contains:\n  equals: foo",
+			wantLen:   1,
+			wantOps:   []string{"equals"},
+			wantValue: []any{"foo"},
+		},
+		{
+			name:      "explicit matches map keeps Op=matches",
+			yaml:      `contains: {matches: "^prefix"}`,
+			wantLen:   1,
+			wantOps:   []string{"matches"},
+			wantValue: []any{"^prefix"},
+		},
+		{
+			name:      "mixed sequence: explicit equals + bare scalar",
+			yaml:      `contains: [{equals: foo}, bar]`,
+			wantLen:   2,
+			wantOps:   []string{"equals", "contains"},
+			wantValue: []any{"foo", "bar"},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var c Check
+			if err := yaml.Unmarshal([]byte(tc.yaml), &c); err != nil {
+				t.Fatalf("yaml unmarshal: %v", err)
+			}
+			if len(c.Contains) != tc.wantLen {
+				t.Fatalf("len = %d, want %d", len(c.Contains), tc.wantLen)
+			}
+			for i := range c.Contains {
+				if c.Contains[i].Op != tc.wantOps[i] {
+					t.Errorf("[%d].Op = %q, want %q", i, c.Contains[i].Op, tc.wantOps[i])
+				}
+				if !reflect.DeepEqual(c.Contains[i].Value, tc.wantValue[i]) {
+					t.Errorf("[%d].Value = %v (%T), want %v (%T)",
+						i, c.Contains[i].Value, c.Contains[i].Value,
+						tc.wantValue[i], tc.wantValue[i])
+				}
+			}
+		})
+	}
+}
+
+// TestContainsList_RealWorldHarnessProbe simulates the harness.yml:248 form
+// that triggered the 2026-04-27 incident. Before the fix, file probes with
+// `contains: ["marker"]` silently asked for content EQUALITY — passing
+// coincidentally when the file's TrimRight'd content equaled the marker
+// (phase 1 fixture-os) and failing whenever the file had any other content
+// such as wrapping HTML (phase 2 fixture-web). Post-fix the probe correctly
+// asks for substring containment.
+func TestContainsList_RealWorldHarnessProbe(t *testing.T) {
+	yamlSrc := `
+file: /srv/fixture/index.html
+exists: true
+contains: ["ov-fixture-web-content-marker"]
+`
+	var c Check
+	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	if len(c.Contains) != 1 {
+		t.Fatalf("len(Contains) = %d, want 1", len(c.Contains))
+	}
+	if c.Contains[0].Op != "contains" {
+		t.Errorf("Op = %q, want %q (the field-name semantic intent)",
+			c.Contains[0].Op, "contains")
+	}
+	if c.Contains[0].Value != "ov-fixture-web-content-marker" {
+		t.Errorf("Value = %v, want \"ov-fixture-web-content-marker\"", c.Contains[0].Value)
+	}
+}
+
+// TestContainsList_DoesNotAffectMatcherList ensures the fix is field-scoped:
+// stdout/body/etc. (typed MatcherList) keep Op="equals" as the default for
+// bare scalars, since `stdout: PONG` should mean "stdout EQUALS PONG", not
+// "stdout CONTAINS PONG". Only Contains was field-semantically broken.
+func TestContainsList_DoesNotAffectMatcherList(t *testing.T) {
+	yamlSrc := `
+command: echo PONG
+stdout: PONG
+`
+	var c Check
+	if err := yaml.Unmarshal([]byte(yamlSrc), &c); err != nil {
+		t.Fatalf("yaml unmarshal: %v", err)
+	}
+	if len(c.Stdout) != 1 {
+		t.Fatalf("len(Stdout) = %d, want 1", len(c.Stdout))
+	}
+	if c.Stdout[0].Op != "equals" {
+		t.Errorf("MatcherList default = %q, want %q (regression: ContainsList logic must not leak to MatcherList)",
+			c.Stdout[0].Op, "equals")
+	}
+}

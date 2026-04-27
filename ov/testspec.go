@@ -120,7 +120,7 @@ type Check struct {
 	Owner    string      `yaml:"owner,omitempty"    json:"owner,omitempty"`
 	GroupOf  string      `yaml:"group_of,omitempty" json:"group_of,omitempty"` // file's group; named to avoid clashing with verb-level Group
 	Filetype string      `yaml:"filetype,omitempty" json:"filetype,omitempty"` // file, directory, symlink
-	Contains MatcherList `yaml:"contains,omitempty" json:"contains,omitempty"`
+	Contains ContainsList `yaml:"contains,omitempty" json:"contains,omitempty"`
 	Sha256   string      `yaml:"sha256,omitempty"   json:"sha256,omitempty"`
 
 	// package-specific
@@ -490,6 +490,69 @@ func (ml *MatcherList) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	*ml = []Matcher{m}
+	return nil
+}
+
+// ContainsList is a MatcherList variant whose bare-scalar/sequence elements
+// default to Op="contains" instead of Op="equals". Used on probe fields whose
+// YAML key is literally `contains:` (e.g. file probes) — the field name's
+// promise is "the content contains these substrings". The pre-2026-04-27
+// authoring shorthand `contains: ["X", "Y"]` silently promoted to Op="equals"
+// because MatcherList.UnmarshalYAML routes scalars through Matcher's
+// ScalarNode branch, which hardcodes Op="equals". That made the probe ask
+// "does the entire content EQUAL X" — semantically wrong for a `contains:`
+// field. ContainsList fixes the field-level intent without changing
+// MatcherList's behavior on stdout/body/etc., where Op="equals" is the
+// correct default for bare scalars.
+//
+// Explicit operator-map elements (`{equals: X}`, `{matches: R}`, `{lt: N}`)
+// keep the authored Op verbatim — only bare scalars/sequences are promoted.
+type ContainsList []Matcher
+
+// UnmarshalYAML promotes bare scalar/sequence elements to Op="contains" while
+// preserving the authored Op for explicit operator-map elements.
+func (cl *ContainsList) UnmarshalYAML(node *yaml.Node) error {
+	promote := func(child *yaml.Node) (Matcher, error) {
+		var m Matcher
+		switch child.Kind {
+		case yaml.ScalarNode:
+			var v any
+			if err := child.Decode(&v); err != nil {
+				return m, fmt.Errorf("decoding contains scalar: %w", err)
+			}
+			m.Op = "contains"
+			m.Value = v
+			return m, nil
+		case yaml.MappingNode, yaml.SequenceNode:
+			// Defer to Matcher; explicit {op: value} keeps the authored Op.
+			// Nested sequences fall through to Matcher's SequenceNode branch
+			// (Op="equals", Value=[]any) — the field-level promotion does not
+			// recurse into a list of lists.
+			if err := m.UnmarshalYAML(child); err != nil {
+				return m, err
+			}
+			return m, nil
+		default:
+			return m, fmt.Errorf("contains: unsupported YAML kind %d", child.Kind)
+		}
+	}
+	if node.Kind == yaml.SequenceNode {
+		list := make([]Matcher, 0, len(node.Content))
+		for i, child := range node.Content {
+			m, err := promote(child)
+			if err != nil {
+				return fmt.Errorf("contains[%d]: %w", i, err)
+			}
+			list = append(list, m)
+		}
+		*cl = ContainsList(list)
+		return nil
+	}
+	m, err := promote(node)
+	if err != nil {
+		return err
+	}
+	*cl = ContainsList{m}
 	return nil
 }
 

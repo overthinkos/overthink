@@ -501,9 +501,14 @@ func substitutePlaceholders(in string, row map[string]string) string {
 	return out
 }
 
-// substituteMatchers walks a MatcherList and substitutes placeholders
+// substituteMatchers walks a matcher slice and substitutes placeholders
 // inside any string-valued Matcher.Value. Non-string values are untouched.
-func substituteMatchers(ml MatcherList, row map[string]string) {
+//
+// Takes []Matcher rather than MatcherList so callers can pass any named slice
+// type whose underlying element is Matcher (MatcherList, ContainsList) without
+// an explicit conversion at every call site. Mutations are visible to the
+// caller since slice headers are shared.
+func substituteMatchers(ml []Matcher, row map[string]string) {
 	for i := range ml {
 		switch v := ml[i].Value.(type) {
 		case string:
@@ -548,11 +553,16 @@ func cloneStepMatchers(s *Step) {
 	s.Check.Value = cloneMatcherList(s.Check.Value)
 }
 
-func cloneMatcherList(ml MatcherList) MatcherList {
+// cloneMatcherList returns a deep copy of a matcher slice. Returns the
+// underlying type ([]Matcher) so callers can assign back to any named slice
+// type whose underlying type is []Matcher (MatcherList, ContainsList) — the
+// type-literal return is assignable to either named type per Go's
+// assignability rules.
+func cloneMatcherList(ml []Matcher) []Matcher {
 	if len(ml) == 0 {
 		return nil
 	}
-	out := make(MatcherList, len(ml))
+	out := make([]Matcher, len(ml))
 	copy(out, ml)
 	return out
 }

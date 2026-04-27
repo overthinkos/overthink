@@ -228,7 +228,7 @@ func TestRunner_Addr(t *testing.T) {
 func TestRunner_Matching(t *testing.T) {
 	r, _ := newFakeRunner(t, RunModeTest)
 	res := r.Run(context.Background(), []Check{
-		{Matching: "hello world", Contains: MatcherList{{Op: "contains", Value: "world"}}},
+		{Matching: "hello world", Contains: ContainsList{{Op: "contains", Value: "world"}}},
 	})
 	if res[0].Status != TestPass {
 		t.Errorf("got %+v", res[0])

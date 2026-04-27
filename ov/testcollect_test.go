@@ -147,7 +147,7 @@ func TestLabelTests_JSONRoundTrip(t *testing.T) {
 				Origin:   "layer:redis",
 				Scope:    "build",
 				ID:       "redis-binary",
-				Contains: MatcherList{{Op: "contains", Value: "ELF"}},
+				Contains: ContainsList{{Op: "contains", Value: "ELF"}},
 			},
 			{
 				Port:      6379,

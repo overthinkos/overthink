@@ -235,7 +235,10 @@ var validMatcherOps = map[string]bool{
 	"lt": true, "le": true, "gt": true, "ge": true,
 }
 
-func validateMatchers(ml MatcherList, loc string, errs *ValidationError) {
+// Takes []Matcher rather than MatcherList so callers can pass any named slice
+// type whose underlying element is Matcher (MatcherList, ContainsList) without
+// an explicit conversion at every call site.
+func validateMatchers(ml []Matcher, loc string, errs *ValidationError) {
 	for i, m := range ml {
 		if m.Op == "" {
 			continue // UnmarshalYAML guarantees Op is set; defensive only.

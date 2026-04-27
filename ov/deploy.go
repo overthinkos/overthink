@@ -689,6 +689,12 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 		if overlay.Security.ShmSize != "" {
 			meta.Security.ShmSize = overlay.Security.ShmSize
 		}
+		if overlay.Security.IpcMode != "" {
+			meta.Security.IpcMode = overlay.Security.IpcMode
+		}
+		if overlay.Security.CgroupNS != "" {
+			meta.Security.CgroupNS = overlay.Security.CgroupNS
+		}
 		if len(overlay.Security.GroupAdd) > 0 {
 			meta.Security.GroupAdd = overlay.Security.GroupAdd
 		}

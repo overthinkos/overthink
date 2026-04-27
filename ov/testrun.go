@@ -142,11 +142,16 @@ type Runner struct {
 	ValidateAiArtifacts bool
 
 	// IterStartTime is the freshness floor for AI-artifact mtime
-	// checks. Set by the harness scorer when constructing the runner.
-	// Zero value = no freshness check (validators only see file
-	// existence + content). Non-zero = artifact mtime MUST be ≥ this
-	// time or the probe fails with the stale-artifact anti-deception
-	// error.
+	// checks. The harness scorer populates this with the BENCHMARK
+	// start time (not per-iter start) so artifacts produced
+	// legitimately in earlier phases survive scoring across phase
+	// boundaries — a record/stop cast file written in phase 6
+	// remains valid in phase 7 + 8 scoring. Zero value = no
+	// freshness check (validators only see file existence +
+	// content). Non-zero = artifact mtime MUST be ≥ this time or
+	// the probe fails with the stale-artifact anti-deception error.
+	// The field name is historical; semantically the floor is the
+	// run/benchmark start.
 	IterStartTime time.Time
 }
 

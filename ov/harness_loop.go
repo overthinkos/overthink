@@ -716,9 +716,17 @@ func runOneIteration(
 				NoImprovementTimeout: noImpTimeout,
 				BenchmarkStart:       benchmarkStart,
 				Probe: func(probeCtx context.Context) (int, int, error) {
+					// IterStartTime here uses BENCHMARK start, NOT
+					// per-iter start: artifacts produced legitimately
+					// in earlier phases (e.g. record/stop's cast file
+					// in phase 6) must remain valid through phase 7 + 8
+					// scoring even though their mtime predates each
+					// later phase's per-iter start. Anti-deception is
+					// preserved because files older than the benchmark
+					// start are still rejected.
 					live, err := RunRecipeScenariosLive(probeCtx, deployment, scoreName, scoringScenarios, RunScoringOpts{
 						ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
-						IterStartTime:       iterStart,
+						IterStartTime:       benchmarkStart,
 					})
 					if err != nil {
 						return 0, 0, err
@@ -851,7 +859,11 @@ func runOneIteration(
 		testStart := time.Now()
 		live, scoreErr := RunRecipeScenariosLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.ScoringScenarios, RunScoringOpts{
 			ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
-			IterStartTime:       iterStart,
+			// Freshness floor uses benchmarkStart so artifacts
+			// produced in earlier phases survive scoring across
+			// phase boundaries — see the watchdog probe path
+			// for the design rationale.
+			IterStartTime: benchmarkStart,
 		})
 		iter.TestDuration = time.Since(testStart).String()
 		if scoreErr != nil {

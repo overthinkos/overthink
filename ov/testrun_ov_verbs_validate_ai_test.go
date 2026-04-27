@@ -187,6 +187,64 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_StaleMtime_FailsAntiDeception(t 
 	}
 }
 
+// TestRunOvVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact
+// is the regression test for the R cutover. The freshness floor is
+// the BENCHMARK start, not the per-iter start: artifacts produced
+// legitimately in earlier phases (e.g. record/stop's cast file in
+// phase 6) MUST remain valid when scored in later phases (7, 8).
+//
+// The bug this test guards against: per-iter freshness floor caused
+// fixture-desktop:12 (record-cast-has-events) to flip from solved in
+// phase 6/7 to fail in phase 8 — even though the cast file was
+// genuinely produced during the benchmark. Plus record/stop is not
+// idempotent, so the AI's self-evaluate can't regenerate the cast in
+// later phases.
+//
+// Test setup mirrors the real bug: artifact mtime is older than a
+// putative per-iter start, but newer than the benchmark/run start.
+// The MUST-PASS verdict here proves the run-start floor is in place.
+func TestRunOvVerb_ValidateAi_AllowlistedMethod_PhaseBoundary_AcceptsCrossPhaseArtifact(t *testing.T) {
+	tmp := t.TempDir()
+	cast := filepath.Join(tmp, "session.cast")
+	body := `{"version":2,"width":80,"height":24}` + "\n" +
+		`[0.1, "o", "line1\n"]` + "\n" +
+		`[0.2, "o", "line2\n"]` + "\n" +
+		`[0.3, "o", "line3\n"]` + "\n" +
+		`[0.4, "o", "line4\n"]` + "\n" +
+		`[0.5, "o", "line5\n"]` + "\n"
+	if err := os.WriteFile(cast, []byte(body), 0o644); err != nil {
+		t.Fatalf("write cast: %v", err)
+	}
+	// Simulate an artifact produced in phase 6 of the benchmark:
+	// 90 minutes ago (older than the current phase's iter start
+	// would be, but younger than the benchmark start).
+	earlierPhase := time.Now().Add(-90 * time.Minute)
+	if err := os.Chtimes(cast, earlierPhase, earlierPhase); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	// IterStartTime is the BENCHMARK start (per the R cutover
+	// semantics): 2 hours ago — older than the artifact's mtime.
+	// This MUST pass.
+	r := &Runner{
+		Mode:                RunModeTest,
+		Image:               "fixture-desktop",
+		ValidateAiArtifacts: true,
+		IterStartTime:       time.Now().Add(-2 * time.Hour),
+	}
+	c := &Check{
+		Record:                "stop",
+		Artifact:              cast,
+		ArtifactMinBytes:      50,
+		ArtifactMinCastEvents: 5,
+	}
+	res := r.runOvVerb(context.Background(), c, "record", "stop", recordMethods)
+	if res.Status != TestPass {
+		t.Errorf("phase-boundary cross-phase artifact MUST pass with run-start freshness floor; got %s: %s",
+			res.Status, res.Message)
+	}
+}
+
 // TestRunOvVerb_ValidateAi_AllowlistedMethod_StdoutMatcher_FailsActionable
 // covers the "stdout matchers require re-execution" combination.
 // Without re-running the command there's no stdout to match against.

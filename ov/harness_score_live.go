@@ -39,11 +39,15 @@ import (
 //     spice cursor, record stop) when score.validate_ai_artifacts is
 //     true. ALL OTHER probes still re-run independently.
 //
-//   - Provide an iteration-start floor for the freshness mtime gate.
+//   - Provide a benchmark-start floor for the freshness mtime gate.
 //     Artifacts must have mtime ≥ IterStartTime or the probe fails
 //     with a clear stale-artifact error — this is the load-bearing
 //     anti-deception mechanism that prevents the AI from pre-staging
-//     or carrying-forward doctored artifact files.
+//     or carrying-forward doctored artifact files. The harness
+//     populates IterStartTime with the BENCHMARK start (NOT per-iter
+//     start) so artifacts produced legitimately in earlier phases
+//     survive scoring through later phases. The field name is
+//     historical; semantically this is the run/benchmark start.
 type RunScoringOpts struct {
 	ValidateAiArtifacts bool
 	IterStartTime       time.Time

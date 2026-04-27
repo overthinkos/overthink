@@ -203,6 +203,23 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 		return err
 	}
 
+	// Direct-mode deploy (no quadlet, but marker file recorded by
+	// runConfigDirect). Fall through to `podman start ov-<name>` instead
+	// of `systemctl --user start`. Encrypted-volume mounts are skipped
+	// in direct mode (those require systemd-run --scope, see
+	// runConfigDirect's warning path).
+	if !exists && IsDirectDeploy(c.Image, c.Instance) {
+		name := containerNameInstance(c.Image, c.Instance)
+		cmd := exec.Command("podman", "start", name)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("starting %s (direct mode): %w", name, err)
+		}
+		fmt.Fprintf(os.Stderr, "Started %s (direct mode)\n", name)
+		return nil
+	}
+
 	if !exists {
 		return fmt.Errorf("not configured; run 'ov config %s' first", c.Image)
 	}

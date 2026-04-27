@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ImageConfigCmd groups image configuration subcommands.
@@ -73,8 +75,15 @@ func (c *ImageConfigSetupCmd) Run() error {
 		return err
 	}
 
-	if rt.RunMode != "quadlet" {
-		return fmt.Errorf("ov config requires run_mode=quadlet (current: %s)", rt.RunMode)
+	switch rt.RunMode {
+	case "quadlet", "direct":
+		// Both modes are supported. Direct mode skips quadlet/systemctl
+		// and uses `podman run -d` directly — used in nested environments
+		// (bench-pods, supervisord-only containers, sysvinit hosts) where
+		// systemd-user is unavailable. The branch point is inside
+		// runConfig at the quadlet-write step.
+	default:
+		return fmt.Errorf("ov config requires run_mode=quadlet or direct (current: %s)", rt.RunMode)
 	}
 
 	if c.Image == "" {
@@ -464,6 +473,16 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		SecretNames: secretDepNames(meta),
 	})
 
+	// Direct mode: skip quadlet+systemctl and run podman directly. Used
+	// in nested environments (bench-pods, supervisord-only containers,
+	// sysvinit hosts) where systemd-user is unavailable. Sidecars,
+	// encrypted volumes, and tunnel companion services require systemd
+	// and are not supported in direct mode — the branch warns and
+	// proceeds without those features.
+	if rt.RunMode == "direct" {
+		return c.runConfigDirect(qcfg, bindMounts, resolvedSidecars, tunnelCfg)
+	}
+
 	content := generateQuadlet(qcfg)
 
 	qdir, err := quadletDir()
@@ -685,6 +704,205 @@ skipDataProvision:
 	return nil
 }
 
+// directDeployMarker is the on-disk record of a direct-mode deploy. Used
+// by lifecycle commands (start/stop/status/logs/remove) to detect that a
+// deploy was created without quadlet so they should talk to podman
+// directly instead of `systemctl --user`.
+type directDeployMarker struct {
+	ContainerName string `json:"container_name"`
+	Image         string `json:"image"`
+	Instance      string `json:"instance,omitempty"`
+	ImageRef      string `json:"image_ref"`
+	CreatedUTC    string `json:"created_utc"`
+}
+
+// directDeployMarkerDir returns ~/.config/ov/direct/, the registry
+// directory for direct-mode deploys (the equivalent of
+// ~/.config/containers/systemd/ for quadlet deploys).
+func directDeployMarkerDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("resolving user home: %w", err)
+	}
+	return filepath.Join(home, ".config", "ov", "direct"), nil
+}
+
+// directDeployMarkerPath returns the marker JSON path for a deploy.
+func directDeployMarkerPath(image, instance string) (string, error) {
+	dir, err := directDeployMarkerDir()
+	if err != nil {
+		return "", err
+	}
+	name := containerNameInstance(image, instance)
+	return filepath.Join(dir, name+".json"), nil
+}
+
+// IsDirectDeploy reports whether the named deploy was created in
+// direct mode (i.e. has a marker file). Used by lifecycle commands.
+func IsDirectDeploy(image, instance string) bool {
+	path, err := directDeployMarkerPath(image, instance)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
+	return err == nil
+}
+
+// readDirectDeployMarker loads a marker file (returns nil, nil when the
+// file doesn't exist — caller should treat that as "not a direct deploy").
+func readDirectDeployMarker(image, instance string) (*directDeployMarker, error) {
+	path, err := directDeployMarkerPath(image, instance)
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m directDeployMarker
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, fmt.Errorf("parsing direct-mode marker %s: %w", path, err)
+	}
+	return &m, nil
+}
+
+// writeDirectDeployMarker persists the marker JSON.
+func writeDirectDeployMarker(m directDeployMarker) error {
+	path, err := directDeployMarkerPath(m.Image, m.Instance)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("creating direct-mode marker dir: %w", err)
+	}
+	data, err := json.MarshalIndent(m, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
+}
+
+// removeDirectDeployMarker removes the marker file (used by `ov remove`).
+func removeDirectDeployMarker(image, instance string) error {
+	path, err := directDeployMarkerPath(image, instance)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// directPodmanArgs translates a QuadletConfig + bind mounts into the
+// `podman run -d ...` argv. Each translation maps 1:1 to the equivalent
+// quadlet directive (see plan G.2 translation table); changes here
+// should match the corresponding generateQuadlet field handling.
+func directPodmanArgs(qcfg QuadletConfig, bindMounts []ResolvedBindMount) []string {
+	name := containerNameInstance(qcfg.ImageName, qcfg.Instance)
+	args := []string{"run", "-d",
+		"--name", name,
+		"--hostname", name,
+		"--restart=always",
+	}
+	if qcfg.Network != "" {
+		args = append(args, "--network", qcfg.Network)
+	} else {
+		args = append(args, "--network", "ov")
+	}
+	for _, p := range qcfg.Ports {
+		// PublishPort lines map to -p directly. Bind address prefix if
+		// the qcfg has one (matches generateQuadlet behavior).
+		if qcfg.BindAddress != "" && qcfg.BindAddress != "0.0.0.0" {
+			args = append(args, "-p", qcfg.BindAddress+":"+p)
+		} else {
+			args = append(args, "-p", p)
+		}
+	}
+	for _, v := range qcfg.Volumes {
+		// Named volume — podman manages backing.
+		args = append(args, "-v", v.VolumeName+":"+v.ContainerPath)
+	}
+	for _, bm := range bindMounts {
+		// Host bind mount (or encrypted plain dir).
+		args = append(args, "-v", bm.HostPath+":"+bm.ContPath)
+	}
+	for _, e := range qcfg.Env {
+		args = append(args, "-e", e)
+	}
+	if qcfg.EnvFile != "" {
+		args = append(args, "--env-file", qcfg.EnvFile)
+	}
+	// Translate security config to podman flags via the existing
+	// SecurityArgs helper (the same source quadlet uses).
+	args = append(args, SecurityArgs(qcfg.Security)...)
+	// User-namespace mapping for bind-backed volumes (matches quadlet
+	// behavior: keep-id when there are host bind mounts).
+	if len(bindMounts) > 0 && qcfg.UID > 0 {
+		args = append(args, "--userns",
+			fmt.Sprintf("keep-id:uid=%d,gid=%d", qcfg.UID, qcfg.GID))
+	}
+	// Image ref.
+	args = append(args, qcfg.ImageRef)
+	// Entrypoint cmdline if set.
+	args = append(args, qcfg.Entrypoint...)
+	return args
+}
+
+// runConfigDirect is the direct-podman counterpart to the quadlet write
+// path in runConfig. Skips quadlet generation, systemctl daemon-reload,
+// post_enable hooks, encrypted-volume scope-unit setup, and tunnel
+// companion services. Writes a marker file so lifecycle commands
+// (start/stop/status/logs/remove) can route to podman instead of
+// systemctl.
+func (c *ImageConfigSetupCmd) runConfigDirect(
+	qcfg QuadletConfig,
+	bindMounts []ResolvedBindMount,
+	sidecars []ResolvedSidecar,
+	tunnelCfg *TunnelConfig,
+) error {
+	if len(sidecars) > 0 {
+		fmt.Fprintf(os.Stderr, "Warning: sidecars are not supported in direct mode (skipping); use run_mode=quadlet for sidecar deploys.\n")
+	}
+	if tunnelCfg != nil && tunnelCfg.Provider == "cloudflare" {
+		fmt.Fprintf(os.Stderr, "Warning: cloudflare tunnel companion service requires systemd; tunnel will not be started in direct mode.\n")
+	}
+	if hasEncryptedBindMounts(bindMounts) {
+		fmt.Fprintf(os.Stderr, "Warning: encrypted bind mounts require systemd-run; encrypted volumes will not be initialized in direct mode.\n")
+	}
+
+	name := containerNameInstance(qcfg.ImageName, qcfg.Instance)
+	// Idempotent re-deploy: stop + remove any existing container with the
+	// same name. Errors are best-effort — if the container doesn't exist,
+	// `podman rm` returns non-zero and we ignore it.
+	_ = exec.Command("podman", "stop", name).Run()
+	_ = exec.Command("podman", "rm", "-f", name).Run()
+
+	args := directPodmanArgs(qcfg, bindMounts)
+	cmd := exec.Command("podman", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("podman run %s failed: %w\n%s", name, err, strings.TrimSpace(string(out)))
+	}
+	cid := strings.TrimSpace(string(out))
+	fmt.Fprintf(os.Stderr, "Started %s (direct mode, container=%s)\n", name, cid[:12])
+
+	// Persist marker for lifecycle commands.
+	if err := writeDirectDeployMarker(directDeployMarker{
+		ContainerName: name,
+		Image:         qcfg.ImageName,
+		Instance:      qcfg.Instance,
+		ImageRef:      qcfg.ImageRef,
+		CreatedUTC:    time.Now().UTC().Format(time.RFC3339),
+	}); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not write direct-mode marker: %v\n", err)
+	}
+	return nil
+}
+
 // ImageConfigStatusCmd shows encrypted volume status.
 type ImageConfigStatusCmd struct {
 	Image    string `arg:"" help:"Image name"`
@@ -739,11 +957,28 @@ func (c *ImageConfigRemoveCmd) Run() error {
 		return err
 	}
 
-	if rt.RunMode != "quadlet" {
-		return fmt.Errorf("ov config remove requires run_mode=quadlet (current: %s)", rt.RunMode)
+	imageName := resolveImageName(c.Image)
+
+	// Direct-mode removal: the deploy was created without a quadlet, so
+	// `systemctl --user disable` would fail. Stop + remove the container
+	// directly via podman, then drop the marker file.
+	if rt.RunMode == "direct" || IsDirectDeploy(imageName, c.Instance) {
+		name := containerNameInstance(imageName, c.Instance)
+		_ = exec.Command("podman", "stop", name).Run()
+		if out, err := exec.Command("podman", "rm", "-f", name).CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: podman rm %s: %v\n%s", name, err, strings.TrimSpace(string(out)))
+		}
+		if err := removeDirectDeployMarker(imageName, c.Instance); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: removing direct-mode marker: %v\n", err)
+		}
+		fmt.Fprintf(os.Stderr, "Removed %s (direct mode)\n", name)
+		return nil
 	}
 
-	imageName := resolveImageName(c.Image)
+	if rt.RunMode != "quadlet" {
+		return fmt.Errorf("ov config remove requires run_mode=quadlet or direct (current: %s)", rt.RunMode)
+	}
+
 	svc := serviceNameInstance(imageName, c.Instance)
 	cmd := exec.Command("systemctl", "--user", "disable", "--now", svc)
 	cmd.Stdout = os.Stdout

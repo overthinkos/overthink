@@ -533,3 +533,80 @@ func TestBindAddress_InvalidEnv(t *testing.T) {
 		t.Error("expected error for invalid bind_address")
 	}
 }
+
+// TestDetectRunMode_NonPodmanEngine — runEngine != "podman" is always
+// "direct" regardless of systemd state.
+func TestDetectRunMode_NonPodmanEngine(t *testing.T) {
+	if got := detectRunMode("docker"); got != "direct" {
+		t.Errorf("detectRunMode(docker) = %q, want direct", got)
+	}
+}
+
+// TestSystemdUserAvailable_EmptyXDG — without XDG_RUNTIME_DIR set, the
+// function returns false regardless of whether the runtime dir exists.
+func TestSystemdUserAvailable_EmptyXDG(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", "")
+
+	dir := t.TempDir()
+	orig := systemdUserRuntimeDir
+	defer func() { systemdUserRuntimeDir = orig }()
+	systemdUserRuntimeDir = func() string { return dir }
+
+	if systemdUserAvailable() {
+		t.Error("systemdUserAvailable() = true with empty XDG_RUNTIME_DIR; want false")
+	}
+}
+
+// TestSystemdUserAvailable_DirMissing — XDG set but the systemd dir
+// doesn't exist (typical bench-pod state) → false.
+func TestSystemdUserAvailable_DirMissing(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	orig := systemdUserRuntimeDir
+	defer func() { systemdUserRuntimeDir = orig }()
+	missing := filepath.Join(t.TempDir(), "definitely-not-a-systemd-dir")
+	systemdUserRuntimeDir = func() string { return missing }
+
+	if systemdUserAvailable() {
+		t.Error("systemdUserAvailable() = true with missing /run/user/<uid>/systemd; want false")
+	}
+}
+
+// TestSystemdUserAvailable_DirIsFile — XDG set + path exists but is a
+// regular file (not a directory) → false.
+func TestSystemdUserAvailable_DirIsFile(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	tmp := t.TempDir()
+	filePath := filepath.Join(tmp, "systemd")
+	if err := os.WriteFile(filePath, []byte{}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := systemdUserRuntimeDir
+	defer func() { systemdUserRuntimeDir = orig }()
+	systemdUserRuntimeDir = func() string { return filePath }
+
+	if systemdUserAvailable() {
+		t.Error("systemdUserAvailable() = true with regular file at probed path; want false")
+	}
+}
+
+// TestSystemdUserAvailable_AllPresent — XDG set + dir exists → true.
+// This is the only case where detectRunMode should pick quadlet (when
+// also paired with podman engine + systemctl binary).
+func TestSystemdUserAvailable_AllPresent(t *testing.T) {
+	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+
+	tmp := t.TempDir()
+	dirPath := filepath.Join(tmp, "systemd")
+	if err := os.Mkdir(dirPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	orig := systemdUserRuntimeDir
+	defer func() { systemdUserRuntimeDir = orig }()
+	systemdUserRuntimeDir = func() string { return dirPath }
+
+	if !systemdUserAvailable() {
+		t.Error("systemdUserAvailable() = false with all signals present; want true")
+	}
+}

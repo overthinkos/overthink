@@ -235,14 +235,56 @@ func validateRunMode(value string) error {
 	return nil
 }
 
-// detectRunMode returns "quadlet" when podman and systemd are present, otherwise "direct".
+// detectRunMode returns "quadlet" when podman is present AND a functional
+// systemd-user session is reachable (systemctl binary + XDG_RUNTIME_DIR +
+// /run/user/<uid>/systemd directory). Otherwise returns "direct".
+//
+// The functional-systemd-user check (added 2026-04-27) catches nested
+// environments — bench-pods, supervisord-only containers, sysvinit hosts —
+// that have the systemctl binary present but no running `systemd --user`
+// session. Without this check, `ov deploy add <name> <ref>` would silently
+// pick run_mode=quadlet, write the .container file, and fail at
+// `systemctl --user daemon-reload` time. With the check, run_mode=direct
+// is auto-selected on those hosts and `runConfigDirect()` (in
+// config_image.go) emits a `podman run -d` invocation instead.
 func detectRunMode(runEngine string) string {
-	if runEngine == "podman" {
-		if _, err := exec.LookPath("systemctl"); err == nil {
-			return "quadlet"
-		}
+	if runEngine != "podman" {
+		return "direct"
 	}
-	return "direct"
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return "direct"
+	}
+	if !systemdUserAvailable() {
+		return "direct"
+	}
+	return "quadlet"
+}
+
+// systemdUserRuntimeDir returns the path the directory check probes —
+// `/run/user/<uid>/systemd`. Exposed as a package-level var so tests
+// can redirect to a t.TempDir().
+var systemdUserRuntimeDir = func() string {
+	return filepath.Join("/run/user", strconv.Itoa(os.Geteuid()), "systemd")
+}
+
+// systemdUserAvailable reports whether a functional `systemd --user`
+// session is reachable for the current process. Both signals must hold:
+//
+//   - $XDG_RUNTIME_DIR is set (the bus address resolves against it)
+//   - /run/user/<uid>/systemd exists as a directory (systemd-user has
+//     populated its runtime dir, i.e. the user-instance has actually
+//     started)
+//
+// Either alone is insufficient: $XDG_RUNTIME_DIR can be set in stale
+// environments where systemd-user never came up, and the runtime dir
+// can exist on systems where the env var got dropped (sudo without -E,
+// container entrypoints).
+func systemdUserAvailable() bool {
+	if os.Getenv("XDG_RUNTIME_DIR") == "" {
+		return false
+	}
+	info, err := os.Stat(systemdUserRuntimeDir())
+	return err == nil && info.IsDir()
 }
 
 func validateBindAddress(value string) error {

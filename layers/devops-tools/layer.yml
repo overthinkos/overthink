@@ -58,7 +58,7 @@ layer:
         rm -f /tmp/install-opentofu.sh
       user: root
 
-  tests:
+  eval:
     - id: aws-binary
       file: /usr/local/bin/aws
       exists: true

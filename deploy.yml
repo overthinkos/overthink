@@ -81,7 +81,7 @@ deployment:
             verify: true
         env:
             - OVERTHINK_DEV=true
-        tests:
+        eval:
             # --- C.1  Guest identity + SSH connectivity ---------------
             - {id: guest-identity-uid, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
             - {id: guest-identity-wheel, scope: deploy, command: id, stdout: {contains: wheel}}
@@ -169,7 +169,7 @@ deployment:
                 lifecycle: dev
                 add_layers:
                     - direnv
-                tests:
+                eval:
                     # Nested command runs: SSH into arch-vm → exec as arch user.
                     # `ov deploy show` lists entries in schema v4 (there is
                     # no `ov deploy list` subcommand).
@@ -211,7 +211,7 @@ deployment:
             - 18790:18789 # openclaw gateway
             - 5901:5900 # wayvnc
             - 9223:9222 # chrome devtools
-        tests:
+        eval:
             # --- Pod-runtime health (in-container) -------------------
             - {id: sp-sway-running, scope: deploy, process: sway, running: true}
             - {id: sp-chrome-present, scope: deploy, command: "command -v google-chrome || command -v chromium"}
@@ -293,7 +293,7 @@ deployment:
             allow_repo_changes: true # pacman sync / repo key import
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
-        tests:
+        eval:
             # --- Guest identity + VM health --------------------------
             - {id: kv-guest-identity, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
             - {id: kv-guest-os-release, scope: deploy, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}}

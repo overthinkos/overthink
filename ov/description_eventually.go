@@ -13,7 +13,7 @@ import (
 // Semantics:
 //
 //   - eventually:  outer retry cap (parsed as time.Duration).
-//     Defaults the returned TestResult to Attempts=1 when
+//     Defaults the returned EvalResult to Attempts=1 when
 //     unset (handler runs exactly once, unchanged).
 //   - retry_interval: sleep between retries. Defaults to 1s.
 //     Must be ≤ eventually or the loop would sleep past
@@ -36,7 +36,7 @@ import (
 // Context: runWithEventually honours ctx.Deadline / ctx.Done — a
 // canceled context short-circuits the loop with the last attempt's
 // result.
-func runWithEventually(ctx context.Context, check *Check, handler func() TestResult) TestResult {
+func runWithEventually(ctx context.Context, check *Check, handler func() EvalResult) EvalResult {
 	if check == nil || check.Eventually == "" {
 		result := handler()
 		if result.Attempts == 0 {
@@ -50,7 +50,7 @@ func runWithEventually(ctx context.Context, check *Check, handler func() TestRes
 
 	deadlineD, err := time.ParseDuration(check.Eventually)
 	if err != nil {
-		r := TestResult{
+		r := EvalResult{
 			Check:   check,
 			Status:  TestFail,
 			Message: fmt.Sprintf("invalid eventually duration %q: %v", check.Eventually, err),
@@ -63,7 +63,7 @@ func runWithEventually(ctx context.Context, check *Check, handler func() TestRes
 		if d, perr := time.ParseDuration(check.RetryInterval); perr == nil {
 			interval = d
 		} else {
-			r := TestResult{
+			r := EvalResult{
 				Check:   check,
 				Status:  TestFail,
 				Message: fmt.Sprintf("invalid retry_interval %q: %v", check.RetryInterval, perr),
@@ -79,7 +79,7 @@ func runWithEventually(ctx context.Context, check *Check, handler func() TestRes
 	start := time.Now()
 	deadline := start.Add(deadlineD)
 
-	var last TestResult
+	var last EvalResult
 	attempts := 0
 	for {
 		attempts++

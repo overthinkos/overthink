@@ -17,7 +17,7 @@ layer:
       - rustc
       - cargo
 
-  tests:
+  eval:
     - id: rustc-binary
       file: /usr/bin/rustc
       exists: true

@@ -109,7 +109,7 @@ layer:
         rm -f /tmp/dotnet-install.sh
       user: root
 
-  tests:
+  eval:
     - id: dotnet-binary
       file: /usr/bin/dotnet
       exists: true

@@ -140,12 +140,12 @@ type ImageConfig struct {
 	// Tests are image-level declarative checks (cross-layer invariants).
 	// Entries without explicit scope default to "build" and land in the
 	// image section of the OCI label.
-	Tests []Check `yaml:"tests,omitempty"`
+	Eval []Check `yaml:"eval,omitempty"`
 
 	// DeployTests are image-author-supplied deploy-level defaults. All
 	// entries default to scope: deploy and land in the deploy section of
 	// the OCI label; local deploy.yml can override them by id.
-	DeployTests []Check `yaml:"deploy_tests,omitempty"`
+	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

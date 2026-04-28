@@ -11,7 +11,7 @@ layer:
       mode: "0755"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: pixelflux-screenshot-script
       file: ${HOME}/.local/bin/pixelflux-screenshot
       exists: true

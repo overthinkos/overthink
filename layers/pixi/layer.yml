@@ -15,7 +15,7 @@ layer:
       to: /usr/local/bin
       user: root
 
-  tests:
+  eval:
     - id: pixi-binary
       file: /usr/local/bin/pixi
       exists: true

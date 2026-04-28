@@ -375,11 +375,11 @@ func (s *Step) IsPending() bool {
 // (one per layer), image-level description (one), deploy-default
 // description (one — usually from deploy.yml overlays).
 //
-// Mirrors LabelTestSet's shape so the collection + merge pipeline and
+// Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
 // LabelDescriptionSet and LabeledDescription were relocated to
 // labelset.go in the 2026-04 BDD/test/harness surface-cleanup cutover,
-// alongside the new LabelSet aggregate that wraps both LabelTestSet and
+// alongside the new LabelSet aggregate that wraps both LabelEvalSet and
 // LabelDescriptionSet. See labelset.go for the type definitions and
 // IsEmpty method.
 
@@ -390,7 +390,7 @@ func (s *Step) IsPending() bool {
 // ExpandedScenario is a flattened scenario: the original scenario with
 // outline placeholders substituted from a single Examples row (or the
 // original scenario verbatim if there were no Examples). Used by the
-// runner to emit one TestResult per row without re-coding outline-aware
+// runner to emit one EvalResult per row without re-coding outline-aware
 // logic at every dispatch site.
 //
 // RowIndex is 0-based and stable across runs (deterministic ordering);

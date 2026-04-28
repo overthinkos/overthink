@@ -119,7 +119,7 @@ const DefaultAITimeout = ""
 
 var (
 	// ErrNoAIs fires when the project has no `ai:` map (no AIs configured).
-	ErrNoAIs = errors.New("harness: no AIs configured (add a 'ai:' map to harness.yml)")
+	ErrNoAIs = errors.New("eval: no AIs configured (add a 'ai:' map to eval.yml)")
 
 	// ErrAINotFound fires when the requested AI name is absent from the catalog.
 	ErrAINotFound = errors.New("harness: ai not found")
@@ -293,7 +293,7 @@ func firstNonEmptyLine(s string) string {
 // Used by `ov harness list-ai`.
 func PrintAIs(w io.Writer, catalog map[string]*AIConfig) {
 	if len(catalog) == 0 {
-		fmt.Fprintln(w, "No AIs configured. Add a 'ai:' map to harness.yml.")
+		fmt.Fprintln(w, "No AIs configured. Add a 'ai:' map to eval.yml.")
 		return
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)

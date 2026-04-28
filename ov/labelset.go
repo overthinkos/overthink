@@ -3,7 +3,7 @@ package main
 // labelset.go — unified envelope for the two three-section OCI label
 // payloads carried by every overthink image:
 //
-//   org.overthinkos.tests       → LabelTestSet (declarative test manifest)
+//   org.overthinkos.tests       → LabelEvalSet (declarative test manifest)
 //   org.overthinkos.description → LabelDescriptionSet (BDD self-description)
 //
 // Pre-2026-04 these types lived in testspec.go and description_spec.go
@@ -14,7 +14,7 @@ package main
 // labels.go. LabelSet is a Go-side ergonomic aggregate, not a wire
 // schema change.
 //
-// Section semantics (identical for both LabelTestSet and
+// Section semantics (identical for both LabelEvalSet and
 // LabelDescriptionSet):
 //   - Layer:  one entry per layer in the chain that contributes
 //             tests / a description.
@@ -26,10 +26,10 @@ package main
 // LabelSet is the Go-side aggregate of an image's two three-section
 // label payloads. Used by call sites that want to pass both around
 // together (validators, MCP-style introspection); the existing
-// per-label fields (ImageMetadata.Tests, ImageMetadata.Description)
+// per-label fields (ImageMetadata.Eval, ImageMetadata.Description)
 // remain the canonical access points for code that only needs one.
 type LabelSet struct {
-	Tests        *LabelTestSet        `json:"tests,omitempty"`
+	Eval         *LabelEvalSet        `json:"eval,omitempty"`
 	Descriptions *LabelDescriptionSet `json:"descriptions,omitempty"`
 }
 
@@ -38,13 +38,13 @@ func (s *LabelSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
-	return s.Tests.IsEmpty() && s.Descriptions.IsEmpty()
+	return s.Eval.IsEmpty() && s.Descriptions.IsEmpty()
 }
 
-// LabelTestSet is the three-section structure embedded in the
+// LabelEvalSet is the three-section structure embedded in the
 // org.overthinkos.tests OCI label: layer-contributed checks, image-level
 // checks, and deploy-default checks.
-type LabelTestSet struct {
+type LabelEvalSet struct {
 	Layer  []Check `json:"layer,omitempty"`
 	Image  []Check `json:"image,omitempty"`
 	Deploy []Check `json:"deploy,omitempty"`
@@ -52,7 +52,7 @@ type LabelTestSet struct {
 
 // IsEmpty returns true if no section has any checks. Used by label emission
 // to omit the label entirely when there are no tests to ship.
-func (s *LabelTestSet) IsEmpty() bool {
+func (s *LabelEvalSet) IsEmpty() bool {
 	if s == nil {
 		return true
 	}
@@ -64,7 +64,7 @@ func (s *LabelTestSet) IsEmpty() bool {
 // (one per layer), image-level description (one), deploy-default
 // description (one — usually from deploy.yml overlays).
 //
-// Mirrors LabelTestSet's shape so the collection + merge pipeline and
+// Mirrors LabelEvalSet's shape so the collection + merge pipeline and
 // the reporting format can share a mental model.
 type LabelDescriptionSet struct {
 	Layer  []LabeledDescription `json:"layer,omitempty"`
@@ -75,7 +75,7 @@ type LabelDescriptionSet struct {
 // LabeledDescription is a Description with its collection-time origin
 // annotation. Origin follows the `layer:<name>` / `image:<name>` /
 // `deploy-default` / `deploy-local` convention also used by
-// LabelTestSet entries' Origin field.
+// LabelEvalSet entries' Origin field.
 type LabeledDescription struct {
 	Origin      string      `json:"origin"`
 	Description Description `json:"description"`

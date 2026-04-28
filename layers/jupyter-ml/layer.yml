@@ -32,7 +32,7 @@ layer:
       path: ~/workspace
 
 
-  tests:
+  eval:
     # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
     # Runs only under `ov test <image>` (deploy-scope). Build-scope and
     # functional HTTP checks are contributed by the composed jupyter-mcp layer.

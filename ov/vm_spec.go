@@ -46,8 +46,8 @@ type VmSpec struct {
 	// composition machinery. These slots are ONLY for tests genuinely
 	// specific to the VM template (e.g., checking a cloud-init runcmd
 	// took effect, probing a libvirt device).
-	Tests       []Check `yaml:"tests,omitempty"`
-	DeployTests []Check `yaml:"deploy_tests,omitempty"`
+	Eval        []Check `yaml:"eval,omitempty"`
+	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
 }
 
 // Note: per /ov-dev:disposable, disposability is a DEPLOY property and

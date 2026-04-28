@@ -4,7 +4,7 @@ package main
 // gathers every kind: entity's description: block into a three-section
 // LabelDescriptionSet.
 //
-// The walk mirrors CollectTests and CollectHooks: layer-order per
+// The walk mirrors CollectEval and CollectHooks: layer-order per
 // level, then step into internal base, dedupe by layer name, stop at
 // first external base OR on cycle. This keeps collection ordering
 // consistent across every collected label.
@@ -81,7 +81,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string
 
 // MergeDeployDescriptions adds a local deploy.yml description onto a
 // label-baked LabelDescriptionSet's Deploy section. Mirrors
-// MergeDeployTests semantics but at Description-level (the finest
+// MergeDeployEval semantics but at Description-level (the finest
 // granularity for description overlays is per-deploy-entity — if the
 // user wants to override a specific step or scenario, they author a
 // replacement description on the DeploymentNode).

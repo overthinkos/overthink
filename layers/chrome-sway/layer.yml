@@ -14,7 +14,7 @@ layer:
       mode: "0644"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: chrome-sway-config
       file: ${HOME}/.config/sway/config.d/chrome-sway.conf
       exists: true

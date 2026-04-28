@@ -191,7 +191,7 @@ type kindKeyedDoc struct {
 
 // AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
 // standalone form. Bundles of `kind: ai` + `name: <name>` documents
-// can be concatenated via YAML --- separators in harness.yml.
+// can be concatenated via YAML --- separators in eval.yml.
 type AIDoc struct {
 	Name     string `yaml:"name"`
 	AIConfig `yaml:",inline"`
@@ -320,7 +320,7 @@ var entityKinds = []entityKind{
 	{Key: "host", Filename: "host.yml"},
 	// 2026-04 harness cutover: `ai:`, `recipe:` (pure spec) and
 	// `score:` (runner config referencing recipes) kinds. Convention
-	// file: harness.yml (carries all three kinds together).
+	// file: eval.yml (carries all three kinds together).
 	{Key: "ai", Filename: "ai.yml"},
 	{Key: "recipe", Filename: "recipe.yml"},
 	{Key: "score", Filename: "score.yml"},
@@ -739,11 +739,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 			"the `vms:` root key was renamed to `vm:` (singular) in schema v2. Run: ov migrate merge-vms",
 		)
 	}
-	// Legacy `benchmark:` root key — replaced by kind:ai + kind:recipe
-	// in the 2026-04 harness cutover.
+	// Legacy `benchmark:` root key — predates two cutovers. The eval
+	// migrator is forward-only (harness → eval); pre-April-2026 projects
+	// must run `ov migrate harness` from a pre-April-2026 ov release
+	// first, then upgrade and run `ov migrate eval`.
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
-			"the `benchmark:` root key is no longer accepted. AI catalog and harness recipes are now kind-entities (kind:ai, kind:recipe) living in harness.yml. Run: ov migrate harness",
+			"the `benchmark:` root key is no longer accepted (this project predates two cutovers). Run `ov migrate harness` from a pre-April-2026 ov release first, then upgrade and run: ov migrate eval",
 		)
 	}
 	switch {
@@ -1925,7 +1927,7 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 		layer.libvirt = ly.Libvirt
 	}
 	layer.hooks = ly.Hooks
-	layer.tests = ly.Tests
+	layer.tests = ly.Eval
 	layer.PortRelayPorts = ly.PortRelay
 	layer.secrets = ly.SecretsYAML
 	if len(ly.EnvProvides) > 0 {

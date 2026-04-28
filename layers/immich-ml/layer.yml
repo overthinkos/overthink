@@ -52,7 +52,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: immich-ml-venv
       file: /opt/immich/machine-learning/.venv/bin/python
       exists: true

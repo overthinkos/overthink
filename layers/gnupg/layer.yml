@@ -14,7 +14,7 @@ layer:
     packages:
       - gnupg
 
-  tests:
+  eval:
     - id: gpg-binary
       file: /usr/bin/gpg
       exists: true

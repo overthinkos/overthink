@@ -6,7 +6,7 @@ import (
 )
 
 // Exercises the full OCI-label read path for the tests manifest:
-// InspectLabels → ExtractMetadata → ImageMetadata.Tests.
+// InspectLabels → ExtractMetadata → ImageMetadata.Eval.
 //
 // This is the read-side complement to TestLabelTests_JSONRoundTrip, which
 // only validates the marshaling path. Together they prove the contract
@@ -16,7 +16,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	orig := InspectLabels
 	defer func() { InspectLabels = orig }()
 
-	testsBlob, err := json.Marshal(&LabelTestSet{
+	testsBlob, err := json.Marshal(&LabelEvalSet{
 		Layer: []Check{
 			{File: "/usr/bin/redis-server", Exists: ptrBool(true), Origin: "layer:redis", Scope: "build"},
 		},
@@ -41,7 +41,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 		return map[string]string{
 			LabelVersion: "1",
 			LabelImage:   "redis-ml",
-			LabelTests:   string(testsBlob),
+			LabelEval:   string(testsBlob),
 		}, nil
 	}
 
@@ -52,20 +52,20 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	if meta == nil {
 		t.Fatal("meta is nil")
 	}
-	if meta.Tests == nil {
+	if meta.Eval == nil {
 		t.Fatal("Tests was not parsed from label")
 	}
 
-	if len(meta.Tests.Layer) != 1 || meta.Tests.Layer[0].File != "/usr/bin/redis-server" {
-		t.Errorf("layer section wrong: %+v", meta.Tests.Layer)
+	if len(meta.Eval.Layer) != 1 || meta.Eval.Layer[0].File != "/usr/bin/redis-server" {
+		t.Errorf("layer section wrong: %+v", meta.Eval.Layer)
 	}
-	if len(meta.Tests.Image) != 1 || meta.Tests.Image[0].Command != "supervisord -v" {
-		t.Errorf("image section wrong: %+v", meta.Tests.Image)
+	if len(meta.Eval.Image) != 1 || meta.Eval.Image[0].Command != "supervisord -v" {
+		t.Errorf("image section wrong: %+v", meta.Eval.Image)
 	}
-	if len(meta.Tests.Deploy) != 1 {
-		t.Fatalf("deploy section wrong: %+v", meta.Tests.Deploy)
+	if len(meta.Eval.Deploy) != 1 {
+		t.Fatalf("deploy section wrong: %+v", meta.Eval.Deploy)
 	}
-	d := meta.Tests.Deploy[0]
+	d := meta.Eval.Deploy[0]
 	if d.ID != "routed" {
 		t.Errorf("deploy id = %q", d.ID)
 	}
@@ -79,7 +79,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 	}
 }
 
-// No tests label ⇒ meta.Tests stays nil. Confirms the absence path
+// No tests label ⇒ meta.Eval stays nil. Confirms the absence path
 // doesn't spuriously create empty sections that would confuse callers.
 func TestExtractMetadata_Tests_AbsentLabel(t *testing.T) {
 	orig := InspectLabels
@@ -92,8 +92,8 @@ func TestExtractMetadata_Tests_AbsentLabel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("extract: %v", err)
 	}
-	if meta.Tests != nil {
-		t.Errorf("Tests should be nil when label absent, got %+v", meta.Tests)
+	if meta.Eval != nil {
+		t.Errorf("Tests should be nil when label absent, got %+v", meta.Eval)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestExtractMetadata_Tests_MalformedLabel(t *testing.T) {
 		return map[string]string{
 			LabelVersion: "1",
 			LabelImage:   "x",
-			LabelTests:   "{not valid json",
+			LabelEval:   "{not valid json",
 		}, nil
 	}
 	_, err := ExtractMetadata("podman", "x")

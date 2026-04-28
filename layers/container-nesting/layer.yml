@@ -255,7 +255,7 @@ layer:
         mount_program = "/usr/bin/fuse-overlayfs"
         mountopt = "nodev,fsync=0"
 
-  tests:
+  eval:
     - id: podman-binary
       file: /usr/bin/podman
       exists: true

@@ -14,7 +14,7 @@ layer:
     packages:
       - asciinema
 
-  tests:
+  eval:
     - id: asciinema-binary
       file: /usr/bin/asciinema
       exists: true

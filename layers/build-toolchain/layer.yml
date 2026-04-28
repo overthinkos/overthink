@@ -126,7 +126,7 @@ layer:
       - pkg-config
       - rustc
 
-  tests:
+  eval:
     - id: gcc-binary
       file: /usr/bin/gcc
       exists: true

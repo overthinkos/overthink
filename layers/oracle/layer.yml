@@ -5,7 +5,7 @@ layer:
   depends:
     - nodejs
 
-  tests:
+  eval:
     - id: oracle-binary
       file: ${HOME}/.npm-global/bin/oracle
       exists: true

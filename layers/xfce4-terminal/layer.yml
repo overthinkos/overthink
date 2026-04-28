@@ -15,7 +15,7 @@ layer:
       mode: "0644"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: xfce4-terminal-binary
       file: /usr/bin/xfce4-terminal
       exists: true

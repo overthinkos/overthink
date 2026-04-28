@@ -12,7 +12,7 @@ layer:
     packages:
       - supervisor
 
-  tests:
+  eval:
     - id: supervisord-binary
       file: /usr/bin/supervisord
       exists: true

@@ -37,7 +37,7 @@ layer:
       user: root
 
 
-  tests:
+  eval:
     - id: filebrowser-binary
       file: /usr/local/bin/filebrowser
       exists: true

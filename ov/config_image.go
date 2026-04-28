@@ -79,7 +79,7 @@ func (c *ImageConfigSetupCmd) Run() error {
 	case "quadlet", "direct":
 		// Both modes are supported. Direct mode skips quadlet/systemctl
 		// and uses `podman run -d` directly — used in nested environments
-		// (bench-pods, supervisord-only containers, sysvinit hosts) where
+		// (eval-pods, supervisord-only containers, sysvinit hosts) where
 		// systemd-user is unavailable. The branch point is inside
 		// runConfig at the quadlet-write step.
 	default:
@@ -474,7 +474,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	})
 
 	// Direct mode: skip quadlet+systemctl and run podman directly. Used
-	// in nested environments (bench-pods, supervisord-only containers,
+	// in nested environments (eval-pods, supervisord-only containers,
 	// sysvinit hosts) where systemd-user is unavailable. Sidecars,
 	// encrypted volumes, and tunnel companion services require systemd
 	// and are not supported in direct mode — the branch warns and

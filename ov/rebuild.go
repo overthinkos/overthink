@@ -263,15 +263,15 @@ func (c *RebuildCmd) rebuildVm() error {
 //
 // Sequence:
 //  1. (unless --reuse-image) ov image build <base>   [build]
-//  2. (unless --reuse-image) ov image test <base>    [build-scope test: disposable container]
+//  2. (unless --reuse-image) ov eval image <base>    [build-scope eval: disposable container]
 //  3. ov deploy add <name>                           [compile overlay if add_layers; non-destructive]
 //  4. ov stop <name>                                 [disruption window starts]
 //  5. ov config <name>                               [regenerate quadlet]
 //  6. ov start <name>                                [start with new image]
 //
-// Deploy-scope tests are NOT part of rebuild — operators run
-// `ov test run <name>` separately against the running service. That
-// keeps rebuild focused (build the artifact, start it) and test
+// Deploy-scope eval is NOT part of rebuild — operators run
+// `ov eval live <name>` separately against the running service. That
+// keeps rebuild focused (build the artifact, start it) and eval
 // distinct (build-scope during rebuild; deploy-scope on demand).
 //
 // Uses `ov stop` — NOT `ov remove`. `ov remove` wipes the deploy.yml
@@ -289,7 +289,7 @@ func (c *RebuildCmd) rebuildContainerDeploy() error {
 	if c.DryRun {
 		if !c.ReuseImage {
 			fmt.Printf("dry-run: ov image build %s\n", baseRef)
-			fmt.Printf("dry-run: ov image test %s\n", baseRef)
+			fmt.Printf("dry-run: ov eval image %s\n", baseRef)
 		}
 		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
 		fmt.Printf("dry-run: ov stop %s\n", c.Name)
@@ -305,8 +305,8 @@ func (c *RebuildCmd) rebuildContainerDeploy() error {
 		if err := runOvSubcommand("image", "build", baseRef); err != nil {
 			return fmt.Errorf("ov image build %s: %w", baseRef, err)
 		}
-		if err := runOvSubcommand("image", "test", baseRef); err != nil {
-			return fmt.Errorf("ov image test %s: %w", baseRef, err)
+		if err := runOvSubcommand("eval", "image", baseRef); err != nil {
+			return fmt.Errorf("ov eval image %s: %w", baseRef, err)
 		}
 	}
 

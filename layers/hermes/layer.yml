@@ -79,7 +79,7 @@ layer:
 
 
 
-  tests:
+  eval:
     - id: hermes-entrypoint
       file: ${HOME}/.local/bin/hermes-entrypoint
       exists: true

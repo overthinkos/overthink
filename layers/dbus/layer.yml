@@ -19,7 +19,7 @@ layer:
       - dbus
 
 
-  tests:
+  eval:
     - id: dbus-daemon-binary
       file: /usr/bin/dbus-daemon
       exists: true

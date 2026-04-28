@@ -4,7 +4,7 @@ layer:
     packages:
       - grim
 
-  tests:
+  eval:
     - id: grim-binary
       file: /usr/bin/grim
       exists: true

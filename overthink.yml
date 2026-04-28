@@ -1,6 +1,6 @@
 version: 4
 includes:
-    - harness.yml
+    - eval.yml
 discover:
     layers:
       - path: layers
@@ -58,7 +58,7 @@ images:
         ports:
           - 2222:2222
           - 18765:18765
-        tests:
+        eval:
           - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
                 && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
             id: arch-coder-ai-clis
@@ -258,7 +258,7 @@ images:
         ports:
           - 2222:2222
           - 18765:18765
-        tests:
+        eval:
           - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
                 && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
             id: debian-coder-ai-clis
@@ -347,7 +347,7 @@ images:
         ports:
           - 2222:2222
           - 18765:18765
-        tests:
+        eval:
           - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
                 && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
             id: fedora-coder-ai-clis
@@ -421,7 +421,7 @@ images:
           - ov
         ports:
           - 8085:8080
-        tests:
+        eval:
           - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov
                 && test -x /usr/bin/dbus-daemon
             id: filebrowser-composed-binaries
@@ -447,7 +447,7 @@ images:
           - agent-forwarding
           - hermes-full
           - dbus
-        tests:
+        eval:
           - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
                 && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
             id: hermes-all-clis-present
@@ -501,7 +501,7 @@ images:
           - ov
         ports:
           - 2283:2283
-        tests:
+        eval:
           - command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server &&
                 test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
             id: immich-ml-stack-binaries
@@ -529,7 +529,7 @@ images:
           - ov
         ports:
           - 8888:8888
-        tests:
+        eval:
           - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n
                 1
             id: jupyter-notebook-templates-provisioned
@@ -717,7 +717,7 @@ images:
           - ov
         ports:
           - 8080:8080
-        tests:
+        eval:
           - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python
                 && test -x /usr/local/bin/ov
             id: openwebui-composition
@@ -749,7 +749,7 @@ images:
           - 9222:9222
           - 9224:9224
           - 2222:2222
-        tests:
+        eval:
           - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable
                 && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
             id: selkies-desktop-binaries
@@ -781,7 +781,7 @@ images:
           - 13000:3000
           - 19222:9222
           - 19224:9224
-        tests:
+        eval:
           - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable
                 && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
             id: selkies-desktop-bootc-binaries
@@ -819,7 +819,7 @@ images:
           - 9222:9222
           - 9224:9224
           - 2222:2222
-        tests:
+        eval:
           - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x
                 /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
             id: selkies-desktop-ov-nested-binaries
@@ -889,7 +889,7 @@ images:
           - 5900:5900
           - 9222:9222
           - 9224:9224
-        tests:
+        eval:
           - command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
             id: sway-browser-vnc-binaries
             exit_status: 0
@@ -990,7 +990,7 @@ images:
         ports:
           - 2222:2222
           - 18765:18765
-        tests:
+        eval:
           - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
                 && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
             id: ubuntu-coder-ai-clis
@@ -1045,70 +1045,70 @@ images:
         ports:
           - 6379:6379
 
-    # Throwaway benchmark target used by `ov benchmark run bench-target`.
-    # The bench-target layer ships a deliberately-failing BDD scenario
+    # Throwaway benchmark target used by `ov eval run eval-target`.
+    # The eval-target layer ships a deliberately-failing BDD scenario
     # that an AI solves by adding a write: task. Fedora base + minimal
     # layer stack keeps per-iteration rebuild fast.
-    bench-target:
+    eval-target:
         base: fedora
         layers:
           - claude-code
           - ov-mcp
-          - bench-target-layer
+          - eval-target-layer
         ports:
           - 18765:18765
 
     # ov harness `default` score — per-pod target images.
-    bench-fixture-os:
+    os:
         base: fedora
         layers:
           - supervisord
-          - fixture-os-layer
-    bench-fixture-web:
+          - os-layer
+    web:
         base: fedora
         layers:
           - supervisord
-          - fixture-web-layer
+          - web-layer
         ports:
           - 8080:8080
-    bench-tier1:
+    tier1:
         enabled: false
         base: fedora
         layers:
-          - bench-tier1-layer
-    bench-tier23:
+          - eval-tier1-layer
+    tier23:
         enabled: false
         base: fedora
         layers:
           - supervisord
-          - bench-tier23-layer
+          - eval-tier23-layer
         ports:
           - 8080:8080
-    bench-redis:
+    redis:
         enabled: false
         base: fedora
         layers:
           - supervisord
           - redis
-          - bench-redis-init-layer
+          - eval-redis-init-layer
         ports:
           - 6379:6379
     # tier4-redis: server bound to 0.0.0.0 for cross-pod access (deploys as `redis`).
-    bench-redis-server:
+    redis-server:
         base: fedora
         layers:
           - supervisord
-          - harness-redis-server-layer
+          - redis-server-layer
         ports:
           - 6379:6379
     # tier4-redis: client pod with redis-cli only (deploys as `redis-client`).
-    bench-redis-client:
+    redis-client:
         base: fedora
         layers:
           - supervisord
-          - harness-redis-client-layer
-    # mcp-protocol-probe: full Jupyter image (deploys as `fixture-mcp`).
-    bench-fixture-mcp:
+          - redis-client-layer
+    # mcp-protocol-probe: full Jupyter image (deploys as `mcp`).
+    mcp:
         base: fedora
         layers:
           - agent-forwarding
@@ -1118,31 +1118,31 @@ images:
           - ov
         ports:
           - 8888:8888
-    # kubernetes-cluster: fake k8s API server (deploys as `fixture-k8s`).
-    bench-fixture-k8s:
+    # kubernetes-cluster: fake k8s API server (deploys as `k8s`).
+    k8s:
         base: fedora
         layers:
           - supervisord
-          - harness-k8s-fixture-layer
+          - k8s-layer
         ports:
           - 6443:6443
     # phase5 selftest: minimal sshd-only image for selftest-layer pod.
-    bench-selftest-layer:
+    selftest-layer:
         base: fedora
         layers:
           - sshd
     # phase5 selftest: minimal ov-only image for selftest-image pod.
-    bench-selftest-image:
+    selftest-image:
         base: fedora
         layers:
           - ov
     # phase6 selftest: combines sshd + ov + composition marker for composition-app pod.
-    bench-composition-app:
+    composition-app:
         base: fedora
         layers:
           - sshd
           - ov
-          - bench-composition-layer
+          - eval-composition-layer
 builders:
     aur:
         detect_config: aur
@@ -1600,12 +1600,12 @@ inits:
                 WantedBy=multi-user.target
                 {{- end}}
 
-# fixture-vm — phase 7 (vm-control-libvirt-spice). The libvirt domain
-# `ov-fixture-vm` is defined externally (not via `ov vm build`); this
-# entity exists so `ov test libvirt info fixture-vm` and
-# `ov test spice * fixture-vm` resolve their session-libvirt domain.
+# vm — phase 7 (vm-control-libvirt-spice). The libvirt domain
+# `ov-vm` is defined externally (not via `ov vm build`); this
+# entity exists so `ov test libvirt info vm` and
+# `ov test spice * vm` resolve their session-libvirt domain.
 vm:
-    fixture-vm:
+    vm:
         source:
             kind: cloud_image
             url: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2
@@ -1628,14 +1628,17 @@ vm:
               - qemu-guest-agent
               - curl
             runcmd:
-              - "echo '10.0.2.2 ov-fixture-web' >> /etc/hosts"
+              - "setenforce 0 || true"
+              - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
+              - "echo '10.89.0.1 ov-web' >> /etc/hosts"
               - "systemctl enable --now qemu-guest-agent"
+              - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
         libvirt:
             devices:
                 channels:
                     - type: unix
                       name: org.qemu.guest_agent.0
-                      path: /home/user/.local/share/ov/vm/ov-fixture-vm/qga.sock
+                      path: /home/user/.local/share/ov/vm/ov-vm/qga.sock
                 graphics:
                     - type: spice
                       autoport: "yes"

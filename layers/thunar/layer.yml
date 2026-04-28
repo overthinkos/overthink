@@ -15,7 +15,7 @@ layer:
       mode: "0644"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: thunar-binary
       file: /usr/bin/thunar
       exists: true

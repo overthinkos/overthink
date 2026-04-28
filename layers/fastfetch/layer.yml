@@ -6,7 +6,7 @@ layer:
     packages:
       - fastfetch
 
-  tests:
+  eval:
     - id: fastfetch-binary
       file: /usr/bin/fastfetch
       exists: true

@@ -8,7 +8,7 @@ layer:
       - liberation-fonts
       - nerd-fonts
 
-  tests:
+  eval:
     - id: jetbrains-mono-installed
       package: jetbrains-mono-fonts
       installed: true

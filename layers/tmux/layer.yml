@@ -14,7 +14,7 @@ layer:
     packages:
       - tmux
 
-  tests:
+  eval:
     - id: tmux-binary
       file: /usr/bin/tmux
       exists: true

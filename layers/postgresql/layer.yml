@@ -119,7 +119,7 @@ layer:
         exec /usr/bin/postgres "${POSTGRES_ARGS[@]}"
 
 
-  tests:
+  eval:
     - id: postgres-binary
       file: /usr/bin/postgres
       exists: true

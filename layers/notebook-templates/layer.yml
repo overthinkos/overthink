@@ -3,7 +3,7 @@ layer:
   data:
     - src: data/notebooks
       volume: workspace
-  tests:
+  eval:
     - id: notebook-templates-dir
       scope: deploy
       file: ${VOLUME_CONTAINER_PATH:workspace}

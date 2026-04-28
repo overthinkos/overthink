@@ -60,7 +60,7 @@ layer:
         fi
       user: root
 
-  tests:
+  eval:
     - id: kubectl-binary
       file: /usr/bin/kubectl
       exists: true

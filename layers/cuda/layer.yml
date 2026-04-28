@@ -52,7 +52,7 @@ layer:
         cd / && rm -rf "$CUDNN_DIR"
       user: root
 
-  tests:
+  eval:
     - id: cuda-nvcc-binary
       file: /usr/bin/nvcc
       exists: true

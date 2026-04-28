@@ -52,7 +52,7 @@ image:
         ports:
             - 2222:2222
             - 18765:18765
-        tests:
+        eval:
             - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
               id: arch-coder-ai-clis
               exit_status: 0
@@ -249,7 +249,7 @@ image:
         ports:
             - 2222:2222
             - 18765:18765
-        tests:
+        eval:
             - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
               id: debian-coder-ai-clis
               exit_status: 0
@@ -335,7 +335,7 @@ image:
         ports:
             - 2222:2222
             - 18765:18765
-        tests:
+        eval:
             - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
               id: fedora-coder-ai-clis
               exit_status: 0
@@ -406,7 +406,7 @@ image:
             - ov
         ports:
             - 8085:8080
-        tests:
+        eval:
             - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov && test -x /usr/bin/dbus-daemon
               id: filebrowser-composed-binaries
               exit_status: 0
@@ -431,7 +431,7 @@ image:
             - agent-forwarding
             - hermes-full
             - dbus
-        tests:
+        eval:
             - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
               id: hermes-all-clis-present
               exit_status: 0
@@ -484,7 +484,7 @@ image:
             - ov
         ports:
             - 2283:2283
-        tests:
+        eval:
             - command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server && test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
               id: immich-ml-stack-binaries
               exit_status: 0
@@ -510,7 +510,7 @@ image:
             - ov
         ports:
             - 8888:8888
-        tests:
+        eval:
             - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n 1
               id: jupyter-notebook-templates-provisioned
               scope: deploy
@@ -696,7 +696,7 @@ image:
             - ov
         ports:
             - 8080:8080
-        tests:
+        eval:
             - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/ov
               id: openwebui-composition
               exit_status: 0
@@ -727,7 +727,7 @@ image:
             - 9222:9222
             - 9224:9224
             - 2222:2222
-        tests:
+        eval:
             - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
               id: selkies-desktop-binaries
               exit_status: 0
@@ -758,7 +758,7 @@ image:
             - 13000:3000
             - 19222:9222
             - 19224:9224
-        tests:
+        eval:
             - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
               id: selkies-desktop-bootc-binaries
               exit_status: 0
@@ -795,7 +795,7 @@ image:
             - 9222:9222
             - 9224:9224
             - 2222:2222
-        tests:
+        eval:
             - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
               id: selkies-desktop-ov-nested-binaries
               exit_status: 0
@@ -862,7 +862,7 @@ image:
             - 5900:5900
             - 9222:9222
             - 9224:9224
-        tests:
+        eval:
             - command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
               id: sway-browser-vnc-binaries
               exit_status: 0
@@ -963,7 +963,7 @@ image:
         ports:
             - 2222:2222
             - 18765:18765
-        tests:
+        eval:
             - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
               id: ubuntu-coder-ai-clis
               exit_status: 0

@@ -224,7 +224,7 @@ func TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "fixture-vm"}, `ov test libvirt info fixture-vm`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `ov test libvirt info vm`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}

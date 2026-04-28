@@ -5,7 +5,7 @@ layer:
   depends:
     - nodejs
 
-  tests:
+  eval:
     - id: codex-binary
       file: ${HOME}/.npm-global/bin/codex
       exists: true

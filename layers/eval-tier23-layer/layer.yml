@@ -1,0 +1,70 @@
+layer:
+  name: eval-tier23-layer
+  description:
+    feature: bench-tier23 — tier 2 + tier 3 in a shared pod
+    narrative: |
+      Tier 2: HTTP server on port 8080 returning a body containing "ov benchmark".
+      Tier 3: curl installed + persistent /srv/bench/version.txt.
+      Both tiers share the same pod (harness-tier23).
+
+  depends: []
+
+  rpm:
+    packages:
+      - curl
+      - python3
+      - iproute
+      - procps-ng
+
+  ports:
+    - 8080
+
+  tasks:
+    - mkdir: /srv/bench
+      user: root
+      mode: "0755"
+    - write: /srv/bench/version.txt
+      user: root
+      mode: "0644"
+      content: |
+        tier3-ok
+    - write: /srv/bench/index.html
+      user: root
+      mode: "0644"
+      content: |
+        <!doctype html>
+        <html><body>
+        <h1>ov benchmark</h1>
+        <p>tier2 + tier3 are happy.</p>
+        </body></html>
+
+  service:
+    - name: bench-http
+      exec: "/usr/bin/python3 -m http.server --bind 0.0.0.0 --directory /srv/bench 8080"
+      restart: always
+      priority: 20
+      enable: true
+      scope: system
+
+  eval:
+    - id: tier23-curl-binary
+      file: /usr/bin/curl
+      exists: true
+    - id: tier23-version-file
+      file: /srv/bench/version.txt
+      exists: true
+      contains:
+        - tier3-ok
+    - id: tier23-index-exists
+      file: /srv/bench/index.html
+      exists: true
+    - id: tier23-port-open
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:8080}
+    - id: tier23-http-200
+      scope: deploy
+      http: http://127.0.0.1:${HOST_PORT:8080}/
+      status: 200
+      body:
+        - contains:
+            - ov benchmark

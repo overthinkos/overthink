@@ -17,7 +17,7 @@ layer:
         done
       user: root
 
-  tests:
+  eval:
     - id: gcloud-binary
       file: /usr/bin/gcloud
       exists: true

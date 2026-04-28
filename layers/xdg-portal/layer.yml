@@ -30,7 +30,7 @@ layer:
       mode: "0644"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: xdg-desktop-portal-package
       package: xdg-desktop-portal
       installed: true

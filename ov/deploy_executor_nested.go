@@ -188,7 +188,7 @@ func (n *NestedExecutor) RunBuilder(ctx context.Context, opts BuilderRunOpts) ([
 
 // RunCapture executes a script inside the nested venue and returns
 // stdout/stderr/exit. The wrapped script is forwarded to the parent's
-// own RunCapture, so multi-hop chains compose: bench-pod (host) →
+// own RunCapture, so multi-hop chains compose: eval-pod (host) →
 // VM (ssh) → inner-pod (podman exec) → nested-pod (podman exec)
 // stacks four heredocs and captures the deepest stdout.
 //

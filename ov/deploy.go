@@ -72,7 +72,7 @@ type DeploymentNode struct {
 	// label-baked deploy section at runtime: entries with an id: that
 	// matches a baked entry replace it; otherwise they append. An entry
 	// with id:X and skip:true effectively disables the baked check.
-	Tests []Check `yaml:"tests,omitempty"`
+	Eval []Check `yaml:"eval,omitempty"`
 
 	// --- BuildTarget refactor fields (Task 13) ---
 	//
@@ -924,7 +924,7 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			// local deploy.yml overlays via field-level replace — so a
 			// per-machine add_layers list fully replaces the project list,
 			// and per-machine tests replace project tests. For tests the
-			// caller (ov test) can run MergeDeployTests to merge by id.
+			// caller (ov test) can run MergeDeployEval to merge by id.
 			if overlay.Target != "" {
 				existing.Target = overlay.Target
 			}
@@ -964,8 +964,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.AddLayers != nil {
 				existing.AddLayers = overlay.AddLayers
 			}
-			if overlay.Tests != nil {
-				existing.Tests = overlay.Tests
+			if overlay.Eval != nil {
+				existing.Eval = overlay.Eval
 			}
 			if overlay.InstallOpts != nil {
 				existing.InstallOpts = overlay.InstallOpts

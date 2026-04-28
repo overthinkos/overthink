@@ -18,7 +18,7 @@ layer:
           'https://wheels.vllm.ai/f53fa26e05c476a43f6db048a9e3b43bcb2b72fb/vllm-0.19.1rc1.dev39%2Bgf53fa26e0.cu130-cp38-abi3-manylinux_2_35_x86_64.whl'
       user: "${USER}"
 
-  tests:
+  eval:
     - id: python-ml-python-binary
       file: ${HOME}/.pixi/envs/default/bin/python
       exists: true

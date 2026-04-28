@@ -20,7 +20,7 @@ layer:
     - cmd: cargo install taplo-cli --locked
       user: "${USER}"
 
-  tests:
+  eval:
     - id: taplo-binary
       file: ${HOME}/.cargo/bin/taplo
       exists: true

@@ -183,15 +183,15 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Declarative Testing
 
-Images and deployments come with inline checks. A `tests:` block on any `layer:`, `image:`, or `deploy.yml` entry authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.tests` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov image test <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
+Images and deployments come with inline checks. A `tests:` block on any `layer:`, `image:`, or `deploy.yml` entry authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.eval` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov eval image <image>` runs build-scope checks against a disposable container; `ov test <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
 
-Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov:test`).
+Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov:eval`).
 
-`ov test` is also the parent router for live-container drive verbs: `ov test cdp` (Chrome DevTools), `ov test wl` (Wayland), `ov test dbus` (D-Bus / notifications), `ov test vnc` (VNC), `ov test mcp` (Model Context Protocol clients) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
+`ov test` is also the parent router for live-container drive verbs: `ov eval cdp` (Chrome DevTools), `ov eval wl` (Wayland), `ov eval dbus` (D-Bus / notifications), `ov eval vnc` (VNC), `ov eval mcp` (Model Context Protocol clients) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
 
-Running images ship comprehensive coverage: `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92), `selkies-desktop-ov` (91 image-scope · 118 live-service). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov test mcp` verb. `selkies-desktop-ov` adds extra gates for the nested-podman recipe: its live-service run (`ov test selkies-desktop-ov`) verifies nested `podman run quay.io/libpod/alpine:latest`, `virsh -c qemu:///session` domcapabilities, KVM hardware acceleration, and in-container `ov version` / `ov doctor`. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
+Running images ship comprehensive coverage: `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92), `selkies-desktop-ov` (91 image-scope · 118 live-service). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov eval mcp` verb. `selkies-desktop-ov` adds extra gates for the nested-podman recipe: its live-service run (`ov test selkies-desktop-ov`) verifies nested `podman run quay.io/libpod/alpine:latest`, `virsh -c qemu:///session` domcapabilities, KVM hardware acceleration, and in-container `ov version` / `ov doctor`. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
 
-See `/ov:test` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
+See `/ov:eval` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
 
 ### Quadlets: Containers as System Services
 
@@ -377,7 +377,7 @@ Overthink covers the full lifecycle — from development to production — wheth
 
 ## Command Reference
 
-The `ov` CLI has 24 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `overthink.yml`), **test mode** (`ov test` + `ov image test` read OCI labels + `deploy.yml` tests overlay, never `overthink.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
+The `ov` CLI has 24 top-level command families split across three modes with disjoint input sets — **build mode** (`ov image …` reads `overthink.yml`), **test mode** (`ov test` + `ov eval image` read OCI labels + `deploy.yml` tests overlay, never `overthink.yml`), and **deploy mode** (everything else reads OCI labels + `deploy.yml`) — plus one cross-mode gateway command (`ov mcp serve`) that exposes the entire CLI surface as an MCP server. Each command has a dedicated skill — invoke `/ov:<cmd>` (or run `ov <cmd> --help`) for full flag listings and examples. This section is a scannable index.
 
 | Area | Commands | Skill |
 |---|---|---|
@@ -387,7 +387,7 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 | **Schema migration** | `migrate unified` (legacy `image.yml`/`build.yml`/flat-form `layer.yml` → unified `overthink.yml`); `migrate vm-spec` (legacy `image.bootc`/`image.vm:`/`image.libvirt:` → `vms.yml` `kind: vm` entities). Both idempotent; auto-invoked on remote-cache downloads | `/ov:migrate` |
 | **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
 | **Desktop recording** | `record` | `/ov:record` |
-| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:test` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
+| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:eval` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
 | **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov:mcp` + `/ov-layers:ov-mcp` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov:doctor`, `/ov:udev`, `/ov:vm`, `/ov-vms:vms` |
@@ -409,8 +409,8 @@ ov image pull jupyter                  # Fetch into local storage (see /ov:pull 
 ov config jupyter                      # Unified deploy setup (see /ov:config for --bind, --encrypt, --sidecar, -i, --update-all)
 ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
-ov test cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
-ov test wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
+ov eval cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
+ov eval wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
 ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
 ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov:mcp Part 2)
 ```
@@ -453,7 +453,7 @@ The Tailscale sidecar routes outbound traffic through a Tailscale exit node whil
 
 ### Wayland Overlays
 
-`ov test wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
+`ov eval wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
 
 ## Troubleshooting
 
@@ -469,7 +469,7 @@ Each entry points to the canonical skill — details belong there, not here.
 | Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov:config`) |
 | Build cache stale | `ov image build --no-cache <image>` (`/ov:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
-| Service built fine but broken in production | `ov test <image>` runs the baked layer + image + deploy checks against the live container; `ov image test <image>` checks the disposable build (`/ov:test`) |
+| Service built fine but broken in production | `ov test <image>` runs the baked layer + image + deploy checks against the live container; `ov eval image <image>` checks the disposable build (`/ov:eval`) |
 | `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vms:vms`, `/ov:migrate`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vms:arch` Finding B) |
 | `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov:vm` Backend matrix) |
@@ -481,7 +481,7 @@ Each entry points to the canonical skill — details belong there, not here.
 ov image new layer my-layer            # Scaffold the directory
 # Edit layers/my-layer/layer.yml       # Declare packages, deps, env, ports,
 #                                      # and tasks: (see /ov:layer for the verb catalog)
-# Optionally add tests: for file / port / http / command checks (see /ov:test)
+# Optionally add tests: for file / port / http / command checks (see /ov:eval)
 # Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
 # Add to an image: entry in overthink.yml:
@@ -522,11 +522,11 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:test` (declarative testing).
+This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:eval` (declarative testing).
 
-The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov test mcp` (see `/ov:mcp`).
+The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov eval mcp` (see `/ov:mcp`).
 
-The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-layers:jupyter`, `/ov-layers:jupyter-mcp`, and `/ov-images:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-layers:jupyter`, `/ov-layers:jupyter-ml`, and their image counterparts for details. Use `ov test mcp` (see `/ov:mcp`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
+The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-layers:jupyter`, `/ov-layers:jupyter-mcp`, and `/ov-images:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-layers:jupyter`, `/ov-layers:jupyter-ml`, and their image counterparts for details. Use `ov eval mcp` (see `/ov:mcp`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

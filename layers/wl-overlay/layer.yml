@@ -19,7 +19,7 @@ layer:
       mode: "0755"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: ov-overlay-script
       file: ${HOME}/.local/bin/ov-overlay
       exists: true

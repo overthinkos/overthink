@@ -103,7 +103,7 @@ var CapabilityLabelMap = map[string]string{
 	"MCPAccepts":     LabelMCPAccepts,
 
 	// Declarative tests (image-level invariants + deploy defaults)
-	"Tests": LabelTests,
+	"Eval":  LabelEval,
 
 	// Gherkin-shaped self-description — three-section (layer/image/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in

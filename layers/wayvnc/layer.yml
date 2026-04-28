@@ -19,7 +19,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: wayvnc-binary
       file: /usr/bin/wayvnc
       exists: true

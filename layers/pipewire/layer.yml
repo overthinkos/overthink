@@ -22,7 +22,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: pipewire-binary
       file: /usr/bin/pipewire
       exists: true

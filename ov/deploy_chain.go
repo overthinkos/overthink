@@ -31,7 +31,7 @@ import (
 // `root`.
 //
 // `root` is typically &LocalDeployExecutor{} (the operator's host, or
-// the inside-of-bench-pod context the harness loop runs in). Pass nil to
+// the inside-of-eval-pod context the harness loop runs in). Pass nil to
 // substitute LocalDeployExecutor.
 //
 // For each path segment, a single hop is added based on the node's

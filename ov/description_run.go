@@ -24,7 +24,7 @@ import (
 // Cycle errors are recorded as a fail verdict on every cyclic scenario
 // in the affected description, then the non-cyclic remainder runs
 // normally — matches the harness's "score the non-cyclic subset" policy
-// from RunRecipeScenariosLive.
+// from RunEvalLive.
 //
 // Features are iterated in LabelDescriptionSet section order
 // (layer → image → deploy). Outline scenarios fan out to one
@@ -99,7 +99,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 		Tag:        append([]string(nil), sc.Tag...),
 		Status:     TestFail,
 		Steps: []StepResult{{
-			Result: TestResult{
+			Result: EvalResult{
 				Status:  TestFail,
 				Message: "scenario participates in a depends_on cycle — see validation output",
 			},
@@ -108,7 +108,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 }
 
 // ScenarioResult is the summary of one scenario's execution, including
-// every step's individual TestResult. Reporters transform this into
+// every step's individual EvalResult. Reporters transform this into
 // text/json/tap/junit output.
 type ScenarioResult struct {
 	Origin     string       `json:"origin"`      // "layer:redis" etc.
@@ -117,16 +117,16 @@ type ScenarioResult struct {
 	Tag        []string     `json:"tag,omitempty"`
 	Steps      []StepResult `json:"steps"`
 	OnFail     []StepResult `json:"on_fail,omitempty"`
-	Status     TestStatus   `json:"status"` // overall (fail if any step failed)
+	Status     EvalStatus   `json:"status"` // overall (fail if any step failed)
 	Pending    int          `json:"pending,omitempty"`
 }
 
-// StepResult pairs a TestResult with the step's narrative keyword/text.
+// StepResult pairs a EvalResult with the step's narrative keyword/text.
 type StepResult struct {
 	Keyword string     `json:"keyword"`
 	Text    string     `json:"text"`
 	StepID  string     `json:"step_id"`
-	Result  TestResult `json:"result"`
+	Result  EvalResult `json:"result"`
 }
 
 // matchScenario returns true when the filter matches the scenario's
@@ -179,7 +179,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 		}
 
 		if failed {
-			sr.Result = TestResult{
+			sr.Result = EvalResult{
 				Status:  TestSkip,
 				Message: "skipped — blocked by earlier fail in scenario",
 				Verb:    verbOf(&step),
@@ -195,7 +195,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 				status = TestFail
 				msg = "pending (no verb bound) — strict mode"
 			}
-			sr.Result = TestResult{Status: status, Message: msg}
+			sr.Result = EvalResult{Status: status, Message: msg}
 			res.Steps = append(res.Steps, sr)
 			res.Pending++
 			if strict {
@@ -230,7 +230,7 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 			}
 
 			if onfailStep.IsPending() {
-				sr.Result = TestResult{Status: TestSkip, Message: "on_fail step has no verb (advisory)"}
+				sr.Result = EvalResult{Status: TestSkip, Message: "on_fail step has no verb (advisory)"}
 				res.OnFail = append(res.OnFail, sr)
 				continue
 			}

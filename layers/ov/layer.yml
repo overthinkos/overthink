@@ -21,7 +21,7 @@ layer:
       mode: "0755"
       user: root
 
-  tests:
+  eval:
     - id: ov-binary
       file: /usr/local/bin/ov
       exists: true

@@ -53,7 +53,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: sway-binary
       file: /usr/bin/sway
       exists: true

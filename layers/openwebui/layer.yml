@@ -83,7 +83,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: openwebui-entrypoint
       file: ${HOME}/.local/bin/openwebui-entrypoint
       exists: true

@@ -59,7 +59,7 @@ layer:
     - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
       user: root
 
-  tests:
+  eval:
     - id: docker-binary
       file: /usr/bin/docker
       exists: true

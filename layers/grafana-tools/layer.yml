@@ -65,7 +65,7 @@ layer:
         chmod +x /usr/local/bin/grafanactl && rm -rf /tmp/grafanactl.tar.gz /tmp/grafanactl
       user: root
 
-  tests:
+  eval:
     - id: mcp-grafana-binary
       file: /usr/local/bin/mcp-grafana
       exists: true

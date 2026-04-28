@@ -72,7 +72,7 @@ layer:
         systemctl enable --now k3s-agent.service
       user: root
 
-  tests:
+  eval:
     - id: k3s-agent-config-file
       scope: build
       file: /etc/rancher/k3s/config.yaml

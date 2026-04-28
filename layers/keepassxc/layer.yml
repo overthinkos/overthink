@@ -10,7 +10,7 @@ layer:
     packages:
       - keepassxc
 
-  tests:
+  eval:
     - id: keepassxc-binary
       command: test -x /usr/bin/keepassxc
       exit_status: 0

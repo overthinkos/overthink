@@ -17,7 +17,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     # Build-scope: inside the built image.
     - id: redis-binary
       file: /usr/bin/redis-server

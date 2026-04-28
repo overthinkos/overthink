@@ -14,7 +14,7 @@ layer:
     packages:
       - gocryptfs
 
-  tests:
+  eval:
     - id: gocryptfs-binary
       file: /usr/bin/gocryptfs
       exists: true

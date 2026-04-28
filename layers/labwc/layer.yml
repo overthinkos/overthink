@@ -45,7 +45,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: labwc-binary
       file: /usr/bin/labwc
       exists: true

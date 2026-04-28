@@ -52,7 +52,7 @@ layer:
 
   # Systemd service (bootc images)
 
-  tests:
+  eval:
     - id: sshd-binary
       file: /usr/sbin/sshd
       exists: true

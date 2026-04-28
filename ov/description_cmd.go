@@ -7,7 +7,7 @@ import (
 )
 
 // FeatureCmd groups the `ov feature` authoring + inspection verbs.
-// Additional run-verbs live on TestCmd / ImageCmd as Feature children
+// Additional run-verbs live on EvalCmd / ImageCmd as Feature children
 // so that `ov test feature run <deployment>` and `ov image feature run
 // <image>` fit the existing test-command hierarchy.
 type FeatureCmd struct {

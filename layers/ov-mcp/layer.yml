@@ -46,7 +46,7 @@ layer:
       user: root
 
 
-  tests:
+  eval:
     - id: ov-mcp-service
       scope: deploy
       service: ov-mcp

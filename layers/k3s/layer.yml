@@ -84,7 +84,7 @@ layer:
         ln -sf /usr/local/bin/k3s /usr/local/bin/ctr
       user: root
 
-  tests:
+  eval:
     - id: k3s-binary
       file: /usr/local/bin/k3s
       exists: true

@@ -14,7 +14,7 @@ layer:
     packages:
       - golang-go
 
-  tests:
+  eval:
     - id: go-binary
       file: /usr/bin/go
       exists: true

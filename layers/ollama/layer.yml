@@ -30,7 +30,7 @@ layer:
       user: root
 
 
-  tests:
+  eval:
     # Build-scope invariants on the installed artifact.
     - id: ollama-binary
       file: /usr/bin/ollama

@@ -5,7 +5,7 @@ layer:
   depends:
     - nodejs
 
-  tests:
+  eval:
     - id: gemini-binary
       file: ${HOME}/.npm-global/bin/gemini
       exists: true

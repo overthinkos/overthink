@@ -51,13 +51,13 @@ output/
 # Legacy `ov benchmark` cache (pre-2026-04).
 .benchmark/
 
-# `ov harness` artifacts under <project>/.harness/<recipe>/. Broadly
+# `ov harness` artifacts under <project>/.eval/<recipe>/. Broadly
 # gitignored — same pattern as .claude/memory/ + .claude/plans/: lives
 # IN the project tree so Syncthing-style file replication carries the
 # durable result files + NOTES.md memory across the user's machines,
 # but stays OUT of git history (per-machine + per-run state, not
 # version-controlled source).
-.harness/
+.eval/
 
 # Screenshots and temporary images
 *.png

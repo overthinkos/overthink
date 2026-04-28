@@ -18,7 +18,7 @@ layer:
           "$JUPYTER_CONFIG_DIR/jupyter_mcp.json"
       user: "${USER}"
 
-  tests:
+  eval:
     - id: jupyter-mcp-config-enabled
       file: ${HOME}/.pixi/envs/default/etc/jupyter/jupyter_server_config.d/jupyter_mcp.json
       exists: true

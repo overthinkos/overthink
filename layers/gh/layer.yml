@@ -36,7 +36,7 @@ layer:
     - cmd: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
       user: root
 
-  tests:
+  eval:
     - id: gh-binary
       file: /usr/bin/gh
       exists: true

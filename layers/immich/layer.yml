@@ -216,7 +216,7 @@ layer:
 
 
 
-  tests:
+  eval:
     - id: immich-server-main
       file: /opt/immich/server/dist/main.js
       exists: true

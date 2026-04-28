@@ -39,10 +39,10 @@ type PodSpec struct {
 	// Tests are optional target-specific build-scope checks that run for
 	// every deployment using this template. Default empty — layer tests
 	// and image tests stay where authored and propagate automatically.
-	Tests []Check `yaml:"tests,omitempty"`
+	Eval []Check `yaml:"eval,omitempty"`
 
 	// DeployTests are optional target-specific deploy-scope defaults.
 	// Default empty. Deployment-level tests overlay on top via
-	// MergeDeployTests.
-	DeployTests []Check `yaml:"deploy_tests,omitempty"`
+	// MergeDeployEval.
+	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
 }

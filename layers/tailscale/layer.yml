@@ -17,7 +17,7 @@ layer:
     - cmd: systemctl enable tailscaled.service 2>/dev/null || true
       user: root
 
-  tests:
+  eval:
     - id: tailscale-binary
       command: test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled
       exit_status: 0

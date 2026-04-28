@@ -38,7 +38,7 @@ layer:
       - nodejs
       - npm
 
-  tests:
+  eval:
     - id: node-binary
       file: /usr/bin/node
       exists: true

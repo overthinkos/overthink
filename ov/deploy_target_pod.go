@@ -346,7 +346,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	// downstream invariant that depends on the base running as a
 	// non-root user (rootless nested podman, claude's
 	// --dangerously-skip-permissions, etc.). Symptom of the regression
-	// before this fix: bench-pod with add_layers: [virtualization]
+	// before this fix: eval-pod with add_layers: [virtualization]
 	// flipped from uid=1000 to uid=0, breaking the harness's claude
 	// invocation across every iteration.
 	if baseMeta, err := ExtractMetadata(t.Engine, t.BaseImage); err == nil && baseMeta != nil && baseMeta.User != "" && baseMeta.User != "root" {

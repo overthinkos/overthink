@@ -14,7 +14,7 @@ layer:
     packages:
       - openssh-client
 
-  tests:
+  eval:
     - id: ssh-binary
       file: /usr/bin/ssh
       exists: true

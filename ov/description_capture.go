@@ -107,14 +107,14 @@ func (s *ScenarioContext) ApplyToEnv(env map[string]string) {
 // centralises the mapping so capture semantics stay consistent across
 // verbs.
 //
-// Today's heuristic: use the TestResult's Message field. Verb handlers
+// Today's heuristic: use the EvalResult's Message field. Verb handlers
 // overwrite Message with their primary output on PASS (for example
 // `runCommand` includes stdout in the Message; `runCDP` in
 // `testrun_ov_verbs.go` puts captured subprocess stdout there). The
 // caller (Runner) holds the stdout verbatim for verbs where Message
 // is a summary rather than raw output and supplies that instead.
 //
-// Callers should prefer CaptureFromResult when they have a TestResult
+// Callers should prefer CaptureFromResult when they have a EvalResult
 // and Captures already knows the raw value (e.g. command stdout); it
 // falls back to Result.Message for verbs that don't carry the raw
 // value separately.

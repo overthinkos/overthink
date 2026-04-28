@@ -1485,9 +1485,9 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
 	// so every pulled image is self-describing at all three levels. Local
 	// deploy.yml overlays (by id) are applied at ov test time, not here.
-	tests := CollectTests(g.Config, g.Layers, imageName)
+	tests := CollectEval(g.Config, g.Layers, imageName)
 	if tests != nil {
-		writeJSONLabel(b, LabelTests, tests)
+		writeJSONLabel(b, LabelEval, tests)
 	}
 
 	// Description: three-section Gherkin-shaped self-description.

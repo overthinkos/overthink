@@ -28,6 +28,6 @@ type HostSpec struct {
 	// Tests / DeployTests are optional target-specific checks (default
 	// empty). Layer tests and per-deployment tests propagate
 	// automatically.
-	Tests       []Check `yaml:"tests,omitempty"`
-	DeployTests []Check `yaml:"deploy_tests,omitempty"`
+	Eval        []Check `yaml:"eval,omitempty"`
+	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
 }

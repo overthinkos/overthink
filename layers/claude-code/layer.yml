@@ -6,7 +6,7 @@ layer:
   path_append:
     - "~/.local/bin"
 
-  tests:
+  eval:
     - id: claude-binary
       file: ${HOME}/.npm-global/bin/claude
       exists: true

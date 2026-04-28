@@ -15,7 +15,7 @@ layer:
         rm -rf /tmp/typst.tar.xz /tmp/typst-*
       user: root
 
-  tests:
+  eval:
     - id: typst-binary
       file: /usr/local/bin/typst
       exists: true

@@ -11,7 +11,7 @@ layer:
       - wlr-randr
       - ydotool
 
-  tests:
+  eval:
     - id: wtype-binary
       file: /usr/bin/wtype
       exists: true

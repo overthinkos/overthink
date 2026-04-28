@@ -157,7 +157,7 @@ layer:
       scope: system
       enable: true
 
-  tests:
+  eval:
     # Build-scope tests: emitted config files exist and are sane. Run
     # during `ov image test` — verifies the layer's setup did its job
     # before we start it.

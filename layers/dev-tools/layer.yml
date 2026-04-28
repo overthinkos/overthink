@@ -184,7 +184,7 @@ layer:
         fi
       user: root
 
-  tests:
+  eval:
     - id: ripgrep-binary
       file: /usr/bin/rg
       exists: true

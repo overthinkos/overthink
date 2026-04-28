@@ -240,7 +240,7 @@ func validateRunMode(value string) error {
 // /run/user/<uid>/systemd directory). Otherwise returns "direct".
 //
 // The functional-systemd-user check (added 2026-04-27) catches nested
-// environments — bench-pods, supervisord-only containers, sysvinit hosts —
+// environments — eval-pods, supervisord-only containers, sysvinit hosts —
 // that have the systemctl binary present but no running `systemd --user`
 // session. Without this check, `ov deploy add <name> <ref>` would silently
 // pick run_mode=quadlet, write the .container file, and fail at

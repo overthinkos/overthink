@@ -105,7 +105,7 @@ layer:
   # --timeout 0 keeps the daemons alive instead of exiting on idle.
 
 
-  tests:
+  eval:
     # virtqemud / virtnetworkd ship as separate binaries on Fedora and Arch,
     # but on Debian / Ubuntu the libvirt-daemon-driver-qemu package ships
     # a plugin library instead — the monolithic `libvirtd` absorbs the QEMU

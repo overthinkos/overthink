@@ -64,13 +64,13 @@ const (
 	LabelMCPProvides     = "org.overthinkos.mcp_provides"
 	LabelMCPRequires     = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts      = "org.overthinkos.mcp_accepts"
-	LabelTests           = "org.overthinkos.tests" // three-section test manifest (layer/image/deploy)
+	LabelEval           = "org.overthinkos.eval" // three-section test manifest (layer/image/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (layer/image/deploy).
 	// Authored inline in YAML under `description:` on each kind; collected
 	// via CollectDescriptions following the same base-chain walk as
-	// CollectTests. Subject to a 256 KiB soft cap with narrative truncation.
+	// CollectEval. Subject to a 256 KiB soft cap with narrative truncation.
 	LabelDescription = "org.overthinkos.description"
 	// LabelServices — structured JSON array of CapabilityService (full
 	// per-entry spec, not just names). Source-less deploy (`ov deploy from-image`)
@@ -181,7 +181,7 @@ type ImageMetadata struct {
 	MCPProvides    []MCPServerYAML      // MCP servers provided to other containers (service discovery templates)
 	MCPRequires    []EnvDependency      // MCP servers image must have from the environment
 	MCPAccepts     []EnvDependency      // MCP servers image can optionally use
-	Tests          *LabelTestSet        // three-section (layer/image/deploy) declarative test spec
+	Eval           *LabelEvalSet        // three-section (layer/image/deploy) declarative test spec
 	Description    *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
 }
 
@@ -499,12 +499,12 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// Tests (three-section declarative test manifest)
-	if v := labels[LabelTests]; v != "" {
-		var ts LabelTestSet
+	if v := labels[LabelEval]; v != "" {
+		var ts LabelEvalSet
 		if err := json.Unmarshal([]byte(v), &ts); err != nil {
-			return nil, fmt.Errorf("parsing %s: %w", LabelTests, err)
+			return nil, fmt.Errorf("parsing %s: %w", LabelEval, err)
 		}
-		meta.Tests = &ts
+		meta.Eval = &ts
 	}
 
 	// Description (three-section Gherkin-shaped self-description)

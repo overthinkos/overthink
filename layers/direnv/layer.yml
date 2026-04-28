@@ -14,7 +14,7 @@ layer:
     packages:
       - direnv
 
-  tests:
+  eval:
     - id: direnv-binary
       file: /usr/bin/direnv
       exists: true

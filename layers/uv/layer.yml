@@ -18,7 +18,7 @@ layer:
         - /usr/local/bin/uv
         - /usr/local/bin/uvx
 
-  tests:
+  eval:
     - id: uv-binary
       file: /usr/local/bin/uv
       exists: true

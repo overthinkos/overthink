@@ -4,7 +4,7 @@ layer:
     packages:
       - xterm
 
-  tests:
+  eval:
     - id: xterm-binary
       file: /usr/bin/xterm
       exists: true

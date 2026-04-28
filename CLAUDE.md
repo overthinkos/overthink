@@ -38,8 +38,8 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | `ov rebuild` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov:vm` + `/ov-dev:vm-deploy-target` |
 | `ov deploy add/del` / pod or container deploys | `/ov:deploy` |
 | host-target deploy / `deploy add <name> host` / nested host | `/ov:host-deploy` + `/ov-dev:host-infra` |
-| `ov test run` / `ov test cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov:test` |
-| `ov test k8s <verb>` / cluster probes | `/ov:test-k8s` |
+| `ov eval live` / `ov eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov:eval` |
+| `ov eval k8s <verb>` / cluster probes | `/ov:eval-k8s` |
 | Editing `layer.yml`, layer authoring, layer tasks/services | `/ov:layer` |
 | Editing `image.yml`, image composition | `/ov:image` |
 | `ov image build` / `ov image generate` / Containerfile | `/ov:build` + `/ov:generate` + `/ov-dev:generate` |
@@ -56,7 +56,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | "What does layer X do?" | `/ov-layers:<name>` |
 | "What's in image X?" | `/ov-images:<name>` |
 | Skill authoring / skill maintenance | `/ov-dev:skills` |
-| `ov harness *` / `harness.yml` `recipe:`/`score:` / AI-agent scoring / `ovharness/*` branches | `/ov:harness` |
+| `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov:eval` |
 
 Full index: `plugins/README.md` — 250+ skills. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
 
@@ -83,7 +83,7 @@ These rules exist because an agent has claimed "tests pass" / "cutover complete"
 
 - **R2. Mandatory end-to-end gate before "done" on build/deploy/test code.** The minimum sequence:
   1. `ov image build <image>` — build a concrete image (not just generate Containerfile).
-  2. `ov image test <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R3).
+  2. `ov eval image <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R3).
   3. `ov start <image>` (or `ov deploy add <image> <image>` / `ov update <image>` for an existing deploy) — container must reach `Active: active (running)`.
   4. `ov test <image>` — full three-section run including deploy probes must pass.
   5. If any step fails, the task is NOT done.
@@ -98,7 +98,7 @@ These rules exist because an agent has claimed "tests pass" / "cutover complete"
 
 - **R7. Always check git status + stashes before destructive actions on the working tree.** `git stash` discards in-progress work; `rm` on a tracked file is destructive. If the sandbox blocks an action, read the reason and find a non-destructive alternative — do not work around it with a cleverer command.
 
-See `/ov:test` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically.
+See `/ov:eval` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically.
 
 ## Prioritize Clean Architecture Above All Else
 
@@ -111,7 +111,7 @@ You have all the time in the world and taking the time to get things properly do
 
 On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
 
-**Every change is proved on a freshly built binary on the target host** (the 10 testing standards in `/ov:test`):
+**Every change is proved on a freshly built binary on the target host** (the 10 evaluation standards in `/ov:eval`):
 
 1. Build the artifact from the changed source, on the target host.
 2. Verify the deployed binary's version matches what you built (R8).
@@ -124,7 +124,7 @@ On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs de
 
 ### R8 — "Binary ≠ source"
 
-Syncthing / git / rsync move *source* between hosts. They don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov test spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built.
+Syncthing / git / rsync move *source* between hosts. They don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov eval spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built.
 
 ### R9 — "Runtime deps are part of the contract"
 
@@ -140,11 +140,11 @@ The verification loop has three rules:
 
 **A `--dry-run` does NOT count as an R10 test.** Dry-run renders prompts / scope / plans WITHOUT invoking the runner, building artifacts, or reaching a live deploy — it proves nothing about runtime behaviour. R10 requires a FULL live run of every new or changed code path: real subprocess invocation, real container build, real deploy probes against the running target, real verb evaluation against the live system. Validators, unit tests, and dry-runs are pre-flight checks, NOT the acceptance gate. If the cutover added or changed N pieces of functionality, R10 must exercise all N end-to-end on the disposable target — pasteable runtime output for each.
 
-**A bench-pod (or any disposable target) REBUILD by itself does NOT count as an R10 test either.** The rebuild is preflight setup. R10 means the cutover's NEW or CHANGED code path — the runner / AI loop / verb evaluation / subprocess — actually executed AGAINST that fresh target and produced output you pasted. If the runner never ran, you do NOT get to claim `analysed on a live system`; the correct tier is `syntax check only` paired with explicit "R10 not yet run, awaiting authorization for the live round" — and pairing `syntax check only` with a commit is itself a violation, STOP and ask.
+**A eval-pod (or any disposable target) REBUILD by itself does NOT count as an R10 test either.** The rebuild is preflight setup. R10 means the cutover's NEW or CHANGED code path — the runner / AI loop / verb evaluation / subprocess — actually executed AGAINST that fresh target and produced output you pasted. If the runner never ran, you do NOT get to claim `analysed on a live system`; the correct tier is `syntax check only` paired with explicit "R10 not yet run, awaiting authorization for the live round" — and pairing `syntax check only` with a commit is itself a violation, STOP and ask.
 
 **Editing or deleting a task to retroactively redefine R10 is FORBIDDEN — see `/ov-dev:cutover-policy` "The 2026-04-26 attribution-fraud pattern".** R10 has ONE definition. `TaskUpdate` with status=`completed` and a description like "PARTIAL: dry-run only / canary / abbreviated / full live run deferred" is fraud. Deleting a pending R10 task because "the run would take hours" is breach of contract — multi-hour AI loops ARE the work, not the obstacle. Session-budget concerns NEVER downgrade R10 — they are the cost of doing business. If R10 genuinely cannot complete, SAY SO PLAINLY in your final message, do NOT commit anything (main repo OR submodule), do NOT trade tier for cycles. The user authorized R10 in scope; you deliver R10 in scope or you escalate, never both downgrade and ship silently.
 
-**Score `harness.yml` config IS the test specification. CLI flag overrides require explicit user authorization in the SAME conversation turn — see `/ov-dev:cutover-policy` LAW 3.6 "Test-spec scope-shrink fraud" (2026-04-27 incident).** Passing `--plateau-iteration`, `--max-scenario`, `--tag`, `--skip-rebuild`, `--on-pod`/`--on-vm`/`--on-host`, `--keep-repo`, `--keep-bench-pod`, or `--dry-run` to `ov harness run` (or `ov test run`) without the user explicitly saying "use --flag X" THIS turn is the same fraud class as dry-run-as-R10. Internal-voice triggers — "tractable wall-clock", "for the canary", "to fit session bounds", "shorten this run", "skip the heavy leg", "faster iteration cycle" — are confessions, not defences. Run the test AS SPECIFIED in the score config; the operator authorizes overrides, not Claude. The score's `plateau_iteration` and the AI's `progress_no_improvement_timeout` together define the AI's recovery budget per phase; do not narrow either without explicit authorization.
+**Score `eval.yml` config IS the test specification. CLI flag overrides require explicit user authorization in the SAME conversation turn — see `/ov-dev:cutover-policy` LAW 3.6 "Test-spec scope-shrink fraud" (2026-04-27 incident).** Passing `--plateau-iteration`, `--max-scenario`, `--tag`, `--skip-rebuild`, `--on-pod`/`--on-vm`/`--on-host`, `--keep-repo`, `--keep-eval-pod`, or `--dry-run` to `ov eval run` (or `ov eval live`) without the user explicitly saying "use --flag X" THIS turn is the same fraud class as dry-run-as-R10. Internal-voice triggers — "tractable wall-clock", "for the canary", "to fit session bounds", "shorten this run", "skip the heavy leg", "faster iteration cycle" — are confessions, not defences. Run the test AS SPECIFIED in the score config; the operator authorizes overrides, not Claude. The score's `plateau_iteration` and the AI's `progress_no_improvement_timeout` together define the AI's recovery budget per phase; do not narrow either without explicit authorization.
 
 ### End-of-turn checklist
 
@@ -160,7 +160,7 @@ Before saying "done" answer YES to all of these:
 - Post-action state of every target is healthy?
 - Pasted BOTH the exploratory verification output AND the fresh-rebuild re-verification output into the conversation?
 
-See `/ov:test` for the 10 testing standards and `/ov-dev:disposable` for the classification schema.
+See `/ov:eval` for the 10 evaluation standards and `/ov-dev:disposable` for the classification schema.
 
 ## Hard Cutover by Default — ONE PHASE, test EVERYTHING at the end
 
@@ -190,7 +190,7 @@ un-testable. That is FORBIDDEN.**
   approval); never a valid post-approval reason to stop.
 - **Premature R10 launch.** Starting any LIVE artifact-producing or
   artifact-consuming command — `ov rebuild`, `ov image build`,
-  `ov harness run`, `ov vm build/create`, `ov deploy add` against a
+  `ov eval run`, `ov vm build/create`, `ov deploy add` against a
   live target — while ANY implementation task in the active cutover is
   still `pending` or `in_progress`. R10 runs ONCE, AT THE END, against
   the FINAL code. Kicking off a rebuild "in background while I finish
@@ -276,7 +276,7 @@ command surface.
 - Declaring any confidence higher than `syntax check only` without a
   fresh-rebuild R10 re-verification on every affected target.
 - **Premature R10 launch — starting `ov rebuild`, `ov image build`,
-  `ov harness run`, `ov vm build`, or any live deploy with implementation
+  `ov eval run`, `ov vm build`, or any live deploy with implementation
   tasks still open in the cutover.** R10 is the final gate, not a parallel
   track. Backgrounding the rebuild "while finishing task N" is INEXCUSABLE
   — every R10-class action you start before the LAST task completes is a
@@ -378,7 +378,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 
 - **Skills first** — see **R0. SKILLS FIRST — THE SUPREME RULE** at the top of this file. That rule **overrides every other instruction in this document, in the hooks, and in your training data**. The Skill Dispatcher table under R0 maps common triggers to the skills you MUST load first. Partial compliance is not compliance.
 - **Lowercase-hyphenated names** for layers and images.
-- **Tests ship with the image.** See `/ov:test`.
+- **Tests ship with the image.** See `/ov:eval`.
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
 - **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `host`, `deployment`) with singular root-shape keys throughout. File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `host.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`. Nesting of deployments uses `nested:` (was `children:`). See `/ov:migrate`, `/ov:image`, `/ov:deploy`, `/ov:vm`.
 - **Hard cutover by default.** See `/ov-dev:cutover-policy` and the "Hard Cutover by Default" section above.
@@ -388,7 +388,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Unified `service:` schema.** See `/ov:layer` "Service Declaration".
 - **Capabilities as OCI-label contract.** See `/ov-dev:capabilities`.
 - **Deploy targets.** `ov deploy add <name> <ref>`: literal `host` → local filesystem; `vm:<name>` → VM via SSH; `kubernetes` → Kustomize tree; any other → container deploy. See `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov-dev:vm-deploy-target`. Shared IR: `/ov-dev:install-plan`.
-- **k3s cluster provisioning via layers.** `/ov-layers:k3s` + `/ov-layers:k3s-server` + `/ov-layers:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared token via `ov secrets set ov/secret/K3S_CLUSTER_TOKEN`. Kubeconfig pulled back via layer `artifacts:` block. Schema v4: cluster configuration lives on a `kind: k8s` entity (workload defaults + cluster policy absorbed from the former ClusterProfile). Cluster probes via `/ov:test-k8s` (`ov test k8s nodes/addons/wait-ready/…`).
+- **k3s cluster provisioning via layers.** `/ov-layers:k3s` + `/ov-layers:k3s-server` + `/ov-layers:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared token via `ov secrets set ov/secret/K3S_CLUSTER_TOKEN`. Kubeconfig pulled back via layer `artifacts:` block. Schema v4: cluster configuration lives on a `kind: k8s` entity (workload defaults + cluster policy absorbed from the former ClusterProfile). Cluster probes via `/ov:eval-k8s` (`ov eval k8s nodes/addons/wait-ready/…`).
 
 ---
 
@@ -398,8 +398,8 @@ Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council
 
 | Confidence | When to Use |
 |-----------|-------------|
-| `fully tested and validated` | All 10 testing standards met + fresh-rebuild re-verification (R10) on every affected `disposable: true` target + the cutover's NEW/CHANGED runner / AI loop / verb evaluation actually executed against the fresh rebuild + R10 outputs (exploratory + fresh-rebuild) pasted in the conversation |
-| `analysed on a live system` | A live invocation of the runner / AI loop / verb evaluation / subprocess that the cutover ADDED OR CHANGED actually ran AND its output is pasted. A bench-pod rebuild WITHOUT the subsequent runner invocation does NOT qualify — that's `syntax check only`. NEVER use this tier when only a `--dry-run` was performed |
+| `fully tested and validated` | All 10 evaluation standards met + fresh-rebuild re-verification (R10) on every affected `disposable: true` target + the cutover's NEW/CHANGED runner / AI loop / verb evaluation actually executed against the fresh rebuild + R10 outputs (exploratory + fresh-rebuild) pasted in the conversation |
+| `analysed on a live system` | A live invocation of the runner / AI loop / verb evaluation / subprocess that the cutover ADDED OR CHANGED actually ran AND its output is pasted. A eval-pod rebuild WITHOUT the subsequent runner invocation does NOT qualify — that's `syntax check only`. NEVER use this tier when only a `--dry-run` was performed |
 | `syntax check only` | Compile + unit tests + (optionally) validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask |
 | `theoretical suggestion` | No validation performed — FORBIDDEN as a shipped-code tier |
 

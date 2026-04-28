@@ -558,7 +558,7 @@ func TestSystemdUserAvailable_EmptyXDG(t *testing.T) {
 }
 
 // TestSystemdUserAvailable_DirMissing — XDG set but the systemd dir
-// doesn't exist (typical bench-pod state) → false.
+// doesn't exist (typical eval-pod state) → false.
 func TestSystemdUserAvailable_DirMissing(t *testing.T) {
 	t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
 

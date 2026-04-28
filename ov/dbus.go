@@ -192,7 +192,7 @@ func dbusIntrospectLocal(dest, path string) error {
 func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 	// Try native ov binary first
 	if checkToolAvailable(engine, name, "ov") == nil {
-		cmd := exec.Command(engine, "exec", name, "ov", "test", "dbus", "notify", ".", title, body)
+		cmd := exec.Command(engine, "exec", name, "ov", "eval", "dbus", "notify", ".", title, body)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err == nil {
@@ -226,7 +226,7 @@ func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 func dbusCallRemote(engine, name, dest, path, method string, args []string) error {
 	// Try native ov binary first
 	if checkToolAvailable(engine, name, "ov") == nil {
-		ovArgs := []string{"exec", name, "ov", "test", "dbus", "call", ".", dest, path, method}
+		ovArgs := []string{"exec", name, "ov", "eval", "dbus", "call", ".", dest, path, method}
 		ovArgs = append(ovArgs, args...)
 		cmd := exec.Command(engine, ovArgs...)
 		cmd.Stdout = os.Stdout

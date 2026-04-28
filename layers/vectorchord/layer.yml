@@ -59,7 +59,7 @@ layer:
         ls "$SHAREDIR/extension/vchord.control"
       user: root
 
-  tests:
+  eval:
     - id: vchord-control-file
       file: /usr/share/pgsql/extension/vchord.control
       exists: true

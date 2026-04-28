@@ -61,9 +61,8 @@ type CLI struct {
 	Start     StartCmd        `cmd:"" help:"Start a container as a background service"`
 	Status    StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
 	Stop      StopCmd         `cmd:"" help:"Stop a running service container"`
-	Test      TestCmd         `cmd:"" help:"Run declarative tests and drive running services (cdp/wl/dbus/vnc/mcp/spice/libvirt/record)"`
+	Eval      EvalCmd         `cmd:"" help:"Evaluate images and deployments — pure-image (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
 	Feature   FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
-	Harness HarnessCmd `cmd:"" help:"Drive AI agents through iteration cycles against BDD scenarios (benchmark + development recipes)"`
 	Tmux      TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
 	Udev      UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
 	Update    UpdateCmd       `cmd:"" help:"Update image and restart if active"`
@@ -277,7 +276,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			if err != nil {
 				return err
 			}
-			set := CollectTests(cfg, layers, c.Image)
+			set := CollectEval(cfg, layers, c.Image)
 			if set == nil {
 				fmt.Println("{}")
 				return nil

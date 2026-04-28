@@ -28,7 +28,7 @@ layer:
       user: "${USER}"
 
 
-  tests:
+  eval:
     - id: waybar-binary
       file: /usr/bin/waybar
       exists: true

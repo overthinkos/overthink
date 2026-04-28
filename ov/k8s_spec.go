@@ -83,8 +83,8 @@ type K8sSpec struct {
 
 	// --- Target-specific tests (optional) ---
 
-	Tests       []Check `yaml:"tests,omitempty"`
-	DeployTests []Check `yaml:"deploy_tests,omitempty"`
+	Eval        []Check `yaml:"eval,omitempty"`
+	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
 }
 
 // K8sResources is per-container CPU / memory requests + limits.

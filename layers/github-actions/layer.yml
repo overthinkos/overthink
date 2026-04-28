@@ -53,7 +53,7 @@ layer:
         rm -f /tmp/actionlint.tar.gz
       user: root
 
-  tests:
+  eval:
     - id: act-binary
       file: /usr/bin/act
       exists: true

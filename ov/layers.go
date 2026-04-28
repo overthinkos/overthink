@@ -218,7 +218,7 @@ type LayerYAML struct {
 	// in the org.overthinkos.tests OCI label (layer section) and run under
 	// `ov image test` (build-time) and `ov test` (deploy-time).
 	// See testspec.go for the Check type.
-	Tests []Check `yaml:"tests,omitempty"`
+	Eval []Check `yaml:"eval,omitempty"`
 
 	// Artifacts are files a layer publishes back to the operator after its
 	// setup runs successfully. Each artifact is retrieved from the deploy
@@ -848,7 +848,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.hooks = ly.Hooks
 
 		// Pre-populate tests (declarative checks)
-		layer.tests = ly.Tests
+		layer.tests = ly.Eval
 
 		// Pre-populate description (Gherkin-shaped self-description)
 		layer.description = ly.Description

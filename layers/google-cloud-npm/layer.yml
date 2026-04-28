@@ -4,7 +4,7 @@ layer:
     - google-cloud
     - nodejs
 
-  tests:
+  eval:
     - id: firebase-binary
       file: ${HOME}/.npm-global/bin/firebase
       exists: true

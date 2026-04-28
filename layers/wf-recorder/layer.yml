@@ -6,7 +6,7 @@ layer:
     packages:
       - wf-recorder
 
-  tests:
+  eval:
     - id: wf-recorder-binary
       file: /usr/bin/wf-recorder
       exists: true

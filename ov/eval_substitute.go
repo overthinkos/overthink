@@ -1,6 +1,6 @@
 package main
 
-// harness_substitute.go — ${TOKEN} substitution for the harness.
+// eval_substitute.go — ${TOKEN} substitution for the harness.
 //
 // Substitution precedence (definitive):
 //   well-known tokens (PROMPT, ITERATION, SCORE_DELTA, ...) →

@@ -1,6 +1,6 @@
 package main
 
-// benchmark_score.go — scoring primitives for `ov harness`.
+// benchmark_score.go — scoring primitives for `ov eval`.
 //
 // Exported surface:
 //   - ParseOvTestOutput(yaml) (*EvalRunResults, error)

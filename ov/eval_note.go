@@ -9,15 +9,15 @@ package main
 //   .harness/<score>/note/<run-id>.md   one file per run
 //
 // During a run, OV_EVAL_NOTES_FILE is set to the per-run path so
-// the AI's `ov harness note append` (invoked from inside the per-run
+// the AI's `ov eval note append` (invoked from inside the per-run
 // clone, with cwd != the host project) writes to the OUTER per-run
 // file rather than a fresh per-clone copy that would die with the
 // transient clone.
 //
-// Outside a run, `ov harness note read` defaults to the most recent
-// run's notes file. `ov harness note append` outside a run errors —
+// Outside a run, `ov eval note read` defaults to the most recent
+// run's notes file. `ov eval note append` outside a run errors —
 // notes are run-scoped, ad-hoc seeding from the CLI is unsupported
-// (use `ov harness note append <score> <text>` only inside an
+// (use `ov eval note append <score> <text>` only inside an
 // iteration's runner.log via the env injection path).
 
 import (

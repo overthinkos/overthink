@@ -2,7 +2,7 @@ package main
 
 // harness_score_kind.go — `kind: score` entity (the harness runner config).
 //
-// A score is the unit you actually invoke: `ov harness run <score>`.
+// A score is the unit you actually invoke: `ov eval run <score>`.
 // It carries the target, AI list, plateau policy, prompt, deployment,
 // MCP endpoint, notes toggle, env, AND `recipes:` — the ordered list
 // of recipes whose scenarios this run evaluates against in EVERY
@@ -29,7 +29,7 @@ import (
 // HarnessScore — one entry under top-level `score:`
 // ---------------------------------------------------------------------------
 
-// HarnessScore is the runner config for `ov harness run <name>`.
+// HarnessScore is the runner config for `ov eval run <name>`.
 //
 // Exactly one of `pod`/`vm`/`host` MUST be set (ResolveScoreTarget
 // enforces). `recipes:` MUST be a non-empty list of names that resolve
@@ -325,7 +325,7 @@ func RenderScoreRecipesYAML(recipeNames []string, recipeCatalog map[string]*Harn
 // ---------------------------------------------------------------------------
 
 // PrintScores writes a human-readable table of configured scores to w.
-// Used by `ov harness list-score`.
+// Used by `ov eval list-score`.
 func PrintScores(w io.Writer, catalog map[string]*HarnessScore) {
 	if len(catalog) == 0 {
 		fmt.Fprintln(w, "No scores configured. Add a 'score:' map to eval.yml.")

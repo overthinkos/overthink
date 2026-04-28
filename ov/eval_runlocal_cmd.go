@@ -1,8 +1,8 @@
 package main
 
-// harness_runlocal_cmd.go — in-target entry point of the harness.
+// eval_runlocal_cmd.go — in-target entry point of the harness.
 //
-// The host-side `ov harness run <score>` is a thin forwarder. All real
+// The host-side `ov eval run <score>` is a thin forwarder. All real
 // work happens here, executed *inside the chosen target* (pod via
 // `podman exec`, vm via `ssh`, or host directly).
 //
@@ -114,7 +114,7 @@ func (c *EvalRunLocalCmd) Run() error {
 		return fmt.Errorf("load harness config from %s: %w", projectDir, err)
 	}
 	if !ok || uf == nil {
-		return fmt.Errorf("ov harness run-local: no overthink.yml in %s", projectDir)
+		return fmt.Errorf("ov eval run-local: no overthink.yml in %s", projectDir)
 	}
 
 	score, err := ResolveScore(uf.Score, c.Score)
@@ -139,7 +139,7 @@ func (c *EvalRunLocalCmd) Run() error {
 	// ${SCENARIOS}/${RECIPES} prompt tokens (placeholders only); the
 	// substituted slice flows into baseline synthesis + per-iter
 	// scoring so probes carry real nonce values that the AI cannot
-	// have pre-set. See SubstituteScenarioNonces in harness_substitute.go.
+	// have pre-set. See SubstituteScenarioNonces in eval_substitute.go.
 	//
 	// Nonces are generated ONCE over the FULL recipe set so they're
 	// stable across phases (a scenario in tier4 sees the same nonce
@@ -198,7 +198,7 @@ func (c *EvalRunLocalCmd) Run() error {
 	}
 
 	// No in-pod preflight: the harness only owns the eval-pod itself
-	// (rebuilt fresh per run by the host-side preflight in harness_cmd.go).
+	// (rebuilt fresh per run by the host-side preflight in eval_runner_cmd.go).
 	// Inside eval-pod, the AI is on its own — it builds whatever images
 	// each scenario needs, creates each pod a scenario references via
 	// `ov deploy add`, and modifies state until scenarios pass. The

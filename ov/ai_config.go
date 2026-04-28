@@ -290,7 +290,7 @@ func firstNonEmptyLine(s string) string {
 // ---------------------------------------------------------------------------
 
 // PrintAIs writes a human-readable table of configured AIs to w.
-// Used by `ov harness list-ai`.
+// Used by `ov eval list-ai`.
 func PrintAIs(w io.Writer, catalog map[string]*AIConfig) {
 	if len(catalog) == 0 {
 		fmt.Fprintln(w, "No AIs configured. Add a 'ai:' map to eval.yml.")

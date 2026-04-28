@@ -755,7 +755,7 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		if err != nil {
 			return failf(c,
 				"%s: %s: validate_ai_artifacts requires the AI to have produced %q "+
-					"during its iteration (e.g. via `ov harness self-evaluate`); "+
+					"during its iteration (e.g. via `ov eval self-evaluate`); "+
 					"file not found: %v", verb, method, c.Artifact, err)
 		}
 		if !r.IterStartTime.IsZero() && info.ModTime().Before(r.IterStartTime) {

@@ -15,7 +15,7 @@ import (
 // EvalCmd is the unified `ov eval` command tree — declarative evaluation,
 // AI-driven iteration, and live-container probe verbs all under one
 // prefix. Three primary verbs (image / live / run) replace the old
-// `ov image test` / `ov test <image>` / `ov harness run <score>` split:
+// `ov image test` / `ov test <image>` / `ov eval run <score>` split:
 //
 //   - `ov eval image <image>` — pure-image artifact eval (disposable
 //     container, build-scope checks only, no host port mapping, no
@@ -31,7 +31,7 @@ import (
 //
 // Eval-run management subcommands (list-ai, list-recipe, list-score,
 // list, sync-credential, report, scope, last-tag, note, run-local,
-// self-evaluate) are the renamed `ov harness *` surface.
+// self-evaluate) are the renamed `ov eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
 	Image EvalImageCmd `cmd:"" help:"Pure-image eval (disposable container, build-scope checks)"`
@@ -49,18 +49,18 @@ type EvalCmd struct {
 	Wl      WlCmd      `cmd:"" help:"Desktop automation (input, windows, screenshots, sway IPC)"`
 	K8s     K8sCmd     `cmd:"" name:"k8s" help:"Kubernetes cluster probes (nodes, wait-nodes, pods, ingress, storageclass, addons, apply, delete, raw)"`
 
-	// Eval-run management (was `ov harness *`)
-	ListAI     EvalListAICmd     `cmd:"list-ai" help:"List configured AIs from eval.yml"`
-	ListRecipe EvalListRecipeCmd `cmd:"list-recipe" help:"List configured recipes (spec) from eval.yml"`
-	ListScore  EvalListScoreCmd  `cmd:"list-score" help:"List configured scores (runner config) from eval.yml"`
-	RunLocal   EvalRunLocalCmd   `cmd:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
-	SyncCred   EvalSyncCredCmd   `cmd:"sync-credential" help:"Copy AI credentials into the score's target"`
-	Scope      EvalScopeCmd      `cmd:"scope" help:"AI-facing: print current iteration scope"`
-	LastTag    EvalLastTagCmd    `cmd:"last-tag" help:"AI-facing: print prior iteration's image tag"`
-	SelfEval   EvalSelfEvalCmd   `cmd:"self-evaluate" help:"AI-facing: rebuild current clone + re-run live eval"`
-	List       EvalListRunsCmd   `cmd:"list" help:"List past eval runs under .eval/<score>/"`
-	Report     EvalReportCmd     `cmd:"report" help:"Render a past result-<calver>.yml"`
-	Note       EvalNoteCmd       `cmd:"note" help:"Read/append the persistent NOTES.md memory for a score"`
+	// Eval-run management (was `ov eval *`)
+	ListAI     EvalListAICmd     `cmd:"" name:"list-ai" help:"List configured AIs from eval.yml"`
+	ListRecipe EvalListRecipeCmd `cmd:"" name:"list-recipe" help:"List configured recipes (spec) from eval.yml"`
+	ListScore  EvalListScoreCmd  `cmd:"" name:"list-score" help:"List configured scores (runner config) from eval.yml"`
+	RunLocal   EvalRunLocalCmd   `cmd:"" name:"run-local" hidden:"" help:"Pod/VM-side iteration driver (not invoked directly)"`
+	SyncCred   EvalSyncCredCmd   `cmd:"" name:"sync-credential" help:"Copy AI credentials into the score's target"`
+	Scope      EvalScopeCmd      `cmd:"" name:"scope" help:"AI-facing: print current iteration scope"`
+	LastTag    EvalLastTagCmd    `cmd:"" name:"last-tag" help:"AI-facing: print prior iteration's image tag"`
+	SelfEval   EvalSelfEvalCmd   `cmd:"" name:"self-evaluate" help:"AI-facing: rebuild current clone + re-run live eval"`
+	List       EvalListRunsCmd   `cmd:"" name:"list" help:"List past eval runs under .eval/<score>/"`
+	Report     EvalReportCmd     `cmd:"" name:"report" help:"Render a past result-<calver>.yml"`
+	Note       EvalNoteCmd       `cmd:"" name:"note" help:"Read/append the persistent NOTES.md memory for a score"`
 }
 
 // EvalLiveCmd runs tests against a running service — the deploy-time entry point.

@@ -24,7 +24,7 @@ package main
 // The watchdog is HIDDEN from the AI by construction:
 //   - Runs in the harness Go process, not in any tool the AI invokes.
 //   - Adds no token to the prompt, no field to ${SCENARIOS}/${RECIPES},
-//     no entry in `ov harness scope`, no log line in NOTES.md.
+//     no entry in `ov eval scope`, no log line in NOTES.md.
 //   - The AI's view of the iteration is unchanged from before Round 3.
 //
 // `Run` exits cleanly when the runner's context is cancelled (the

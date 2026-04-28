@@ -140,14 +140,31 @@ func CreateRunClone(ctx context.Context, l RunLayout) error {
 		return fmt.Errorf("git checkout -b %s: %w\n%s", l.Branch, err, string(out))
 	}
 
-	subCmd := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "submodule", "update", "--init", "--recursive")
+	// Source submodule clones from the host working tree so locally-pinned
+	// commits that haven't been pushed to origin still resolve. Without
+	// this, mid-cutover state (e.g. parent repo points at a plugins
+	// commit that lives only in the host clone) breaks every per-run
+	// scratch clone with `upload-pack: not our ref <sha>`. The override
+	// is benign when origin DOES have the commit — git just fetches from
+	// the local path, which is faster anyway.
+	if err := overrideSubmoduleUrlsToLocal(ctx, l.RepoDir, l.ProjectDir); err != nil {
+		return fmt.Errorf("override submodule URLs: %w", err)
+	}
+
+	// `-c protocol.file.allow=always` lifts git's CVE-2022-39253
+	// hardening for local-path submodule URLs. Required because the
+	// override above points each submodule at the host's working-tree
+	// .git directory.
+	subCmd := exec.CommandContext(ctx, "git",
+		"-c", "protocol.file.allow=always",
+		"-C", l.RepoDir, "submodule", "update", "--init", "--recursive")
 	if out, err := subCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("git submodule update --init --recursive in %s: %w\n%s", l.RepoDir, err, string(out))
 	}
 
 	for _, kv := range [][2]string{
-		{"user.email", "harness@overthinkos.local"},
-		{"user.name", "ov harness"},
+		{"user.email", "eval@overthinkos.local"},
+		{"user.name", "ov eval"},
 	} {
 		c := exec.CommandContext(ctx, "git", "-C", l.RepoDir, "config", kv[0], kv[1])
 		if out, err := c.CombinedOutput(); err != nil {
@@ -310,4 +327,58 @@ func parseRunIDTimestamp(runID string) time.Time {
 		return time.Time{}
 	}
 	return t
+}
+
+// overrideSubmoduleUrlsToLocal rewrites every `submodule.<name>.url` in
+// the freshly-cloned repo's .gitmodules to a `file://<projectDir>/<path>`
+// pointing at the host's working-tree submodule, then runs
+// `git submodule sync` so .git/config picks up the override.
+//
+// Why .gitmodules and not just .git/config: uninitialized submodules
+// read their URL from .gitmodules at `git submodule init` time. Editing
+// only .git/config has no effect on the first `submodule update --init`.
+//
+// Why local URLs: locally-pinned commits that haven't been pushed to
+// origin still resolve via file://. Without this, mid-cutover state
+// (parent repo points at a submodule commit that lives only in the
+// host clone) breaks every per-run scratch clone with
+// `upload-pack: not our ref <sha>`. The override is benign when origin
+// DOES have the commit — git just fetches from the local path.
+//
+// Submodules whose host directory does not exist are left untouched.
+func overrideSubmoduleUrlsToLocal(ctx context.Context, repoDir, projectDir string) error {
+	out, err := exec.CommandContext(ctx, "git", "-C", repoDir,
+		"config", "-f", ".gitmodules",
+		"--get-regexp", `^submodule\..*\.path$`).Output()
+	if err != nil {
+		return nil
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		key := parts[0]
+		subPath := parts[1]
+		name := strings.TrimSuffix(strings.TrimPrefix(key, "submodule."), ".path")
+		hostSub := filepath.Join(projectDir, subPath)
+		if _, err := os.Stat(filepath.Join(hostSub, ".git")); err != nil {
+			continue
+		}
+		// Plain absolute path (NOT file://) — file:// triggers
+		// `transport 'file' not allowed` even with the protocol.file.allow
+		// flag because git applies that policy by URL scheme, not by
+		// resolved path. A bare absolute path is treated as a local
+		// repository directly.
+		if err := exec.CommandContext(ctx, "git", "-C", repoDir,
+			"config", "-f", ".gitmodules",
+			"submodule."+name+".url", hostSub).Run(); err != nil {
+			return fmt.Errorf("git config -f .gitmodules submodule.%s.url: %w", name, err)
+		}
+	}
+	return exec.CommandContext(ctx, "git", "-C", repoDir,
+		"submodule", "sync", "--recursive").Run()
 }

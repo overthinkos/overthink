@@ -77,7 +77,7 @@ type DeployExecutor interface {
 	// previous test-time Executor.Exec semantics. After the executor-
 	// hierarchy cutover (2026-04), this is the single capture-output
 	// method used by every probe across `ov test`, `ov image test`, and
-	// `ov harness` scoring.
+	// `ov eval` scoring.
 	RunCapture(ctx context.Context, script string) (stdout, stderr string, exit int, err error)
 
 	// Kind returns a coarse classification of the venue used by the test

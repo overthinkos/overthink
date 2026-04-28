@@ -33,8 +33,10 @@ layer:
       - mesa-libgbm-devel    # smithay backend_gbm
       - nasm                 # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
       - ninja-build
+      - opusfile-devel       # ov binary's CGo build (audio recording / opus codec)
       - patch                # for source patching in cargo/pip build stages
       - pixman-devel         # smithay renderer_pixman feature
+      - portaudio-devel      # ov binary's CGo build (audio recording)
       - pkgconf
       - pkgconf-m4
       - pkgconf-pkg-config
@@ -72,9 +74,11 @@ layer:
       - mesa              # smithay backend_gbm (provides libgbm)
       - nasm              # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
       - ninja
+      - opusfile          # ov binary's CGo build (audio recording / opus codec)
       - patch             # for source patching in cargo/pip build stages
       - pixman            # smithay renderer_pixman feature
       - pkgconf
+      - portaudio         # ov binary's CGo build (audio recording)
       - rust              # rustc + cargo for setuptools-rust (pixelflux_wayland)
       - systemd           # smithay backend_udev via libudev
       - wayland           # smithay wayland_frontend / backend_* features
@@ -122,8 +126,10 @@ layer:
       - libxkbcommon-dev
       - nasm
       - ninja-build
+      - libopusfile-dev      # ov binary's CGo build (audio recording / opus codec)
       - patch
       - pkg-config
+      - portaudio19-dev      # ov binary's CGo build (audio recording)
       - rustc
 
   eval:

@@ -286,6 +286,12 @@ func (c *RebuildCmd) rebuildContainerDeploy() error {
 		baseRef = c.Name
 	}
 
+	if !c.DryRun {
+		if err := c.precheckPortConflicts(); err != nil {
+			return err
+		}
+	}
+
 	if c.DryRun {
 		if !c.ReuseImage {
 			fmt.Printf("dry-run: ov image build %s\n", baseRef)
@@ -493,4 +499,95 @@ func isBenignAlreadyRunning(stderr string) bool {
 	s := strings.ToLower(stderr)
 	return strings.Contains(s, "already running") ||
 		strings.Contains(s, "operation is not valid")
+}
+
+// precheckPortConflicts inspects the deploy's published host ports and
+// errors out before any disruption if a different container is already
+// publishing the same host port. Saves the operator from a confusing
+// `bind: address already in use` mid-rebuild — the destroy/rebuild has
+// already happened by the time podman tries to start, leaving the
+// system in a weirder state than where it started.
+//
+// A container with the same name as this deploy is treated as
+// non-conflicting (it will be stopped at step 4 of rebuild).
+func (c *RebuildCmd) precheckPortConflicts() error {
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	tree, _ := resolveTreeRoot(dir)
+	if tree == nil {
+		return nil
+	}
+	node, _, err := ResolveNodePath(tree, c.Name)
+	if err != nil || node == nil || len(node.Ports) == 0 {
+		return nil
+	}
+
+	hostPorts := make(map[string]struct{}, len(node.Ports))
+	for _, p := range node.Ports {
+		hp := hostPortOf(p)
+		if hp != "" {
+			hostPorts[hp] = struct{}{}
+		}
+	}
+	if len(hostPorts) == 0 {
+		return nil
+	}
+
+	out, err := exec.Command("podman", "ps", "--format", "{{.Names}}\t{{.Ports}}").Output()
+	if err != nil {
+		return nil
+	}
+
+	selfNames := map[string]struct{}{
+		c.Name:         {},
+		"ov-" + c.Name: {},
+	}
+
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		name, ports := parts[0], parts[1]
+		if _, self := selfNames[name]; self {
+			continue
+		}
+		for hp := range hostPorts {
+			if portsListContainsHostPort(ports, hp) {
+				return fmt.Errorf("port %s already published by container %q\n  Fix: ov stop %s   (or remap %s in deploy.yml)", hp, name, name, c.Name)
+			}
+		}
+	}
+	return nil
+}
+
+// hostPortOf parses a deploy.yml port entry such as "2222:22",
+// "127.0.0.1:2222:22", or "5900:5900/tcp" and returns the host port.
+// Returns "" for entries that don't follow the host:container shape.
+func hostPortOf(spec string) string {
+	s := spec
+	if i := strings.LastIndex(s, "/"); i >= 0 {
+		s = s[:i]
+	}
+	parts := strings.Split(s, ":")
+	switch len(parts) {
+	case 2:
+		return parts[0]
+	case 3:
+		return parts[1]
+	}
+	return ""
+}
+
+// portsListContainsHostPort returns true when podman's ports column
+// (e.g. "0.0.0.0:2222->22/tcp, 0.0.0.0:9222->9222/tcp") publishes the
+// given host port.
+func portsListContainsHostPort(podmanPorts, hostPort string) bool {
+	needle := ":" + hostPort + "->"
+	return strings.Contains(podmanPorts, needle)
 }

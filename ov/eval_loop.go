@@ -1,6 +1,6 @@
 package main
 
-// harness_loop.go — the iteration state machine for `ov harness run`.
+// harness_loop.go — the iteration state machine for `ov eval run`.
 //
 // Post the 2026-04 kind split, the loop is keyed on a `kind: score`
 // (HarnessScore) which references one or more `kind: recipe` entries.
@@ -17,6 +17,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -548,6 +549,18 @@ func runOneIteration(
 		return iter, fmt.Errorf("mkdir iter%d: %w", k, err)
 	}
 
+	// 0. Pre-iter fixture-persistence check (iter ≥ 2 only): probe whether
+	// every in-scope scenario's `pod:` is still running inside the eval-pod.
+	// Per the harness contract, fixtures from earlier phases must persist
+	// for cumulative scoring; if one disappeared (R10 saw ov-desktop's
+	// supervisord exit cleanly mid-run between phases 6 and 7), warn the
+	// AI via stderr — its prompt context will pick up the warning. Don't
+	// auto-redeploy: that's the AI's job. Skip on iter1 (no prior fixtures
+	// expected yet — they're being deployed in this iter for the first time).
+	if k > 1 {
+		warnMissingInScopePods(opts.MergedScenarios)
+	}
+
 	// 1. Write scope.yml
 	scope := renderScope(opts, layout, k, reportSoFar, unsolved)
 	if err := writeScope(layout, k, scope); err != nil {
@@ -775,6 +788,21 @@ func runOneIteration(
 					iterMu.Lock()
 					iter.WatchdogSample = append(iter.WatchdogSample, sample)
 					iterMu.Unlock()
+					// Also append the sample as a JSON line to a host-
+					// visible <iter-dir>/watchdog.jsonl file so operators
+					// can `tail -f` mid-iteration. The result.yml carries
+					// the same timeline as a structured field, but it is
+					// only flushed at iter end — the JSONL stream is the
+					// only live observation surface. Best-effort: write
+					// failures are logged but don't disrupt the watchdog
+					// or the AI runner.
+					if data, err := json.Marshal(sample); err == nil {
+						path := filepath.Join(layout.IterDir(iterK), "watchdog.jsonl")
+						if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+							_, _ = f.Write(append(data, '\n'))
+							_ = f.Close()
+						}
+					}
 				},
 				OnTickError: func(err error) {
 					fmt.Fprintf(stderr,
@@ -871,7 +899,7 @@ func runOneIteration(
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
 			fmt.Fprintf(opts.Stderr, "iter%d: live score: %v\n", k, scoreErr)
-			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}
 			_ = writeIterScore(layout, k, iter)
@@ -893,7 +921,7 @@ func runOneIteration(
 			iter.BuildFailure = true
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
-			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}
 			_ = writeIterScore(layout, k, iter)
@@ -908,7 +936,7 @@ func runOneIteration(
 			iter.Score = priorScore(reportSoFar)
 			iter.Scenario = priorScenarios(reportSoFar)
 			fmt.Fprintf(opts.Stderr, "iter%d: ov image test: %v\n", k, testErr)
-			if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+			if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 				fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 			}
 			_ = writeIterScore(layout, k, iter)
@@ -985,7 +1013,7 @@ func runOneIteration(
 	}
 
 	solvedIDs := collectSolvedIDs(iter.Scenario)
-	if err := commitIterationBestEffort(ctx, layout, k, iter); err != nil {
+	if err := commitIterationBestEffort(ctx, layout, k, iter, opts); err != nil {
 		fmt.Fprintf(opts.Stderr, "iter%d: commit: %v\n", k, err)
 	}
 	_ = solvedIDs
@@ -997,7 +1025,25 @@ func runOneIteration(
 }
 
 // commitIterationBestEffort commits the iteration in the per-run clone.
-func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState) error {
+//
+// Before committing, emits a per-iter delta summary line and kills
+// orphaned `while true; do sleep N; done` / `pgrep -f` self-match
+// poll-loop bash subprocesses left dangling by the AI's
+// `Bash{run_in_background: true}` + `TaskOutput`-timeout pattern
+// (Claude Code issue 52328 — see
+// `.eval/ISSUE-claude-code-bash-pgrep-self-match-deadlock.md`). Without
+// this kill, orphans accumulate across iterations, eventually wedging
+// the next claude spawn (the parent claude process waits for all
+// background bash subprocesses to exit before terminating itself).
+//
+// The kill targets two patterns observed in the 2026-04-28 R10 round:
+//   - `bash -c 'while true; do sleep N; done'` (heartbeat keepalives)
+//   - `bash -c '... pgrep -f "<arbitrary>" ... ; do sleep N'` (self-match polls)
+//
+// Best-effort: pkill failure is logged but doesn't abort the commit.
+func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, iter IterationState, opts HarnessOpts) error {
+	emitIterEndSummary(k, iter)
+	killOrphanLoopBashes(opts.TargetKind, opts.TargetName)
 	solved := collectSolvedIDs(iter.Scenario)
 	sha, err := CommitIterationInRepo(ctx, layout, k, iter.Score, solved)
 	if err != nil {
@@ -1005,6 +1051,170 @@ func commitIterationBestEffort(ctx context.Context, layout RunLayout, k int, ite
 	}
 	iter.CommitSHA = sha
 	return nil
+}
+
+// emitIterEndSummary prints one stderr line at the end of every
+// iteration with a per-iter delta breakdown: solved count this iter,
+// list of failed scenarios (capped at 5), cascade-skipped count, and
+// the new cumulative score. The watchdog's per-tick "current score"
+// log shows running totals but does not delta-summarize. This is the
+// "what did this iter actually change?" view operators want.
+//
+// Format:
+//
+//	harness: phase 6 iter 1 → solved 6 of 13 this iter (failed:
+//	desktop-cdp-loads-web; cascade-skipped: 6 dependents); cumulative 67/74
+//
+// `solved this iter` counts scenarios with VerdictSolved (baseline
+// fail → final pass) — NOT cumulative passing scenarios from prior
+// iters. Cumulative score = total scenarios with `final: pass` across
+// all in-scope recipes.
+func emitIterEndSummary(k int, iter IterationState) {
+	var solvedThisIter, failedFinal, skippedFinal, cumulativePass, total int
+	var failedNames []string
+	for _, s := range iter.Scenario {
+		total++
+		switch s.Verdict {
+		case VerdictSolved:
+			solvedThisIter++
+			cumulativePass++
+		case VerdictUnchanged:
+			// baseline pass → final pass: counts toward cumulative but
+			// not solved-this-iter.
+			if s.Final == "pass" {
+				cumulativePass++
+			} else {
+				failedFinal++
+				if len(failedNames) < 5 {
+					failedNames = append(failedNames, scenarioShortName(s.ID))
+				}
+			}
+		case VerdictSkipped:
+			skippedFinal++
+		case VerdictTampered:
+			// counted as cumulative pass because the baseline was passing.
+			// Tampering means baseline-pass + final-fail.
+			failedFinal++
+			if len(failedNames) < 5 {
+				failedNames = append(failedNames, scenarioShortName(s.ID))
+			}
+		default:
+			if s.Final == "pass" {
+				cumulativePass++
+			}
+		}
+	}
+	failPart := ""
+	if failedFinal > 0 {
+		more := ""
+		if failedFinal > len(failedNames) {
+			more = fmt.Sprintf(", +%d more", failedFinal-len(failedNames))
+		}
+		failPart = fmt.Sprintf(" (failed: %s%s; cascade-skipped: %d)", strings.Join(failedNames, ", "), more, skippedFinal)
+	} else if skippedFinal > 0 {
+		failPart = fmt.Sprintf(" (cascade-skipped: %d)", skippedFinal)
+	}
+	fmt.Fprintf(os.Stderr,
+		"harness: iter %d end → solved %d this iter%s; cumulative %d/%d\n",
+		k, solvedThisIter, failPart, cumulativePass, total)
+}
+
+// scenarioShortName returns the tail segment of a `desc:pod:<pod>:<idx>`
+// or `recipe:<name>:<idx>` scenario ID, falling back to the full ID.
+// Used by emitIterEndSummary to keep the failed-name list compact.
+func scenarioShortName(id string) string {
+	parts := strings.Split(id, ":")
+	if len(parts) >= 2 {
+		return parts[len(parts)-2] + ":" + parts[len(parts)-1]
+	}
+	return id
+}
+
+// warnMissingInScopePods probes the running container set and warns
+// once per missing fixture pod that's referenced in the in-scope
+// scenarios. The harness contract requires earlier-phase fixture pods
+// to persist for cumulative scoring; this is a soft signal to the AI
+// (via the next iter's prompt context) that something needs redeploying.
+// Best-effort: probe failures are silently ignored (the live scorer
+// will surface real issues at iter end).
+func warnMissingInScopePods(scenarios []Scenario) {
+	// Collect unique pod names from scenarios.
+	uniquePods := map[string]bool{}
+	for _, sc := range scenarios {
+		if sc.Pod != "" {
+			// Use only the root segment for dotted paths — nested
+			// pods are checked via their parent's reachability.
+			rootPod := sc.Pod
+			if i := strings.IndexByte(rootPod, '.'); i > 0 {
+				rootPod = rootPod[:i]
+			}
+			uniquePods[rootPod] = true
+		}
+	}
+	if len(uniquePods) == 0 {
+		return
+	}
+	// Probe each: `podman ps --filter name=ov-<pod> --format {{.Names}}`.
+	// One missing pod produces one warn line; multiple missing produce one
+	// warn line each so the operator/AI sees them all.
+	missing := 0
+	for pod := range uniquePods {
+		expected := "ov-" + strings.ReplaceAll(pod, ".", "_")
+		out, err := exec.Command("podman", "ps", "--filter", "name="+expected,
+			"--filter", "status=running", "--format", "{{.Names}}").Output()
+		if err != nil {
+			continue // probe error → silent (don't spam)
+		}
+		if !strings.Contains(string(out), expected) {
+			fmt.Fprintf(os.Stderr,
+				"harness: WARNING: in-scope fixture pod %q is not running — "+
+					"earlier-phase scenarios that probe it will fail at iter end "+
+					"unless the AI redeploys it this iteration.\n", expected)
+			missing++
+		}
+	}
+	if missing > 0 {
+		fmt.Fprintf(os.Stderr,
+			"harness: %d fixture pod(s) missing — see warnings above; "+
+				"the AI's iteration prompt should restore them per harness contract.\n",
+			missing)
+	}
+}
+
+// killOrphanLoopBashes kills issue-52328 deadlock orphans inside the
+// target's PID namespace. The orchestrator runs HOST-side; orphans
+// accumulate INSIDE the eval-pod (where the AI runner spawns claude,
+// which forks `bash -c 'while true; do sleep N; done'` heartbeats and
+// `bash -c '... pgrep -f ...; do sleep N'` self-match polls). Without
+// `podman exec`, pkill on the host would scan the wrong PID namespace.
+//
+// Two patterns observed in the 2026-04-28 R10 round:
+//   - `while true.*sleep [0-9]+`            (heartbeat keepalives)
+//   - `bash -c .*pgrep -f .*sleep`          (self-match polls)
+//
+// Best-effort: failures are silent (no eval-pod = nothing to kill).
+// Pod-target only: vm/host targets don't have the same PID-namespace
+// shape and the AI runs natively, so the issue does not apply.
+func killOrphanLoopBashes(targetKind, targetName string) {
+	if targetKind != "pod" || targetName == "" {
+		return
+	}
+	container := "ov-" + targetName
+	patterns := map[string]string{
+		"while-true-sleep": `while true.*sleep [0-9]+`,
+		"pgrep-self-match": `bash -c .*pgrep -f .*sleep`,
+	}
+	for label, pat := range patterns {
+		// pkill -c reports kill count; -f matches full cmdline.
+		// `podman exec` runs the kill inside the pod's PID namespace.
+		cmd := exec.Command("podman", "exec", container, "pkill", "-c", "-f", pat)
+		out, _ := cmd.Output()
+		var n int
+		fmt.Sscanf(string(out), "%d", &n)
+		if n > 0 {
+			fmt.Fprintf(os.Stderr, "harness: killed %d orphan bash poll-loop(s) [%s] inside %s before iter commit\n", n, label, container)
+		}
+	}
 }
 
 // collectSolvedIDs returns the IDs with Verdict == Solved.
@@ -1240,7 +1450,7 @@ func renderRunnerInvocation(opts HarnessOpts, substCtx *SubstContext, promptText
 	env["OV_EVAL_TARGET_KIND"] = substCtx.TargetKind
 	env["OV_EVAL_TARGET_NAME"] = substCtx.TargetName
 	// OV_EVAL_PHASE is the 1-indexed phase number (0 when the score
-	// is single-pass / non-progressive). `ov harness self-evaluate`
+	// is single-pass / non-progressive). `ov eval self-evaluate`
 	// uses this to resolve the in-scope recipes for the current phase
 	// the same way the orchestrator's scorer does.
 	env["OV_EVAL_PHASE"] = fmt.Sprintf("%d", substCtx.Phase)
@@ -1305,7 +1515,7 @@ func computeSummary(scenarios []ScenarioVerdict, total int) ReportSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Scope-from-env — `ov harness scope` handler
+// Scope-from-env — `ov eval scope` handler
 // ---------------------------------------------------------------------------
 
 // ResolveAndPrintScope reads OV_EVAL_RUN_ID from the environment,

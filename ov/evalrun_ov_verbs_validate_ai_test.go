@@ -144,7 +144,7 @@ func TestRunOvVerb_ValidateAi_AllowlistedMethod_FileMissing_FailsActionable(t *t
 		t.Errorf("expected actionable error mentioning validate_ai_artifacts, got %q", res.Message)
 	}
 	if !strings.Contains(res.Message, "self-evaluate") {
-		t.Errorf("expected error to point at `ov harness self-evaluate`, got %q", res.Message)
+		t.Errorf("expected error to point at `ov eval self-evaluate`, got %q", res.Message)
 	}
 }
 

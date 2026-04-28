@@ -1,6 +1,6 @@
 package main
 
-// harness_synccreds_cmd.go — host-side `ov harness sync-credential <score>`.
+// eval_synccreds_cmd.go — host-side `ov eval sync-credential <score>`.
 //
 // One-shot copy of AI-CLI auth material from the host's $HOME into the
 // score's target. Per-target dispatch:
@@ -19,7 +19,7 @@ import (
 )
 
 // RunActual executes the credential sync. The EvalSyncCredCmd struct
-// + its Kong tags are declared in harness_cmd.go.
+// + its Kong tags are declared in eval_runner_cmd.go.
 func (c *EvalSyncCredCmd) RunActual() error {
 	ctx := context.Background()
 

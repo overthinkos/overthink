@@ -16,7 +16,7 @@ import (
 //   - ov test parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
 //                            parent VM via SSH instead of inside the leaf pod)
-//   - ov harness     → hardcoded ContainerExecutor{ContainerName: "ov-"+pod}
+//   - ov eval     → hardcoded ContainerExecutor{ContainerName: "ov-"+pod}
 //                      (single-hop only; could not reach pod-in-vm)
 //
 // Post-cutover, every call site routes through ResolveDeployChain. The

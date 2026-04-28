@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -47,6 +49,10 @@ func (c *BuildCmd) Run() error {
 	}
 	if err := gen.Generate(); err != nil {
 		return fmt.Errorf("generating build files: %w", err)
+	}
+
+	if err := ensureOvBinaryFresh(dir, gen.Images, c.Images); err != nil {
+		return fmt.Errorf("refreshing ov binary: %w", err)
 	}
 
 	// Resolve runtime config for build engine
@@ -474,4 +480,95 @@ func filterImages(order []string, requested []string, images map[string]*Resolve
 		}
 	}
 	return filtered, nil
+}
+
+// ensureOvBinaryFresh rebuilds layers/ov/bin/ov when any image whose
+// resolved layer chain includes the `ov` layer is in scope for the
+// current build. Without this, podman build would COPY whatever stale
+// binary happens to live at layers/ov/bin/ov — silently baking obsolete
+// CLI behaviour into the image. Skipped (with a one-line warning) when
+// `go` is not on PATH, so an end-user with a packaged ov install does
+// not see a hard error.
+func ensureOvBinaryFresh(dir string, images map[string]*ResolvedImage, requested []string) error {
+	in := requested
+	if len(in) == 0 {
+		in = make([]string, 0, len(images))
+		for name := range images {
+			in = append(in, name)
+		}
+	}
+	needs := false
+	for _, name := range in {
+		img, ok := images[name]
+		if !ok {
+			continue
+		}
+		for _, layer := range img.Layers {
+			if layer == "ov" {
+				needs = true
+				break
+			}
+		}
+		if needs {
+			break
+		}
+	}
+	if !needs {
+		return nil
+	}
+
+	binPath := filepath.Join(dir, "layers", "ov", "bin", "ov")
+	srcDir := filepath.Join(dir, "ov")
+	upToDate, err := ovBinaryUpToDate(binPath, srcDir)
+	if err == nil && upToDate {
+		return nil
+	}
+
+	if _, err := exec.LookPath("go"); err != nil {
+		fmt.Fprintf(os.Stderr, "ov: warning: `go` not on PATH; skipping layers/ov/bin/ov rebuild (image will use existing binary)\n")
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "ov: rebuilding layers/ov/bin/ov from ./ov before image build\n")
+	cmd := exec.Command("go", "build", "-o", binPath, ".")
+	cmd.Dir = srcDir
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// ovBinaryUpToDate returns true when binPath exists and is newer than
+// every .go file under srcDir. Returns (false, nil) for any file system
+// state that warrants a rebuild (missing binary, missing source dir).
+func ovBinaryUpToDate(binPath, srcDir string) (bool, error) {
+	binStat, err := os.Stat(binPath)
+	if err != nil {
+		return false, nil
+	}
+	binMtime := binStat.ModTime()
+	upToDate := true
+	walkErr := filepath.WalkDir(srcDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		if info.ModTime().After(binMtime) {
+			upToDate = false
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	if walkErr != nil {
+		return false, walkErr
+	}
+	return upToDate, nil
 }

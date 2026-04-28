@@ -136,7 +136,7 @@ type Runner struct {
 	// artifactValidatableMethods) to validate the AI's iteration
 	// artifact instead of re-running the capture. See HarnessScore's
 	// field of the same name for the design rationale. Always false in
-	// `ov harness self-evaluate` invocations, regardless of score
+	// `ov eval self-evaluate` invocations, regardless of score
 	// config — self-evaluate's job is to actually produce the
 	// artifacts that the harness scorer then validates.
 	ValidateAiArtifacts bool

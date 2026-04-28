@@ -93,7 +93,7 @@ func SortedRecipeNames(catalog map[string]*HarnessRecipe) []string {
 // ---------------------------------------------------------------------------
 
 // PrintRecipes writes a human-readable table of configured recipes to w.
-// Used by `ov harness list-recipe`. Recipes are pure spec, so the table
+// Used by `ov eval list-recipe`. Recipes are pure spec, so the table
 // shows scenario count + description summary.
 func PrintRecipes(w io.Writer, catalog map[string]*HarnessRecipe) {
 	if len(catalog) == 0 {

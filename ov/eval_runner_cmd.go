@@ -1,6 +1,6 @@
 package main
 
-// harness_cmd.go — `ov harness` command tree (host-side dispatcher).
+// eval_runner_cmd.go — `ov eval` command tree (host-side dispatcher).
 //
 // Post the 2026-04 kind split, the runner is keyed on `kind: score`.
 // `recipe:` entries are pure spec; the user invokes a score, not a recipe.
@@ -26,7 +26,7 @@ import (
 // list-ai / list-recipe / list-score — functional inspection
 // ---------------------------------------------------------------------------
 
-// EvalListAICmd implements `ov harness list-ai`.
+// EvalListAICmd implements `ov eval list-ai`.
 type EvalListAICmd struct{}
 
 func (c *EvalListAICmd) Run() error {
@@ -46,7 +46,7 @@ func (c *EvalListAICmd) Run() error {
 	return nil
 }
 
-// EvalListRecipeCmd implements `ov harness list-recipe` — lists pure
+// EvalListRecipeCmd implements `ov eval list-recipe` — lists pure
 // spec recipes (description + scenarios).
 type EvalListRecipeCmd struct{}
 
@@ -67,7 +67,7 @@ func (c *EvalListRecipeCmd) Run() error {
 	return nil
 }
 
-// EvalListScoreCmd implements `ov harness list-score` — lists runner
+// EvalListScoreCmd implements `ov eval list-score` — lists runner
 // configs (target, AI, plateau, recipes).
 type EvalListScoreCmd struct{}
 
@@ -92,7 +92,7 @@ func (c *EvalListScoreCmd) Run() error {
 // run — host-side dispatcher
 // ---------------------------------------------------------------------------
 
-// EvalRunCmd is `ov harness run <score>`.
+// EvalRunCmd is `ov eval run <score>`.
 type EvalRunCmd struct {
 	Score string `arg:"" help:"Score name (from eval.yml)"`
 	AI    string `name:"ai" help:"Pick which AI to run (required if score.ai has more than one entry)"`
@@ -121,7 +121,7 @@ func (c *EvalRunCmd) Run() error {
 		return err
 	}
 	if !ok || uf == nil {
-		return fmt.Errorf("ov harness run: no overthink.yml in %s", cwd)
+		return fmt.Errorf("ov eval run: no overthink.yml in %s", cwd)
 	}
 	score, err := ResolveScore(uf.Score, c.Score)
 	if err != nil {
@@ -221,7 +221,7 @@ func (c *EvalRunCmd) Run() error {
 				// Re-sync AI credentials (claude creds, etc.) into the
 				// freshly-restarted pod. Use the host's just-built ov
 				// binary so the sync logic itself is post-cutover.
-				credSync := exec.Command(findOvForEval(), "eval", "sync-cred", c.Score)
+				credSync := exec.Command(findOvForEval(), "eval", "sync-credential", c.Score)
 				credSync.Stdout = os.Stderr
 				credSync.Stderr = os.Stderr
 				if err := credSync.Run(); err != nil {
@@ -293,10 +293,10 @@ var evalPhaseRe = regexp.MustCompile(`^harness: phase (\d+)/\d+ —`)
 
 // phaseResyncFn is the credential-resync hook invoked by
 // runWithPhaseResync at every phase boundary (N >= 2). Default invokes
-// `ov harness sync-cred <score>` from the host. Tests override to record
-// calls without spawning subprocesses.
+// `ov eval sync-credential <score>` from the host. Tests override to
+// record calls without spawning subprocesses.
 var phaseResyncFn = func(scoreName string, phase int) error {
-	cmd := exec.Command(findOvForEval(), "eval", "sync-cred", scoreName)
+	cmd := exec.Command(findOvForEval(), "eval", "sync-credential", scoreName)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -317,7 +317,7 @@ var phaseResyncFn = func(scoreName string, phase int) error {
 // plateaus without ever exercising later phases.
 //
 // Phase 1 is intentionally skipped: EvalRunCmd.Run's preflight has
-// already run `ov harness sync-cred` immediately before dispatch, so
+// already run `ov eval sync-credential` immediately before dispatch, so
 // phase 1's claude has the freshest possible credentials.
 //
 // The resync runs concurrently with the orchestrator's per-phase
@@ -366,10 +366,10 @@ func runWithPhaseResync(cmd *exec.Cmd, scoreName string) error {
 }
 
 // ---------------------------------------------------------------------------
-// sync-credential — `ov harness sync-credential <score>`
+// sync-credential — `ov eval sync-credential <score>`
 // ---------------------------------------------------------------------------
 
-// EvalSyncCredCmd is `ov harness sync-credential <score>`.
+// EvalSyncCredCmd is `ov eval sync-credential <score>`.
 type EvalSyncCredCmd struct {
 	Score string `arg:"" help:"Score name"`
 	AI    string `name:"ai" help:"Sync credentials for this AI only (default: all configured)"`
@@ -389,7 +389,7 @@ func (c *EvalScopeCmd) Run() error {
 	runID := os.Getenv("OV_EVAL_RUN_ID")
 	iter := os.Getenv("OV_EVAL_ITERATION")
 	if score == "" || runID == "" || iter == "" {
-		return fmt.Errorf("ov harness scope: must run inside an iteration (OV_EVAL_SCORE/RUN_ID/ITERATION env required)")
+		return fmt.Errorf("ov eval scope: must run inside an iteration (OV_EVAL_SCORE/RUN_ID/ITERATION env required)")
 	}
 	cwd, _ := os.Getwd()
 	path := fmt.Sprintf("%s/.eval/%s/runs/%s/iter%s/scope.yml", cwd, score, runID, iter)
@@ -408,18 +408,18 @@ func (c *EvalLastTagCmd) Run() error {
 	runID := os.Getenv("OV_EVAL_RUN_ID")
 	iter := os.Getenv("OV_EVAL_ITERATION")
 	if runID == "" || iter == "" {
-		return fmt.Errorf("ov harness last-test-tag: must run inside an iteration")
+		return fmt.Errorf("ov eval last-test-tag: must run inside an iteration")
 	}
 	var k int
 	fmt.Sscanf(iter, "%d", &k)
 	if k <= 1 {
-		return fmt.Errorf("ov harness last-test-tag: no prior iteration (k=%d)", k)
+		return fmt.Errorf("ov eval last-test-tag: no prior iteration (k=%d)", k)
 	}
 	fmt.Printf("oveval-%s-iter%d\n", runID, k-1)
 	return nil
 }
 
-// EvalSelfEvalCmd implements `ov harness self-evaluate` — the AI's
+// EvalSelfEvalCmd implements `ov eval self-evaluate` — the AI's
 // canonical self-verification path during a harness iteration.
 //
 // Behavior: invokes the SAME RunEvalLive function the
@@ -455,7 +455,7 @@ func (c *EvalSelfEvalCmd) Run() error {
 	iter := os.Getenv("OV_EVAL_ITERATION")
 	phaseStr := os.Getenv("OV_EVAL_PHASE")
 	if score == "" || runID == "" || iter == "" {
-		return fmt.Errorf("ov harness self-evaluate: must run inside an iteration (OV_EVAL_SCORE/RUN_ID/ITERATION env required)")
+		return fmt.Errorf("ov eval self-evaluate: must run inside an iteration (OV_EVAL_SCORE/RUN_ID/ITERATION env required)")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -468,14 +468,14 @@ func (c *EvalSelfEvalCmd) Run() error {
 	// iter end uses the same project-tree path.
 	uf, ok, err := LoadUnified(cwd)
 	if err != nil {
-		return fmt.Errorf("ov harness self-evaluate: load eval.yml: %w", err)
+		return fmt.Errorf("ov eval self-evaluate: load eval.yml: %w", err)
 	}
 	if !ok || uf == nil {
-		return fmt.Errorf("ov harness self-evaluate: no eval.yml at project root %s — self-evaluate must run from a directory with a project tree containing eval.yml (typically /workspace inside the eval-pod)", cwd)
+		return fmt.Errorf("ov eval self-evaluate: no eval.yml at project root %s — self-evaluate must run from a directory with a project tree containing eval.yml (typically /workspace inside the eval-pod)", cwd)
 	}
 	resolvedScore, err := ResolveScore(uf.Score, score)
 	if err != nil {
-		return fmt.Errorf("ov harness self-evaluate: resolve score %q: %w", score, err)
+		return fmt.Errorf("ov eval self-evaluate: resolve score %q: %w", score, err)
 	}
 
 	// Determine the in-scope recipe set: progressive scores reveal
@@ -491,10 +491,10 @@ func (c *EvalSelfEvalCmd) Run() error {
 		scenarios, _, err = ResolveScoreRecipes(resolvedScore, uf.Recipe)
 	}
 	if err != nil {
-		return fmt.Errorf("ov harness self-evaluate: resolve scenarios: %w", err)
+		return fmt.Errorf("ov eval self-evaluate: resolve scenarios: %w", err)
 	}
 	if len(scenarios) == 0 {
-		fmt.Fprintln(os.Stdout, "ov harness self-evaluate: no in-scope scenarios for this phase")
+		fmt.Fprintln(os.Stdout, "ov eval self-evaluate: no in-scope scenarios for this phase")
 		return nil
 	}
 
@@ -505,7 +505,7 @@ func (c *EvalSelfEvalCmd) Run() error {
 	ctx := context.Background()
 	live, err := RunEvalLive(ctx, resolvedScore.Deployment, score, scenarios, RunScoringOpts{})
 	if err != nil {
-		return fmt.Errorf("ov harness self-evaluate: live scoring: %w", err)
+		return fmt.Errorf("ov eval self-evaluate: live scoring: %w", err)
 	}
 
 	// Print verdict table — same fields the orchestrator's scorer
@@ -642,7 +642,7 @@ func (c *EvalNoteReadCmd) Run() error {
 		score = os.Getenv("OV_EVAL_SCORE")
 	}
 	if score == "" {
-		return fmt.Errorf("ov harness note read: score name required (pass as arg or set OV_EVAL_SCORE)")
+		return fmt.Errorf("ov eval note read: score name required (pass as arg or set OV_EVAL_SCORE)")
 	}
 	dir, err := os.Getwd()
 	if err != nil {

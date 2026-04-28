@@ -1107,12 +1107,15 @@ images:
         layers:
           - supervisord
           - harness-redis-client-layer
-    # mcp-protocol-probe: minimal Streamable-HTTP MCP server stub (deploys as `fixture-mcp`).
+    # mcp-protocol-probe: full Jupyter image (deploys as `fixture-mcp`).
     bench-fixture-mcp:
         base: fedora
         layers:
-          - supervisord
-          - harness-mcp-fixture-layer
+          - agent-forwarding
+          - jupyter
+          - notebook-templates
+          - dbus
+          - ov
         ports:
           - 8888:8888
     # kubernetes-cluster: fake k8s API server (deploys as `fixture-k8s`).
@@ -1605,23 +1608,38 @@ vm:
     fixture-vm:
         source:
             kind: cloud_image
-            url: https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/cloud/nocloud_alpine-3.23.0-x86_64-bios-cloudinit-r0.qcow2
-        disk_size: 4G
-        ram: 1G
+            url: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2
+            checksum:
+                type: sha256
+                value: 6205ae0c524b4d1816dbd3573ce29b5c44ed26c9fbc874fbe48c41c89dd0bac2
+            base_user: fedora
+        disk_size: 6G
+        ram: 2G
         cpus: 2
         firmware: bios
         network:
             mode: user
         ssh:
-            port: 2222
-            key_source: none
+            user: fedora
+            port: 12222
+            key_source: generate
+        cloud_init:
+            packages:
+              - qemu-guest-agent
+              - curl
+            runcmd:
+              - "echo '10.0.2.2 ov-fixture-web' >> /etc/hosts"
+              - "systemctl enable --now qemu-guest-agent"
         libvirt:
             devices:
+                channels:
+                    - type: unix
+                      name: org.qemu.guest_agent.0
+                      path: /home/user/.local/share/ov/vm/ov-fixture-vm/qga.sock
                 graphics:
                     - type: spice
-                      listen:
-                        - type: address
-                          address: 127.0.0.1
+                      autoport: "yes"
+                      listen: 127.0.0.1
                 video:
                     - model: virtio
                       heads: 1

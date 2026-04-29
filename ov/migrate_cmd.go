@@ -6,14 +6,20 @@ import (
 )
 
 // MigrateCmdGroup groups `ov migrate` subcommands.
+//
+// Retired migration commands (deleted with the bootstrap-builder cutover):
+//   - vm-spec: legacy `bootc: true` schema migration; replaced by layer
+//     capability aggregation (no migration required — bootc-config layer
+//     contributes preserve_user, no image-level flag exists).
+//   - merge-vms: legacy vms.yml -> deploy.yml merge + arch-cloud-base
+//     rename; project is on schema v4, no remaining input.
+//   - deploy-v3: deploy.yml v2 -> v3 migration; project is on v4.
+//   - eval: harness.yml -> eval.yml + tests:->eval: rename; project is
+//     on eval.yml already.
 type MigrateCmdGroup struct {
-	Unified        MigrateUnifiedCmd        `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
-	VmSpec         MigrateVmSpecCmd         `cmd:"vm-spec" help:"Migrate legacy bootc:true + image.vm: + image.libvirt: fields to kind:vm entities"`
-	MergeVms       MigrateMergeVmsCmd       `cmd:"merge-vms" help:"Merge vms.yml into deploy.yml, rename vms:→vm:, rename arch-cloud-base→arch, bump schema v1→v2"`
-	DeploySchemaV3 MigrateDeploySchemaV3Cmd `cmd:"deploy-v3" help:"Migrate deploy.yml to schema v3: rename vm:X→X-vm, container→pod, kubernetes→k8s, vm_source:→vm:, bump version 2→3"`
-	SchemaV4       MigrateSchemaV4Cmd       `cmd:"schema-v4" help:"Migrate schema v3 → v4: flatten deployments.images→deployment, rename plurals to singular, children:→nested:, remove deploy-choice fields from images, bump version 3→4"`
-	Description    MigrateDescriptionCmd    `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
-	Eval           MigrateEvalCmd           `cmd:"eval" help:"Forward-only migrate harness.yml→eval.yml: rename file/dir/labels/tokens/env, rewrite tests:→eval: project-wide, rename well-known bench-pod/bench-vm aliases, drop fixture- prefix from pod and recipe names"`
+	Unified     MigrateUnifiedCmd     `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
+	SchemaV4    MigrateSchemaV4Cmd    `cmd:"schema-v4" help:"Migrate schema v3 → v4: flatten deployments.images→deployment, rename plurals to singular, children:→nested:, remove deploy-choice fields from images, bump version 3→4"`
+	Description MigrateDescriptionCmd `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

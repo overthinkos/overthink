@@ -278,7 +278,9 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		return g.generateDataImageContainerfile(imageName, img, layerOrder, imageDir)
 	}
 
-	// ARG for base image must come first (before any FROM)
+	// ARG for base image must come first (before any FROM). For
+	// `from: builder:<name>` images the resolved base is "scratch" and
+	// the rootfs gets ADDed right after the FROM ${BASE_IMAGE} line below.
 	resolvedBase := g.resolveBaseImage(img)
 	b.WriteString(fmt.Sprintf("ARG BASE_IMAGE=%s\n\n", resolvedBase))
 
@@ -336,14 +338,26 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		}
 	}
 
+	// Aggregate layer-contributed capabilities once for this image. Cache
+	// onto ResolvedImage so downstream emit paths (and label emission)
+	// don't recompute.
+	caps, capsErr := AggregateLayerCapabilities(g.Layers, layerOrder)
+	if capsErr != nil {
+		return capsErr
+	}
+	img.LayerCaps = caps
+	if missing := CheckRequiredCapabilities(g.Layers, layerOrder, caps); len(missing) > 0 {
+		return LayerCapabilitiesError(g.Layers, layerOrder, missing)
+	}
+
 	// Detect active init systems from layers (driven by build.yml init: section config)
 	activeInits := make(map[string]*InitDef)
 	if img.InitConfig != nil {
-		activeInits = img.InitConfig.ActiveInits(g.Layers, layerOrder, img.Bootc)
+		activeInits = img.InitConfig.ActiveInits(g.Layers, layerOrder)
 	}
 	// Store init system on ResolvedImage for downstream use (labels, etc.)
 	if img.InitConfig != nil {
-		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, img.Bootc, "")
+		img.InitSystem, img.InitDef = img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
 	}
 
 	// Check if this image has route layers and traefik
@@ -459,11 +473,25 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Main image
 	b.WriteString("FROM ${BASE_IMAGE}\n\n")
 
-	// Bootstrap preamble (only for external base images)
-	if img.IsExternalBase {
+	// `from: builder:<name>` — import the pre-built rootfs tarball that
+	// was staged by runPrivilegedBuilders (see build.go preBuildHook).
+	// The path is relative to the project-root build context, so it
+	// dotted-out under .build/<image>/.
+	if strings.HasPrefix(img.From, "builder:") {
+		builderName := strings.TrimPrefix(img.From, "builder:")
+		b.WriteString(fmt.Sprintf("ADD .build/%s/%s.tar.gz /\n\n", imageName, builderName))
+	}
+
+	// Bootstrap preamble (only for external base images, and only when
+	// not coming from a builder rootfs — the bootstrap step expects an
+	// upstream package manager which from: scratch + ADD doesn't have
+	// pre-installed; that's handled by the builder's package set).
+	if img.IsExternalBase && !strings.HasPrefix(img.From, "builder:") {
 		g.writeBootstrap(&b, img)
-	} else {
+	} else if !strings.HasPrefix(img.From, "builder:") {
 		// Internal base - reset to root for layer processing
+		b.WriteString("USER root\n\n")
+	} else {
 		b.WriteString("USER root\n\n")
 	}
 
@@ -553,7 +581,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Process each layer
 	// Post-layer steps (init assembly, traefik, bootc) run as root,
 	// so the last layer must reset to root only if such steps exist.
-	needsRootAfter := len(activeInits) > 0 || (hasRoutes && hasTraefik) || img.Bootc
+	needsRootAfter := len(activeInits) > 0 || (hasRoutes && hasTraefik) || (caps != nil && caps.NeedsRootAfterInit)
 	inUserMode := false
 	for i, layerName := range layerOrder {
 		isLast := i == len(layerOrder)-1
@@ -626,9 +654,10 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	}
 
 	// Final USER directive (use UID for robustness)
-	// Bootc images boot with systemd which manages users via login —
-	// the container USER directive is irrelevant (bootc+systemd handles sessions).
-	if img.Bootc {
+	// Compositions that declare preserve_user (e.g. bootc-config) boot
+	// with systemd managing user sessions — the container USER directive
+	// is irrelevant. Other compositions reset to the unprivileged uid.
+	if caps != nil && caps.PreserveUser {
 		// leave as root — systemd handles user sessions
 	} else if !inUserMode || needsRootAfter {
 		b.WriteString(fmt.Sprintf("USER %d\n", img.UID))
@@ -1414,8 +1443,26 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	if img.Registry != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
 	}
-	if img.Bootc {
+	// Bootc-flavored compositions emit the internal round-trip label so
+	// deploy-time consumers (labels.go ExtractMetadata) continue to see
+	// meta.Bootc=true. The signal is layer-derived now (preserve_user)
+	// rather than img.Bootc.
+	if img.LayerCaps != nil && img.LayerCaps.PreserveUser {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
+	}
+	// Layer-contributed OCI labels (capabilities.oci_labels). Includes
+	// dev.containers.bootc=true emitted from layers/bootc-config when its
+	// preserve_user capability is in the composition. Sorted for
+	// determinism so Containerfile diffs stay stable.
+	if img.LayerCaps != nil && len(img.LayerCaps.OCILabels) > 0 {
+		keys := make([]string, 0, len(img.LayerCaps.OCILabels))
+		for k := range img.LayerCaps.OCILabels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", k, img.LayerCaps.OCILabels[k]))
+		}
 	}
 	if img.Network != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelNetwork, img.Network))
@@ -1506,7 +1553,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Init system label: active init system name + per-init service list
 	if img.InitConfig != nil {
-		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, img.Bootc, "")
+		labelInitSystem, labelInitDef := img.InitConfig.ResolveInitSystem(g.Layers, layerOrder, "")
 		if labelInitSystem != "" && labelInitDef != nil {
 			b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelInit, labelInitSystem))
 			// Per-init service-name list (legacy layer-name summary; kept for

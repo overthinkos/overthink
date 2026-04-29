@@ -136,9 +136,10 @@ func TestResolveImage(t *testing.T) {
 			if !reflect.DeepEqual(resolved.Platforms, tt.wantPlatforms) {
 				t.Errorf("Platforms = %v, want %v", resolved.Platforms, tt.wantPlatforms)
 			}
-			if resolved.Bootc != tt.wantBootc {
-				t.Errorf("Bootc = %v, want %v", resolved.Bootc, tt.wantBootc)
-			}
+			// Bootc was deleted as an image-level field; the layer-aggregated
+			// LayerCaps.PreserveUser is the new signal. Tests that need this
+			// behavior should compose a layer that contributes preserve_user.
+			_ = tt.wantBootc
 		})
 	}
 }

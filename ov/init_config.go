@@ -17,10 +17,16 @@ type InitConfig struct {
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
 type InitDef struct {
 	// Detection: which layer.yml fields and file patterns trigger this init system
-	LayerFields   []string `yaml:"layer_fields,omitempty"`
-	LayerFiles    []string `yaml:"layer_files,omitempty"`   // glob patterns (e.g., "*.service")
-	DependsLayer  string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
-	RequiresBootc bool     `yaml:"requires_bootc,omitempty"`
+	LayerFields  []string `yaml:"layer_fields,omitempty"`
+	LayerFiles   []string `yaml:"layer_files,omitempty"`   // glob patterns (e.g., "*.service")
+	DependsLayer string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
+	// RequiresCapabilities lists layer-aggregated capability names that
+	// must be present in the image composition for this init system to
+	// be selected. Replaces the previous RequiresBootc boolean — generic
+	// across any layer-contributed capability (preserve_user, data_only,
+	// gpu_required, ...). Empty means "no requirement, always eligible".
+	// Names match the keys used in AggregatedLayerCaps.Provided.
+	RequiresCapabilities []string `yaml:"requires_capabilities,omitempty"`
 
 	// Build model: "fragment_assembly" or "file_copy"
 	Model string `yaml:"model"`
@@ -166,7 +172,14 @@ func detectsInit(def *InitDef, ly *LayerYAML, layerPath string) bool {
 // ResolveInitSystem determines the active init system for an image.
 // Priority: explicit override → auto-detect from layers.
 // Returns ("", nil) if no init system is needed.
-func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []string, isBootc bool, explicit string) (string, *InitDef) {
+//
+// Layer capability requirements (RequiresCapabilities) are checked
+// against the aggregated layer caps for the composition; init systems
+// whose requirements aren't met are filtered out. The aggregated caps
+// are also consulted for the bootc-prefer-systemd heuristic via
+// PreserveUser (the canonical signal that this is a bootc-flavored
+// composition).
+func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []string, explicit string) (string, *InitDef) {
 	if ic == nil {
 		return "", nil
 	}
@@ -178,8 +191,12 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 		}
 	}
 
+	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
+	if caps == nil {
+		caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
+	}
+
 	// Auto-detect: find the init system that layers trigger
-	// For bootc images, prefer systemd over supervisord when systemd services exist
 	initHits := make(map[string]bool)
 	for _, layerName := range layerOrder {
 		layer, ok := layers[layerName]
@@ -199,16 +216,16 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 		}
 	}
 
-	// Filter by bootc requirement
+	// Filter by capability requirements
 	for initName := range initHits {
 		def := ic.Init[initName]
-		if def.RequiresBootc && !isBootc {
+		if !initDefRequirementsMet(def, caps) {
 			delete(initHits, initName)
 		}
 	}
 
-	// For bootc images with systemd, use systemd (skip supervisord)
-	if isBootc && initHits["systemd"] {
+	// For bootc-flavored compositions (preserve_user) prefer systemd over supervisord
+	if caps.PreserveUser && initHits["systemd"] {
 		return "systemd", ic.Init["systemd"]
 	}
 
@@ -226,10 +243,16 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 }
 
 // ActiveInits returns all init systems that are active for the given image.
-// An image can have multiple active inits (e.g., supervisord + systemd on bootc).
-func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string, isBootc bool) map[string]*InitDef {
+// An image can have multiple active inits (e.g., supervisord + systemd on
+// bootc-flavored compositions).
+func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string) map[string]*InitDef {
 	if ic == nil {
 		return nil
+	}
+
+	caps, _ := AggregateLayerCapabilities(layers, layerOrder)
+	if caps == nil {
+		caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
 	}
 
 	result := make(map[string]*InitDef)
@@ -240,7 +263,7 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string,
 		}
 		for initName := range layer.InitSystems {
 			if def, ok := ic.Init[initName]; ok {
-				if def.RequiresBootc && !isBootc {
+				if !initDefRequirementsMet(def, caps) {
 					continue
 				}
 				result[initName] = def
@@ -249,7 +272,7 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string,
 		// port_relay triggers init systems with relay_template
 		if len(layer.PortRelayPorts) > 0 {
 			for initName, def := range ic.Init {
-				if def.RelayTemplate != "" && (!def.RequiresBootc || isBootc) {
+				if def.RelayTemplate != "" && initDefRequirementsMet(def, caps) {
 					result[initName] = def
 				}
 			}
@@ -257,6 +280,23 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string,
 	}
 
 	return result
+}
+
+// initDefRequirementsMet reports whether the init definition's
+// RequiresCapabilities are all present in the aggregated caps.
+func initDefRequirementsMet(def *InitDef, caps *AggregatedLayerCaps) bool {
+	if def == nil || len(def.RequiresCapabilities) == 0 {
+		return true
+	}
+	if caps == nil || caps.Provided == nil {
+		return false
+	}
+	for _, req := range def.RequiresCapabilities {
+		if !caps.Provided[req] {
+			return false
+		}
+	}
+	return true
 }
 
 // HasRelayTemplate returns true if this init definition has a relay template.

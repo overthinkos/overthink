@@ -136,22 +136,22 @@ image:
     aurora:
         enabled: false
         base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
-        bootc: true
         platforms:
             - linux/amd64
         layers:
             - agent-forwarding
+            - bootc-base
             - sshd
             - ov-full
             - golang
     bazzite-ai:
         enabled: false
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
-        bootc: true
         platforms:
             - linux/amd64
         layers:
             - agent-forwarding
+            - bootc-base
             - build-toolchain
             - language-runtimes
             - ujust
@@ -584,7 +584,6 @@ image:
     openclaw-browser-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        bootc: true
         platforms:
             - linux/amd64
         layers:
@@ -739,7 +738,6 @@ image:
     selkies-desktop-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        bootc: true
         platforms:
             - linux/amd64
         distro:

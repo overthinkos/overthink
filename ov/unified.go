@@ -32,6 +32,11 @@ import (
 // UnifiedFileName is the canonical root file of the unified format.
 const UnifiedFileName = "overthink.yml"
 
+// schemaVersion is the on-disk overthink.yml schema version. Bumped on
+// each hard-cutover migration; the LoadUnified gate refuses anything
+// older with a hint pointing at `ov migrate schema-v4`.
+const schemaVersion = 4
+
 // MaxIncludeDepth caps recursive include resolution. A cycle or excessive depth
 // raises a clear error with the offending file path.
 const MaxIncludeDepth = 8
@@ -510,12 +515,6 @@ func validateDeploymentName(name, parentPath string) error {
 			full,
 		)
 	}
-	if strings.Contains(name, legacyVmEntityName) {
-		return fmt.Errorf(
-			"deployment key %q references the legacy entity name %q which was renamed to %q in schema v2. Run: ov migrate merge-vms",
-			full, legacyVmEntityName, currentVmEntityName,
-		)
-	}
 	return nil
 }
 
@@ -528,15 +527,6 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return fmt.Errorf("resolving %s: %w", path, err)
-	}
-	// Hard-reject the legacy vms.yml layout (v1). The file-level check
-	// catches both `includes:` users and any rogue discover path. Mirror
-	// of the `vms:` key-level check in classifyDoc.
-	if filepath.Base(abs) == legacyVmFilename {
-		return fmt.Errorf(
-			"%s: vms.yml is no longer accepted. VM entities now live under the `vm:` key in deploy.yml. Run: ov migrate merge-vms",
-			abs,
-		)
 	}
 	if visited[abs] {
 		return fmt.Errorf("include cycle: %s already visited", abs)
@@ -702,7 +692,6 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 
 	hasRoot, hasKind := false, false
 	var keys []string
-	hasLegacyVmsKey := false
 	hasLegacyBenchmarkKey := false
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
@@ -727,17 +716,6 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 		} else if kindKeysSet[k] {
 			hasKind = true
 		}
-		if k == legacyVmRootKey {
-			hasLegacyVmsKey = true
-		}
-	}
-	// Legacy `vms:` root key (v1 schema) — hard-rejected before the
-	// generic ambiguity / unrecognized-keys branches so the user gets
-	// a pointer straight at the migration command.
-	if hasLegacyVmsKey {
-		return 0, fmt.Errorf(
-			"the `vms:` root key was renamed to `vm:` (singular) in schema v2. Run: ov migrate merge-vms",
-		)
 	}
 	// Legacy `benchmark:` root key — predates two cutovers. The eval
 	// migrator is forward-only (harness → eval); pre-April-2026 projects

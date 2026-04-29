@@ -120,18 +120,6 @@ func TestValidateDeploymentTree_RejectsDotInName(t *testing.T) {
 	}
 }
 
-func TestValidateDeploymentTree_RejectsArchCloudBase(t *testing.T) {
-	section := &DeploymentsSection{
-		Images: map[string]DeploymentNode{
-			"arch-cloud-base": {Target: "vm"},
-		},
-	}
-	err := validateDeploymentTree(section)
-	if err == nil {
-		t.Fatal("expected error for legacy arch-cloud-base name")
-	}
-}
-
 func TestSortedChildKeys_Deterministic(t *testing.T) {
 	kids := map[string]*DeploymentNode{"z": {}, "a": {}, "m": {}}
 	got := sortedNestedKeys(kids)

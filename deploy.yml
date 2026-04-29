@@ -54,6 +54,16 @@
 
 version: 4
 deployment:
+    arch-pacstrap-vm:
+        target: vm
+        vm: arch-pacstrap
+        disposable: true
+        lifecycle: dev
+    cachyos-vm-deploy:
+        target: vm
+        vm: cachyos-vm
+        disposable: true
+        lifecycle: dev
     # =================================================================
     # Bed 1: arch-vm (target: vm)
     # ---------------------------------------------------------------

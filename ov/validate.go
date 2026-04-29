@@ -191,21 +191,27 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			continue // other validators handle resolution errors
 		}
 
-		// For each init system with a depends_layer, check if it's needed and present
-		isBootc := img.Bootc
+		// For each init system with a depends_layer, check if it's needed and present.
+		// Layer-derived caps replace the prior img.Bootc magic flag.
+		caps, _ := AggregateLayerCapabilities(layers, resolved)
+		if caps == nil {
+			caps = &AggregatedLayerCaps{Provided: map[string]bool{}}
+		}
+		isBootcFlavored := caps.PreserveUser
 		for initName, def := range initCfg.Init {
 			if def.DependsLayer == "" {
 				continue // no dependency requirement (e.g., systemd is provided by base OS)
 			}
 
-			// Skip init systems that don't apply to this image type.
-			// Mirrors the RequiresBootc filter in ResolveInitSystem/ActiveInits.
-			if def.RequiresBootc && !isBootc {
-				continue // e.g., systemd not applicable to non-bootc images
+			// Skip init systems whose RequiresCapabilities aren't met by the
+			// current composition.
+			if !initDefRequirementsMet(def, caps) {
+				continue
 			}
-			if !def.RequiresBootc && isBootc {
-				// For bootc images with dual-init layers (service: + system_services:),
-				// skip supervisord depends_layer check when systemd is also triggered.
+			// For bootc-flavored compositions with dual-init layers
+			// (service: + system_services:), skip supervisord depends_layer
+			// check when systemd is also triggered.
+			if len(def.RequiresCapabilities) == 0 && isBootcFlavored {
 				hasSystemdLayer := false
 				for _, layerName := range resolved {
 					if layer, ok := layers[layerName]; ok && layer.HasInit("systemd") {
@@ -1147,10 +1153,21 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 		}
 	}
 
-	// Warn if use_packaged is used in non-bootc images (only systemd can
-	// consume packaged units — supervisord is the container init and can't).
+	// Warn if use_packaged is used on a composition that doesn't preserve
+	// the layer USER (i.e. non-bootc-flavored images). Only systemd-based
+	// compositions consume packaged units; supervisord, the container
+	// default init, can't.
 	for imageName, img := range cfg.Images {
-		if !img.IsEnabled() || img.Bootc {
+		if !img.IsEnabled() {
+			continue
+		}
+		// Resolve layer order to aggregate caps for this image.
+		var imgLayers []string
+		for _, ref := range img.Layers {
+			imgLayers = append(imgLayers, BareRef(ref))
+		}
+		caps, _ := AggregateLayerCapabilities(layers, imgLayers)
+		if caps != nil && caps.PreserveUser {
 			continue
 		}
 		for _, layerRef := range img.Layers {
@@ -1159,7 +1176,7 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 			if !ok || !layerHasPackaged(layer) {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with use_packaged entries, but is not a bootc image (systemd units will be ignored)\n", imageName, bare)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with use_packaged entries, but composition does not preserve_user (systemd units will be ignored)\n", imageName, bare)
 		}
 	}
 }

@@ -361,7 +361,8 @@ inits:
             - service
         layer_files:
             - '*.service'
-        requires_bootc: true
+        requires_capabilities:
+            - preserve_user
         model: file_copy
         fragment_dir: systemd
         stage_name: systemd-services

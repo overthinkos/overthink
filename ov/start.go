@@ -378,9 +378,9 @@ func buildStartArgs(engine, imageRef string, uid, gid int, ports []string, name 
 
 // resolveEntrypoint determines the init system entrypoint for an image.
 // Uses build.yml init: section config when available, falls back to well-known defaults.
-func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOrder []string, isBootc bool) []string {
+func resolveEntrypoint(initConfig *InitConfig, layers map[string]*Layer, layerOrder []string) []string {
 	if initConfig != nil {
-		initName, initDef := initConfig.ResolveInitSystem(layers, layerOrder, isBootc, "")
+		initName, initDef := initConfig.ResolveInitSystem(layers, layerOrder, "")
 		if initName != "" && initDef != nil && len(initDef.Entrypoint) > 0 {
 			return initDef.Entrypoint
 		}
@@ -395,14 +395,10 @@ func resolveEntrypointFromMeta(meta *ImageMetadata) []string {
 	if meta.Init == "" {
 		return []string{"sleep", "infinity"}
 	}
-	switch meta.Init {
-	case "supervisord":
-		return []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}
-	case "systemd":
-		return nil // systemd images boot via VM, no container entrypoint
-	default:
-		return []string{"sleep", "infinity"}
+	if def, ok := wellKnownInitDefs[meta.Init]; ok {
+		return def.Entrypoint
 	}
+	return []string{"sleep", "infinity"}
 }
 
 // containerName returns the deterministic container name for an image.

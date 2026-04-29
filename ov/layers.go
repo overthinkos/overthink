@@ -230,6 +230,14 @@ type LayerYAML struct {
 	// cluster without manual scp. Generic — not k3s-specific.
 	Artifacts []LayerArtifact `yaml:"artifacts,omitempty"`
 
+	// Capabilities are layer-contributed image-level facts (preserve_user,
+	// needs_root_after_init, init_system_hint, data_only, oci_labels).
+	// Aggregated at image resolve time via AggregateLayerCapabilities.
+	// Replaces the magic image-level booleans (image.bootc, image.data_image)
+	// with a declarative layer-derived surface.
+	Capabilities         *LayerCapabilities `yaml:"capabilities,omitempty"`
+	RequiresCapabilities []string           `yaml:"requires_capabilities,omitempty"`
+
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
 	TagSections    map[string]*TagPkgConfig   `yaml:"-"` // distro/version tag sections
@@ -256,6 +264,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
 	"vars": true, "tasks": true, "tests": true,
 	"artifacts": true,
+	"capabilities": true, "requires_capabilities": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -537,6 +546,11 @@ type Layer struct {
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
 	description    *Description      // Gherkin-shaped self-description (from layer.yml description:)
+
+	// Layer-contributed image-level facts (capabilities: block in layer.yml)
+	// and cross-layer requirement declarations (requires_capabilities:).
+	capabilities         *LayerCapabilities
+	requiresCapabilities []string
 }
 
 // ScanLayers returns all layers for the project at dir. Post-unified-cutover
@@ -855,6 +869,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate artifacts (files to retrieve after setup)
 		layer.artifacts = ly.Artifacts
+
+		// Pre-populate layer-contributed capabilities + requirements
+		layer.capabilities = ly.Capabilities
+		layer.requiresCapabilities = ly.RequiresCapabilities
 
 		// Pre-populate port relay
 		layer.PortRelayPorts = ly.PortRelay

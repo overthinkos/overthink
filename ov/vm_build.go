@@ -145,39 +145,38 @@ func normalizeSize(size string) string {
 	return s
 }
 
+// KnownVmSourceKinds lists the source.kind values supported by ov vm build.
+// Used by error messages so adding a new kind keeps the user-facing
+// enumeration in sync with the dispatch.
+var KnownVmSourceKinds = []string{"cloud_image", "bootc", "bootstrap"}
+
 // runVmSpecBuild handles `ov vm build <vm-name>` where <vm-name>
-// matches a kind:vm entity in overthink.yml. Branches on source.kind:
-//
-//	cloud_image → fetch URL + qcow2 overlay + resize + seed ISO (D4)
-//	bootc       → bootc install to-disk reading VmSpec.Source fields (D12)
-//
-// The new path lives alongside the legacy VmConfig path in VmBuildCmd.Run
-// until the Hard Cutover commit (Task 21) deletes the legacy branch.
+// matches a kind:vm entity. Dispatches on source.kind to the appropriate
+// per-kind builder (BuildCloudImage / BuildBootcVM / BuildBootstrapVM).
 func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRuntime) error {
 	fmt.Fprintf(os.Stderr, "Building VM %q (source.kind=%s)\n", vmName, spec.Source.Kind)
 
+	outputDir, err := filepath.Abs(filepath.Join("output", "qcow2"))
+	if err != nil {
+		return err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	vmStateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
+	if err := os.MkdirAll(vmStateDir, 0o755); err != nil {
+		return err
+	}
+	var existingState *VmDeployState
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if e, ok := dc.Deployment["vm:"+vmName]; ok {
+			existingState = e.VmState
+		}
+	}
+
 	switch spec.Source.Kind {
 	case "cloud_image":
-		outputDir, err := filepath.Abs(filepath.Join("output", "qcow2"))
-		if err != nil {
-			return err
-		}
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return err
-		}
-		vmStateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
-		if err := os.MkdirAll(vmStateDir, 0o755); err != nil {
-			return err
-		}
-		// Hydrate existing VmDeployState (for stable instance-id across
-		// rebuilds).
-		var existingState *VmDeployState
-		if dc, _ := LoadDeployConfig(); dc != nil {
-			if e, ok := dc.Deployment["vm:"+vmName]; ok {
-				existingState = e.VmState
-			}
-		}
 		res, err := BuildCloudImage(spec, outputDir, vmStateDir, existingState)
 		if err != nil {
 			return err
@@ -188,16 +187,50 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		return nil
 
 	case "bootc":
-		// Bootc VMs need an existing container image to `bootc install`
-		// against. Look up the referenced kind:image and delegate to the
-		// existing bootc install pipeline via a synthetic VmConfig.
-		// This is a temporary shim while the legacy VmConfig machinery
-		// is still in place; the Hard Cutover commit will collapse the
-		// two paths into one.
 		_ = rt
-		return fmt.Errorf("bootc source via kind:vm entity: full wiring lands in the Hard Cutover commit (Task 21). Workaround: use the existing legacy kind:image + bootc: true path for now")
+		res, err := BuildBootcVM(spec, outputDir, vmStateDir, existingState)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s\n", res.DiskPath)
+		if res.SeedIsoPath != "" {
+			fmt.Fprintf(os.Stderr, "Wrote %s\n", res.SeedIsoPath)
+		}
+		return nil
+
+	case "bootstrap":
+		// Resolve build.yml builder + distro configs. Loaded via the
+		// project's overthink.yml format_config refs (handled internally
+		// by the runtime; here we look them up from the runtime).
+		distroCfg, builderCfg, err := loadBuildYmlSections()
+		if err != nil {
+			return fmt.Errorf("loading build.yml builder/distro sections: %w", err)
+		}
+		res, err := BuildBootstrapVM(spec, outputDir, vmStateDir, existingState, distroCfg, builderCfg)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "Wrote %s (rootfs sha256=%s)\n", res.DiskPath, res.BaseImageSHA256)
+		if res.SeedIsoPath != "" {
+			fmt.Fprintf(os.Stderr, "Wrote %s\n", res.SeedIsoPath)
+		}
+		return nil
 
 	default:
-		return fmt.Errorf("vm %q: unsupported source.kind %q (want cloud_image or bootc)", vmName, spec.Source.Kind)
+		return fmt.Errorf("vm %q: unsupported source.kind %q (want one of %s)", vmName, spec.Source.Kind, strings.Join(KnownVmSourceKinds, ", "))
 	}
+}
+
+// loadBuildYmlSections loads the project's build.yml distro: + builder:
+// blocks. Mirrors the loader path used by ov image build for the same
+// data — bootstrap VM builds need the distro.<name>.pacstrap and
+// .bootloader templates plus the matching builder.<name> bootstrap
+// template.
+func loadBuildYmlSections() (*DistroConfig, *BuilderConfig, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return nil, nil, err
+	}
+	dc, bc, _, err := LoadBuildConfigForImage(dir)
+	return dc, bc, err
 }

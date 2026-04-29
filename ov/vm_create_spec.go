@@ -66,11 +66,15 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		return err
 	}
 
-	// Apply D13 key-injection resolution.
+	// Apply D13 key-injection resolution. The credential targets the
+	// SSH user the spec asks for — root for bootc/legacy paths, the
+	// named user for cloud_image / bootstrap VMs. The image MUST
+	// already have the user account created (via cloud_image base or
+	// bootloader install template); this only delivers the per-VM key.
 	smbiosOn, _ := ResolveKeyInjectionChannels(spec)
 	var smbiosCreds []string
 	if smbiosOn && pubKey != "" {
-		smbiosCreds = append(smbiosCreds, SmbiosCredForRootSSH(pubKey))
+		smbiosCreds = append(smbiosCreds, SmbiosCredForSSH(resolveVmSshUser(spec), "", pubKey))
 	}
 
 	// Resolve D17 firmware paths + per-VM NVRAM.

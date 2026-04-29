@@ -193,6 +193,16 @@ func mergeAfterBuild(name string, img *ResolvedImage) {
 func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg *Config, platform, engineName, containerfileContent string) error {
 	tags := imageTags(name, img, cfg)
 
+	// Pre-build phase for `from: builder:<name>` images: run the named
+	// kind:bootstrap builder in a privileged container, capture its
+	// rootfs.tar.gz into .build/<image>/<builder>.tar.gz so the
+	// Containerfile's ADD <builder>.tar.gz / step finds it.
+	if strings.HasPrefix(img.From, "builder:") {
+		if err := c.runPrivilegedBootstrap(engineName, dir, name, img); err != nil {
+			return err
+		}
+	}
+
 	var args []string
 
 	if c.Push {
@@ -212,6 +222,114 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 		return fmt.Errorf("%s build failed: %w", engine, err)
 	}
 
+	return nil
+}
+
+// runPrivilegedBootstrap executes the kind: bootstrap builder selected
+// by img.From ("builder:<name>") via RunPrivileged. The output rootfs
+// tarball lands at .build/<image>/<builder>.tar.gz, where the
+// Containerfile's ADD step picks it up.
+//
+// Skipped (returns nil) when img.From is not a builder ref. Errors when
+// the builder is missing, isn't kind: bootstrap, or doesn't have a
+// resolved BuilderImage on the ResolvedImage.
+func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedImage) error {
+	if !strings.HasPrefix(img.From, "builder:") {
+		return nil
+	}
+	builderName := strings.TrimPrefix(img.From, "builder:")
+	if img.BootstrapBuilderImage == "" {
+		return fmt.Errorf("image %s: from: builder:%s requires bootstrap_builder_image: in image.yml", imageName, builderName)
+	}
+	if img.BuilderConfig == nil {
+		return fmt.Errorf("image %s: build.yml builder: section is empty", imageName)
+	}
+	builder, ok := img.BuilderConfig.Builder[builderName]
+	if !ok {
+		return fmt.Errorf("image %s: builder %q is not declared in build.yml", imageName, builderName)
+	}
+	if !builder.IsBootstrap() {
+		return fmt.Errorf("image %s: builder %q is not kind: bootstrap (got kind=%q)", imageName, builderName, builder.Kind)
+	}
+	if img.DistroDef == nil {
+		return fmt.Errorf("image %s: distro %v has no resolved DistroDef", imageName, img.Distro)
+	}
+
+	output := builder.OutputArtifact
+	if output == "" {
+		output = "/out/rootfs.tar.gz"
+	}
+	outDest := filepath.Join(dir, ".build", imageName, fmt.Sprintf("%s.tar.gz", builderName))
+
+	// Skip rebuild when the staged tarball is already present and the
+	// builder image hash hasn't changed. Cheap stat is enough for now;
+	// content-addressing is a future optimization.
+	if _, err := os.Stat(outDest); err == nil {
+		fmt.Fprintf(os.Stderr, "Bootstrap %s already staged at %s — skipping\n", builderName, outDest)
+		return nil
+	}
+
+	// Resolve the builder image ref. Internal kind:image names get
+	// resolved to the newest local CalVer tag via the same machinery
+	// as `ov shell <name>` so build never tries to pull a `:latest`
+	// that ov doesn't emit.
+	builderRef := img.BootstrapBuilderImage
+	if !strings.Contains(builderRef, "/") {
+		resolved, err := resolveLocalImageRef(engine, builderRef)
+		if err != nil {
+			return fmt.Errorf("resolving builder image %q: %w (build the bootstrap_builder_image first)", builderRef, err)
+		}
+		builderRef = resolved
+	}
+
+	ctx := struct {
+		Distro          *DistroDef
+		Packages        []string
+		ExtraPacmanConf string
+		Arch            string
+		Variant         string
+	}{
+		Distro:   img.DistroDef,
+		Packages: bootstrapPackagesForImage(img),
+	}
+	// CachyOS et al. need extra repo blocks injected into pacman.conf
+	// before pacstrap so the new packages resolve from the right repos.
+	if img.DistroDef.Pacstrap != nil && len(img.DistroDef.Pacstrap.ExtraRepos) > 0 {
+		var b strings.Builder
+		for _, r := range img.DistroDef.Pacstrap.ExtraRepos {
+			fmt.Fprintf(&b, "[%s]\nServer = %s\n", r.Name, r.Server)
+		}
+		ctx.ExtraPacmanConf = b.String()
+	}
+
+	script, err := renderBootstrapScript(builder, ctx)
+	if err != nil {
+		return fmt.Errorf("rendering bootstrap script for %s: %w", imageName, err)
+	}
+
+	fmt.Fprintf(os.Stderr, "\n--- Bootstrap (%s) for %s ---\n", builderName, imageName)
+	if err := RunPrivileged(PrivilegedRun{
+		Image:      builderRef,
+		Script:     script,
+		OutputPath: output,
+		OutputDest: outDest,
+	}); err != nil {
+		return fmt.Errorf("running %s for %s: %w", builderName, imageName, err)
+	}
+	fmt.Fprintf(os.Stderr, "Wrote %s\n", outDest)
+	return nil
+}
+
+// bootstrapPackagesForImage returns base + per-image bootstrap packages.
+// Per-image overrides aren't currently surfaced via image.yml; this
+// returns just the distro defaults for now.
+func bootstrapPackagesForImage(img *ResolvedImage) []string {
+	if img.DistroDef == nil {
+		return nil
+	}
+	if img.DistroDef.Pacstrap != nil {
+		return img.DistroDef.Pacstrap.BasePackages
+	}
 	return nil
 }
 

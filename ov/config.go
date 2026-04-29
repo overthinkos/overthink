@@ -108,11 +108,16 @@ type ImageConfig struct {
 	// with a remediation hint pointing at `ov migrate description`.
 	// Internal read sites continue to reference these fields; they are
 	// always "" post-migration.
-	Status     string        `yaml:"status,omitempty"`
-	Info       string        `yaml:"info,omitempty"`
-	Base       string        `yaml:"base,omitempty"`
-	Bootc      bool          `yaml:"bootc,omitempty"`
-	Platforms  []string      `yaml:"platforms,omitempty"`
+	Status    string   `yaml:"status,omitempty"`
+	Info      string   `yaml:"info,omitempty"`
+	Base      string   `yaml:"base,omitempty"`
+	// From selects a non-registry base via "builder:<name>" — the named
+	// builder must be kind: bootstrap and runs as a pre-build privileged
+	// container that produces a rootfs tarball, then the Containerfile
+	// emits FROM scratch + ADD. Mutually exclusive with Base.
+	From                  string   `yaml:"from,omitempty"`
+	BootstrapBuilderImage string   `yaml:"bootstrap_builder_image,omitempty"`
+	Platforms             []string `yaml:"platforms,omitempty"`
 	Tag        string        `yaml:"tag,omitempty"`
 	Registry   string        `yaml:"registry,omitempty"`
 	Distro     []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
@@ -167,9 +172,13 @@ type ResolvedImage struct {
 	Version      string `json:"version,omitempty"` // CalVer version from image.yml
 	Status       string `json:"status,omitempty"`  // effective status (worst of image + layers)
 	Info         string `json:"info,omitempty"`    // aggregated info from image + layers
-	Base         string // Resolved base (external OCI ref or internal image name)
-	Bootc        bool
-	Platforms    []string
+	Base string // Resolved base (external OCI ref or internal image name)
+	// From mirrors ImageConfig.From after resolution. When non-empty
+	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
+	// ADD <staged-rootfs.tar.gz> instead of FROM <base>.
+	From                  string
+	BootstrapBuilderImage string
+	Platforms             []string
 	Tag          string
 	Registry     string
 	Pkg          string   // primary build format (first entry in BuildFormats) — for cache mounts, bootstrap
@@ -221,6 +230,15 @@ type ResolvedImage struct {
 
 	// Data image (scratch-based, data-only)
 	DataImage bool // true = FROM scratch, no runtime, no init, no services
+
+	// LayerCaps aggregates layer-contributed capabilities from this
+	// image's resolved layer composition (preserve_user, data_only,
+	// init_system_hint, oci_labels, etc.). Populated by ResolveImage
+	// via AggregateLayerCapabilities. Replaces the magic image-level
+	// flags (Bootc, DataImage) with a layer-derived surface — those
+	// fields remain during the cutover transition and are removed in
+	// the same commit once consumers migrate to LayerCaps.
+	LayerCaps *AggregatedLayerCaps `json:"-"`
 
 	// Derived fields
 	IsExternalBase bool   // true if base is external OCI image, false if internal
@@ -297,8 +315,18 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		Info:    img.Info,
 	}
 
-	// Data images are always FROM scratch — no base resolution needed
-	if img.DataImage {
+	// `from: builder:<name>` — non-registry base via a kind: bootstrap
+	// builder. Mutually exclusive with base:; pre-build phase produces
+	// a rootfs tarball, generator emits FROM scratch + ADD.
+	if img.From != "" {
+		if img.Base != "" {
+			return nil, fmt.Errorf("image %s: from: and base: are mutually exclusive", name)
+		}
+		resolved.From = img.From
+		resolved.BootstrapBuilderImage = img.BootstrapBuilderImage
+		resolved.Base = "scratch"
+		resolved.IsExternalBase = true
+	} else if img.DataImage {
 		resolved.Base = "scratch"
 		resolved.IsExternalBase = true
 	} else {
@@ -317,12 +345,6 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 		} else {
 			resolved.IsExternalBase = true
 		}
-	}
-
-	// Resolve bootc: image -> defaults -> false
-	resolved.Bootc = img.Bootc
-	if !resolved.Bootc {
-		resolved.Bootc = c.Defaults.Bootc
 	}
 
 	// Resolve platforms: image -> defaults -> ["linux/amd64", "linux/arm64"]

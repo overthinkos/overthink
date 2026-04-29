@@ -220,6 +220,41 @@ type VmSource struct {
 	// `ov vm import --update` invocation. Empty when the entry has
 	// never been re-synced (still matches the original adoption).
 	LastSyncedAt string `yaml:"last_synced_at,omitempty"`
+
+	// --- Bootstrap branch (Kind == "bootstrap") ---
+	//
+	// Builder names a kind:bootstrap builder declared in build.yml
+	// (e.g. "pacstrap", "debootstrap", "alpine-bootstrap"). The builder
+	// definition supplies the rootfs-creation template; the Distro field
+	// supplies the per-distro config (base packages, keyring init,
+	// repos, bootloader install).
+	Builder string `yaml:"builder,omitempty"`
+
+	// BuilderImage is the OCI image ref of the privileged builder used
+	// to host the rootfs creation step. Typically points at a
+	// project-internal image with arch-install-scripts / debootstrap /
+	// apk pre-installed (e.g. archlinux-pacstrap-builder). Required for
+	// privileged bootstrap builders.
+	BuilderImage string `yaml:"builder_image,omitempty"`
+
+	// Distro selects the DistroDef in build.yml whose Pacstrap /
+	// Debootstrap / AlpineBootstrap / Bootloader sub-blocks drive the
+	// bootstrap and bootloader install. Examples: "archlinux", "cachyos",
+	// "debian", "ubuntu", "alpine".
+	Distro string `yaml:"distro,omitempty"`
+
+	// Packages is the per-VM additional package list passed to the
+	// bootstrap command alongside the distro's base packages.
+	Packages []string `yaml:"packages,omitempty"`
+
+	// BootstrapArch picks the target architecture for bootstrap (mostly
+	// relevant for debootstrap which needs `--arch=amd64`/`arm64`).
+	// Defaults to host arch when empty.
+	BootstrapArch string `yaml:"bootstrap_arch,omitempty"`
+
+	// BootstrapVariant is debootstrap's `--variant=` argument
+	// (minbase|buildd|fakechroot|...). Defaults to "minbase".
+	BootstrapVariant string `yaml:"bootstrap_variant,omitempty"`
 }
 
 // VmChecksum is the integrity check for a VmSource URL fetch.

@@ -142,25 +142,56 @@ images:
           - npm
           - cargo
           - aur
+    archlinux-pacstrap-builder:
+        base: archlinux
+        distro:
+          - archlinux
+        build:
+          - pac
+        layers:
+          - pacstrap-builder
+    archlinux-pacstrap:
+        from: builder:pacstrap
+        bootstrap_builder_image: archlinux-pacstrap-builder
+        distro:
+          - archlinux
+        build:
+          - pac
+    cachyos-pacstrap-builder:
+        base: archlinux
+        distro:
+          - archlinux
+        build:
+          - pac
+        layers:
+          - pacstrap-builder
+    cachyos:
+        from: builder:pacstrap
+        bootstrap_builder_image: cachyos-pacstrap-builder
+        distro:
+          - cachyos
+          - archlinux
+        build:
+          - pac
     aurora:
         enabled: false
         base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
-        bootc: true
         platforms:
           - linux/amd64
         layers:
           - agent-forwarding
+          - bootc-base
           - sshd
           - ov-full
           - golang
     bazzite-ai:
         enabled: false
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
-        bootc: true
         platforms:
           - linux/amd64
         layers:
           - agent-forwarding
+          - bootc-base
           - build-toolchain
           - language-runtimes
           - ujust
@@ -605,7 +636,6 @@ images:
     openclaw-browser-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        bootc: true
         platforms:
           - linux/amd64
         layers:
@@ -762,7 +792,6 @@ images:
     selkies-desktop-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        bootc: true
         platforms:
           - linux/amd64
         distro:
@@ -1144,6 +1173,27 @@ images:
           - ov
           - eval-composition-layer
 builders:
+    pacstrap:
+        kind: bootstrap
+        privileged: true
+        output_artifact: /out/rootfs.tar.gz
+        cache_mounts:
+          - dst: /var/cache/pacman/pkg
+            sharing: locked
+        phases:
+            install:
+                container: |
+                    set -euo pipefail
+                    {{.Distro.Pacstrap.KeyringInitCmd}}
+                    mkdir -p /target /out
+                    {{- if .ExtraPacmanConf}}
+                    cat > /etc/pacman.conf.extra <<'CACHYOS_REPOS'
+                    {{.ExtraPacmanConf}}
+                    CACHYOS_REPOS
+                    cat /etc/pacman.conf.extra >> /etc/pacman.conf
+                    {{- end}}
+                    pacstrap -K -G /target {{range .Packages}}{{.}} {{end}}
+                    tar -C /target --xattrs --acls -czf /out/rootfs.tar.gz .
     aur:
         detect_config: aur
         cache_mounts:
@@ -1286,6 +1336,142 @@ distros:
                     {{- range .Options}} {{.}}{{end}}
                     {{- range .Packages}} \
                           {{.}}{{end}}
+        pacstrap:
+            base_packages:
+              - base
+              - base-devel
+              - linux
+              - linux-firmware
+              - openssh
+              - sudo
+              - cloud-init
+              - grub
+              - efibootmgr
+              - mkinitcpio
+            keyring_init_cmd: |
+                pacman-key --init && pacman-key --populate archlinux
+            mirrorlist_url: https://archlinux.org/mirrorlist/all/
+        bootloader:
+            install_template: |
+                # Seed common /etc files that mkinitcpio hooks expect
+                # so the initramfs build doesn't error on `file not found`.
+                : > {{.Mnt}}/etc/vconsole.conf
+                # Arch's default systemd preset is `disable *`. Without
+                # explicit enablement, sshd / cloud-init / qemu-guest-agent
+                # never start on first boot, and `ov vm ssh` times out
+                # during banner exchange because nothing is listening
+                # inside the guest. Enable them here so cloud-init can
+                # run on first boot and apply the seed-ISO user-data
+                # (user creation, ssh_authorized_keys, runcmd).
+                #
+                # Notes on unit names (Arch / cloud-init >=24.x):
+                #   - cloud-init.service no longer exists; the multi-stage
+                #     flow uses cloud-init-local, cloud-init-network,
+                #     cloud-config, cloud-final. Pulling in cloud-init.target
+                #     activates the whole chain.
+                #   - Each `systemctl enable <unit>` call is separate so a
+                #     single missing unit doesn't skip the rest.
+                #   - systemd-networkd + systemd-resolved are enabled too
+                #     because cloud-init-network.service has
+                #     `After=systemd-networkd-wait-online.service`. Without
+                #     a configured network unit, networkd-wait-online
+                #     never reaches ready, blocking cloud-init forever.
+                # cloud-init-main.service is the single-Python-process
+                # daemon (cloud-init >= 24.x); the four stage services
+                # (cloud-init-local / cloud-init-network / cloud-config /
+                # cloud-final) are SHIMS that connect to it via
+                # /run/cloud-init/share/*.sock. Without main enabled, the
+                # shims fail silently with "No such file or directory" on
+                # the socket and cloud-init never runs.
+                for unit in sshd qemu-guest-agent cloud-init-main cloud-init-local cloud-init-network cloud-config cloud-final systemd-networkd systemd-resolved; do
+                  arch-chroot {{.Mnt}} systemctl enable "$unit" 2>&1 | grep -v "^$" || true
+                done
+                # cloud-init.target has no [Install] WantedBy: it's a sync
+                # point activated by cloud-init-generator at boot time
+                # (ds-identify decides if cloud-init should run). Create the
+                # symlink statically so cloud-init.target gets pulled into
+                # multi-user.target reliably even when ds-identify mis-fires.
+                ln -sf /usr/lib/systemd/system/cloud-init.target {{.Mnt}}/etc/systemd/system/multi-user.target.wants/cloud-init.target
+                # Force-list NoCloud as the only datasource so ds-identify
+                # doesn't speculate or "FOUND nothing" when DMI / kernel
+                # cmdline aren't priming it. Without this, on bare Arch
+                # ds-identify defaults to MAYBE, the generator emits
+                # cloud-init.disabled, and cloud-init never runs.
+                mkdir -p {{.Mnt}}/etc/cloud/cloud.cfg.d
+                printf 'datasource_list: [ NoCloud ]\n' > {{.Mnt}}/etc/cloud/cloud.cfg.d/99-ov-noCloud.cfg
+                # Belt-and-suspenders: write /etc/cloud/ds-identify.cfg
+                # with `policy: enabled` so ds-identify ALWAYS enables
+                # cloud-init regardless of detection outcome — the seed
+                # ISO is guaranteed by the bootstrap-VM build path so
+                # there's nothing to detect.
+                printf 'policy: enabled\n' > {{.Mnt}}/etc/cloud/ds-identify.cfg
+                # Default DHCP profile for any virtio/eth/en* interface so
+                # systemd-networkd actually configures something at first
+                # boot. printf used (rather than heredoc) so YAML's leading
+                # whitespace doesn't end up in the .network file.
+                mkdir -p {{.Mnt}}/etc/systemd/network
+                printf '[Match]\nName=en* eth*\n[Network]\nDHCP=yes\n' > {{.Mnt}}/etc/systemd/network/20-wired.network
+                arch-chroot {{.Mnt}} grub-install --target=x86_64-efi \
+                  --efi-directory=/boot --bootloader-id=ov --removable
+                arch-chroot {{.Mnt}} grub-mkconfig -o /boot/grub/grub.cfg
+                # Create the SSH login user account (NO key baked in).
+                # Per-VM SSH keys are delivered at boot via SMBIOS type 11
+                # → systemd-tmpfiles → /home/<user>/.ssh/authorized_keys.
+                # That keeps the rootfs image identity-free (any key holder
+                # of the same image cannot SSH; only the operator with the
+                # corresponding private key for THIS VM can).
+                if [ -n "{{.SSHUser}}" ] && [ "{{.SSHUser}}" != "root" ]; then
+                  arch-chroot {{.Mnt}} useradd -m -G wheel -s /bin/bash {{.SSHUser}} 2>&1 | grep -v 'already exists' || true
+                  echo '{{.SSHUser}} ALL=(ALL) NOPASSWD:ALL' > {{.Mnt}}/etc/sudoers.d/99-{{.SSHUser}}
+                  chmod 0440 {{.Mnt}}/etc/sudoers.d/99-{{.SSHUser}}
+                fi
+            initramfs_template: |
+                # mkinitcpio prints WARNING for missing optional inputs but
+                # still produces a working initramfs; let that pass.
+                arch-chroot {{.Mnt}} mkinitcpio -P || true
+            fstab_template: |
+                # genfstab -U does not reliably resolve UUIDs for loop
+                # devices in privileged-container build mode (it inserts
+                # /dev/loopXpY paths that don't exist post-boot, dropping
+                # systemd into emergency mode). Hand-roll UUID-based fstab
+                # entries via blkid which always works.
+                ROOT_UUID=$(blkid -s UUID -o value "${LOOP}p2")
+                ESP_UUID=$(blkid -s UUID -o value "${LOOP}p1")
+                cat > {{.Mnt}}/etc/fstab <<FSTAB
+                # Generated by ov bootstrap-VM build.
+                #
+                # `nofail` on /boot prevents systemd from blocking the
+                # boot sequence on the ESP mount. Without it, an ESP
+                # whose udev by-uuid symlink shows up late drops the
+                # VM into emergency mode.
+                UUID=${ROOT_UUID}  /      {{.Rootfs}}  rw,relatime              0 1
+                UUID=${ESP_UUID}   /boot  vfat  rw,relatime,fmask=0022,dmask=0022,codepage=437,iocharset=ascii,shortname=mixed,utf8,nofail  0 2
+                FSTAB
+    cachyos:
+        inherits: archlinux
+        pacstrap:
+            base_packages:
+              - base
+              - base-devel
+              - linux-cachyos
+              - linux-cachyos-headers
+              - linux-firmware
+              - openssh
+              - sudo
+              - cloud-init
+              - grub
+              - efibootmgr
+              - mkinitcpio
+            keyring_init_cmd: |
+                pacman-key --init && pacman-key --populate archlinux && \
+                pacman-key --recv-keys F3B607488DB35A47 && \
+                pacman-key --lsign-key F3B607488DB35A47
+            mirrorlist_url: https://mirror.cachyos.org/mirrorlist.txt
+            extra_repos:
+              - {name: cachyos-v3,      server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
+              - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
+              - {name: cachyos,         server: "https://mirror.cachyos.org/repo/$arch/$repo"}
+              - {name: cachyos-extra,   server: "https://mirror.cachyos.org/repo/$arch/$repo"}
     debian:
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends
@@ -1507,7 +1693,8 @@ inits:
           - service
         layer_files:
           - '*.service'
-        requires_bootc: true
+        requires_capabilities:
+          - preserve_user
         model: file_copy
         fragment_dir: systemd
         stage_name: systemd-services
@@ -1605,6 +1792,77 @@ inits:
 # entity exists so `ov test libvirt info vm` and
 # `ov test spice * vm` resolve their session-libvirt domain.
 vm:
+    arch-pacstrap:
+        source:
+            kind: bootstrap
+            builder: pacstrap
+            builder_image: archlinux-pacstrap-builder
+            distro: archlinux
+            packages:
+              - sudo
+              - openssh
+              - qemu-guest-agent
+              - cloud-init
+              - grub
+              - efibootmgr
+            rootfs: ext4
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 20G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: arch
+            port: 12225
+            key_source: generate
+        cloud_init:
+            users:
+              - name: arch
+                sudo: true
+                shell: /bin/bash
+            runcmd:
+              - systemctl enable --now sshd
+              - systemctl enable --now qemu-guest-agent
+              # Diagnostic: write network + sshd state to /boot so it can
+              # be mount-inspected after a failed-boot cycle.
+              - "{ ip a; echo ===listen===; ss -tlnp; echo ===sshd===; systemctl status sshd --no-pager; } > /boot/ov-diag.txt 2>&1"
+    cachyos-vm:
+        source:
+            kind: bootstrap
+            builder: pacstrap
+            builder_image: cachyos-pacstrap-builder
+            distro: cachyos
+            packages:
+              - sudo
+              - openssh
+              - qemu-guest-agent
+              - cloud-init
+              - grub
+              - efibootmgr
+            rootfs: btrfs
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 25G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: cachy
+            port: 12226
+            key_source: generate
+        cloud_init:
+            users:
+              - name: cachy
+                sudo: true
+                shell: /bin/bash
+            runcmd:
+              - systemctl enable --now sshd
+              - systemctl enable --now qemu-guest-agent
     vm:
         source:
             kind: cloud_image

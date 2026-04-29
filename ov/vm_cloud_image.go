@@ -157,8 +157,12 @@ func BuildCloudImage(
 // VM as the same instance (first-boot directives re-fire per instance-id
 // change, which callers may or may not want).
 func RegenerateSeedISO(spec *VmSpec, seedPath, vmStateDir string, existingState *VmDeployState) error {
-	if spec.Source.Kind != "cloud_image" {
-		return nil // bootc VMs have no seed ISO
+	// Source-kind agnostic: any VM with a non-nil cloud_init: block gets a
+	// seed ISO. Cloud_image and bootstrap-VM both consume cloud-init via
+	// the NoCloud datasource; bootc-VM optionally does too when its image
+	// includes the cloud-init layer.
+	if spec.CloudInit == nil {
+		return nil
 	}
 
 	instanceID := ""

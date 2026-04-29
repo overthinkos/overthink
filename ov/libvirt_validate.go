@@ -124,10 +124,28 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 		if src.FromVm != "" || src.FromSnapshot != "" {
 			errs.Add("vm %q: source.from_vm / source.from_snapshot only valid when source.kind == clone", name)
 		}
+	case "bootstrap":
+		if src.Builder == "" {
+			errs.Add("vm %q: source.kind == bootstrap requires source.builder (name of a kind: bootstrap builder in build.yml)", name)
+		}
+		if src.Distro == "" {
+			errs.Add("vm %q: source.kind == bootstrap requires source.distro (selects DistroDef in build.yml)", name)
+		}
+		if src.Rootfs != "" {
+			switch src.Rootfs {
+			case "ext4", "xfs", "btrfs":
+				// OK
+			default:
+				errs.Add("vm %q: source.rootfs %q is not supported (want ext4, xfs, or btrfs)", name, src.Rootfs)
+			}
+		}
+		if src.URL != "" || src.Image != "" || src.Transport != "" {
+			errs.Add("vm %q: source.url / source.image / source.transport are not valid when source.kind == bootstrap", name)
+		}
 	case "":
-		errs.Add("vm %q: source.kind is required (cloud_image, bootc, clone, or imported)", name)
+		errs.Add("vm %q: source.kind is required (cloud_image, bootc, bootstrap, clone, or imported)", name)
 	default:
-		errs.Add("vm %q: source.kind %q is unknown (want cloud_image, bootc, clone, or imported)", name, src.Kind)
+		errs.Add("vm %q: source.kind %q is unknown (want cloud_image, bootc, bootstrap, clone, or imported)", name, src.Kind)
 	}
 
 	if src.Checksum.Type != "" && src.Checksum.Type != "sha256" {

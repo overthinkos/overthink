@@ -101,7 +101,7 @@ func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string,
 	}
 	layerOrder := append([]string{}, t.Image.Layers...)
 	layerOrder = append(layerOrder, overlayLayers...)
-	initName, initDef := t.Image.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Image.Bootc, t.Image.InitSystem)
+	initName, initDef := t.Image.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Image.InitSystem)
 	if initDef == nil || initDef.ServiceSchema == nil {
 		return "", "", nil
 	}

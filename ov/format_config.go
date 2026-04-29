@@ -25,6 +25,56 @@ type DistroDef struct {
 	// configured uid. Nil on distros whose canonical base images ship no
 	// pre-existing user account (fedora, arch, plain debian:13).
 	BaseUser *BaseUserDef `yaml:"base_user,omitempty"`
+
+	// Bootstrap-builder strategy configurations. Each is optional; only
+	// distros that support the strategy populate the corresponding block.
+	// Used by the kind:bootstrap builders in build.yml `builder:` section
+	// to render the actual bootstrap command (pacstrap, debootstrap, etc.)
+	Pacstrap        *PacstrapDef        `yaml:"pacstrap,omitempty"`
+	Debootstrap     *DebootstrapDef     `yaml:"debootstrap,omitempty"`
+	AlpineBootstrap *AlpineBootstrapDef `yaml:"alpine_bootstrap,omitempty"`
+
+	// Bootloader install templates rendered during VM disk builds for
+	// bootstrap-flavored VMs. Drives the chroot grub-install + initramfs
+	// generation. Distinct from bootc-VM which handles its own bootloader
+	// install internally via `bootc install to-disk`.
+	Bootloader *BootloaderDef `yaml:"bootloader,omitempty"`
+}
+
+// PacstrapDef configures pacstrap-flavored bootstrap (Arch, CachyOS).
+type PacstrapDef struct {
+	BasePackages    []string         `yaml:"base_packages,omitempty"`
+	KeyringInitCmd  string           `yaml:"keyring_init_cmd,omitempty"`
+	MirrorlistURL   string           `yaml:"mirrorlist_url,omitempty"`
+	ExtraRepos      []PacstrapRepo   `yaml:"extra_repos,omitempty"`
+}
+
+// PacstrapRepo describes an additional pacman repo (e.g. CachyOS repos)
+// to inject into /etc/pacman.conf inside the bootstrap target before
+// running pacstrap.
+type PacstrapRepo struct {
+	Name   string `yaml:"name"`
+	Server string `yaml:"server"`
+}
+
+// DebootstrapDef configures debootstrap-flavored bootstrap (Debian, Ubuntu).
+type DebootstrapDef struct {
+	Suite   string `yaml:"suite,omitempty"`
+	Mirror  string `yaml:"mirror,omitempty"`
+	Variant string `yaml:"variant,omitempty"` // default: minbase
+}
+
+// AlpineBootstrapDef configures `apk add --root` style bootstrap (Alpine).
+type AlpineBootstrapDef struct {
+	MirrorURL string `yaml:"mirror_url,omitempty"`
+}
+
+// BootloaderDef holds per-distro bootloader-install templates rendered
+// during VM disk builds. {{.Mnt}} expands to the target mount point.
+type BootloaderDef struct {
+	InstallTemplate   string `yaml:"install_template,omitempty"`
+	InitramfsTemplate string `yaml:"initramfs_template,omitempty"`
+	FstabTemplate     string `yaml:"fstab_template,omitempty"`
 }
 
 // BaseUserDef describes a user account that already exists in a base image.
@@ -172,54 +222,101 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 		return def
 	}
 	resolved := dc.resolveInherits(parent, maxDepth-1)
-	// BaseUser: child wins when set, otherwise inherit from parent. A child
-	// can still clear an inherited base_user by declaring `base_user: null`,
-	// though the nil-vs-absent distinction is the normal YAML semantic.
+
+	// "Child wins per non-nil/non-empty field, else inherit from parent"
+	// applied uniformly across every optional sub-block. This pattern
+	// scales as new sub-blocks are added (Pacstrap, Bootloader, etc.).
+	pickPtr := func(child, parent interface{}) interface{} {
+		// Caller passes typed pointers; return whichever is non-nil.
+		if child != nil && !isNilPtr(child) {
+			return child
+		}
+		return parent
+	}
+	_ = pickPtr // (placeholder; explicit per-field merges below for clarity)
+
 	baseUser := def.BaseUser
 	if baseUser == nil {
 		baseUser = resolved.BaseUser
 	}
-	// Child overrides parent for non-zero fields
-	if def.Bootstrap.InstallCmd != "" {
-		// Child has its own bootstrap — use child, but inherit formats if missing
-		if len(def.Formats) == 0 && len(resolved.Formats) > 0 {
-			merged := &DistroDef{
-				Inherits:    def.Inherits,
-				Bootstrap:   def.Bootstrap,
-				Workarounds: def.Workarounds,
-				Formats:     resolved.Formats,
-				BaseUser:    baseUser,
-			}
-			return merged
-		}
-		if def.BaseUser == nil && resolved.BaseUser != nil {
-			// Inherit base_user even when child has its own bootstrap
-			merged := *def
-			merged.BaseUser = baseUser
-			return &merged
-		}
-		return def
+	pacstrap := def.Pacstrap
+	if pacstrap == nil {
+		pacstrap = resolved.Pacstrap
 	}
-	// Child has no bootstrap — inherit everything from parent, but overlay
-	// child's formats (if any) and child's base_user (if any). The base_user
-	// overlay is critical because a child distro like `ubuntu` inherits the
-	// apt bootstrap from `debian` yet still needs to declare its own
-	// pre-existing uid account (ubuntu:1000 on ubuntu:24.04 base images).
+	debootstrap := def.Debootstrap
+	if debootstrap == nil {
+		debootstrap = resolved.Debootstrap
+	}
+	alpineBootstrap := def.AlpineBootstrap
+	if alpineBootstrap == nil {
+		alpineBootstrap = resolved.AlpineBootstrap
+	}
+	bootloader := def.Bootloader
+	if bootloader == nil {
+		bootloader = resolved.Bootloader
+	}
+
+	if def.Bootstrap.InstallCmd != "" {
+		// Child has its own bootstrap. Merge inherited optional sub-blocks
+		// onto it.
+		formats := def.Formats
+		if len(formats) == 0 {
+			formats = resolved.Formats
+		}
+		merged := &DistroDef{
+			Inherits:        def.Inherits,
+			Bootstrap:       def.Bootstrap,
+			Workarounds:     def.Workarounds,
+			Formats:         formats,
+			BaseUser:        baseUser,
+			Pacstrap:        pacstrap,
+			Debootstrap:     debootstrap,
+			AlpineBootstrap: alpineBootstrap,
+			Bootloader:      bootloader,
+		}
+		return merged
+	}
+	// Child has no bootstrap — inherit parent's bootstrap + workarounds,
+	// overlay child's formats / baseuser / new sub-blocks.
 	formats := resolved.Formats
 	if len(def.Formats) > 0 {
 		formats = def.Formats
 	}
-	if def.BaseUser != nil || len(def.Formats) > 0 {
-		merged := &DistroDef{
-			Inherits:    def.Inherits,
-			Bootstrap:   resolved.Bootstrap,
-			Workarounds: resolved.Workarounds,
-			Formats:     formats,
-			BaseUser:    baseUser,
-		}
-		return merged
+	merged := &DistroDef{
+		Inherits:        def.Inherits,
+		Bootstrap:       resolved.Bootstrap,
+		Workarounds:     resolved.Workarounds,
+		Formats:         formats,
+		BaseUser:        baseUser,
+		Pacstrap:        pacstrap,
+		Debootstrap:     debootstrap,
+		AlpineBootstrap: alpineBootstrap,
+		Bootloader:      bootloader,
 	}
-	return resolved
+	return merged
+}
+
+// isNilPtr is a small helper used by resolveInherits's per-field merge
+// pattern. Returns true for typed nil pointers; false for everything else.
+func isNilPtr(v interface{}) bool {
+	if v == nil {
+		return true
+	}
+	// Reflection-free shortcut: the merger only passes nilable pointer
+	// types; non-pointers reach here with non-nil interface boxes.
+	switch p := v.(type) {
+	case *BaseUserDef:
+		return p == nil
+	case *PacstrapDef:
+		return p == nil
+	case *DebootstrapDef:
+		return p == nil
+	case *AlpineBootstrapDef:
+		return p == nil
+	case *BootloaderDef:
+		return p == nil
+	}
+	return false
 }
 
 // AllFormatNames returns a sorted, deduplicated list of all format names across all distros.
@@ -304,6 +401,34 @@ type BuilderDef struct {
 	// means "this builder doesn't contribute to PATH" (aur — installs
 	// to /usr/bin via pacman -U).
 	PathContributions []string `yaml:"path_contributions,omitempty"`
+
+	// Kind discriminates between layer builders (default — produce
+	// artifacts COPY'd into the final image via multi-stage Containerfile)
+	// and bootstrap builders (produce a complete rootfs that REPLACES the
+	// FROM line via `FROM scratch + ADD`). Empty defaults to "layer".
+	Kind string `yaml:"kind,omitempty"`
+
+	// Privileged builders run as a pre-build podman invocation outside
+	// `podman build` (because pacstrap/debootstrap need /dev, namespaces,
+	// mount, which buildah's RUN does not reliably grant). The output
+	// (typically a tarball) is staged and then ADDed by the Containerfile.
+	Privileged bool `yaml:"privileged,omitempty"`
+
+	// OutputArtifact is the absolute path inside the privileged builder
+	// container where the produced artifact lands. The pre-build phase
+	// copies it out to .build/<image>/<builder-name>.<ext>. Required when
+	// Privileged is true.
+	OutputArtifact string `yaml:"output_artifact,omitempty"`
+}
+
+// IsBootstrap reports whether this builder produces a rootfs that
+// replaces the FROM line (kind: bootstrap). Defaults to false (layer
+// builder) when Kind is empty.
+func (b *BuilderDef) IsBootstrap() bool {
+	if b == nil {
+		return false
+	}
+	return b.Kind == "bootstrap"
 }
 
 // PhaseTemplate is the BuilderDef analog of FormatDef.PhaseTemplate.

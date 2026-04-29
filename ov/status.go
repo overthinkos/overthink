@@ -50,6 +50,19 @@ func (c *StatusCmd) Run() error {
 	if c.ReapOrphans {
 		return c.reapEphemeralOrphans()
 	}
+
+	// Surface deploy.yml validation errors at the top of output rather
+	// than swallowing them. Pre-fix: a malformed ephemeral.ttl or a
+	// validation rejection would cause LoadDeployConfig to fail, but
+	// `ov status` continued rendering image-label-driven results from
+	// running containers, hiding the validation error from operators
+	// who used `ov status` as their first check.
+	if _, derr := LoadDeployConfig(); derr != nil {
+		fmt.Fprintf(os.Stderr, "WARNING: deploy.yml has validation errors:\n  %v\n", derr)
+		fmt.Fprintln(os.Stderr, "(showing image-label-driven results below; resolve the errors to see deploy.yml-driven state)")
+		fmt.Fprintln(os.Stderr, "")
+	}
+
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err

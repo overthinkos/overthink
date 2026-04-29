@@ -371,6 +371,40 @@ func ValidateLibvirtDomain(name string, spec *VmSpec, errs *ValidationError) {
 				errs.Add("vm %q: libvirt.devices.video[%d]: model is required", name, i)
 			}
 		}
+		// Channel-path portability: reject literal /home/<user>/ paths
+		// in <channel><source path=/></channel>. Authors must use
+		// {{.VmStateDir}}/<file> or a relative path that the libvirt
+		// renderer expands at create time. See expandVmPathTemplate
+		// in libvirt_yaml_bridge.go for the supported template vars.
+		for i, ch := range lv.Devices.Channels {
+			validateLibvirtChannelPath(name, i, ch.Path, errs)
+			validateLibvirtChannelPath(name, i, ch.Source, errs)
+		}
+	}
+}
+
+// validateLibvirtChannelPath enforces path portability for libvirt
+// <channel> sockets. A literal /home/<user>/ path makes the config
+// non-portable across user accounts (the prior R10 incident:
+// /home/user/.../qga.sock blocked libvirt-backend boot for every
+// user not literally named "user"). The template form
+// {{.VmStateDir}}/qga.sock is the recommended replacement.
+func validateLibvirtChannelPath(name string, idx int, path string, errs *ValidationError) {
+	if path == "" {
+		return
+	}
+	if strings.HasPrefix(path, "/home/") {
+		// Allow the path through ONLY if it contains a template
+		// variable — those resolve at create time.
+		if strings.Contains(path, "{{") {
+			return
+		}
+		errs.Add(
+			"vm %q: libvirt.devices.channels[%d].path %q hardcodes a /home/<user> "+
+				"path; use '{{.VmStateDir}}/<file>' or a relative path that the "+
+				"libvirt renderer expands at create time (see /ov-dev:libvirt-renderer)",
+			name, idx, path,
+		)
 	}
 }
 

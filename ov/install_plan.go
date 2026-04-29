@@ -824,6 +824,7 @@ type EmitOpts struct {
 	Verify               bool // run layer tests after install
 	Pull                 bool // force re-fetch of remote refs / image pull
 	BuilderImageOverride string
+	K8sApply             bool // target=k8s: run `kubectl apply -k` after generating the kustomize tree
 
 	// ParentExec is the DeployExecutor of the parent deployment in a
 	// nested tree. Non-nil iff this target is dispatched as a child of

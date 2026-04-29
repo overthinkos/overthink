@@ -92,6 +92,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		RamMB:             parseRAMtoMB(resolveVmRam(spec)),
 		Cpus:              resolveVmCpus(spec),
 		SshPort:           resolveVmSshPort(spec),
+		VmStateDir:        vmStateDir,
 	}
 	// ExtraPortForwards intentionally empty — spec.Network.PortForwards is
 	// already read by the renderers directly. Populating rt here would

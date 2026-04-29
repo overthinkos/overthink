@@ -59,6 +59,15 @@ type VmRuntimeParams struct {
 	// ExtraPortForwards are additional "host:guest" TCP forwards on
 	// top of the SSH port. Used with user-mode networking.
 	ExtraPortForwards []string
+
+	// VmStateDir is the absolute path to the per-VM state directory
+	// (~/.local/share/ov/vm/ov-<name>/). Used by the libvirt YAML
+	// bridge to expand `{{.VmStateDir}}` template references in
+	// path-bearing libvirt attributes (channel <source path=>,
+	// graphics socket paths). Populated by the create-time caller
+	// (vm_create_spec.go::runVmSpecCreate) so author-supplied paths
+	// stay portable across users without hardcoded /home/<x>.
+	VmStateDir string
 }
 
 // boolPtrTrue returns true when p is non-nil and *p is true.

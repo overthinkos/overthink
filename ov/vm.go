@@ -14,7 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/tabwriter"
 
+	libvirt "github.com/digitalocean/go-libvirt"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
@@ -58,13 +60,30 @@ func vmDir() (string, error) {
 // Priority: libvirt → qemu
 func resolveVmBackend(configured string) (string, error) {
 	if configured == "libvirt" || configured == "auto" {
-		// Check for libvirt session socket
-		sockPath := libvirtSessionSocket()
-		if _, err := os.Stat(sockPath); err == nil {
+		picked, probed := libvirtSessionSocketWithProbes()
+		// `picked` is the last-resort dial target; we still need to
+		// confirm it exists. The earlier probes (in `probed`) ARE
+		// already stat'd inside libvirtSessionSocketWithProbes, but
+		// that function returns the legacy path when neither exists,
+		// so we re-stat here to be sure.
+		if _, err := os.Stat(picked); err == nil {
 			return "libvirt", nil
 		}
 		if configured == "libvirt" {
-			return "", fmt.Errorf("libvirt backend requires libvirt session daemon (socket not found at %s)", sockPath)
+			var trail strings.Builder
+			for _, p := range probed {
+				_, err := os.Stat(p)
+				if err == nil {
+					trail.WriteString(fmt.Sprintf("\n  %s — found", p))
+				} else {
+					trail.WriteString(fmt.Sprintf("\n  %s — not found", p))
+				}
+			}
+			return "", fmt.Errorf(
+				"libvirt backend requires libvirt session daemon (probed:%s\n"+
+					"configure libvirt session daemon or run: ov settings set vm.backend qemu)",
+				trail.String(),
+			)
 		}
 	}
 	if configured == "qemu" || configured == "auto" {
@@ -497,82 +516,157 @@ func (c *VmDestroyCmd) Run() error {
 // --- VmListCmd ---
 
 type VmListCmd struct {
-	All bool `short:"a" long:"all" help:"Show all VMs including stopped"`
+	All           bool `short:"a" long:"all" help:"Show all VMs including stopped"`
+	CleanOrphans  bool `long:"clean-orphans" help:"Detect and undefine orphan libvirt domains (defined but no qcow2 backing or state dir)"`
 }
 
 func (c *VmListCmd) Run() error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
+	if c.CleanOrphans {
+		return c.runCleanOrphans()
 	}
 
-	backend, err := resolveVmBackend(rt.VmBackend)
-	if err != nil {
-		return err
+	// Backend-agnostic listing — probe BOTH libvirt and QEMU and merge.
+	// Each probe is informational; a failure in one doesn't fail the
+	// whole command. Pre-fix behavior was to bail when the configured
+	// backend's probe failed, hiding running VMs in the OTHER backend.
+	type vmRow struct {
+		Name    string
+		Backend string
+		State   string
 	}
+	var rows []vmRow
+	var probeNotes []string
 
-	switch backend {
-	case "libvirt":
-		conn, err := connectLibvirt("")
-		if err != nil {
-			return err
-		}
+	// libvirt probe
+	if conn, err := connectLibvirt(""); err == nil {
 		defer conn.Close()
-
-		domains, err := conn.listOvDomains()
-		if err != nil {
-			return fmt.Errorf("listing VMs: %w", err)
-		}
-		if len(domains) == 0 {
-			fmt.Fprintln(os.Stderr, "No VMs found")
-			return nil
-		}
-		fmt.Println("NAME\tSTATE")
-		for _, d := range domains {
-			fmt.Printf("%s\t%s\n", d.Name, d.State)
-		}
-
-	case "qemu":
-		dir, err := vmDir()
-		if err != nil {
-			return err
-		}
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			if os.IsNotExist(err) {
-				fmt.Fprintln(os.Stderr, "No VMs found")
-				return nil
+		domains, derr := conn.listOvDomains()
+		if derr != nil {
+			probeNotes = append(probeNotes, fmt.Sprintf("(libvirt: listing failed: %v)", derr))
+		} else {
+			for _, d := range domains {
+				rows = append(rows, vmRow{Name: d.Name, Backend: "libvirt", State: d.State})
 			}
-			return err
 		}
+	} else {
+		probeNotes = append(probeNotes, fmt.Sprintf("(libvirt session daemon not reachable: %v)", err))
+	}
 
-		headerPrinted := false
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			name := entry.Name()
-			pidFile := filepath.Join(dir, name, "qemu.pid")
-			state := "stopped"
-			if data, err := os.ReadFile(pidFile); err == nil {
-				if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
-					if proc, err := os.FindProcess(pid); err == nil {
-						// Check if process exists
-						if err := proc.Signal(syscall.Signal(0)); err == nil {
-							state = "running"
+	// QEMU pidfile scan
+	if dir, err := vmDir(); err == nil {
+		entries, derr := os.ReadDir(dir)
+		if derr == nil {
+			for _, entry := range entries {
+				if !entry.IsDir() {
+					continue
+				}
+				name := entry.Name()
+				pidFile := filepath.Join(dir, name, "qemu.pid")
+				state := "stopped"
+				alive := false
+				if data, err := os.ReadFile(pidFile); err == nil {
+					if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil {
+						if proc, err := os.FindProcess(pid); err == nil {
+							if err := proc.Signal(syscall.Signal(0)); err == nil {
+								state = "running"
+								alive = true
+							}
 						}
 					}
 				}
+				// Skip QEMU rows that duplicate a libvirt-listed name —
+				// libvirt is authoritative when both backends know about
+				// the same domain.
+				duplicate := false
+				for _, existing := range rows {
+					if existing.Name == name {
+						duplicate = true
+						break
+					}
+				}
+				if duplicate {
+					continue
+				}
+				if !c.All && !alive {
+					continue
+				}
+				rows = append(rows, vmRow{Name: name, Backend: "qemu", State: state})
 			}
-			if !headerPrinted {
-				fmt.Println("NAME\tSTATE")
-				headerPrinted = true
-			}
-			fmt.Printf("%s\t%s\n", name, state)
 		}
-		if !headerPrinted {
-			fmt.Fprintln(os.Stderr, "No VMs found")
+	}
+
+	if len(rows) == 0 {
+		fmt.Fprintln(os.Stderr, "No VMs found")
+		for _, note := range probeNotes {
+			fmt.Fprintln(os.Stderr, note)
 		}
+		return nil
+	}
+
+	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "NAME\tBACKEND\tSTATE")
+	for _, r := range rows {
+		fmt.Fprintf(tw, "%s\t%s\t%s\n", r.Name, r.Backend, r.State)
+	}
+	if err := tw.Flush(); err != nil {
+		return err
+	}
+	for _, note := range probeNotes {
+		fmt.Fprintln(os.Stderr, note)
+	}
+	return nil
+}
+
+// runCleanOrphans detects orphan libvirt domains and undefines them.
+// A domain is "orphan" when:
+//   1. Defined in libvirt
+//   2. State == shut off (not running)
+//   3. Either: backing qcow2 doesn't exist, OR no matching state dir.
+//
+// Active (running) domains are never touched. Cleanup runs
+// DomainUndefineFlags(libvirt.DomainUndefineNvram) and removes the
+// per-VM state directory.
+func (c *VmListCmd) runCleanOrphans() error {
+	conn, err := connectLibvirt("")
+	if err != nil {
+		return fmt.Errorf("connecting to libvirt: %w", err)
+	}
+	defer conn.Close()
+	domains, err := conn.listOvDomains()
+	if err != nil {
+		return fmt.Errorf("listing domains: %w", err)
+	}
+	stateRoot, err := vmDir()
+	if err != nil {
+		return err
+	}
+	var orphans []string
+	for _, d := range domains {
+		if d.State == "running" {
+			continue
+		}
+		stateDir := filepath.Join(stateRoot, d.Name)
+		_, statErr := os.Stat(stateDir)
+		if statErr == nil {
+			continue // state dir present → not an orphan
+		}
+		orphans = append(orphans, d.Name)
+	}
+	if len(orphans) == 0 {
+		fmt.Println("no orphan libvirt domains")
+		return nil
+	}
+	for _, name := range orphans {
+		dom, derr := conn.lookupDomain(name)
+		if derr != nil {
+			fmt.Fprintf(os.Stderr, "warning: lookup %s: %v\n", name, derr)
+			continue
+		}
+		if uerr := conn.l.DomainUndefineFlags(dom, libvirt.DomainUndefineNvram); uerr != nil {
+			fmt.Fprintf(os.Stderr, "warning: undefine %s: %v\n", name, uerr)
+			continue
+		}
+		fmt.Printf("undefined orphan: %s\n", name)
 	}
 	return nil
 }

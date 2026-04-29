@@ -326,7 +326,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		c.Name = saved
 		return err
 	case "k8s":
-		return fmt.Errorf("target=k8s dispatch via tree walker not yet wired — use `ov deploy add --target kubernetes` directly")
+		return c.runK8s(plans, dir, opts)
 	case "pod":
 		// Pod target (formerly container). runContainer uses c.Name
 		// as the pod name; nested pods flatten the dotted path.
@@ -458,7 +458,7 @@ func (c *DeployDelCmd) Run() error {
 	case "pod":
 		return c.runContainerDel(paths)
 	case "k8s":
-		return fmt.Errorf("`ov deploy del` for target=k8s: not yet supported — use `kubectl delete -k`")
+		return c.runK8sDel(paths)
 	default:
 		return c.runContainerDel(paths)
 	}

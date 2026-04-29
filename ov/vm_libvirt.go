@@ -182,6 +182,7 @@ func ensureDomainSocketDirs(l *libvirt.Libvirt, dom libvirt.Domain) error {
 		return fmt.Errorf("reading domain XML: %w", err)
 	}
 	paths := extractGraphicsSocketPaths(xmlStr)
+	paths = append(paths, extractChannelSocketPaths(xmlStr)...)
 	for _, p := range paths {
 		dir := filepath.Dir(p)
 		if dir == "" || dir == "." || dir == "/" {
@@ -192,6 +193,51 @@ func ensureDomainSocketDirs(l *libvirt.Libvirt, dom libvirt.Domain) error {
 		}
 	}
 	return nil
+}
+
+// extractChannelSocketPaths finds `<channel type='unix'><source path='…'/></channel>`
+// paths in a libvirt domain XML. Same string-search approach as
+// extractGraphicsSocketPaths — looks for any `<source>` whose
+// containing element is a unix-type channel.
+//
+// Rationale: the qemu-guest-agent channel binds a unix socket; if
+// the parent directory doesn't exist (common when authors compose
+// the path with templating like {{.VmStateDir}}/qga.sock and the
+// VM state dir was just created), QEMU's bind(2) fails. Mirroring
+// the existing graphics-socket pre-create logic.
+func extractChannelSocketPaths(xmlStr string) []string {
+	var out []string
+	remaining := xmlStr
+	for {
+		i := strings.Index(remaining, "<channel")
+		if i < 0 {
+			return out
+		}
+		// Slice the channel element body to its closing tag.
+		end := strings.Index(remaining[i:], "</channel>")
+		if end < 0 {
+			return out
+		}
+		body := remaining[i : i+end]
+		remaining = remaining[i+end:]
+		if !strings.Contains(body, `type='unix'`) && !strings.Contains(body, `type="unix"`) {
+			continue
+		}
+		// Look for <source path='…'/> (or path="…").
+		for _, q := range []string{"path='", `path="`} {
+			si := strings.Index(body, q)
+			if si < 0 {
+				continue
+			}
+			rest := body[si+len(q):]
+			ei := strings.IndexAny(rest, `'"`)
+			if ei < 0 {
+				continue
+			}
+			out = append(out, rest[:ei])
+			break
+		}
+	}
 }
 
 // extractGraphicsSocketPaths finds `<listen type='socket' socket='…'/>`
@@ -340,19 +386,40 @@ exit 1
 // that's what every current distro ships; fall back to the legacy
 // path on older systems.
 func libvirtSessionSocket() string {
+	picked, _ := libvirtSessionSocketWithProbes()
+	return picked
+}
+
+// libvirtSessionSocketWithProbes returns both the picked socket path
+// AND the full list of paths attempted, so callers (resolveVmBackend
+// in particular) can format helpful error messages that show every
+// path probed instead of just the fallback. The picked path is empty
+// when none of the probed paths exists; in that case the fallback
+// path is still returned (it's the path the caller would attempt to
+// dial), but the second return surfaces the full probe trail.
+func libvirtSessionSocketWithProbes() (picked string, probed []string) {
 	dir := os.Getenv("XDG_RUNTIME_DIR")
 	if dir == "" {
 		dir = fmt.Sprintf("/run/user/%d", os.Getuid())
 	}
 	libvirtDir := filepath.Join(dir, "libvirt")
 
-	// Try modular (virtqemud) first — standard on libvirt ≥ 8.0.
+	// Probe order: modular (virtqemud) first — standard on libvirt
+	// ≥ 8.0 — then legacy monolithic socket as fallback.
 	modular := filepath.Join(libvirtDir, "virtqemud-sock")
+	legacy := filepath.Join(libvirtDir, "libvirt-sock")
+	probed = []string{modular, legacy}
+
 	if _, err := os.Stat(modular); err == nil {
-		return modular
+		return modular, probed
 	}
-	// Fallback to legacy monolithic socket.
-	return filepath.Join(libvirtDir, "libvirt-sock")
+	if _, err := os.Stat(legacy); err == nil {
+		return legacy, probed
+	}
+	// Neither exists. Return the legacy path as the caller's last
+	// resort dial target; the probe trail in `probed` shows what
+	// was checked.
+	return legacy, probed
 }
 
 // buildDomainXML constructs a minimal libvirt domain XML for a VM.

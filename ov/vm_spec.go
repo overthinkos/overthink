@@ -215,6 +215,11 @@ type VmSource struct {
 	// AdoptedAt is the ISO8601 timestamp when `ov vm import` first
 	// recorded this entry. Informational; aids audit trails.
 	AdoptedAt string `yaml:"adopted_at,omitempty"`
+
+	// LastSyncedAt is the ISO8601 timestamp of the most recent
+	// `ov vm import --update` invocation. Empty when the entry has
+	// never been re-synced (still matches the original adoption).
+	LastSyncedAt string `yaml:"last_synced_at,omitempty"`
 }
 
 // VmChecksum is the integrity check for a VmSource URL fetch.

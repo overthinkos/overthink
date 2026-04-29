@@ -1638,7 +1638,7 @@ vm:
                 channels:
                     - type: unix
                       name: org.qemu.guest_agent.0
-                      path: /home/user/.local/share/ov/vm/ov-vm/qga.sock
+                      path: '{{.VmStateDir}}/qga.sock'
                 graphics:
                     - type: spice
                       autoport: "yes"

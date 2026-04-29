@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -169,11 +170,20 @@ func writeVmCloneDeclaration(name, srcVm, srcSnap string, cloudInitClean bool) e
 	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name}
 	vmMap.Content = append(vmMap.Content, keyNode, entry)
 
-	// Re-marshal.
-	out, err := yaml.Marshal(&root)
-	if err != nil {
+	// Re-marshal with explicit 4-space indent matching the project's
+	// overthink.yml canonical style. Default `yaml.Marshal` produces
+	// the right indent BUT also re-flows quoted strings and key
+	// ordering in ways that pollute the diff; we use the encoder API
+	// for stable output. Mirrors migrate_deploy_v3.go which uses
+	// SetIndent(4) for the same reason.
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(4)
+	if err := enc.Encode(&root); err != nil {
 		return fmt.Errorf("marshaling updated YAML: %w", err)
 	}
+	_ = enc.Close()
+	out := []byte(buf.String())
 	tmp := target + ".tmp"
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", tmp, err)

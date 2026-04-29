@@ -339,15 +339,308 @@ func WriteVmImportDeclaration(name string, spec *VmSpec) error {
 		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
 		entry,
 	)
-	out, err := yaml.Marshal(&root)
-	if err != nil {
+	// Re-marshal with 4-space indent matching overthink.yml's
+	// canonical style.
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(4)
+	if err := enc.Encode(&root); err != nil {
 		return fmt.Errorf("marshaling YAML: %w", err)
 	}
+	_ = enc.Close()
+	out := []byte(buf.String())
 	tmp := target + ".tmp"
 	if err := os.WriteFile(tmp, out, 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", tmp, err)
 	}
 	return os.Rename(tmp, target)
+}
+
+// UpdateImportedVm re-reads the libvirt XML for the named domain and
+// overwrites only the source-derived fields on the matching vm.yml
+// entry, preserving operator-authored sub-mappings (snapshots:,
+// cloud_init:, ssh:, libvirt: by default — pass --replace-libvirt to
+// overwrite). Returns the updated spec for caller-side reporting.
+//
+// Field-merge semantics (see /ov-dev:libvirt-renderer "VM adoption"):
+//   - source.{libvirt_name,disk_path,disk_format} → replaced from XML
+//   - source.adopted_at → preserved (first-import timestamp)
+//   - source.last_synced_at → set to NOW
+//   - ram, cpus, machine, firmware, network.mode → replaced from XML
+//   - snapshots:, cloud_init:, ssh:, libvirt: → preserved by default
+func UpdateImportedVm(name, domainName string, replaceLibvirt bool) (*VmSpec, error) {
+	if name == "" {
+		return nil, fmt.Errorf("update: vm.yml entry name is required")
+	}
+	if domainName == "" {
+		domainName = name
+	}
+
+	// Read the fresh state from libvirt.
+	_, freshSpec, err := ImportFromLibvirt(domainName, name)
+	if err != nil {
+		return nil, fmt.Errorf("re-reading libvirt XML for %q: %w", domainName, err)
+	}
+	freshSpec.Source.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
+
+	// Locate the existing entry in vm.yml / overthink.yml.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	target := filepath.Join(cwd, "vm.yml")
+	if _, err := os.Stat(target); err != nil {
+		if os.IsNotExist(err) {
+			alt := filepath.Join(cwd, "overthink.yml")
+			if _, err2 := os.Stat(alt); err2 == nil {
+				target = alt
+			} else {
+				return nil, fmt.Errorf("neither vm.yml nor overthink.yml found in %s", cwd)
+			}
+		}
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		return nil, fmt.Errorf("reading %s: %w", target, err)
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil, fmt.Errorf("parsing %s: %w", target, err)
+	}
+	if root.Kind == 0 || len(root.Content) == 0 || root.Content[0].Kind != yaml.MappingNode {
+		return nil, fmt.Errorf("%s: top-level YAML is not a mapping", target)
+	}
+	topMap := root.Content[0]
+	vmMap := findOrCreateMapEntry(topMap, "vm")
+	entryNode := findMapEntryByKey(vmMap, name)
+	if entryNode == nil {
+		return nil, fmt.Errorf("%s: no kind:vm entry %q to update; run `ov vm import %s` first", target, name, domainName)
+	}
+
+	// Preserve adopted_at from existing entry; preserve operator-
+	// authored sub-mappings.
+	preservedAdoptedAt := readSourceField(entryNode, "adopted_at")
+	if preservedAdoptedAt != "" {
+		freshSpec.Source.AdoptedAt = preservedAdoptedAt
+	}
+
+	// Overwrite source-derived fields field-by-field, preserving any
+	// operator-added sibling keys at the top level (libvirt:, ssh:,
+	// snapshots:, cloud_init:, etc.).
+	replaceMapEntryByKey(entryNode, "source", buildImportedSourceNode(freshSpec))
+	replaceScalarByKey(entryNode, "ram", freshSpec.Ram)
+	replaceIntByKey(entryNode, "cpus", freshSpec.Cpus)
+	replaceScalarByKey(entryNode, "machine", freshSpec.Machine)
+	replaceScalarByKey(entryNode, "firmware", freshSpec.Firmware)
+	if freshSpec.Network != nil {
+		netNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		addStrPair(netNode, "mode", freshSpec.Network.Mode)
+		replaceMapEntryByKey(entryNode, "network", netNode)
+	}
+	if replaceLibvirt {
+		// V1 doesn't render a libvirt-block from imported VMs (the
+		// renderer reads from libvirt directly), so when caller asks
+		// to "replace", we drop the existing libvirt: key entirely.
+		removeMapEntryByKey(entryNode, "libvirt")
+	}
+
+	// Re-marshal with 4-space indent matching overthink.yml's style.
+	var buf strings.Builder
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(4)
+	if err := enc.Encode(&root); err != nil {
+		return nil, fmt.Errorf("marshaling YAML: %w", err)
+	}
+	_ = enc.Close()
+	tmp := target + ".tmp"
+	if err := os.WriteFile(tmp, []byte(buf.String()), 0o644); err != nil {
+		return nil, fmt.Errorf("writing %s: %w", tmp, err)
+	}
+	if err := os.Rename(tmp, target); err != nil {
+		return nil, fmt.Errorf("renaming %s → %s: %w", tmp, target, err)
+	}
+	return freshSpec, nil
+}
+
+// DiffImported compares the live libvirt XML against the on-disk
+// vm.yml entry's source-derived fields and returns a human-readable
+// list of differences. Empty list means "no drift". Each line has the
+// shape "field: <on-disk-value> → <fresh-value>".
+func DiffImported(name, domainName string) ([]string, error) {
+	if domainName == "" {
+		domainName = name
+	}
+	_, freshSpec, err := ImportFromLibvirt(domainName, name)
+	if err != nil {
+		return nil, err
+	}
+	cwd, _ := os.Getwd()
+	for _, fn := range []string{"vm.yml", "overthink.yml"} {
+		path := filepath.Join(cwd, fn)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		var doc struct {
+			Vm map[string]VmSpec `yaml:"vm"`
+		}
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			continue
+		}
+		existing, ok := doc.Vm[name]
+		if !ok {
+			continue
+		}
+		var diffs []string
+		if existing.Source.LibvirtName != freshSpec.Source.LibvirtName {
+			diffs = append(diffs, fmt.Sprintf("source.libvirt_name: %q → %q", existing.Source.LibvirtName, freshSpec.Source.LibvirtName))
+		}
+		if existing.Source.DiskPath != freshSpec.Source.DiskPath {
+			diffs = append(diffs, fmt.Sprintf("source.disk_path: %q → %q", existing.Source.DiskPath, freshSpec.Source.DiskPath))
+		}
+		if existing.Source.DiskFormat != freshSpec.Source.DiskFormat {
+			diffs = append(diffs, fmt.Sprintf("source.disk_format: %q → %q", existing.Source.DiskFormat, freshSpec.Source.DiskFormat))
+		}
+		if existing.Ram != freshSpec.Ram {
+			diffs = append(diffs, fmt.Sprintf("ram: %q → %q", existing.Ram, freshSpec.Ram))
+		}
+		if existing.Cpus != freshSpec.Cpus {
+			diffs = append(diffs, fmt.Sprintf("cpus: %d → %d", existing.Cpus, freshSpec.Cpus))
+		}
+		if existing.Machine != freshSpec.Machine {
+			diffs = append(diffs, fmt.Sprintf("machine: %q → %q", existing.Machine, freshSpec.Machine))
+		}
+		if existing.Firmware != freshSpec.Firmware {
+			diffs = append(diffs, fmt.Sprintf("firmware: %q → %q", existing.Firmware, freshSpec.Firmware))
+		}
+		oldMode := ""
+		if existing.Network != nil {
+			oldMode = existing.Network.Mode
+		}
+		newMode := ""
+		if freshSpec.Network != nil {
+			newMode = freshSpec.Network.Mode
+		}
+		if oldMode != newMode {
+			diffs = append(diffs, fmt.Sprintf("network.mode: %q → %q", oldMode, newMode))
+		}
+		return diffs, nil
+	}
+	return nil, fmt.Errorf("no vm.yml or overthink.yml entry for %q", name)
+}
+
+// findMapEntryByKey returns the value node of a key in a mapping,
+// or nil if absent.
+func findMapEntryByKey(parent *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			return parent.Content[i+1]
+		}
+	}
+	return nil
+}
+
+// readSourceField reads a string value at entryNode.source.<key>.
+func readSourceField(entryNode *yaml.Node, key string) string {
+	src := findMapEntryByKey(entryNode, "source")
+	if src == nil {
+		return ""
+	}
+	v := findMapEntryByKey(src, key)
+	if v == nil {
+		return ""
+	}
+	return v.Value
+}
+
+// replaceScalarByKey replaces (or adds) a scalar string value at
+// parent.<key>. Empty new-value removes the key.
+func replaceScalarByKey(parent *yaml.Node, key, newVal string) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			if newVal == "" {
+				parent.Content = append(parent.Content[:i], parent.Content[i+2:]...)
+				return
+			}
+			parent.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: newVal}
+			return
+		}
+	}
+	if newVal == "" {
+		return
+	}
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: newVal},
+	)
+}
+
+// replaceIntByKey replaces (or adds) an int value at parent.<key>.
+// Zero new-value removes the key.
+func replaceIntByKey(parent *yaml.Node, key string, newVal int) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			if newVal == 0 {
+				parent.Content = append(parent.Content[:i], parent.Content[i+2:]...)
+				return
+			}
+			parent.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: fmt.Sprintf("%d", newVal)}
+			return
+		}
+	}
+	if newVal == 0 {
+		return
+	}
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!int", Value: fmt.Sprintf("%d", newVal)},
+	)
+}
+
+// replaceMapEntryByKey replaces (or adds) a mapping value at
+// parent.<key>.
+func replaceMapEntryByKey(parent *yaml.Node, key string, newVal *yaml.Node) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content[i+1] = newVal
+			return
+		}
+	}
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		newVal,
+	)
+}
+
+// removeMapEntryByKey removes the key/value pair at parent.<key>.
+func removeMapEntryByKey(parent *yaml.Node, key string) {
+	for i := 0; i+1 < len(parent.Content); i += 2 {
+		if parent.Content[i].Value == key {
+			parent.Content = append(parent.Content[:i], parent.Content[i+2:]...)
+			return
+		}
+	}
+}
+
+// buildImportedSourceNode builds the YAML mapping for the source:
+// sub-block of an imported VM (used by UpdateImportedVm).
+func buildImportedSourceNode(spec *VmSpec) *yaml.Node {
+	source := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	addStrPair(source, "kind", "imported")
+	addStrPair(source, "libvirt_name", spec.Source.LibvirtName)
+	if spec.Source.DiskPath != "" {
+		addStrPair(source, "disk_path", spec.Source.DiskPath)
+	}
+	if spec.Source.DiskFormat != "" {
+		addStrPair(source, "disk_format", spec.Source.DiskFormat)
+	}
+	if spec.Source.AdoptedAt != "" {
+		addStrPair(source, "adopted_at", spec.Source.AdoptedAt)
+	}
+	if spec.Source.LastSyncedAt != "" {
+		addStrPair(source, "last_synced_at", spec.Source.LastSyncedAt)
+	}
+	return source
 }
 
 // buildImportedVmNode constructs the YAML mapping for an imported VM

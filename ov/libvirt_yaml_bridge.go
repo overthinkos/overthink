@@ -32,6 +32,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"text/template"
 
 	libvirtxml "libvirt.org/go/libvirtxml"
 )
@@ -642,7 +643,7 @@ func buildDomainDevices(spec *VmSpec, rt VmRuntimeParams) *libvirtxml.DomainDevi
 
 	if lvd != nil {
 		for _, ch := range lvd.Channels {
-			out.Channels = append(out.Channels, mapChannel(ch))
+			out.Channels = append(out.Channels, mapChannel(ch, rt))
 		}
 		for _, s := range lvd.Serial {
 			out.Serials = append(out.Serials, mapSerial(s))
@@ -918,7 +919,7 @@ func mapInterface(iface LibvirtInterface) libvirtxml.DomainInterface {
 	return out
 }
 
-func mapChannel(ch LibvirtChannel) libvirtxml.DomainChannel {
+func mapChannel(ch LibvirtChannel, rt VmRuntimeParams) libvirtxml.DomainChannel {
 	out := libvirtxml.DomainChannel{}
 	if ch.Type == "spicevmc" {
 		out.Source = &libvirtxml.DomainChardevSource{SpiceVMC: &libvirtxml.DomainChardevSourceSpiceVMC{}}
@@ -927,12 +928,44 @@ func mapChannel(ch LibvirtChannel) libvirtxml.DomainChannel {
 		if path == "" {
 			path = ch.Path
 		}
+		path = expandVmPathTemplate(path, rt)
 		out.Source = &libvirtxml.DomainChardevSource{
 			UNIX: &libvirtxml.DomainChardevSourceUNIX{Mode: "bind", Path: path},
 		}
 	}
 	out.Target = &libvirtxml.DomainChannelTarget{VirtIO: &libvirtxml.DomainChannelTargetVirtIO{Name: ch.Name}}
 	return out
+}
+
+// expandVmPathTemplate substitutes Go-template variables in a libvirt
+// path attribute. Supports {{.VmStateDir}} and {{.VmName}}; passes
+// templates that error or contain no `{{` through unchanged so the
+// fast path stays free.
+//
+// Authored as a defensive measure against literal `/home/<user>/...`
+// paths in libvirt snippets — see /ov-dev:libvirt-renderer for the
+// design rationale and the prior R10 incident where a hardcoded
+// `/home/user/...` qga.sock path blocked libvirt-backend boot for
+// every user not literally named "user".
+func expandVmPathTemplate(path string, rt VmRuntimeParams) string {
+	if path == "" || !strings.Contains(path, "{{") {
+		return path
+	}
+	t, err := template.New("vmpath").Parse(path)
+	if err != nil {
+		return path
+	}
+	var buf strings.Builder
+	if err := t.Execute(&buf, struct {
+		VmStateDir string
+		VmName     string
+	}{
+		VmStateDir: rt.VmStateDir,
+		VmName:     rt.Name,
+	}); err != nil {
+		return path
+	}
+	return buf.String()
 }
 
 func mapSerial(s LibvirtSerial) libvirtxml.DomainSerial {

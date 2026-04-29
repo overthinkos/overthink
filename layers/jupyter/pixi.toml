@@ -32,6 +32,10 @@ polars = "*"
 pyarrow = "*"
 duckdb = "*"
 
+# NLP
+spacy = "*"
+spacy-model-en_core_web_sm = "*"
+
 # Utilities
 black = "*"
 pytest = "*"
@@ -46,6 +50,7 @@ start-jupyter = "bash -c 'if [ -n \"${JUPYTER_TOKEN_FILE:-}\" ] && [ -f \"${JUPY
 verify-jupyter = "python -c 'import jupyterlab; print(f\"JupyterLab: {jupyterlab.__version__}\")'"
 verify-collaboration = "python -c 'import jupyter_collaboration; print(f\"jupyter-collaboration: {jupyter_collaboration.__version__}\")'"
 verify-mcp = "python -c 'import jupyter_mcp; print(f\"MCP: {jupyter_mcp.__version__}\")'"
+verify-spacy = "python -c 'import spacy; nlp = spacy.load(\"en_core_web_sm\"); doc = nlp(\"Hello world\"); print(f\"spaCy: {spacy.__version__}; tokens: {[t.text for t in doc]}\")'"
 verify-mcp-endpoint = "curl -sf http://localhost:8888/mcp -X POST -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"0.1.0\"}}}' && echo ' MCP OK' || echo 'MCP endpoint not responding'"
 
 [environments]

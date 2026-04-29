@@ -35,6 +35,11 @@ layer:
     - id: jupyter-lab-binary
       file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
       exists: true
+    # Verify spacy + en_core_web_sm model load — build-scope smoke for the NLP
+    # additions in pixi.toml. The verify-spacy pixi task does the actual import.
+    - id: spacy-import
+      command: ${HOME}/.pixi/envs/default/bin/python -c "import spacy; spacy.load('en_core_web_sm')"
+      exit_code: 0
     - id: jupyter-service
       scope: deploy
       service: jupyter

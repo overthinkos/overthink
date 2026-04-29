@@ -4,6 +4,14 @@ layer:
     packages:
       - qemu-guest-agent
 
+  deb:
+    packages:
+      - qemu-guest-agent
+
+  pac:
+    packages:
+      - qemu-guest-agent
+
 
   libvirt:
     - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>

@@ -286,6 +286,7 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 		Distro          *DistroDef
 		Packages        []string
 		ExtraPacmanConf string
+		ExtraAptSources string
 		Arch            string
 		Variant         string
 	}{
@@ -300,6 +301,25 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 			fmt.Fprintf(&b, "[%s]\nServer = %s\n", r.Name, r.Server)
 		}
 		ctx.ExtraPacmanConf = b.String()
+	}
+	// Debian-family security/backports apt sources injected before stage-2.
+	if img.DistroDef.Debootstrap != nil && len(img.DistroDef.Debootstrap.ExtraRepos) > 0 {
+		var b strings.Builder
+		for _, r := range img.DistroDef.Debootstrap.ExtraRepos {
+			suite := r.Suite
+			if suite == "" {
+				suite = img.DistroDef.Debootstrap.Suite
+			}
+			components := r.Components
+			if components == "" {
+				components = img.DistroDef.Debootstrap.Components
+				if components == "" {
+					components = "main"
+				}
+			}
+			fmt.Fprintf(&b, "echo 'deb %s %s %s' > /target/etc/apt/sources.list.d/%s.list\n", r.URL, suite, components, r.Name)
+		}
+		ctx.ExtraAptSources = b.String()
 	}
 
 	script, err := renderBootstrapScript(builder, ctx)
@@ -323,12 +343,20 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 // bootstrapPackagesForImage returns base + per-image bootstrap packages.
 // Per-image overrides aren't currently surfaced via image.yml; this
 // returns just the distro defaults for now.
+//
+// Mirrors baseBootstrapPackages in vm_bootstrap.go but at the OCI-image
+// build path (image.yml `from: builder:<name>` consumers). Same dispatch
+// rules: Pacstrap.BasePackages for pacstrap-flavored, Debootstrap.BasePackages
+// for debootstrap-flavored.
 func bootstrapPackagesForImage(img *ResolvedImage) []string {
 	if img.DistroDef == nil {
 		return nil
 	}
 	if img.DistroDef.Pacstrap != nil {
 		return img.DistroDef.Pacstrap.BasePackages
+	}
+	if img.DistroDef.Debootstrap != nil {
+		return img.DistroDef.Debootstrap.BasePackages
 	}
 	return nil
 }

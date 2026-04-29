@@ -58,10 +58,32 @@ type PacstrapRepo struct {
 }
 
 // DebootstrapDef configures debootstrap-flavored bootstrap (Debian, Ubuntu).
+//
+// Two-stage flow:
+//   1. `debootstrap --variant=<Variant> --components=<Components>
+//      --include=<IncludePackages,...> <Suite> /target <Mirror>`
+//      unpacks a minimal apt-aware rootfs.
+//   2. `chroot /target apt-get install -y <BasePackages>` lands the
+//      kernel, bootloader, sshd, cloud-init, and any other VM-class
+//      packages that aren't part of the minbase set.
 type DebootstrapDef struct {
-	Suite   string `yaml:"suite,omitempty"`
-	Mirror  string `yaml:"mirror,omitempty"`
-	Variant string `yaml:"variant,omitempty"` // default: minbase
+	Suite           string            `yaml:"suite,omitempty"`
+	Mirror          string            `yaml:"mirror,omitempty"`
+	Variant         string            `yaml:"variant,omitempty"`           // default: minbase
+	Components      string            `yaml:"components,omitempty"`        // "main" (Debian) | "main universe" (Ubuntu)
+	IncludePackages []string          `yaml:"include_packages,omitempty"`  // debootstrap --include=<csv>
+	BasePackages    []string          `yaml:"base_packages,omitempty"`     // chroot apt-get install <list>
+	ExtraRepos      []DebootstrapRepo `yaml:"extra_repos,omitempty"`       // optional security/backports
+}
+
+// DebootstrapRepo describes an additional apt repo to inject into
+// /etc/apt/sources.list.d/<name>.list inside the bootstrap target
+// before the chroot apt-get install in stage 2.
+type DebootstrapRepo struct {
+	Name       string `yaml:"name"`
+	URL        string `yaml:"url"`
+	Suite      string `yaml:"suite,omitempty"`
+	Components string `yaml:"components,omitempty"`
 }
 
 // AlpineBootstrapDef configures `apk add --root` style bootstrap (Alpine).

@@ -8,6 +8,16 @@ layer:
       - cloud-init
       - cloud-utils-growpart
 
+  deb:
+    packages:
+      - cloud-init
+      - cloud-guest-utils
+
+  pac:
+    packages:
+      - cloud-init
+      - cloud-guest-utils
+
 
   tasks:
     - mkdir: /etc/cloud/cloud.cfg.d

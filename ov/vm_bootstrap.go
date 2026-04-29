@@ -81,6 +81,7 @@ func BuildBootstrapVM(
 		Distro          *DistroDef
 		Packages        []string
 		ExtraPacmanConf string
+		ExtraAptSources string
 		Arch            string
 		Variant         string
 	}{
@@ -97,6 +98,26 @@ func BuildBootstrapVM(
 			fmt.Fprintf(&rb, "[%s]\nServer = %s\n", r.Name, r.Server)
 		}
 		rootfsCtx.ExtraPacmanConf = rb.String()
+	}
+	// Inject optional extra apt sources (security/backports) into
+	// /etc/apt/sources.list.d/ inside the chroot before stage-2 install.
+	if distro.Debootstrap != nil && len(distro.Debootstrap.ExtraRepos) > 0 {
+		var rb strings.Builder
+		for _, r := range distro.Debootstrap.ExtraRepos {
+			suite := r.Suite
+			if suite == "" {
+				suite = distro.Debootstrap.Suite
+			}
+			components := r.Components
+			if components == "" {
+				components = distro.Debootstrap.Components
+				if components == "" {
+					components = "main"
+				}
+			}
+			fmt.Fprintf(&rb, "echo 'deb %s %s %s' > /target/etc/apt/sources.list.d/%s.list\n", r.URL, suite, components, r.Name)
+		}
+		rootfsCtx.ExtraAptSources = rb.String()
 	}
 	bootstrapScript, err := renderBootstrapScript(builder, rootfsCtx)
 	if err != nil {
@@ -196,8 +217,16 @@ func BuildBootstrapVM(
 
 // baseBootstrapPackages returns the per-distro base package list
 // declared on the appropriate sub-block (Pacstrap / Debootstrap /
-// AlpineBootstrap). Used as the kernel set for `pacstrap /target`
-// alongside any spec-supplied additions.
+// AlpineBootstrap). Used as the kernel set passed to the bootstrap
+// template's `.Packages` field alongside any spec-supplied additions.
+//
+// Per-distro semantics:
+//   - Pacstrap: positional args to `pacstrap -K -G /target <pkgs>`;
+//     the entire .Packages list installs in one invocation.
+//   - Debootstrap: stage-2 chroot apt-get install list. Stage-1
+//     debootstrap's --variant + --include come from
+//     d.Debootstrap.{Variant,IncludePackages} read directly from the
+//     template; only stage-2 reads from .Packages.
 func baseBootstrapPackages(d *DistroDef) []string {
 	if d == nil {
 		return nil
@@ -206,9 +235,7 @@ func baseBootstrapPackages(d *DistroDef) []string {
 		return d.Pacstrap.BasePackages
 	}
 	if d.Debootstrap != nil {
-		// debootstrap takes its package set via --include= rather than
-		// positional packages; callers join into a comma-list.
-		return nil
+		return d.Debootstrap.BasePackages
 	}
 	return nil
 }

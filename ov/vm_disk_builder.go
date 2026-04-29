@@ -32,11 +32,16 @@ type DiskLayout struct {
 // commands after `# >>> install rootfs <<<` and before the
 // finalization (`# <<< install rootfs >>>`) markers.
 //
-// Output of the rendered script (when run inside the privileged builder):
-//   /out/disk.raw      — sparse raw disk
-//   /dev/loopX{p1,p2}  — ESP, root partitions (X varies)
-//   {{.Mnt}}           — root partition mounted
-//   {{.Mnt}}/boot      — ESP mounted
+// Layout (matches the standard Debian/Ubuntu installer layout):
+//   /out/disk.raw         — sparse raw disk
+//   /dev/loopX{p1,p2}     — ESP, root partitions (X varies)
+//   {{.Mnt}}              — root partition mounted (ext4/xfs/btrfs).
+//                           /boot lives here too, so kernel images,
+//                           initramfs files, and their compatibility
+//                           symlinks (e.g. /boot/vmlinuz on Ubuntu)
+//                           land on a Unix-permission-aware filesystem.
+//   {{.Mnt}}/boot/efi     — ESP mounted (FAT32). Only EFI binaries
+//                           (BOOTX64.EFI, grubx64.efi) live here.
 //
 // The script unmounts and detaches the loop device on exit (trap),
 // then `qemu-img convert` produces /out/disk.qcow2.
@@ -46,7 +51,7 @@ RAW=/out/disk.raw
 truncate -s {{.SizeBytesOrSuffix}} "$RAW"
 LOOP=$(losetup --find --show --partscan "$RAW")
 trap '
-  umount {{.Mnt}}/boot 2>/dev/null || true
+  umount {{.Mnt}}/boot/efi 2>/dev/null || true
   umount {{.Mnt}} 2>/dev/null || true
   losetup -d "$LOOP" 2>/dev/null || true
 ' EXIT
@@ -60,8 +65,8 @@ mkfs.fat -F32 "${LOOP}p1"
 {{.MkfsCmd}} "${LOOP}p2"
 mkdir -p {{.Mnt}}
 mount "${LOOP}p2" {{.Mnt}}
-mkdir -p {{.Mnt}}/boot
-mount "${LOOP}p1" {{.Mnt}}/boot
+mkdir -p {{.Mnt}}/boot/efi
+mount "${LOOP}p1" {{.Mnt}}/boot/efi
 # >>> install rootfs <<<
 `
 
@@ -70,7 +75,7 @@ mount "${LOOP}p1" {{.Mnt}}/boot
 // form the full bash body passed to RunPrivileged.
 const diskBuildFinalizeTmpl = `# <<< install rootfs >>>
 sync
-umount {{.Mnt}}/boot
+umount {{.Mnt}}/boot/efi
 umount {{.Mnt}}
 losetup -d "$LOOP"
 trap - EXIT

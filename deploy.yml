@@ -64,6 +64,16 @@ deployment:
         vm: cachyos-vm
         disposable: true
         lifecycle: dev
+    debian-debootstrap-vm:
+        target: vm
+        vm: debian-debootstrap
+        disposable: true
+        lifecycle: dev
+    ubuntu-debootstrap-vm:
+        target: vm
+        vm: ubuntu-debootstrap
+        disposable: true
+        lifecycle: dev
     # =================================================================
     # Bed 1: arch-vm (target: vm)
     # ---------------------------------------------------------------

@@ -113,7 +113,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 
 	userMap["users"] = composeUsers(spec, ci, rt)
 
-	packages := composePackages(ci.Packages)
+	packages := composePackages(ci.Packages, spec.Source.Distro)
 	if len(packages) > 0 {
 		userMap["packages"] = packages
 	}
@@ -273,10 +273,21 @@ func applySSHDefaults(entry map[string]interface{}, rt CloudInitRuntimeParams) {
 	}
 }
 
-// composePackages unions ov's minimum {openssh, curl, tar} with the
-// user's declared packages, preserving the user's order for extras.
-func composePackages(userPkgs []string) []string {
-	minimum := []string{"openssh", "curl", "tar"}
+// composePackages unions ov's minimum SSH+curl+tar package set with
+// the user's declared packages, preserving the user's order for extras.
+//
+// The minimum SSH package name is distro-aware: `openssh` on
+// Arch/Fedora, `openssh-server` on Debian/Ubuntu. Without this, cloud-
+// init's package-install module hard-fails on Debian (`E: Unable to
+// locate package openssh`), which then fails cloud-init-network →
+// cloud-init.target → qemu-guest-agent stays stuck waiting forever.
+func composePackages(userPkgs []string, distro string) []string {
+	sshPkg := "openssh"
+	switch distro {
+	case "debian", "ubuntu":
+		sshPkg = "openssh-server"
+	}
+	minimum := []string{sshPkg, "curl", "tar"}
 	seen := map[string]bool{}
 	var out []string
 	for _, p := range minimum {
@@ -297,9 +308,18 @@ func composePackages(userPkgs []string) []string {
 // composeRunCmd prepends ov's minimum boot tasks, appends the user's
 // runcmd, and injects the ov_install URL download runcmd when
 // strategy == "url".
+//
+// The sshd unit name is distro-aware: `sshd` on Arch/Fedora,
+// `ssh` on Debian/Ubuntu (where the systemd unit is named `ssh.service`
+// — `sshd.service` is just a symlink that systemd refuses to enable).
 func composeRunCmd(spec *VmSpec, ci *VmCloudInit, rt CloudInitRuntimeParams) []interface{} {
 	var runcmd []interface{}
-	runcmd = append(runcmd, "systemctl enable --now sshd")
+	sshUnit := "sshd"
+	switch spec.Source.Distro {
+	case "debian", "ubuntu":
+		sshUnit = "ssh"
+	}
+	runcmd = append(runcmd, fmt.Sprintf("systemctl enable --now %s", sshUnit))
 
 	for _, cmd := range ci.RunCmd {
 		runcmd = append(runcmd, cmd)

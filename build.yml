@@ -216,6 +216,20 @@ builders:
         env:
             PIXI_CACHE_DIR: /tmp/pixi-cache
             RATTLER_CACHE_DIR: /tmp/rattler-cache
+        # Runtime env contract — emitted into the final image's ENV PATH +
+        # the org.overthinkos.path_append / org.overthinkos.env_layers
+        # OCI labels when any layer in the image triggers this builder.
+        # Used to live on layers/pixi/layer.yml; moved here in 2026-04-29
+        # so images that use pixi via pixi.toml-triggered builds (jupyter,
+        # openwebui, immich-ml, …) get the env contract automatically
+        # without needing pixi as a top-level layer for sibling-grouped
+        # auto-intermediate inheritance.
+        path_contributions:
+            - "~/.pixi/bin"
+            - "~/.pixi/envs/default/bin"
+        runtime_env:
+            PIXI_CACHE_DIR: "~/.cache/pixi"
+            RATTLER_CACHE_DIR: "~/.cache/rattler"
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER {{.UID}}

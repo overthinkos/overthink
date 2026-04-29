@@ -866,7 +866,10 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
 }
 
-// writeLayerEnv collects env configs from all layers and writes ENV directives
+// writeLayerEnv collects env configs from all layers and writes ENV directives.
+// Builder-triggered runtime env contributions (RuntimeEnv + PathContributions
+// on BuilderDef) are merged in alongside layer contributions — see
+// collectBuilderRuntimeEnv.
 func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *ResolvedImage) {
 	var configs []*EnvConfig
 
@@ -879,6 +882,8 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 			}
 		}
 	}
+
+	configs = append(configs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
 
 	if len(configs) == 0 {
 		return
@@ -1339,6 +1344,57 @@ func (g *Generator) layerNeedsBuilder(layer *Layer, builderDef *BuilderDef) bool
 	return false
 }
 
+// collectBuilderRuntimeEnv returns synthesised EnvConfig entries for every
+// builder triggered by any layer in layerOrder. Each builder contributes at
+// most one config — the same builder is not double-counted even when many
+// layers trigger it. Used by writeLayerEnv (Containerfile ENV emission) and
+// writeLabels (org.overthinkos.path_append + org.overthinkos.env_layers).
+//
+// The "runtime env contract" idea moved from the pixi LAYER to the pixi
+// BUILDER in 2026-04-29 because layer-level env: + path_append: only
+// reached an image when (a) the layer was a top-level entry on the image
+// or (b) sibling-grouped auto-intermediate inheritance carried it through.
+// Images using pixi via pixi.toml-triggered builds (jupyter, openwebui,
+// immich-ml, …) had neither, and ended up with /usr/local/bin:/usr/bin
+// at runtime — supervisord couldn't find `jupyter` in PATH, even though
+// the binary lived at ~/.pixi/envs/default/bin/jupyter. Threading via the
+// BUILDER means any image whose layers trigger pixi gets the contract
+// automatically.
+func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedImage) []*EnvConfig {
+	if img == nil || img.BuilderConfig == nil {
+		return nil
+	}
+	var out []*EnvConfig
+	for _, builderName := range img.BuilderConfig.BuilderNames() {
+		def := img.BuilderConfig.Builder[builderName]
+		if def == nil {
+			continue
+		}
+		if len(def.RuntimeEnv) == 0 && len(def.PathContributions) == 0 {
+			continue
+		}
+		triggered := false
+		for _, layerName := range layerOrder {
+			layer, ok := g.Layers[layerName]
+			if !ok {
+				continue
+			}
+			if g.layerNeedsBuilder(layer, def) {
+				triggered = true
+				break
+			}
+		}
+		if !triggered {
+			continue
+		}
+		out = append(out, &EnvConfig{
+			Vars:       def.RuntimeEnv,
+			PathAppend: def.PathContributions,
+		})
+	}
+	return out
+}
+
 // buildStageContext creates the template context for a builder's stage_template.
 func (g *Generator) buildStageContext(layer *Layer, builderName string, builderDef *BuilderDef, img *ResolvedImage, builderRef string) *BuildStageContext {
 	stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
@@ -1779,7 +1835,11 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 	writeJSONLabel(b, LabelRoutes, routes)
 
-	// Layer env vars: merged from all layers
+	// Layer env vars: merged from all layers + builder runtime contributions.
+	// Both sources funnel into the same OCI labels so deploy-mode consumers
+	// of `org.overthinkos.path_append` and `org.overthinkos.env_layers` see
+	// the full effective env regardless of whether it came from a layer's
+	// `env:`/`path_append:` or a builder's `runtime_env:`/`path_contributions:`.
 	var envConfigs []*EnvConfig
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
@@ -1787,6 +1847,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 			envConfigs = append(envConfigs, layer.envConfig)
 		}
 	}
+	envConfigs = append(envConfigs, g.collectBuilderRuntimeEnv(layerOrder, img)...)
 	if len(envConfigs) > 0 {
 		merged := MergeEnvConfigs(envConfigs)
 		if len(merged.Vars) > 0 {

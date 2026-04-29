@@ -415,14 +415,24 @@ type BuilderDef struct {
 	CopyArtifacts   []CopyDef         `yaml:"copy_artifacts,omitempty"`
 	CopyBinary      *CopyDef          `yaml:"copy_binary,omitempty"`
 
-	// PathContributions lists sub-paths under the builder's install prefix
-	// that should be added to PATH on deploy targets. Used by the compiler
-	// (install_build.go) to derive implicit PATH additions from builder
-	// outputs (pixi env bin, cargo bin, npm-global bin). Authors can
-	// override per-layer via layer.yml path_append: as today. Empty list
-	// means "this builder doesn't contribute to PATH" (aur — installs
+	// PathContributions lists HOME-relative paths the builder's runtime
+	// artefacts live under (e.g. "~/.pixi/envs/default/bin"). When any
+	// layer in an image triggers the builder via DetectFiles/DetectConfig,
+	// these paths are emitted into the final image's `ENV PATH=...` and
+	// the `org.overthinkos.path_append` OCI label by writeLayerEnv +
+	// emitLabels in generate.go. Authors can also add layer-level entries
+	// via layer.yml `path_append:` — both contribute to the same merged
+	// PATH. Empty list means the builder doesn't contribute (aur installs
 	// to /usr/bin via pacman -U).
 	PathContributions []string `yaml:"path_contributions,omitempty"`
+
+	// RuntimeEnv lists environment variables the builder contributes to the
+	// final image when triggered by any layer (e.g. PIXI_CACHE_DIR pointing
+	// at the user's persistent cache). Distinct from `Env` above — `Env`
+	// applies to the BUILDER stage of the multi-stage Containerfile;
+	// RuntimeEnv applies to the FINAL image's ENV directives. Tilde-prefixed
+	// values are expanded with the image's HOME at generate time.
+	RuntimeEnv map[string]string `yaml:"runtime_env,omitempty"`
 
 	// Kind discriminates between layer builders (default — produce
 	// artifacts COPY'd into the final image via multi-stage Containerfile)

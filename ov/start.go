@@ -306,6 +306,56 @@ func (c *StopCmd) Run() error {
 	return nil
 }
 
+// RestartCmd restarts a service container. In quadlet mode it issues a single
+// `systemctl --user restart`, which is atomic from systemd's perspective —
+// ExecStopPost (e.g. tailscale serve --off) runs before ExecStartPost
+// (tailscale serve), and the unit ends in either active or failed, never the
+// silent stopped state that a manual stop+start sequence can produce when
+// start fails.
+type RestartCmd struct {
+	Image    string `arg:"" help:"Image name or remote ref"`
+	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+}
+
+func (c *RestartCmd) Run() error {
+	imageName := c.Image
+	ref := StripURLScheme(c.Image)
+	if IsRemoteImageRef(ref) {
+		imageName = ParseRemoteRef(ref).Name
+	}
+
+	rt, err := ResolveRuntime()
+	if err != nil {
+		return err
+	}
+
+	quadletActive, _ := quadletExistsInstance(imageName, c.Instance)
+	if quadletActive {
+		svc := serviceNameInstance(imageName, c.Instance)
+		cmd := exec.Command("systemctl", "--user", "restart", svc)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("restarting %s: %w", svc, err)
+		}
+		fmt.Fprintf(os.Stderr, "Restarted %s\n", svc)
+		return nil
+	}
+
+	// Direct mode: delegate to engine restart.
+	runEngine := ResolveImageEngineForDeploy(imageName, c.Instance, rt.RunEngine)
+	engine := EngineBinary(runEngine)
+	name := containerNameInstance(imageName, c.Instance)
+
+	cmd := exec.Command(engine, "restart", name)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s restart %s failed: %w\n%s", engine, name, err, strings.TrimSpace(string(output)))
+	}
+	fmt.Fprintf(os.Stderr, "Restarted %s\n", name)
+	return nil
+}
+
 // stopTunnelForImage attempts to stop any tunnel for the given image (best-effort).
 func stopTunnelForImage(imageName, instance string) {
 	var tc *TunnelConfig

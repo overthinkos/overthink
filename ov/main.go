@@ -53,6 +53,7 @@ type CLI struct {
 	Migrate   MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
 	Rebuild   RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
 	Remove    RemoveCmd       `cmd:"" help:"Remove service container"`
+	Restart   RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
 	Secrets   SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Service   ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
 	Settings  SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`

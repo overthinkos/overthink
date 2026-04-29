@@ -344,10 +344,28 @@ func shellQuoteArgs(args []string) string {
 }
 
 // localizePort prefixes a port mapping with the given bind address.
-// "80:8000" -> "<bindAddr>:80:8000", "8080" -> "<bindAddr>:8080:8080"
-// Preserves protocol suffixes: "47998:47998/udp" -> "<bindAddr>:47998:47998/udp"
+//
+//	"80:8000"               -> "<bindAddr>:80:8000"
+//	"8080"                  -> "<bindAddr>:8080:8080"
+//	"127.0.0.1:8080:8080"   -> "127.0.0.1:8080:8080"  (explicit prefix preserved, NOT doubled)
+//	"[::1]:8080:8080"       -> "[::1]:8080:8080"
+//	"47998:47998/udp"       -> "<bindAddr>:47998:47998/udp"
+//
+// Routes through the canonical ParsePortMapping so the IP:H:C form is
+// recognised and an existing bind address survives unchanged. Bare
+// (unparseable) input falls through to the legacy prepend so we never
+// silently drop a port the operator declared.
 func localizePort(mapping string, bindAddr string) string {
-	// Extract and preserve protocol suffix (/udp, /tcp)
+	if p, ok := ParsePortMapping(mapping); ok {
+		out := p
+		if out.BindAddr == "" {
+			out.BindAddr = bindAddr
+		}
+		return FormatPortMapping(out)
+	}
+	// Fall back to the legacy prepend for shapes ParsePortMapping rejects
+	// — keeps existing behaviour for anything we don't recognise (callers
+	// of this helper expect a string back, not an error).
 	suffix := ""
 	clean := mapping
 	for _, proto := range []string{"/udp", "/tcp"} {

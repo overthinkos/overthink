@@ -358,6 +358,64 @@ func TestGenerateQuadletWithTailscaleExplicitRemap(t *testing.T) {
 	}
 }
 
+// TestGenerateQuadletPublishPortPreservesIPPrefix is the integration regression
+// for the 2026-04-29 cutover: when deploy.yml carried ports as
+// "127.0.0.1:8888:8888" (an explicit bind prefix that ov config also adds for
+// tunneled ports), the legacy localizePort double-prepended and produced
+// PublishPort=127.0.0.1:127.0.0.1:8888:8888 — a malformed mapping podman
+// rejects at start time. The fix routes localizePort through the canonical
+// ParsePortMapping; either input form (bare or IP-prefixed) is now normalized
+// to a single-prefixed line.
+func TestGenerateQuadletPublishPortPreservesIPPrefix(t *testing.T) {
+	tests := []struct {
+		name        string
+		ports       []string
+		bindAddress string
+		want        string
+		notWant     string
+	}{
+		{
+			name:        "bare 8888:8888 gets bind prepended (existing behavior)",
+			ports:       []string{"8888:8888"},
+			bindAddress: "127.0.0.1",
+			want:        "PublishPort=127.0.0.1:8888:8888\n",
+			notWant:     "PublishPort=127.0.0.1:127.0.0.1:8888:8888",
+		},
+		{
+			name:        "IP-prefixed 127.0.0.1:8888:8888 is preserved verbatim (regression)",
+			ports:       []string{"127.0.0.1:8888:8888"},
+			bindAddress: "127.0.0.1",
+			want:        "PublishPort=127.0.0.1:8888:8888\n",
+			notWant:     "PublishPort=127.0.0.1:127.0.0.1:8888:8888",
+		},
+		{
+			name:        "IPv6 bracket form is preserved verbatim",
+			ports:       []string{"[::1]:8080:80"},
+			bindAddress: "127.0.0.1",
+			want:        "PublishPort=[::1]:8080:80\n",
+			notWant:     "PublishPort=127.0.0.1:[::1]",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := QuadletConfig{
+				ImageName:   "myapp",
+				ImageRef:    "ghcr.io/test/myapp:latest",
+				Home:        "/home/user",
+				Ports:       tt.ports,
+				BindAddress: tt.bindAddress,
+			}
+			got := generateQuadlet(cfg)
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("expected %q in quadlet, got:\n%s", tt.want, got)
+			}
+			if strings.Contains(got, tt.notWant) {
+				t.Errorf("unexpected double-prefix %q in quadlet, got:\n%s", tt.notWant, got)
+			}
+		})
+	}
+}
+
 func TestGenerateQuadletWithHTTPSInsecureBackend(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "selkies-app",

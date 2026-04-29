@@ -624,49 +624,38 @@ func createCloudflaredTunnel(name string) (string, error) {
 	return "", fmt.Errorf("could not parse tunnel UUID from output: %s", outputStr)
 }
 
-// parseHostPorts extracts host-side ports from image port mappings.
-// For "443:18789" returns 443. For "5900" returns 5900.
-// Handles /udp and /tcp suffixes: "47998:47998/udp" returns 47998.
+// parseHostPorts extracts host-side ports from image port mappings via the
+// canonical ParsePortMapping. Unparseable entries are reported on stderr —
+// silent skipping was the root cause of an unrelated bug where tunnel rules
+// vanished without a diagnostic.
 func parseHostPorts(imagePorts []string) []int {
 	var result []int
 	for _, mapping := range imagePorts {
-		hostPort := mapping
-		if idx := strings.Index(mapping, ":"); idx != -1 {
-			hostPort = mapping[:idx]
-		}
-		clean, _ := stripPortSuffix(hostPort)
-		p, err := strconv.Atoi(clean)
-		if err != nil {
+		p, ok := ParsePortMapping(mapping)
+		if !ok {
+			fmt.Fprintf(os.Stderr,
+				"Warning: ignoring unparseable port mapping %q (expected forms: \"P\", \"H:C\", \"IP:H:C\")\n",
+				mapping)
 			continue
 		}
-		result = append(result, p)
+		result = append(result, p.Host)
 	}
 	return result
 }
 
 // buildPortMapping builds a host→container port map from image port mappings.
-// For "443:18789" maps 443→18789. For "5900" maps 5900→5900.
-// Handles /udp and /tcp suffixes: "47998:47998/udp" maps 47998→47998.
+// Same loud-failure policy as parseHostPorts — see comment above.
 func buildPortMapping(imagePorts []string) map[int]int {
 	m := make(map[int]int, len(imagePorts))
 	for _, mapping := range imagePorts {
-		if idx := strings.Index(mapping, ":"); idx != -1 {
-			hostStr := mapping[:idx]
-			contStr := mapping[idx+1:]
-			cleanHost, _ := stripPortSuffix(hostStr)
-			cleanCont, _ := stripPortSuffix(contStr)
-			host, err1 := strconv.Atoi(cleanHost)
-			container, err2 := strconv.Atoi(cleanCont)
-			if err1 == nil && err2 == nil {
-				m[host] = container
-			}
-		} else {
-			clean, _ := stripPortSuffix(mapping)
-			p, err := strconv.Atoi(clean)
-			if err == nil {
-				m[p] = p
-			}
+		p, ok := ParsePortMapping(mapping)
+		if !ok {
+			fmt.Fprintf(os.Stderr,
+				"Warning: ignoring unparseable port mapping %q (expected forms: \"P\", \"H:C\", \"IP:H:C\")\n",
+				mapping)
+			continue
 		}
+		m[p.Host] = p.Container
 	}
 	return m
 }

@@ -48,6 +48,45 @@ type VmSpec struct {
 	// took effect, probing a libvirt device).
 	Eval        []Check `yaml:"eval,omitempty"`
 	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
+
+	// --- Declarative snapshot intent (optional; default empty) ---
+	//
+	// Documents which named snapshots THIS template expects to have. Read
+	// by `ov vm snapshot list <vm>` to flag missing-but-expected snapshots.
+	// Actual existing snapshots live in registry.json under
+	// ~/.local/share/ov/vm/ov-<vm>/snapshots/registry.json — the
+	// declarative list is intent, not inventory.
+	Snapshots []VmSnapshotDecl `yaml:"snapshots,omitempty"`
+}
+
+// VmSnapshotDecl is one entry in the declarative `vm.<name>.snapshots`
+// list. Records intent — this template is expected to have a snapshot
+// of the given name and mode. The actual existence is tracked in the
+// per-VM registry.json. The `From` field is forward-looking: V1 builds
+// snapshot chains implicitly (whichever is current at create-time
+// becomes the parent); V2 may honor explicit chaining.
+type VmSnapshotDecl struct {
+	// Name uniquely identifies the snapshot within this VM (registry key).
+	Name string `yaml:"name"`
+
+	// Description is an optional human-facing note about what the snapshot
+	// captures. Persisted into registry.json.meta.
+	Description string `yaml:"description,omitempty"`
+
+	// Mode is "external" (default; clone-friendly, separate qcow2 file)
+	// or "internal" (embedded in the qcow2 via qemu-img snapshot). See
+	// /ov:vm "snapshot modes" for the tradeoff matrix.
+	Mode string `yaml:"mode,omitempty"`
+
+	// Quiesce, when true, instructs the snapshot creation path to flush
+	// guest state via guest-agent fsfreeze before snapshotting (with
+	// libvirt's plain freeze as fallback when qemu-guest-agent is absent).
+	Quiesce bool `yaml:"quiesce,omitempty"`
+
+	// From names the parent snapshot in a multi-tier chain. RESERVED for
+	// V2; V1 builds chains implicitly at create-time. Setting this in V1
+	// produces a one-line warning but is not enforced.
+	From string `yaml:"from,omitempty"`
 }
 
 // Note: per /ov-dev:disposable, disposability is a DEPLOY property and
@@ -60,10 +99,16 @@ type VmSpec struct {
 // matching deployment entries.
 
 // VmSource is the discriminated-union source for a VM disk image.
-// Kind selects the active branch — "cloud_image" uses URL/Checksum/Cache;
-// "bootc" uses Image/Transport/Rootfs/RootSize/KernelArgs.
+// Kind selects the active branch:
+//   - "cloud_image" — fetch a pre-built qcow2 from URL/Checksum/Cache
+//   - "bootc"       — `bootc install to-disk` from a kind:image entry
+//   - "clone"       — qcow2 backing-chain overlay on another VM's snapshot
+//   - "imported"    — adopt an externally-managed VM (virsh-defined,
+//                     virt-manager-created, etc.); ov tracks lifecycle
+//                     but does not rebuild the disk
 type VmSource struct {
-	// Kind discriminates the two branches. Must be "cloud_image" or "bootc".
+	// Kind discriminates the branches. Must be "cloud_image", "bootc",
+	// "clone", or "imported".
 	Kind string `yaml:"kind"`
 
 	// --- Cloud-image branch ---
@@ -123,6 +168,53 @@ type VmSource struct {
 	// KernelArgs are additional kernel command-line parameters appended
 	// via `bootc install --karg <...>`.
 	KernelArgs string `yaml:"kernel_args,omitempty"`
+
+	// --- Clone branch (Kind == "clone") ---
+	//
+	// FromVm names the parent kind:vm entity whose snapshot disk this
+	// clone backs onto. The parent VM must exist and be addressable in
+	// the same project. Required when Kind == "clone".
+	FromVm string `yaml:"from_vm,omitempty"`
+
+	// FromSnapshot names the snapshot on FromVm to use as the backing
+	// disk for the clone. The snapshot must exist (created via
+	// `ov vm snapshot create <FromVm> <FromSnapshot>`). Required when
+	// Kind == "clone". When the named snapshot is mode=internal, the
+	// build path auto-promotes via `qemu-img convert` before creating
+	// the overlay, with a one-line stderr note.
+	FromSnapshot string `yaml:"from_snapshot,omitempty"`
+
+	// CloudInitClean, when true, injects a `runcmd: cloud-init clean
+	// --machine-id --logs` entry into the clone's user-data so the
+	// guest regenerates its machine-id and SSH host keys on first boot.
+	// Default false to avoid surprising existing workflows. Recommended
+	// true for clones that will run alongside the parent on the same
+	// network.
+	CloudInitClean bool `yaml:"cloud_init_clean,omitempty"`
+
+	// --- Imported branch (Kind == "imported") ---
+	//
+	// LibvirtName is the libvirt domain name for the externally-managed
+	// VM. Often differs from ov's `ov-<vm>` prefixed naming convention,
+	// because adoption preserves the upstream tool's name. Required when
+	// Kind == "imported".
+	LibvirtName string `yaml:"libvirt_name,omitempty"`
+
+	// DiskPath is the absolute path to the disk image file as recorded
+	// in the libvirt domain's `<disk source file=/>` element. ov
+	// commands consult this for snapshot operations and clone-backing
+	// resolution; ov NEVER overwrites this file. Required when
+	// Kind == "imported".
+	DiskPath string `yaml:"disk_path,omitempty"`
+
+	// DiskFormat is the qemu image format declared by the libvirt
+	// domain (`<driver type=/>`): typically "qcow2" or "raw".
+	// Required when Kind == "imported".
+	DiskFormat string `yaml:"disk_format,omitempty"`
+
+	// AdoptedAt is the ISO8601 timestamp when `ov vm import` first
+	// recorded this entry. Informational; aids audit trails.
+	AdoptedAt string `yaml:"adopted_at,omitempty"`
 }
 
 // VmChecksum is the integrity check for a VmSource URL fetch.

@@ -612,6 +612,16 @@ func (c *DeployDelCmd) runContainerDel(paths *LedgerPaths) error {
 	if err := DeleteDeployRecord(paths, rec.DeployID); err != nil {
 		return err
 	}
+
+	// Ephemeral lifecycle teardown hook (pod-target).
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+			if tdErr := TeardownEphemeralLifecycle(&node, c.Name); tdErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
+			}
+		}
+	}
+
 	fmt.Printf("Removed container deploy %s\n", c.Name)
 	return nil
 }
@@ -898,6 +908,20 @@ func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *Dist
 }
 
 func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg *DistroConfig, builderCfg *BuilderConfig, opts EmitOpts) error {
+	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
+	// When the deploy is marked ephemeral, register the systemd
+	// transient timer + parent-detection metadata BEFORE any container
+	// build / quadlet emission. Pod-target ephemerals don't have a
+	// snapshot refcount (containers don't have backing chains), so
+	// the helper handles only timer + parent linkage in this path.
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
+			}
+		}
+	}
+
 	// Only the overlay build piece is implemented v1; the final
 	// container start (volumes, quadlet, traefik) is still routed
 	// through the existing `ov start` command.

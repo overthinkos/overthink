@@ -1,8 +1,9 @@
 package main
 
-// Disposable + lifecycle classification for deploy-shaped configs.
+// Disposable + lifecycle + ephemeral classification for deploy-shaped configs.
 //
-// Two independent fields with clearly separated roles:
+// Three fields, two with clearly separated roles plus one operational
+// counterpart:
 //
 //   disposable: <bool>    // LOAD-BEARING. Default false. Explicit opt-in.
 //                         //   `true` authorizes `ov rebuild <name>` to
@@ -10,28 +11,39 @@ package main
 //   lifecycle: <tier>     // INFORMATIONAL ONLY. Free-form human tag
 //                         //   (dev | qa | prod | custom-whatever).
 //                         //   Has ZERO effect on disposability.
+//   ephemeral: <block>    // OPERATIONAL MANDATE. Counterpart to
+//                         //   disposable's authorization. Presence
+//                         //   means "MUST be destroyed as soon as it
+//                         //   isn't needed anymore". Implies
+//                         //   `disposable: true` automatically (the
+//                         //   one documented exception to anti-
+//                         //   derivation, because ephemeral
+//                         //   STRENGTHENS the contract).
 //
-// There is DELIBERATELY no derivation from `lifecycle` to `disposable`.
-// `lifecycle: dev` does NOT imply `disposable: true`. A deploy is only
-// disposable when it literally carries `disposable: true`. This makes
-// the classification safe to use on shared hosts where unrelated
-// production services may run alongside — `ov rebuild` cannot touch
-// anything that isn't explicitly opted in.
+// Anti-derivation invariant (with one named exception):
+//   `lifecycle: dev` does NOT imply `disposable: true` — lifecycle is
+//   informational only.
+//   `ephemeral: ...` DOES imply `disposable: true` — ephemeral is a
+//   stronger guarantee, and "must be destroyed when not needed" can
+//   only be honored if "may be destroyed" is also true. Setting
+//   `ephemeral: true` together with `disposable: false` is a
+//   contradiction; the loader rejects it with a clear error.
 //
 // See /ov-dev:disposable for the schema + rationale, and CLAUDE.md
 // R10 for the verification-loop implications.
 
 // Classified is the small contract a config struct implements so the
-// ov CLI can ask "are you disposable?" / "what lifecycle tag do you
-// carry?" without caring whether the underlying struct is VmSpec
-// (vms.yml), DeploymentNode (deploy.yml), or a per-instance
-// override.
+// ov CLI can ask "are you disposable?" / "are you ephemeral?" /
+// "what lifecycle tag do you carry?" without caring whether the
+// underlying struct is VmSpec (vms.yml), DeploymentNode (deploy.yml),
+// or a per-instance override.
 //
-// Both fields are plain values — no pointers, no derivation. Default
-// zero value of a plain `bool` is `false`, which is exactly the
-// conservative "requires user confirmation" default we want.
+// IsDisposable returns true when the config carries `disposable: true`
+// OR is ephemeral (load-bearing implication). IsEphemeral is the
+// stricter check.
 type Classified interface {
 	IsDisposable() bool
+	IsEphemeral() bool
 	LifecycleTag() string
 }
 

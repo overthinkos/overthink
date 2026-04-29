@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -189,12 +190,17 @@ type DeploymentNode struct {
 	// disk path points at the same qcow2, etc.).
 	VmState *VmDeployState `yaml:"vm_state,omitempty"`
 
-	// --- Disposable / lifecycle classification (see /ov-dev:disposable) ---
+	// --- Disposable / lifecycle / ephemeral classification (see /ov-dev:disposable) ---
 
 	// Disposable, when true, authorizes `ov rebuild <name>` to
 	// destroy + rebuild + restart this deploy unattended. Default
 	// is false (conservative; explicit opt-in). There is NO
 	// derivation from Lifecycle. See CLAUDE.md R10.
+	//
+	// Load-bearing implication: when Ephemeral is non-nil, Disposable
+	// is auto-promoted to true at load time (see classification.go).
+	// Authoring `disposable: false` together with `ephemeral: ...` is
+	// rejected as a contradiction.
 	Disposable bool `yaml:"disposable,omitempty"`
 
 	// Lifecycle is a free-form human-facing tier tag (scratch | dev |
@@ -202,6 +208,32 @@ type DeploymentNode struct {
 	// ZERO effect on disposability. Consumed by `ov status
 	// --lifecycle <tier>` filters and display columns.
 	Lifecycle string `yaml:"lifecycle,omitempty"`
+
+	// Ephemeral is the operational-mandate counterpart to Disposable's
+	// authorization: presence indicates the deploy MUST be destroyed as
+	// soon as it isn't needed anymore (auto-cleanup at scenario end,
+	// SIGTERM, or TTL expiry). The block-form unmarshal accepts both
+	// `ephemeral: true` (boolean shorthand → defaults) and
+	// `ephemeral: { ttl: ..., keep_on_failure: ..., naming_pattern:
+	// ... }` (full block). nil means non-ephemeral.
+	Ephemeral *EphemeralLifetime `yaml:"ephemeral,omitempty"`
+
+	// FromSnapshot, on a target=vm deploy, names the snapshot on the
+	// referenced kind:vm to use as the cloned overlay's backing disk.
+	// Empty means "boot the template VM directly" (legacy behavior).
+	// When set, the deploy's vm-target Add path uses qemu-img backing-
+	// chain to materialize a fresh per-deploy disk from the snapshot.
+	// Required for ephemeral deploys against a VM that has snapshots;
+	// optional for persistent deploys (rare but supported).
+	FromSnapshot string `yaml:"from_snapshot,omitempty"`
+
+	// CloudInitClean, on a target=vm deploy, injects a `runcmd:
+	// cloud-init clean --machine-id --logs` entry into the clone's
+	// user-data so machine-id + ssh host keys regenerate inside the
+	// guest on first boot. Default false. Mirrors the
+	// VmSource.CloudInitClean field for clone-source templates;
+	// applies only to deploy-level cloning via FromSnapshot.
+	CloudInitClean bool `yaml:"cloud_init_clean,omitempty"`
 
 	// --- Recursive tree: nested deployments (schema v4) ---
 	//
@@ -222,10 +254,21 @@ type DeploymentNode struct {
 	Nested map[string]*DeploymentNode `yaml:"nested,omitempty"`
 }
 
-// IsDisposable returns the literal Disposable field. Implements the
-// Classified interface.
+// IsDisposable returns true when the node is explicitly disposable OR
+// is marked ephemeral (the load-bearing implication: ephemeral deploys
+// MUST be auto-destroyed and therefore MAY be — see /ov-dev:disposable
+// "the ephemeral exception"). Implements the Classified interface.
 func (c DeploymentNode) IsDisposable() bool {
-	return c.Disposable
+	return c.Disposable || c.IsEphemeral()
+}
+
+// IsEphemeral reports whether this deploy is marked ephemeral
+// (`ephemeral:` field present in deploy.yml). Equivalent to
+// `c.Ephemeral != nil`. The presence of the field is the marker; the
+// block's contents (TTL, keep_on_failure, naming_pattern) parameterize
+// the lifecycle.
+func (c DeploymentNode) IsEphemeral() bool {
+	return c.Ephemeral != nil
 }
 
 // HasChildren reports whether this node has any nested deployments.
@@ -346,6 +389,119 @@ func sortedNestedKeys(children map[string]*DeploymentNode) []string {
 	return out
 }
 
+// EphemeralLifetime parameterizes the auto-destruction lifecycle for a
+// deploy. The presence of this struct (Ephemeral != nil) is the marker;
+// fields default to sane values when the block-form is absent.
+//
+// YAML accepts both:
+//
+//	ephemeral: true             # boolean shorthand → defaults
+//	ephemeral:                  # block form
+//	  ttl: 30m
+//	  keep_on_failure: false
+//	  naming_pattern: "{{.Source}}-eph-{{.UUID6}}"
+type EphemeralLifetime struct {
+	// TTL is the maximum wall-clock lifetime of an instantiated
+	// ephemeral. Parsed via time.ParseDuration ("30m", "2h", "90s").
+	// When empty (boolean-shorthand authoring), defaults to "1h".
+	// The value is the safety floor: a systemd transient timer fires
+	// `ov deploy del <name> --force` after this duration if all
+	// higher-layer cleanup paths fail.
+	TTL string `yaml:"ttl,omitempty"`
+
+	// KeepOnFailure, when true, instructs the eval-runner integration
+	// to skip the post-scenario `ov deploy del` when assertions fail
+	// — leaves the instance alive (still subject to TTL) for operator
+	// inspection. Default false.
+	KeepOnFailure bool `yaml:"keep_on_failure,omitempty"`
+
+	// NamingPattern is the template for ephemeral instance names.
+	// Available variables: {{.Source}} (the deploy name), {{.UUID6}}
+	// (six-char random hex), {{.Iter}} (eval-iter counter when called
+	// from runner). Default: "{{.Source}}-eph-{{.UUID6}}".
+	NamingPattern string `yaml:"naming_pattern,omitempty"`
+
+	// boolForm captures whether YAML authored the field as a bare
+	// boolean (`ephemeral: true`) vs a block. Used for round-trip
+	// fidelity in `ov deploy show` and to distinguish "not set" from
+	// "set to true with all defaults" in error messages.
+	boolForm bool
+}
+
+// UnmarshalYAML accepts either a bare boolean (`ephemeral: true|false`)
+// or a mapping (`ephemeral: { ttl: 30m, ... }`). Boolean-false is
+// equivalent to omitting the field entirely (handled at the
+// DeploymentNode-level by the loader; this method only fires when the
+// node has the key set). Boolean-true populates an empty
+// EphemeralLifetime — defaults apply at validation time.
+func (e *EphemeralLifetime) UnmarshalYAML(node *yaml.Node) error {
+	if node == nil {
+		return nil
+	}
+	switch node.Kind {
+	case yaml.ScalarNode:
+		// Boolean shorthand. Reject anything that isn't a recognizable
+		// bool to surface authoring mistakes early.
+		switch strings.ToLower(strings.TrimSpace(node.Value)) {
+		case "true", "yes", "on":
+			e.boolForm = true
+			return nil
+		case "false", "no", "off", "":
+			// "false" is equivalent to absence. The deploy.yml
+			// loader's nil check still holds, but honor a literal
+			// `ephemeral: false` by leaving fields zero. The caller
+			// must check whether boolForm was set; in practice the
+			// load path interprets nil-or-zero as non-ephemeral.
+			return fmt.Errorf("ephemeral: false is not supported — omit the field instead (or set ephemeral: true / ephemeral: {block} to mark ephemeral)")
+		default:
+			return fmt.Errorf("ephemeral: scalar value %q is not a boolean", node.Value)
+		}
+	case yaml.MappingNode:
+		// Block form. Decode the underlying type without recursing
+		// through this UnmarshalYAML.
+		type rawEphemeral struct {
+			TTL           string `yaml:"ttl,omitempty"`
+			KeepOnFailure bool   `yaml:"keep_on_failure,omitempty"`
+			NamingPattern string `yaml:"naming_pattern,omitempty"`
+		}
+		var raw rawEphemeral
+		if err := node.Decode(&raw); err != nil {
+			return fmt.Errorf("ephemeral block: %w", err)
+		}
+		e.TTL = raw.TTL
+		e.KeepOnFailure = raw.KeepOnFailure
+		e.NamingPattern = raw.NamingPattern
+		e.boolForm = false
+		return nil
+	default:
+		return fmt.Errorf("ephemeral: unsupported YAML node kind %d (expected boolean scalar or mapping)", node.Kind)
+	}
+}
+
+// EffectiveTTL returns the parsed TTL with sane default. Empty TTL
+// (boolean-shorthand authoring) → 1h.
+func (e *EphemeralLifetime) EffectiveTTL() time.Duration {
+	if e == nil {
+		return 0
+	}
+	if e.TTL == "" {
+		return time.Hour
+	}
+	d, err := time.ParseDuration(e.TTL)
+	if err != nil || d <= 0 {
+		return time.Hour
+	}
+	return d
+}
+
+// EffectiveNamingPattern returns the configured pattern with sane default.
+func (e *EphemeralLifetime) EffectiveNamingPattern() string {
+	if e == nil || e.NamingPattern == "" {
+		return "{{.Source}}-eph-{{.UUID6}}"
+	}
+	return e.NamingPattern
+}
+
 // LifecycleTag returns the literal Lifecycle field. Implements the
 // Classified interface.
 func (c DeploymentNode) LifecycleTag() string {
@@ -408,6 +564,106 @@ type VmDeployState struct {
 	// the recorded digest, the user changed the kind:vm entity and
 	// the seed ISO needs to be regenerated before re-apply.
 	CloudInitRenderedDigest string `yaml:"cloud_init_rendered_digest,omitempty"`
+
+	// Snapshots is the set of snapshots known to ov for this VM (mode
+	// + libvirt name + disk path + creation time + refcount). Acts as
+	// a deploy.yml-side mirror of the per-VM registry.json so other
+	// commands can interrogate snapshot state without filesystem
+	// access. Maintained by `ov vm snapshot create/delete/promote`.
+	Snapshots []VmSnapshotState `yaml:"snapshots,omitempty"`
+
+	// Ephemeral, when non-nil, captures the live runtime state of an
+	// active ephemeral instantiation: the registered systemd transient
+	// timer, the parent snapshot reference, the TTL deadline, and the
+	// optional parent ephemeral ID for nested cases. Reset to nil on
+	// `ov deploy del` (clean teardown) or `ov status --reap-orphans`
+	// (orphan cleanup). Presence here means an instance is/was active;
+	// the underlying-resource check (libvirt domain alive) determines
+	// whether it's still healthy.
+	Ephemeral *EphemeralRuntime `yaml:"ephemeral,omitempty"`
+}
+
+// VmSnapshotState records one snapshot in deploy.yml's vm_state mirror.
+// The authoritative store is the per-VM `registry.json` on disk; this
+// mirror lets `ov status` / `ov deploy show` report state without
+// filesystem reads.
+type VmSnapshotState struct {
+	// Name uniquely identifies the snapshot within this VM.
+	Name string `yaml:"name"`
+
+	// Mode is "external" or "internal".
+	Mode string `yaml:"mode"`
+
+	// LibvirtName is the snapshot's name as registered with libvirt
+	// (typically same as Name; recorded for explicitness so the libvirt
+	// snapshot APIs can be invoked without re-deriving).
+	LibvirtName string `yaml:"libvirt_name,omitempty"`
+
+	// DiskPath is the absolute path to the external snapshot file.
+	// Empty for internal-mode snapshots.
+	DiskPath string `yaml:"disk_path,omitempty"`
+
+	// Description carries the operator-supplied note from --description
+	// at create-time.
+	Description string `yaml:"description,omitempty"`
+
+	// Created is the ISO8601 creation timestamp.
+	Created string `yaml:"created,omitempty"`
+
+	// Parent is the prior snapshot in the chain at creation time
+	// (informational; V1 builds chains implicitly).
+	Parent string `yaml:"parent,omitempty"`
+
+	// Refcount tracks active clones / ephemerals depending on this
+	// snapshot. `ov vm snapshot delete` refuses while > 0.
+	Refcount int `yaml:"refcount"`
+}
+
+// EphemeralRuntime captures the live runtime state of an active
+// ephemeral instantiation. Persisted under VmDeployState.Ephemeral
+// (also Pod/K8s analogues; same shape for symmetry).
+type EphemeralRuntime struct {
+	// ID is a six-char random hex string uniquely identifying this
+	// ephemeral instantiation.
+	ID string `yaml:"id"`
+
+	// ParentVm names the kind:vm entity (or kind:image / kind:k8s for
+	// pod / k8s targets) the ephemeral was instantiated from.
+	ParentVm string `yaml:"parent_vm,omitempty"`
+
+	// ParentSnapshot names the snapshot used as the cloned overlay's
+	// backing disk, when applicable. Empty for pod/k8s ephemerals
+	// (which don't have backing chains).
+	ParentSnapshot string `yaml:"parent_snapshot,omitempty"`
+
+	// ParentEphemeral, when non-empty, is the ID of the outer
+	// ephemeral whose lifecycle wraps this one (nested case). Set
+	// from OV_EPHEMERAL_PARENT environment variable at Add time.
+	ParentEphemeral string `yaml:"parent_ephemeral,omitempty"`
+
+	// ChildRefcount tracks nested ephemerals that name this one as
+	// their parent. Recursive teardown decrements before destroying.
+	ChildRefcount int `yaml:"child_refcount,omitempty"`
+
+	// TimerUnit is the systemd transient unit name the TTL safety
+	// timer is registered as. Empty if registration failed or was
+	// skipped (e.g., on systems without user systemd). On clean
+	// teardown, `ov deploy del` cancels this unit.
+	TimerUnit string `yaml:"timer_unit,omitempty"`
+
+	// TtlDeadline is the absolute time (ISO8601) when the TTL timer
+	// will fire. Computed at Add time as time.Now() + EffectiveTTL.
+	// `ov status` displays the remaining time.
+	TtlDeadline string `yaml:"ttl_deadline,omitempty"`
+
+	// Status is one of "provisioning" | "active" | "tearing_down".
+	// Reset to nil parent on clean teardown.
+	Status string `yaml:"status,omitempty"`
+
+	// InstanceName is the rendered NamingPattern result, e.g.
+	// "arch-test-eph-a3f2c1" — the name as it appears to libvirt /
+	// podman / kubectl.
+	InstanceName string `yaml:"instance_name,omitempty"`
 }
 
 // VmKeyInjectionResolved is the effective per-channel toggle state
@@ -586,6 +842,28 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	var dc DeployConfig
 	if err := yaml.Unmarshal(data, &dc); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+
+	// Auto-promote disposable: true on ephemeral entries (the one
+	// load-bearing exception to /ov-dev:disposable's anti-derivation
+	// rule — ephemeral STRENGTHENS the disposability contract; see
+	// classification.go for the rationale).
+	for name, node := range dc.Deployment {
+		if node.IsEphemeral() && !node.Disposable {
+			node.Disposable = true
+			dc.Deployment[name] = node
+		}
+	}
+
+	// Validate ephemeral / clone / imported / naming invariants. Errors
+	// here are surfaced at load time with a clear remediation hint.
+	verrs := &ValidationError{}
+	ValidateEphemeralAcrossDeploy(&dc, verrs)
+	for name := range dc.Deployment {
+		ValidateVmNamingGuard(name, verrs)
+	}
+	if verrs.HasErrors() {
+		return nil, fmt.Errorf("deploy.yml validation:\n  %s", verrs.Error())
 	}
 
 	return &dc, nil

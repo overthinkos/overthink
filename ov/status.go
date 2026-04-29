@@ -39,13 +39,17 @@ type ContainerStatus struct {
 
 // StatusCmd shows the status of service containers.
 type StatusCmd struct {
-	Image    string `arg:"" optional:"" help:"Image name or remote ref (omit to list all)"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
-	All      bool   `short:"a" long:"all" help:"Show all services including stopped/enabled"`
-	JSON     bool   `long:"json" help:"Output as JSON"`
+	Image        string `arg:"" optional:"" help:"Image name or remote ref (omit to list all)"`
+	Instance     string `short:"i" long:"instance" help:"Instance name"`
+	All          bool   `short:"a" long:"all" help:"Show all services including stopped/enabled"`
+	JSON         bool   `long:"json" help:"Output as JSON"`
+	ReapOrphans  bool   `long:"reap-orphans" help:"Find and clean up orphaned ephemerals (state.json says active but underlying resource is gone)"`
 }
 
 func (c *StatusCmd) Run() error {
+	if c.ReapOrphans {
+		return c.reapEphemeralOrphans()
+	}
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -55,6 +59,97 @@ func (c *StatusCmd) Run() error {
 		return c.statusAll(rt)
 	}
 	return c.statusSingle(rt)
+}
+
+// reapEphemeralOrphans walks deploy.yml entries marked active in
+// vm_state.ephemeral and verifies the underlying resource still exists.
+// For VM ephemerals: checks libvirt for the named domain. For pod
+// ephemerals: checks `podman ps -a` for the container. For k8s
+// ephemerals: checks `kubectl get namespace`. When the underlying
+// resource is gone, runs `ov deploy del <name> --force` to clean up
+// the deploy.yml entry, transient timer, and refcount bookkeeping.
+//
+// Pure orphan detection — no race resolution. If a teardown is
+// concurrently in progress, the second `ov deploy del --force`
+// no-ops on the already-removed pieces.
+func (c *StatusCmd) reapEphemeralOrphans() error {
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		return fmt.Errorf("loading deploy.yml: %w", err)
+	}
+	if dc == nil {
+		fmt.Println("no deploy.yml; nothing to reap")
+		return nil
+	}
+	var orphans []string
+	for name, node := range dc.Deployment {
+		if node.VmState == nil || node.VmState.Ephemeral == nil {
+			continue
+		}
+		if node.VmState.Ephemeral.Status != "active" {
+			continue
+		}
+		if !ephemeralUnderlyingResourceAlive(name, node) {
+			orphans = append(orphans, name)
+		}
+	}
+	if len(orphans) == 0 {
+		fmt.Println("no orphaned ephemerals")
+		return nil
+	}
+	for _, name := range orphans {
+		fmt.Printf("reaping orphan %q ...\n", name)
+		exe, _ := os.Executable()
+		cmd := exec.Command(exe, "deploy", "del", name, "--force")
+		cmd.Stderr = os.Stderr
+		cmd.Stdout = os.Stdout
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: ov deploy del %q: %v\n", name, err)
+		}
+	}
+	return nil
+}
+
+// ephemeralUnderlyingResourceAlive returns true when the named
+// ephemeral's underlying resource is still alive. Best-effort across
+// targets — false negatives are OK (we'll just skip reaping that
+// entry); false positives are bad (we'd nuke a still-running
+// resource), so the checks lean conservative.
+func ephemeralUnderlyingResourceAlive(name string, node DeploymentNode) bool {
+	switch node.Target {
+	case "vm":
+		// Probe via libvirt.
+		conn, err := connectLibvirt(libvirtSessionURI)
+		if err != nil {
+			// Can't probe → conservative: assume alive.
+			return true
+		}
+		defer conn.Close()
+		domName := "ov-" + node.Vm
+		if node.VmState != nil && node.VmState.Ephemeral != nil && node.VmState.Ephemeral.InstanceName != "" {
+			domName = "ov-" + node.VmState.Ephemeral.InstanceName
+		}
+		if _, err := conn.lookupDomain(domName); err != nil {
+			return false
+		}
+		return true
+	case "pod", "container":
+		// Probe via podman.
+		check := exec.Command("podman", "container", "exists", "ov-"+name)
+		return check.Run() == nil
+	case "k8s", "kubernetes":
+		// Probe via kubectl.
+		ns := name
+		if node.VmState != nil && node.VmState.Ephemeral != nil && node.VmState.Ephemeral.InstanceName != "" {
+			ns = node.VmState.Ephemeral.InstanceName
+		}
+		check := exec.Command("kubectl", "get", "namespace", ns)
+		check.Stderr = nil
+		check.Stdout = nil
+		return check.Run() == nil
+	}
+	// Unknown target — assume alive (conservative).
+	return true
 }
 
 // --- Container PS JSON parsing ---

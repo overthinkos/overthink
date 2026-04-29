@@ -39,6 +39,19 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 
 	// Load existing VmDeployState from deploy.yml if any.
 	dc, _ := LoadDeployConfig()
+
+	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
+	// When this deploy is marked ephemeral, register the systemd
+	// transient timer + parent-detection + snapshot refcount BEFORE
+	// any libvirt or qemu-img call. The handle is ephemeral-runtime
+	// metadata persisted into deploy.yml; teardown reads it from there.
+	if dc != nil {
+		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
+			}
+		}
+	}
 	var state *VmDeployState
 	if dc != nil {
 		if entry, exists := dc.Deployment[c.Name]; exists && entry.VmState != nil {
@@ -278,6 +291,20 @@ func (c *DeployDelCmd) runVmDel(paths *LedgerPaths) error {
 
 	if err := DeleteDeployRecord(paths, rec.DeployID); err != nil {
 		return fmt.Errorf("deleting deploy record: %w", err)
+	}
+
+	// Ephemeral lifecycle teardown hook. Recursive nested-children
+	// teardown, transient-timer cancellation, snapshot refcount
+	// decrement, deploy.yml ephemeral metadata clearance — all in
+	// one helper. Runs BEFORE removeVmDeployEntry because the helper
+	// reads the deploy.yml entry to find the timer unit + parent
+	// linkage.
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+			if tdErr := TeardownEphemeralLifecycle(&node, c.Name); tdErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
+			}
+		}
 	}
 
 	// Best-effort deploy.yml cleanup.

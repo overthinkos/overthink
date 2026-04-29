@@ -162,7 +162,11 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) (disposable bool, lifecycle string) {
 	for _, node := range tree {
 		if (node.Target == "vm" || node.Target == "") && node.Vm == vmName {
-			if node.Disposable {
+			// IsDisposable() honors the load-bearing implication
+			// `ephemeral: ... ⇒ disposable: true` so an ephemeral
+			// deploy authorizes rebuild even without explicit
+			// `disposable: true`.
+			if node.IsDisposable() {
 				disposable = true
 			}
 			if lifecycle == "" {

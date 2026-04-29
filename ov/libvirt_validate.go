@@ -27,6 +27,9 @@ func ValidateVmSpec(name string, spec *VmSpec, errs *ValidationError) {
 	if spec.CloudInit != nil {
 		validateVmCloudInit(name, spec, errs)
 	}
+	if len(spec.Snapshots) > 0 {
+		validateVmSnapshots(name, spec, errs)
+	}
 }
 
 // validateVmSource checks the discriminated-union invariants.
@@ -81,14 +84,75 @@ func validateVmSource(name string, src *VmSource, errs *ValidationError) {
 				errs.Add("vm %q: source.transport %q is not supported (want registry, containers-storage, oci, or oci-archive)", name, src.Transport)
 			}
 		}
+	case "clone":
+		if src.FromVm == "" {
+			errs.Add("vm %q: source.kind == clone requires source.from_vm (parent VM name)", name)
+		}
+		if src.FromSnapshot == "" {
+			errs.Add("vm %q: source.kind == clone requires source.from_snapshot (snapshot name on the parent)", name)
+		}
+		// cloud_image / bootc / imported fields should not appear on clone.
+		if src.URL != "" {
+			errs.Add("vm %q: source.url only valid when source.kind == cloud_image", name)
+		}
+		if src.Image != "" {
+			errs.Add("vm %q: source.image only valid when source.kind == bootc", name)
+		}
+		if src.LibvirtName != "" || src.DiskPath != "" || src.DiskFormat != "" {
+			errs.Add("vm %q: source.libvirt_name/disk_path/disk_format only valid when source.kind == imported", name)
+		}
+	case "imported":
+		if src.LibvirtName == "" {
+			errs.Add("vm %q: source.kind == imported requires source.libvirt_name", name)
+		}
+		if src.DiskPath == "" {
+			errs.Add("vm %q: source.kind == imported requires source.disk_path", name)
+		}
+		if src.DiskFormat == "" {
+			errs.Add("vm %q: source.kind == imported requires source.disk_format (qcow2 or raw)", name)
+		} else {
+			switch src.DiskFormat {
+			case "qcow2", "raw":
+				// OK
+			default:
+				errs.Add("vm %q: source.disk_format %q is not supported (want qcow2 or raw)", name, src.DiskFormat)
+			}
+		}
+		if src.URL != "" || src.Image != "" {
+			errs.Add("vm %q: source.url / source.image not valid when source.kind == imported", name)
+		}
+		if src.FromVm != "" || src.FromSnapshot != "" {
+			errs.Add("vm %q: source.from_vm / source.from_snapshot only valid when source.kind == clone", name)
+		}
 	case "":
-		errs.Add("vm %q: source.kind is required (cloud_image or bootc)", name)
+		errs.Add("vm %q: source.kind is required (cloud_image, bootc, clone, or imported)", name)
 	default:
-		errs.Add("vm %q: source.kind %q is unknown (want cloud_image or bootc)", name, src.Kind)
+		errs.Add("vm %q: source.kind %q is unknown (want cloud_image, bootc, clone, or imported)", name, src.Kind)
 	}
 
 	if src.Checksum.Type != "" && src.Checksum.Type != "sha256" {
 		errs.Add("vm %q: source.checksum.type %q is not supported (only sha256)", name, src.Checksum.Type)
+	}
+}
+
+// validateVmSnapshots checks the declarative snapshots list.
+func validateVmSnapshots(name string, spec *VmSpec, errs *ValidationError) {
+	seen := make(map[string]bool, len(spec.Snapshots))
+	for i, s := range spec.Snapshots {
+		if s.Name == "" {
+			errs.Add("vm %q: snapshots[%d]: name is required", name, i)
+			continue
+		}
+		if seen[s.Name] {
+			errs.Add("vm %q: snapshots[%d]: duplicate name %q", name, i, s.Name)
+		}
+		seen[s.Name] = true
+		switch s.Mode {
+		case "", "external", "internal":
+			// OK ("" → defaults to external at apply-time)
+		default:
+			errs.Add("vm %q: snapshots[%q].mode %q is unknown (want external or internal)", name, s.Name, s.Mode)
+		}
 	}
 }
 

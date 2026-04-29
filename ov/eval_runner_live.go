@@ -157,6 +157,38 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 		}
 		pod := bucket[0].Pod
 
+		// Ephemeral lifecycle wrapping. When the bucket's pod resolves
+		// to a deploy.yml entry with ephemeral: set, run `ov deploy add`
+		// before the scenarios and `ov deploy del` after — the eval
+		// runner becomes a thin scenario-driver around the standard
+		// deploy verbs. Same code path the user invokes interactively;
+		// no parallel orchestrator. keep_on_failure honored: when set,
+		// the post-bucket Del is skipped if any scenario in the bucket
+		// failed, leaving the instance alive for inspection.
+		var ephemeralCleanup func(scenarioFailed bool)
+		if isEphemeralDeploy(deployRoots, pod) {
+			fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — ov deploy add %s\n", pod)
+			exe, _ := os.Executable()
+			addCmd := exec.Command(exe, "deploy", "add", pod)
+			addCmd.Stderr = os.Stderr
+			addCmd.Stdout = os.Stdout
+			if err := addCmd.Run(); err != nil {
+				fmt.Fprintf(os.Stderr, "score live: ephemeral add %s failed: %v\n", pod, err)
+			}
+			keepOnFailure := ephemeralKeepOnFailure(deployRoots, pod)
+			ephemeralCleanup = func(failed bool) {
+				if failed && keepOnFailure {
+					fmt.Fprintf(os.Stderr, "score live: keep_on_failure=true; leaving %s alive for inspection (TTL safety net still active)\n", pod)
+					return
+				}
+				fmt.Fprintf(os.Stderr, "score live: ephemeral wrap — ov deploy del %s\n", pod)
+				delCmd := exec.Command(exe, "deploy", "del", pod, "--force")
+				delCmd.Stderr = os.Stderr
+				delCmd.Stdout = os.Stdout
+				_ = delCmd.Run()
+			}
+		}
+
 		// Resolve scenario.Pod to a DeployExecutor chain. Dotted paths
 		// route through ResolveDeployChain (multi-hop); flat names
 		// fall back to ContainerChain (single-hop into "ov-<pod>"),
@@ -293,6 +325,20 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 				out.Summary.Skip++
 				verdictByKey[keyOf(sc)] = "fail" // skipped-by-runner ≠ depends-skipped
 			}
+		}
+
+		// Ephemeral cleanup runs at end-of-bucket. Determine bucket-level
+		// failure by checking whether any scenario in the bucket is
+		// recorded as fail.
+		if ephemeralCleanup != nil {
+			bucketFailed := false
+			for _, sc := range bucket {
+				if v, ok := verdictByKey[keyOf(sc)]; ok && v == "fail" {
+					bucketFailed = true
+					break
+				}
+			}
+			ephemeralCleanup(bucketFailed)
 		}
 	}
 
@@ -513,4 +559,43 @@ func RenderRecipeScenariosYAML(scenarios []Scenario) string {
 	}
 	_ = enc.Close()
 	return buf.String()
+}
+
+// isEphemeralDeploy reports whether the named pod resolves to a
+// deploy.yml entry marked ephemeral. Used by RunEvalLive to wrap
+// scenario buckets with deploy add/del.
+func isEphemeralDeploy(roots map[string]DeploymentNode, pod string) bool {
+	if pod == "" {
+		return false
+	}
+	// Try direct lookup first; dotted paths (e.g. "stack.web") resolve
+	// via the existing tree walker.
+	if node, ok := roots[pod]; ok {
+		return node.IsEphemeral()
+	}
+	if node, _, err := ResolveNodePath(roots, pod); err == nil && node != nil {
+		return node.IsEphemeral()
+	}
+	return false
+}
+
+// ephemeralKeepOnFailure returns the keep_on_failure flag from the
+// named ephemeral deploy's lifetime block.
+func ephemeralKeepOnFailure(roots map[string]DeploymentNode, pod string) bool {
+	if pod == "" {
+		return false
+	}
+	resolve := func(node *DeploymentNode) bool {
+		if node == nil || node.Ephemeral == nil {
+			return false
+		}
+		return node.Ephemeral.KeepOnFailure
+	}
+	if node, ok := roots[pod]; ok {
+		return resolve(&node)
+	}
+	if node, _, err := ResolveNodePath(roots, pod); err == nil {
+		return resolve(node)
+	}
+	return false
 }

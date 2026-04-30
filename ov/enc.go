@@ -108,10 +108,11 @@ func encExtpassArgs(imageID string) ([]string, func()) {
 		ep := "systemd-ask-password --id=" + imageID + " --timeout=0 --echo=masked Passphrase"
 		return []string{"-extpass", ep}, func() {}
 	}
+	RegisterTempCleanup(f.Name())
 	f.WriteString(script)
 	f.Chmod(0700)
 	f.Close()
-	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()) }
+	return []string{"-extpass", f.Name()}, func() { os.Remove(f.Name()); UnregisterTempCleanup(f.Name()) }
 }
 
 // resolveEncPassphrase resolves the gocryptfs passphrase for an image.
@@ -669,6 +670,7 @@ func encPasswd(imageName, instance string) error {
 		if err != nil {
 			return fmt.Errorf("creating temp script for %s: %w", m.Name, err)
 		}
+		RegisterTempCleanup(oldScript.Name())
 		oldScript.WriteString("#!/bin/bash\nprintf '%s' '" + strings.ReplaceAll(oldPass, "'", "'\\''") + "'\n")
 		oldScript.Chmod(0700)
 		oldScript.Close()
@@ -680,6 +682,7 @@ func encPasswd(imageName, instance string) error {
 		cmd.Stderr = os.Stderr
 		runErr := cmd.Run()
 		os.Remove(oldScript.Name())
+		UnregisterTempCleanup(oldScript.Name())
 		if runErr != nil {
 			return fmt.Errorf("changing password for %s: %w", m.Name, runErr)
 		}

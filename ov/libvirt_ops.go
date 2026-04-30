@@ -156,7 +156,8 @@ func captureDomainScreenshotViaVirsh(domName string) (image.Image, error) {
 	}
 	tmpPath := tmp.Name()
 	tmp.Close()
-	defer os.Remove(tmpPath)
+	RegisterTempCleanup(tmpPath)
+	defer func() { os.Remove(tmpPath); UnregisterTempCleanup(tmpPath) }()
 	defer os.Remove(filepath.Join(filepath.Dir(tmpPath), "ov-libvirt-screenshot-temp.ppm"))
 
 	cmd := exec.Command("virsh", "-c", "qemu:///session", "screenshot", domName, tmpPath)

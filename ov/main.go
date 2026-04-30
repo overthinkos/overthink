@@ -739,6 +739,13 @@ func main() {
 		}
 	}
 
+	// Cleanup hygiene: install a global signal handler so that registered
+	// temp-file paths are removed on SIGTERM/SIGINT/SIGHUP, and sweep any
+	// /tmp/ov-* leftovers from prior SIGKILL'd ov invocations. See
+	// cleanup.go for the full design.
+	InstallSignalHandler()
+	SweepStaleTemps()
+
 	err := ctx.Run()
 	ctx.FatalIfErrorf(FormatCLIError(err))
 }

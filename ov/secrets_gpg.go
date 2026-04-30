@@ -107,7 +107,8 @@ func (c *SecretsGpgEditCmd) Run() error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
-	defer secureDelete(tmpPath)
+	RegisterTempCleanup(tmpPath)
+	defer func() { secureDelete(tmpPath); UnregisterTempCleanup(tmpPath) }()
 
 	plaintext, decErr := gpgDecryptToBytes(c.File)
 	if decErr != nil {

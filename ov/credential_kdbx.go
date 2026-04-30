@@ -253,6 +253,12 @@ func openKdbx(path, password, keyFile string) (*gokeepasslib.Database, error) {
 }
 
 // saveKdbx writes the database to a temp file and atomically renames it.
+//
+// Note: the temp lives in the kdbx parent dir (not /tmp) for the atomic
+// rename. SweepStaleTemps doesn't cover non-/tmp paths, but the signal
+// handler still does — RegisterTempCleanup catches Ctrl-C / SIGTERM
+// between CreateTemp and Rename. UnregisterTempCleanup fires after the
+// successful rename (the temp no longer exists at that path).
 func saveKdbx(db *gokeepasslib.Database, path string) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".ov-kdbx-*.tmp")
@@ -260,6 +266,8 @@ func saveKdbx(db *gokeepasslib.Database, path string) error {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
 	tmpPath := tmp.Name()
+	RegisterTempCleanup(tmpPath)
+	defer UnregisterTempCleanup(tmpPath)
 
 	if err := gokeepasslib.NewEncoder(tmp).Encode(db); err != nil {
 		tmp.Close()

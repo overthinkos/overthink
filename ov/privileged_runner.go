@@ -81,6 +81,8 @@ func RunPrivileged(p PrivilegedRun) error {
 		if err != nil {
 			return fmt.Errorf("creating staging dir: %w", err)
 		}
+		RegisterTempCleanup(hostStaging)
+		defer UnregisterTempCleanup(hostStaging)
 		stagingDir = filepath.Dir(p.OutputPath)
 		args = append(args, "-v", fmt.Sprintf("%s:%s", hostStaging, stagingDir))
 	}

@@ -614,8 +614,9 @@ func saveAndLoad(binary, ref string) (v1.Image, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating temp file: %w", err)
 	}
+	RegisterTempCleanup(tmpFile.Name())
 
-	cleanup := func() { os.Remove(tmpFile.Name()) }
+	cleanup := func() { os.Remove(tmpFile.Name()); UnregisterTempCleanup(tmpFile.Name()) }
 
 	cmd := exec.Command(binary, "save", ref)
 	cmd.Stdout = tmpFile
@@ -643,7 +644,8 @@ func saveImageToDaemon(img v1.Image, ref string, engine string) error {
 	if err != nil {
 		return fmt.Errorf("creating temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	RegisterTempCleanup(tmpFile.Name())
+	defer func() { os.Remove(tmpFile.Name()); UnregisterTempCleanup(tmpFile.Name()) }()
 	defer tmpFile.Close()
 
 	tag, err := name.NewTag(ref)

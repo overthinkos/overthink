@@ -342,7 +342,8 @@ func (t *HostDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts E
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(aurStage)
+		RegisterTempCleanup(aurStage)
+		defer func() { os.RemoveAll(aurStage); UnregisterTempCleanup(aurStage) }()
 		bindMounts["/tmp/aur-pkgs"] = aurStage
 	}
 

@@ -35,17 +35,17 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 
 | Trigger (what the user said or what you're about to do) | Skills to load BEFORE doing anything |
 |---|---|
-| `ov rebuild` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov:vm` + `/ov-dev:vm-deploy-target` |
-| `ov deploy add/del` / pod or container deploys | `/ov:deploy` |
-| host-target deploy / `deploy add <name> host` / nested host | `/ov:host-deploy` + `/ov-dev:host-infra` |
-| `ov eval live` / `ov eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov:eval` |
-| `ov eval k8s <verb>` / cluster probes | `/ov:eval-k8s` |
-| Editing `layer.yml`, layer authoring, layer tasks/services | `/ov:layer` |
-| Editing `image.yml`, image composition | `/ov:image` |
-| `ov image build` / `ov image generate` / Containerfile | `/ov:build` + `/ov:generate` + `/ov-dev:generate` |
-| `ov image validate` / schema error | `/ov:validate` |
-| Secret management / `ov secrets` / `.kdbx` | `/ov:secrets` |
-| Schema v4 migration / legacy → new format | `/ov:migrate` |
+| `ov rebuild` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov-advanced:vm` + `/ov-dev:vm-deploy-target` |
+| `ov deploy add/del` / pod or container deploys | `/ov-core:deploy` |
+| host-target deploy / `deploy add <name> host` / nested host | `/ov-advanced:host-deploy` + `/ov-dev:host-infra` |
+| `ov eval live` / `ov eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov-build:eval` |
+| `ov eval k8s <verb>` / cluster probes | `/ov-advanced:eval-k8s` |
+| Editing `layer.yml`, layer authoring, layer tasks/services | `/ov-build:layer` |
+| Editing `image.yml`, image composition | `/ov-build:image` |
+| `ov image build` / `ov image generate` / Containerfile | `/ov-build:build` + `/ov-build:generate` + `/ov-dev:generate` |
+| `ov image validate` / schema error | `/ov-build:validate` |
+| Secret management / `ov secrets` / `.kdbx` | `/ov-build:secrets` |
+| Schema v4 migration / legacy → new format | `/ov-build:migrate` |
 | Hard-cutover concerns / rename sweeps | `/ov-dev:cutover-policy` |
 | Disposable-flag semantics / `disposable: true` authorization | `/ov-dev:disposable` |
 | Go source work (adding/modifying `ov` commands) | `/ov-dev:go` |
@@ -53,12 +53,14 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | OCI labels / capabilities contract | `/ov-dev:capabilities` |
 | VmSpec / libvirt / cloud-init / OVMF internals | `/ov-dev:vm-spec` (+ renderer skills as needed) |
 | Unexpected failure / error / anomaly | `/ov-dev:root-cause-analyzer` agent (BEFORE any fix) |
-| "What does layer X do?" | `/ov-layers:<name>` |
-| "What's in image X?" | `/ov-images:<name>` |
+| "What does layer X do?" / "What's in image X?" — pod-specific | `/ov-jupyter:<name>`, `/ov-coder:<name>`, `/ov-selkies:<name>`, `/ov-openclaw:<name>`, `/ov-ollama:<name>`, `/ov-openwebui:<name>`, `/ov-comfyui:<name>`, `/ov-immich:<name>`, `/ov-hermes:<name>`, `/ov-filebrowser:<name>` |
+| "What does layer X do?" / "What's in image X?" — base/foundation | `/ov-foundation:<name>` (pixi, supervisord, cuda, nvidia, fedora, archlinux, debian, ubuntu, …) |
 | Skill authoring / skill maintenance | `/ov-dev:skills` |
-| `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov:eval` |
+| `ov eval *` / `eval.yml` `recipe:`/`score:` / AI-agent scoring / `oveval/*` branches | `/ov-build:eval` |
 
-Full index: `plugins/README.md` — 250+ skills. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
+Full index: `plugins/README.md`. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
+
+**Plugin reorganization (2026-04-30)**: the giant `ov` plugin was split into `ov-core` (daily-ops verbs), `ov-build` (authoring), and `ov-advanced` (k8s/vm/probes). The catalog plugins `ov-images` and `ov-layers` were absorbed: pod-specific skills moved into per-pod plugins (`ov-jupyter`, `ov-coder`, `ov-selkies`, `ov-openclaw`, `ov-ollama`, `ov-openwebui`, `ov-comfyui`, `ov-immich`, `ov-hermes`, `ov-filebrowser`) and base/foundation skills consolidated in `ov-foundation`. Marketplace bumped to v2.0.0.
 
 ### Anti-patterns — FORBIDDEN, regardless of context
 

@@ -1508,6 +1508,36 @@ recipe:
             timeout: 15s
 
   # ─────────────────────────────────────────────────────────────────────
+  # c4-smoke-drag: SMOKE-only recipe exercising the 2026-05 wl:drag
+  # signature expansion (x1 y1 x2 y2 instead of just x y). Asserts the
+  # drag verb dispatches with all four coords through to the CLI's
+  # `wl drag <image> <x1> <y1> <x2> <y2>` signature.
+  # ─────────────────────────────────────────────────────────────────────
+  c4-smoke-drag:
+    description:
+      feature: "wl: drag verb honors x1/y1/x2/y2 instead of legacy 2-coord form"
+    scenario:
+      - name: drag-with-four-coords
+        pod: sway-browser-vnc-concurrency-test
+        steps:
+          - then: "drag from (100,100) to (200,200) succeeds (CLI writes to stderr)"
+            wl: drag
+            x: 100
+            y: 100
+            x2: 200
+            y2: 200
+            stderr: { contains: "Dragged" }
+            timeout: 15s
+          - then: "stderr reports both endpoints"
+            wl: drag
+            x: 50
+            y: 75
+            x2: 300
+            y2: 400
+            stderr: { matches: "from \\(50, 75\\) to \\(300, 400\\)" }
+            timeout: 15s
+
+  # ─────────────────────────────────────────────────────────────────────
   # c1-smoke-kill: SMOKE-only recipe exercising the 2026-05 capture_extract:
   # regex modifier + kill: step verb (sendSIGKILL via captured PID). This
   # is the C1 cutover's R10 acceptance smoke; remove or keep as the

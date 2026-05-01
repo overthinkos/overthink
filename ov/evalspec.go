@@ -278,8 +278,10 @@ type Check struct {
 	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"` // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)
 	ArtifactNotUniform    bool   `yaml:"artifact_not_uniform,omitempty"    json:"artifact_not_uniform,omitempty"`    // post-run "image is not uniformly one color" assertion (full decode + pixel sampling)
 	ArtifactMinCastEvents int    `yaml:"artifact_min_cast_events,omitempty" json:"artifact_min_cast_events,omitempty"` // post-run asciinema .cast event-line count assertion
-	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                  // wl/vnc: click/mouse x coord
-	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                  // wl/vnc: click/mouse y coord
+	X                int      `yaml:"x,omitempty"                  json:"x,omitempty"`                  // wl/vnc: click/mouse x coord; for drag: start x (X1)
+	Y                int      `yaml:"y,omitempty"                  json:"y,omitempty"`                  // wl/vnc: click/mouse y coord; for drag: start y (Y1)
+	X2               int      `yaml:"x2,omitempty"                 json:"x2,omitempty"`                 // wl: drag end x (mirrors WlDragCmd.X2)
+	Y2               int      `yaml:"y2,omitempty"                 json:"y2,omitempty"`                 // wl: drag end y (mirrors WlDragCmd.Y2)
 	Button           string   `yaml:"button,omitempty"             json:"button,omitempty"`             // wl/vnc: left/middle/right
 	Text             string   `yaml:"text,omitempty"               json:"text,omitempty"`               // wl/vnc: type text / overlay text
 	KeyName          string   `yaml:"key,omitempty"                json:"key,omitempty"`                // wl/vnc: key name (Return/Escape/...)

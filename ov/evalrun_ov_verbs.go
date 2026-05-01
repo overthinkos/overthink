@@ -146,7 +146,7 @@ var wlMethods = map[string]methodSpec{
 	"double-click": {path: []string{"wl", "double-click"}, required: []string{"X", "Y"}, posArgs: posXY},
 	"mouse":        {path: []string{"wl", "mouse"}, required: []string{"X", "Y"}, posArgs: posXY},
 	"scroll":       {path: []string{"wl", "scroll"}, required: []string{"X", "Y", "Direction"}, posArgs: posScroll},
-	"drag":         {path: []string{"wl", "drag"}, required: []string{"X", "Y"}, posArgs: posXY}, // simplified — drag takes x1 y1 x2 y2; see Phase 2
+	"drag":         {path: []string{"wl", "drag"}, required: []string{"X", "Y", "X2", "Y2"}, posArgs: posXYXY}, // start (X,Y) → end (X2,Y2)
 	"type":         {path: []string{"wl", "type"}, required: []string{"Text"}, posArgs: posText},
 	"key":          {path: []string{"wl", "key"}, required: []string{"KeyName"}, posArgs: posKeyName},
 	"key-combo":    {path: []string{"wl", "key-combo"}, required: []string{"Combo"}, posArgs: posCombo},
@@ -502,6 +502,13 @@ func posCdpRaw(c *Check) []string {
 }
 func posXY(c *Check) []string {
 	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y)}
+}
+// posXYXY emits four positionals (start + end) for verbs whose CLI
+// signature is `<image> <x1> <y1> <x2> <y2>` — e.g. `wl drag`.
+// Reuses X/Y as the start and X2/Y2 as the end so click/drag share
+// the X/Y idiom for the start point.
+func posXYXY(c *Check) []string {
+	return []string{strconv.Itoa(c.X), strconv.Itoa(c.Y), strconv.Itoa(c.X2), strconv.Itoa(c.Y2)}
 }
 func posScroll(c *Check) []string {
 	amount := c.Amount
@@ -1042,6 +1049,10 @@ func isZeroField(c *Check, name string) bool {
 		return c.X == 0
 	case "Y":
 		return c.Y == 0
+	case "X2":
+		return c.X2 == 0
+	case "Y2":
+		return c.Y2 == 0
 	case "Button":
 		return c.Button == ""
 	case "Text":

@@ -491,84 +491,22 @@ func (c *DeployDelCmd) resolveDelTargetKind() string {
 	return "pod"
 }
 
-// runHostDel tears down host deploys: runs each ReverseOp, removes
-// ledger entries and (for layers whose refcount drops to zero) cleans
-// up env.d files and shell-profile managed blocks.
+// runHostDel is a thin wrapper that constructs a HostUnifiedTarget
+// with this cmd's gate flags and delegates teardown to the unified
+// target's Del method (see unified_targets_host.go). The body lives on
+// HostUnifiedTarget.Del so future schema-v3 dispatchers can call into
+// the same logic without going through DeployDelCmd.
 func (c *DeployDelCmd) runHostDel(paths *LedgerPaths) error {
-	entries, err := os.ReadDir(paths.Deploys)
-	if err != nil {
-		if os.IsNotExist(err) {
-			fmt.Println("No deployments recorded.")
-			return nil
-		}
-		return err
+	target := &HostUnifiedTarget{
+		NodeName:        c.Name,
+		KeepRepoChanges: c.KeepRepoChanges,
+		KeepServices:    c.KeepServices,
+		RevRunner:       c.Runner,
 	}
-
-	hostHome := os.Getenv("HOME")
-	anyRemoved := false
-
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(paths.Deploys, e.Name()))
-		if err != nil {
-			continue
-		}
-		var rec DeployRecord
-		if err := json.Unmarshal(data, &rec); err != nil {
-			continue
-		}
-		if rec.Target != "host" {
-			continue
-		}
-		if c.DryRun {
-			fmt.Printf("[dry-run] would tear down host deploy %s (image=%s, %d layers)\n",
-				rec.DeployID, rec.Image, len(rec.Layers))
-			continue
-		}
-		if err := c.tearDownDeploy(paths, &rec, hostHome); err != nil {
-			return err
-		}
-		anyRemoved = true
-		fmt.Printf("Removed host deploy %s (%s)\n", rec.DeployID, rec.Image)
-	}
-
-	// If nothing is deployed anymore, strip the shell managed block.
-	if anyRemoved && !c.DryRun {
-		if remainingLayers, _ := os.ReadDir(paths.Layers); len(remainingLayers) == 0 {
-			shell := DetectLoginShell()
-			_ = RemoveManagedBlock(shell, hostHome)
-		}
-	}
-	return nil
-}
-
-// tearDownDeploy reverses a single host deploy record: for each layer
-// in the deploy, decrement its refcount; if the layer's refcount drops
-// to zero, run its ReverseOps, delete its env.d file, delete its
-// ledger entry.
-func (c *DeployDelCmd) tearDownDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string) error {
-	for _, layer := range rec.Layers {
-		layerRec, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
-		if err != nil {
-			return err
-		}
-		if !shouldRemove {
-			continue
-		}
-		// Execute the ReverseOps for this layer.
-		if err := runReverseOps(layerRec.ReverseOps, c); err != nil {
-			return fmt.Errorf("reversing layer %s: %w", layer, err)
-		}
-		// Remove the env.d file (always, regardless of ReverseOps).
-		_ = RemoveEnvdFile(hostHome, layer)
-		// Delete the layer ledger.
-		if err := DeleteLayerRecord(paths, layer); err != nil {
-			return err
-		}
-	}
-	return DeleteDeployRecord(paths, rec.DeployID)
+	return target.Del(context.Background(), DelOpts{
+		DryRun:    c.DryRun,
+		AssumeYes: c.AssumeYes,
+	})
 }
 
 // runContainerDel stops + removes the container deploy, removes the

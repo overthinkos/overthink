@@ -46,6 +46,10 @@ var ErrNotSupportedOnK8s = errors.New("lifecycle operation not supported on kube
 
 // ---------------------------------------------------------------------------
 // HostUnifiedTarget — adapter over HostDeployTarget.
+//
+// Stubbed Add/Name/Kind/Executor live here. The lifecycle and management
+// methods (Del, Test, Update, Start, Stop, Status, Logs, Shell, Rebuild)
+// live in unified_targets_host.go (C11 / Phase 3 implementation).
 // ---------------------------------------------------------------------------
 
 // HostUnifiedTarget wraps HostDeployTarget to satisfy
@@ -57,6 +61,20 @@ type HostUnifiedTarget struct {
 	// from the legacy HostDeployTarget.Name() which returns the kind
 	// ("host"). UnifiedDeployTarget.Name() returns this.
 	NodeName string
+
+	// KeepRepoChanges and KeepServices are deploy-del gate flags
+	// populated by the dispatcher from `ov deploy del --keep-…`.
+	// Forwarded to runReverseOps when Del runs. Default false → repo
+	// changes and packaged services ARE reversed (the destructive
+	// teardown path matches today's runHostDel behavior).
+	KeepRepoChanges bool
+	KeepServices    bool
+
+	// RevRunner is the ReverseRunner used by ReverseOp handlers.
+	// Defaults to nil → reverse_ops.go falls back to local exec.Command,
+	// which matches the long-standing on-host teardown path. Tests
+	// substitute a mock here.
+	RevRunner ReverseRunner
 }
 
 func (t *HostUnifiedTarget) Name() string { return t.NodeName }
@@ -70,37 +88,6 @@ func (t *HostUnifiedTarget) Executor() DeployExecutor {
 
 func (t *HostUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
 	return t.HostDeployTarget.Emit(plans, opts)
-}
-
-func (t *HostUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-
-func (t *HostUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-
-func (t *HostUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-
-func (t *HostUnifiedTarget) Start(ctx context.Context) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *HostUnifiedTarget) Stop(ctx context.Context) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *HostUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
-	return StatusInfo{}, fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *HostUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *HostUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *HostUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
-	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotYetImplemented)
 }
 
 // ---------------------------------------------------------------------------

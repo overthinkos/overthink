@@ -24,6 +24,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -455,11 +456,11 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 // changes, disable services, and strip env.d files, which the
 // operator explicitly opted into. Refresh, don't destroy.
 func (c *RebuildCmd) rebuildHostDeploy() error {
-	if c.DryRun {
-		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
-		return nil
-	}
-	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
+	target := &HostUnifiedTarget{NodeName: c.Name}
+	if err := target.Rebuild(context.Background(), RebuildOpts{
+		DryRun:       c.DryRun,
+		RebuildImage: false,
+	}); err != nil {
 		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
 	}
 	return nil

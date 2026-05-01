@@ -217,6 +217,23 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 			resolver := &EvalVarResolver{}
 			runner = NewRunner(chainExec, resolver, RunModeLive)
 			runner.Image = pod
+			// Wire TargetResolver so per-step `on: <target>` overrides
+			// route the dispatch through a fresh chain for that target.
+			// Same resolveScoringChain logic as the scenario-level pod
+			// resolution — flat names → ContainerChain, dotted →
+			// ResolveDeployChain. Returns a per-target executor + a
+			// lazy resolver; r.Image is also swapped by the on-handler
+			// in evalrun.go (so cdp/wl/vnc/mcp dispatch routes through
+			// `ov eval cdp <method> <target>` correctly). Closes over
+			// deployRoots from the enclosing for-bucket loop.
+			roots := deployRoots
+			runner.TargetResolver = func(target string) (*EvalVarResolver, DeployExecutor, error) {
+				exec, err := resolveScoringChain(roots, target)
+				if err != nil {
+					return nil, nil, err
+				}
+				return &EvalVarResolver{}, exec, nil
+			}
 			// Propagate score-level AI-artifact validation policy +
 			// iter-start freshness floor into the runner. The runner
 			// uses these in runOvVerb's artifact-producing branch to

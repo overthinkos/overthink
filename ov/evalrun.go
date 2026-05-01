@@ -230,10 +230,19 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 		}
 	}
 
-	// `on:` multi-target dispatch. Swap executor + resolver for the
-	// duration of this check only; restore on return. When r.TargetResolver
-	// is nil (classical tests: path), Resolver+Exec stay as-is.
-	origExec, origResolver := r.Exec, r.Resolver
+	// `on:` multi-target dispatch. Swap executor + resolver + image for
+	// the duration of this check only; restore on return. When
+	// r.TargetResolver is nil (classical tests: path), Resolver+Exec
+	// stay as-is.
+	//
+	// 2026-05: also swap r.Image so cdp/wl/vnc/mcp/etc dispatch
+	// (runOvVerb at evalrun_ov_verbs.go:709 reads r.Image to build
+	// `ov eval <verb> <method> <image> ...` argv) routes against the
+	// on-named pod, not the scenario's default pod. Without this swap,
+	// `cdp: open` with `on: sway-browser-vnc-concurrency-test` was
+	// silently dispatched against the scenario's jupyter pod and
+	// failed at unknown-image.
+	origExec, origResolver, origImage := r.Exec, r.Resolver, r.Image
 	if c.On != "" && r.TargetResolver != nil {
 		newResolver, newExec, terr := r.TargetResolver(c.On)
 		if terr != nil {
@@ -250,9 +259,11 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 		if newResolver != nil {
 			r.Resolver = newResolver
 		}
+		r.Image = c.On
 		defer func() {
 			r.Exec = origExec
 			r.Resolver = origResolver
+			r.Image = origImage
 		}()
 	}
 

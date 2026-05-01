@@ -823,7 +823,22 @@ func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, a
 		}
 	}
 
-	return passf(c, fmt.Sprintf("%s %s: exit=%d", verb, method, exit))
+	// On PASS, return the captured stdout as the Message (or stderr if
+	// stdout is empty — some verbs print to stderr per /ov-build:eval
+	// "Know which stream a --version-style command writes to"). This
+	// makes the captured subprocess output available to downstream
+	// `capture: <name>` / `capture_extract:` chains; the docstring on
+	// CaptureFromResult promises this and runCommand already does it.
+	// Falls back to the exit summary when both streams are empty so
+	// the report still has something human-readable.
+	body := stdout
+	if strings.TrimSpace(body) == "" {
+		body = stderr
+	}
+	if strings.TrimSpace(body) == "" {
+		body = fmt.Sprintf("%s %s: exit=%d", verb, method, exit)
+	}
+	return passf(c, body)
 }
 
 // runArtifactValidators is the shared post-validator pipeline used by

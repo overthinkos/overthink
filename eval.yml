@@ -1312,20 +1312,200 @@ recipe:
             input: '{"path":"jc-mixed.ipynb","index":0}'
             stdout: { matches: "mcp[0-9]" }
             timeout: 30s
-          # NOTE: CDP-via-browser portion of mixed-mcp-cdp is deferred —
-          # the eval framework's `cdp:` verb uses the existing capture
-          # pipeline which doesn't support pattern-extracting tab IDs from
-          # `cdp open` stdout. Adding that requires a `capture_extract:`
-          # modifier (regex), which is a follow-up extension. The MCP-only
-          # half above proves the per-notebook lock + parallel: + count:
-          # primitives work; the CDP half can be added without further
-          # framework changes once capture_extract: lands.
+          # CDP half — added 2026-05 once `capture_extract:` (C1) landed.
+          # Open a Chrome tab on the sway-browser-vnc-concurrency-test
+          # pod, capture its hex tab ID via regex, then exercise the
+          # captured ID via cdp eval (proves the captured value flows
+          # through ${CAPTURED:tab_id} into a subsequent CDP step).
+          - id: cdp-open-tab
+            then: "open Chrome tab on the sway-browser-vnc disposable; capture tab id"
+            cdp: open
+            url: "about:blank"
+            on: sway-browser-vnc-concurrency-test
+            capture: tab_id
+            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
+            timeout: 30s
+          - then: "cdp eval against captured tab returns expected result"
+            cdp: eval
+            tab: ${CAPTURED:tab_id}
+            expression: "1+2"
+            on: sway-browser-vnc-concurrency-test
+            stdout: { contains: "3" }
+            timeout: 30s
+          - then: "close the captured tab"
+            cdp: close
+            tab: ${CAPTURED:tab_id}
+            on: sway-browser-vnc-concurrency-test
+            timeout: 15s
         teardown:
           - then: "close MCP session"
             mcp: call
             tool: close_notebook_session
             input: '{"path":"jc-mixed.ipynb"}'
             timeout: 30s
+
+      # Scenario 9: data-safety-kill. Background a host-side writer that
+      # pumps update_cell ops at the jupyter MCP endpoint, capture its
+      # PID, SIGKILL it mid-stream, then verify the .ipynb still parses
+      # (no half-write). Companion to delete-vs-edit but with forcible
+      # writer death rather than ordered teardown — exercises MCP's
+      # ability to leave the room in a coherent state when a writer
+      # vanishes ungracefully.
+      - name: data-safety-kill
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook"
+            command: "rm -f /home/user/workspace/jc-kill.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-kill.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "open MCP collaboration room"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jc-kill.ipynb"}'
+            timeout: 60s
+        steps:
+          - id: bg-writer
+            then: "background a host-side writer pumping update_cell at the MCP port"
+            command: "while true; do curl -sS -X POST http://127.0.0.1:18888/mcp -H 'Content-Type: application/json' -H 'Accept: application/json,text/event-stream' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"update_cell\",\"arguments\":{\"path\":\"jc-kill.ipynb\",\"index\":0,\"source\":\"# k\",\"cell_type\":\"code\"}}}' >/dev/null 2>&1 || true; done"
+            in_container: false
+            background: true
+            capture: writer_pid
+            capture_extract: "pid=([0-9]+)"
+          - then: "let the writer make some changes"
+            command: "sleep 2"
+            in_container: false
+            exit_status: 0
+          - then: "SIGKILL the writer mid-stream"
+            kill: ${CAPTURED:writer_pid}
+            signal: KILL
+          - then: "wait for the OS to reap"
+            command: "sleep 1"
+            in_container: false
+            exit_status: 0
+          - then: "writer is gone"
+            command: "kill -0 ${CAPTURED:writer_pid} 2>&1; echo exit=$?"
+            in_container: false
+            stdout: { contains: "exit=1" }
+        teardown:
+          - then: "close MCP session (flushes pending CRDT)"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jc-kill.ipynb"}'
+            timeout: 30s
+          - then: "notebook still parses (no half-write left by SIGKILL'd writer)"
+            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jc-kill.ipynb\")); print(\"ok cells=\", len(d[\"cells\"]))'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok cells=" }
+
+      # Scenario 10: open-order-cdp-first. Open the browser tab BEFORE
+      # the MCP room. Both rooms can coexist — MCP's CRDT room and
+      # Chrome's CDP tab are orthogonal connections to the same
+      # JupyterLab server. Open order shouldn't matter; this scenario
+      # locks that contract.
+      - name: open-order-cdp-first
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook"
+            command: "rm -f /home/user/workspace/jc-orderc.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-orderc.ipynb"
+            in_container: true
+            exit_status: 0
+        steps:
+          - id: cdp-first
+            then: "STEP 1 — open Chrome tab; capture tab id"
+            cdp: open
+            url: "about:blank"
+            on: sway-browser-vnc-concurrency-test
+            capture: cdp_tab
+            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
+            timeout: 30s
+          - then: "STEP 2 — open MCP room (after cdp tab exists)"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jc-orderc.ipynb"}'
+            timeout: 60s
+          - then: "MCP write succeeds with cdp tab open"
+            mcp: call
+            tool: update_cell
+            input: '{"path":"jc-orderc.ipynb","index":0,"source":"# cdp-first","cell_type":"code"}'
+            timeout: 30s
+          - then: "CDP eval succeeds with mcp room open"
+            cdp: eval
+            tab: ${CAPTURED:cdp_tab}
+            expression: "5*7"
+            on: sway-browser-vnc-concurrency-test
+            stdout: { contains: "35" }
+            timeout: 30s
+          - then: "MCP read confirms cell contents"
+            mcp: call
+            tool: get_cell
+            input: '{"path":"jc-orderc.ipynb","index":0}'
+            stdout: { contains: "cdp-first" }
+            timeout: 30s
+        teardown:
+          - then: "close MCP session"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jc-orderc.ipynb"}'
+            timeout: 30s
+          - then: "close cdp tab"
+            cdp: close
+            tab: ${CAPTURED:cdp_tab}
+            on: sway-browser-vnc-concurrency-test
+            timeout: 15s
+
+      # Scenario 11: open-order-mcp-first. Mirror of scenario 10 with
+      # the open order reversed — proves order is symmetric.
+      - name: open-order-mcp-first
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook"
+            command: "rm -f /home/user/workspace/jc-orderm.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-orderm.ipynb"
+            in_container: true
+            exit_status: 0
+        steps:
+          - then: "STEP 1 — open MCP room first"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jc-orderm.ipynb"}'
+            timeout: 60s
+          - id: cdp-second
+            then: "STEP 2 — open Chrome tab; capture tab id (after mcp room exists)"
+            cdp: open
+            url: "about:blank"
+            on: sway-browser-vnc-concurrency-test
+            capture: cdp_tab2
+            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
+            timeout: 30s
+          - then: "MCP write succeeds with cdp tab open"
+            mcp: call
+            tool: update_cell
+            input: '{"path":"jc-orderm.ipynb","index":0,"source":"# mcp-first","cell_type":"code"}'
+            timeout: 30s
+          - then: "CDP eval succeeds with mcp room open"
+            cdp: eval
+            tab: ${CAPTURED:cdp_tab2}
+            expression: "9*9"
+            on: sway-browser-vnc-concurrency-test
+            stdout: { contains: "81" }
+            timeout: 30s
+          - then: "MCP read confirms cell contents"
+            mcp: call
+            tool: get_cell
+            input: '{"path":"jc-orderm.ipynb","index":0}'
+            stdout: { contains: "mcp-first" }
+            timeout: 30s
+        teardown:
+          - then: "close MCP session"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jc-orderm.ipynb"}'
+            timeout: 30s
+          - then: "close cdp tab"
+            cdp: close
+            tab: ${CAPTURED:cdp_tab2}
+            on: sway-browser-vnc-concurrency-test
+            timeout: 15s
 
   # ─────────────────────────────────────────────────────────────────────
   # c1-smoke-kill: SMOKE-only recipe exercising the 2026-05 capture_extract:

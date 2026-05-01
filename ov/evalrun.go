@@ -1009,7 +1009,7 @@ func trimPreview(s string) string {
 }
 
 // ---------------------------------------------------------------------------
-// Report rendering (text format — json/tap come in Phase 4)
+// Report rendering — text / JSON / TAP v13.
 // ---------------------------------------------------------------------------
 
 // FormatResultsText writes a human-readable summary of results to w and

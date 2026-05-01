@@ -124,18 +124,43 @@ func printRecipeText(res *EvalRunResults) {
 		pass, fail, skip, len(sorted))
 }
 
-// printRecipeTAP emits TAP12-compatible output for CI consumption.
+// printRecipeTAP emits TAP v13 output for CI consumption. Each scenario
+// is one top-level test; failures carry a YAML diagnostic block listing
+// the failed step text + verb so `prove` / `tap-parser` consumers see
+// exactly which step regressed without re-running the recipe.
 func printRecipeTAP(res *EvalRunResults) {
+	fmt.Println("TAP version 13")
 	if res == nil {
 		fmt.Println("1..0")
 		return
 	}
 	fmt.Printf("1..%d\n", len(res.Scenario))
 	for i, s := range res.Scenario {
-		marker := "ok"
-		if s.Status == "fail" {
-			marker = "not ok"
+		num := i + 1
+		switch s.Status {
+		case "pass":
+			fmt.Printf("ok %d - %s\n", num, s.Name)
+		case "skip", "skipped":
+			fmt.Printf("ok %d - %s # SKIP\n", num, s.Name)
+		case "fail":
+			fmt.Printf("not ok %d - %s\n", num, s.Name)
+			// YAML diagnostic block — TAP v13 spec.
+			fmt.Println("  ---")
+			fmt.Printf("  origin: %q\n", s.Origin)
+			if len(s.Steps) > 0 {
+				fmt.Println("  failed_steps:")
+				for _, step := range s.Steps {
+					if step.Status == "fail" {
+						fmt.Printf("    - text: %q\n", step.Text)
+						fmt.Printf("      verb: %q\n", step.Verb)
+						fmt.Printf("      step_id: %q\n", step.StepID)
+					}
+				}
+			}
+			fmt.Println("  ...")
+		default:
+			// Unknown status — emit not ok with the raw status as a directive.
+			fmt.Printf("not ok %d - %s # %s\n", num, s.Name, s.Status)
 		}
-		fmt.Printf("%s %d - %s\n", marker, i+1, s.Name)
 	}
 }

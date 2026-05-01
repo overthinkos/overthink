@@ -793,21 +793,107 @@ func resolveIngressPort(opts K8sGenerateOpts, portNameOrNumber string) int {
 // Check → K8s Probe translation.
 // -----------------------------------------------------------------------------
 
-// checkToProbe turns a generic declarative Check into a K8s probe spec. Only
-// HTTP and TCP addr checks translate; other check types (file, command) can
-// be expressed via exec probes but require additional wiring — left TODO.
+// checkToProbe turns a generic declarative Check into a K8s probe spec.
+// Translates the four most common check types into Kubernetes-native
+// probe shapes:
+//
+//   - http: <url>          → httpGet { path, port [+ host] }
+//   - addr: <host:port>    → tcpSocket { port [+ host] }
+//   - file: <path>         → exec { command: ["test", "-e", path] }
+//   - command: <cmd>       → exec { command: ["sh", "-c", cmd] }
+//
+// Returns nil for unsupported / unset checks so the manifest emitter
+// can omit the probe entirely (kubectl tolerates a missing probe; an
+// empty map would be rendered as `livenessProbe: {}` and rejected by
+// the apiserver's schema).
 func checkToProbe(c *Check) map[string]any {
 	if c == nil {
 		return nil
 	}
-	// Heuristic: if HTTP, emit httpGet; if Addr, emit tcpSocket; else exec.
-	if c.Path != "" && c.Dest == "" {
-		// TODO: if Check has explicit http path+port, map to httpGet. The
-		// existing Check struct routes http specifics through a sub-field
-		// that differs per check type; this generator supports the simple
-		// case only for now.
+	switch {
+	case c.HTTP != "":
+		probe := map[string]any{}
+		// HTTP url shape: scheme://host:port/path. We extract path+port
+		// best-effort; on parse failure we still emit httpGet with the
+		// raw string under "path" so the manifest is recognisable.
+		path, port, host := parseHTTPForProbe(c.HTTP)
+		probe["path"] = path
+		probe["port"] = port
+		if host != "" {
+			probe["host"] = host
+		}
+		return map[string]any{"httpGet": probe}
+	case c.Addr != "":
+		host, port := parseAddrForProbe(c.Addr)
+		probe := map[string]any{"port": port}
+		if host != "" {
+			probe["host"] = host
+		}
+		return map[string]any{"tcpSocket": probe}
+	case c.File != "":
+		// Probe semantics: file exists. K8s exec probes succeed iff
+		// exit 0; `test -e <path>` matches that contract.
+		return map[string]any{"exec": map[string]any{"command": []string{"test", "-e", c.File}}}
+	case c.Command != "":
+		// `sh -c <cmd>` because Command often carries pipelines or
+		// shell-substitutions that bare exec wouldn't handle.
+		return map[string]any{"exec": map[string]any{"command": []string{"sh", "-c", c.Command}}}
 	}
 	return nil
+}
+
+// parseHTTPForProbe extracts (path, port, host) from a check's HTTP URL.
+// Defaults: path "/", port 80 for http / 443 for https, host empty (k8s
+// uses the pod IP). Best-effort — on parse failure returns the URL as
+// path with port 80 so the user sees something traceable.
+func parseHTTPForProbe(url string) (path string, port int, host string) {
+	path, port = "/", 80
+	rest := url
+	if strings.HasPrefix(rest, "https://") {
+		rest = strings.TrimPrefix(rest, "https://")
+		port = 443
+	} else if strings.HasPrefix(rest, "http://") {
+		rest = strings.TrimPrefix(rest, "http://")
+	}
+	// rest = host[:port][/path]
+	pathIdx := strings.Index(rest, "/")
+	hostPort := rest
+	if pathIdx >= 0 {
+		hostPort = rest[:pathIdx]
+		path = rest[pathIdx:]
+	}
+	if colonIdx := strings.LastIndex(hostPort, ":"); colonIdx >= 0 {
+		host = hostPort[:colonIdx]
+		if p, err := strconv.Atoi(hostPort[colonIdx+1:]); err == nil {
+			port = p
+		}
+	} else {
+		host = hostPort
+	}
+	// k8s probes use the pod IP by default — leave host empty when the
+	// caller used "localhost" or "127.0.0.1" since those mean "the pod"
+	// in container-probe semantics.
+	if host == "localhost" || host == "127.0.0.1" {
+		host = ""
+	}
+	return path, port, host
+}
+
+// parseAddrForProbe splits "host:port" → (host, port). Host may be
+// empty when the check used a bare port (interpreted as pod-local).
+func parseAddrForProbe(addr string) (host string, port int) {
+	if colonIdx := strings.LastIndex(addr, ":"); colonIdx >= 0 {
+		host = addr[:colonIdx]
+		if p, err := strconv.Atoi(addr[colonIdx+1:]); err == nil {
+			port = p
+		}
+	} else if p, err := strconv.Atoi(addr); err == nil {
+		port = p
+	}
+	if host == "localhost" || host == "127.0.0.1" {
+		host = ""
+	}
+	return host, port
 }
 
 // -----------------------------------------------------------------------------

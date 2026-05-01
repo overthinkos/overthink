@@ -6,9 +6,23 @@ layer:
       dest: finetuning
   description:
     feature: Unsloth fine-tuning notebook collection
-    narrative: |-
-      Unsloth fine-tuning notebook collection
+    narrative: |
+      Provisions Unsloth fine-tuning notebooks into the workspace
+      volume's `finetuning/` subdirectory at deploy time. Includes
+      Unsloth_Setup, Vision_Training, SFT, GRPO, DPO, Reward,
+      RLOO, and QLoRA variants. Data-only — no packages, no
+      services. Consumed by jupyter-ml-notebook for an Unsloth-ready
+      JupyterLab image.
     scenario:
-      - name: 'TODO: describe Unsloth fine-tuning notebook collection'
-        tag: [skeleton]
-        steps: []
+      - name: finetuning notebooks land in the workspace volume
+        steps:
+          - then: the finetuning subdirectory is provisioned in the workspace
+            scope: deploy
+            file: ${VOLUME_CONTAINER_PATH:workspace}/finetuning
+            filetype: directory
+          - and: the Unsloth_Setup producer notebook is present
+            scope: deploy
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/finetuning/
+            exit_status: 0
+            stdout:
+              - matches: "Unsloth_Setup"

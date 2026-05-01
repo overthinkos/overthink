@@ -128,6 +128,15 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 	if ok && uf != nil && uf.VM != nil {
 		if _, present := uf.VM[c.Name]; present {
 			d, life := vmDisposableFromDeployments(tree, c.Name)
+			// Per-instance override (2026-05): lets an operator
+			// flip disposable/lifecycle for their specific libvirt
+			// domain without editing deploy.yml. Domain name is
+			// "ov-<vmEntityName>" (matches what ov vm create writes
+			// to ~/.local/share/ov/vm/<domain>/). Silent miss →
+			// keep upstream classification.
+			if ov, _ := LoadVmInstanceOverride("ov-" + c.Name); ov != nil {
+				d, life = ov.ApplyToVmClassification(d, life)
+			}
 			return "vm", d, life, nil
 		}
 	}

@@ -1,9 +1,16 @@
 """FastMCP server definition with tools for notebook manipulation via CRDT.
 
-Tools are organized into three groups:
-  - Notebook management (list, get, create)
-  - Cell operations (get, update, insert, delete, execute) — mutations sync live
-  - Collaboration awareness (active users, active sessions)
+Tool naming convention: every tool uses ``<noun>_<verb>`` form.
+Three nouns partition the catalog:
+
+  - ``notebook_*`` — filesystem operations on .ipynb files
+  - ``cell_*``     — in-memory cell mutations (require an open room)
+  - ``room_*``     — CRDT room lifecycle and introspection
+
+Room creation is ALWAYS explicit: only ``room_open`` creates a room.
+Every room-mutation tool (cell_*, notebook_get, notebook_watch) raises
+RoomNotOpenError when the path has no active room — call ``room_open``
+first.
 """
 
 from __future__ import annotations
@@ -13,7 +20,7 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-from .rtc_adapter import RTCAdapter
+from .rtc_adapter import RTCAdapter, RoomNotOpenError
 
 
 def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
@@ -22,37 +29,33 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         os.environ.get("MCP_SERVER_NAME", "jupyter"),
         instructions=(
             "JupyterLab MCP server with real-time collaboration. "
-            "Cell operations mutate the live CRDT document — changes appear "
-            "instantly in all connected JupyterLab clients. "
-            "Notebooks must be open in JupyterLab for CRDT tools to work."
+            "Tools are prefixed by domain: notebook_* (filesystem), "
+            "cell_* (in-memory mutations), room_* (CRDT room lifecycle). "
+            "Room creation is explicit: call room_open(path) before any "
+            "cell_* or notebook_get/watch operation, and room_close(path) "
+            "when done. Cell mutations propagate live to all connected "
+            "JupyterLab UI clients via the same CRDT room."
         ),
     )
 
-    # ── Notebook management ──────────────────────────────────────────
+    # ── notebook_* — filesystem operations ───────────────────────────
 
     @mcp.tool()
-    async def list_notebooks() -> list[dict[str, str]]:
+    async def notebook_list() -> list[dict[str, str]]:
         """List all notebooks accessible in the workspace.
+
+        Filesystem-only. Does not touch CRDT rooms.
 
         Returns a list of dicts with 'path' and 'name' for each notebook.
         """
         return await adapter.list_notebooks()
 
     @mcp.tool()
-    async def get_notebook(path: str) -> dict[str, Any] | None:
-        """Get full notebook content (cells, metadata, kernel info).
+    async def notebook_create(path: str) -> dict[str, str]:
+        """Create a new empty notebook on disk.
 
-        If the notebook is open in a collaboration session, returns the live
-        CRDT state. Otherwise, reads from disk.
-
-        Args:
-            path: Notebook path relative to the workspace root (e.g. "analysis.ipynb")
-        """
-        return await adapter.get_notebook(path)
-
-    @mcp.tool()
-    async def create_notebook(path: str) -> dict[str, str]:
-        """Create a new empty notebook.
+        Filesystem-only. Does NOT open a CRDT room — call ``room_open``
+        afterwards if you need to read or mutate cells.
 
         Args:
             path: Path for the new notebook (e.g. "experiments/new.ipynb")
@@ -62,13 +65,46 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         """
         return await adapter.create_notebook(path)
 
-    # ── Cell operations (CRDT — changes sync to all collaborators) ───
+    @mcp.tool()
+    async def notebook_get(path: str) -> dict[str, Any] | None:
+        """Get full notebook content (cells, metadata, kernel info).
+
+        Requires an open CRDT room for the path. Call ``room_open(path)``
+        first; raises RoomNotOpenError otherwise.
+
+        Args:
+            path: Notebook path relative to the workspace root
+        """
+        return await adapter.get_notebook(path)
 
     @mcp.tool()
-    async def get_cell(path: str, index: int) -> dict[str, Any]:
+    async def notebook_watch(path: str, timeout: int = 30) -> dict[str, Any]:
+        """Watch for changes to a notebook. Blocks until a cell is changed
+        by another client or a human in JupyterLab, or until timeout.
+
+        Requires an open CRDT room. Call ``room_open(path)`` first.
+
+        Multiple clients can watch the same notebook simultaneously — each
+        gets independently notified.
+
+        Args:
+            path: Notebook path relative to workspace root
+            timeout: Seconds to wait before returning (default: 30, max: 300)
+
+        Returns:
+            {"changed": true, "cell_count": N} if a change was detected,
+            {"changed": false} if timeout expired with no changes.
+        """
+        clamped_timeout = min(max(timeout, 1), 300)
+        return await adapter.watch_notebook(path, timeout=clamped_timeout)
+
+    # ── cell_* — in-memory cell mutations (require open room) ────────
+
+    @mcp.tool()
+    async def cell_get(path: str, index: int) -> dict[str, Any]:
         """Get a specific cell's content from an open notebook.
 
-        The notebook must be open in JupyterLab (CRDT room must exist).
+        Requires an open CRDT room. Call ``room_open(path)`` first.
 
         Args:
             path: Notebook path relative to workspace root
@@ -81,13 +117,15 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         return await adapter.get_cell(path, index)
 
     @mcp.tool()
-    async def update_cell(
+    async def cell_update(
         path: str,
         index: int,
         source: str,
         cell_type: str | None = None,
     ) -> str:
         """Update a cell's content. The change syncs live to all collaborators.
+
+        Requires an open CRDT room. Call ``room_open(path)`` first.
 
         Args:
             path: Notebook path
@@ -109,13 +147,15 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         return f"Cell {index} updated"
 
     @mcp.tool()
-    async def insert_cell(
+    async def cell_insert(
         path: str,
         index: int,
         source: str,
         cell_type: str = "code",
     ) -> str:
         """Insert a new cell at the given position. Syncs live to all collaborators.
+
+        Requires an open CRDT room. Call ``room_open(path)`` first.
 
         Args:
             path: Notebook path
@@ -127,8 +167,10 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         return f"Cell inserted at index {index}"
 
     @mcp.tool()
-    async def delete_cell(path: str, index: int) -> str:
+    async def cell_delete(path: str, index: int) -> str:
         """Delete a cell from an open notebook. Syncs live to all collaborators.
+
+        Requires an open CRDT room. Call ``room_open(path)`` first.
 
         Args:
             path: Notebook path
@@ -138,9 +180,10 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         return f"Cell {index} deleted"
 
     @mcp.tool()
-    async def execute_cell(path: str, index: int) -> list[dict[str, Any]]:
+    async def cell_execute(path: str, index: int) -> list[dict[str, Any]]:
         """Execute a cell and return its outputs.
 
+        Requires an open CRDT room. Call ``room_open(path)`` first.
         Starts a kernel if one isn't already running for this notebook.
 
         Args:
@@ -153,73 +196,100 @@ def create_mcp_server(adapter: RTCAdapter) -> FastMCP:
         """
         return await adapter.execute_cell(path, index)
 
-    # ── Collaboration awareness ──────────────────────────────────────
+    # ── room_* — CRDT room lifecycle and introspection ───────────────
 
     @mcp.tool()
-    async def get_active_users() -> list[dict[str, str]]:
-        """List users currently connected via real-time collaboration.
+    async def room_open(path: str) -> str:
+        """Open a CRDT collaboration room for a notebook (idempotent).
 
-        Returns a list of dicts with 'id' and 'name' for each user.
-        """
-        return await adapter.get_active_users()
-
-    @mcp.tool()
-    async def get_active_sessions() -> list[dict[str, str]]:
-        """List active collaboration sessions (open documents).
-
-        Returns a list of dicts with 'room_id' identifying each active
-        document session.
-        """
-        return await adapter.get_active_sessions()
-
-    # ── Room management ──────────────────────────────────────────────
-
-    @mcp.tool()
-    async def open_notebook_session(path: str) -> str:
-        """Open a notebook and create a CRDT collaboration room.
-
-        This makes the notebook available for real-time cell operations
-        (get_cell, update_cell, etc.) without needing a browser open.
-        The room persists until close_notebook_session is called.
+        If a room already exists for this path, returns it unchanged.
+        Once open, any subsequent JupyterLab UI tab that opens the same
+        notebook automatically joins the same room — there is no second
+        room. Required before any cell_* or notebook_get/watch call.
 
         Args:
             path: Notebook path relative to workspace root
         """
         await adapter.open_room(path)
-        return f"Collaboration room opened for {path}"
+        return f"Room opened for {path}"
 
     @mcp.tool()
-    async def close_notebook_session(path: str) -> str:
-        """Close a notebook's CRDT collaboration room and save to disk.
+    async def room_close(path: str) -> str:
+        """Close a notebook's CRDT room and save its state to disk.
+
+        Hard-fails if no room exists for the given path.
 
         Args:
             path: Notebook path relative to workspace root
         """
         await adapter.close_room(path)
-        return f"Collaboration room closed for {path}"
-
-    # ── Change watching ──────────────────────────────────────────────
+        return f"Room closed for {path}"
 
     @mcp.tool()
-    async def watch_notebook(path: str, timeout: int = 30) -> dict[str, Any]:
-        """Watch for changes to a notebook. Blocks until a cell is changed
-        by another client or a human in JupyterLab, or until timeout expires.
+    async def room_close_all() -> dict[str, Any]:
+        """Close every active CRDT room — blanket cleanup.
 
-        Use this to get notified of collaborative edits in real-time.
-        The notebook must have an open session (call open_notebook_session first).
-
-        Multiple clients can watch the same notebook simultaneously — each
-        gets independently notified.
-
-        Args:
-            path: Notebook path relative to workspace root
-            timeout: Seconds to wait before returning (default: 30, max: 300)
+        Iterates every room currently in the server's room registry,
+        saves it to disk, and deletes it. Disconnects any active
+        JupyterLab UI clients from their rooms. Use for end-of-task
+        cleanup or orphan recovery, not for routine multi-client
+        workflows.
 
         Returns:
-            {"changed": true, "cell_count": N} if a change was detected,
-            {"changed": false} if timeout expired with no changes.
+            ``{"closed": [{"room_id": ..., "path": ...}, ...],
+               "errors": [{"room_id": ..., "error": "..."}, ...]}``
         """
-        clamped_timeout = min(max(timeout, 1), 300)
-        return await adapter.watch_notebook(path, timeout=clamped_timeout)
+        return await adapter.close_all_rooms()
+
+    @mcp.tool()
+    async def room_pick(
+        path: str | None = None, room_id: str | None = None
+    ) -> dict[str, Any]:
+        """Look up an existing CRDT room without creating one.
+
+        Hard-fails if no room exists for the given path or room_id.
+        Distinct from ``room_open`` (which creates if absent). Useful
+        when verifying cleanup, attaching to a UI-created room, or
+        operating on rooms whose path mapping has been lost.
+
+        Provide exactly one of ``path`` or ``room_id``.
+
+        Args:
+            path: Notebook path to look up.
+            room_id: Direct room id (escape hatch for orphans).
+
+        Returns:
+            One ``room_list`` entry: room_id, path, file_id, users,
+            user_count, has_kernel.
+        """
+        if (path is None) == (room_id is None):
+            raise ValueError("Provide exactly one of 'path' or 'room_id'.")
+        return await adapter.pick_room(path=path, room_id=room_id)
+
+    @mcp.tool()
+    async def room_list() -> list[dict[str, Any]]:
+        """List every active CRDT room with full metadata.
+
+        Reports all rooms in the server's registry — UI-created and
+        MCP-created alike — with each room's notebook path (reverse-
+        resolved via the file id manager), the underlying file_id,
+        the list of currently-attached awareness users, the user
+        count, and whether a Jupyter kernel session is currently
+        bound to the path.
+
+        Returns:
+            List of dicts with keys: room_id, path, file_id, users,
+            user_count, has_kernel.
+        """
+        return await adapter.list_rooms()
+
+    @mcp.tool()
+    async def room_list_users() -> list[dict[str, str]]:
+        """List awareness users currently connected to any CRDT room.
+
+        Returns:
+            List of dicts with 'id' and 'name' for each connected user.
+        """
+        return await adapter.list_room_users()
 
     return mcp

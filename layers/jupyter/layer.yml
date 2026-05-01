@@ -64,29 +64,32 @@ layer:
       mcp: ping
       timeout: 10s
     # Assert every JupyterLab MCP tool name is present in list-tools.
-    # See plugins/ov-layers/skills/jupyter-mcp/SKILL.md for the
-    # documented 13-tool surface this MCP server provides.
+    # See plugins/ov-jupyter/skills/jupyter-mcp/SKILL.md for the
+    # documented 15-tool surface this MCP server provides.
+    # Naming convention: <noun>_<verb> with notebook_*/cell_*/room_* prefixes.
     - id: mcp-jupyter-list-tools
       scope: deploy
       mcp: list-tools
       stdout:
-        - contains: list_notebooks
-        - contains: get_notebook
-        - contains: create_notebook
-        - contains: open_notebook_session
-        - contains: close_notebook_session
-        - contains: get_cell
-        - contains: update_cell
-        - contains: insert_cell
-        - contains: delete_cell
-        - contains: execute_cell
-        - contains: get_active_sessions
-        - contains: get_active_users
-        - contains: watch_notebook
+        - contains: notebook_list
+        - contains: notebook_create
+        - contains: notebook_get
+        - contains: notebook_watch
+        - contains: cell_get
+        - contains: cell_update
+        - contains: cell_insert
+        - contains: cell_delete
+        - contains: cell_execute
+        - contains: room_open
+        - contains: room_close
+        - contains: room_close_all
+        - contains: room_pick
+        - contains: room_list
+        - contains: room_list_users
     - id: mcp-jupyter-list-notebooks
       scope: deploy
       mcp: call
-      tool: list_notebooks
+      tool: notebook_list
       input: "{}"
       exit_status: 0
 

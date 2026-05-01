@@ -368,16 +368,6 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 		return nil
 	}
 
-	// Route the podman build via the configured executor. On the root
-	// (LocalDeployExecutor) this is equivalent to the prior direct
-	// exec.CommandContext call. On a NestedExecutor the command runs
-	// in the parent venue — the caller is responsible for ensuring the
-	// build context is reachable there (today this is only true when
-	// the build dir is on a shared filesystem the parent can see; we
-	// error loudly otherwise).
-	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
-		return fmt.Errorf("PodDeployTarget: nested container overlay builds inside %s are not yet wired — build the base image locally, then `ov deploy add` with a pre-built ref", nested.Venue())
-	}
 	// Build context is the PROJECT ROOT (Generator.Dir), not the overlay
 	// build dir — the emitted Containerfile has `COPY layers/<name>/ /`
 	// paths that are relative to the project root, same as the full
@@ -386,8 +376,35 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	if t.Generator != nil && t.Generator.Dir != "" {
 		buildContext = t.Generator.Dir
 	}
+
+	// Containerfile path on the host (host-side absolute) is also
+	// host-only; nested execution can't see it directly.
+	cfPathInVenue := cfPath
+	venueBuildContext := buildContext
+
+	// Route the podman build via the configured executor. On the root
+	// (LocalDeployExecutor) this is equivalent to the prior direct
+	// exec.CommandContext call. On a NestedExecutor the command runs
+	// in the parent venue — translate host-side paths (Containerfile,
+	// build context) to venue-side paths via the parent's bind-mount
+	// mappings declared in deploy.yml. Pre-C10 this errored out
+	// unconditionally; with the path translator we can continue when
+	// the parent venue has the project tree bind-mounted.
+	if nested, ok := t.Executor.(*NestedExecutor); ok && nested != nil {
+		venuePath, ok := translateHostPathToVenue(buildContext, opts.ParentNode)
+		if !ok {
+			return fmt.Errorf("PodDeployTarget: nested container overlay build inside %s requires the project tree at %s to be bind-mounted into the parent venue (set `volumes: [{name: project, type: bind, host: %s, path: /workspace}]` on the parent deploy.yml entry, then re-run)", nested.Venue(), buildContext, buildContext)
+		}
+		venueBuildContext = venuePath
+		// The Containerfile lives inside the build context, so its
+		// venue-side path follows the same translation.
+		if cfVenue, ok := translateHostPathToVenue(cfPath, opts.ParentNode); ok {
+			cfPathInVenue = cfVenue
+		}
+	}
+
 	buildScript := fmt.Sprintf("%s build -f %s -t %s %s",
-		t.Engine, deployShellQuote(cfPath), deployShellQuote(t.overlayImageRef), deployShellQuote(buildContext))
+		t.Engine, deployShellQuote(cfPathInVenue), deployShellQuote(t.overlayImageRef), deployShellQuote(venueBuildContext))
 	if err := t.exec().RunUser(opts.ContextOrDefault(), buildScript, opts); err != nil {
 		return fmt.Errorf("overlay build: %w", err)
 	}
@@ -513,3 +530,42 @@ func (t *PodDeployTarget) RemoveOverlayImage(opts EmitOpts) error {
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
+
+// translateHostPathToVenue maps a host-side absolute path to the
+// equivalent path inside a parent venue, by walking the parent
+// DeploymentNode's bind-mount volumes. Returns (venuePath, true)
+// when a containing bind-mount is found; ("", false) otherwise.
+//
+// Used by C10' s pod-in-pod overlay build path: the nested podman
+// runs in the parent venue and needs build-context paths expressed
+// in the venue's filesystem view, not the host's.
+//
+// Example: parent has
+//   volumes: [{name: project, type: bind, host: /home/user/repo, path: /workspace}]
+// then translateHostPathToVenue("/home/user/repo/layers/x", parent)
+// returns ("/workspace/layers/x", true).
+func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, bool) {
+	if parent == nil || hostPath == "" {
+		return "", false
+	}
+	// Normalize the input: the bind-mount Host fields are typically
+	// expanded (no ~), absolute, and lack trailing slashes.
+	clean := filepath.Clean(hostPath)
+	for _, v := range parent.Volumes {
+		if v.Type != "bind" || v.Host == "" || v.Path == "" {
+			continue
+		}
+		hostBase := filepath.Clean(v.Host)
+		// hostPath must equal hostBase or be a subpath of it.
+		if clean == hostBase {
+			return filepath.Clean(v.Path), true
+		}
+		prefix := hostBase + string(filepath.Separator)
+		if strings.HasPrefix(clean, prefix) {
+			rel := strings.TrimPrefix(clean, prefix)
+			return filepath.Join(v.Path, rel), true
+		}
+	}
+	return "", false
+}
+

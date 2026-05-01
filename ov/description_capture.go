@@ -1,6 +1,10 @@
 package main
 
-import "sync"
+import (
+	"fmt"
+	"regexp"
+	"sync"
+)
 
 // ScenarioContext carries per-scenario mutable state across the
 // execution of that scenario's steps — principally the capture store
@@ -199,4 +203,30 @@ func CaptureFromResult(rawValue, resultMessage string) string {
 		return rawValue
 	}
 	return resultMessage
+}
+
+// ApplyCaptureExtract runs the regex `pattern` against `value` and
+// returns the first submatch group (or the whole match if no groups
+// exist). Returns an error if the pattern is invalid or doesn't match.
+//
+// Used by the runner when a check sets `capture_extract:` alongside
+// `capture:` — see evalrun.go's post-dispatch capture block. A failed
+// match deliberately surfaces as an error so the caller can FAIL the
+// check rather than silently store the unextracted (noisy) value.
+func ApplyCaptureExtract(value, pattern string) (string, error) {
+	if pattern == "" {
+		return value, nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", fmt.Errorf("invalid capture_extract regex %q: %w", pattern, err)
+	}
+	m := re.FindStringSubmatch(value)
+	if m == nil {
+		return "", fmt.Errorf("capture_extract regex %q did not match input", pattern)
+	}
+	if len(m) >= 2 {
+		return m[1], nil
+	}
+	return m[0], nil
 }

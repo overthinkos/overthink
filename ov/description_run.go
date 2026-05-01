@@ -514,3 +514,24 @@ func sendSIGTERM(pid int) error {
 	}
 	return nil
 }
+
+// sendSIGKILL is the SIGKILL sibling of sendSIGTERM. Used by the
+// `kill:` step verb when Signal: KILL is requested. Same best-effort
+// semantics as sendSIGTERM — process-not-found is treated as success.
+func sendSIGKILL(pid int) error {
+	if pid <= 0 {
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return nil
+	}
+	if err := proc.Signal(syscall.SIGKILL); err != nil {
+		if strings.Contains(err.Error(), "process already finished") ||
+			strings.Contains(err.Error(), "no such process") {
+			return nil
+		}
+		return err
+	}
+	return nil
+}

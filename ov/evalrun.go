@@ -327,6 +327,8 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			dr = r.runK8s(ctx, &expanded)
 		case "summarize":
 			dr = r.runSummarize(ctx, &expanded)
+		case "kill":
+			dr = r.runKill(ctx, &expanded)
 		default:
 			dr.Status = TestSkip
 			dr.Message = fmt.Sprintf("unknown verb %q", kind)
@@ -352,7 +354,21 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 		// Prefer Check-type-specific capture extraction where we have it;
 		// fall back to result.Message which verb handlers populate with
 		// their primary output on PASS.
-		r.Scenario.Capture(c.Capture, CaptureFromResult("", result.Message))
+		raw := CaptureFromResult("", result.Message)
+		if c.CaptureExtract != "" {
+			extracted, err := ApplyCaptureExtract(raw, c.CaptureExtract)
+			if err != nil {
+				// A capture_extract miss is a real failure — better to
+				// surface it loudly than store an empty/noisy value
+				// that downstream ${CAPTURED:<name>} refs would then
+				// misuse.
+				result.Status = TestFail
+				result.Message = fmt.Sprintf("%s (capture_extract on Message=%q)", err, raw)
+				return result
+			}
+			raw = extracted
+		}
+		r.Scenario.Capture(c.Capture, raw)
 		result.CapturedValue = r.Scenario.Captures[c.Capture]
 	}
 	return result
@@ -576,6 +592,49 @@ func (r *Runner) dialPort(c *Check) EvalResult {
 // runCommand runs the command (in-container by default, from-host if
 // InContainer=false or FromHost=true) and matches against Exit/Stdout/Stderr.
 //
+// runKill resolves the PID in c.Kill (typically expanded from
+// ${CAPTURED:<name>} carrying a prior `command:` step's
+// "backgrounded pid=N" message via capture_extract), and sends a
+// signal — SIGTERM by default, SIGKILL when c.Signal == "KILL". The
+// counterpart to `command: ... background: true`: a scenario can
+// spawn a writer, capture its PID, kill it mid-stream, and assert
+// post-state consistency.
+//
+// Host-side only. Like Background, in-container PID kill is the
+// user's responsibility (drop into command: with kill -<sig>).
+func (r *Runner) runKill(ctx context.Context, c *Check) EvalResult {
+	if r.Mode == RunModeImage {
+		return skipf(c, "kill: not meaningful under ov image test")
+	}
+	pidStr := strings.TrimSpace(c.Kill)
+	if pidStr == "" {
+		return failf(c, "kill: empty PID (resolved value is blank — check capture/${CAPTURED:...} chain)")
+	}
+	pid, err := strconv.Atoi(pidStr)
+	if err != nil {
+		return failf(c, "kill: cannot parse PID %q: %v", pidStr, err)
+	}
+	if pid <= 0 {
+		return failf(c, "kill: invalid PID %d", pid)
+	}
+
+	sig := strings.ToUpper(strings.TrimSpace(c.Signal))
+	switch sig {
+	case "", "TERM", "SIGTERM":
+		if err := sendSIGTERM(pid); err != nil {
+			return failf(c, "kill -TERM %d: %v", pid, err)
+		}
+		return passf(c, fmt.Sprintf("sent SIGTERM to pid=%d", pid))
+	case "KILL", "SIGKILL":
+		if err := sendSIGKILL(pid); err != nil {
+			return failf(c, "kill -KILL %d: %v", pid, err)
+		}
+		return passf(c, fmt.Sprintf("sent SIGKILL to pid=%d", pid))
+	default:
+		return failf(c, "kill: unsupported signal %q (valid: TERM, KILL)", c.Signal)
+	}
+}
+
 // Background mode: when c.Background is true, the host-side command is
 // spawned via cmd.Start() (no Wait); the PID is registered with the
 // scenario context for SIGTERM-reap at scenario teardown. Background
@@ -607,6 +666,12 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 		if r.Scenario != nil {
 			r.Scenario.AddBackground(cmd.Process.Pid)
 		}
+		// Reap asynchronously so `kill:` SIGKILL doesn't leave the
+		// process as a zombie (which `kill -0 PID` would still report
+		// as alive). Wait blocks until the process actually exits;
+		// either teardown's SIGTERM or an in-scenario kill: SIGKILL
+		// will trigger that exit, after which Wait clears the zombie.
+		go func() { _ = cmd.Wait() }()
 		return passf(c, fmt.Sprintf("backgrounded pid=%d", cmd.Process.Pid))
 	}
 

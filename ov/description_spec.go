@@ -374,15 +374,25 @@ func (s *Step) KeywordText() string {
 // IsPending reports whether the step has no verb attached. Pending steps
 // are narrative-only (no check executes) and are reported as "pending" —
 // advisory by default, fail under --strict.
+//
+// NOTE: this list mirrors Check.verbsSet but is INTENTIONALLY a separate
+// hand-maintained list rather than a delegation. Reason: the
+// `summarize:` verb is currently broken in some scenarios (over_ids
+// glob matching against recorded step IDs needs separate work), and
+// flipping its IsPending status from true to false would surface
+// pre-existing failures unrelated to whatever verb's being added.
+// When summarize lands a real fix, this list and verbsSet should be
+// unified. New verbs added in the meantime: include them here AND in
+// CheckVerbs / verbsSet.
 func (s *Step) IsPending() bool {
-	// Walk the exact same verb list Check.verbsSet uses but stop at the first.
 	c := &s.Check
 	if c.File != "" || c.Package != "" || c.Service != "" || c.Port != 0 ||
 		c.Process != "" || c.Command != "" || c.HTTP != "" || c.DNS != "" ||
 		c.User != "" || c.Group != "" || c.Interface != "" || c.KernelParam != "" ||
 		c.Mount != "" || c.Addr != "" || c.Matching != nil ||
 		c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" || c.Mcp != "" ||
-		c.Record != "" || c.Spice != "" || c.Libvirt != "" || c.K8s != "" {
+		c.Record != "" || c.Spice != "" || c.Libvirt != "" || c.K8s != "" ||
+		c.Kill != "" {
 		return false
 	}
 	return true

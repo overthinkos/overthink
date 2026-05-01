@@ -61,6 +61,15 @@ type Check struct {
 	Spice   string `yaml:"spice,omitempty"   json:"spice,omitempty"`
 	Libvirt string `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 	K8s     string `yaml:"k8s,omitempty"     json:"k8s,omitempty"`
+	// Kill is a verb discriminator. The value is a PID string (typically
+	// produced via ${CAPTURED:<name>} from a prior `command:` step that
+	// ran with `background: true` and captured its "backgrounded pid=N"
+	// message). The kill: verb resolves this PID and sends a signal —
+	// SIGTERM by default, SIGKILL when Signal is "KILL". Companion to
+	// Background; the two together let scenarios spawn a writer, kill it
+	// mid-stream, and assert post-state consistency.
+	Kill   string `yaml:"kill,omitempty"   json:"kill,omitempty"`
+	Signal string `yaml:"signal,omitempty" json:"signal,omitempty"` // "TERM" (default) or "KILL"
 
 	// Shared resource-identity modifiers — reusable across verbs that need
 	// them (k8s needs all four; future verbs can opt in). Kept as plain
@@ -112,6 +121,17 @@ type Check struct {
 	//                  Each On dispatch resolves a target-specific VarResolver (HOST_PORT / CONTAINER_IP / …).
 	//   Tag: free-form label set for --tag filtering. Combined with the enclosing scenario's tags.
 	Capture       string   `yaml:"capture,omitempty"        json:"capture,omitempty"`
+	// CaptureExtract: optional Go RE2 regex applied to the raw capture
+	// value before it lands in ScenarioContext.Captures. The first
+	// regex submatch group becomes the captured value (whole match if
+	// no group is present). Use when a verb's natural output carries
+	// the value you want plus surrounding noise — e.g. the
+	// "backgrounded pid=NNNN" Message from a `background: true`
+	// command, where `capture_extract: "pid=([0-9]+)"` extracts just
+	// the PID. If the regex fails to match, the check FAILS rather
+	// than storing the unextracted value (silent fall-through would
+	// be worse than a loud failure here).
+	CaptureExtract string   `yaml:"capture_extract,omitempty" json:"capture_extract,omitempty"`
 	Eventually    string   `yaml:"eventually,omitempty"     json:"eventually,omitempty"`
 	RetryInterval string   `yaml:"retry_interval,omitempty" json:"retry_interval,omitempty"`
 	On            string   `yaml:"on,omitempty"             json:"on,omitempty"`
@@ -297,6 +317,7 @@ var CheckVerbs = []string{
 	"cdp", "wl", "dbus", "vnc", "mcp",
 	"record", "spice", "libvirt", "k8s",
 	"summarize",
+	"kill",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -404,6 +425,9 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.Summarize != "" {
 		set = append(set, "summarize")
+	}
+	if c.Kill != "" {
+		set = append(set, "kill")
 	}
 	return set
 }
@@ -764,7 +788,10 @@ func (c *Check) StringFields() []*string {
 		&c.RecordName, &c.RecordMode,
 		// BDD-era modifiers — On may contain ${VAR}; Capture/Eventually/RetryInterval
 		// are identifiers/durations but still run through the expander for symmetry.
-		&c.On, &c.Capture, &c.Eventually, &c.RetryInterval,
+		&c.On, &c.Capture, &c.CaptureExtract, &c.Eventually, &c.RetryInterval,
+		// kill: verb's PID arg is typically ${CAPTURED:<name>} from a prior
+		// background command; Signal is a literal but expanded for symmetry.
+		&c.Kill, &c.Signal,
 	}
 }
 

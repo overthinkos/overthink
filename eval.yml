@@ -1328,6 +1328,45 @@ recipe:
             timeout: 30s
 
   # ─────────────────────────────────────────────────────────────────────
+  # c1-smoke-kill: SMOKE-only recipe exercising the 2026-05 capture_extract:
+  # regex modifier + kill: step verb (sendSIGKILL via captured PID). This
+  # is the C1 cutover's R10 acceptance smoke; remove or keep as the
+  # framework's primary test case. Pod is jupyter-concurrency-test only
+  # because every `pod:` field needs SOME target — the kill itself is
+  # host-side (background: true requires it) and the assertions all
+  # in_container: false.
+  # ─────────────────────────────────────────────────────────────────────
+  c1-smoke-kill:
+    description:
+      feature: "capture_extract: regex + kill: step verb roundtrip"
+    scenario:
+      - name: kill-captured-bg-pid
+        pod: jupyter-concurrency-test
+        steps:
+          - id: bg-writer
+            then: "background a host-side writer; capture its pid via regex"
+            command: "sleep 600"
+            in_container: false
+            background: true
+            capture: writer_pid
+            capture_extract: "pid=([0-9]+)"
+          - then: "writer is alive (kill -0 succeeds before the kill step)"
+            command: "kill -0 ${CAPTURED:writer_pid}"
+            in_container: false
+            exit_status: 0
+          - then: "send SIGKILL to the captured pid"
+            kill: ${CAPTURED:writer_pid}
+            signal: KILL
+          - then: "wait for OS reap"
+            command: "sleep 1"
+            in_container: false
+            exit_status: 0
+          - then: "writer is gone (kill -0 returns non-zero)"
+            command: "kill -0 ${CAPTURED:writer_pid} 2>&1; echo exit=$?"
+            in_container: false
+            stdout: { contains: "exit=1" }
+
+  # ─────────────────────────────────────────────────────────────────────
   # jupyter-execute-cell-persistence: locks the contract that
   # mcp__jupyter__execute_cell outputs persist to the on-disk .ipynb
   # after mcp__jupyter__close_notebook_session, and that close evicts

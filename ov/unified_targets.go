@@ -101,6 +101,23 @@ type VmUnifiedTarget struct {
 	// from VmDeployTarget.Name ("vm:" + VMName legacy) and
 	// VmDeployTarget.VMName (the underlying kind:vm entity name).
 	NodeName string
+
+	// Instance is the optional per-instance suffix for multi-instance
+	// VMs. Combined with the entity name to form the libvirt/qemu
+	// domain via vmName(entity, instance).
+	Instance string
+
+	// KeepRepoChanges and KeepServices are deploy-del gate flags
+	// populated by the dispatcher from `ov deploy del --keep-…`.
+	// Forwarded to runReverseOps when Del runs.
+	KeepRepoChanges bool
+	KeepServices    bool
+
+	// RevRunner is the ReverseRunner used by guest-side ReverseOp
+	// teardown. Typically an *sshReverseRunner constructed by the
+	// dispatcher from the persisted vm_state in deploy.yml. Nil →
+	// Del builds it itself from buildVmReverseRunner(NodeName).
+	RevRunner ReverseRunner
 }
 
 func (t *VmUnifiedTarget) Name() string { return t.NodeName }
@@ -114,34 +131,6 @@ func (t *VmUnifiedTarget) Executor() DeployExecutor {
 
 func (t *VmUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
 	return t.VmDeployTarget.Emit(plans, opts)
-}
-
-func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Start(ctx context.Context) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Stop(ctx context.Context) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
-	return StatusInfo{}, fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *VmUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
-	return fmt.Errorf("vm %q: %w", t.NodeName, ErrNotYetImplemented)
 }
 
 // ---------------------------------------------------------------------------

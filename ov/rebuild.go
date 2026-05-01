@@ -218,48 +218,11 @@ func (c *RebuildCmd) refuseMessage(kind, lifecycle string) error {
 
 // rebuildVm: destroy → (optional build) → create → start.
 func (c *RebuildCmd) rebuildVm() error {
-	if c.DryRun {
-		fmt.Printf("dry-run: ov vm destroy %s\n", c.Name)
-		if !c.ReuseImage {
-			fmt.Printf("dry-run: ov vm build %s\n", c.Name)
-		}
-		fmt.Printf("dry-run: ov vm create %s\n", c.Name)
-		fmt.Printf("dry-run: ov vm start %s\n", c.Name)
-		return nil
-	}
-	// Destroy is best-effort (may not exist yet).
-	_ = runOvSubcommand("vm", "destroy", c.Name)
-	if !c.ReuseImage {
-		if err := runOvSubcommand("vm", "build", c.Name); err != nil {
-			return fmt.Errorf("ov vm build %s: %w", c.Name, err)
-		}
-	}
-	if err := runOvSubcommand("vm", "create", c.Name); err != nil {
-		return fmt.Errorf("ov vm create %s: %w", c.Name, err)
-	}
-	// `ov vm create` may auto-start the VM via libvirt-config-injection
-	// post-create. If so, `ov vm start` will fail with "already
-	// running" — that's a success signal for us, not an error.
-	// runOvSubcommandCapture captures stderr so we can pattern-match
-	// AND suppress the output when it's benign (no scary error line
-	// in the user-visible rebuild log).
-	stderr, err := runOvSubcommandCapture("vm", "start", c.Name)
-	if err != nil {
-		if isBenignAlreadyRunning(stderr) {
-			// VM was booted by the create path — that's the desired
-			// end state for rebuild. Silently accept.
-			return nil
-		}
-		// Real error: print the captured stderr then return.
-		fmt.Fprint(os.Stderr, stderr)
-		return fmt.Errorf("ov vm start %s: %w", c.Name, err)
-	}
-	// Non-error path: mirror captured stderr (if any) so diagnostic
-	// messages aren't lost.
-	if stderr != "" {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	return nil
+	target := &VmUnifiedTarget{NodeName: c.Name}
+	return target.Rebuild(context.Background(), RebuildOpts{
+		DryRun:       c.DryRun,
+		RebuildImage: !c.ReuseImage,
+	})
 }
 
 // rebuildContainerDeploy follows a build → build-test → stop → start
@@ -408,37 +371,27 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 		return fmt.Errorf("ov rebuild: deploy %q has target=vm but no `vm:` field set", c.Name)
 	}
 
+	// Phase 1: VM lifecycle through VmUnifiedTarget — handles destroy +
+	// (optional) build + create + start with benign-already-running
+	// suppression. The unified target's vmEntityName() falls back to
+	// NodeName when VmDeployTarget is absent, so we set NodeName=vmName
+	// here so the underlying ov vm * subcommands receive the kind:vm
+	// entity name (not the deploy.yml name).
+	target := &VmUnifiedTarget{NodeName: vmName}
+	if err := target.Rebuild(context.Background(), RebuildOpts{
+		DryRun:       c.DryRun,
+		RebuildImage: !c.ReuseImage,
+	}); err != nil {
+		return err
+	}
+
+	// Phase 2: apply the deploy's add_layers in-guest. For dry-run,
+	// surface the matching dry-run line so the operator sees the full
+	// intended sequence; otherwise shell out to ov deploy add.
 	if c.DryRun {
-		fmt.Printf("dry-run: ov vm destroy %s\n", vmName)
-		if !c.ReuseImage {
-			fmt.Printf("dry-run: ov vm build %s\n", vmName)
-		}
-		fmt.Printf("dry-run: ov vm create %s\n", vmName)
-		fmt.Printf("dry-run: ov vm start %s\n", vmName)
 		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
 		return nil
 	}
-	// Destroy is best-effort (may not exist yet).
-	_ = runOvSubcommand("vm", "destroy", vmName)
-	if !c.ReuseImage {
-		if err := runOvSubcommand("vm", "build", vmName); err != nil {
-			return fmt.Errorf("ov vm build %s: %w", vmName, err)
-		}
-	}
-	if err := runOvSubcommand("vm", "create", vmName); err != nil {
-		return fmt.Errorf("ov vm create %s: %w", vmName, err)
-	}
-	// `ov vm create` may auto-start the VM; ov vm start then reports
-	// "already running", which we accept as the desired end state.
-	stderr, startErr := runOvSubcommandCapture("vm", "start", vmName)
-	if startErr != nil && !isBenignAlreadyRunning(stderr) {
-		fmt.Fprint(os.Stderr, stderr)
-		return fmt.Errorf("ov vm start %s: %w", vmName, startErr)
-	}
-	if stderr != "" && startErr == nil {
-		fmt.Fprint(os.Stderr, stderr)
-	}
-	// Apply the deploy's add_layers (in-guest, over SSH).
 	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
 		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
 	}
@@ -496,15 +449,37 @@ func runOvSubcommandCapture(args ...string) (string, error) {
 	return buf.String(), err
 }
 
-// isBenignAlreadyRunning detects the libvirt "domain is already
-// running" error text. During a rebuild, `ov vm create` may boot
-// the VM as part of its libvirt-config-injection sequence; a
-// subsequent `ov vm start` then fails with this exact message.
-// That's the end state we want — treat it as success.
+// captureOvStdout captures the child's stdout (instead of stderr).
+// Sibling of runOvSubcommandCapture; used when the caller needs to
+// parse `ov vm list` / `ov status` table output.
+func captureOvStdout(args ...string) (string, error) {
+	exe := os.Args[0]
+	cmd := exec.Command(exe, args...)
+	cmd.Stdin = os.Stdin
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	return buf.String(), err
+}
+
+// isBenignAlreadyRunning detects "already running" error text from
+// the underlying VM backend. During a rebuild, `ov vm create` may boot
+// the VM as part of its libvirt-config-injection sequence (or, for
+// QEMU-direct, may auto-start at the end of create); a subsequent
+// `ov vm start` then fails. That's the end state we want — treat it
+// as success.
+//
+// Two backend dialects to match:
+//   - libvirt: "domain is already running" / "operation is not valid"
+//   - qemu-direct: "Cannot lock pid file: Resource temporarily unavailable"
+//     (the second qemu-system-x86_64 invocation can't acquire the same
+//     pid-file lock the first one holds → effectively "already running")
 func isBenignAlreadyRunning(stderr string) bool {
 	s := strings.ToLower(stderr)
 	return strings.Contains(s, "already running") ||
-		strings.Contains(s, "operation is not valid")
+		strings.Contains(s, "operation is not valid") ||
+		strings.Contains(s, "cannot lock pid file")
 }
 
 // precheckPortConflicts inspects the deploy's published host ports and

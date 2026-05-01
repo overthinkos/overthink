@@ -250,100 +250,28 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	return nil
 }
 
-// runVmDel handles `ov deploy del vm:<vm-name>`. Mirrors runHostDel
-// 1:1 — reads the host ledger to find the deploy record, iterates each
-// layer's ReverseOps and executes them on the GUEST via
-// sshReverseRunner (which wraps the same SSHExecutor that applied the
-// deploy). At the end, removes the ledger entries and the deploy.yml
-// vm: entry.
+// runVmDel is a thin wrapper that constructs a VmUnifiedTarget with
+// this cmd's gate flags and delegates teardown to the unified target's
+// Del method (see unified_targets_vm.go). The body lives on
+// VmUnifiedTarget.Del so future schema-v3 dispatchers can call into the
+// same logic without going through DeployDelCmd.
 func (c *DeployDelCmd) runVmDel(paths *LedgerPaths) error {
-	// Locate the VM's deploy record in the host ledger. VM deploys are
-	// Target="vm:<name>"; there's typically a single record per name.
-	rec, err := findVmDeployRecord(paths, c.Name)
-	if err != nil {
-		return err
+	target := &VmUnifiedTarget{
+		NodeName:        c.Name,
+		KeepRepoChanges: c.KeepRepoChanges,
+		KeepServices:    c.KeepServices,
 	}
-	if rec == nil {
-		// No ledger record → nothing to reverse on the guest. Still
-		// clean up the deploy.yml entry if present.
-		if entryErr := removeVmDeployEntry(c.Name); entryErr != nil {
-			fmt.Fprintf(os.Stderr, "note: deploy.yml cleanup: %v\n", entryErr)
-		}
-		fmt.Fprintf(os.Stderr, "No VM deploy ledger entry for %s (already torn down?)\n", c.Name)
-		return nil
+	err := target.Del(context.Background(), DelOpts{
+		DryRun:    c.DryRun,
+		AssumeYes: c.AssumeYes,
+	})
+	if err == nil && !c.DryRun {
+		// Match legacy log line for `ov deploy del vm:` — the unified
+		// Del path doesn't print this because it doesn't know how many
+		// layers were torn down at the call site (the runner does).
+		fmt.Fprintf(os.Stderr, "Removed VM deploy %s\n", c.Name)
 	}
-
-	if c.DryRun {
-		fmt.Printf("[dry-run] would tear down VM deploy %s (deploy_id=%s, %d layers)\n",
-			c.Name, rec.DeployID, len(rec.Layers))
-		for _, layer := range rec.Layers {
-			layerRec, err := ReadLayerRecord(paths, layer)
-			if err != nil || layerRec == nil {
-				continue
-			}
-			for _, op := range layerRec.ReverseOps {
-				fmt.Printf("  - %s %v\n", op.Kind, op.Targets)
-			}
-		}
-		return nil
-	}
-
-	// Build an SSH-backed ReverseRunner from the VmDeployState recorded
-	// in the per-machine deploy.yml (same fields VmDeployTarget used at
-	// apply time, so we talk to the same guest over the same SSH key).
-	runner, err := buildVmReverseRunner(c.Name)
-	if err != nil {
-		return fmt.Errorf("building VM reverse runner: %w", err)
-	}
-	c.Runner = runner
-
-	// Tear down each layer record in reverse order (last-installed,
-	// first-removed). Mirrors tearDownDeploy but with guest-side exec.
-	for _, layer := range rec.Layers {
-		layerRec, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
-		if err != nil {
-			return fmt.Errorf("removing layer deployment %s: %w", layer, err)
-		}
-		if !shouldRemove {
-			continue
-		}
-		if err := runReverseOps(layerRec.ReverseOps, c); err != nil {
-			return fmt.Errorf("reversing layer %s: %w", layer, err)
-		}
-		// env.d file cleanup on the guest. Use double-quoted form so $HOME
-		// expands — shellQuoteSimple would single-quote the whole string
-		// and leave the literal "$HOME" in place.
-		_ = runner.RunUser(fmt.Sprintf(`rm -f "$HOME/.config/overthink/env.d/%s.env"`, layer))
-		if err := DeleteLayerRecord(paths, layer); err != nil {
-			return fmt.Errorf("deleting layer record %s: %w", layer, err)
-		}
-	}
-
-	if err := DeleteDeployRecord(paths, rec.DeployID); err != nil {
-		return fmt.Errorf("deleting deploy record: %w", err)
-	}
-
-	// Ephemeral lifecycle teardown hook. Recursive nested-children
-	// teardown, transient-timer cancellation, snapshot refcount
-	// decrement, deploy.yml ephemeral metadata clearance — all in
-	// one helper. Runs BEFORE removeVmDeployEntry because the helper
-	// reads the deploy.yml entry to find the timer unit + parent
-	// linkage.
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
-			if tdErr := TeardownEphemeralLifecycle(&node, c.Name); tdErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
-			}
-		}
-	}
-
-	// Best-effort deploy.yml cleanup.
-	if err := removeVmDeployEntry(c.Name); err != nil {
-		fmt.Fprintf(os.Stderr, "note: deploy.yml cleanup: %v\n", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Removed VM deploy %s (%d layers torn down on guest)\n", c.Name, len(rec.Layers))
-	return nil
+	return err
 }
 
 // findVmDeployRecord scans paths.Deploys for a record whose Target

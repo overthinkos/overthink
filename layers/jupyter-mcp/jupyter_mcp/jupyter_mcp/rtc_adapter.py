@@ -108,7 +108,10 @@ class RTCAdapter:
         elif model["type"] == "directory":
             content = model.get("content")
             if content is None:
-                # Subdirectory not yet fetched — fetch it recursively
+                # Lazy fetch: a top-level get() returns the project root's
+                # children with content; deeper subdirs are stubs until
+                # explicitly fetched. Recurse with an explicit get() to
+                # populate the stub.
                 sub = self.contents_manager.get(model["path"], content=True, type="directory")
                 if asyncio.iscoroutine(sub):
                     sub = await sub

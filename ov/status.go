@@ -331,6 +331,13 @@ type QuadletEntry struct {
 }
 
 // listQuadletImages scans the quadlet directory for ov-*.container files.
+//
+// Disambiguates image-name vs instance-name by reading each unit's
+// `Description=Overthink <image> (<instance>)` line — the canonical
+// shape `ov config` writes (see writeQuadletUnit's Description=
+// formatter). Falls back to the filename-derived joined name when the
+// Description line is absent or malformed, preserving the
+// pre-disambiguation behaviour for hand-edited unit files.
 func listQuadletImages() ([]QuadletEntry, error) {
 	qdir, err := quadletDir()
 	if err != nil {
@@ -342,12 +349,56 @@ func listQuadletImages() ([]QuadletEntry, error) {
 	}
 	var entries []QuadletEntry
 	for _, path := range matches {
-		name := strings.TrimSuffix(filepath.Base(path), ".container")
-		name = strings.TrimPrefix(name, "ov-")
-		// TODO: disambiguate instance from image name if needed
-		entries = append(entries, QuadletEntry{Image: name})
+		joined := strings.TrimSuffix(filepath.Base(path), ".container")
+		joined = strings.TrimPrefix(joined, "ov-")
+
+		image, instance := parseQuadletDescription(path)
+		if image == "" {
+			// Fallback: filename-only — image carries the joined name.
+			entries = append(entries, QuadletEntry{Image: joined})
+			continue
+		}
+		entries = append(entries, QuadletEntry{Image: image, Instance: instance})
 	}
 	return entries, nil
+}
+
+// parseQuadletDescription reads a `.container` quadlet file and pulls
+// (image, instance) from its `Description=Overthink <image> (<instance>)`
+// line. Returns ("", "") if the file can't be read or the line doesn't
+// match the canonical ov-config-emitted shape — caller falls back to
+// the filename-derived joined name.
+//
+// Example unit content:
+//   [Unit]
+//   Description=Overthink jupyter (concurrency-test)
+//
+// → image="jupyter", instance="concurrency-test"
+//
+//   Description=Overthink redis
+//
+// → image="redis", instance=""
+func parseQuadletDescription(unitPath string) (image, instance string) {
+	data, err := os.ReadFile(unitPath)
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "Description=Overthink ") {
+			continue
+		}
+		body := strings.TrimPrefix(line, "Description=Overthink ")
+		// Match `<image> (<instance>)` — the parens form. If there are
+		// no parens, the whole body is the image.
+		if open := strings.LastIndex(body, " ("); open != -1 && strings.HasSuffix(body, ")") {
+			image = strings.TrimSpace(body[:open])
+			instance = strings.TrimSpace(body[open+2 : len(body)-1])
+			return image, instance
+		}
+		return strings.TrimSpace(body), ""
+	}
+	return "", ""
 }
 
 // --- Formatting helpers ---
@@ -607,7 +658,10 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 			continue
 		}
 		imageName := strings.TrimPrefix(name, "ov-")
-		seen[imageName] = true
+		// Seen-key uses the full container name so quadlet-list
+		// dedup (which now respects per-instance container names)
+		// stays consistent with the running-container path.
+		seen[name] = true
 
 		status := "running"
 		state := strings.ToLower(entry.State)
@@ -620,8 +674,22 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 		runEngine := ResolveImageEngineForDeploy(imageName, "", rt.RunEngine)
 		engineBin := EngineBinary(runEngine)
 
+		// Disambiguate image vs instance via the quadlet unit's
+		// `Description=Overthink <image> (<instance>)` line, when present.
+		// Falls through to imageName=joined when no quadlet exists (e.g.
+		// containers started ad-hoc via podman run instead of ov config).
+		dispImage, dispInstance := imageName, ""
+		if rt.RunMode == "quadlet" {
+			if qdir, qerr := quadletDir(); qerr == nil {
+				if img, inst := parseQuadletDescription(filepath.Join(qdir, name+".container")); img != "" {
+					dispImage, dispInstance = img, inst
+				}
+			}
+		}
+
 		cs := ContainerStatus{
-			Image:     imageName,
+			Image:     dispImage,
+			Instance:  dispInstance,
 			Status:    status,
 			Uptime:    entry.Status,
 			Container: name,
@@ -669,13 +737,20 @@ func (c *StatusCmd) statusAll(rt *ResolvedRuntime) error {
 	if c.All && rt.RunMode == "quadlet" {
 		quadlets, _ := listQuadletImages()
 		for _, q := range quadlets {
-			if !seen[q.Image] {
-				seen[q.Image] = true
+			// Container name is the image-instance join under the ov- prefix.
+			containerName := "ov-" + q.Image
+			if q.Instance != "" {
+				containerName = "ov-" + q.Image + "-" + q.Instance
+			}
+			// Dedup key — image alone collides for multi-instance entries,
+			// so use the full container name.
+			if !seen[containerName] {
+				seen[containerName] = true
 				statuses = append(statuses, ContainerStatus{
 					Image:     q.Image,
 					Instance:  q.Instance,
 					Status:    "enabled",
-					Container: "ov-" + q.Image,
+					Container: containerName,
 					RunMode:   "quadlet",
 				})
 			}

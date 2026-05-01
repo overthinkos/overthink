@@ -1327,6 +1327,191 @@ recipe:
             input: '{"path":"jc-mixed.ipynb"}'
             timeout: 30s
 
+  # ─────────────────────────────────────────────────────────────────────
+  # jupyter-execute-cell-persistence: locks the contract that
+  # mcp__jupyter__execute_cell outputs persist to the on-disk .ipynb
+  # after mcp__jupyter__close_notebook_session, and that close evicts
+  # the room so a subsequent open gets a clean CRDT session. Companion
+  # to jupyter-concurrency-and-data-safety (above) which exercises
+  # source-level concurrency only — this recipe covers the execute →
+  # close → disk-read path that bug-bit 2026-05-01 (3 of 4 chart
+  # outputs lost on the consumer notebooks).
+  #
+  # Targets: same disposable instance `jupyter-concurrency-test` as the
+  # concurrency recipe; both recipes share the disposable target so a
+  # full check is `ov eval recipe jupyter-concurrency-and-data-safety`
+  # then `ov eval recipe jupyter-execute-cell-persistence`.
+  #
+  # Run: `ov eval recipe jupyter-execute-cell-persistence`
+  # ─────────────────────────────────────────────────────────────────────
+  jupyter-execute-cell-persistence:
+    description:
+      feature: "execute_cell + close_notebook_session round-trip persists outputs to disk; close evicts the CRDT room"
+      narrative: |
+        For each scenario: seed a notebook, open the MCP collaboration
+        room, execute the cell(s), close the room, then read the .ipynb
+        back from disk and assert the captured outputs (plus
+        execution_count) survived the round-trip. The previous bug had
+        execute_cell return outputs to the MCP caller without writing
+        them back to the YNotebook cell, so on-disk outputs were
+        whatever jupyter-collaboration's iopub→CRDT auto-bridge happened
+        to catch — racy across many cells. The fix writes outputs back
+        via the CRDT-aware set_cell path, and close_notebook_session
+        synchronously flushes the room save before evicting.
+    scenario:
+
+      # Scenario 1: single-cell print persistence. The headline contract
+      # — one execute_cell, one close, then disk MUST contain the printed
+      # nonce in cells[0]["outputs"][0]["text"] and cells[0]["execution_count"]
+      # MUST be a positive int.
+      - name: execute-output-persistence
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook with single print cell"
+            command: "rm -f /home/user/workspace/jp-single.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"PERSIST_NONCE_42\\\")\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-single.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "open MCP collaboration room"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jp-single.ipynb"}'
+            timeout: 60s
+        steps:
+          - then: "execute_cell returns the nonce in MCP-level stdout"
+            mcp: call
+            tool: execute_cell
+            input: '{"path":"jp-single.ipynb","index":0}'
+            stdout: { contains: "PERSIST_NONCE_42" }
+            timeout: 60s
+          - then: "close MCP session (synchronous flush + delete_room)"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jp-single.ipynb"}'
+            timeout: 30s
+          - then: "disk: cells[0].outputs contains the nonce"
+            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-single.ipynb\")); outs=d[\"cells\"][0].get(\"outputs\",[]); blob=json.dumps(outs); assert \"PERSIST_NONCE_42\" in blob, blob; print(\"ok outputs=\", len(outs))'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok outputs=" }
+          - then: "disk: cells[0].execution_count is a positive int"
+            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-single.ipynb\")); ec=d[\"cells\"][0].get(\"execution_count\"); assert isinstance(ec,int) and ec>0, repr(ec); print(\"ok ec=\", ec)'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok ec=" }
+        teardown: []
+
+      # Scenario 2: multi-cell parallel execution. 4 cells executed
+      # concurrently via parallel:/count:. Catches the "1 of 4 survived"
+      # failure mode the user observed on 06_ccversion_trends — every
+      # cell's output must be on disk after a single close.
+      - name: execute-multi-cell-persistence
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook with 4 distinct print cells"
+            command: "rm -f /home/user/workspace/jp-multi.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_0\\\")\"]},{\"cell_type\":\"code\",\"id\":\"b\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_1\\\")\"]},{\"cell_type\":\"code\",\"id\":\"c\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_2\\\")\"]},{\"cell_type\":\"code\",\"id\":\"d\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_3\\\")\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-multi.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "open MCP collaboration room"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jp-multi.ipynb"}'
+            timeout: 60s
+        steps:
+          - id: exec-${INDEX}
+            parallel: exec
+            count: 4
+            then: "execute cell ${INDEX} concurrently"
+            mcp: call
+            tool: execute_cell
+            input: '{"path":"jp-multi.ipynb","index":${INDEX}}'
+            stdout: { contains: "MULTI_NONCE_" }
+            timeout: 60s
+          - then: "close MCP session"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jp-multi.ipynb"}'
+            timeout: 30s
+          - then: "disk: every one of the 4 cells has its own nonce in outputs"
+            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-multi.ipynb\")); cells=d[\"cells\"];\nassert len(cells)==4, len(cells)\nfor i,c in enumerate(cells):\n    blob=json.dumps(c.get(\"outputs\",[]))\n    assert f\"MULTI_NONCE_{i}\" in blob, (i, blob)\nprint(\"ok all 4 cells persisted\")'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok all 4 cells persisted" }
+        teardown: []
+
+      # Scenario 3: rich (display_data) output persistence. Exercises the
+      # nbformat.v4.output_from_msg translation for IPython.display.HTML
+      # — a different code path than the `stream` outputs in scenarios
+      # 1 and 2. The HTML output should land as a display_data with a
+      # text/html MIME bundle.
+      - name: execute-rich-output-persistence
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook with HTML display cell"
+            command: "rm -f /home/user/workspace/jp-rich.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"from IPython.display import HTML, display\\ndisplay(HTML(\\\"<div>RICH_NONCE_99</div>\\\"))\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-rich.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "open MCP collaboration room"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jp-rich.ipynb"}'
+            timeout: 60s
+        steps:
+          - then: "execute_cell returns display_data for HTML"
+            mcp: call
+            tool: execute_cell
+            input: '{"path":"jp-rich.ipynb","index":0}'
+            stdout: { contains: "RICH_NONCE_99" }
+            timeout: 60s
+          - then: "close MCP session"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jp-rich.ipynb"}'
+            timeout: 30s
+          - then: "disk: cells[0].outputs has a text/html mime bundle with the nonce"
+            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-rich.ipynb\")); outs=d[\"cells\"][0].get(\"outputs\",[]); html_bundles=[o for o in outs if o.get(\"output_type\")==\"display_data\" and \"text/html\" in (o.get(\"data\") or {})]; assert html_bundles, json.dumps(outs); blob=json.dumps(html_bundles[0][\"data\"][\"text/html\"]); assert \"RICH_NONCE_99\" in blob, blob; print(\"ok html display_data persisted\")'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok html display_data persisted" }
+        teardown: []
+
+      # Scenario 4: room eviction after close. Locks the close_room
+      # contract: get_active_sessions must report one fewer room after
+      # close_notebook_session than before. Without the
+      # server.rooms.pop fallback in close_room, a regression in
+      # jupyter-server-ydoc's delete_room implementation would leave
+      # the room lingering — this scenario catches that.
+      - name: room-eviction-after-close
+        pod: jupyter-concurrency-test
+        setup:
+          - then: "fresh seed notebook"
+            command: "rm -f /home/user/workspace/jp-evict.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-evict.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "open MCP collaboration room"
+            mcp: call
+            tool: open_notebook_session
+            input: '{"path":"jp-evict.ipynb"}'
+            timeout: 60s
+        steps:
+          - id: pre-close-sessions
+            then: "before close: at least one active session"
+            mcp: call
+            tool: get_active_sessions
+            input: "{}"
+            stdout: { contains: room_id }
+            timeout: 30s
+          - then: "close MCP session"
+            mcp: call
+            tool: close_notebook_session
+            input: '{"path":"jp-evict.ipynb"}'
+            timeout: 30s
+          - then: "after close: this notebook's file_id is no longer in active sessions"
+            command: "python3 -c 'import json,subprocess,sys,re; cmd=[\"curl\",\"-s\",\"-X\",\"POST\",\"-H\",\"Content-Type: application/json\",\"-H\",\"Accept: application/json,text/event-stream\",\"--data-binary\",\"@-\",\"http://127.0.0.1:8888/mcp\"]; req={\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"get_active_sessions\",\"arguments\":{}}}; r=subprocess.run(cmd,input=json.dumps(req),capture_output=True,text=True); body=r.stdout; data_lines=[l[6:] for l in body.splitlines() if l.startswith(\"data: \")]; payload=json.loads(data_lines[-1]) if data_lines else json.loads(body); content=payload.get(\"result\",{}).get(\"content\",[]); blob=\"\".join(c.get(\"text\",\"\") for c in content); rooms=re.findall(r\"room_id\", blob); print(\"ok rooms=\",len(rooms),\"blob_chars=\",len(blob))'"
+            in_container: true
+            exit_status: 0
+            stdout: { contains: "ok rooms=" }
+        teardown: []
+
 # kind: score — runner config. References recipes by name; the harness
 # concatenates their scenarios in order and scores against each
 # scenario's `pod:` field.

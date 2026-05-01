@@ -192,7 +192,16 @@ class RTCAdapter:
     # ── Cell execution ───────────────────────────────────────────────
 
     async def execute_cell(self, path: str, index: int) -> list[dict[str, Any]]:
-        """Execute a cell via the Jupyter kernel and return outputs."""
+        """Execute a cell via the Jupyter kernel and return outputs.
+
+        Outputs are also written back to the cell via the CRDT-aware set_cell
+        path so they persist to disk on the next room save. Without this
+        write-back, jupyter-collaboration's iopub→CRDT auto-bridge is the
+        only thing pulling outputs into the document, and that bridge fires
+        opportunistically (racy across many cells).
+        """
+        from nbformat.v4 import output_from_msg
+
         cell = await self.get_cell(path, index)
         source = cell.get("source", "")
         if not source.strip():
@@ -209,30 +218,90 @@ class RTCAdapter:
 
             msg_id = client.execute(source)
             outputs: list[dict[str, Any]] = []
+            iopub_msgs: list[dict[str, Any]] = []
+            execution_count: int | None = None
 
-            while True:
+            # Read the shell-channel execute_reply concurrently with iopub.
+            # execute_reply carries the canonical execution_count for every
+            # cell, including print/display-only cells that produce no
+            # execute_result iopub message.
+            async def _read_shell_reply() -> None:
+                nonlocal execution_count
                 try:
-                    msg = await asyncio.wait_for(
-                        asyncio.ensure_future(client.get_iopub_msg()),
-                        timeout=120,
-                    )
+                    while True:
+                        reply = await asyncio.wait_for(
+                            asyncio.ensure_future(client.get_shell_msg()),
+                            timeout=120,
+                        )
+                        if reply["parent_header"].get("msg_id") != msg_id:
+                            continue
+                        if reply["msg_type"] == "execute_reply":
+                            execution_count = reply["content"].get("execution_count")
+                            return
                 except asyncio.TimeoutError:
-                    outputs.append(
-                        {"type": "error", "content": {"ename": "Timeout", "evalue": "Cell execution timed out"}}
-                    )
-                    break
+                    return
 
-                if msg["parent_header"].get("msg_id") != msg_id:
-                    continue
+            shell_task = asyncio.ensure_future(_read_shell_reply())
 
-                msg_type = msg["msg_type"]
-                if msg_type in ("stream", "display_data", "execute_result", "error"):
-                    outputs.append({"type": msg_type, "content": msg["content"]})
-                elif (
-                    msg_type == "status"
-                    and msg["content"]["execution_state"] == "idle"
-                ):
-                    break
+            try:
+                while True:
+                    try:
+                        msg = await asyncio.wait_for(
+                            asyncio.ensure_future(client.get_iopub_msg()),
+                            timeout=120,
+                        )
+                    except asyncio.TimeoutError:
+                        outputs.append(
+                            {"type": "error", "content": {"ename": "Timeout", "evalue": "Cell execution timed out"}}
+                        )
+                        break
+
+                    if msg["parent_header"].get("msg_id") != msg_id:
+                        continue
+
+                    msg_type = msg["msg_type"]
+                    if msg_type in ("stream", "display_data", "execute_result", "error"):
+                        outputs.append({"type": msg_type, "content": msg["content"]})
+                        iopub_msgs.append(msg)
+                        if msg_type == "execute_result" and execution_count is None:
+                            execution_count = msg["content"].get("execution_count")
+                    elif (
+                        msg_type == "status"
+                        and msg["content"]["execution_state"] == "idle"
+                    ):
+                        break
+            finally:
+                # Wait briefly for the shell reply to land if iopub finished
+                # first; cancel if it never comes.
+                try:
+                    await asyncio.wait_for(shell_task, timeout=5)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    shell_task.cancel()
+
+            # Write captured outputs back to the cell so they persist on
+            # the next room save. Use nbformat's canonical iopub→nbformat
+            # translator rather than hand-rolling the schema.
+            try:
+                nbf_outputs = [output_from_msg(m) for m in iopub_msgs]
+            except Exception:
+                # If translation fails for any output, persist nothing
+                # rather than write a malformed cell — the MCP-return
+                # path still surfaces the raw outputs to the caller.
+                nbf_outputs = []
+
+            try:
+                # Re-read the cell to merge with any concurrent source edit
+                # that landed during execution. Per-notebook lock in
+                # set_cell serialises against concurrent update_cell.
+                latest = await self.get_cell(path, index)
+                if latest.get("cell_type") == "code":
+                    latest["outputs"] = nbf_outputs
+                    if execution_count is not None:
+                        latest["execution_count"] = execution_count
+                    await self.set_cell(path, index, latest)
+            except IndexError:
+                # Cell was concurrently deleted — nothing to update.
+                pass
 
             return outputs
         finally:
@@ -317,7 +386,13 @@ class RTCAdapter:
         await self._create_room(path)
 
     async def close_room(self, path: str) -> None:
-        """Close a CRDT room, saving the notebook to disk."""
+        """Close a CRDT room, saving the notebook to disk.
+
+        DocumentRoom.stop() (called by server.delete_room) cancels the
+        save task without flushing, so any pending CRDT mutations would
+        be lost. Trigger an immediate save first via _save_to_disc, await
+        it, then evict the room.
+        """
         self._detach_watcher(path)
         if self.ydoc_extension is None:
             return
@@ -337,9 +412,29 @@ class RTCAdapter:
         )
 
         if not server.room_exists(room_id):
+            self._notebook_locks.pop(path, None)
             return
 
+        # Synchronously flush pending CRDT state to disk. _save_to_disc
+        # returns the save task (or None if a save is already locked);
+        # awaiting it guarantees the .ipynb on disk reflects the room's
+        # current state before stop() cancels the auto-save task.
+        room = server.rooms.get(room_id)
+        if room is not None:
+            try:
+                save_task = room._save_to_disc()
+                if save_task is not None:
+                    await save_task
+            except Exception as e:
+                log.warning("Synchronous save before close failed for %s: %s", path, e)
+
         await server.delete_room(name=room_id)
+
+        # delete_room pops from server.rooms in jupyter_server_ydoc 2.3.0,
+        # but evict defensively in case a future version drifts or a
+        # concurrent path re-added the room.
+        server.rooms.pop(room_id, None)
+        self._notebook_locks.pop(path, None)
         log.info("Closed CRDT room: %s", room_id)
 
     # ── Internal helpers ─────────────────────────────────────────────

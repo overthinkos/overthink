@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 )
 
 // runVM handles `ov deploy add vm:<vm-name>[/<instance>] [<ref>]`.
@@ -171,6 +173,34 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 				}
 				break
 			}
+		}
+	}
+
+	// Auto-boot integration (formerly Task 19, deferred at
+	// deploy_add_cmd_vm.go's runVM-doc): if the VM isn't reachable
+	// on its SSH port yet, invoke `ov vm build <vmName>` (idempotent;
+	// fetches/builds the disk if missing) followed by `ov vm create
+	// <vmName>` to boot it. Probe via TCP DialTimeout — fast (10ms
+	// happy path; ~2s connection-refused). Idempotent: when the VM
+	// is already up, this short-circuits and Emit's own WaitForSSH
+	// gates SSH-readiness. Skipped in DryRun mode and when the
+	// deploy is nested (parent's executor handles the
+	// guest-into-guest path differently).
+	if !opts.DryRun && opts.ParentExec == nil && os.Getenv("OV_DEPLOY_NO_AUTOBOOT") == "" {
+		sshAddr := fmt.Sprintf("127.0.0.1:%d", sshPort)
+		conn, dialErr := net.DialTimeout("tcp", sshAddr, 2*time.Second)
+		if dialErr != nil {
+			fmt.Fprintf(os.Stderr,
+				"VM %q not reachable on %s — auto-booting via `ov vm build %s` + `ov vm create %s` (set OV_DEPLOY_NO_AUTOBOOT=1 to skip)...\n",
+				vmName, sshAddr, vmName, vmName)
+			if bErr := runOvSubcommand("vm", "build", vmName); bErr != nil {
+				return fmt.Errorf("auto-boot: ov vm build %s: %w", vmName, bErr)
+			}
+			if cErr := runOvSubcommand("vm", "create", vmName); cErr != nil {
+				return fmt.Errorf("auto-boot: ov vm create %s: %w", vmName, cErr)
+			}
+		} else {
+			_ = conn.Close()
 		}
 	}
 

@@ -401,16 +401,170 @@ systemctl daemon-reload
 }
 
 // execBuilder runs a builder step on the HOST (where podman is
-// available), then scp's the resulting artifacts into the guest. For
-// the MVP this is a placeholder — builder-artifact shuttling needs
-// per-builder knowledge (pixi, npm, cargo, aur each produce different
-// trees) and is Phase 2 of the VM deploy target per plan D11.
+// available), then transfers the resulting artifacts into the guest.
+//
+// Today only the `aur` builder is fully implemented: it produces
+// .pkg.tar.zst files in a host staging dir; we tar the staging dir,
+// scp it to the guest's /tmp, and run `pacman -U <files>` via SSH.
+// The aur path is the most well-defined cross-machine case (pacman -U
+// is the canonical install verb; no home-dir assumptions to translate).
+//
+// pixi / npm / cargo still emit ErrNotYetImplemented because their
+// outputs land in user-home subdirectories whose mappings to the
+// guest's home (different uid/gid, possibly different shell, possibly
+// different user names) need per-builder translation — out of scope
+// for the AUR-canary MVP. --skip-incompatible continues to skip them.
 func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *InstallPlan, opts EmitOpts) error {
-	if opts.SkipIncompatible {
-		fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
+	// AUR is the only fully-supported builder for VM targets today.
+	// Other builders honor SkipIncompatible (which the operator may
+	// legitimately set for "skip rpm:/deb:-only sections" without
+	// intending to skip aur) — but for aur specifically we always
+	// attempt the build since the cross-host pipeline is now wired.
+	if s.Builder != "aur" {
+		if opts.SkipIncompatible {
+			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping builder step %q (--skip-incompatible)\n", s.Builder)
+			return nil
+		}
+		return fmt.Errorf("builder %q on VM target is not yet supported; only `aur` works cross-host today (others have user-home assumptions that need per-builder mapping). Run with --skip-incompatible to skip, or restructure the layer to use install: instead of builder:", s.Builder)
+	}
+
+	// BuilderImage resolution order:
+	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
+	//   2. BuilderStep.BuilderImage (compiled from image.yml's
+	//      builder: section by install_build.go)
+	//   3. t.BuilderImageResolver (rarely wired)
+	//
+	// For VM-target deploys where the deploy is a deploy.yml entity
+	// (no associated image.yml), step 2 returns empty — the operator
+	// must either pass --builder-image or the layer's `aur:` config
+	// must reference a known builder. Pre-C9 this branch was an
+	// unreachable error; C9 makes it reachable but still requires a
+	// resolved image to proceed.
+	image := opts.BuilderImageOverride
+	if image == "" {
+		image = s.BuilderImage
+	}
+	if image == "" && t.BuilderImageResolver != nil {
+		image = t.BuilderImageResolver(s.Builder)
+	}
+	if image == "" {
+		return fmt.Errorf("no builder image for aur (layer=%s); set --builder-image or define builder.aur in image.yml", s.LayerName)
+	}
+
+	// Stage the .pkg.tar.zst output on the host. The builder writes
+	// here; we then ship it to the guest.
+	hostStage, err := os.MkdirTemp("", "ov-vm-aur-")
+	if err != nil {
+		return fmt.Errorf("aur staging mkdir: %w", err)
+	}
+	RegisterTempCleanup(hostStage)
+	defer func() { os.RemoveAll(hostStage); UnregisterTempCleanup(hostStage) }()
+
+	// Re-use the same builder-script renderer as HostDeployTarget so
+	// the in-container build steps stay identical between host and
+	// VM deploys. The HOME we pass is the host's HOME — the builder
+	// container does HOME-remap internally via BuilderRunOpts.
+	hostHome, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("UserHomeDir: %w", err)
+	}
+	bindMounts, err := UserScopeBindMounts(hostHome)
+	if err != nil {
+		return err
+	}
+	bindMounts["/tmp/aur-pkgs"] = hostStage
+	envVars := UserScopeEnv(hostHome)
+
+	// VM-specific aur script: runs as root inside the container,
+	// configures NOPASSWD sudoers for the `user` account, then drops
+	// to that user to run the existing aur build flow. The host-side
+	// renderAurScript assumes a pre-baked sudoers (OCI multistage
+	// builds add it via stage_template); deploy-time podman-run on a
+	// stock archlinux-builder image doesn't have that, so we set it
+	// up ourselves before invoking the inner build.
+	innerScript, err := renderBuilderScript(s, hostHome)
+	if err != nil {
+		return err
+	}
+	wrappedScript := "set -e\n" +
+		"echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/ov-builder\n" +
+		"chmod 440 /etc/sudoers.d/ov-builder\n" +
+		"# Drop to user; pass HOME so $HOME inside the inner script is /home/user.\n" +
+		"su - user -c " + shQuoteArg("set -e\n"+innerScript) + "\n" +
+		"# Backstop find: yay -S installs the package and cleans up its\n" +
+		"# build tree, so renderAurScript's find may run after yay\n" +
+		"# already wiped /tmp/aur-build. Broaden the search if the\n" +
+		"# inner script's find produced nothing.\n" +
+		"if [ -z \"$(ls -A /tmp/aur-pkgs 2>/dev/null)\" ]; then\n" +
+		"  find / -name '*.pkg.tar.zst' 2>/dev/null -exec cp {} /tmp/aur-pkgs/ \\;\n" +
+		"fi\n" +
+		"# Rootless-podman userns fix: files created by container user\n" +
+		"# 1000 land in the host's subuid range and become unreadable to\n" +
+		"# the operator. chown to 0:0 — root in container maps to the\n" +
+		"# host user under rootless podman — so the bind-mount surface is\n" +
+		"# host-readable for the subsequent scp+pacman -U leg.\n" +
+		"chown -R 0:0 /tmp/aur-pkgs/\n"
+
+	out, err := BuilderRun(opts.ContextOrDefault(), BuilderRunOpts{
+		BuilderImage: image,
+		LayerDir:     s.LayerDir,
+		ScriptBody:   wrappedScript,
+		BindMounts:   bindMounts,
+		Env:          envVars,
+		HostHome:     hostHome,
+		DryRun:       opts.DryRun,
+		RunAsRoot:    true,
+	})
+	// Always surface the builder's stdout/stderr — the operator needs to
+	// see compile output to debug build failures, not just the bare exit
+	// status. (BuilderRun returns combined output; non-error path
+	// discards it by default.)
+	if len(out) > 0 {
+		os.Stderr.Write(out)
+	}
+	if err != nil {
+		return fmt.Errorf("VM aur builder: %w", err)
+	}
+	if opts.DryRun {
 		return nil
 	}
-	return fmt.Errorf("builder steps (%s) in VM deploys are not yet supported (Phase 2); re-run with --skip-incompatible to ignore", s.Builder)
+
+	// Ship the staging dir to the guest via tar+ssh and run pacman -U
+	// on the resulting files. Wrapping in a single shell pipeline keeps
+	// the transfer atomic — if scp succeeds but pacman fails, the
+	// operator can re-run and the staging dir's content is replaced
+	// idempotently (-U is the upgrade form; doesn't error on already-
+	// installed).
+	matches, _ := filepath.Glob(filepath.Join(hostStage, "*.pkg.tar.zst"))
+	if len(matches) == 0 {
+		return fmt.Errorf("aur builder produced no .pkg.tar.zst in %s", hostStage)
+	}
+	guestStage := "/tmp/ov-aur-pkgs"
+	transferScript := fmt.Sprintf(`set -e
+mkdir -p %[1]s
+rm -f %[1]s/*.pkg.tar.zst 2>/dev/null || true
+`, guestStage)
+	if err := t.Exec.RunUser(ctx, transferScript, opts); err != nil {
+		return fmt.Errorf("preparing guest stage dir: %w", err)
+	}
+
+	// scp each package file. PutFile signature is
+	// (ctx, localPath, remotePath, mode, ownerRoot, opts) — the
+	// SSH executor turns this into scp + (optional) sudo install.
+	for _, m := range matches {
+		base := filepath.Base(m)
+		dest := filepath.Join(guestStage, base)
+		if err := t.Exec.PutFile(ctx, m, dest, 0o644, false, opts); err != nil {
+			return fmt.Errorf("scp %s: %w", base, err)
+		}
+	}
+
+	installScript := fmt.Sprintf("pacman -U --noconfirm %s/*.pkg.tar.zst", guestStage)
+	if err := t.Exec.RunSystem(ctx, installScript, opts); err != nil {
+		return fmt.Errorf("guest pacman -U: %w", err)
+	}
+
+	return nil
 }
 
 // renderCustomServiceForSystemdTarget populates s.UnitText + s.UnitPath

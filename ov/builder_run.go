@@ -59,6 +59,14 @@ type BuilderRunOpts struct {
 	// DryRun returns the command line that would run without executing.
 	// Used for --dry-run deploy.
 	DryRun bool
+
+	// RunAsRoot spawns the container as UID 0 instead of the host's
+	// UID. Needed for builders whose script body uses `sudo` against
+	// users that don't exist in the builder image's /etc/passwd —
+	// e.g. AUR's makepkg+yay flow inside a non-OCI-staged builder
+	// image. Under rootless podman, root-in-container maps to the
+	// host's UID, so file ownership in bind-mounts stays correct.
+	RunAsRoot bool
 }
 
 // BuilderRun runs the configured builder container. Returns the
@@ -99,10 +107,13 @@ func buildBuilderRunArgs(opts BuilderRunOpts) []string {
 	uid := os.Getuid()
 	gid := os.Getgid()
 
-	args := []string{"run", "--rm",
-		"--user", fmt.Sprintf("%d:%d", uid, gid),
-		"-i", // bash -c reads the script from stdin
+	args := []string{"run", "--rm"}
+	if opts.RunAsRoot {
+		args = append(args, "--user", "0:0")
+	} else {
+		args = append(args, "--user", fmt.Sprintf("%d:%d", uid, gid))
 	}
+	args = append(args, "-i") // bash -c reads the script from stdin
 
 	// Deterministic bind-mount ordering so dry-run output is
 	// reproducible. Sorted by container path.

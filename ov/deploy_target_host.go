@@ -311,15 +311,19 @@ func (t *HostDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
 }
 
 func (t *HostDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
-	if t.BuilderImageResolver == nil {
-		return fmt.Errorf("builder step %s has no BuilderImageResolver", s.Builder)
-	}
-	image := s.BuilderImage
+	// Builder image resolution mirrors VmDeployTarget.execBuilder:
+	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
+	//   2. BuilderStep.BuilderImage (compiled from image.yml)
+	//   3. t.BuilderImageResolver (rarely wired)
+	image := opts.BuilderImageOverride
 	if image == "" {
+		image = s.BuilderImage
+	}
+	if image == "" && t.BuilderImageResolver != nil {
 		image = t.BuilderImageResolver(s.Builder)
 	}
 	if image == "" {
-		return fmt.Errorf("no builder image for %s", s.Builder)
+		return fmt.Errorf("no builder image for %s (layer=%s); set --builder-image or define builder.%s in image.yml", s.Builder, s.LayerName, s.Builder)
 	}
 
 	// aur on non-Arch host: refuse cleanly.

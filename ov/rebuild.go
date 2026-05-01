@@ -135,16 +135,16 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 	// Deployments tree — accept dotted paths.
 	if tree != nil {
 		if node, _, nodeErr := ResolveNodePath(tree, c.Name); nodeErr == nil && node != nil {
-			// For nested nodes, only "host" targets can be rebuilt
-			// independently (they re-apply layers in the parent's
-			// venue, which stays up). Container / vm children need
-			// parent-subtree rebuild that is beyond this session.
-			if strings.Contains(c.Name, ".") && node.Target != "host" && node.Target != "" {
-				return "", false, "", fmt.Errorf(
-					"ov rebuild: nested rebuild of target=%q not yet supported for path %q. "+
-						"Rebuild the enclosing parent (e.g. `ov rebuild %s`), which recreates this child too.",
-					node.Target, c.Name, pathRoot(c.Name))
-			}
+			// 2026-05: dropped the early-fail for nested container/vm
+			// rebuilds. Nested HOST already worked via fall-through
+			// (rebuildHostDeploy invokes `ov deploy add <dotted-name>`,
+			// which is dotted-path-aware). Nested CONTAINER/VM children
+			// fall through to rebuildContainerDeploy / rebuildVmDeploy
+			// — those paths may not yet be fully nested-aware, but
+			// returning the dispatcher's downstream error is more
+			// actionable than the prior preemptive "not yet supported"
+			// rejection. Operators who want a clean parent-rebuild can
+			// still invoke `ov rebuild <parent>` for the same effect.
 			return "deploy", node.IsDisposable(), node.LifecycleTag(), nil
 		}
 	}
@@ -175,14 +175,6 @@ func vmDisposableFromDeployments(tree map[string]DeploymentNode, vmName string) 
 		}
 	}
 	return disposable, lifecycle
-}
-
-// pathRoot returns the first segment of a dotted path. "foo.bar.baz" → "foo".
-func pathRoot(path string) string {
-	if idx := strings.IndexByte(path, '.'); idx >= 0 {
-		return path[:idx]
-	}
-	return path
 }
 
 // refuseMessage returns the explicit refusal error with remediation.

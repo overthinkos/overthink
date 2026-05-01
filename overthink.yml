@@ -1,6 +1,7 @@
 version: 4
 includes:
     - eval.yml
+    - deploy.yml
 discover:
     layers:
       - path: layers

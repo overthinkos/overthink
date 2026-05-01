@@ -34,9 +34,10 @@ import (
 // self-evaluate) are the renamed `ov eval *` surface.
 type EvalCmd struct {
 	// Three primary modes
-	Image EvalImageCmd `cmd:"" help:"Pure-image eval (disposable container, build-scope checks)"`
-	Live  EvalLiveCmd  `cmd:"" help:"Full-stack eval against a running deployment"`
-	Run   EvalRunCmd   `cmd:"" help:"Drive an AI through iteration cycles for the named score"`
+	Image  EvalImageCmd  `cmd:"" help:"Pure-image eval (disposable container, build-scope checks)"`
+	Live   EvalLiveCmd   `cmd:"" help:"Full-stack eval against a running deployment"`
+	Run    EvalRunCmd    `cmd:"" help:"Drive an AI through iteration cycles for the named score"`
+	Recipe EvalRecipeCmd `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`

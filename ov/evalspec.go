@@ -117,6 +117,45 @@ type Check struct {
 	On            string   `yaml:"on,omitempty"             json:"on,omitempty"`
 	Tag           []string `yaml:"tag,omitempty"           json:"tag,omitempty"`
 
+	// Concurrency primitives (2026-05) — usable in scenario Steps to express
+	// stress, race, and high-volume concurrency tests declaratively.
+	//
+	//   Parallel:   non-empty group id; consecutive steps with the same value
+	//               run concurrently as goroutines, awaited via WaitGroup
+	//               before the runner advances past the last step in the group.
+	//               Empty = sequential (current behavior). Validator: only
+	//               valid in Scenario.Steps (not Setup/Teardown/OnFail).
+	//   Count:      expand the step into N iterations. Each iteration receives
+	//               its own EvalResult with id="<orig>-<i>" and an INDEX
+	//               variable available via ${INDEX} (or ${IndexVar} if set).
+	//               Combines with Parallel: all N expansions of a parallel
+	//               step run concurrently.
+	//   IndexVar:   override the default "INDEX" variable name when Count > 0.
+	//   Background: spawn a `command:` verb without waiting for it to exit.
+	//               PID is tracked in ScenarioContext.Backgrounds and reaped
+	//               at scenario teardown via SIGTERM. Only valid on command:.
+	Parallel   string `yaml:"parallel,omitempty"   json:"parallel,omitempty"`
+	Count      int    `yaml:"count,omitempty"      json:"count,omitempty"`
+	IndexVar   string `yaml:"index_var,omitempty"  json:"index_var,omitempty"`
+	Background bool   `yaml:"background,omitempty" json:"background,omitempty"`
+
+	// Aggregation primitive (2026-05) — `summarize:` is a verb that walks
+	// prior steps' EvalResult.Elapsed values and computes distribution
+	// metrics. Discriminator value is the metric kind ("latency"); siblings
+	// OverIDs / Metrics / EmitID / per-metric matchers configure it.
+	Summarize string   `yaml:"summarize,omitempty" json:"summarize,omitempty"`
+	OverIDs   []string `yaml:"over_ids,omitempty"  json:"over_ids,omitempty"`
+	Metrics   []string `yaml:"metrics,omitempty"   json:"metrics,omitempty"`
+	EmitID    string   `yaml:"emit_id,omitempty"   json:"emit_id,omitempty"`
+	// Per-metric numeric matchers — when set, the verb fails if the metric
+	// exceeds the threshold. Reuses the existing Matcher type so lt/le/gt/ge
+	// numeric ops work as on any other verb.
+	P50Match Matcher `yaml:"p50,omitempty"  json:"p50,omitempty"`
+	P95Match Matcher `yaml:"p95,omitempty"  json:"p95,omitempty"`
+	P99Match Matcher `yaml:"p99,omitempty"  json:"p99,omitempty"`
+	MaxMatch Matcher `yaml:"max,omitempty"  json:"max,omitempty"`
+	MeanMatch Matcher `yaml:"mean,omitempty" json:"mean,omitempty"`
+
 	// Origin is populated at collection time (layer:<name>, image:<name>,
 	// deploy-default, deploy-local). Not authored in YAML, but travels in
 	// the OCI label JSON.
@@ -257,6 +296,7 @@ var CheckVerbs = []string{
 	"mount", "addr", "matching",
 	"cdp", "wl", "dbus", "vnc", "mcp",
 	"record", "spice", "libvirt", "k8s",
+	"summarize",
 }
 
 // Kind returns the check's verb name and an error if zero or multiple
@@ -361,6 +401,9 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.K8s != "" {
 		set = append(set, "k8s")
+	}
+	if c.Summarize != "" {
+		set = append(set, "summarize")
 	}
 	return set
 }

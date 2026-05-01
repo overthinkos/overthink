@@ -161,6 +161,16 @@ type Scenario struct {
 	Examples []map[string]string `yaml:"examples,omitempty"   json:"examples,omitempty"`
 	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
 
+	// Setup steps run before Steps. A Setup failure aborts the scenario
+	// without running Steps but Teardown still runs. Use for fixture
+	// install (seed notebook copy, MCP open_notebook_session, etc.).
+	Setup []Step `yaml:"setup,omitempty" json:"setup,omitempty"`
+
+	// Teardown steps ALWAYS run, even if Setup or Steps failed. Use for
+	// cleanup that should never be skipped (close session, kill watcher).
+	// Teardown failures are logged but do NOT escalate the scenario verdict.
+	Teardown []Step `yaml:"teardown,omitempty" json:"teardown,omitempty"`
+
 	// Pod is the container name this scenario's steps probe. Used by
 	// kind:recipe scenarios in the harness; required at validation time
 	// for any scenario inside a `recipe:` block. Layer- and image-baked
@@ -232,8 +242,16 @@ func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 			if err := v.Decode(&s.DependsOn); err != nil {
 				return fmt.Errorf("scenario.depends_on: %w", err)
 			}
+		case "setup":
+			if err := v.Decode(&s.Setup); err != nil {
+				return fmt.Errorf("scenario.setup: %w", err)
+			}
+		case "teardown":
+			if err := v.Decode(&s.Teardown); err != nil {
+				return fmt.Errorf("scenario.teardown: %w", err)
+			}
 		default:
-			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, pod, depends_on, steps, examples, on_fail)", k.Value, k.Line)
+			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, pod, depends_on, steps, examples, on_fail, setup, teardown)", k.Value, k.Line)
 		}
 	}
 	return nil
@@ -252,6 +270,8 @@ func (s *Scenario) UnmarshalJSON(data []byte) error {
 		Steps    []Step              `json:"steps,omitempty"`
 		Examples []map[string]string `json:"examples,omitempty"`
 		OnFail   []Step              `json:"on_fail,omitempty"`
+		Setup    []Step              `json:"setup,omitempty"`
+		Teardown []Step              `json:"teardown,omitempty"`
 	}
 	var r rawScenario
 	if err := json.Unmarshal(data, &r); err != nil {
@@ -267,6 +287,8 @@ func (s *Scenario) UnmarshalJSON(data []byte) error {
 	s.Steps = r.Steps
 	s.Examples = r.Examples
 	s.OnFail = r.OnFail
+	s.Setup = r.Setup
+	s.Teardown = r.Teardown
 	return nil
 }
 

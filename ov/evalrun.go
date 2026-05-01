@@ -325,6 +325,8 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			dr = r.runLibvirt(ctx, &expanded)
 		case "k8s":
 			dr = r.runK8s(ctx, &expanded)
+		case "summarize":
+			dr = r.runSummarize(ctx, &expanded)
 		default:
 			dr.Status = TestSkip
 			dr.Message = fmt.Sprintf("unknown verb %q", kind)
@@ -573,6 +575,13 @@ func (r *Runner) dialPort(c *Check) EvalResult {
 
 // runCommand runs the command (in-container by default, from-host if
 // InContainer=false or FromHost=true) and matches against Exit/Stdout/Stderr.
+//
+// Background mode: when c.Background is true, the host-side command is
+// spawned via cmd.Start() (no Wait); the PID is registered with the
+// scenario context for SIGTERM-reap at scenario teardown. Background
+// mode is host-side only — in-container backgrounding is the user's
+// responsibility (use `setsid nohup ... &` inside the bash given to
+// the container shell).
 func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 	inContainer := true
 	if c.InContainer != nil {
@@ -580,6 +589,25 @@ func (r *Runner) runCommand(ctx context.Context, c *Check) EvalResult {
 	}
 	if c.FromHost {
 		inContainer = false
+	}
+
+	// Background path — host-side only, fire-and-forget. Scenario teardown
+	// reaps via SIGTERM. Returns immediately with PASS.
+	if c.Background {
+		if inContainer {
+			return failf(c, "background: true is host-side only (set in_container: false or from_host: true)")
+		}
+		if r.Mode == RunModeImage {
+			return skipf(c, "background command not meaningful under ov image test")
+		}
+		cmd := exec.Command("sh", "-c", c.Command) // not CommandContext — survives ctx cancel
+		if err := cmd.Start(); err != nil {
+			return failf(c, "background start: %v", err)
+		}
+		if r.Scenario != nil {
+			r.Scenario.AddBackground(cmd.Process.Pid)
+		}
+		return passf(c, fmt.Sprintf("backgrounded pid=%d", cmd.Process.Pid))
 	}
 
 	var stdout, stderr string

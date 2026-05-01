@@ -1,5 +1,7 @@
 package main
 
+import "sync"
+
 // ScenarioContext carries per-scenario mutable state across the
 // execution of that scenario's steps — principally the capture store
 // populated by checks with `capture: <name>`. Instantiated fresh per
@@ -30,6 +32,21 @@ type ScenarioContext struct {
 	// `CAPTURED:<name>` so the existing ${NAME:arg} grammar in
 	// testspec.go does the substitution for free.
 	Captures map[string]string
+
+	// mu guards Captures + Backgrounds + Results when steps execute
+	// concurrently within a `parallel:` group. The default (sequential)
+	// path doesn't contend, so the mutex overhead is negligible.
+	mu sync.Mutex
+
+	// Backgrounds tracks PIDs of host-side processes spawned by
+	// `command:` verbs with `background: true`. Reaped at scenario
+	// teardown via SIGTERM (best-effort; non-fatal on failure).
+	Backgrounds []int
+
+	// Results accumulates EvalResults from steps that have completed,
+	// indexed by step ID. Used by the `summarize:` verb to walk prior
+	// steps' Elapsed durations and compute distribution metrics.
+	Results map[string]EvalResult
 }
 
 // NewScenarioContext returns an empty context bound to the given
@@ -39,6 +56,7 @@ func NewScenarioContext(scenarioID string) *ScenarioContext {
 	return &ScenarioContext{
 		ScenarioID: scenarioID,
 		Captures:   map[string]string{},
+		Results:    map[string]EvalResult{},
 	}
 }
 
@@ -47,10 +65,13 @@ func NewScenarioContext(scenarioID string) *ScenarioContext {
 // Empty name / empty value is a no-op — authoring ergonomics: writing
 // `capture:` on a check that didn't actually produce output shouldn't
 // crash the run.
+// Thread-safe: parallel-grouped steps may capture concurrently.
 func (s *ScenarioContext) Capture(name, value string) {
 	if s == nil || name == "" || value == "" {
 		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.Captures == nil {
 		s.Captures = map[string]string{}
 	}
@@ -59,12 +80,67 @@ func (s *ScenarioContext) Capture(name, value string) {
 
 // Get returns the captured value for a name, or ("", false) if unset.
 // Used by the variable resolver's CAPTURED:<name> branch.
+// Thread-safe.
 func (s *ScenarioContext) Get(name string) (string, bool) {
 	if s == nil {
 		return "", false
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	v, ok := s.Captures[name]
 	return v, ok
+}
+
+// AddBackground records a PID for later teardown reaping. Thread-safe.
+func (s *ScenarioContext) AddBackground(pid int) {
+	if s == nil || pid <= 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Backgrounds = append(s.Backgrounds, pid)
+}
+
+// SnapshotBackgrounds returns a copy of the current backgrounds slice.
+// Used by the teardown reaper.
+func (s *ScenarioContext) SnapshotBackgrounds() []int {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]int, len(s.Backgrounds))
+	copy(out, s.Backgrounds)
+	return out
+}
+
+// RecordResult stores a step's EvalResult for later inspection by
+// `summarize:` verbs. Keyed by step ID.
+func (s *ScenarioContext) RecordResult(stepID string, r EvalResult) {
+	if s == nil || stepID == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.Results == nil {
+		s.Results = map[string]EvalResult{}
+	}
+	s.Results[stepID] = r
+}
+
+// SnapshotResults returns a copy of all recorded results. Used by
+// `summarize:` to compute aggregate metrics.
+func (s *ScenarioContext) SnapshotResults() map[string]EvalResult {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]EvalResult, len(s.Results))
+	for k, v := range s.Results {
+		out[k] = v
+	}
+	return out
 }
 
 // ApplyToEnv merges scenario-scope variables into an env map for

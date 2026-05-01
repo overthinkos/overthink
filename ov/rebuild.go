@@ -250,62 +250,26 @@ func (c *RebuildCmd) rebuildVm() error {
 func (c *RebuildCmd) rebuildContainerDeploy() error {
 	baseRef := c.deployBaseImageRef()
 	if baseRef == "" {
-		// Fall back to using the deploy name itself as the ref — some
-		// deploys are named after their image.
 		baseRef = c.Name
 	}
 
+	// Port-conflict pre-flight stays here — it's a real-host-only check
+	// that the unified Rebuild method shouldn't carry (the unified
+	// surface is target-kind agnostic). Dry-run skips this.
 	if !c.DryRun {
 		if err := c.precheckPortConflicts(); err != nil {
 			return err
 		}
 	}
 
-	if c.DryRun {
-		if !c.ReuseImage {
-			fmt.Printf("dry-run: ov image build %s\n", baseRef)
-			fmt.Printf("dry-run: ov eval image %s\n", baseRef)
-		}
-		fmt.Printf("dry-run: ov deploy add %s\n", c.Name)
-		fmt.Printf("dry-run: ov stop %s\n", c.Name)
-		fmt.Printf("dry-run: ov config %s\n", c.Name)
-		fmt.Printf("dry-run: ov start %s\n", c.Name)
-		return nil
+	target := &PodUnifiedTarget{
+		NodeName:     c.Name,
+		BaseImageRef: baseRef,
 	}
-
-	// 1-2. Rebuild the base image and run build-scope tests on it.
-	// Fail fast before touching anything that might disrupt the
-	// running container.
-	if !c.ReuseImage {
-		if err := runOvSubcommand("image", "build", baseRef); err != nil {
-			return fmt.Errorf("ov image build %s: %w", baseRef, err)
-		}
-		if err := runOvSubcommand("eval", "image", baseRef); err != nil {
-			return fmt.Errorf("ov eval image %s: %w", baseRef, err)
-		}
-	}
-
-	// 3. Re-apply the deploy. For pod targets with add_layers this
-	//    builds the overlay image; failures here leave the running
-	//    container untouched.
-	if err := runOvSubcommand("deploy", "add", c.Name); err != nil {
-		return fmt.Errorf("ov deploy add %s: %w", c.Name, err)
-	}
-
-	// 4. Stop the running container (systemctl --user stop only).
-	_ = runOvSubcommand("stop", c.Name)
-
-	// 5. Regenerate the quadlet so systemd picks up any changed image
-	//    or deploy.yml field on the next start.
-	if err := runOvSubcommand("config", c.Name); err != nil {
-		return fmt.Errorf("ov config %s: %w", c.Name, err)
-	}
-
-	// 6. Start with the new image.
-	if err := runOvSubcommand("start", c.Name); err != nil {
-		return fmt.Errorf("ov start %s: %w", c.Name, err)
-	}
-	return nil
+	return target.Rebuild(context.Background(), RebuildOpts{
+		DryRun:       c.DryRun,
+		RebuildImage: !c.ReuseImage,
+	})
 }
 
 // deployTarget re-reads the deploy node to return its Target field.

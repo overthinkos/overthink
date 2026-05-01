@@ -509,59 +509,18 @@ func (c *DeployDelCmd) runHostDel(paths *LedgerPaths) error {
 	})
 }
 
-// runContainerDel stops + removes the container deploy, removes the
-// overlay image (unless --keep-image), and cleans up the ledger entry.
+// runContainerDel is a thin wrapper that constructs a PodUnifiedTarget
+// with this cmd's gate flags and delegates teardown to the unified
+// target's Del method (see unified_targets_pod.go).
 func (c *DeployDelCmd) runContainerDel(paths *LedgerPaths) error {
-	rec, err := findContainerDeploy(paths, c.Name)
-	if err != nil {
-		return err
+	target := &PodUnifiedTarget{
+		NodeName:  c.Name,
+		KeepImage: c.KeepImage,
 	}
-	if rec == nil {
-		return fmt.Errorf("no container deploy named %q in ledger", c.Name)
-	}
-	if c.DryRun {
-		fmt.Printf("[dry-run] would stop container %s, remove image %s (keep=%v)\n",
-			c.Name, rec.Image, c.KeepImage)
-		return nil
-	}
-	// Stop + remove the container via podman.
-	engine := "podman"
-	_ = runPodmanCommand(engine, "stop", c.Name)
-	_ = runPodmanCommand(engine, "rm", "-f", c.Name)
-
-	// Remove the overlay image if any was recorded and --keep-image not set.
-	overlayRef := rec.Image
-	if !c.KeepImage && strings.HasSuffix(overlayRef, "-overlay") {
-		_ = runPodmanCommand(engine, "rmi", overlayRef)
-	}
-
-	// Decrement refcounts on each included layer (same as host del).
-	for _, layer := range rec.Layers {
-		_, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
-		if err != nil {
-			return err
-		}
-		if shouldRemove {
-			_ = DeleteLayerRecord(paths, layer)
-		}
-	}
-
-	// Remove deploy record.
-	if err := DeleteDeployRecord(paths, rec.DeployID); err != nil {
-		return err
-	}
-
-	// Ephemeral lifecycle teardown hook (pod-target).
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
-			if tdErr := TeardownEphemeralLifecycle(&node, c.Name); tdErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
-			}
-		}
-	}
-
-	fmt.Printf("Removed container deploy %s\n", c.Name)
-	return nil
+	return target.Del(context.Background(), DelOpts{
+		DryRun:    c.DryRun,
+		AssumeYes: c.AssumeYes,
+	})
 }
 
 // findContainerDeploy locates the deploy record with matching Target.

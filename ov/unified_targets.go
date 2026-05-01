@@ -147,6 +147,17 @@ type PodUnifiedTarget struct {
 	// legacy PodDeployTarget.DeployName holds the same string;
 	// we duplicate here for adapter-level symmetry with Host/Vm.
 	NodeName string
+
+	// KeepImage suppresses overlay-image removal during Del. Populated
+	// by the dispatcher from `ov deploy del --keep-image`. The unified
+	// DelOpts is uniform across kinds; pod-specific gates live here.
+	KeepImage bool
+
+	// BaseImageRef is the image ref the rebuild's image-build/eval
+	// steps target. Set by the dispatcher from the deploy.yml node's
+	// `image:` field (or NodeName when absent). Empty → falls back to
+	// NodeName at Rebuild time.
+	BaseImageRef string
 }
 
 func (t *PodUnifiedTarget) Name() string { return t.NodeName }
@@ -160,34 +171,6 @@ func (t *PodUnifiedTarget) Executor() DeployExecutor {
 
 func (t *PodUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
 	return t.PodDeployTarget.Emit(plans, opts)
-}
-
-func (t *PodUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Start(ctx context.Context) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Stop(ctx context.Context) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
-	return StatusInfo{}, fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
-}
-func (t *PodUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
-	return fmt.Errorf("pod %q: %w", t.NodeName, ErrNotYetImplemented)
 }
 
 // ---------------------------------------------------------------------------

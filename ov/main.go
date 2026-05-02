@@ -49,10 +49,11 @@ type CLI struct {
 	Image     ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
 	Layer     LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
 	Logs      LogsCmd         `cmd:"" help:"Show service container logs"`
-	Mcp       McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
-	Migrate   MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
-	Rebuild   RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
-	Remove    RemoveCmd       `cmd:"" help:"Remove service container"`
+	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
+	Migrate     MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
+	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
+	Rebuild     RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
+	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
 	Restart   RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
 	Secrets   SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
 	Service   ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`

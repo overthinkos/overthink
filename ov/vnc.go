@@ -1,13 +1,12 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"image/png"
-	"io"
-	"net"
 	"os"
 	"os/exec"
 	"strings"
@@ -227,7 +226,20 @@ type VncStatusCmd struct {
 }
 
 func (c *VncStatusCmd) Run() error {
-	ts := checkVncStatus(c.Image, c.Instance)
+	engine, name, err := resolveVNCContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	var snap *ContainerSnapshot
+	if engine == "" {
+		snap = &ContainerSnapshot{NetworkMode: "host"}
+	} else {
+		snap, err = NewEngineClient(engine).Snapshot(name)
+		if err != nil {
+			return err
+		}
+	}
+	ts := vncProbe{}.ProbeHost(context.Background(), snap)
 	if ts.Status == "-" {
 		return fmt.Errorf("VNC server not configured (port 5900 not mapped)")
 	}
@@ -244,46 +256,6 @@ func (c *VncStatusCmd) Run() error {
 	}
 	fmt.Fprintf(os.Stderr, "VNC server is reachable\n")
 	return nil
-}
-
-// checkVncStatus probes VNC availability on port 5900.
-// Returns ToolStatus{Status: "-"} if port 5900 is not mapped.
-func checkVncStatus(image, instance string) ToolStatus {
-	ts := ToolStatus{Name: "vnc", Status: "-"}
-
-	engine, name, err := resolveVNCContainer(image, instance)
-	if err != nil {
-		return ts
-	}
-
-	address, err := resolveVNCAddress(engine, name)
-	if err != nil {
-		return ts
-	}
-
-	// Extract port from address (host:port format)
-	ts.Port = extractPortFromAddress(address)
-	ts.Status = "unreachable"
-
-	// Lightweight probe: TCP connect + RFB banner read (no password needed).
-	conn, err := net.DialTimeout("tcp", address, 2*time.Second)
-	if err != nil {
-		return ts
-	}
-	defer conn.Close()
-
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var banner [12]byte
-	if _, err := io.ReadFull(conn, banner[:]); err != nil {
-		return ts
-	}
-	if !strings.HasPrefix(string(banner[:]), "RFB ") {
-		return ts
-	}
-
-	ts.Status = "ok"
-	ts.Detail = strings.TrimSpace(string(banner[:]))
-	return ts
 }
 
 // VncPasswdCmd sets up VNC authentication for a deployment.

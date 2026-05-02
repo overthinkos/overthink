@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -271,11 +272,17 @@ func (c *WlStatusCmd) Run() error {
 		return err
 	}
 
-	// Quick check via shared probe function.
-	ts := checkWlStatus(engine, name)
-	fmt.Printf("WL:        %s\n", ts.Status)
-	if ts.Detail != "" {
-		fmt.Printf("Detail:    %s\n", ts.Detail)
+	// Quick summary line via the canonical wlProbe (one batched exec).
+	if engine != "" {
+		ec := NewEngineClient(engine)
+		results := runGuestProbes(context.Background(), ec, name, []GuestProbe{wlProbe{}})
+		if len(results) > 0 {
+			ts := results[0]
+			fmt.Printf("WL:        %s\n", ts.Status)
+			if ts.Detail != "" {
+				fmt.Printf("Detail:    %s\n", ts.Detail)
+			}
+		}
 	}
 
 	// Verbose per-tool availability.
@@ -372,38 +379,9 @@ func (c *WlStatusCmd) Run() error {
 	return nil
 }
 
-// checkWlStatus probes Wayland tool availability inside a container.
-// Returns ToolStatus{Status: "-"} if the Wayland tools aren't present.
-func checkWlStatus(engine, containerName string) ToolStatus {
-	ts := ToolStatus{Name: "wl", Status: "-"}
-
-	// Check for core tools: screenshot (grim or pixelflux-screenshot), wtype, wlrctl
-	coreTools := []string{"wtype", "wlrctl"}
-	var available []string
-	for _, tool := range coreTools {
-		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
-		if err := execWlCmdSilent(engine, containerName, shellCmd); err == nil {
-			available = append(available, tool)
-		}
-	}
-
-	// Also check for screenshot tool (grim or pixelflux-screenshot)
-	for _, tool := range []string{"grim", "pixelflux-screenshot"} {
-		shellCmd := fmt.Sprintf("command -v %s >/dev/null 2>&1", tool)
-		if err := execWlCmdSilent(engine, containerName, shellCmd); err == nil {
-			available = append(available, tool)
-			break // only need one screenshot tool
-		}
-	}
-
-	if len(available) == 0 {
-		return ts
-	}
-
-	ts.Status = "ok"
-	ts.Detail = strings.Join(available, ",")
-	return ts
-}
+// checkWlStatus / checkSwayStatus replaced by wlProbe / swayProbe in
+// status_probes.go. The xxxStatusCmd Run methods call those probes via
+// runGuestProbes (one batched exec) instead of fanning out N execs.
 
 // WlWindowsCmd lists windows. Tries wlrctl toplevel (Wayland-native, works on
 // both sway and labwc) then falls back to xdotool (X11/XWayland).
@@ -1434,27 +1412,7 @@ func captureSwaymsg(engine, containerName string, args ...string) ([]byte, error
 	return cmd.Output()
 }
 
-// checkSwayStatus probes the Sway compositor via IPC socket.
-func checkSwayStatus(engine, containerName string) ToolStatus {
-	ts := ToolStatus{Name: "sway", Status: "-"}
-	data, err := captureSwaymsg(engine, containerName, "-t", "get_outputs")
-	if err != nil {
-		return ts
-	}
-	ts.Status = "ok"
-	var outputs []struct {
-		Name        string `json:"name"`
-		CurrentMode struct {
-			Width  int `json:"width"`
-			Height int `json:"height"`
-		} `json:"current_mode"`
-	}
-	if err := json.Unmarshal(data, &outputs); err == nil && len(outputs) > 0 {
-		o := outputs[0]
-		ts.Detail = fmt.Sprintf("%s %dx%d", o.Name, o.CurrentMode.Width, o.CurrentMode.Height)
-	}
-	return ts
-}
+// checkSwayStatus replaced by swayProbe in status_probes.go.
 
 // SwayRect represents a window's position and size on the desktop.
 type SwayRect struct {

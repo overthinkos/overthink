@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -125,7 +126,19 @@ func (c *CdpStatusCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	ts := checkCdpStatus(engine, name)
+	// Local mode (engine == "") talks to localhost:9222 directly; no
+	// snapshot exists. Synthesize a host-network snapshot so the probe
+	// uses HostPortFor's host-net branch.
+	var snap *ContainerSnapshot
+	if engine == "" {
+		snap = &ContainerSnapshot{NetworkMode: "host"}
+	} else {
+		snap, err = NewEngineClient(engine).Snapshot(name)
+		if err != nil {
+			return err
+		}
+	}
+	ts := cdpProbe{}.ProbeHost(context.Background(), snap)
 	if ts.Port > 0 {
 		fmt.Printf("CDP:       %s (port %d)\n", ts.Status, ts.Port)
 	} else {
@@ -135,52 +148,6 @@ func (c *CdpStatusCmd) Run() error {
 		fmt.Printf("Detail:    %s\n", ts.Detail)
 	}
 	return nil
-}
-
-// checkCdpStatus probes CDP availability on port 9222.
-// Returns ToolStatus{Status: "-"} if port 9222 is not mapped (tool not configured).
-func checkCdpStatus(engine, containerName string) ToolStatus {
-	ts := ToolStatus{Name: "cdp", Status: "-"}
-	devtoolsURL, err := resolveDevToolsURL(engine, containerName)
-	if err != nil {
-		return ts
-	}
-
-	// Extract port from resolved URL
-	ts.Port = extractPortFromURL(devtoolsURL)
-	ts.Status = "unreachable"
-
-	// Probe: GET /json to list tabs
-	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(devtoolsURL + "/json")
-	if err != nil {
-		return ts
-	}
-	defer resp.Body.Close()
-
-	var tabs []devToolsTab
-	if err := json.NewDecoder(resp.Body).Decode(&tabs); err != nil {
-		return ts
-	}
-
-	ts.Status = "ok"
-	ts.Detail = fmt.Sprintf("%d tabs", len(tabs))
-	return ts
-}
-
-// extractPortFromURL extracts the port number from a URL like "http://127.0.0.1:9222".
-func extractPortFromURL(rawURL string) int {
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return 0
-	}
-	portStr := u.Port()
-	if portStr == "" {
-		return 0
-	}
-	var port int
-	fmt.Sscanf(portStr, "%d", &port)
-	return port
 }
 
 // CdpOpenCmd opens a URL in the container's Chrome browser

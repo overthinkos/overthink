@@ -13,44 +13,61 @@ import (
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
 // Used by VmDeployTarget to run the same InstallPlan IR that
-// HostDeployTarget runs — but wrapped as `ssh <user>@<host> sudo
+// LocalDeployTarget runs — but wrapped as `ssh <user>@<host> sudo
 // bash -s` instead of direct local bash, and scp for file transfers.
 //
 // The builder-container path (VenueContainerBuilder steps for
 // pixi/npm/cargo/aur) runs on the **host** (where podman is available),
 // and the resulting artifacts are scp'd into the guest via PutFile.
 // This keeps podman out of the guest's dependency surface.
+//
+// Credential-free by design: SSHExecutor contains zero key paths, zero
+// host-key overrides, zero ssh-agent socket detection. ssh(1) reads
+// ~/.ssh/config and ssh-agent for everything. VMs publish a managed
+// Host stanza into ~/.config/ov/ssh_config (Included from ~/.ssh/config)
+// that names the IdentityFile + UserKnownHostsFile + StrictHostKeyChecking
+// per VM; ov vm create writes the stanza, ov vm destroy removes it.
 type SSHExecutor struct {
-	// User is the guest account to SSH as (typically "ov" for
-	// cloud-image VMs; "root" for bootc VMs).
+	// User is the SSH login user. Optional — when empty, ssh(1) reads
+	// the User directive from ~/.ssh/config or falls back to $USER.
 	User string
 
-	// Host is the SSH target address. For user-mode-networking VMs
-	// this is "127.0.0.1" and the guest's :22 is forwarded to Port.
+	// Host is the SSH target — a hostname, an "[user@]host[:port]"
+	// destination, or an ssh-config alias (e.g., the "ov-<vmname>"
+	// stanzas managed by ov vm create). Required.
 	Host string
 
-	// Port is the host-side port forwarded to the guest's :22.
+	// Port is the SSH port. Optional — when 0, ssh uses the Port
+	// directive from ~/.ssh/config or default 22.
 	Port int
 
-	// KeyPath is the absolute path to the SSH private key.
-	KeyPath string
+	// Args are extra ssh-cli arguments appended verbatim before the
+	// destination. Pass-through from the deployment's `ssh_args:` field
+	// (Ansible's ansible_ssh_extra_args). We do NOT parse, validate,
+	// or interpret. Use sparingly — ssh-config is the right home for
+	// persistent options.
+	Args []string
 
 	// ConnectTimeout caps the `-o ConnectTimeout=<N>` used in every
 	// ssh invocation. Defaults to 10 seconds when zero.
 	ConnectTimeout int
-
-	// KnownHostsFile is the path to the known_hosts file. When empty,
-	// "/dev/null" is used — appropriate for ephemeral VMs where host
-	// keys rotate on every VM recreation. Set for long-lived VMs where
-	// you want man-in-the-middle protection.
-	KnownHostsFile string
 }
 
 // Venue returns a stable "ssh://<user>@<host>:<port>" identifier so
-// install_ledger.go can scope per-VM ledgers without colliding with
-// the local-host ledger or other VMs.
+// install_ledger.go can scope per-target ledgers without colliding
+// with the local-shell ledger or other SSH targets. Components that
+// are empty stringify naturally ("ssh://server" when User+Port unset).
 func (e *SSHExecutor) Venue() string {
-	return fmt.Sprintf("ssh://%s@%s:%d", e.User, e.Host, e.Port)
+	switch {
+	case e.User != "" && e.Port > 0:
+		return fmt.Sprintf("ssh://%s@%s:%d", e.User, e.Host, e.Port)
+	case e.User != "":
+		return fmt.Sprintf("ssh://%s@%s", e.User, e.Host)
+	case e.Port > 0:
+		return fmt.Sprintf("ssh://%s:%d", e.Host, e.Port)
+	default:
+		return fmt.Sprintf("ssh://%s", e.Host)
+	}
 }
 
 // RunSystem executes a bash script as root on the guest.
@@ -187,9 +204,10 @@ func (e *SSHExecutor) RunCapture(ctx context.Context, script string) (string, st
 	return runCaptureCmd(cmd)
 }
 
-// Kind reports "vm" — SSHExecutor targets a guest reachable over SSH
-// (cloud_image VMs, bootc VMs).
-func (e *SSHExecutor) Kind() string { return "vm" }
+// Kind reports "ssh" — SSHExecutor targets any host reachable over SSH
+// (VMs via the managed ov-<name> aliases, remote machines via
+// "[user@]host[:port]" or ssh-config aliases).
+func (e *SSHExecutor) Kind() string { return "ssh" }
 
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
@@ -240,50 +258,52 @@ fi
 	return cmd.Run()
 }
 
-// sshBaseArgs builds the common ssh invocation prefix (options +
-// destination). Used by RunSystem / RunUser / WaitForSSH /
-// WaitForCloudInit.
+// sshBaseArgs builds the common ssh invocation prefix. ssh(1) reads
+// ~/.ssh/config + ssh-agent for keys, host-key checking, identity
+// files, etc. We supply only the per-call ergonomics (LogLevel,
+// ConnectTimeout) plus optional Port (when caller pre-parsed it from
+// the destination string) plus the deployment's pass-through Args.
+// The destination is "user@host" when User is set, otherwise just Host
+// — letting ssh-config's User directive apply.
 func (e *SSHExecutor) sshBaseArgs() []string {
 	connectTimeout := e.ConnectTimeout
 	if connectTimeout <= 0 {
 		connectTimeout = 10
 	}
-	knownHosts := e.KnownHostsFile
-	if knownHosts == "" {
-		knownHosts = "/dev/null"
-	}
 	args := []string{
-		"-i", e.KeyPath,
-		"-p", strconv.Itoa(e.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=" + knownHosts,
 		"-o", "LogLevel=ERROR",
 		"-o", "ConnectTimeout=" + strconv.Itoa(connectTimeout),
-		fmt.Sprintf("%s@%s", e.User, e.Host),
+	}
+	if e.Port > 0 {
+		args = append(args, "-p", strconv.Itoa(e.Port))
+	}
+	args = append(args, e.Args...)
+	if e.User != "" {
+		args = append(args, fmt.Sprintf("%s@%s", e.User, e.Host))
+	} else {
+		args = append(args, e.Host)
 	}
 	return args
 }
 
-// scpBaseArgs builds the scp-invocation prefix. scp uses the same
-// SSH options but scp's `-P` flag has uppercase semantics (vs ssh's
-// lowercase `-p`).
+// scpBaseArgs builds the scp-invocation prefix. scp reads ~/.ssh/config
+// the same way ssh does. Note: scp's `-P` flag has uppercase semantics
+// (vs ssh's lowercase `-p`); SSHArgs is pass-through, so callers
+// targeting scp-specific options should put them in scp's expected form.
 func (e *SSHExecutor) scpBaseArgs() []string {
 	connectTimeout := e.ConnectTimeout
 	if connectTimeout <= 0 {
 		connectTimeout = 10
 	}
-	knownHosts := e.KnownHostsFile
-	if knownHosts == "" {
-		knownHosts = "/dev/null"
-	}
-	return []string{
-		"-i", e.KeyPath,
-		"-P", strconv.Itoa(e.Port),
-		"-o", "StrictHostKeyChecking=no",
-		"-o", "UserKnownHostsFile=" + knownHosts,
+	args := []string{
 		"-o", "LogLevel=ERROR",
 		"-o", "ConnectTimeout=" + strconv.Itoa(connectTimeout),
 	}
+	if e.Port > 0 {
+		args = append(args, "-P", strconv.Itoa(e.Port))
+	}
+	args = append(args, e.Args...)
+	return args
 }
 
 // randSeed returns a fast-enough unique number for staging filename

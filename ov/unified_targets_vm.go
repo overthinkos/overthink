@@ -3,7 +3,7 @@ package main
 // unified_targets_vm.go — C12 (Phase 3) implementations of
 // VmUnifiedTarget's lifecycle and management methods.
 //
-// Pattern mirrors C11's HostUnifiedTarget extraction:
+// Pattern mirrors C11's LocalUnifiedTarget extraction:
 //   - Methods that map to existing CLI bodies (Del, Rebuild) are
 //     extracted from their cmd-file homes; cmd-file entry points
 //     become thin wrappers.
@@ -12,7 +12,7 @@ package main
 //     same pattern rebuildVm + rebuildHostDeploy already used. The
 //     spawned child uses the same binary on $PATH, so a developer
 //     install picks up the local build automatically.
-//   - Test mirrors HostUnifiedTarget.Test: a Runner over the target's
+//   - Test mirrors LocalUnifiedTarget.Test: a Runner over the target's
 //     SSHExecutor walks the supplied checks.
 //   - Status reads ov vm list output for the specific VM.
 //
@@ -119,6 +119,20 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	if rerr := removeVmDeployEntry(t.NodeName); rerr != nil {
 		fmt.Fprintf(os.Stderr, "note: deploy.yml cleanup: %v\n", rerr)
 	}
+
+	// Remove the VM's managed ssh-config Host stanza. When this was the
+	// last managed alias, also strip the Include line from ~/.ssh/config.
+	if home, herr := os.UserHomeDir(); herr == nil {
+		remaining, rerr := RemoveVmSshStanza(home, VmSshAlias(t.NodeName))
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "note: ssh-config stanza cleanup: %v\n", rerr)
+		}
+		if remaining == 0 {
+			if rerr := RemoveSshConfigInclude(home); rerr != nil {
+				fmt.Fprintf(os.Stderr, "note: ssh-config include cleanup: %v\n", rerr)
+			}
+		}
+	}
 	return nil
 }
 
@@ -139,7 +153,7 @@ func (e *vmReverseExec) reverseKeepServices() bool    { return e.KeepServices }
 func (e *vmReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Test runs deploy-scope checks against the live VM via its SSHExecutor.
-// Mirrors HostUnifiedTarget.Test — only the executor differs.
+// Mirrors LocalUnifiedTarget.Test — only the executor differs.
 func (t *VmUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {

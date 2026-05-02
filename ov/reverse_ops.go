@@ -1,6 +1,6 @@
 package main
 
-// reverse_ops.go — execute ReverseOp slices recorded by HostDeployTarget
+// reverse_ops.go — execute ReverseOp slices recorded by LocalDeployTarget
 // at install time, turning them into concrete teardown commands.
 //
 // Each InstallStep's Reverse() method records a list of ReverseOps
@@ -313,7 +313,7 @@ func reverseRestoreEnabled(op ReverseOp, re ReverseExecutor) error {
 
 func reverseRemoveManaged(op ReverseOp, re ReverseExecutor) error {
 	// Managed-block removal happens at the session level, not per-op.
-	// This kind is present for completeness but the runHostDel path
+	// This kind is present for completeness but the runLocalDel path
 	// calls RemoveManagedBlock directly when the last deploy is torn
 	// down.
 	return nil

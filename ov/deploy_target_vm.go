@@ -11,7 +11,7 @@ import (
 )
 
 // VmDeployTarget applies an InstallPlan inside a running VM over SSH.
-// Uses the same InstallPlan IR that HostDeployTarget consumes — the
+// Uses the same InstallPlan IR that LocalDeployTarget consumes — the
 // only difference is that bash bodies run via `ssh vm 'sudo bash -s'`
 // instead of local `sudo bash -s`.
 //
@@ -43,11 +43,11 @@ type VmDeployTarget struct {
 	Exec DeployExecutor
 
 	// BuilderImageResolver maps builder names to image refs for the
-	// runBuilder step. Same shape as HostDeployTarget's resolver —
+	// runBuilder step. Same shape as LocalDeployTarget's resolver —
 	// builders run on the host, artifacts are scp'd into the guest.
 	BuilderImageResolver func(builderName string) string
 
-	// Distro mirrors HostDeployTarget.Distro for gating decisions
+	// Distro mirrors LocalDeployTarget.Distro for gating decisions
 	// (e.g. aur on non-Arch host). For a VM target, this is the
 	// GUEST distro, not the host; resolved via ssh /etc/os-release.
 	Distro *HostDistro
@@ -67,7 +67,7 @@ func (t *VmDeployTarget) targetName() string { return "vm:" + t.VMName }
 //     VmOvInstall.Strategy.
 //  5. Ensure guest ledger dir exists.
 //
-// Then walks the plans identically to HostDeployTarget, but with
+// Then walks the plans identically to LocalDeployTarget, but with
 // SSH-wrapped shell execution.
 func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if t.Exec == nil {
@@ -175,7 +175,7 @@ func firstDeployID(plans []*InstallPlan) string {
 }
 
 // recordLayer writes the per-layer ledger entry INTO THE GUEST via
-// t.Exec. Mirrors HostDeployTarget.recordLayer's executor-routed
+// t.Exec. Mirrors LocalDeployTarget.recordLayer's executor-routed
 // pattern (B6 fix) so VM deploys obey the same
 // zero-operator-side-effects invariant as nested host deploys.
 func (t *VmDeployTarget) recordLayer(paths *LedgerPaths, rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
@@ -203,7 +203,7 @@ mkdir -p "$HOME/.config/overthink/env.d"
 }
 
 // emitPlan walks a single InstallPlan and routes each step to the
-// appropriate DeployExecutor method. Mirrors HostDeployTarget.emitPlan's
+// appropriate DeployExecutor method. Mirrors LocalDeployTarget.emitPlan's
 // step-dispatch table but with SSH-wrapped execution. Collects
 // ReverseOps from each executed step so `ov deploy del vm:<name>` can
 // replay them in reverse order at teardown time.
@@ -283,7 +283,7 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 
 // execSystemPackages runs the distro's package install command on the
 // guest. Currently uses the fallback renderer (dnf / apt-get / pacman);
-// the structured-template path is shared with HostDeployTarget and
+// the structured-template path is shared with LocalDeployTarget and
 // will be wired once per-distro FormatDefs are accessible from here.
 func (t *VmDeployTarget) execSystemPackages(ctx context.Context, s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts) error {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
@@ -460,7 +460,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 	RegisterTempCleanup(hostStage)
 	defer func() { os.RemoveAll(hostStage); UnregisterTempCleanup(hostStage) }()
 
-	// Re-use the same builder-script renderer as HostDeployTarget so
+	// Re-use the same builder-script renderer as LocalDeployTarget so
 	// the in-container build steps stay identical between host and
 	// VM deploys. The HOME we pass is the host's HOME — the builder
 	// container does HOME-remap internally via BuilderRunOpts.
@@ -658,7 +658,7 @@ func renderCustomServiceForSystemdTarget(s *ServiceCustomStep) error {
 }
 
 // --- Package-install fallback shared with host (mirrors
-// HostDeployTarget.renderFallbackPkgCmd). ---
+// LocalDeployTarget.renderFallbackPkgCmd). ---
 
 func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
@@ -679,9 +679,9 @@ func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
 	return ""
 }
 
-// renderVmTaskCommand renders the same task verbs as HostDeployTarget
+// renderVmTaskCommand renders the same task verbs as LocalDeployTarget
 // (cmd/mkdir/link/setcap/copy/write/download). Kept a separate function
-// so VmDeployTarget doesn't depend on HostDeployTarget's receiver, but
+// so VmDeployTarget doesn't depend on LocalDeployTarget's receiver, but
 // the supported verb set MUST stay in lock-step with the host version —
 // any verb the host supports needs a parallel branch here, otherwise
 // task steps silently no-op on VMs (observed live 2026-04-22: uv
@@ -691,7 +691,7 @@ func renderVmTaskCommand(s *TaskStep) string {
 	task := s.Task
 	ctxPath := s.CtxPath
 
-	// Task.Env prelude — matches HostDeployTarget.renderTaskCommand so
+	// Task.Env prelude — matches LocalDeployTarget.renderTaskCommand so
 	// layer authors can declare env vars and have them reach the shell
 	// regardless of target (host/vm). Also required for the secret-
 	// injection path (ov/layer_secrets.go InjectSecretsIntoPlans) to

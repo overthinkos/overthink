@@ -364,7 +364,7 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 
 // rebuildHostDeploy handles `ov rebuild <deploy-name>` for deploys
 // with target: host (including nested dotted-path host deploys like
-// `arch-vm.arch-host`). Applies layers via HostDeployTarget to the
+// `arch-vm.arch-host`). Applies layers via LocalDeployTarget to the
 // local FS or the nested-executor venue.
 //
 // `ov deploy add` is idempotent on host targets — it re-applies
@@ -373,7 +373,7 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 // changes, disable services, and strip env.d files, which the
 // operator explicitly opted into. Refresh, don't destroy.
 func (c *RebuildCmd) rebuildHostDeploy() error {
-	target := &HostUnifiedTarget{NodeName: c.Name}
+	target := &LocalUnifiedTarget{NodeName: c.Name}
 	if err := target.Rebuild(context.Background(), RebuildOpts{
 		DryRun:       c.DryRun,
 		RebuildImage: false,

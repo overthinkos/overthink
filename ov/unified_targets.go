@@ -3,7 +3,7 @@ package main
 // unified_targets.go — Phase 2 of the schema-v3 refactor.
 //
 // Adds UnifiedDeployTarget/LifecycleTarget adapters for each of the
-// four legacy DeployTarget implementers (HostDeployTarget,
+// four legacy DeployTarget implementers (LocalDeployTarget,
 // VmDeployTarget, PodDeployTarget, K8sDeployTarget), plus the
 // ResolveTarget dispatcher.
 //
@@ -19,7 +19,7 @@ package main
 //   - Del()/Test()/Update() and the lifecycle methods (Start/Stop/
 //     Status/Logs/Shell/Rebuild) are STUBS that return a typed
 //     ErrNotYetImplemented sentinel. Phase 3 extracts the existing
-//     runHostDel / runContainerDel / runVmDel / ov test / ov start /
+//     runLocalDel / runContainerDel / runVmDel / ov test / ov start /
 //     ov stop / etc. bodies from their cmd files into these methods.
 //   - ResolveTarget returns a concrete adapter given a DeploymentNode.
 //     For now, only legacy-compatible targets are instantiable; full
@@ -45,20 +45,20 @@ var ErrNotYetImplemented = errors.New("unified target method not yet implemented
 var ErrNotSupportedOnK8s = errors.New("lifecycle operation not supported on kubernetes target")
 
 // ---------------------------------------------------------------------------
-// HostUnifiedTarget — adapter over HostDeployTarget.
+// LocalUnifiedTarget — adapter over LocalDeployTarget.
 //
 // Stubbed Add/Name/Kind/Executor live here. The lifecycle and management
 // methods (Del, Test, Update, Start, Stop, Status, Logs, Shell, Rebuild)
 // live in unified_targets_host.go (C11 / Phase 3 implementation).
 // ---------------------------------------------------------------------------
 
-// HostUnifiedTarget wraps HostDeployTarget to satisfy
+// LocalUnifiedTarget wraps LocalDeployTarget to satisfy
 // UnifiedDeployTarget + LifecycleTarget.
-type HostUnifiedTarget struct {
-	*HostDeployTarget
+type LocalUnifiedTarget struct {
+	*LocalDeployTarget
 
 	// NodeName is the deployment identifier from deploy.yml. Distinct
-	// from the legacy HostDeployTarget.Name() which returns the kind
+	// from the legacy LocalDeployTarget.Name() which returns the kind
 	// ("host"). UnifiedDeployTarget.Name() returns this.
 	NodeName string
 
@@ -66,7 +66,7 @@ type HostUnifiedTarget struct {
 	// populated by the dispatcher from `ov deploy del --keep-…`.
 	// Forwarded to runReverseOps when Del runs. Default false → repo
 	// changes and packaged services ARE reversed (the destructive
-	// teardown path matches today's runHostDel behavior).
+	// teardown path matches today's runLocalDel behavior).
 	KeepRepoChanges bool
 	KeepServices    bool
 
@@ -77,17 +77,17 @@ type HostUnifiedTarget struct {
 	RevRunner ReverseRunner
 }
 
-func (t *HostUnifiedTarget) Name() string { return t.NodeName }
-func (t *HostUnifiedTarget) Kind() string { return "host" }
-func (t *HostUnifiedTarget) Executor() DeployExecutor {
-	if t.HostDeployTarget == nil {
-		return LocalDeployExecutor{}
+func (t *LocalUnifiedTarget) Name() string { return t.NodeName }
+func (t *LocalUnifiedTarget) Kind() string { return "host" }
+func (t *LocalUnifiedTarget) Executor() DeployExecutor {
+	if t.LocalDeployTarget == nil {
+		return ShellExecutor{}
 	}
-	return t.HostDeployTarget.exec()
+	return t.LocalDeployTarget.exec()
 }
 
-func (t *HostUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
-	return t.HostDeployTarget.Emit(plans, opts)
+func (t *LocalUnifiedTarget) Add(ctx context.Context, plans []*InstallPlan, opts EmitOpts) error {
+	return t.LocalDeployTarget.Emit(plans, opts)
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +164,7 @@ func (t *PodUnifiedTarget) Name() string { return t.NodeName }
 func (t *PodUnifiedTarget) Kind() string { return "pod" }
 func (t *PodUnifiedTarget) Executor() DeployExecutor {
 	if t.PodDeployTarget == nil {
-		return LocalDeployExecutor{}
+		return ShellExecutor{}
 	}
 	return t.PodDeployTarget.exec()
 }
@@ -244,28 +244,20 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 	// cutover commit, missing target: is a hard error at load.
 	if node.Target == "" {
 		return nil, fmt.Errorf("deployment %q missing required `target:` field "+
-			"(host|vm|pod|k8s); run `ov migrate deploy-schema-v3`", name)
+			"(local|vm|pod|k8s); run `ov migrate target-local`", name)
 	}
 
 	switch node.Target {
-	case "host":
-		// Phase 3 will plumb HostDeployTarget construction (distro,
-		// shell detection, nested executor via node.Inside). Today's
-		// cmd-file runHost() still does this setup; the returned
-		// adapter has a nil embedded target so only Name/Kind work.
-		return &HostUnifiedTarget{NodeName: name}, nil
+	case "local":
+		// Construction is enriched by the cmd-file dispatch path
+		// (distro detection, shell detection, executor selection from
+		// node.Host). The unified adapter just carries identity here.
+		return &LocalUnifiedTarget{NodeName: name}, nil
 
 	case "vm":
-		// Legacy alias: "vm:<name>" naming is deprecated in schema v3
-		// but may still appear pre-migration. The name-prefix parser
-		// is removed in Phase 5; for now, we accept either.
 		return &VmUnifiedTarget{NodeName: name}, nil
 
-	case "pod", "container":
-		// "container" is the legacy spelling. The Phase 4 sweep
-		// renames it; migration in Phase 6 rewrites existing files.
-		// Accepting both during the transition keeps old configs
-		// loadable until the cutover commit.
+	case "pod":
 		return &PodUnifiedTarget{NodeName: name}, nil
 
 	case "k8s", "kubernetes":
@@ -282,12 +274,12 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 // compile-time assertion: every adapter satisfies the interfaces it
 // claims. If any method signature drifts, `go build` fails here.
 var (
-	_ UnifiedDeployTarget = (*HostUnifiedTarget)(nil)
+	_ UnifiedDeployTarget = (*LocalUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*VmUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*PodUnifiedTarget)(nil)
 	_ UnifiedDeployTarget = (*K8sUnifiedTarget)(nil)
 
-	_ LifecycleTarget = (*HostUnifiedTarget)(nil)
+	_ LifecycleTarget = (*LocalUnifiedTarget)(nil)
 	_ LifecycleTarget = (*VmUnifiedTarget)(nil)
 	_ LifecycleTarget = (*PodUnifiedTarget)(nil)
 	// K8sUnifiedTarget intentionally NOT in the LifecycleTarget set.

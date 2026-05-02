@@ -184,7 +184,7 @@ deployment:
         # -----------------------------------------------------------------
         nested:
             arch-host:
-                target: host
+                target: local
                 disposable: true
                 lifecycle: dev
                 add_layers:

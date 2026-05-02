@@ -503,6 +503,22 @@ func (c *VmDestroyCmd) Run() error {
 		fmt.Fprintf(os.Stderr, "Destroyed VM %s\n", name)
 	}
 
+	// Remove the managed ssh-config Host stanza (the inverse of what
+	// `ov vm create` published). The libvirt/qemu domain `name` is
+	// already the prefixed form ("ov-<image>" via vmName()), which IS
+	// the alias — we use it directly without re-prefixing.
+	if home, herr := os.UserHomeDir(); herr == nil {
+		remaining, rerr := RemoveVmSshStanza(home, name)
+		if rerr != nil {
+			fmt.Fprintf(os.Stderr, "note: ssh-config stanza cleanup: %v\n", rerr)
+		}
+		if remaining == 0 {
+			if rerr := RemoveSshConfigInclude(home); rerr != nil {
+				fmt.Fprintf(os.Stderr, "note: ssh-config include cleanup: %v\n", rerr)
+			}
+		}
+	}
+
 	if c.Disk {
 		// Remove QCOW2 output
 		qcow2Dir := filepath.Join("output", "qcow2")

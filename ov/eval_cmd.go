@@ -280,8 +280,6 @@ func (c *EvalLiveCmd) runVm() error {
 
 	user := resolveVmSshUser(spec)
 	port := resolveVmSshPort(spec)
-	home, _ := os.UserHomeDir()
-	keyPath := home + "/.local/share/ov/vm/ov-" + vmName + "/id_ed25519"
 
 	// Two deploy sources for VMs:
 	//   - project-level: overthink.yml / deploy.yml `deployments.images["vm:<name>"]`
@@ -337,21 +335,17 @@ func (c *EvalLiveCmd) runVm() error {
 				if entry.VmState.SshPort > 0 {
 					port = entry.VmState.SshPort
 				}
-				if entry.VmState.SshKeyPath != "" {
-					keyPath = entry.VmState.SshKeyPath
-				}
 			}
 		}
 	}
 	tests := MergeDeployEval(projectTests, localTests)
 
-	if user == "" || port == 0 || keyPath == "" {
-		return fmt.Errorf("vm:%s has incomplete SSH config (user=%q port=%d key=%q); run `ov vm create %s` first",
-			c.Image, user, port, keyPath, c.Image)
-	}
-
+	// SSH connection details (User/Port/IdentityFile) live in the
+	// managed ssh-config Host stanza (ov-<vmName>) written at deploy
+	// time. We point the executor at the alias and let ssh(1) resolve
+	// the rest from ~/.ssh/config + agent.
 	host := "127.0.0.1"
-	var executor DeployExecutor = &SSHExecutor{User: user, Host: host, Port: port, KeyPath: keyPath}
+	var executor DeployExecutor = &SSHExecutor{Host: VmSshAlias(vmName), ConnectTimeout: 10}
 
 	// 2026-04 cutover: when c.Image is dotted ("vm.inner-pod"), walk
 	// the deploy tree and construct the full chain via ResolveDeployChain
@@ -360,7 +354,7 @@ func (c *EvalLiveCmd) runVm() error {
 	// leaf returned the VM's user, not the inner pod's.
 	if strings.Contains(c.Image, ".") {
 		if roots, _ := resolveTreeRoot(dir); roots != nil {
-			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, LocalDeployExecutor{}); chainErr == nil && chain != nil {
+			if _, chain, chainErr := ResolveDeployChain(roots, c.Image, ShellExecutor{}); chainErr == nil && chain != nil {
 				executor = chain
 			}
 		}

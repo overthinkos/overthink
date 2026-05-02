@@ -2,7 +2,7 @@ package main
 
 // walk_plan.go — shared InstallPlan walker used by every DeployTarget.
 //
-// Before this file, HostDeployTarget.emitPlan (deploy_target_host.go:156)
+// Before this file, LocalDeployTarget.emitPlan (deploy_target_host.go:156)
 // and VmDeployTarget.emitPlan (deploy_target_vm.go:201) each maintained
 // their own switch-over-step-kind. The two paths had diverged subtly:
 // host batched by (Scope, Venue) via plan.StepsByVenue(), vm iterated

@@ -20,6 +20,7 @@ type MigrateCmdGroup struct {
 	Unified     MigrateUnifiedCmd     `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
 	SchemaV4    MigrateSchemaV4Cmd    `cmd:"schema-v4" help:"Migrate schema v3 → v4: flatten deployments.images→deployment, rename plurals to singular, children:→nested:, remove deploy-choice fields from images, bump version 3→4"`
 	Description MigrateDescriptionCmd `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
+	TargetLocal MigrateTargetLocalCmd `cmd:"target-local" help:"Rename kind:host → kind:local (host.yml → local.yml, target:host → target:local, host:<template> → local:<template>); drop legacy status:/info: scalars + VmDeployState.ssh_key_path; idempotent"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

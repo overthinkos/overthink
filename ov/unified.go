@@ -70,9 +70,9 @@ type UnifiedFile struct {
 	DeploymentSingular map[string]DeploymentNode `yaml:"deployment,omitempty"`
 
 	// Schema v4: first-class target template maps (singular keys).
-	Pod  map[string]*PodSpec  `yaml:"pod,omitempty"`
-	K8s  map[string]*K8sSpec  `yaml:"k8s,omitempty"`
-	Host map[string]*HostSpec `yaml:"host,omitempty"`
+	Pod   map[string]*PodSpec   `yaml:"pod,omitempty"`
+	K8s   map[string]*K8sSpec   `yaml:"k8s,omitempty"`
+	Local map[string]*LocalSpec `yaml:"local,omitempty"`
 
 	// AI catalog (kind:ai), harness recipes (kind:recipe = pure spec),
 	// and harness scores (kind:score = runner config that references
@@ -185,9 +185,9 @@ type kindKeyedDoc struct {
 	Init       *InitDoc       `yaml:"init,omitempty"`
 	VM         *VmDoc         `yaml:"vm,omitempty"`
 	// Schema v4 first-class target templates.
-	Pod  *PodDoc  `yaml:"pod,omitempty"`
-	K8s  *K8sDoc  `yaml:"k8s,omitempty"`
-	Host *HostDoc `yaml:"host,omitempty"`
+	Pod   *PodDoc   `yaml:"pod,omitempty"`
+	K8s   *K8sDoc   `yaml:"k8s,omitempty"`
+	Local *LocalDoc `yaml:"local,omitempty"`
 	// 2026-04 harness cutover.
 	AI     *AIDoc     `yaml:"ai,omitempty"`
 	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
@@ -230,11 +230,11 @@ type K8sDoc struct {
 	K8sSpec `yaml:",inline"`
 }
 
-// HostDoc wraps a single HostSpec with an explicit Name — the kind:host
+// LocalDoc wraps a single LocalSpec with an explicit Name — the kind:host
 // standalone form.
-type HostDoc struct {
-	Name     string `yaml:"name"`
-	HostSpec `yaml:",inline"`
+type LocalDoc struct {
+	Name      string `yaml:"name"`
+	LocalSpec `yaml:",inline"`
 }
 
 // LayerDoc wraps a LayerYAML body with an explicit Name — the standalone form
@@ -294,9 +294,7 @@ type InitDoc struct {
 type VmDoc struct {
 	Name        string       `yaml:"name"`
 	Version     string       `yaml:"version,omitempty"`
-	Status      string       `yaml:"status,omitempty"`      // [DEPRECATED - migrate to description.tags]
-	Info        string       `yaml:"info,omitempty"`        // [DEPRECATED - migrate to description.feature+narrative]
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
 	Spec        VmSpec       `yaml:"spec"`
 }
 
@@ -318,11 +316,11 @@ var entityKinds = []entityKind{
 	{Key: "init", Filename: "init.yml"},
 	// Schema v4 additions — first-class target template kinds. All
 	// singular. All authored in overthink.yml or in their convention
-	// files (pod.yml / vm.yml / k8s.yml / host.yml).
+	// files (pod.yml / vm.yml / k8s.yml / local.yml).
 	{Key: "pod", Filename: "pod.yml"},
 	{Key: "vm", Filename: "vm.yml"},
 	{Key: "k8s", Filename: "k8s.yml"},
-	{Key: "host", Filename: "host.yml"},
+	{Key: "local", Filename: "local.yml"},
 	// 2026-04 harness cutover: `ai:`, `recipe:` (pure spec) and
 	// `score:` (runner config referencing recipes) kinds. Convention
 	// file: eval.yml (carries all three kinds together).
@@ -344,6 +342,50 @@ var entityKinds = []entityKind{
 // absent or less than 2 is hard-rejected with a migration hint. v1 configs
 // used a separate vms.yml + plural `vms:` root key; `ov migrate merge-vms`
 // produces a v2 layout in one shot.
+// rejectLegacyLocalSurface refuses to load any project that still
+// carries kind:host, target:host, or DeploymentNode `host: <template>`
+// references against templates that no longer exist (the new `host:`
+// field is destination-only). All three are fixed by
+// `ov migrate target-local` in one pass.
+func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
+	if merged == nil {
+		return nil
+	}
+	var walk func(name string, node *DeploymentNode) error
+	walk = func(name string, node *DeploymentNode) error {
+		if node == nil {
+			return nil
+		}
+		if node.Target == "host" {
+			return fmt.Errorf(
+				"%s: deployment %q uses legacy `target: host` — schema renamed to `target: local`. Run: ov migrate target-local",
+				root, name)
+		}
+		for childName, child := range node.Nested {
+			fullName := name + "." + childName
+			if err := walk(fullName, child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if merged.Deployments != nil {
+		for name, node := range merged.Deployments.Images {
+			n := node
+			if err := walk(name, &n); err != nil {
+				return err
+			}
+		}
+	}
+	for name, node := range merged.DeploymentSingular {
+		n := node
+		if err := walk(name, &n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	root := filepath.Join(dir, UnifiedFileName)
 	if !fileExists(root) {
@@ -360,6 +402,11 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 			"%s: schema v%d is required (found v%d). Run: ov migrate schema-v4",
 			root, schemaVersion, merged.Version,
 		)
+	}
+	// Reject any residual legacy local/host or status/info surface.
+	// `ov migrate target-local` fixes all of these in one shot.
+	if err := rejectLegacyLocalSurface(root, merged); err != nil {
+		return nil, true, err
 	}
 	if err := validateDeploymentTree(merged.Deployments); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
@@ -645,7 +692,7 @@ var rootShapeKeys = map[string]bool{
 	"distros": true, "builders": true, "inits": true,
 	"layers": true,
 	// v4 singular kind maps:
-	"image": true, "pod": true, "vm": true, "k8s": true, "host": true,
+	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"deployment": true,
 	// legacy aliases accepted for transitional compatibility; migration
 	// rewrites them:
@@ -747,13 +794,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 // HarnessRecipe / HarnessScore struct decoders would otherwise silently
 // drop:
 //
-//   1. **Fat-recipe shape**: a `recipe:` entry whose body carries any
-//      key other than {description, scenario}. Pre-cutover recipes
-//      mixed runner config (host, ai, plateau_iteration, prompt, …)
-//      with spec; post-cutover those move to `score:`.
+//  1. **Fat-recipe shape**: a `recipe:` entry whose body carries any
+//     key other than {description, scenario}. Pre-cutover recipes
+//     mixed runner config (host, ai, plateau_iteration, prompt, …)
+//     with spec; post-cutover those move to `score:`.
 //
-//   2. **Residual `max_iteration:`** anywhere on `recipe:` or `score:`
-//      bodies. The post-cutover loop bound is plateau-only.
+//  2. **Residual `max_iteration:`** anywhere on `recipe:` or `score:`
+//     bodies. The post-cutover loop bound is plateau-only.
 //
 // Walks both the root-shape (recipe: { name: { ... }, name2: { ... } })
 // and the kind-keyed standalone form (top-level `recipe: { name: X,
@@ -1057,7 +1104,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeVmMap(&dst.VM, src.VM)
 	mergePodMap(&dst.Pod, src.Pod)
 	mergeK8sMap(&dst.K8s, src.K8s)
-	mergeHostMap(&dst.Host, src.Host)
+	mergeLocalMap(&dst.Local, src.Local)
 	mergeAIMap(&dst.AI, src.AI)
 	mergeRecipeMap(&dst.Recipe, src.Recipe)
 	mergeScoreMap(&dst.Score, src.Score)
@@ -1227,12 +1274,12 @@ func mergeK8sMap(dst *map[string]*K8sSpec, src map[string]*K8sSpec) {
 	}
 }
 
-func mergeHostMap(dst *map[string]*HostSpec, src map[string]*HostSpec) {
+func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = make(map[string]*HostSpec)
+		*dst = make(map[string]*LocalSpec)
 	}
 	for k, v := range src {
 		if _, exists := (*dst)[k]; !exists {
@@ -1350,7 +1397,7 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.K8s != nil {
 		count++
 	}
-	if kd.Host != nil {
+	if kd.Local != nil {
 		count++
 	}
 	if kd.AI != nil {
@@ -1468,16 +1515,16 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 			spec := kd.K8s.K8sSpec
 			merged.K8s[kd.K8s.Name] = &spec
 		}
-	case kd.Host != nil:
-		if kd.Host.Name == "" {
+	case kd.Local != nil:
+		if kd.Local.Name == "" {
 			return fmt.Errorf("host: missing name")
 		}
-		if merged.Host == nil {
-			merged.Host = map[string]*HostSpec{}
+		if merged.Local == nil {
+			merged.Local = map[string]*LocalSpec{}
 		}
-		if _, exists := merged.Host[kd.Host.Name]; !exists {
-			spec := kd.Host.HostSpec
-			merged.Host[kd.Host.Name] = &spec
+		if _, exists := merged.Local[kd.Local.Name]; !exists {
+			spec := kd.Local.LocalSpec
+			merged.Local[kd.Local.Name] = &spec
 		}
 	case kd.AI != nil:
 		if kd.AI.Name == "" {
@@ -1847,8 +1894,9 @@ func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer
 // detection (which synthesizeInlineLayer does separately against SourceDir).
 func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.Version = ly.Version
-	layer.Status = ly.Status
-	layer.Info = ly.Info
+	layer.Description = ly.Description
+	layer.Status = descriptionStatus(ly.Description)
+	layer.Info = descriptionInfo(ly.Description)
 
 	layer.RawDepends = ly.Depends
 	layer.Depends = make([]string, len(ly.Depends))

@@ -18,7 +18,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -931,23 +930,3 @@ func findPodSpec(dir, name string) *PodSpec {
 	return uf.Pod[name]
 }
 
-// findHostSpec looks up a HostSpec by name from the unified loader.
-func findHostSpec(dir, name string) *HostSpec {
-	if dir == "" || name == "" {
-		return nil
-	}
-	uf, _, err := LoadUnified(dir)
-	if err != nil || uf == nil {
-		return nil
-	}
-	if uf.Host == nil {
-		return nil
-	}
-	return uf.Host[name]
-}
-
-// Force-use the strconv import so the file compiles even if none of the
-// methods above happen to reach a code path that touches it. The Kong
-// default-value parser uses string-to-int parsing for several `default:`
-// tags, but some Go versions warn on unused imports from vendored subsets.
-var _ = strconv.Itoa

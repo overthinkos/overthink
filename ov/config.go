@@ -102,36 +102,29 @@ func (m BuilderMap) AllBuilders() []string {
 type ImageConfig struct {
 	Enabled     *bool        `yaml:"enabled,omitempty"`
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this image definition
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description — replaces the retired info:/status: scalar fields
-	// Legacy scalar fields — retained as rejection traps per
-	// `/ov-dev:cutover-policy`. Non-empty at config load time errors
-	// with a remediation hint pointing at `ov migrate description`.
-	// Internal read sites continue to reference these fields; they are
-	// always "" post-migration.
-	Status    string   `yaml:"status,omitempty"`
-	Info      string   `yaml:"info,omitempty"`
-	Base      string   `yaml:"base,omitempty"`
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
+	Base        string       `yaml:"base,omitempty"`
 	// From selects a non-registry base via "builder:<name>" — the named
 	// builder must be kind: bootstrap and runs as a pre-build privileged
 	// container that produces a rootfs tarball, then the Containerfile
 	// emits FROM scratch + ADD. Mutually exclusive with Base.
-	From                  string   `yaml:"from,omitempty"`
-	BootstrapBuilderImage string   `yaml:"bootstrap_builder_image,omitempty"`
-	Platforms             []string `yaml:"platforms,omitempty"`
-	Tag        string        `yaml:"tag,omitempty"`
-	Registry   string        `yaml:"registry,omitempty"`
-	Distro     []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
-	Build      BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Layers     []string      `yaml:"layers,omitempty"`
-	Ports      []string      `yaml:"ports,omitempty"`       // runtime port mappings ["host:container"]
-	User       string        `yaml:"user,omitempty"`        // username (default: "user")
-	UID        *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
-	GID        *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
-	UserPolicy string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
-	Merge      *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
-	Aliases    []AliasConfig `yaml:"aliases,omitempty"`     // command aliases
-	Builder    BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
-	Builds     []string      `yaml:"builds,omitempty"`      // what this builder image can build (pixi, npm, cargo, aur)
+	From                  string        `yaml:"from,omitempty"`
+	BootstrapBuilderImage string        `yaml:"bootstrap_builder_image,omitempty"`
+	Platforms             []string      `yaml:"platforms,omitempty"`
+	Tag                   string        `yaml:"tag,omitempty"`
+	Registry              string        `yaml:"registry,omitempty"`
+	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
+	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
+	Layers                []string      `yaml:"layers,omitempty"`
+	Ports                 []string      `yaml:"ports,omitempty"`       // runtime port mappings ["host:container"]
+	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
+	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
+	GID                   *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
+	UserPolicy            string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
+	Merge                 *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
+	Aliases               []AliasConfig `yaml:"aliases,omitempty"`     // command aliases
+	Builder               BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
+	Builds                []string      `yaml:"builds,omitempty"`      // what this builder image can build (pixi, npm, cargo, aur)
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
 	// DeploymentNode and flow through to consumers via ImageMetadata.
@@ -150,7 +143,7 @@ type ImageConfig struct {
 	// DeployTests are image-author-supplied deploy-level defaults. All
 	// entries default to scope: deploy and land in the deploy section of
 	// the OCI label; local deploy.yml can override them by id.
-	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
+	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)
@@ -168,25 +161,25 @@ func boolPtr(v bool) *bool {
 
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedImage struct {
-	Name         string
-	Version      string `json:"version,omitempty"` // CalVer version from image.yml
-	Status       string `json:"status,omitempty"`  // effective status (worst of image + layers)
-	Info         string `json:"info,omitempty"`    // aggregated info from image + layers
-	Base string // Resolved base (external OCI ref or internal image name)
+	Name    string
+	Version string `json:"version,omitempty"` // CalVer version from image.yml
+	Status  string `json:"status,omitempty"`  // effective status (worst of image + layers)
+	Info    string `json:"info,omitempty"`    // aggregated info from image + layers
+	Base    string // Resolved base (external OCI ref or internal image name)
 	// From mirrors ImageConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
 	// ADD <staged-rootfs.tar.gz> instead of FROM <base>.
 	From                  string
 	BootstrapBuilderImage string
 	Platforms             []string
-	Tag          string
-	Registry     string
-	Pkg          string   // primary build format (first entry in BuildFormats) — for cache mounts, bootstrap
-	Distro       []string // resolved distro tags: ["fedora:43", "fedora"]
-	BuildFormats []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
-	Tags         []string // union: ["all"] + Distro + BuildFormats — for task matching
-	Layers       []string
-	Ports        []string // runtime port mappings
+	Tag                   string
+	Registry              string
+	Pkg                   string   // primary build format (first entry in BuildFormats) — for cache mounts, bootstrap
+	Distro                []string // resolved distro tags: ["fedora:43", "fedora"]
+	BuildFormats          []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
+	Tags                  []string // union: ["all"] + Distro + BuildFormats — for task matching
+	Layers                []string
+	Ports                 []string // runtime port mappings
 
 	// User configuration
 	User string // username
@@ -287,14 +280,6 @@ func LoadConfigRaw(dir string) (*Config, error) {
 		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified` to convert legacy image.yml/build.yml/deploy.yml)", dir)
 	}
 	cfg := uf.ProjectConfig()
-	// BDD description cutover — reject any residual legacy info:/status:
-	// at the ImageConfig layer. Per `/ov-dev:cutover-policy` hard cutover,
-	// non-empty legacy fields are a load-time error with a remediation hint.
-	for name, img := range cfg.Images {
-		if err := rejectLegacyInfoStatus(fmt.Sprintf("image %q", name), img.Info, img.Status); err != nil {
-			return nil, err
-		}
-	}
 	return cfg, nil
 }
 
@@ -311,8 +296,8 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	resolved := &ResolvedImage{
 		Name:    name,
 		Version: img.Version,
-		Status:  img.Status,
-		Info:    img.Info,
+		Status:  descriptionStatus(img.Description),
+		Info:    descriptionInfo(img.Description),
 	}
 
 	// `from: builder:<name>` — non-registry base via a kind: bootstrap

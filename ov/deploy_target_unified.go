@@ -42,7 +42,7 @@ type UnifiedDeployTarget interface {
 	Kind() string
 
 	// Executor returns the DeployExecutor this target will use for
-	// shell operations. For host → LocalDeployExecutor; for vm →
+	// shell operations. For host → ShellExecutor; for vm →
 	// SSHExecutor; for pod → a podman-exec wrapper; for k8s → a nop
 	// executor that errors on invocation (k8s operates via
 	// kubectl/Kustomize, not shell ops).

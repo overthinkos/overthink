@@ -15,7 +15,7 @@ func TestPodUnifiedTarget_Basics(t *testing.T) {
 		t.Errorf("Kind = %q, want %q", got, "pod")
 	}
 	// With no embedded PodDeployTarget, Executor falls back to a
-	// LocalDeployExecutor (matches HostUnifiedTarget's nil-safety).
+	// ShellExecutor (matches LocalUnifiedTarget's nil-safety).
 	if target.Executor() == nil {
 		t.Errorf("Executor: expected fallback executor, got nil")
 	}
@@ -53,11 +53,11 @@ func TestPodUnifiedTarget_engine(t *testing.T) {
 
 // TestPodUnifiedTarget_Test_NilExecutor verifies Test errors cleanly
 // when no executor is configured (rather than panicking on nil).
-// PodUnifiedTarget.Executor() returns LocalDeployExecutor on nil
+// PodUnifiedTarget.Executor() returns ShellExecutor on nil
 // embed, but in a real flow the executor would be a podman-exec
 // wrapper; this test is the nil-safety floor.
 func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
-	// Without any embed, Executor returns a non-nil LocalDeployExecutor
+	// Without any embed, Executor returns a non-nil ShellExecutor
 	// — so Test should run on it. We use a hermetic command:true.
 	target := &PodUnifiedTarget{NodeName: "sway-pod"}
 	checks := []Check{{ID: "ok", Command: "true"}}

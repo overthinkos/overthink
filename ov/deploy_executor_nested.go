@@ -13,7 +13,7 @@ import (
 // deploy_executor_nested.go — the composable executor that turns the
 // flat DeployTarget interface into a recursive dispatcher.
 //
-// Every DeployTarget today (HostDeployTarget, VmDeployTarget,
+// Every DeployTarget today (LocalDeployTarget, VmDeployTarget,
 // PodDeployTarget, K8sDeployTarget) runs InstallStep primitives
 // through a single DeployExecutor. When a deployment is nested inside
 // another — a container inside a VM, a VM inside a container, a host-
@@ -89,7 +89,12 @@ const (
 // string's meaning depends on Kind:
 //
 //	JumpPodmanExec / JumpDockerExec: container name.
-//	JumpSSH:                         "user@host:port" (port optional).
+//	JumpSSH:                         "[user@]host[:port]" or an
+//	                                 ssh-config alias (e.g.
+//	                                 "ov-<vmname>"). ssh(1) reads
+//	                                 ~/.ssh/config + agent for keys
+//	                                 and connection options — we
+//	                                 contain zero credential state.
 //	JumpVirshConsole:                libvirt domain name.
 type NestedJump struct {
 	Kind   JumpKind
@@ -99,10 +104,6 @@ type NestedJump struct {
 	// needed; useful for `podman exec --env FOO=bar` or
 	// `ssh -o ProxyJump=…` style tweaks.
 	ExtraArgs []string
-
-	// SSHKeyPath is the private-key path for JumpSSH. Required for
-	// that kind; ignored otherwise.
-	SSHKeyPath string
 }
 
 // String renders a jump as a human-readable venue segment. Used as a
@@ -380,10 +381,6 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 		if host == "" {
 			return "", fmt.Errorf("NestedJump{JumpSSH}: target %q missing host", jump.Target)
 		}
-		keyArg := ""
-		if jump.SSHKeyPath != "" {
-			keyArg = "-i " + deployShellQuote(jump.SSHKeyPath) + " "
-		}
 		portArg := ""
 		if port > 0 {
 			portArg = fmt.Sprintf("-p %d ", port)
@@ -393,8 +390,11 @@ func wrapWithJump(jump NestedJump, script string, asRoot bool) (string, error) {
 			userPrefix = user + "@"
 		}
 		extras := strings.Join(escapeTokens(jump.ExtraArgs), " ")
-		cmd := fmt.Sprintf("ssh %s%s-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s %s%s %s",
-			keyArg, portArg, extras, userPrefix, host, shell)
+		// ssh(1) reads ~/.ssh/config + agent — no -i / -o overrides
+		// from us. The Target is either an ssh-config alias (managed
+		// ov-<vmname> stanza) or "[user@]host[:port]".
+		cmd := fmt.Sprintf("ssh %s%s %s%s %s",
+			portArg, extras, userPrefix, host, shell)
 		return fmt.Sprintf("%s <<'%s'\n%s\n%s\n", cmd, delim, script, delim), nil
 
 	case JumpVirshConsole:
@@ -437,10 +437,6 @@ func copyIntoJumpCommand(jump NestedJump, stagePath, remotePath string, mode uin
 
 	case JumpSSH:
 		user, host, port := parseSSHTarget(jump.Target)
-		keyArg := ""
-		if jump.SSHKeyPath != "" {
-			keyArg = "-i " + quote(jump.SSHKeyPath) + " "
-		}
 		portArg := ""
 		if port > 0 {
 			portArg = fmt.Sprintf("-P %d ", port)
@@ -450,25 +446,22 @@ func copyIntoJumpCommand(jump NestedJump, stagePath, remotePath string, mode uin
 			userPrefix = user + "@"
 		}
 		target := fmt.Sprintf("%s%s:%s", userPrefix, host, remotePath)
-		// scp for the file; a separate ssh for chown+chmod when root.
+		// ssh(1)/scp(1) read ~/.ssh/config + agent — no -i / -o
+		// overrides from us. Target may be an ssh-config alias.
 		installCmd := ""
-		if ownerRoot {
-			sshPort := ""
-			if port > 0 {
-				sshPort = fmt.Sprintf("-p %d ", port)
-			}
-			installCmd = fmt.Sprintf(" && ssh %s%s-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s%s 'sudo chown root:root %s && sudo chmod %s %s'",
-				keyArg, sshPort, userPrefix, host, quote(remotePath), modeStr, quote(remotePath))
-		} else {
-			sshPort := ""
-			if port > 0 {
-				sshPort = fmt.Sprintf("-p %d ", port)
-			}
-			installCmd = fmt.Sprintf(" && ssh %s%s-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s%s 'chmod %s %s'",
-				keyArg, sshPort, userPrefix, host, modeStr, quote(remotePath))
+		sshPort := ""
+		if port > 0 {
+			sshPort = fmt.Sprintf("-p %d ", port)
 		}
-		return fmt.Sprintf("scp %s%s-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null %s %s%s",
-			keyArg, portArg, quote(stagePath), target, installCmd), nil
+		if ownerRoot {
+			installCmd = fmt.Sprintf(" && ssh %s%s%s 'sudo chown root:root %s && sudo chmod %s %s'",
+				sshPort, userPrefix, host, quote(remotePath), modeStr, quote(remotePath))
+		} else {
+			installCmd = fmt.Sprintf(" && ssh %s%s%s 'chmod %s %s'",
+				sshPort, userPrefix, host, modeStr, quote(remotePath))
+		}
+		return fmt.Sprintf("scp %s%s %s%s",
+			portArg, quote(stagePath), target, installCmd), nil
 	}
 
 	switch jump.Kind {

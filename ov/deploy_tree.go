@@ -88,7 +88,7 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 	// visitor call but require it to be idempotent for teardown —
 	// the caller can record the child executor up front from a
 	// lightweight `deriveChildExecutor` call.
-	thisExec, err := deriveChildExecutor(root, parentExec)
+	thisExec, err := deriveChildExecutor(root, parentExec, rootPath)
 	if err != nil {
 		return err
 	}
@@ -117,7 +117,7 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 //
 //	host:       children share the parent venue (host applies layers
 //	            in-place). Child executor = parentExec or
-//	            LocalDeployExecutor at the root.
+//	            ShellExecutor at the root.
 //	container:  wrap parent with NestedExecutor{JumpPodmanExec}.
 //	vm:         wrap parent with NestedExecutor{JumpSSH} when parent
 //	            is non-nil; otherwise the child executor is a plain
@@ -127,7 +127,7 @@ func WalkDeploymentTreePostOrder(rootPath string, root *DeploymentNode, parentEx
 //
 // Returns (parentExec, nil) for nodes with no children — no
 // composition needed.
-func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
+func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
 	if node == nil {
 		return parentExec, nil
 	}
@@ -135,21 +135,21 @@ func deriveChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (Deplo
 		return parentExec, nil
 	}
 	switch node.Target {
-	case "host", "":
+	case "host", "local", "":
 		// When Target is empty, fall back to "pod" (default for
-		// named deploys). Host with children → pass-through (children
-		// use parentExec or localhost).
-		if node.Target == "host" {
+		// named deploys). Local (was: host) with children →
+		// pass-through (children use parentExec or localhost).
+		if node.Target == "host" || node.Target == "local" {
 			if parentExec != nil {
 				return parentExec, nil
 			}
-			return LocalDeployExecutor{}, nil
+			return ShellExecutor{}, nil
 		}
 		return containerChildExecutor(node, parentExec)
 	case "pod", "container":
 		return containerChildExecutor(node, parentExec)
 	case "vm":
-		return vmChildExecutor(node, parentExec)
+		return vmChildExecutor(node, parentExec, deployName)
 	case "k8s", "kubernetes":
 		return nil, fmt.Errorf("target=k8s cannot have children (manifests are leaf artifacts)")
 	default:
@@ -172,7 +172,7 @@ func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (De
 		engineJump = JumpDockerExec
 	}
 	if parentExec == nil {
-		parentExec = LocalDeployExecutor{}
+		parentExec = ShellExecutor{}
 	}
 	return &NestedExecutor{
 		Parent: parentExec,
@@ -182,29 +182,30 @@ func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (De
 
 // vmChildExecutor wraps parentExec with an SSH jump into the VM
 // represented by this node. At the root (parentExec == nil or
-// LocalDeployExecutor), the child gets a plain SSHExecutor — no
+// ShellExecutor), the child gets a plain SSHExecutor — no
 // nesting overhead for the common case of a VM on localhost.
-func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (DeployExecutor, error) {
-	ssh, err := sshParamsForVm(node)
-	if err != nil {
-		return nil, err
-	}
+//
+// deployName is the deployment's name (e.g. "arch-vm") and selects
+// the managed ssh-config alias (ov-<deployName>) that `ov vm create`
+// or `ov deploy add` previously published into ~/.config/ov/ssh_config.
+func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
+	ssh := sshParamsForVm(deployName)
 	// If parent is localhost-equivalent, use a direct SSHExecutor —
 	// no need to hop through a trivial wrapper.
 	if parentExec == nil {
 		return ssh, nil
 	}
-	if _, isLocal := parentExec.(LocalDeployExecutor); isLocal {
+	if _, isLocal := parentExec.(ShellExecutor); isLocal {
 		return ssh, nil
 	}
-	// Nested VM (inside a container, or inside another VM): compose.
-	target := fmt.Sprintf("%s@%s:%d", ssh.User, ssh.Host, ssh.Port)
+	// Nested VM (inside a container, or inside another VM): compose
+	// using the same alias as the JumpSSH target — ssh-config supplies
+	// User/Port/IdentityFile.
 	return &NestedExecutor{
 		Parent: parentExec,
 		Jump: NestedJump{
-			Kind:       JumpSSH,
-			Target:     target,
-			SSHKeyPath: ssh.KeyPath,
+			Kind:   JumpSSH,
+			Target: ssh.Host,
 		},
 	}, nil
 }
@@ -230,39 +231,17 @@ func containerNameForNode(node *DeploymentNode) string {
 	return ""
 }
 
-// sshParamsForVm builds an *SSHExecutor from a vm-target node's
-// VmState + VmSource. Fills in defaults only where the VM has
-// already booted and persisted state; raises a precise error
-// otherwise so the caller can show the user which field is missing.
-func sshParamsForVm(node *DeploymentNode) (*SSHExecutor, error) {
-	if node == nil {
-		return nil, fmt.Errorf("sshParamsForVm: nil node")
-	}
-	state := node.VmState
-	// Fallback: in schema v4 the deployment key ("arch-vm") and the
-	// legacy state-key format ("vm:arch") differ. Check the local
-	// overlay under "vm:<template-name>" when the in-memory node's
-	// VmState is nil.
-	if state == nil && node.Vm != "" {
-		if dc, _ := LoadDeployConfig(); dc != nil {
-			if legacy, ok := dc.Deployment["vm:"+node.Vm]; ok && legacy.VmState != nil {
-				state = legacy.VmState
-			}
-		}
-	}
-	if state == nil {
-		return nil, fmt.Errorf("vm node: no VmState — run `ov vm create` + `ov deploy add` for this node first")
-	}
-	if state.SshPort == 0 || state.SshUser == "" || state.SshKeyPath == "" {
-		return nil, fmt.Errorf("vm node: incomplete VmState (user=%q port=%d key=%q)",
-			state.SshUser, state.SshPort, state.SshKeyPath)
-	}
+// sshParamsForVm returns an SSHExecutor pointing at the VM's managed
+// ssh-config alias (ov-<deployName>). All connection details — User,
+// Port, IdentityFile, host-key checking — live in the Host stanza
+// that `ov vm create` / `ov deploy add` published into
+// ~/.config/ov/ssh_config; ssh(1) reads them from there. Our
+// SSHExecutor needs only the alias as Host.
+func sshParamsForVm(deployName string) *SSHExecutor {
 	return &SSHExecutor{
-		User:    state.SshUser,
-		Host:    "127.0.0.1",
-		Port:    state.SshPort,
-		KeyPath: state.SshKeyPath,
-	}, nil
+		Host:           VmSshAlias(deployName),
+		ConnectTimeout: 10,
+	}
 }
 
 // classifyTarget normalizes the Target field for dispatch. Empty

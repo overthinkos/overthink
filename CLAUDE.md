@@ -37,7 +37,9 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 |---|---|
 | `ov rebuild` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov-advanced:vm` + `/ov-dev:vm-deploy-target` |
 | `ov deploy add/del` / pod or container deploys | `/ov-core:deploy` |
-| host-target deploy / `deploy add <name> host` / nested host | `/ov-advanced:host-deploy` + `/ov-dev:host-infra` |
+| local-target deploy / `target: local` / `host: local` (default) / SSH-host deploys / `user:` / `ssh_args:` | `/ov-advanced:local-deploy` + `/ov-dev:local-infra` |
+| Editing `local.yml` / authoring `kind: local` templates | `/ov-build:local-spec` |
+| Managed `~/.config/ov/ssh_config` fragment / `ov vm create` writes Host stanza | `/ov-advanced:vm` + `/ov-advanced:local-deploy` |
 | `ov eval live` / `ov eval cdp/wl/dbus/vnc/mcp/record/spice/libvirt` | `/ov-build:eval` |
 | `ov eval k8s <verb>` / cluster probes | `/ov-advanced:eval-k8s` |
 | Editing `layer.yml`, layer authoring, layer tasks/services | `/ov-build:layer` |
@@ -61,6 +63,8 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 Full index: `plugins/README.md`. This table covers the top triggers; anything not listed here requires reading the index FIRST, loading the matching skill SECOND, touching code THIRD. Never reverse this order.
 
 **Plugin reorganization (2026-04-30)**: the giant `ov` plugin was split into `ov-core` (daily-ops verbs), `ov-build` (authoring), and `ov-advanced` (k8s/vm/probes). The catalog plugins `ov-images` and `ov-layers` were absorbed: pod-specific skills moved into per-pod plugins (`ov-jupyter`, `ov-coder`, `ov-selkies`, `ov-openclaw`, `ov-ollama`, `ov-openwebui`, `ov-comfyui`, `ov-immich`, `ov-hermes`, `ov-filebrowser`) and base/foundation skills consolidated in `ov-foundation`. Marketplace bumped to v2.0.0.
+
+**Local cutover (2026-05-03)**: `kind: host` renamed to `kind: local`; `host.yml` → `local.yml`; `target: host` → `target: local`. The `host:` field on deployments now means **destination machine** (Ansible-style): `host: local` (literal, default) → direct shell, anything else → SSH via `ssh(1)` reading `~/.ssh/config` + ssh-agent. New deployment fields: `local: <template>`, `user: <ssh-user>`, `ssh_args: [-o, ProxyJump=...]`. Skills renamed: `host-deploy` → `local-deploy`, `host-infra` → `local-infra`. New skill: `local-spec`. ov contains zero custom SSH-key resolution — `ov vm create` writes a managed Host stanza to `~/.config/ov/ssh_config`, and `~/.ssh/config` Includes it. Deprecated `status:`/`info:` scalar fields and `VmDeployState.ssh_key_path` deleted; `description.tag` (`working`/`testing`/`broken`) carries the rollup. Migration: `ov migrate target-local` (idempotent).
 
 ### Anti-patterns — FORBIDDEN, regardless of context
 
@@ -234,20 +238,32 @@ introduced unseen regressions and flushes them out.
 **The workflow for every non-trivial change:**
 
 1. **Split into tasks, not phases.** Use TaskCreate to decompose work into
-   independently-trackable tasks inside ONE commit. Tasks may be
-   implemented and marked complete incrementally, but the whole commit is
-   atomic — no intermediate `git commit`, no intermediate "done for today."
+   independently-trackable tasks inside ONE commit. **N tasks ≠ N phases.**
+   A 15-task cutover is still ONE phase: every task lands in the same
+   working tree, R10 runs ONCE at the end, ONE `git commit` at the close.
+   Marking a TaskCreate task `completed` is a TODO-tracking signal — it is
+   NOT a `git commit` signal, and it is NOT permission to ship that piece
+   of work independently.
 2. **Implement all tasks together.** Schema changes, code edits, migration
    commands, skill updates — all land in the same working-tree state.
    Transitional aliases / legacy-accepting paths are fine DURING
    implementation, but every one of them is DELETED before the end of the
    same cutover.
-3. **Full R10 test AFTER all code changes are implemented.** Unit tests,
+3. **Cheap smoke between tasks is fine; R10-class verbs are FORBIDDEN
+   until every task is done.** Cheap smoke = `go build`, `go test`,
+   `ov image validate`, `ov image generate --dry-run`. R10-class verbs =
+   `ov image build`, `ov rebuild`, `ov deploy add` against a live target,
+   `ov vm create` of a real VM, `ov eval run`, `ov update`, `ov start`
+   against a real container/VM. The first time any R10-class verb runs
+   is the dedicated end-of-cutover R10 round. Running one earlier burns
+   cycles on artifacts the next task obsoletes AND tempts the second-order
+   violation of committing a half-migrated state because "it built."
+4. **Full R10 test AFTER all code changes are implemented.** Unit tests,
    live build, live deploy to a `disposable: true` target, fresh-rebuild
    re-verification. The tests run against the FINAL code, not an
    intermediate state. R10's purpose is to catch whatever the migration
    missed — expect regressions and fix them in the same working tree.
-4. **Fail the cutover if any verification fails.** Fix in the same working
+5. **Fail the cutover if any verification fails.** Fix in the same working
    tree. Re-run everything. Do NOT paper over a partial failure by
    declaring "the rest is Phase 2."
 
@@ -382,14 +398,14 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Lowercase-hyphenated names** for layers and images.
 - **Tests ship with the image.** See `/ov:eval`.
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
-- **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `host`, `deployment`) with singular root-shape keys throughout. File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `host.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`. Nesting of deployments uses `nested:` (was `children:`). See `/ov:migrate`, `/ov:image`, `/ov:deploy`, `/ov:vm`.
+- **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deployment`) with singular root-shape keys throughout. File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`; the local-cutover (kind:host → kind:local) is `ov migrate target-local`. Nesting of deployments uses `nested:` (was `children:`). See `/ov:migrate`, `/ov:image`, `/ov:deploy`, `/ov:vm`, `/ov-build:local-spec`.
 - **Hard cutover by default.** See `/ov-dev:cutover-policy` and the "Hard Cutover by Default" section above.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
 - **Project directory resolution.** See `/ov:image` "Project directory resolution".
 - **User policy: adopt over rename.** Declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov:image` "user_policy" and `/ov:build` "base_user:".
 - **Unified `service:` schema.** See `/ov:layer` "Service Declaration".
 - **Capabilities as OCI-label contract.** See `/ov-dev:capabilities`.
-- **Deploy targets.** `ov deploy add <name> <ref>`: literal `host` → local filesystem; `vm:<name>` → VM via SSH; `kubernetes` → Kustomize tree; any other → container deploy. See `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov-dev:vm-deploy-target`. Shared IR: `/ov-dev:install-plan`.
+- **Deploy targets.** `ov deploy add <name> <ref>`: `target: local` + `host: local` (default) → local filesystem via `ShellExecutor`; `target: local` + `host: <user@machine[:port]>` → SSH (ssh-config + agent supply credentials); `target: vm` → VM via managed `ov-<vmname>` ssh-config alias; `target: k8s` → Kustomize tree; `target: pod` (default) → container deploy. See `/ov-core:deploy`, `/ov-advanced:local-deploy`, `/ov-advanced:kubernetes`, `/ov-dev:vm-deploy-target`. Shared IR: `/ov-dev:install-plan`.
 - **k3s cluster provisioning via layers.** `/ov-layers:k3s` + `/ov-layers:k3s-server` + `/ov-layers:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared token via `ov secrets set ov/secret/K3S_CLUSTER_TOKEN`. Kubeconfig pulled back via layer `artifacts:` block. Schema v4: cluster configuration lives on a `kind: k8s` entity (workload defaults + cluster policy absorbed from the former ClusterProfile). Cluster probes via `/ov:eval-k8s` (`ov eval k8s nodes/addons/wait-ready/…`).
 
 ---

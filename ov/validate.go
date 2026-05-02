@@ -166,10 +166,89 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	// tests: + image.yml deploy_tests:)
 	validateTests(cfg, layers, errs)
 
+	// Validate kind:local templates and target:local deployments.
+	validateLocalTemplates(dir, layers, errs)
+	validateLocalDeployments(dir, errs)
+
 	if errs.HasErrors() {
 		return errs
 	}
 	return nil
+}
+
+// validateLocalTemplates checks each kind:local entity for: layer
+// references that resolve, an empty `layers: []` (warning, allowed for
+// stub placeholders), and a missing `layers:` field entirely (error).
+func validateLocalTemplates(dir string, layers map[string]*Layer, errs *ValidationError) {
+	uf, _, err := LoadUnified(dir)
+	if err != nil || uf == nil {
+		return
+	}
+	for name, spec := range uf.Local {
+		if spec == nil {
+			continue
+		}
+		if spec.Layers == nil {
+			errs.Add("kind:local %q: missing required field `layers:` (use `layers: []` for an explicit placeholder)", name)
+			continue
+		}
+		for _, layerName := range spec.Layers {
+			if _, ok := layers[layerName]; !ok {
+				errs.Add("kind:local %q: layer %q not found", name, layerName)
+			}
+		}
+	}
+}
+
+// validateLocalDeployments checks every target:local deployment:
+//   - `local: <name>` references must resolve to a kind:local template.
+//   - `host:` non-`local` values must parse via ParseSSHTarget.
+//   - `user:` and `ssh_args:` are only meaningful when `host:` is non-`local`.
+//   - `user:` redundancy when `host: <inline-user>@<machine>` is set.
+func validateLocalDeployments(dir string, errs *ValidationError) {
+	uf, _, err := LoadUnified(dir)
+	if err != nil || uf == nil {
+		return
+	}
+	dc := uf.ProjectDeployConfig()
+	if dc == nil {
+		return
+	}
+	for name, node := range dc.Deployment {
+		if node.Target != "local" && node.Target != "" {
+			continue
+		}
+		if node.Target == "" && !strings.HasSuffix(name, "-local") && name != "local" {
+			// Default target is "pod"; only validate when explicit.
+			continue
+		}
+		if node.Local != "" {
+			if uf.Local == nil || uf.Local[node.Local] == nil {
+				errs.Add("deployment %q: kind:local template %q not found", name, node.Local)
+			}
+		}
+		hostField := strings.TrimSpace(node.Host)
+		isLocalDest := hostField == "" || hostField == "local"
+		if !isLocalDest {
+			if _, perr := ParseSSHTarget(hostField); perr != nil {
+				errs.Add("deployment %q: invalid host %q: %v", name, hostField, perr)
+			}
+			if node.User != "" && strings.Contains(hostField, "@") {
+				inlineUser := strings.SplitN(hostField, "@", 2)[0]
+				if inlineUser != node.User {
+					errs.Add("deployment %q: ambiguous user — host: %q has inline user %q but user: field is %q (remove one)",
+						name, hostField, inlineUser, node.User)
+				}
+			}
+		} else {
+			if node.User != "" {
+				errs.Add("deployment %q: user: field only meaningful when host: is non-local", name)
+			}
+			if len(node.SSHArgs) > 0 {
+				errs.Add("deployment %q: ssh_args: field only meaningful when host: is non-local", name)
+			}
+		}
+	}
 }
 
 // validateInitDependencies checks that images using an init system have the
@@ -1431,19 +1510,29 @@ var validStatuses = map[string]bool{
 // calverRe matches CalVer format: YYYY.DDD.HHMM (3 dot-separated non-negative integers)
 var calverRe = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
 
-// validateStatus validates status fields in layers and images.
+// validateStatus validates status tags in description.tag for layers
+// and images. Accepts empty (defaults to testing) plus working/testing/
+// broken. The status word is one of many possible Description.Tag
+// entries — others are free-form and not policed here.
 func validateStatus(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if !validStatuses[layer.Status] {
-			errs.Add("layer %q: status must be \"working\", \"testing\", or \"broken\", got %q", name, layer.Status)
+		if layer.Description == nil {
+			continue
+		}
+		for _, t := range layer.Description.Tag {
+			if (t == "working" || t == "testing" || t == "broken") && !validStatuses[t] {
+				errs.Add("layer %q: description.tag includes unknown status %q", name, t)
+			}
 		}
 	}
 	for name, img := range cfg.Images {
-		if !img.IsEnabled() {
+		if !img.IsEnabled() || img.Description == nil {
 			continue
 		}
-		if !validStatuses[img.Status] {
-			errs.Add("image %q: status must be \"working\", \"testing\", or \"broken\", got %q", name, img.Status)
+		for _, t := range img.Description.Tag {
+			if (t == "working" || t == "testing" || t == "broken") && !validStatuses[t] {
+				errs.Add("image %q: description.tag includes unknown status %q", name, t)
+			}
 		}
 	}
 }

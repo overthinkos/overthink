@@ -18,7 +18,7 @@ func TestHostDeployTargetDryRunShellHook(t *testing.T) {
 		Layers:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
-	tgt := &HostDeployTarget{
+	tgt := &LocalDeployTarget{
 		HostHome:    home,
 		LedgerPaths: paths,
 		Shell:       ShellBash,
@@ -75,7 +75,7 @@ func TestHostDeployTargetGateSkips(t *testing.T) {
 		Layers:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
-	tgt := &HostDeployTarget{
+	tgt := &LocalDeployTarget{
 		HostHome:    home,
 		LedgerPaths: paths,
 		Shell:       ShellBash,
@@ -120,7 +120,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 		Layers:   filepath.Join(home, "installed", "layers"),
 		LockFile: filepath.Join(home, "installed", ".lock"),
 	}
-	tgt := &HostDeployTarget{
+	tgt := &LocalDeployTarget{
 		HostHome:    home,
 		LedgerPaths: paths,
 		Shell:       ShellBash,
@@ -143,7 +143,7 @@ func TestHostDeployTargetDryRunSystemPackages(t *testing.T) {
 }
 
 func TestRenderTaskCommandMkdir(t *testing.T) {
-	tgt := &HostDeployTarget{}
+	tgt := &LocalDeployTarget{}
 	ts := &TaskStep{Task: &Task{Mkdir: "/etc/foo", Mode: "0700"}}
 	cmd, err := tgt.renderTaskCommand(ts)
 	if err != nil {
@@ -155,7 +155,7 @@ func TestRenderTaskCommandMkdir(t *testing.T) {
 }
 
 func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
-	tgt := &HostDeployTarget{}
+	tgt := &LocalDeployTarget{}
 	ts := &TaskStep{
 		Task:    &Task{Cmd: "cp /ctx/config.json /etc/foo/"},
 		CtxPath: "/home/u/layers/foo",
@@ -170,7 +170,7 @@ func TestRenderTaskCommandCmdWithCtx(t *testing.T) {
 }
 
 func TestRenderFallbackPkgCmd(t *testing.T) {
-	tgt := &HostDeployTarget{}
+	tgt := &LocalDeployTarget{}
 	tests := []struct {
 		format   string
 		packages []string

@@ -1863,18 +1863,22 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelSkills, skillURL))
 	}
 
-	// Status and info: aggregate worst status from image + layers
-	effectiveStatus := img.Status
+	// Status and info: aggregate worst status from image + layers using
+	// Description.Tag (status word) and Description.Feature/Narrative
+	// (human-facing info). The legacy Status/Info scalar fields on
+	// authored configs were removed; ResolvedImage carries the derived
+	// pair (populated in ResolveImage from img.Description).
+	effectiveStatus := resolveStatus(img.Status)
 	var infoParts []string
 	if img.Info != "" {
 		infoParts = append(infoParts, img.Info)
 	}
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		layerStatus := layer.Status
+		layerStatus := descriptionStatus(layer.Description)
 		effectiveStatus = worstStatus(effectiveStatus, layerStatus)
-		if layer.Info != "" && resolveStatus(layerStatus) != "working" {
-			infoParts = append(infoParts, layerName+": "+layer.Info)
+		if li := descriptionInfo(layer.Description); li != "" && layerStatus != "working" {
+			infoParts = append(infoParts, layerName+": "+li)
 		}
 	}
 	resolvedStatus := resolveStatus(effectiveStatus)
@@ -1968,11 +1972,55 @@ func writeJSONLabel[T any](b *strings.Builder, key string, value T) {
 }
 
 // resolveStatus returns the effective status string. Empty defaults to "testing".
+// Accepts a single status word (working/testing/broken) — the legacy form
+// used by older callers. Prefer resolveStatusFromTags for new code that
+// reads from Description.Tag directly.
 func resolveStatus(s string) string {
 	if s == "" {
 		return "testing"
 	}
 	return s
+}
+
+// resolveStatusFromTags walks Description.Tag looking for a literal
+// status tag (working/testing/broken) and returns it. When none is
+// present, returns "testing" (the historic default).
+func resolveStatusFromTags(tags []string) string {
+	for _, t := range tags {
+		switch t {
+		case "working", "testing", "broken":
+			return t
+		}
+	}
+	return "testing"
+}
+
+// descriptionStatus is a thin wrapper that pulls the status tag out of
+// a Description value (returning "testing" when the description is nil
+// or carries no status-class tag). Centralizes the lookup so callers
+// don't reach into Description.Tag directly.
+func descriptionStatus(d *Description) string {
+	if d == nil {
+		return "testing"
+	}
+	return resolveStatusFromTags(d.Tag)
+}
+
+// descriptionInfo aggregates Description.Feature + Description.Narrative
+// into a single human-facing string (replacing the legacy Info field).
+func descriptionInfo(d *Description) string {
+	if d == nil {
+		return ""
+	}
+	switch {
+	case d.Feature != "" && d.Narrative != "":
+		return d.Feature + ": " + d.Narrative
+	case d.Feature != "":
+		return d.Feature
+	case d.Narrative != "":
+		return d.Narrative
+	}
+	return ""
 }
 
 // statusSeverity returns a numeric severity for status comparison.
@@ -1995,6 +2043,12 @@ func worstStatus(a, b string) string {
 		return resolveStatus(b)
 	}
 	return resolveStatus(a)
+}
+
+// worstStatusFromTags picks the more severe of two tag lists, returning
+// the resolved status string ("working" / "testing" / "broken").
+func worstStatusFromTags(a, b []string) string {
+	return worstStatus(resolveStatusFromTags(a), resolveStatusFromTags(b))
 }
 
 // createRemoteLayerCopies copies remote layer directories into .build/_layers/

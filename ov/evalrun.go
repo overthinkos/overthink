@@ -87,7 +87,7 @@ const (
 // to deploy_executor.go as `runCaptureCmd` so every DeployExecutor
 // implementation can share it. asExitError moved alongside as
 // asExitErrorDeploy. Both are package-private and used by
-// LocalDeployExecutor.RunCapture / SSHExecutor.RunCapture.
+// ShellExecutor.RunCapture / SSHExecutor.RunCapture.
 
 // Runner wires together the execution context for one pass of checks.
 //

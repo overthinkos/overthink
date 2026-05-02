@@ -2,7 +2,7 @@ package main
 
 // -----------------------------------------------------------------------------
 // K8sDeployTarget — the fourth DeployTarget implementation (Part F).
-// Sibling of OCITarget (install_plan.go), ContainerDeployTarget, HostDeployTarget.
+// Sibling of OCITarget (install_plan.go), ContainerDeployTarget, LocalDeployTarget.
 //
 // Unlike host target (which applies layers directly to the local filesystem)
 // or container target (which emits podman quadlets), k8s target produces a
@@ -11,7 +11,7 @@ package main
 // -----------------------------------------------------------------------------
 
 // K8sDeployTarget implements DeployTarget for kubernetes deploys. It doesn't
-// consume install plans the same way HostDeployTarget does (plans describe
+// consume install plans the same way LocalDeployTarget does (plans describe
 // host/container mutations; K8s deploys describe desired cluster state
 // instead). Instead, its Emit is a no-op wrapper — K8s manifest generation
 // happens via GenerateK8sKustomize called separately by `ov deploy add

@@ -8,7 +8,7 @@ import (
 )
 
 // DeployExecutor abstracts shell execution + file placement for deploy
-// targets. HostDeployTarget uses LocalDeployExecutor (spawns bash directly);
+// targets. LocalDeployTarget uses ShellExecutor (spawns bash directly);
 // VmDeployTarget uses SSHExecutor (wraps scripts as `ssh vm sudo bash -s`,
 // uses scp for file transfers). Nested topologies (container-in-vm,
 // vm-in-container, host-in-vm-in-container, etc.) use NestedExecutor,
@@ -24,7 +24,7 @@ type DeployExecutor interface {
 	// Venue returns a stable identifier for where this executor's
 	// commands physically run. Examples:
 	//
-	//   "local"                            — LocalDeployExecutor.
+	//   "local"                            — ShellExecutor.
 	//   "ssh://arch@127.0.0.1:2224"        — SSHExecutor.
 	//   "nested:podman exec stack/local"   — NestedExecutor over local.
 	//   "nested:ssh vm/local"              — NestedExecutor over SSH.
@@ -82,7 +82,7 @@ type DeployExecutor interface {
 
 	// Kind returns a coarse classification of the venue used by the test
 	// runner for reporting and skip decisions. Values:
-	//   "host"      — LocalDeployExecutor (operator's machine)
+	//   "host"      — ShellExecutor (operator's machine)
 	//   "container" — NestedExecutor with JumpPodmanExec / JumpDockerExec
 	//   "image"     — NestedExecutor with JumpPodmanRun / JumpDockerRun
 	//                 (disposable container per invocation)
@@ -92,10 +92,10 @@ type DeployExecutor interface {
 	Kind() string
 }
 
-// LocalDeployExecutor implements DeployExecutor against the invoking user's shell
+// ShellExecutor implements DeployExecutor against the invoking user's shell
 // + filesystem. Faithful behavior-preserving wrapper around the
 // existing runSudoShell / runUserShell / BuilderRun helpers.
-type LocalDeployExecutor struct{}
+type ShellExecutor struct{}
 
 // VenueLocal is the stable Venue() identifier for the local host.
 // Exported so install_ledger.go and tests can reference it without
@@ -104,27 +104,27 @@ const VenueLocal = "local"
 
 // Venue returns the fixed "local" identifier — commands always run on
 // the invoking user's host.
-func (LocalDeployExecutor) Venue() string { return VenueLocal }
+func (ShellExecutor) Venue() string { return VenueLocal }
 
 // RunSystem delegates to the package-level runSudoShell.
-func (LocalDeployExecutor) RunSystem(_ context.Context, script string, opts EmitOpts) error {
+func (ShellExecutor) RunSystem(_ context.Context, script string, opts EmitOpts) error {
 	return runSudoShell(script, opts)
 }
 
 // RunUser delegates to the package-level runUserShell.
-func (LocalDeployExecutor) RunUser(_ context.Context, script string, opts EmitOpts) error {
+func (ShellExecutor) RunUser(_ context.Context, script string, opts EmitOpts) error {
 	return runUserShell(script, opts)
 }
 
 // RunBuilder delegates to the package-level BuilderRun.
-func (LocalDeployExecutor) RunBuilder(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
+func (ShellExecutor) RunBuilder(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 	return BuilderRun(ctx, opts)
 }
 
 // PutFile on the local executor is a direct filesystem write. When
 // ownerRoot is set, the installer uses `sudo install -m <mode> -o root
 // -g root` so the target path can be /usr/local/bin or similar.
-func (LocalDeployExecutor) PutFile(_ context.Context, localPath, remotePath string, mode uint32, ownerRoot bool, opts EmitOpts) error {
+func (ShellExecutor) PutFile(_ context.Context, localPath, remotePath string, mode uint32, ownerRoot bool, opts EmitOpts) error {
 	if ownerRoot {
 		// Use sudo install for atomic, correct-permissions placement.
 		// `install` creates target directory if missing (-D).
@@ -139,7 +139,7 @@ func (LocalDeployExecutor) PutFile(_ context.Context, localPath, remotePath stri
 // asRoot is set, the read is delegated to `sudo cat` so files with
 // restricted permissions (e.g. /etc/shadow, rancher kubeconfig) can
 // still be retrieved. Stdout is captured verbatim.
-func (LocalDeployExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error) {
+func (ShellExecutor) GetFile(ctx context.Context, remotePath string, asRoot bool, opts EmitOpts) ([]byte, error) {
 	if opts.DryRun {
 		return nil, nil
 	}
@@ -161,14 +161,14 @@ func (LocalDeployExecutor) GetFile(ctx context.Context, remotePath string, asRoo
 // ImageExecutor / VmTestExecutor behaviour from the pre-cutover test-
 // time interface — callers (testrun.go verbs) get the same return
 // shape via the unified DeployExecutor interface.
-func (LocalDeployExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
+func (ShellExecutor) RunCapture(ctx context.Context, script string) (string, string, int, error) {
 	cmd := exec.CommandContext(ctx, "bash", "-c", script)
 	return runCaptureCmd(cmd)
 }
 
-// Kind reports "host" — LocalDeployExecutor's commands run on the
+// Kind reports "host" — ShellExecutor's commands run on the
 // operator's machine.
-func (LocalDeployExecutor) Kind() string { return "host" }
+func (ShellExecutor) Kind() string { return "host" }
 
 // runCaptureCmd is the shared output-capture helper. Identical behaviour
 // to the pre-cutover testrun.go's runCapture (which lived on the now-

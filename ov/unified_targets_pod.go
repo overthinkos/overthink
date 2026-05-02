@@ -99,7 +99,7 @@ func (t *PodUnifiedTarget) engine() string {
 }
 
 // Test runs deploy-scope checks against the live container via its
-// executor (podman-exec wrapper). Mirrors HostUnifiedTarget.Test +
+// executor (podman-exec wrapper). Mirrors LocalUnifiedTarget.Test +
 // VmUnifiedTarget.Test — only the executor differs.
 func (t *PodUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))

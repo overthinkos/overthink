@@ -396,7 +396,7 @@ type BuilderConfig struct {
 // The legacy `stage_template:` / `install_template:` fields emit a
 // single Containerfile chunk. The new `phases:` field matches FormatDef
 // and lets a builder specify separate container + host renderings for
-// each of prepare/install/cleanup — required for HostDeployTarget to
+// each of prepare/install/cleanup — required for LocalDeployTarget to
 // invoke the builder via `podman run` with HOME-remapped bind-mounts
 // rather than as a build stage.
 type BuilderDef struct {

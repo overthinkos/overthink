@@ -11,7 +11,7 @@ func TestResolveDeployChain_FlatContainer(t *testing.T) {
 	roots := map[string]DeploymentNode{
 		"redis": {Target: "pod"},
 	}
-	leaf, chain, err := ResolveDeployChain(roots, "redis", LocalDeployExecutor{})
+	leaf, chain, err := ResolveDeployChain(roots, "redis", ShellExecutor{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -34,18 +34,19 @@ func TestResolveDeployChain_VmFlat(t *testing.T) {
 			VmState: &VmDeployState{
 				SshUser:    "arch",
 				SshPort:    2222,
-				SshKeyPath: "/tmp/fake-key",
 			},
 		},
 	}
-	_, chain, err := ResolveDeployChain(roots, "bench-vm", LocalDeployExecutor{})
+	_, chain, err := ResolveDeployChain(roots, "bench-vm", ShellExecutor{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
 	venue := chain.Venue()
-	// Expect: ssh://arch@127.0.0.1:2222
-	if !strings.Contains(venue, "ssh://arch@") {
-		t.Errorf("venue %q does not contain ssh://arch@", venue)
+	// Post-cutover: SSH connection details live in the managed ssh-config
+	// fragment (~/.config/ov/ssh_config) under the alias ov-<deployName>;
+	// SSHExecutor needs only the alias as Host. Expect: ssh://ov-bench-vm
+	if !strings.Contains(venue, "ssh://ov-bench-vm") {
+		t.Errorf("venue %q does not contain ssh://ov-bench-vm (managed alias)", venue)
 	}
 }
 
@@ -60,14 +61,13 @@ func TestResolveDeployChain_VmInnerPod(t *testing.T) {
 			VmState: &VmDeployState{
 				SshUser:    "arch",
 				SshPort:    2222,
-				SshKeyPath: "/tmp/fake-key",
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner": innerNode,
 			},
 		},
 	}
-	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner", LocalDeployExecutor{})
+	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner", ShellExecutor{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -101,14 +101,13 @@ func TestResolveDeployChain_ThreeDeep(t *testing.T) {
 			VmState: &VmDeployState{
 				SshUser:    "arch",
 				SshPort:    2222,
-				SshKeyPath: "/tmp/fake-key",
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner": innerNode,
 			},
 		},
 	}
-	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner.deeper", LocalDeployExecutor{})
+	leaf, chain, err := ResolveDeployChain(roots, "bench-vm.inner.deeper", ShellExecutor{})
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -132,7 +131,7 @@ func TestResolveDeployChain_UnknownRoot(t *testing.T) {
 		"redis": {Target: "pod"},
 		"web":   {Target: "pod"},
 	}
-	_, _, err := ResolveDeployChain(roots, "missing", LocalDeployExecutor{})
+	_, _, err := ResolveDeployChain(roots, "missing", ShellExecutor{})
 	if err == nil {
 		t.Fatal("expected error for unknown root")
 	}
@@ -153,14 +152,13 @@ func TestResolveDeployChain_UnknownNestedChild(t *testing.T) {
 			VmState: &VmDeployState{
 				SshUser:    "arch",
 				SshPort:    2222,
-				SshKeyPath: "/tmp/fake-key",
 			},
 			Nested: map[string]*DeploymentNode{
 				"inner-app": {Target: "pod"},
 			},
 		},
 	}
-	_, _, err := ResolveDeployChain(roots, "vm.missing-child", LocalDeployExecutor{})
+	_, _, err := ResolveDeployChain(roots, "vm.missing-child", ShellExecutor{})
 	if err == nil {
 		t.Fatal("expected error for unknown nested child")
 	}

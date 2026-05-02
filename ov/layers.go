@@ -166,13 +166,7 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 // (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
-	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description — replaces the retired info:/status: scalar fields
-	// Legacy Info / Status fields — retained as load-time rejection traps
-	// per `/ov-dev:cutover-policy`. When non-empty, the loader errors with
-	// a remediation hint pointing at `ov migrate description`. Authors
-	// migrate once; after migration these fields are empty and invisible.
-	Status string `yaml:"status,omitempty"`
-	Info   string `yaml:"info,omitempty"`
+	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
 	// Directory is the anchor for relative file references in this layer (tasks.copy,
 	// tasks.write inline paths, data.src, extract, install-file detection). Defaults
 	// to "." — the directory containing this layer.yml. Relative values resolve
@@ -263,7 +257,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
 	"vars": true, "tasks": true, "tests": true,
-	"artifacts": true,
+	"artifacts":    true,
 	"capabilities": true, "requires_capabilities": true,
 }
 
@@ -471,11 +465,12 @@ type RouteYAML struct {
 // Layer represents a layer directory and its contents
 type Layer struct {
 	Name              string
-	Path              string // directory containing layer.yml
-	SourceDir         string // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
-	Version           string // CalVer version from layer.yml
-	Status            string // working, testing, broken (empty = testing)
-	Info              string // free-form status description
+	Path              string       // directory containing layer.yml
+	SourceDir         string       // anchor for relative file lookups (tasks.copy, data.src, install files); defaults to Path, overridden by layer.yml `directory:`
+	Version           string       // CalVer version from layer.yml
+	Description       *Description // Gherkin-shaped self-description (Feature/Narrative/Tag/Scenario)
+	Status            string       // derived from Description.Tag — working/testing/broken (empty = testing)
+	Info              string       // derived from Description.Feature+Narrative
 	HasPixiToml       bool
 	HasPyprojectToml  bool
 	HasEnvironmentYml bool
@@ -675,35 +670,11 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 		if err := inner.Content[layerIdx].Decode(&ly); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		if err := rejectLegacyInfoStatus(path, ly.Info, ly.Status); err != nil {
-			return nil, err
-		}
 		return &ly, nil
 	}
 
 	// No `layer:` wrapper — legacy flat form. Reject with migration hint.
 	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate unified --rewrite-layers` to convert to the canonical `layer:` kind-keyed form", path)
-}
-
-// rejectLegacyInfoStatus errors when either field is non-empty on a
-// freshly-parsed entity. Part of the BDD description cutover per
-// `/ov-dev:cutover-policy`: legacy info: / status: scalar fields are
-// banned; authors migrate them into description.feature / .narrative /
-// .tags via `ov migrate description`. The error carries an actionable
-// remediation hint.
-func rejectLegacyInfoStatus(sourcePath, info, status string) error {
-	if info == "" && status == "" {
-		return nil
-	}
-	var which []string
-	if info != "" {
-		which = append(which, "'info'")
-	}
-	if status != "" {
-		which = append(which, "'status'")
-	}
-	return fmt.Errorf("%s: legacy %s field(s) present — the BDD description cutover replaced info:/status: with structured description:. Run: ov migrate description",
-		sourcePath, strings.Join(which, "+"))
 }
 
 // resolveLayerSourceDir returns the anchor directory for relative file lookups
@@ -766,10 +737,13 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 	if ly != nil {
 
-		// Pre-populate version, status, info
+		// Pre-populate version + Description (which carries Tag/Feature/
+		// Narrative — the post-cutover replacements for legacy
+		// status:/info:). Layer.Status/Info derive from Description.
 		layer.Version = ly.Version
-		layer.Status = ly.Status
-		layer.Info = ly.Info
+		layer.Description = ly.Description
+		layer.Status = descriptionStatus(ly.Description)
+		layer.Info = descriptionInfo(ly.Description)
 
 		// Keep raw depends for remote ref collection
 		layer.RawDepends = ly.Depends

@@ -2,11 +2,11 @@ package main
 
 // deploy_add_cmd.go — `ov deploy add <name> [<ref>]` and
 // `ov deploy del <name>`. Thin wiring on top of the pieces already
-// built: BuildDeployPlan → {OCITarget, HostDeployTarget,
+// built: BuildDeployPlan → {OCITarget, LocalDeployTarget,
 // PodDeployTarget}.
 //
 // Name semantics:
-//   - literal "host" → deploy to the local machine via HostDeployTarget
+//   - literal "host" → deploy to the local machine via LocalDeployTarget
 //   - any other name → a named container deployment (ContainerDeploy
 //     + existing quadlet/podman machinery)
 //
@@ -66,7 +66,7 @@ type DeployDelCmd struct {
 	KeepImage       bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
 	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
-	// Runner is populated by runVmDel / runHostDel etc. to route reverse
+	// Runner is populated by runVmDel / runLocalDel etc. to route reverse
 	// ops to the right privilege context. Nil falls back to the local-exec
 	// path in reverse_ops.go. Not exposed as a Kong flag.
 	Runner ReverseRunner `kong:"-"`
@@ -204,9 +204,28 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 
 	target := classifyNodeTarget(node, path)
 
-	// Target-only deploys (host, vm) don't compile primary plans —
+	// Resolve a kind:local template, when referenced. Template fields
+	// (layers + install_opts + env) merge BENEATH deployment-level
+	// overrides — so the precedence is CLI > deployment > template.
+	// `InstallOptsConfig.ApplyTo` is fill-empty, so calling it with the
+	// template's opts after the deployment's leaves the deployment's
+	// values intact and only fills the gaps.
+	if target == "local" && node != nil && node.Local != "" {
+		tmpl := findLocalSpec(dir, node.Local)
+		if tmpl == nil {
+			return fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
+		}
+		// Prepend template layers; deployment add_layers are appended.
+		merged := append([]string(nil), tmpl.Layers...)
+		merged = append(merged, addLayers...)
+		addLayers = merged
+		// Fill install_opts gaps from the template.
+		opts = tmpl.InstallOpts.ApplyTo(opts)
+	}
+
+	// Target-only deploys (local, vm) don't compile primary plans —
 	// everything comes from add_layers.
-	if target == "host" || target == "vm" {
+	if target == "local" || target == "vm" {
 		base = path
 	} else {
 		ref, err := ResolveDeployRef(refStr, dir)
@@ -306,8 +325,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		target = "k8s"
 	}
 	switch target {
-	case "host":
-		return c.runHost(plans, dir, distroCfg, opts)
+	case "local":
+		return c.runLocal(node, plans, dir, opts)
 	case "vm":
 		// runVM keys off c.Name to resolve the VM entity.
 		//   Schema v3 plain name — node.Vm names the vm entity;
@@ -361,11 +380,17 @@ func classifyNodeTarget(node *DeploymentNode, path string) string {
 			return "pod"
 		case "kubernetes":
 			return "k8s"
+		case "host":
+			// Legacy spelling — schema v4 uses "local". Routed for
+			// graceful in-progress migration; the loader rejects
+			// authored target:host entries with a hard error pointing
+			// at `ov migrate target-local`.
+			return "local"
 		}
 		return node.Target
 	}
-	if pathLeaf(path) == "host" {
-		return "host"
+	if pathLeaf(path) == "host" || pathLeaf(path) == "local" {
+		return "local"
 	}
 	return "pod"
 }
@@ -391,11 +416,11 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 		return parentExec, nil
 	}
 	switch classifyNodeTarget(node, path) {
-	case "host":
+	case "local":
 		if parentExec != nil {
 			return parentExec, nil
 		}
-		return LocalDeployExecutor{}, nil
+		return ShellExecutor{}, nil
 	case "pod":
 		name := NestedContainerName(path)
 		engineJump := JumpPodmanExec
@@ -403,14 +428,14 @@ func deriveChildExecutorForPath(path string, node *DeploymentNode, parentExec De
 			engineJump = JumpDockerExec
 		}
 		if parentExec == nil {
-			parentExec = LocalDeployExecutor{}
+			parentExec = ShellExecutor{}
 		}
 		return &NestedExecutor{
 			Parent: parentExec,
 			Jump:   NestedJump{Kind: engineJump, Target: name},
 		}, nil
 	case "vm":
-		return vmChildExecutor(node, parentExec)
+		return vmChildExecutor(node, parentExec, path)
 	case "k8s":
 		return nil, fmt.Errorf("k8s targets cannot have children")
 	}
@@ -436,8 +461,8 @@ func (c *DeployDelCmd) Run() error {
 	// explicit target:, else fall back to the name-prefix heuristic.
 	kind := c.resolveDelTargetKind()
 	switch kind {
-	case "host":
-		return c.runHostDel(paths)
+	case "local", "host":
+		return c.runLocalDel(paths)
 	case "vm":
 		if !strings.HasPrefix(c.Name, "vm:") {
 			// Schema v3: plain identifier — find the matching node's
@@ -491,13 +516,13 @@ func (c *DeployDelCmd) resolveDelTargetKind() string {
 	return "pod"
 }
 
-// runHostDel is a thin wrapper that constructs a HostUnifiedTarget
+// runLocalDel is a thin wrapper that constructs a LocalUnifiedTarget
 // with this cmd's gate flags and delegates teardown to the unified
 // target's Del method (see unified_targets_host.go). The body lives on
-// HostUnifiedTarget.Del so future schema-v3 dispatchers can call into
+// LocalUnifiedTarget.Del so future schema-v3 dispatchers can call into
 // the same logic without going through DeployDelCmd.
-func (c *DeployDelCmd) runHostDel(paths *LedgerPaths) error {
-	target := &HostUnifiedTarget{
+func (c *DeployDelCmd) runLocalDel(paths *LedgerPaths) error {
+	target := &LocalUnifiedTarget{
 		NodeName:        c.Name,
 		KeepRepoChanges: c.KeepRepoChanges,
 		KeepServices:    c.KeepServices,
@@ -733,23 +758,52 @@ func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
 	return nil
 }
 
-func (c *DeployAddCmd) runHost(plans []*InstallPlan, dir string, distroCfg *DistroConfig, opts EmitOpts) error {
-	_ = distroCfg
+// runLocal executes a target:local deployment. The destination is
+// selected by node.Host (Ansible-style):
+//   - "" or "local"   → ShellExecutor (direct local shell)
+//   - anything else   → SSHExecutor (ssh(1) reads ~/.ssh/config + agent)
+//
+// The optional `local: <name>` field references a kind:local template
+// whose layers + install_opts + env merge with this deployment's
+// overrides via the standard 3-tier precedence (CLI > deployment >
+// template). Nested local nodes inherit opts.ParentExec.
+func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir string, opts EmitOpts) error {
 	hostDistro, _ := DetectHostDistro()
-	tgt := &HostDeployTarget{
+	tgt := &LocalDeployTarget{
 		HostHome: os.Getenv("HOME"),
 		Distro:   hostDistro,
 	}
-	// When this host deploy is nested inside a container or VM, the
-	// tree walker sets opts.ParentExec to the parent's executor. The
-	// HostDeployTarget runs all its bash primitives through that
-	// executor instead of the local shell — so "apply these layers
-	// inside the parent container/VM" works without a different target
-	// type.
-	var exec DeployExecutor = LocalDeployExecutor{}
-	if opts.ParentExec != nil {
+	// Pick the executor.
+	var exec DeployExecutor = ShellExecutor{}
+	switch {
+	case opts.ParentExec != nil:
+		// Nested local-target inside a container/VM — run through the
+		// parent's venue.
 		tgt.Executor = opts.ParentExec
 		exec = opts.ParentExec
+	case node != nil:
+		hostField := strings.TrimSpace(node.Host)
+		if hostField != "" && hostField != "local" {
+			sshTarget, perr := ParseSSHTarget(hostField)
+			if perr != nil {
+				return fmt.Errorf("deployment %q: invalid host %q: %w", c.Name, hostField, perr)
+			}
+			user := ""
+			if strings.Contains(hostField, "@") {
+				user = sshTarget.User
+			} else if node.User != "" {
+				user = node.User
+			}
+			sshExec := &SSHExecutor{
+				User:           user,
+				Host:           sshTarget.Host,
+				Port:           sshTarget.Port,
+				Args:           append([]string(nil), node.SSHArgs...),
+				ConnectTimeout: 10,
+			}
+			tgt.Executor = sshExec
+			exec = sshExec
+		}
 	}
 
 	// Resolve layer secret_requires / secret_accepts and inject them
@@ -1011,7 +1065,6 @@ func loadConfigForDeploy(dir string) (*Config, *DistroConfig, *BuilderConfig, er
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	_ = cfg // FormatConfig deprecated — unified loader reads overthink.yml directly.
 	distroCfg, builderCfg, _, err := LoadDefaultBuildConfig(dir)
 	if err != nil {
 		return nil, nil, nil, err

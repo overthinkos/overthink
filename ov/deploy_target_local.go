@@ -1,6 +1,6 @@
 package main
 
-// deploy_target_host.go — HostDeployTarget executes an InstallPlan on
+// deploy_target_host.go — LocalDeployTarget executes an InstallPlan on
 // the host filesystem.
 //
 // Walk strategy:
@@ -27,8 +27,8 @@ import (
 	"time"
 )
 
-// HostDeployTarget executes plans on the host.
-type HostDeployTarget struct {
+// LocalDeployTarget executes plans on the host.
+type LocalDeployTarget struct {
 	// HostHome is the invoking user's home. Populated by DeployUpCmd
 	// before calling Emit.
 	HostHome string
@@ -56,7 +56,7 @@ type HostDeployTarget struct {
 	Shell ShellKind
 
 	// Executor is the DeployExecutor used for every shell primitive.
-	// Defaults to LocalDeployExecutor{} when nil — which matches the
+	// Defaults to ShellExecutor{} when nil — which matches the
 	// pre-tree-schema behavior of spawning bash on the invoking host.
 	//
 	// When non-nil (set by the tree-walking dispatcher for nested
@@ -74,9 +74,9 @@ type HostDeployTarget struct {
 // exec returns the configured executor, defaulting to a local one
 // when unset. Centralized so the emit path doesn't sprinkle nil
 // checks at every call site.
-func (t *HostDeployTarget) exec() DeployExecutor {
+func (t *LocalDeployTarget) exec() DeployExecutor {
 	if t.Executor == nil {
-		return LocalDeployExecutor{}
+		return ShellExecutor{}
 	}
 	return t.Executor
 }
@@ -85,27 +85,27 @@ func (t *HostDeployTarget) exec() DeployExecutor {
 // executor. Replaces direct calls to the package-level runSudoShell
 // so nested host deploys (executor = NestedExecutor) land in the
 // right venue.
-func (t *HostDeployTarget) runSystem(script string, opts EmitOpts) error {
+func (t *LocalDeployTarget) runSystem(script string, opts EmitOpts) error {
 	return t.exec().RunSystem(opts.ContextOrDefault(), script, opts)
 }
 
 // runUser runs a bash script as the invoking user through the
 // target's executor.
-func (t *HostDeployTarget) runUser(script string, opts EmitOpts) error {
+func (t *LocalDeployTarget) runUser(script string, opts EmitOpts) error {
 	return t.exec().RunUser(opts.ContextOrDefault(), script, opts)
 }
 
 // Name identifies this target.
-func (t *HostDeployTarget) Name() string { return "host" }
+func (t *LocalDeployTarget) Name() string { return "host" }
 
 // Emit executes the full list of plans. Plans are processed in order;
 // all steps from plan N run before any step from plan N+1.
-func (t *HostDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
+func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if t.HostHome == "" {
 		t.HostHome = os.Getenv("HOME")
 	}
 	if t.HostHome == "" {
-		return fmt.Errorf("HostDeployTarget: cannot determine HOME")
+		return fmt.Errorf("LocalDeployTarget: cannot determine HOME")
 	}
 	if t.LedgerPaths == nil {
 		p, err := DefaultLedgerPaths()
@@ -153,7 +153,7 @@ func (t *HostDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 
 // emitPlan walks one plan's steps in IR order, batching by
 // (Scope, Venue) for efficient sudo/user/container execution.
-func (t *HostDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
+func (t *LocalDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 	rec := &LayerRecord{
 		Layer:      plan.Layer,
 		Version:    plan.Version,
@@ -186,7 +186,7 @@ func (t *HostDeployTarget) emitPlan(plan *InstallPlan, opts EmitOpts) error {
 // recordLayer writes the per-layer ledger entry and adds the deploy
 // to the refcount set. Idempotent across multiple deploys of the same
 // layer.
-func (t *HostDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
+func (t *LocalDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opts EmitOpts) error {
 	if opts.DryRun || plan.DeployID == "" {
 		return nil
 	}
@@ -202,7 +202,7 @@ func (t *HostDeployTarget) recordLayer(rec *LayerRecord, plan *InstallPlan, opts
 }
 
 // execStep runs one step and records its reversal ops in rec.
-func (t *HostDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord) error {
+func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord) error {
 	start := time.Now().UTC()
 	switch s := step.(type) {
 	case *ShellHookStep:
@@ -222,14 +222,14 @@ func (t *HostDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts Em
 	case *RepoChangeStep:
 		return t.execRepoChange(s, plan, opts, rec, start)
 	}
-	return fmt.Errorf("HostDeployTarget: unknown step kind %T", step)
+	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
 }
 
 // ---------------------------------------------------------------------------
 // Step executors
 // ---------------------------------------------------------------------------
 
-func (t *HostDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	if opts.DryRun {
 		fmt.Fprintf(t.stderr(), "[dry-run] env.d/%s.env + managed block\n", s.LayerName)
 		t.noteStep(rec, StepKindShellHook, s.Scope(), s.Venue(), fmt.Sprintf("layer=%s", s.LayerName), start)
@@ -246,7 +246,7 @@ func (t *HostDeployTarget) execShellHook(s *ShellHookStep, plan *InstallPlan, op
 	return nil
 }
 
-func (t *HostDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	cmd, err := t.renderSystemPackageCommand(s)
 	if err != nil {
 		return err
@@ -268,7 +268,7 @@ func (t *HostDeployTarget) execSystemPackages(s *SystemPackagesStep, plan *Insta
 // renderSystemPackageCommand looks up the format's host-venue template
 // and renders it with the step's RawInstallContext. Returns "" when
 // there's no host rendering for this phase (no error — means skip).
-func (t *HostDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (string, error) {
+func (t *LocalDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (string, error) {
 	// For host deploys we need the distro's FormatDef. Callers may pass
 	// it in via plan-merging; for the skeleton we rely on the installed
 	// DistroDef on the target.
@@ -287,7 +287,7 @@ func (t *HostDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (st
 // format-by-format). The output is a best-effort heuristic — layers
 // depending on complex repo/key setup should move to the structured
 // templates ASAP.
-func (t *HostDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
+func (t *LocalDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
 		return ""
 	}
@@ -310,7 +310,7 @@ func (t *HostDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
 	return ""
 }
 
-func (t *HostDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	// Builder image resolution mirrors VmDeployTarget.execBuilder:
 	//   1. EmitOpts.BuilderImageOverride (--builder-image flag)
 	//   2. BuilderStep.BuilderImage (compiled from image.yml)
@@ -390,7 +390,7 @@ func (t *HostDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts E
 	return nil
 }
 
-func (t *HostDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	if s.Task == nil {
 		return nil
 	}
@@ -429,7 +429,7 @@ func (t *HostDeployTarget) execTask(s *TaskStep, plan *InstallPlan, opts EmitOpt
 // For v1 of the host target we implement cmd, mkdir, and link — the
 // most common verbs. The rest fall back to a "not yet supported" error
 // that tests can verify against.
-func (t *HostDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
+func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 	task := s.Task
 	ctxPath := s.CtxPath
 
@@ -596,7 +596,7 @@ func renderDownloadScript(task *Task) string {
 	return b.String()
 }
 
-func (t *HostDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	mode := fmt.Sprintf("%04o", s.Mode.Perm())
 	owner := ""
 	if s.Owner != "" && s.Owner != "root" {
@@ -617,7 +617,7 @@ func (t *HostDeployTarget) execFile(s *FileStep, plan *InstallPlan, opts EmitOpt
 	return nil
 }
 
-func (t *HostDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	// Query prior enabled state for restore-on-teardown.
 	s.PriorEnabled = systemctlIsEnabled(s.Unit, s.TargetScope)
 
@@ -638,7 +638,7 @@ func (t *HostDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *Ins
 	return nil
 }
 
-func (t *HostDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	if s.UnitPath == "" || s.UnitText == "" {
 		// Renderer didn't populate the unit. For the skeleton we don't
 		// synthesize an empty unit — we warn and skip.
@@ -658,7 +658,7 @@ func (t *HostDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Install
 	return nil
 }
 
-func (t *HostDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_REPO'\n%s\nOV_REPO",
 		shQuoteArg(filepath.Dir(s.File)), shQuoteArg(s.File), s.Content)
 	if err := t.runSystem(cmd, opts); err != nil {
@@ -781,7 +781,7 @@ func writeUnitLikeFile(path, content string, scope Scope, opts EmitOpts) error {
 		return nil
 	}
 	// System scope → sudo. This helper is a standalone function (not
-	// a HostDeployTarget method), so it uses the package-level
+	// a LocalDeployTarget method), so it uses the package-level
 	// runSudoShell directly — writing system-scope unit files is a
 	// local-host-only operation, never a nested-venue one.
 	cmd := fmt.Sprintf("mkdir -p %s && cat > %s <<'OV_UNIT'\n%s\nOV_UNIT",
@@ -793,24 +793,24 @@ func writeUnitLikeFile(path, content string, scope Scope, opts EmitOpts) error {
 // Misc helpers
 // ---------------------------------------------------------------------------
 
-func (t *HostDeployTarget) stderr() *os.File {
+func (t *LocalDeployTarget) stderr() *os.File {
 	if t.DryRunWriter != nil {
 		return t.DryRunWriter
 	}
 	return os.Stderr
 }
 
-func (t *HostDeployTarget) logSkip(batch StepBatch, opts EmitOpts) {
+func (t *LocalDeployTarget) logSkip(batch StepBatch, opts EmitOpts) {
 	for _, s := range batch.Steps {
 		fmt.Fprintf(t.stderr(), "[skip] %s scope=%s reason=container-only\n", s.Kind(), s.Scope())
 	}
 }
 
-func (t *HostDeployTarget) logGated(step InstallStep, gate Gate, opts EmitOpts) {
+func (t *LocalDeployTarget) logGated(step InstallStep, gate Gate, opts EmitOpts) {
 	fmt.Fprintf(t.stderr(), "[skip] %s scope=%s requires --%s\n", step.Kind(), step.Scope(), gate)
 }
 
-func (t *HostDeployTarget) noteStep(rec *LayerRecord, kind StepKind, scope Scope, venue Venue, summary string, start time.Time) {
+func (t *LocalDeployTarget) noteStep(rec *LayerRecord, kind StepKind, scope Scope, venue Venue, summary string, start time.Time) {
 	rec.Steps = append(rec.Steps, StepRecord{
 		Kind:        kind,
 		Scope:       scope,

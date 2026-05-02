@@ -1,6 +1,6 @@
 package main
 
-// builder_run.go — `podman run <builder>` wrapper for HostDeployTarget.
+// builder_run.go — `podman run <builder>` wrapper for LocalDeployTarget.
 //
 // The host target delegates compile-needing steps (pixi/npm/cargo/aur)
 // to the existing multi-stage builder images. BuilderRun spawns the

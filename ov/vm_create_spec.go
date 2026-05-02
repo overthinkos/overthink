@@ -125,7 +125,10 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 				fmt.Fprintf(os.Stderr, "Warning: libvirt snippet injection: %v\n", err)
 			}
 		}
-		fmt.Fprintf(os.Stderr, "SSH: ssh -p %d %s@127.0.0.1\n", rt.SshPort, resolveVmSshUser(spec))
+		if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
+			return fmt.Errorf("publishing ssh-config alias: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/ov/ssh_config)\n", VmSshAlias(name))
 		fmt.Fprintf(os.Stderr, "Console: ov vm console %s\n", vmName)
 		return nil
 
@@ -162,11 +165,34 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 			return fmt.Errorf("qemu failed: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "Created and started VM %s (QEMU)\n", vmDomainName)
-		fmt.Fprintf(os.Stderr, "SSH: ssh -p %d %s@127.0.0.1\n", rt.SshPort, resolveVmSshUser(spec))
+		if err := publishVmSshAlias(home, vmName, name, spec, rt); err != nil {
+			return fmt.Errorf("publishing ssh-config alias: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "SSH: ssh %s    (managed alias resolves user/port/key from ~/.config/ov/ssh_config)\n", VmSshAlias(name))
 		fmt.Fprintf(os.Stderr, "Console: ov vm console %s\n", vmName)
 		return nil
 	}
 	return fmt.Errorf("unknown backend %q", backend)
+}
+
+// publishVmSshAlias writes (or refreshes) the managed ssh-config Host
+// stanza for this VM and ensures the Include line is present in the
+// user's ~/.ssh/config. Idempotent — safe to call on every `ov vm
+// create` invocation including reruns.
+func publishVmSshAlias(home, vmName, deployName string, spec *VmSpec, rt VmRuntimeParams) error {
+	stateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
+	stanza := VmSshStanza{
+		Alias:          VmSshAlias(deployName),
+		Hostname:       "127.0.0.1",
+		Port:           rt.SshPort,
+		User:           resolveVmSshUser(spec),
+		IdentityFile:   filepath.Join(stateDir, "id_ed25519"),
+		KnownHostsFile: filepath.Join(stateDir, "known_hosts"),
+	}
+	if err := WriteVmSshStanza(home, stanza); err != nil {
+		return err
+	}
+	return EnsureSshConfigInclude(home)
 }
 
 // resolveVmRam picks the spec-declared RAM or falls back to "4G".

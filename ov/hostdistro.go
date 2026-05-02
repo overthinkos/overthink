@@ -1,6 +1,6 @@
 package main
 
-// hostdistro.go — host distro + glibc detection for HostDeployTarget.
+// hostdistro.go — host distro + glibc detection for LocalDeployTarget.
 //
 // The host target needs to know (a) which distro family it's running on
 // so the compiler can pick the right format section (rpm/deb/pac), and

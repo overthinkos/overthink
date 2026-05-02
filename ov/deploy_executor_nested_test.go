@@ -9,9 +9,9 @@ import (
 // composition (jump generation, Venue() accumulation).
 
 func TestNestedExecutor_VenueChains(t *testing.T) {
-	local := LocalDeployExecutor{}
+	local := ShellExecutor{}
 	if local.Venue() != VenueLocal {
-		t.Errorf("LocalDeployExecutor.Venue = %q, want %q", local.Venue(), VenueLocal)
+		t.Errorf("ShellExecutor.Venue = %q, want %q", local.Venue(), VenueLocal)
 	}
 
 	n1 := &NestedExecutor{
@@ -69,9 +69,8 @@ func TestWrapWithJump_PodmanRoot(t *testing.T) {
 
 func TestWrapWithJump_SSH(t *testing.T) {
 	j := NestedJump{
-		Kind:       JumpSSH,
-		Target:     "arch@guest.invalid:2224",
-		SSHKeyPath: "/tmp/key",
+		Kind:   JumpSSH,
+		Target: "arch@guest.invalid:2224",
 	}
 	out, err := wrapWithJump(j, "uname -a", false)
 	if err != nil {
@@ -83,11 +82,16 @@ func TestWrapWithJump_SSH(t *testing.T) {
 	if !strings.Contains(out, "arch@guest.invalid") {
 		t.Errorf("missing target: %s", out)
 	}
-	if !strings.Contains(out, "-i '/tmp/key'") {
-		t.Errorf("missing key flag: %s", out)
-	}
 	if !strings.Contains(out, "-p 2224") {
 		t.Errorf("missing port flag: %s", out)
+	}
+	// Post-cutover: no -i / -o overrides — ssh(1) reads ~/.ssh/config
+	// + ssh-agent for keys and host-key checking.
+	if strings.Contains(out, "-i ") {
+		t.Errorf("unexpected `-i` flag — ssh-config supplies IdentityFile: %s", out)
+	}
+	if strings.Contains(out, "StrictHostKeyChecking") {
+		t.Errorf("unexpected StrictHostKeyChecking override — ssh-config decides: %s", out)
 	}
 }
 

@@ -324,7 +324,7 @@ func AddLayerDeploymentVia(exec DeployExecutor, paths *LedgerPaths, layerName, d
 	if exec == nil {
 		return AddLayerDeployment(paths, layerName, deployID, update)
 	}
-	if _, isLocal := exec.(LocalDeployExecutor); isLocal {
+	if _, isLocal := exec.(ShellExecutor); isLocal {
 		return AddLayerDeployment(paths, layerName, deployID, update)
 	}
 	ctx := context.Background()
@@ -375,7 +375,7 @@ func WriteDeployRecordVia(exec DeployExecutor, paths *LedgerPaths, rec *DeployRe
 	if exec == nil {
 		return WriteDeployRecord(paths, rec)
 	}
-	if _, isLocal := exec.(LocalDeployExecutor); isLocal {
+	if _, isLocal := exec.(ShellExecutor); isLocal {
 		return WriteDeployRecord(paths, rec)
 	}
 	ctx := context.Background()

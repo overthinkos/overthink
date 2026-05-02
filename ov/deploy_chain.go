@@ -30,9 +30,9 @@ import (
 // DeploymentNode + a composed DeployExecutor chain that reaches it from
 // `root`.
 //
-// `root` is typically &LocalDeployExecutor{} (the operator's host, or
+// `root` is typically &ShellExecutor{} (the operator's host, or
 // the inside-of-eval-pod context the harness loop runs in). Pass nil to
-// substitute LocalDeployExecutor.
+// substitute ShellExecutor.
 //
 // For each path segment, a single hop is added based on the node's
 // target classification:
@@ -57,7 +57,7 @@ func ResolveDeployChain(roots map[string]DeploymentNode, dotted string, root Dep
 		return nil, nil, fmt.Errorf("ResolveDeployChain: empty path")
 	}
 	if root == nil {
-		root = LocalDeployExecutor{}
+		root = ShellExecutor{}
 	}
 	parts := strings.Split(dotted, ".")
 
@@ -132,22 +132,19 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath s
 		}, nil
 
 	case "vm":
-		ssh, err := sshParamsForVm(node)
-		if err != nil {
-			return nil, err
-		}
-		// If the parent chain is just LocalDeployExecutor, return a
+		ssh := sshParamsForVm(flatPath)
+		// If the parent chain is just ShellExecutor, return a
 		// plain SSHExecutor — no NestedExecutor wrapper needed.
-		if _, isLocal := chain.(LocalDeployExecutor); isLocal {
+		if _, isLocal := chain.(ShellExecutor); isLocal {
 			return ssh, nil
 		}
-		// Nested VM (inside a container or another VM): stack a JumpSSH.
+		// Nested VM (inside a container or another VM): stack a JumpSSH
+		// using the VM's managed ssh-config alias as the target.
 		return &NestedExecutor{
 			Parent: chain,
 			Jump: NestedJump{
-				Kind:       JumpSSH,
-				Target:     fmt.Sprintf("%s@%s:%d", ssh.User, ssh.Host, ssh.Port),
-				SSHKeyPath: ssh.KeyPath,
+				Kind:   JumpSSH,
+				Target: ssh.Host,
 			},
 		}, nil
 
@@ -168,7 +165,7 @@ func ContainerChain(engine, containerName string) DeployExecutor {
 		jumpKind = JumpDockerExec
 	}
 	return &NestedExecutor{
-		Parent: LocalDeployExecutor{},
+		Parent: ShellExecutor{},
 		Jump:   NestedJump{Kind: jumpKind, Target: containerName},
 	}
 }
@@ -188,7 +185,7 @@ func ImageChain(engine, imageRef string) DeployExecutor {
 		jumpKind = JumpDockerRun
 	}
 	return &NestedExecutor{
-		Parent: LocalDeployExecutor{},
+		Parent: ShellExecutor{},
 		Jump:   NestedJump{Kind: jumpKind, Target: imageRef},
 	}
 }

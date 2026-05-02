@@ -10,7 +10,7 @@ package main
 //
 //   - OCITarget        → build-mode Containerfile emission (ov image build)
 //   - ContainerDeploy  → deploy-mode overlay + quadlet (ov deploy add <name>)
-//   - HostDeployTarget → deploy-mode host execution (ov deploy add host)
+//   - LocalDeployTarget → deploy-mode host execution (ov deploy add host)
 //
 // Keeping these three code paths behind one shared IR is the load-bearing
 // move: every feature (service rendering, add_layers overlay, uninstall
@@ -218,7 +218,7 @@ type ReverseOp struct {
 // ---------------------------------------------------------------------------
 
 // InstallStep is the common interface every concrete step implements.
-// Consumers (OCITarget / HostDeployTarget) switch on Kind() to dispatch
+// Consumers (OCITarget / LocalDeployTarget) switch on Kind() to dispatch
 // to the right rendering or execution path.
 type InstallStep interface {
 	// Kind returns the step's concrete type discriminator.
@@ -835,7 +835,7 @@ type EmitOpts struct {
 	// (kubernetes) ignore it and error if non-nil.
 	//
 	// When nil, the target runs against its natural root venue
-	// (LocalDeployExecutor for host, a fresh SSHExecutor for vm, etc.)
+	// (ShellExecutor for host, a fresh SSHExecutor for vm, etc.)
 	// — preserving the flat-schema behavior for v2 configs that happen
 	// to have no `children:`.
 	ParentExec DeployExecutor
@@ -855,7 +855,7 @@ type EmitOpts struct {
 // emitters satisfy. Taking a slice of plans (rather than a single plan)
 // lets whole-image deploys pass all per-layer plans at once and let the
 // target merge them — useful because OCITarget may want to emit a single
-// Containerfile for the image while HostDeployTarget may batch steps
+// Containerfile for the image while LocalDeployTarget may batch steps
 // across layers.
 type DeployTarget interface {
 	Name() string

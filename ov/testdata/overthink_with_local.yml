@@ -1,0 +1,50 @@
+version: 4
+
+local:
+  dev-workstation:
+    layers: [ripgrep, direnv]
+    install_opts: {with_services: false, allow_repo_changes: true}
+    env: [EDITOR=vim]
+    description: {feature: Dev workstation, tag: [working]}
+
+  ci-runner:
+    layers: [ripgrep, pre-commit]
+    install_opts: {with_services: true, allow_root_tasks: true}
+    description: {feature: CI runner profile, tag: [working]}
+
+  cachyos-dx:
+    # Empty placeholder — `layers: []` is a load-time WARNING (allowed
+    # for staged name reservation); a missing `layers:` field would be
+    # a hard error.
+    layers: []
+    install_opts: {}
+    description: {feature: CachyOS DX (placeholder), tag: [testing]}
+
+deployment:
+  # Default — direct local exec (host: omitted == "local").
+  my-laptop:
+    target: local
+    local: dev-workstation
+    add_layers: [sshkeys]
+
+  # Explicit "local" sentinel.
+  my-laptop-explicit:
+    target: local
+    local: dev-workstation
+    host: local
+
+  # Remote SSH — ssh-config + ssh-agent supply credentials.
+  ci-runner-3:
+    target: local
+    local: ci-runner
+    host: ubuntu@ci-runner-3.lan
+
+  # ssh_args: pass-through (Ansible's ansible_ssh_extra_args).
+  via-bastion:
+    target: local
+    local: dev-workstation
+    host: target.internal
+    user: ops
+    ssh_args:
+      - "-o"
+      - "ProxyJump=ops@bastion.example.com"

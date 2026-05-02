@@ -53,7 +53,7 @@ func writeFakeLayer(t *testing.T, paths *LedgerPaths, layer string, deployedBy [
 
 // TestHostUnifiedTarget_Basics verifies the trivial accessor methods.
 func TestHostUnifiedTarget_Basics(t *testing.T) {
-	target := &HostUnifiedTarget{NodeName: "arch-vm.arch-host"}
+	target := &LocalUnifiedTarget{NodeName: "arch-vm.arch-host"}
 	if got := target.Name(); got != "arch-vm.arch-host" {
 		t.Errorf("Name = %q, want %q", got, "arch-vm.arch-host")
 	}
@@ -61,7 +61,7 @@ func TestHostUnifiedTarget_Basics(t *testing.T) {
 		t.Errorf("Kind = %q, want %q", got, "host")
 	}
 	if target.Executor() == nil {
-		t.Errorf("Executor returned nil; expected LocalDeployExecutor fallback")
+		t.Errorf("Executor returned nil; expected ShellExecutor fallback")
 	}
 }
 
@@ -69,7 +69,7 @@ func TestHostUnifiedTarget_Basics(t *testing.T) {
 // lifecycle methods that do not apply to host targets return
 // ErrNotSupportedOnHost. Mirrors the K8sUnifiedTarget pattern.
 func TestHostUnifiedTarget_NotSupportedMethods(t *testing.T) {
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	ctx := context.Background()
 
 	if err := target.Start(ctx); !errors.Is(err, ErrNotSupportedOnHost) {
@@ -88,7 +88,7 @@ func TestHostUnifiedTarget_NotSupportedMethods(t *testing.T) {
 func TestHostUnifiedTarget_Status_Empty(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	info, err := target.Status(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestHostUnifiedTarget_Status_OneDeploy(t *testing.T) {
 	}
 	writeFakeDeploy(t, paths, "h-1", "fedora-coder", []string{"a", "b"})
 
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	info, err := target.Status(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func TestHostUnifiedTarget_Del_DryRun(t *testing.T) {
 	deployFile := writeFakeDeploy(t, paths, "h-1", "fedora-coder", []string{"a"})
 	writeFakeLayer(t, paths, "a", []string{"h-1"})
 
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Del(context.Background(), DelOpts{DryRun: true}); err != nil {
 		t.Fatalf("Del dry-run: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestHostUnifiedTarget_Del_RemovesEntries(t *testing.T) {
 	layerFile := filepath.Join(paths.Layers, "a.json")
 	writeFakeLayer(t, paths, "a", []string{"h-1"})
 
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Del(context.Background(), DelOpts{}); err != nil {
 		t.Fatalf("Del: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestHostUnifiedTarget_Del_SkipsNonHost(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Del(context.Background(), DelOpts{}); err != nil {
 		t.Fatalf("Del: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestHostUnifiedTarget_Del_SkipsNonHost(t *testing.T) {
 // the expected "ov deploy add <name>" message without invoking the
 // subcommand.
 func TestHostUnifiedTarget_Rebuild_DryRun(t *testing.T) {
-	target := &HostUnifiedTarget{NodeName: "arch-vm.arch-host"}
+	target := &LocalUnifiedTarget{NodeName: "arch-vm.arch-host"}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true}); err != nil {
 		t.Fatalf("Rebuild dry-run: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestHostReverseExec_AccessorPassthrough(t *testing.T) {
 // TestHostUnifiedTarget_Test_EmptyChecks verifies an empty check list
 // returns nil (no failures).
 func TestHostUnifiedTarget_Test_EmptyChecks(t *testing.T) {
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	if err := target.Test(context.Background(), nil, TestOpts{}); err != nil {
 		t.Errorf("Test(empty): %v", err)
 	}
@@ -276,7 +276,7 @@ func TestHostUnifiedTarget_Test_EmptyChecks(t *testing.T) {
 // the assertion below catches the case where the filter is broken in
 // a way that produces a real failure.
 func TestHostUnifiedTarget_Test_OnlyIDsFilter(t *testing.T) {
-	target := &HostUnifiedTarget{NodeName: "host"}
+	target := &LocalUnifiedTarget{NodeName: "host"}
 	checks := []Check{
 		{ID: "match", Command: "true"},
 		{ID: "fail", Command: "false"},

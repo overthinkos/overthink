@@ -41,35 +41,35 @@ type CLI struct {
 	// with --dir.
 	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read image.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
-	Alias     AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
-	Cmd       CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
-	Config    ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
-	Deploy    DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
-	Doctor    DoctorCmd       `cmd:"" help:"Show host dependency status"`
-	Image     ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
-	Layer     LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
-	Logs      LogsCmd         `cmd:"" help:"Show service container logs"`
+	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
+	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
+	Config      ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
+	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`
+	Doctor      DoctorCmd       `cmd:"" help:"Show host dependency status"`
+	Image       ImageCmd        `cmd:"" help:"Build, generate, inspect, and pull container images (reads image.yml)"`
+	Layer       LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
+	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate     MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Rebuild     RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
-	Restart   RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
-	Secrets   SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
-	Service   ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
-	Settings  SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
-	Shell     ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
-	Ssh       SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
-	Start     StartCmd        `cmd:"" help:"Start a container as a background service"`
-	Status    StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
-	Stop      StopCmd         `cmd:"" help:"Stop a running service container"`
-	Eval      EvalCmd         `cmd:"" help:"Evaluate images and deployments — pure-image (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
-	Feature   FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
-	Tmux      TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
-	Udev      UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
-	Update    UpdateCmd       `cmd:"" help:"Update image and restart if active"`
-	Version   VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
-	Vm        VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
+	Restart     RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
+	Secrets     SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
+	Service     ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
+	Settings    SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
+	Shell       ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
+	Ssh         SshCmd          `cmd:"" help:"SSH helpers (tunnel SPICE/VNC/unix sockets from a remote libvirt host to the local machine)"`
+	Start       StartCmd        `cmd:"" help:"Start a container as a background service"`
+	Status      StatusCmd       `cmd:"" help:"Show service status (all if no image given)"`
+	Stop        StopCmd         `cmd:"" help:"Stop a running service container"`
+	Eval        EvalCmd         `cmd:"" help:"Evaluate images and deployments — pure-image (disposable), live (running deployment), AI-driven iteration, and live-container probe verbs (cdp/wl/dbus/vnc/mcp/spice/libvirt/record/k8s)"`
+	Feature     FeatureCmd      `cmd:"" help:"Gherkin-shaped description authoring: list/pending/validate"`
+	Tmux        TmuxCmd         `cmd:"" help:"Manage tmux sessions inside running containers"`
+	Udev        UdevCmd         `cmd:"" help:"Manage udev rules for GPU device access in containers"`
+	Update      UpdateCmd       `cmd:"" help:"Update image and restart if active"`
+	Version     VersionCmd      `cmd:"" help:"Print computed CalVer tag"`
+	Vm          VmCmd           `cmd:"" help:"Manage virtual machines from bootc images"`
 }
 
 // GenerateCmd generates Containerfiles
@@ -329,7 +329,7 @@ func (c *ListImagesCmd) Run() error {
 
 	for _, name := range cfg.ImageNames() {
 		img := cfg.Images[name]
-		status := resolveStatus(img.Status)
+		status := descriptionStatus(img.Description)
 		if status != "working" {
 			fmt.Printf("%s [%s]\n", name, status)
 		} else {

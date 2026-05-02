@@ -477,7 +477,7 @@ func stableScenarioIDsByKey(scenarios []Scenario) map[scenarioKey]string {
 // scores flat pods exactly like before.
 func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExecutor, error) {
 	if strings.Contains(pod, ".") && roots != nil {
-		_, chain, err := ResolveDeployChain(roots, pod, LocalDeployExecutor{})
+		_, chain, err := ResolveDeployChain(roots, pod, ShellExecutor{})
 		if err == nil {
 			return chain, nil
 		}

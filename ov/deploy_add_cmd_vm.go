@@ -74,37 +74,50 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Resolve SSH details.
 	sshUser := resolveVmSshUser(spec)
 	sshPort := resolveVmSshPort(spec)
-	sshKeyPath := state.SshKeyPath
-	if sshKeyPath == "" {
-		sshKeyPath = filepath.Join(stateDir, "id_ed25519")
+	sshKeyPath := filepath.Join(stateDir, "id_ed25519")
+	knownHostsPath := filepath.Join(stateDir, "known_hosts")
+
+	// Publish (or refresh) the managed ssh-config Host stanza for this
+	// VM and ensure the Include line is present in ~/.ssh/config. After
+	// these two calls, `ssh ov-<vmname>` works from any terminal and
+	// our SSHExecutor needs only the alias as Host.
+	if err := WriteVmSshStanza(home, VmSshStanza{
+		Alias:          VmSshAlias(c.Name),
+		Hostname:       "127.0.0.1",
+		Port:           sshPort,
+		User:           sshUser,
+		IdentityFile:   sshKeyPath,
+		KnownHostsFile: knownHostsPath,
+	}); err != nil {
+		return fmt.Errorf("publishing ssh-config stanza: %w", err)
+	}
+	if err := EnsureSshConfigInclude(home); err != nil {
+		return fmt.Errorf("ensuring ssh-config include: %w", err)
 	}
 
 	// Resolve key-injection state (persisted into VmDeployState for audit).
 	smbiosOn, cloudInitOn := ResolveKeyInjectionChannels(spec)
 
-	// Build the DeployExecutor. At the root of a tree (no parent),
-	// this is a direct SSHExecutor from the invoking host to the VM
-	// over the forwarded port — today's behavior. When this VM is a
-	// child of a container (vm-in-container), the tree walker passes
-	// opts.ParentExec — we compose a NestedExecutor so SSH runs
-	// through the parent's venue.
+	// Build the DeployExecutor. The VM publishes a managed ssh-config
+	// Host stanza (ov-<vmname>) via WriteVmSshStanza after `ov vm
+	// create`; from then on `ssh ov-<vmname>` works from any terminal
+	// and SSHExecutor needs nothing but the alias as Host. The user's
+	// ~/.ssh/config Includes ~/.config/ov/ssh_config (managed by
+	// EnsureSshConfigInclude). For nested VMs, the same alias works
+	// inside the parent's venue.
+	alias := VmSshAlias(c.Name)
 	var exec DeployExecutor = &SSHExecutor{
-		User:           sshUser,
-		Host:           "127.0.0.1",
-		Port:           sshPort,
-		KeyPath:        sshKeyPath,
+		Host:           alias,
 		ConnectTimeout: 10,
 	}
 	if opts.ParentExec != nil {
 		// Nested VM: the parent's executor runs commands in its venue,
 		// and from there we ssh into the guest.
-		sshTarget := fmt.Sprintf("%s@%s:%d", sshUser, "127.0.0.1", sshPort)
 		exec = &NestedExecutor{
 			Parent: opts.ParentExec,
 			Jump: NestedJump{
-				Kind:       JumpSSH,
-				Target:     sshTarget,
-				SSHKeyPath: sshKeyPath,
+				Kind:   JumpSSH,
+				Target: alias,
 			},
 		}
 	}
@@ -230,7 +243,6 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Write back updated VmDeployState to deploy.yml.
 	state.SshUser = sshUser
 	state.SshPort = sshPort
-	state.SshKeyPath = sshKeyPath
 	if state.Backend == "" {
 		// Default to "auto" — vm.go refactor will populate this once
 		// ResolveRuntime() is wired into the VM deploy code path.
@@ -302,57 +314,14 @@ func findVmDeployRecord(paths *LedgerPaths, vmName string) (*DeployRecord, error
 	return nil, nil
 }
 
-// buildVmReverseRunner resolves the VM's SSH connection info (from
-// vms.yml spec defaults + VmDeployState overlay in the local
-// deploy.yml) and wraps the resulting SSHExecutor in a ReverseRunner.
+// buildVmReverseRunner constructs a ReverseRunner pointed at the VM
+// via its managed ssh-config alias (ov-<deployName>). All SSH connection
+// details (User, Port, IdentityFile, host-key checking) live in the
+// managed Host stanza written by `ov vm create` / runVmAdd; ssh(1)
+// reads them from ~/.ssh/config so we need only the alias here.
 func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
-	vmName, err := vmNameFromDeployName(deployName)
-	if err != nil {
-		return nil, err
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	uf, ok, err := LoadUnified(dir)
-	if err != nil {
-		return nil, err
-	}
-	if !ok || uf.VM == nil {
-		return nil, fmt.Errorf("no vms.yml entity %q", vmName)
-	}
-	spec, ok := uf.VM[vmName]
-	if !ok {
-		return nil, fmt.Errorf("no vms.yml entity %q", vmName)
-	}
-
-	user := resolveVmSshUser(spec)
-	port := resolveVmSshPort(spec)
-	home, _ := os.UserHomeDir()
-	keyPath := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName, "id_ed25519")
-
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, ok := dc.Deployment[deployName]; ok && entry.VmState != nil {
-			if entry.VmState.SshUser != "" {
-				user = entry.VmState.SshUser
-			}
-			if entry.VmState.SshPort > 0 {
-				port = entry.VmState.SshPort
-			}
-			if entry.VmState.SshKeyPath != "" {
-				keyPath = entry.VmState.SshKeyPath
-			}
-		}
-	}
-	if user == "" || port == 0 || keyPath == "" {
-		return nil, fmt.Errorf("VM %s has incomplete SSH config (user=%q port=%d key=%q)",
-			deployName, user, port, keyPath)
-	}
 	exec := &SSHExecutor{
-		User:           user,
-		Host:           "127.0.0.1",
-		Port:           port,
-		KeyPath:        keyPath,
+		Host:           VmSshAlias(deployName),
 		ConnectTimeout: 10,
 	}
 	return &sshReverseRunner{exec: exec}, nil

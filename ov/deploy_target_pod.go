@@ -67,7 +67,7 @@ type PodDeployTarget struct {
 	OverlayBuildDir string
 
 	// Executor is the DeployExecutor used for the `podman build`
-	// invocation. Defaults to LocalDeployExecutor when nil — matching
+	// invocation. Defaults to ShellExecutor when nil — matching
 	// the pre-tree-schema behavior of building overlays on the
 	// invoking host. When set to a NestedExecutor (the tree walker
 	// does this for nested container nodes), the build runs in the
@@ -156,7 +156,7 @@ func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string,
 // exec returns the configured executor, defaulting to the local one.
 func (t *PodDeployTarget) exec() DeployExecutor {
 	if t.Executor == nil {
-		return LocalDeployExecutor{}
+		return ShellExecutor{}
 	}
 	return t.Executor
 }
@@ -383,7 +383,7 @@ func (t *PodDeployTarget) buildOverlay(plans []*InstallPlan, overlayLayers []str
 	venueBuildContext := buildContext
 
 	// Route the podman build via the configured executor. On the root
-	// (LocalDeployExecutor) this is equivalent to the prior direct
+	// (ShellExecutor) this is equivalent to the prior direct
 	// exec.CommandContext call. On a NestedExecutor the command runs
 	// in the parent venue — translate host-side paths (Containerfile,
 	// build context) to venue-side paths via the parent's bind-mount

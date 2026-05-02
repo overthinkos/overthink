@@ -1,11 +1,11 @@
 package main
 
 // unified_targets_host.go — C11 (Phase 3) implementations of
-// HostUnifiedTarget's lifecycle and management methods.
+// LocalUnifiedTarget's lifecycle and management methods.
 //
 // Pattern: methods that map to existing CLI bodies (Del, Rebuild) are
 // extracted from their cmd-file homes into target methods; the cmd-file
-// entry points become thin wrappers that construct a HostUnifiedTarget
+// entry points become thin wrappers that construct a LocalUnifiedTarget
 // and call its method. Methods that don't apply to the host target
 // (Start, Stop, Logs) return ErrNotSupportedOnHost — the host is always
 // running, has no separate journal we own, and isn't ours to "stop".
@@ -29,7 +29,7 @@ import (
 var ErrNotSupportedOnHost = errors.New("lifecycle operation not supported on host target")
 
 // hostReverseExec is an inline ReverseExecutor adapter combining a
-// HostUnifiedTarget's gate flags with a per-call DryRun flag from
+// LocalUnifiedTarget's gate flags with a per-call DryRun flag from
 // DelOpts. Constructed inside Del so the target struct itself doesn't
 // have to carry per-invocation state.
 type hostReverseExec struct {
@@ -51,7 +51,7 @@ func (e *hostReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 // for layers that drop to refcount=0, and removes deploy + layer
 // records. When all host deploys are torn down, also strips the
 // shell-profile managed block.
-func (t *HostUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
+func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
 		return err
@@ -112,7 +112,7 @@ func (t *HostUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 }
 
 // teardownHostDeploy reverses a single host deploy record. Free
-// function so HostUnifiedTarget.Del can call it without a DeployDelCmd
+// function so LocalUnifiedTarget.Del can call it without a DeployDelCmd
 // instance — the legacy DeployDelCmd.tearDownDeploy now delegates here.
 func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, re ReverseExecutor) error {
 	for _, layer := range rec.Layers {
@@ -135,12 +135,12 @@ func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, 
 }
 
 // Test runs deploy-scope checks against the host target. Constructs a
-// Runner around the target's executor (LocalDeployExecutor for a
+// Runner around the target's executor (ShellExecutor for a
 // non-nested host; NestedExecutor for a host-inside-vm child) and walks
 // the supplied check list. OnlyIDs/StopOnFail mirror their TestOpts
 // semantics; the runner-level matching for verb dispatch is shared with
 // `ov eval live`.
-func (t *HostUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
+func (t *LocalUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestOpts) error {
 	onlyIDs := make(map[string]bool, len(opts.OnlyIDs))
 	for _, id := range opts.OnlyIDs {
 		onlyIDs[id] = true
@@ -180,8 +180,8 @@ func (t *HostUnifiedTarget) Test(ctx context.Context, checks []Check, opts TestO
 // over the existing ledger — equivalent in effect to a fresh Add. A
 // future "diff and only apply changed steps" mode would live behind an
 // UpdateOpts flag.
-func (t *HostUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
-	return t.HostDeployTarget.Emit(plans, EmitOpts{
+func (t *LocalUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, opts UpdateOpts) error {
+	return t.LocalDeployTarget.Emit(plans, EmitOpts{
 		DryRun:           opts.DryRun,
 		AllowRepoChanges: opts.AllowRepoChanges,
 		AllowRootTasks:   opts.AllowRootTasks,
@@ -194,7 +194,7 @@ func (t *HostUnifiedTarget) Update(ctx context.Context, plans []*InstallPlan, op
 // when at least one host deploy is recorded; "stopped" otherwise. The
 // host machine itself is always running; ov-managed presence is the
 // signal we report.
-func (t *HostUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
+func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 	paths, err := DefaultLedgerPaths()
 	if err != nil {
 		return StatusInfo{}, err
@@ -248,7 +248,7 @@ func (t *HostUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 // just bash on the local machine; for `target: host, inside: vm:foo`
 // the shell lands inside the parent VM via NestedExecutor, which is the
 // useful case (the local-bash case is already what the user has).
-func (t *HostUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
+func (t *LocalUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 	var script string
 	if len(cmd) > 0 {
 		parts := make([]string, len(cmd))
@@ -271,7 +271,7 @@ func (t *HostUnifiedTarget) Shell(ctx context.Context, cmd []string) error {
 //
 // Body extracted from RebuildCmd.rebuildHostDeploy — the cmd-file
 // caller is now a thin wrapper.
-func (t *HostUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
+func (t *LocalUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error {
 	if opts.DryRun {
 		fmt.Printf("dry-run: ov deploy add %s\n", t.NodeName)
 		return nil
@@ -282,12 +282,12 @@ func (t *HostUnifiedTarget) Rebuild(ctx context.Context, opts RebuildOpts) error
 // Start, Stop, Logs: not applicable to the host target. The host is
 // always running; we don't own its journal. Mirror ErrNotSupportedOnK8s
 // pattern for K8sUnifiedTarget.
-func (t *HostUnifiedTarget) Start(ctx context.Context) error {
+func (t *LocalUnifiedTarget) Start(ctx context.Context) error {
 	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotSupportedOnHost)
 }
-func (t *HostUnifiedTarget) Stop(ctx context.Context) error {
+func (t *LocalUnifiedTarget) Stop(ctx context.Context) error {
 	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotSupportedOnHost)
 }
-func (t *HostUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
+func (t *LocalUnifiedTarget) Logs(ctx context.Context, opts LogsOpts) error {
 	return fmt.Errorf("host %q: %w", t.NodeName, ErrNotSupportedOnHost)
 }

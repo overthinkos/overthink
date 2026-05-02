@@ -27,7 +27,7 @@ type DeployConfig struct {
 // more `children:` that run inside its environment. The node's Target
 // discriminator picks the DeployTarget that owns execution:
 //
-//   - "host"        — local filesystem (HostDeployTarget + LocalDeployExecutor).
+//   - "host"        — local filesystem (LocalDeployTarget + ShellExecutor).
 //   - "vm"          — a libvirt/QEMU VM referenced by VmSource (VmDeployTarget
 //     over SSHDeployExecutor).
 //   - "container"   — a podman/docker container (PodDeployTarget;
@@ -51,9 +51,7 @@ type DeployConfig struct {
 // each child's flag stands on its own (see /ov-dev:disposable).
 type DeploymentNode struct {
 	Version         string                `yaml:"version,omitempty"`
-	Status          string                `yaml:"status,omitempty"`      // [DEPRECATED - migrate to description.tags]
-	Info            string                `yaml:"info,omitempty"`        // [DEPRECATED - migrate to description.feature+narrative]
-	Description     *Description          `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces Info/Status
+	Description     *Description          `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
 	Tunnel          *TunnelYAML           `yaml:"tunnel,omitempty"`
 	DNS             string                `yaml:"dns,omitempty"`
 	AcmeEmail       string                `yaml:"acme_email,omitempty"`
@@ -79,7 +77,7 @@ type DeploymentNode struct {
 	//
 	// Target selects the deploy destination. Empty or "container" →
 	// the existing quadlet/podman pipeline. "host" → apply layers
-	// directly to the invoking user's filesystem via HostDeployTarget.
+	// directly to the invoking user's filesystem via LocalDeployTarget.
 	// "kubernetes" → emit a Kustomize tree via K8sDeployTarget (Part F).
 	// Only honored when this entry's map key matches (host/kubernetes)
 	// or when --target=... is passed on the CLI; a container-named
@@ -158,10 +156,35 @@ type DeploymentNode struct {
 	// target: k8s. Replaces the legacy `cluster:` field.
 	K8s string `yaml:"k8s,omitempty"`
 
-	// Host names a kind:host template (layer stack + install_opts).
-	// Only meaningful for target: host. Optional — a host deployment
-	// MAY inline `layers:` / `add_layers:` directly without a template.
+	// Local names a kind:local template (layer stack + install_opts + env).
+	// Optional — a target:local deployment MAY inline add_layers: directly
+	// without a template.
+	Local string `yaml:"local,omitempty"`
+
+	// Host is the destination machine for target:local deployments
+	// (Ansible-style). The literal string "local" (or empty/absent) means
+	// direct local execution via ShellExecutor. Anything else is treated
+	// as an SSH target in the form "[user@]host[:port]" or an ssh-config
+	// alias and runs through ssh(1), which reads ~/.ssh/config and
+	// ssh-agent for keys, host-key checking, and any other connection
+	// parameters. There is no `ssh:` block — your ssh-config IS the
+	// configuration.
 	Host string `yaml:"host,omitempty"`
+
+	// User overrides the SSH user for this deployment (Ansible's
+	// ansible_user). Only consulted when Host is non-"local" and Host
+	// does NOT already contain "@". When Host carries an inline user
+	// ("alice@server"), that wins and User is redundant — the validator
+	// warns. When neither is set, ssh(1) reads the User directive from
+	// ~/.ssh/config or falls back to $USER.
+	User string `yaml:"user,omitempty"`
+
+	// SSHArgs are extra arguments appended to every ssh/scp invocation
+	// for this deployment (Ansible's ansible_ssh_extra_args). Pass-through:
+	// we do NOT parse, validate, or interpret these args. Use sparingly —
+	// ssh-config Host stanzas are the right home for persistent options.
+	// Common cases: "-o ProxyJump=bastion", "-o ServerAliveInterval=30".
+	SSHArgs []string `yaml:"ssh_args,omitempty"`
 
 	// --- Scalar overrides of target-template defaults ---
 
@@ -535,13 +558,6 @@ type VmDeployState struct {
 	// (distinct from the host user running ov).
 	SshUser string `yaml:"ssh_user,omitempty"`
 
-	// SshKeyPath is the absolute path to the private key used for
-	// VmDeployTarget's SSH sessions. May be auto-generated at first
-	// apply (into ~/.local/share/ov/vm/<vm>/id_ed25519) when
-	// VmSSH.KeySource == "generate", or a pre-existing user key when
-	// KeySource == "auto".
-	SshKeyPath string `yaml:"ssh_key_path,omitempty"`
-
 	// Backend is the VM backend used to boot this VM: "qemu" or
 	// "libvirt". Pinned at first apply so subsequent operations don't
 	// thrash between backends if the user's vm.backend setting
@@ -886,11 +902,8 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Version != "" {
 			img.Version = overlay.Version
 		}
-		if overlay.Status != "" {
-			img.Status = overlay.Status
-		}
-		if overlay.Info != "" {
-			img.Info = overlay.Info
+		if overlay.Description != nil {
+			img.Description = overlay.Description
 		}
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine removed from
 		// ImageConfig — overlay copies for those removed. Values flow
@@ -926,11 +939,9 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 		return
 	}
 
-	if overlay.Status != "" {
-		meta.Status = overlay.Status
-	}
-	if overlay.Info != "" {
-		meta.Info = overlay.Info
+	if overlay.Description != nil {
+		meta.Status = descriptionStatus(overlay.Description)
+		meta.Info = descriptionInfo(overlay.Description)
 	}
 	if overlay.Tunnel != nil {
 		meta.Tunnel = overlay.Tunnel
@@ -1542,17 +1553,16 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine no longer sourced
 		// from ImageConfig (they're deploy-only).
 		entry := DeploymentNode{
-			Version:  img.Version,
-			Status:   img.Status,
-			Info:     img.Info,
-			Ports:    img.Ports,
-			Env:      img.Env,
-			EnvFile:  img.EnvFile,
-			Security: img.Security,
-			Network:  img.Network,
+			Version:     img.Version,
+			Description: img.Description,
+			Ports:       img.Ports,
+			Env:         img.Env,
+			EnvFile:     img.EnvFile,
+			Security:    img.Security,
+			Network:     img.Network,
 		}
 		// Only include if at least one field is set
-		if entry.Version != "" || entry.Status != "" || entry.Info != "" ||
+		if entry.Version != "" || entry.Description != nil ||
 			entry.Ports != nil || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
 			dc.Deployment[name] = entry

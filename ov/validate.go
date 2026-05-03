@@ -932,6 +932,23 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			}
 		}
 
+		// Resolve effective build formats (image → base chain → defaults) — same
+		// inheritance order ResolveImage uses (config.go:372-386). This is what
+		// the IR compiler iterates when emitting per-format install steps;
+		// builders whose DetectConfig isn't in this list are unreachable for
+		// this image and we should not require them.
+		buildFmts := []string(img.Build)
+		if len(buildFmts) == 0 {
+			buildFmts = cfg.walkBaseChainBuild(img.Base)
+		}
+		if len(buildFmts) == 0 {
+			buildFmts = []string(cfg.Defaults.Build)
+		}
+		buildFmtSet := make(map[string]bool, len(buildFmts))
+		for _, f := range buildFmts {
+			buildFmtSet[f] = true
+		}
+
 		// Check if layers need builders that aren't configured.
 		// Detection is fully config-driven from build.yml builder: section:
 		//   detect_files: layer has any of these files
@@ -946,17 +963,39 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 				continue
 			}
 			for builderName, builderDef := range builderCfg.Builder {
-				needed := false
+				fileMatched := false
 				for _, f := range builderDef.DetectFiles {
 					if layerHasFile(layer, f) {
-						needed = true
+						fileMatched = true
 						break
 					}
 				}
+				configMatched := false
 				if builderDef.DetectConfig != "" && layerHasFormatConfig(layer, builderDef.DetectConfig) {
-					needed = true
+					configMatched = true
 				}
-				if needed && !resolved.HasBuilder(builderName) {
+				if !fileMatched && !configMatched {
+					continue
+				}
+				// Distro-aware gate: when detection fired ONLY via a
+				// format-section (DetectConfig, e.g. aur:) and not via files,
+				// skip the check if the image's resolved BuildFormats doesn't
+				// include that format. The IR compiler
+				// (install_build.go:236-249) iterates only img.BuildFormats, so
+				// the section is unreachable for this image — the builder is
+				// not actually needed even though the layer has the section.
+				// Multi-distro layers can carry rpm: + pac: + aur:
+				// simultaneously without forcing every Fedora consumer to
+				// declare an archlinux-builder.
+				//
+				// detect_files-based detection is NOT gated: pixi/npm/cargo
+				// artifacts are produced once at build time and copied into
+				// the final stage regardless of distro, so the builder is
+				// required for any image consuming the layer.
+				if !fileMatched && configMatched && !buildFmtSet[builderDef.DetectConfig] {
+					continue
+				}
+				if !resolved.HasBuilder(builderName) {
 					errs.Add("image %q: layer %q needs builder %q but no builder.%s configured", imageName, layerName, builderName, builderName)
 				}
 			}

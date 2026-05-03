@@ -257,14 +257,17 @@ func TestValidatePacReposMissingName(t *testing.T) {
 }
 
 func TestValidateAurWithoutAurBuilder(t *testing.T) {
+	// Arch image declaring build: [pac, aur] (i.e. it WILL invoke the aur
+	// builder per IR-compile time) but with no builder.aur configured —
+	// this is the legitimate failure case the validator must still catch.
 	cfg := &Config{
 		Defaults: ImageConfig{
-			Build: BuildFormats{"pac"},
+			Build: BuildFormats{"pac", "aur"},
 		},
 		Images: map[string]ImageConfig{
 			"arch-img": {
 				Base:   "archlinux:latest",
-				Build:  BuildFormats{"pac"},
+				Build:  BuildFormats{"pac", "aur"},
 				Layers: []string{"aur-layer"},
 			},
 		},
@@ -283,6 +286,107 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		t.Fatal("expected error for aur packages without builder.aur")
 	}
 	if !strings.Contains(err.Error(), "no builder.aur configured") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+// TestValidateAurOnFedoraImageNoError covers the multi-distro layer case.
+// A layer that ships rpm: AND aur: sections is consumed by a Fedora image
+// with build: [rpm]. The IR compiler skips the aur: section entirely
+// (install_build.go:236-249 iterates only img.BuildFormats), so the
+// archlinux-builder is never invoked. The validator must NOT require
+// builder.aur on the Fedora consumer.
+func TestValidateAurOnFedoraImageNoError(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Build: BuildFormats{"rpm"},
+		},
+		Images: map[string]ImageConfig{
+			"fedora-img": {
+				Base:   "quay.io/fedora/fedora:43",
+				Build:  BuildFormats{"rpm"},
+				Layers: []string{"multi-distro-layer"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"multi-distro-layer": {
+			Name: "multi-distro-layer",
+			formatSections: map[string]*PackageSection{
+				"rpm": {FormatName: "rpm", Packages: []string{"google-chrome-stable"}, Raw: map[string]interface{}{"packages": []interface{}{"google-chrome-stable"}}},
+				"aur": {FormatName: "aur", Packages: []string{"google-chrome"}, Raw: map[string]interface{}{"packages": []interface{}{"google-chrome"}}},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers, testdataDir)
+	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
+		t.Fatalf("Fedora image (build=[rpm]) consuming a multi-distro layer with rpm:+aur: must not require builder.aur; got: %v", err)
+	}
+}
+
+// TestValidateAurOnArchImageWithoutAurInBuildFormats covers the partial-build
+// case. An Arch image with build: [pac] (no aur) consumes a layer with an
+// aur: section. The IR compiler skips aur, so the validator must skip it too.
+func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Build: BuildFormats{"pac"},
+		},
+		Images: map[string]ImageConfig{
+			"arch-pac-only": {
+				Base:   "archlinux:latest",
+				Build:  BuildFormats{"pac"},
+				Layers: []string{"aur-layer"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"aur-layer": {
+			Name: "aur-layer",
+			formatSections: map[string]*PackageSection{
+				"aur": {FormatName: "aur", Packages: []string{"yay-bin"}, Raw: map[string]interface{}{"packages": []interface{}{"yay-bin"}}},
+			},
+		},
+	}
+
+	err := Validate(cfg, layers, testdataDir)
+	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
+		t.Fatalf("Arch image with build=[pac] (no aur) must not require builder.aur; got: %v", err)
+	}
+}
+
+// TestValidatePixiBuilderUnconditional covers the detect_files path. Pixi
+// produces distro-agnostic artifacts copied into the final stage, so the
+// builder requirement applies regardless of the image's BuildFormats.
+// A Fedora image with a layer containing pixi.toml MUST still require
+// builder.pixi — the BuildFormats gate applies only to detect_config-based
+// builders (aur).
+func TestValidatePixiBuilderUnconditional(t *testing.T) {
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Build: BuildFormats{"rpm"},
+		},
+		Images: map[string]ImageConfig{
+			"fedora-img": {
+				Base:   "quay.io/fedora/fedora:43",
+				Build:  BuildFormats{"rpm"},
+				Layers: []string{"pixi-layer"},
+			},
+		},
+	}
+	layers := map[string]*Layer{
+		"pixi-layer": {
+			Name:        "pixi-layer",
+			HasPixiToml: true,
+		},
+	}
+
+	err := Validate(cfg, layers, testdataDir)
+	if err == nil {
+		t.Fatal("expected error for pixi.toml without builder.pixi")
+	}
+	if !strings.Contains(err.Error(), "no builder.pixi configured") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

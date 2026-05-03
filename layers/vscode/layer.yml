@@ -8,3 +8,6 @@ layer:
     packages:
       - code
 
+  aur:
+    packages:
+      - visual-studio-code-bin

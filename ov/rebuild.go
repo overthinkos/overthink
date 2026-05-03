@@ -73,8 +73,8 @@ func (c *RebuildCmd) Run() error {
 			if err := c.rebuildVmDeploy(); err != nil {
 				return err
 			}
-		case "host":
-			if err := c.rebuildHostDeploy(); err != nil {
+		case "local":
+			if err := c.rebuildLocalDeploy(); err != nil {
 				return err
 			}
 		default: // "pod", "container", "" (legacy), "k8s"
@@ -147,7 +147,7 @@ func (c *RebuildCmd) resolve() (kind string, disposable bool, lifecycle string, 
 		if node, _, nodeErr := ResolveNodePath(tree, c.Name); nodeErr == nil && node != nil {
 			// 2026-05: dropped the early-fail for nested container/vm
 			// rebuilds. Nested HOST already worked via fall-through
-			// (rebuildHostDeploy invokes `ov deploy add <dotted-name>`,
+			// (rebuildLocalDeploy invokes `ov deploy add <dotted-name>`,
 			// which is dotted-path-aware). Nested CONTAINER/VM children
 			// fall through to rebuildContainerDeploy / rebuildVmDeploy
 			// — those paths may not yet be fully nested-aware, but
@@ -362,7 +362,7 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 	return nil
 }
 
-// rebuildHostDeploy handles `ov rebuild <deploy-name>` for deploys
+// rebuildLocalDeploy handles `ov rebuild <deploy-name>` for deploys
 // with target: host (including nested dotted-path host deploys like
 // `arch-vm.arch-host`). Applies layers via LocalDeployTarget to the
 // local FS or the nested-executor venue.
@@ -372,7 +372,7 @@ func (c *RebuildCmd) rebuildVmDeploy() error {
 // We do NOT call `ov deploy del` here: deletion would reverse repo
 // changes, disable services, and strip env.d files, which the
 // operator explicitly opted into. Refresh, don't destroy.
-func (c *RebuildCmd) rebuildHostDeploy() error {
+func (c *RebuildCmd) rebuildLocalDeploy() error {
 	target := &LocalUnifiedTarget{NodeName: c.Name}
 	if err := target.Rebuild(context.Background(), RebuildOpts{
 		DryRun:       c.DryRun,

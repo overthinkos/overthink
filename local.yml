@@ -24,6 +24,9 @@ local:
       - devops-tools
       - docker-ce
       - kubernetes
+      - vscode
+      - chrome
+      - ov-full-host
 
     install_opts:
       with_services: true
@@ -48,3 +51,19 @@ local:
         DevOps/container tooling (docker, kubectl, helm, AWS CLI, jq).
         Targets the qc CachyOS host via direct local exec.
       tag: [working]
+
+    # Deploy-scope eval probes. allow_root_tasks: true above implies the
+    # operator has passwordless sudo on the host; the AUR builder install
+    # path also depends on this (the renderAurScript drops to the
+    # unprivileged `user` inside the container after writing
+    # /etc/sudoers.d/20-nopasswd-wheel — but that only matters in the
+    # container, not on the host). This check verifies host passwordless
+    # sudo so a later regression (e.g. accidentally removing
+    # /etc/sudoers.d/20-nopasswd-wheel on the host) is caught by `ov test`
+    # before the next `ov rebuild qc` aborts mid-flight on a sudo prompt.
+    eval:
+      - id: passwordless-sudo-host
+        scope: deploy
+        command: sudo -n true
+        exit_status: 0
+        in_container: false

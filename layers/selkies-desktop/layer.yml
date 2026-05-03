@@ -3,6 +3,7 @@ layer:
   layers:
     - pipewire
     - chrome
+    - chrome-cdp
     - labwc
     - waybar-labwc
     - desktop-fonts

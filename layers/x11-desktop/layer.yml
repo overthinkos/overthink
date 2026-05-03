@@ -1,8 +1,0 @@
-layer:
-  name: x11-desktop
-  layers:
-    - pipewire
-    - openbox
-    - chrome-x11
-    - x11-apps
-

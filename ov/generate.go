@@ -308,7 +308,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			}
 			for _, layerName := range layerOrder {
 				layer := g.Layers[layerName]
-				if !g.layerNeedsBuilder(layer, builderDef) {
+				if !g.layerNeedsBuilder(img, layer, builderDef) {
 					continue
 				}
 				builderRef := g.builderRefForFormat(imageName, builderName)
@@ -521,7 +521,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 			binaryCopied := false
 			for _, layerName := range layerOrder {
 				layer := g.Layers[layerName]
-				if !g.layerNeedsBuilder(layer, builderDef) {
+				if !g.layerNeedsBuilder(img, layer, builderDef) {
 					continue
 				}
 				stageName := fmt.Sprintf("%s-%s-build", layer.Name, builderName)
@@ -1289,7 +1289,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			if !bDef.Inline || bDef.InstallTemplate == "" {
 				continue
 			}
-			if !g.layerNeedsBuilder(layer, bDef) {
+			if !g.layerNeedsBuilder(img, layer, bDef) {
 				continue
 			}
 			if !asUser {
@@ -1329,7 +1329,7 @@ func expandBuilderPath(path string, img *ResolvedImage) string {
 }
 
 // layerNeedsBuilder checks if a layer triggers a builder's detection criteria.
-func (g *Generator) layerNeedsBuilder(layer *Layer, builderDef *BuilderDef) bool {
+func (g *Generator) layerNeedsBuilder(img *ResolvedImage, layer *Layer, builderDef *BuilderDef) bool {
 	for _, f := range builderDef.DetectFiles {
 		if layerHasFile(layer, f) {
 			return true
@@ -1338,6 +1338,30 @@ func (g *Generator) layerNeedsBuilder(layer *Layer, builderDef *BuilderDef) bool
 	if builderDef.DetectConfig != "" {
 		section := layer.FormatSection(builderDef.DetectConfig)
 		if section != nil && len(section.Packages) > 0 {
+			// Distro-aware gate: a config-only detection (no DetectFiles
+			// match) means the builder is tightly coupled to a specific
+			// distro's install_template (e.g. archlinux.formats.aur runs
+			// `pacman -U`). The IR compiler (install_build.go:236-249)
+			// only emits install steps for formats in img.BuildFormats —
+			// so when the image's build modes don't include this format,
+			// the section is unreachable and the builder is not needed.
+			// Multi-distro layers can carry rpm: + pac: + aur: together
+			// without forcing every Fedora consumer to invoke
+			// archlinux-builder. Mirrors the validate.go validateBuilders
+			// gate (Section K-1).
+			if img != nil && !buildFormatsInclude(img.BuildFormats, builderDef.DetectConfig) {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// buildFormatsInclude returns true if formats contains target.
+func buildFormatsInclude(formats []string, target string) bool {
+	for _, f := range formats {
+		if f == target {
 			return true
 		}
 	}
@@ -1379,7 +1403,7 @@ func (g *Generator) collectBuilderRuntimeEnv(layerOrder []string, img *ResolvedI
 			if !ok {
 				continue
 			}
-			if g.layerNeedsBuilder(layer, def) {
+			if g.layerNeedsBuilder(img, layer, def) {
 				triggered = true
 				break
 			}

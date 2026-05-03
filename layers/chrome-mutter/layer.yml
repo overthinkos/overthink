@@ -6,6 +6,7 @@ layer:
 
   layers:
     - chrome
+    - chrome-cdp
 
   tasks:
     - mkdir: "${HOME}/.local/bin"

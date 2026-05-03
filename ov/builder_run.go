@@ -27,8 +27,10 @@ package main
 // `sudo pacman -U <tmpdir>/*.pkg.tar.zst` on the host afterwards.
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,11 +95,19 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 
 	cmd := exec.CommandContext(ctx, engine, args...)
 	cmd.Stdin = strings.NewReader(opts.ScriptBody)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return out, fmt.Errorf("BuilderRun: %w\nOutput:\n%s", err, out)
+	// Stream stdout+stderr live to the operator's terminal AND
+	// capture into a buffer so the caller has the full output for
+	// post-step diagnostics (e.g. failure detection when an exit-0
+	// builder produces zero artifacts). Without live streaming, long
+	// AUR builds appeared frozen and silent yay failures (where
+	// yay returns 0 but installs nothing) had no audit trail.
+	var captured bytes.Buffer
+	cmd.Stdout = io.MultiWriter(os.Stderr, &captured)
+	cmd.Stderr = io.MultiWriter(os.Stderr, &captured)
+	if err := cmd.Run(); err != nil {
+		return captured.Bytes(), fmt.Errorf("BuilderRun: %w\nOutput:\n%s", err, captured.Bytes())
 	}
-	return out, nil
+	return captured.Bytes(), nil
 }
 
 // buildBuilderRunArgs assembles the podman/docker run argv. Extracted

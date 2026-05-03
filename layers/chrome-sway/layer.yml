@@ -5,6 +5,7 @@ layer:
 
   layers:
     - chrome
+    - chrome-cdp
 
   tasks:
     - mkdir: "${HOME}/.config/sway/config.d"

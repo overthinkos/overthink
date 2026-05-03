@@ -54,14 +54,16 @@ layer:
   # minimal, qemu-full includes GUI front-ends). podman-remote is bundled
   # into Arch's `podman` package so no separate entry.
   #
-  # Dropped on Arch (AUR-only or unpackaged — aur: can't ride on a
-  # multi-distro layer because the aur install_template runs `pacman -U`
-  # in the final stage, which Fedora images lack): apptainer, bpftop,
-  # bridge-utils (deprecated; use iproute2 `ip link` instead), debootstrap,
-  # dislocker, ecryptfs-utils, fuse-dislocker, jdupes, podman-machine,
-  # podman-tui, qemu-user-binfmt, qemu-user-static, thefuck. Install these
-  # at runtime via `yay -S <pkg>` if needed — the container-nesting layer
-  # provides rootless `yay` access inside arch-coder.
+  # Not bundled in this layer's pac:/aur: list (left to runtime install
+  # via `yay -S <pkg>` inside arch-coder via the container-nesting
+  # layer's rootless yay): apptainer, bpftop, bridge-utils (deprecated;
+  # use iproute2 `ip link` instead), debootstrap, dislocker,
+  # ecryptfs-utils, fuse-dislocker, jdupes, podman-machine, podman-tui,
+  # qemu-user-binfmt, qemu-user-static, thefuck. Could be promoted to
+  # this layer's aur: section if any Arch consumer needs them
+  # baked-in — multi-distro layers can carry rpm: + pac: + aur:
+  # together (the validator gates aur: by image BuildFormats, so Fedora
+  # consumers harmlessly skip aur sections at IR-compile time).
   pac:
     packages:
       - android-tools

@@ -379,6 +379,14 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		// writable. `--userns=keep-id` would also fix this on paper
 		// but triggers a `readlink \`\`: No such file or directory`
 		// crun bug on common podman 5.x / crun 1.27 combinations.
+		//
+		// AUR is a special case: yay/makepkg refuse root by design,
+		// so renderAurScript does the equivalent of the IMAGE BUILD
+		// path (build.yml builders.aur.stage_template) — starts as
+		// root, configures NOPASSWD for the unprivileged user, then
+		// drops to that user via `sudo -u` for the yay invocation.
+		// Result: yay runs as user (no root warnings), but yay's own
+		// internal `sudo pacman -U` for build deps works via NOPASSWD.
 		RunAsRoot: true,
 	})
 	if err != nil {
@@ -386,13 +394,22 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 	}
 
 	// aur host-install: pacman -U the produced packages.
+	//
+	// Loud-fail when the builder produced zero artifacts. yay can return
+	// exit 0 even when an internal step (e.g. silent sudo prompt, fetch
+	// failure, signature failure) leaves /tmp/aur-build empty. Without
+	// this check, the deploy "succeeds" but the package isn't installed
+	// — invisible to operators and downstream eval probes.
 	if s.Builder == "aur" && !opts.DryRun {
 		matches, _ := filepath.Glob(filepath.Join(aurStage, "*.pkg.tar.zst"))
-		if len(matches) > 0 {
-			args := append([]string{"pacman", "-U", "--noconfirm"}, matches...)
-			if err := runSudoArgs(args, opts); err != nil {
-				return fmt.Errorf("pacman -U: %w", err)
-			}
+		if len(matches) == 0 {
+			pkgList := extractStringSlice(s.RawStageContext, "packages")
+			return fmt.Errorf("aur builder for layer %q produced zero .pkg.tar.zst artifacts in %s; expected packages: %v. Check the BuilderRun output above for the actual yay/makepkg failure",
+				s.LayerName, aurStage, pkgList)
+		}
+		args := append([]string{"pacman", "-U", "--noconfirm"}, matches...)
+		if err := runSudoArgs(args, opts); err != nil {
+			return fmt.Errorf("pacman -U: %w", err)
 		}
 	}
 
@@ -709,6 +726,9 @@ func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *Instal
 		// synthesize an empty unit — we warn and skip.
 		return fmt.Errorf("service %s: no unit text rendered yet", s.Name)
 	}
+	if err := detectPackagedUnitConflict(s.UnitPath, s.TargetScope, rec.Layer); err != nil {
+		return err
+	}
 	if err := writeServiceUnit(s.UnitPath, s.UnitText, s.TargetScope, opts); err != nil {
 		return err
 	}
@@ -741,14 +761,21 @@ func (t *LocalDeployTarget) execRepoChange(s *RepoChangeStep, plan *InstallPlan,
 // runSudoShell wraps a bash snippet in `sudo bash <<EOF`. Uses
 // cmd.Stdin so the script body isn't exposed in the argv (cleaner
 // ps/audit output).
+//
+// Always uses sudo -n (non-interactive). target:local deploys with
+// allow_root_tasks: true assume the operator has NOPASSWD sudo on the
+// host (sudoRefresh verifies this as a preflight). With -n, a missing
+// NOPASSWD policy fails FAST with "a password is required" instead of
+// either (a) hanging forever waiting for stdin, or (b) consuming the
+// script body as a password in tty-less / background contexts.
 func runSudoShell(script string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] sudo bash <<OV_ROOT")
+		fmt.Fprintln(os.Stderr, "[dry-run] sudo -n bash <<OV_ROOT")
 		fmt.Fprintln(os.Stderr, script)
 		fmt.Fprintln(os.Stderr, "OV_ROOT")
 		return nil
 	}
-	cmd := exec.Command("sudo", "bash", "-s")
+	cmd := exec.Command("sudo", "-n", "bash", "-s")
 	cmd.Stdin = strings.NewReader(script)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -757,12 +784,13 @@ func runSudoShell(script string, opts EmitOpts) error {
 
 // runSudoArgs spawns sudo with explicit argv (no shell interpretation).
 // Used for one-shot commands like `sudo pacman -U <pkg1> <pkg2> …`.
+// Same -n rationale as runSudoShell.
 func runSudoArgs(argv []string, opts EmitOpts) error {
 	if opts.DryRun {
-		fmt.Fprintln(os.Stderr, "[dry-run] sudo "+shellJoin(argv))
+		fmt.Fprintln(os.Stderr, "[dry-run] sudo -n "+shellJoin(argv))
 		return nil
 	}
-	cmd := exec.Command("sudo", argv...)
+	cmd := exec.Command("sudo", append([]string{"-n"}, argv...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -785,7 +813,17 @@ func runUserShell(script string, opts EmitOpts) error {
 
 // sudoRefresh runs `sudo -v` to refresh the sudo timestamp so later
 // `sudo bash` invocations don't prompt within the ~5-minute window.
+//
+// Short-circuits when NOPASSWD sudo is effective: `sudo -n true` succeeds
+// for users with passwordless sudo policy, so there's no credential cache
+// that needs priming and `sudo -v` (which requires a TTY for the
+// password-prompt fallback) is unnecessary. This makes the rebuild work
+// in tty-less contexts (background tasks, CI runners, AI agents) on
+// machines with NOPASSWD configured.
 func sudoRefresh() error {
+	if exec.Command("sudo", "-n", "true").Run() == nil {
+		return nil // NOPASSWD effective; nothing to refresh.
+	}
 	cmd := exec.Command("sudo", "-v")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -796,6 +834,39 @@ func sudoRefresh() error {
 // ---------------------------------------------------------------------------
 // Systemd helpers
 // ---------------------------------------------------------------------------
+
+// packagedUnitDirs is the lookup order for OS-package-shipped systemd
+// units. Tests swap this slice to point at a fixture root.
+var packagedUnitDirs = []string{
+	"/usr/lib/systemd/system",
+	"/lib/systemd/system",
+}
+
+// detectPackagedUnitConflict returns an error when a custom system-scope
+// service would shadow a unit shipped by an OS package. Writing
+// /etc/systemd/system/<name>.service silently overrides
+// /usr/lib/systemd/system/<name>.service and replaces socket activation
+// or other distro-managed behavior. The error message points authors
+// at use_packaged: as the canonical remediation.
+func detectPackagedUnitConflict(unitPath string, scope Scope, layerName string) error {
+	if scope != ScopeSystem {
+		return nil
+	}
+	unitName := filepath.Base(unitPath)
+	for _, dir := range packagedUnitDirs {
+		packagedPath := filepath.Join(dir, unitName)
+		if _, err := os.Stat(packagedPath); err == nil {
+			return fmt.Errorf(
+				"service %q from layer %q would override the packaged unit at %s. "+
+					"To respect the distro's native unit, set `use_packaged: %s` on the service entry "+
+					"(drop-in overrides are still applied). To replace it anyway, change `scope:` to "+
+					"`user` for a per-user unit, or rename the service",
+				unitName, layerName, packagedPath, unitName,
+			)
+		}
+	}
+	return nil
+}
 
 func systemctlIsEnabled(unit string, scope Scope) bool {
 	args := []string{"is-enabled", "--quiet", unit}
@@ -1035,27 +1106,78 @@ func renderCargoScript(s *BuilderStep, hostHome string) string {
 	return b.String()
 }
 
-// renderAurScript replicates build.yml builder.aur.stage_template:
-// USER root for sudoers, yay -S builds into /tmp/aur-build, then
-// copies resulting .pkg.tar.zst into /tmp/aur-pkgs (bind-mounted on
-// host target to a staging dir the caller picks up after).
+// renderAurScript replicates build.yml builder.aur.stage_template,
+// adapted for target:local BuilderRun (single-stage podman run instead
+// of multi-stage Containerfile).
 //
-// The BuilderRun wrapper passes --user $(id -u):$(id -g) so we can't
-// actually switch to root — aur container images are configured to
-// run yay as uid 1000 with NOPASSWD sudo. We trust that baseline.
+// The script enters the container as root (BuilderRun RunAsRoot=true),
+// matching the IMAGE BUILD path's `USER root` directive. As root it
+// installs the SAME passwordless-sudo policy used on standard Arch
+// hosts (e.g. CachyOS / EndeavourOS): the `wheel` group gets
+// `NOPASSWD: ALL` via `/etc/sudoers.d/20-nopasswd-wheel`. The
+// archlinux-builder's `user` account is added to wheel idempotently.
+// Then the script drops to that user via `sudo -u user yay -S …`:
+//
+//   * yay/makepkg run as the unprivileged user (modern makepkg refuses
+//     root by design).
+//   * yay's own internal `sudo pacman -U` for build dependencies
+//     passes through the NOPASSWD-wheel policy.
+//
+// Mirroring the host's wheel-based pattern (instead of a per-user
+// rule) means the same convention works whether the image's
+// unprivileged account is "user", "builder", "ubuntu", etc. — anyone
+// in wheel is covered.
+//
+// Build outputs (.pkg.tar.zst) land in /tmp/aur-pkgs which is
+// bind-mounted to a host staging directory; the host's caller does
+// the final privileged `pacman -U` on the produced packages after
+// BuilderRun returns (see execBuilder).
 func renderAurScript(s *BuilderStep, hostHome string) string {
 	packages := extractStringSlice(s.RawStageContext, "packages")
 	var b strings.Builder
 	b.WriteString("set -e\n")
-	b.WriteString("sudo mkdir -p /tmp/aur-build /tmp/aur-pkgs\n")
-	b.WriteString("sudo chown -R $(id -u):$(id -g) /tmp/aur-build /tmp/aur-pkgs\n")
+	// Mirror the host's standard Arch passwordless-sudo pattern:
+	// `%wheel ALL=(ALL:ALL) NOPASSWD: ALL` in a sudoers.d drop-in.
+	b.WriteString("echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/20-nopasswd-wheel\n")
+	b.WriteString("chmod 0440 /etc/sudoers.d/20-nopasswd-wheel\n")
+	// Ensure the unprivileged builder user is a member of wheel. The
+	// archlinux-builder image creates `user` (uid 1000) but does not
+	// add it to wheel by default. groupadd -f is idempotent.
+	b.WriteString("getent group wheel >/dev/null || groupadd wheel\n")
+	b.WriteString("usermod -aG wheel user\n")
+	// Verify membership; fail loudly if not (safer than silent).
+	b.WriteString("id -nG user | tr ' ' '\\n' | grep -qx wheel || { echo 'FATAL: user not in wheel group' >&2; exit 1; }\n")
+	// /tmp/aur-build is in-container only; chown to user so yay/makepkg
+	// (running via `sudo -u user`) can write into it. /tmp/aur-pkgs is
+	// bind-mounted from a host dir owned by the operator (rootless podman
+	// maps in-container uid 0 → host operator uid). Do NOT chown
+	// /tmp/aur-pkgs — chown'ing the bind mount changes ownership to an
+	// in-container user that maps to a host SUBUID, leaving the operator
+	// unable to read the directory after the container exits and ov's
+	// post-step `filepath.Glob` returns zero matches even though the
+	// artifact exists in the container's view.
+	b.WriteString("mkdir -p /tmp/aur-build\n")
+	b.WriteString("chown -R user:user /tmp/aur-build\n")
 	b.WriteString("cp /etc/makepkg.conf /tmp/makepkg.conf\n")
 	b.WriteString("sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf\n")
-	b.WriteString("yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
+	b.WriteString("chown user:user /tmp/makepkg.conf\n")
+	b.WriteString("sudo -u user -- yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf")
 	for _, p := range packages {
 		fmt.Fprintf(&b, " %s", shQuoteArg(p))
 	}
 	b.WriteString("\n")
-	b.WriteString("find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \\;\n")
+	// Copy the built .pkg.tar.zst into the bind-mounted /tmp/aur-pkgs as
+	// in-container root. Rootless-podman maps that uid to the host
+	// operator, so the file lands on the host owned by the operator and
+	// is readable by ov's post-step glob. yay clones PKGBUILDs into
+	// ~/.cache/yay/<pkg>/ and makepkg writes the artifact there
+	// (yay 12.x overrides PKGDEST), so the find scans both yay's cache
+	// and --builddir to be robust across yay versions.
+	b.WriteString("mkdir -p /tmp/aur-pkgs\n")
+	b.WriteString("for src in /tmp/aur-build /home/user/.cache/yay /root/.cache/yay; do\n")
+	b.WriteString("  [ -d \"$src\" ] && find \"$src\" -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \\; 2>/dev/null || true\n")
+	b.WriteString("done\n")
+	b.WriteString("echo 'aur artifacts staged for host install:' >&2\n")
+	b.WriteString("ls -la /tmp/aur-pkgs/ >&2\n")
 	return b.String()
 }

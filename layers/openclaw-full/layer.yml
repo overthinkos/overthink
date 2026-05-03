@@ -5,6 +5,7 @@ layer:
   layers:
     - openclaw
     - chrome
+    - chrome-cdp
     - claude-code
     - codex
     - gemini

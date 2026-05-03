@@ -334,12 +334,18 @@ func gpgEncryptBytes(plaintext []byte, outputPath string, recipients []string) e
 }
 
 // listRecipients parses a GPG-encrypted file to extract recipient key IDs.
+//
+// Modern gpg 2.x's --list-packets attempts to decrypt the outer envelope to
+// enumerate inner packets, which can fail when the secret key isn't unlocked
+// (passphrase not cached, no pinentry display). However, the OUTER
+// `:pubkey enc packet:` line that carries the recipient keyid is emitted to
+// stdout BEFORE that decryption error. So we scan the captured output
+// regardless of gpg's exit status — if we extract any recipients, we return
+// them as success; we only surface gpg's error when the parse yielded
+// nothing at all.
 func listRecipients(path string) ([]string, error) {
 	cmd := exec.Command("gpg", "--list-packets", "--batch", path)
 	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil, fmt.Errorf("listing packets for %s: %w\n%s", path, err, string(out))
-	}
 
 	var recipients []string
 	// Match lines like ":pubkey enc packet: ... keyid 5EA2283B420DE2B3"
@@ -353,7 +359,14 @@ func listRecipients(path string) ([]string, error) {
 			}
 		}
 	}
-	return recipients, nil
+
+	if len(recipients) > 0 {
+		return recipients, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("listing packets for %s: %w\n%s", path, err, string(out))
+	}
+	return nil, nil
 }
 
 // modifySecrets decrypts .secrets, applies a transform function, and re-encrypts.
@@ -1657,6 +1670,15 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 	if _, err := os.Stat(c.File); err != nil {
 		ok(fmt.Sprintf("  %s:           not found (OK if no project secrets needed)", c.File))
 	} else {
+		// Preset passphrases from Secret Service BEFORE listRecipients —
+		// modern gpg --list-packets decrypts the outer envelope to enumerate
+		// inner packets, which needs the passphrase. Without preset, gpg
+		// invokes pinentry, fails when the doctor runs in a context with
+		// no display, exits non-zero, and listRecipients returns empty.
+		for _, k := range keys {
+			presetPassphrasesFromSS(k.KeyID)
+		}
+
 		recipients, _ := listRecipients(c.File)
 		if len(recipients) > 0 {
 			for _, r := range recipients {
@@ -1673,10 +1695,7 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 			warn(fmt.Sprintf("  %s:           could not read recipients", c.File))
 		}
 
-		// 10. Decrypt test — preset passphrases from Secret Service to avoid pinentry GUI
-		for _, k := range keys {
-			presetPassphrasesFromSS(k.KeyID)
-		}
+		// 10. Decrypt test
 		plaintext, err := gpgDecryptToBytes(c.File)
 		if err == nil && len(plaintext) > 0 {
 			ok(fmt.Sprintf("  decrypt test:            OK (%d bytes)", len(plaintext)))

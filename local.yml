@@ -8,6 +8,9 @@ local:
       - pre-commit
       - tmux
       - direnv
+      - gnupg
+      - keepassxc
+      - keepassxc-keyring
       - build-toolchain
       - golang
       - rust

@@ -464,16 +464,16 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		if mode == "" {
 			mode = "0755"
 		}
-		return fmt.Sprintf("install -d -m%s %s", mode, shQuoteArg(task.Mkdir)), nil
+		return fmt.Sprintf("install -d -m%s %s", mode, shDoubleQuote(task.Mkdir)), nil
 	case task.Link != "":
 		target := task.Target
 		if target == "" {
 			target = task.To
 		}
-		return fmt.Sprintf("ln -sfn %s %s", shQuoteArg(target), shQuoteArg(task.Link)), nil
+		return fmt.Sprintf("ln -sfn %s %s", shDoubleQuote(target), shDoubleQuote(task.Link)), nil
 	case task.Setcap != "":
 		caps := task.Caps
-		return fmt.Sprintf("setcap %s %s", shQuoteArg(caps), shQuoteArg(task.Setcap)), nil
+		return fmt.Sprintf("setcap %s %s", shDoubleQuote(caps), shDoubleQuote(task.Setcap)), nil
 	case task.Copy != "":
 		src := filepath.Join(s.LayerDir, task.Copy)
 		dst := task.To
@@ -484,14 +484,14 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		if mode == "" {
 			mode = "0644"
 		}
-		return fmt.Sprintf("install -m%s %s %s", mode, shQuoteArg(src), shQuoteArg(dst)), nil
+		return fmt.Sprintf("install -m%s %s %s", mode, shDoubleQuote(src), shDoubleQuote(dst)), nil
 	case task.Write != "":
 		mode := task.Mode
 		if mode == "" {
 			mode = "0644"
 		}
 		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
-			mode, shQuoteArg(task.Write), task.Content), nil
+			mode, shDoubleQuote(task.Write), task.Content), nil
 	case task.Download != "":
 		return renderDownloadScript(task, s.LayerVars), nil
 	}

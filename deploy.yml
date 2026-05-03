@@ -353,13 +353,15 @@ deployment:
     # ---------------------------------------------------------------
     # Applies the cachyos-dx kind:local template (defined in local.yml)
     # directly to the current machine via ShellExecutor — no SSH, no VM,
-    # no container. NOT marked disposable: this is the operator's real
-    # workstation; every install/uninstall is user-authorized.
+    # no container. Marked disposable: operator has authorized this host
+    # as a test system, so `ov rebuild qc` (full destroy + reinstall via
+    # the install ledger) is allowed for strict R10 verification.
     # =================================================================
     qc:
         target: local
         local: cachyos-dx
         host: local
+        disposable: true
         install_opts:
             with_services: true
             allow_repo_changes: true

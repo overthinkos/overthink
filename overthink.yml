@@ -5,15 +5,15 @@ includes:
     - local.yml
 discover:
     layers:
-      - path: layers
-        recursive: true
+        - path: layers
+          recursive: true
 defaults:
     platforms:
-      - linux/amd64
+        - linux/amd64
     tag: auto
     registry: ghcr.io/overthinkos
     build:
-      - rpm
+        - rpm
     merge:
         auto: true
         max_mb: 128
@@ -21,1096 +21,1071 @@ defaults:
         cargo: fedora-builder
         npm: fedora-builder
         pixi: fedora-builder
-images:
+image:
     arch-coder:
         base: archlinux
         layers:
-          - agent-forwarding
-          - sshd
-          - ov-full
-          - ov-mcp
-          - container-nesting
-          - dbus
-          - tmux
-          - language-runtimes
-          - golang
-          - nodejs
-          - rust
-          - pixi
-          - uv
-          - build-toolchain
-          - dev-tools
-          - pre-commit
-          - direnv
-          - gh
-          - typst
-          - asciinema
-          - claude-code
-          - codex
-          - gemini
-          - forgecode
-          - oracle
-          - devops-tools
-          - kubernetes
-          - docker-ce
-          - github-actions
-          - google-cloud
-          - google-cloud-npm
-          - grafana-tools
+            - agent-forwarding
+            - sshd
+            - ov-full
+            - ov-mcp
+            - container-nesting
+            - dbus
+            - tmux
+            - language-runtimes
+            - golang
+            - nodejs
+            - rust
+            - pixi
+            - uv
+            - build-toolchain
+            - dev-tools
+            - pre-commit
+            - direnv
+            - gh
+            - typst
+            - asciinema
+            - claude-code
+            - codex
+            - gemini
+            - forgecode
+            - oracle
+            - devops-tools
+            - kubernetes
+            - docker-ce
+            - github-actions
+            - google-cloud
+            - google-cloud-npm
+            - grafana-tools
         ports:
-          - 2222:2222
-          - 18765:18765
+            - 2222:2222
+            - 18765:18765
         eval:
-          - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
-                && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-            id: arch-coder-ai-clis
-            exit_status: 0
-          - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo
-                || test -x /usr/bin/cargo; }
-            id: arch-coder-languages
-            exit_status: 0
-          - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x
-                /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-            id: arch-coder-devops
-            exit_status: 0
-          - command: test -x /usr/local/bin/ov
-            id: arch-coder-ov
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:2222}
-            id: arch-coder-sshd-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
-          - command: ov version
-            id: arch-coder-ov-version
-            scope: deploy
-            in_container: true
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:18765}
-            id: arch-coder-mcp-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
+            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+              id: arch-coder-ai-clis
+              exit_status: 0
+            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+              id: arch-coder-languages
+              exit_status: 0
+            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+              id: arch-coder-devops
+              exit_status: 0
+            - command: test -x /usr/local/bin/ov
+              id: arch-coder-ov
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:2222}
+              id: arch-coder-sshd-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
+            - command: ov version
+              id: arch-coder-ov-version
+              scope: deploy
+              in_container: true
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:18765}
+              id: arch-coder-mcp-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
     arch-ov:
         enabled: false
         base: archlinux
         layers:
-          - agent-forwarding
-          - ov-full
-          - ov-mcp
-          - golang
-          - gh
-          - sshd
-          - container-nesting
-          - nvidia
+            - agent-forwarding
+            - ov-full
+            - ov-mcp
+            - golang
+            - gh
+            - sshd
+            - container-nesting
+            - nvidia
         ports:
-          - 2222:2222
-          - 18765:18765
+            - 2222:2222
+            - 18765:18765
     arch-test:
         enabled: false
         base: archlinux
         build:
-          - pac
-          - aur
+            - pac
+            - aur
         layers:
-          - agent-forwarding
-          - arch-pac-test
-          - arch-aur-test
+            - agent-forwarding
+            - arch-pac-test
+            - arch-aur-test
     archlinux:
         base: docker.io/library/archlinux:latest
         distro:
-          - archlinux
+            - archlinux
         build:
-          - pac
+            - pac
         builder:
             aur: archlinux-builder
             cargo: archlinux-builder
             npm: archlinux-builder
             pixi: archlinux-builder
         builds:
-          - pixi
-          - npm
-          - cargo
-          - aur
+            - pixi
+            - npm
+            - cargo
+            - aur
     archlinux-builder:
         base: archlinux
         layers:
-          - pixi
-          - nodejs
-          - build-toolchain
-          - yay
+            - pixi
+            - nodejs
+            - build-toolchain
+            - yay
         builds:
-          - pixi
-          - npm
-          - cargo
-          - aur
+            - pixi
+            - npm
+            - cargo
+            - aur
     archlinux-pacstrap-builder:
         base: archlinux
         distro:
-          - archlinux
+            - archlinux
         build:
-          - pac
+            - pac
         layers:
-          - pacstrap-builder
+            - pacstrap-builder
     archlinux-pacstrap:
         from: builder:pacstrap
         bootstrap_builder_image: archlinux-pacstrap-builder
         distro:
-          - archlinux
+            - archlinux
         build:
-          - pac
+            - pac
     cachyos-pacstrap-builder:
         base: archlinux
         distro:
-          - archlinux
+            - archlinux
         build:
-          - pac
+            - pac
         layers:
-          - pacstrap-builder
+            - pacstrap-builder
     cachyos:
         from: builder:pacstrap
         bootstrap_builder_image: cachyos-pacstrap-builder
         distro:
-          - cachyos
-          - archlinux
+            - cachyos
+            - archlinux
         build:
-          - pac
+            - pac
     debian-debootstrap-builder:
         base: debian:13
         distro:
-          - debian:13
-          - debian
+            - debian:13
+            - debian
         build:
-          - deb
+            - deb
         layers:
-          - debootstrap-builder
+            - debootstrap-builder
     debian-debootstrap:
         from: builder:debootstrap
         bootstrap_builder_image: debian-debootstrap-builder
         distro:
-          - debian:13
-          - debian
+            - debian:13
+            - debian
         build:
-          - deb
+            - deb
     ubuntu-debootstrap-builder:
         base: debian:13
         distro:
-          - debian:13
-          - debian
+            - debian:13
+            - debian
         build:
-          - deb
+            - deb
         layers:
-          - debootstrap-builder
+            - debootstrap-builder
     ubuntu-debootstrap:
         from: builder:debootstrap
         bootstrap_builder_image: ubuntu-debootstrap-builder
         distro:
-          - ubuntu:24.04
-          - ubuntu
-          - debian
+            - ubuntu:24.04
+            - ubuntu
+            - debian
         build:
-          - deb
+            - deb
     aurora:
         enabled: false
         base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - bootc-base
-          - sshd
-          - ov-full
-          - golang
+            - agent-forwarding
+            - bootc-base
+            - sshd
+            - ov-full
+            - golang
     bazzite-ai:
         enabled: false
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - bootc-base
-          - build-toolchain
-          - language-runtimes
-          - ujust
-          - dev-tools
-          - github-actions
-          - virtualization
-          - kubernetes
-          - docker-ce
-          - google-cloud
-          - vr-streaming
-          - cuda
-          - devops-tools
-          - grafana-tools
-          - desktop-apps
-          - vscode
-          - typst
-          - copr-desktop
-          - os-config
-          - os-system-files
+            - agent-forwarding
+            - bootc-base
+            - build-toolchain
+            - language-runtimes
+            - ujust
+            - dev-tools
+            - github-actions
+            - virtualization
+            - kubernetes
+            - docker-ce
+            - google-cloud
+            - vr-streaming
+            - cuda
+            - devops-tools
+            - grafana-tools
+            - desktop-apps
+            - vscode
+            - typst
+            - copr-desktop
+            - os-config
+            - os-system-files
     comfyui:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - comfyui
-          - dbus
-          - ov
+            - agent-forwarding
+            - comfyui
+            - dbus
+            - ov
         ports:
-          - 8188:8188
+            - 8188:8188
     debian:
         enabled: false
         base: debian:13
         distro:
-          - debian:13
-          - debian
+            - debian:13
+            - debian
         build:
-          - deb
+            - deb
         builder:
             cargo: debian-builder
             npm: debian-builder
             pixi: debian-builder
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     debian-builder:
         enabled: false
         base: debian
         layers:
-          - pixi
-          - nodejs
-          - build-toolchain
+            - pixi
+            - nodejs
+            - build-toolchain
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     debian-coder:
         enabled: false
         base: debian
         layers:
-          - agent-forwarding
-          - sshd
-          - ov-full
-          - ov-mcp
-          - container-nesting
-          - dbus
-          - tmux
-          - language-runtimes
-          - golang
-          - nodejs
-          - rust
-          - pixi
-          - uv
-          - build-toolchain
-          - dev-tools
-          - pre-commit
-          - direnv
-          - gh
-          - typst
-          - asciinema
-          - claude-code
-          - codex
-          - gemini
-          - forgecode
-          - oracle
-          - devops-tools
-          - kubernetes
-          - docker-ce
-          - github-actions
-          - google-cloud
-          - google-cloud-npm
-          - grafana-tools
+            - agent-forwarding
+            - sshd
+            - ov-full
+            - ov-mcp
+            - container-nesting
+            - dbus
+            - tmux
+            - language-runtimes
+            - golang
+            - nodejs
+            - rust
+            - pixi
+            - uv
+            - build-toolchain
+            - dev-tools
+            - pre-commit
+            - direnv
+            - gh
+            - typst
+            - asciinema
+            - claude-code
+            - codex
+            - gemini
+            - forgecode
+            - oracle
+            - devops-tools
+            - kubernetes
+            - docker-ce
+            - github-actions
+            - google-cloud
+            - google-cloud-npm
+            - grafana-tools
         ports:
-          - 2222:2222
-          - 18765:18765
+            - 2222:2222
+            - 18765:18765
         eval:
-          - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
-                && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-            id: debian-coder-ai-clis
-            exit_status: 0
-          - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo
-                || test -x /usr/bin/cargo; }
-            id: debian-coder-languages
-            exit_status: 0
-          - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x
-                /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-            id: debian-coder-devops
-            exit_status: 0
-          - command: test -x /usr/local/bin/ov
-            id: debian-coder-ov
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:2222}
-            id: debian-coder-sshd-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
-          - command: ov version
-            id: debian-coder-ov-version
-            scope: deploy
-            in_container: true
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:18765}
-            id: debian-coder-mcp-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
+            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+              id: debian-coder-ai-clis
+              exit_status: 0
+            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+              id: debian-coder-languages
+              exit_status: 0
+            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+              id: debian-coder-devops
+              exit_status: 0
+            - command: test -x /usr/local/bin/ov
+              id: debian-coder-ov
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:2222}
+              id: debian-coder-sshd-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
+            - command: ov version
+              id: debian-coder-ov-version
+              scope: deploy
+              in_container: true
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:18765}
+              id: debian-coder-mcp-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
     fedora:
         base: quay.io/fedora/fedora:43
         distro:
-          - fedora:43
-          - fedora
+            - fedora:43
+            - fedora
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     fedora-builder:
         base: fedora
         layers:
-          - rpmfusion
-          - pixi
-          - nodejs
-          - build-toolchain
+            - rpmfusion
+            - pixi
+            - nodejs
+            - build-toolchain
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     fedora-coder:
         base: fedora-nonfree
         layers:
-          - agent-forwarding
-          - sshd
-          - ov-full
-          - ov-mcp
-          - container-nesting
-          - dbus
-          - tmux
-          - language-runtimes
-          - golang
-          - nodejs24
-          - rust
-          - pixi
-          - uv
-          - build-toolchain
-          - dev-tools
-          - pre-commit
-          - direnv
-          - gh
-          - typst
-          - asciinema
-          - claude-code
-          - codex
-          - gemini
-          - forgecode
-          - oracle
-          - devops-tools
-          - kubernetes
-          - docker-ce
-          - github-actions
-          - google-cloud
-          - google-cloud-npm
-          - grafana-tools
+            - agent-forwarding
+            - sshd
+            - ov-full
+            - ov-mcp
+            - container-nesting
+            - dbus
+            - tmux
+            - language-runtimes
+            - golang
+            - nodejs24
+            - rust
+            - pixi
+            - uv
+            - build-toolchain
+            - dev-tools
+            - pre-commit
+            - direnv
+            - gh
+            - typst
+            - asciinema
+            - claude-code
+            - codex
+            - gemini
+            - forgecode
+            - oracle
+            - devops-tools
+            - kubernetes
+            - docker-ce
+            - github-actions
+            - google-cloud
+            - google-cloud-npm
+            - grafana-tools
         ports:
-          - 2222:2222
-          - 18765:18765
+            - 2222:2222
+            - 18765:18765
         eval:
-          - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
-                && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-            id: fedora-coder-ai-clis
-            exit_status: 0
-          - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo
-                || test -x /usr/bin/cargo; }
-            id: fedora-coder-languages
-            exit_status: 0
-          - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x
-                /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-            id: fedora-coder-devops
-            exit_status: 0
-          - command: test -x /usr/local/bin/ov
-            id: fedora-coder-ov
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:2222}
-            id: fedora-coder-sshd-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
-          - command: ov version
-            id: fedora-coder-ov-version
-            scope: deploy
-            in_container: true
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:18765}
-            id: fedora-coder-mcp-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
+            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+              id: fedora-coder-ai-clis
+              exit_status: 0
+            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+              id: fedora-coder-languages
+              exit_status: 0
+            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+              id: fedora-coder-devops
+              exit_status: 0
+            - command: test -x /usr/local/bin/ov
+              id: fedora-coder-ov
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:2222}
+              id: fedora-coder-sshd-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
+            - command: ov version
+              id: fedora-coder-ov-version
+              scope: deploy
+              in_container: true
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:18765}
+              id: fedora-coder-mcp-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
     fedora-nonfree:
         base: fedora
         layers:
-          - rpmfusion
+            - rpmfusion
     fedora-ov:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - ov-full
-          - golang
-          - gh
-          - sshd
-          - container-nesting
-          - nvidia
+            - agent-forwarding
+            - ov-full
+            - golang
+            - gh
+            - sshd
+            - container-nesting
+            - nvidia
     fedora-remote:
         enabled: false
         base: quay.io/fedora/fedora:43
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - '@github.com/overthinkos/overthink/layers/dev-tools:main'
-          - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.64.1937'
-          - '@github.com/overthinkos/overthink/layers/nodejs'
+            - '@github.com/overthinkos/overthink/layers/dev-tools:main'
+            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.64.1937'
+            - '@github.com/overthinkos/overthink/layers/nodejs'
     fedora-test:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - traefik
-          - testapi
+            - agent-forwarding
+            - traefik
+            - testapi
         ports:
-          - 8000:8000
-          - 8080:8080
+            - 8000:8000
+            - 8080:8080
     filebrowser:
         base: fedora
         layers:
-          - agent-forwarding
-          - filebrowser
-          - dbus
-          - ov
+            - agent-forwarding
+            - filebrowser
+            - dbus
+            - ov
         ports:
-          - 8085:8080
+            - 8085:8080
         eval:
-          - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov
-                && test -x /usr/bin/dbus-daemon
-            id: filebrowser-composed-binaries
-            exit_status: 0
-          - file: ${VOLUME_CONTAINER_PATH:data}
-            id: filebrowser-volumes-exist
-            scope: deploy
-            filetype: directory
+            - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov && test -x /usr/bin/dbus-daemon
+              id: filebrowser-composed-binaries
+              exit_status: 0
+            - file: ${VOLUME_CONTAINER_PATH:data}
+              id: filebrowser-volumes-exist
+              scope: deploy
+              filetype: directory
     githubrunner:
         enabled: false
         base: fedora
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - github-runner
-          - ov-full
-          - dbus
+            - agent-forwarding
+            - github-runner
+            - ov-full
+            - dbus
         network: host
     hermes:
         base: fedora
         layers:
-          - agent-forwarding
-          - hermes-full
-          - dbus
+            - agent-forwarding
+            - hermes-full
+            - dbus
         eval:
-          - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
-                && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
-            id: hermes-all-clis-present
-            exit_status: 0
-          - service: hermes
-            id: hermes-service-up
-            scope: deploy
-            running: true
+            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.pixi/envs/default/bin/hermes
+              id: hermes-all-clis-present
+              exit_status: 0
+            - service: hermes
+              id: hermes-service-up
+              scope: deploy
+              running: true
     hermes-playwright:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - hermes
-          - hermes-playwright
-          - dbus
-          - ov
+            - agent-forwarding
+            - hermes
+            - hermes-playwright
+            - dbus
+            - ov
     immich:
         enabled: false
         base: fedora-nonfree
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - nodejs24
-          - supervisord
-          - postgresql
-          - vectorchord
-          - redis
-          - immich
-          - dbus
-          - ov
+            - agent-forwarding
+            - nodejs24
+            - supervisord
+            - postgresql
+            - vectorchord
+            - redis
+            - immich
+            - dbus
+            - ov
         ports:
-          - 2283:2283
+            - 2283:2283
     immich-ml:
         base: fedora
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - nodejs24
-          - cuda
-          - python-ml
-          - supervisord
-          - postgresql
-          - vectorchord
-          - redis
-          - immich
-          - immich-ml
-          - dbus
-          - ov
+            - agent-forwarding
+            - nodejs24
+            - cuda
+            - python-ml
+            - supervisord
+            - postgresql
+            - vectorchord
+            - redis
+            - immich
+            - immich-ml
+            - dbus
+            - ov
         ports:
-          - 2283:2283
+            - 2283:2283
         eval:
-          - command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server &&
-                test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
-            id: immich-ml-stack-binaries
-            exit_status: 0
-          - command: supervisorctl status postgresql redis immich-server immich-ml
-                | awk '{print $2}' | sort -u
-            id: immich-ml-services-running
-            scope: deploy
-            in_container: true
-            exit_status: 0
-            stdout:
-              - RUNNING
-          - command: curl -fsS http://127.0.0.1:3003/ping
-            id: immich-ml-internal-ping
-            scope: deploy
-            in_container: true
-            exit_status: 0
+            - command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server && test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
+              id: immich-ml-stack-binaries
+              exit_status: 0
+            - command: supervisorctl status postgresql redis immich-server immich-ml | awk '{print $2}' | sort -u
+              id: immich-ml-services-running
+              scope: deploy
+              in_container: true
+              exit_status: 0
+              stdout:
+                - RUNNING
+            - command: curl -fsS http://127.0.0.1:3003/ping
+              id: immich-ml-internal-ping
+              scope: deploy
+              in_container: true
+              exit_status: 0
     jupyter:
         base: fedora
         layers:
-          - agent-forwarding
-          - jupyter
-          - notebook-templates
-          - dbus
-          - ov
+            - agent-forwarding
+            - jupyter
+            - notebook-templates
+            - dbus
+            - ov
         ports:
-          - 8888:8888
+            - 8888:8888
         eval:
-          - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n
-                1
-            id: jupyter-notebook-templates-provisioned
-            scope: deploy
-            in_container: true
-            exit_status: 0
-            stdout:
-              - matches: \.ipynb
-          - command: ${HOME}/.pixi/envs/default/bin/jupyter server extension list
-                2>&1 | grep -i jupyter_mcp
-            id: jupyter-mcp-extension-enabled
-            exit_status: 0
+            - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n 1
+              id: jupyter-notebook-templates-provisioned
+              scope: deploy
+              in_container: true
+              exit_status: 0
+              stdout:
+                - matches: \.ipynb
+            - command: ${HOME}/.pixi/envs/default/bin/jupyter server extension list 2>&1 | grep -i jupyter_mcp
+              id: jupyter-mcp-extension-enabled
+              exit_status: 0
     jupyter-ml:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - jupyter-ml
-          - notebook-templates
-          - dbus
-          - ov
+            - agent-forwarding
+            - jupyter-ml
+            - notebook-templates
+            - dbus
+            - ov
         ports:
-          - 8888:8888
+            - 8888:8888
     jupyter-ml-notebook:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - jupyter-ml
-          - notebook-templates
-          - notebook-finetuning
-          - notebook-ollama
-          - notebook-llm-on-supercomputers
-          - notebook-openrouter
-          - dbus
-          - ov
+            - agent-forwarding
+            - jupyter-ml
+            - notebook-templates
+            - notebook-finetuning
+            - notebook-ollama
+            - notebook-llm-on-supercomputers
+            - notebook-openrouter
+            - dbus
+            - ov
         ports:
-          - 8888:8888
+            - 8888:8888
     nvidia:
         base: fedora-nonfree
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - nvidia
-          - cuda
+            - agent-forwarding
+            - nvidia
+            - cuda
     ollama:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - ollama
-          - dbus
-          - ov
+            - agent-forwarding
+            - ollama
+            - dbus
+            - ov
         ports:
-          - 11434:11434
+            - 11434:11434
     openclaw:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - openclaw
-          - dbus
-          - ov
+            - agent-forwarding
+            - openclaw
+            - dbus
+            - ov
         ports:
-          - 18789:18789
+            - 18789:18789
     openclaw-browser-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - bootc-base
-          - openclaw
-          - pipewire
-          - wayvnc
-          - chrome-sway
+            - agent-forwarding
+            - bootc-base
+            - openclaw
+            - pipewire
+            - wayvnc
+            - chrome-sway
         ports:
-          - 18789:18789
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
+            - 18789:18789
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
     openclaw-full:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - openclaw-full
+            - agent-forwarding
+            - openclaw-full
         ports:
-          - 18789:18789
-          - 9222:9222
-          - 9224:9224
+            - 18789:18789
+            - 9222:9222
+            - 9224:9224
     openclaw-full-ml:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - openclaw-full-ml
-          - sway-desktop-vnc
-          - ollama
+            - agent-forwarding
+            - openclaw-full-ml
+            - sway-desktop-vnc
+            - ollama
         ports:
-          - 18789:18789
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
-          - 11434:11434
+            - 18789:18789
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
+            - 11434:11434
     openclaw-full-sway:
         enabled: false
         base: fedora
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - openclaw-full
-          - sway-desktop-vnc
+            - agent-forwarding
+            - openclaw-full
+            - sway-desktop-vnc
         ports:
-          - 18789:18789
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
+            - 18789:18789
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
     openclaw-ollama:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - openclaw
-          - ollama
-          - dbus
-          - ov
+            - agent-forwarding
+            - openclaw
+            - ollama
+            - dbus
+            - ov
         ports:
-          - 18789:18789
-          - 11434:11434
+            - 18789:18789
+            - 11434:11434
     openclaw-ollama-sway-browser:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - openclaw-full-ml
-          - sway-desktop-vnc
-          - ollama
-          - dbus
-          - ov
+            - agent-forwarding
+            - openclaw-full-ml
+            - sway-desktop-vnc
+            - ollama
+            - dbus
+            - ov
         ports:
-          - 18789:18789
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
-          - 11434:11434
+            - 18789:18789
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
+            - 11434:11434
     openclaw-sway-browser:
         base: fedora
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - openclaw-full
-          - sway-desktop-vnc
-          - dbus
-          - ov
+            - agent-forwarding
+            - openclaw-full
+            - sway-desktop-vnc
+            - dbus
+            - ov
         ports:
-          - 18789:18789
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
+            - 18789:18789
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
     openwebui:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - openwebui
-          - dbus
-          - ov
+            - agent-forwarding
+            - openwebui
+            - dbus
+            - ov
         ports:
-          - 8080:8080
+            - 8080:8080
         eval:
-          - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python
-                && test -x /usr/local/bin/ov
-            id: openwebui-composition
-            exit_status: 0
-          - command: printenv WEBUI_ADMIN_EMAIL
-            id: openwebui-required-env-injected
-            scope: deploy
-            in_container: true
-            exit_status: 0
+            - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/ov
+              id: openwebui-composition
+              exit_status: 0
+            - command: printenv WEBUI_ADMIN_EMAIL
+              id: openwebui-required-env-injected
+              scope: deploy
+              in_container: true
+              exit_status: 0
     python-ml:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - python-ml
+            - agent-forwarding
+            - python-ml
     selkies-desktop:
         base: fedora-nonfree
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - selkies-desktop
-          - dbus
-          - ov
+            - agent-forwarding
+            - selkies-desktop
+            - dbus
+            - ov
         ports:
-          - 3000:3000
-          - 9222:9222
-          - 9224:9224
-          - 2222:2222
+            - 3000:3000
+            - 9222:9222
+            - 9224:9224
+            - 2222:2222
         eval:
-          - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable
-                && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
-            id: selkies-desktop-binaries
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:9224}
-            id: selkies-desktop-chrome-devtools-mcp-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
+            - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/local/bin/traefik && test -x /usr/sbin/sshd
+              id: selkies-desktop-binaries
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:9224}
+              id: selkies-desktop-chrome-devtools-mcp-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
     selkies-desktop-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
         platforms:
-          - linux/amd64
+            - linux/amd64
         distro:
-          - fedora:43
-          - fedora
+            - fedora:43
+            - fedora
         layers:
-          - agent-forwarding
-          - bootc-base
-          - rpmfusion
-          - selkies-desktop
-          - tailscale
-          - keepassxc
-          - dbus
-          - ov
+            - agent-forwarding
+            - bootc-base
+            - rpmfusion
+            - selkies-desktop
+            - tailscale
+            - keepassxc
+            - dbus
+            - ov
         ports:
-          - 13000:3000
-          - 19222:9222
-          - 19224:9224
+            - 13000:3000
+            - 19222:9222
+            - 19224:9224
         eval:
-          - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable
-                && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
-            id: selkies-desktop-bootc-binaries
-            exit_status: 0
+            - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
+              id: selkies-desktop-bootc-binaries
+              exit_status: 0
     selkies-desktop-nvidia:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - selkies-desktop
-          - dbus
-          - ov
+            - agent-forwarding
+            - selkies-desktop
+            - dbus
+            - ov
         ports:
-          - 3000:3000
-          - 9222:9222
-          - 9224:9224
-          - 2222:2222
+            - 3000:3000
+            - 9222:9222
+            - 9224:9224
+            - 2222:2222
     selkies-desktop-ov:
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - selkies-desktop
-          - ov-full
-          - container-nesting
-          - golang
-          - gh
-          - dbus
-          - ov
+            - agent-forwarding
+            - selkies-desktop
+            - ov-full
+            - container-nesting
+            - golang
+            - gh
+            - dbus
+            - ov
         ports:
-          - 3000:3000
-          - 9222:9222
-          - 9224:9224
-          - 2222:2222
+            - 3000:3000
+            - 9222:9222
+            - 9224:9224
+            - 2222:2222
         eval:
-          - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x
-                /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
-            id: selkies-desktop-ov-nested-binaries
-            exit_status: 0
-          - command: test -x /usr/local/bin/ov && test -x /usr/bin/gocryptfs && test
-                -x /usr/bin/socat
-            id: selkies-desktop-ov-ov-binaries
-            exit_status: 0
-          - command: grep -cE '^user:[0-9]+:[0-9]+$' /etc/subuid
-            id: selkies-desktop-ov-subuid-user-two-ranges
-            exit_status: 0
-            stdout:
-              - matches: ^2
-          - command: getcap /usr/bin/newuidmap | grep -c cap_setuid
-            id: selkies-desktop-ov-newuidmap-cap
-            exit_status: 0
-          - file: /etc/containers/policy.json
-            id: selkies-desktop-ov-policy-json
-            exists: true
-          - command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
-            id: selkies-desktop-ov-containers-conf-userns-host
-            exit_status: 0
-          - command: grep -E '^userns\s*=\s*"host"' /home/user/.config/containers/containers.conf
-            id: selkies-desktop-ov-user-containers-conf-userns-host
-            exit_status: 0
-          - command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
-            id: selkies-desktop-ov-env-containers-userns-configured
-            exit_status: 0
-          - command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
-            id: selkies-desktop-ov-env-buildah-isolation
-            exit_status: 0
-          - command: podman run --rm quay.io/libpod/alpine:latest /bin/true
-            id: selkies-desktop-ov-nested-podman-run
-            timeout: 60s
-            scope: deploy
-            in_container: true
-          - command: virsh -c qemu:///session list --all
-            id: selkies-desktop-ov-libvirt-session-list
-            scope: deploy
-            in_container: true
-            exit_status: 0
-          - command: virsh -c qemu:///session domcapabilities 2>/dev/null | grep -c
-                '<domain>kvm</domain>'
-            id: selkies-desktop-ov-libvirt-kvm-domain
-            scope: deploy
-            in_container: true
-            stdout:
-              - matches: ^[1-9]
-          - command: ov version
-            id: selkies-desktop-ov-ov-version
-            scope: deploy
-            in_container: true
-          - command: ov doctor
-            id: selkies-desktop-ov-ov-doctor
-            scope: deploy
-            in_container: true
+            - command: test -x /usr/bin/podman && test -x /usr/bin/buildah && test -x /usr/bin/skopeo && test -x /usr/bin/newuidmap && test -x /usr/bin/newgidmap
+              id: selkies-desktop-ov-nested-binaries
+              exit_status: 0
+            - command: test -x /usr/local/bin/ov && test -x /usr/bin/gocryptfs && test -x /usr/bin/socat
+              id: selkies-desktop-ov-ov-binaries
+              exit_status: 0
+            - command: grep -cE '^user:[0-9]+:[0-9]+$' /etc/subuid
+              id: selkies-desktop-ov-subuid-user-two-ranges
+              exit_status: 0
+              stdout:
+                - matches: ^2
+            - command: getcap /usr/bin/newuidmap | grep -c cap_setuid
+              id: selkies-desktop-ov-newuidmap-cap
+              exit_status: 0
+            - file: /etc/containers/policy.json
+              id: selkies-desktop-ov-policy-json
+              exists: true
+            - command: grep -E '^userns\s*=\s*"host"' /etc/containers/containers.conf
+              id: selkies-desktop-ov-containers-conf-userns-host
+              exit_status: 0
+            - command: grep -E '^userns\s*=\s*"host"' /home/user/.config/containers/containers.conf
+              id: selkies-desktop-ov-user-containers-conf-userns-host
+              exit_status: 0
+            - command: sh -c 'env | grep -q "^_CONTAINERS_USERNS_CONFIGURED="'
+              id: selkies-desktop-ov-env-containers-userns-configured
+              exit_status: 0
+            - command: sh -c 'env | grep -qx "BUILDAH_ISOLATION=chroot"'
+              id: selkies-desktop-ov-env-buildah-isolation
+              exit_status: 0
+            - command: podman run --rm quay.io/libpod/alpine:latest /bin/true
+              id: selkies-desktop-ov-nested-podman-run
+              timeout: 60s
+              scope: deploy
+              in_container: true
+            - command: virsh -c qemu:///session list --all
+              id: selkies-desktop-ov-libvirt-session-list
+              scope: deploy
+              in_container: true
+              exit_status: 0
+            - command: virsh -c qemu:///session domcapabilities 2>/dev/null | grep -c '<domain>kvm</domain>'
+              id: selkies-desktop-ov-libvirt-kvm-domain
+              scope: deploy
+              in_container: true
+              stdout:
+                - matches: ^[1-9]
+            - command: ov version
+              id: selkies-desktop-ov-ov-version
+              scope: deploy
+              in_container: true
+            - command: ov doctor
+              id: selkies-desktop-ov-ov-doctor
+              scope: deploy
+              in_container: true
     sway-browser-vnc:
         base: fedora
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - sway-desktop-vnc
-          - dbus
-          - ov
+            - agent-forwarding
+            - sway-desktop-vnc
+            - dbus
+            - ov
         ports:
-          - 5900:5900
-          - 9222:9222
-          - 9224:9224
+            - 5900:5900
+            - 9222:9222
+            - 9224:9224
         eval:
-          - command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
-            id: sway-browser-vnc-binaries
-            exit_status: 0
-          - command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
-            id: sway-browser-vnc-services
-            scope: deploy
-            in_container: true
-            exit_status: 0
-            stdout:
-              - RUNNING
-          - cdp: status
-            id: sway-browser-vnc-cdp-up
-            scope: deploy
-            stdout:
-              - contains: ok
-          - vnc: status
-            id: sway-browser-vnc-vnc-up
-            scope: deploy
-            stdout:
-              - contains: ok
-          - wl: toplevel
-            id: sway-browser-vnc-wl-has-windows
-            scope: deploy
-          - dbus: list
-            id: sway-browser-vnc-dbus-notifications-registered
-            scope: deploy
-            stdout:
-              - contains: org.freedesktop.Notifications
-          - vnc: screenshot
-            id: sway-browser-vnc-vnc-framebuffer
-            scope: deploy
-            artifact: /tmp/sway-browser-vnc-fb.png
-            artifact_min_bytes: 5000
+            - command: test -x /usr/bin/sway && test -x /usr/bin/wayvnc && test -x /usr/bin/google-chrome-stable
+              id: sway-browser-vnc-binaries
+              exit_status: 0
+            - command: supervisorctl status sway wayvnc | awk '{print $2}' | sort -u
+              id: sway-browser-vnc-services
+              scope: deploy
+              in_container: true
+              exit_status: 0
+              stdout:
+                - RUNNING
+            - cdp: status
+              id: sway-browser-vnc-cdp-up
+              scope: deploy
+              stdout:
+                - contains: ok
+            - vnc: status
+              id: sway-browser-vnc-vnc-up
+              scope: deploy
+              stdout:
+                - contains: ok
+            - wl: toplevel
+              id: sway-browser-vnc-wl-has-windows
+              scope: deploy
+            - dbus: list
+              id: sway-browser-vnc-dbus-notifications-registered
+              scope: deploy
+              stdout:
+                - contains: org.freedesktop.Notifications
+            - vnc: screenshot
+              id: sway-browser-vnc-vnc-framebuffer
+              scope: deploy
+              artifact: /tmp/sway-browser-vnc-fb.png
+              artifact_min_bytes: 5000
     ubuntu:
         enabled: false
         base: ubuntu:24.04
         distro:
-          - ubuntu:24.04
-          - ubuntu
-          - debian
+            - ubuntu:24.04
+            - ubuntu
+            - debian
         build:
-          - deb
+            - deb
         builder:
             cargo: ubuntu-builder
             npm: ubuntu-builder
             pixi: ubuntu-builder
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     ubuntu-builder:
         enabled: false
         base: ubuntu
         layers:
-          - pixi
-          - nodejs
-          - build-toolchain
+            - pixi
+            - nodejs
+            - build-toolchain
         builds:
-          - pixi
-          - npm
-          - cargo
+            - pixi
+            - npm
+            - cargo
     ubuntu-coder:
         enabled: false
         base: ubuntu
         layers:
-          - agent-forwarding
-          - sshd
-          - ov-full
-          - ov-mcp
-          - container-nesting
-          - dbus
-          - tmux
-          - language-runtimes
-          - golang
-          - nodejs
-          - rust
-          - pixi
-          - uv
-          - build-toolchain
-          - dev-tools
-          - pre-commit
-          - direnv
-          - gh
-          - typst
-          - asciinema
-          - claude-code
-          - codex
-          - gemini
-          - forgecode
-          - oracle
-          - devops-tools
-          - kubernetes
-          - docker-ce
-          - github-actions
-          - google-cloud
-          - google-cloud-npm
-          - grafana-tools
+            - agent-forwarding
+            - sshd
+            - ov-full
+            - ov-mcp
+            - container-nesting
+            - dbus
+            - tmux
+            - language-runtimes
+            - golang
+            - nodejs
+            - rust
+            - pixi
+            - uv
+            - build-toolchain
+            - dev-tools
+            - pre-commit
+            - direnv
+            - gh
+            - typst
+            - asciinema
+            - claude-code
+            - codex
+            - gemini
+            - forgecode
+            - oracle
+            - devops-tools
+            - kubernetes
+            - docker-ce
+            - github-actions
+            - google-cloud
+            - google-cloud-npm
+            - grafana-tools
         ports:
-          - 2222:2222
-          - 18765:18765
+            - 2222:2222
+            - 18765:18765
         eval:
-          - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex
-                && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-            id: ubuntu-coder-ai-clis
-            exit_status: 0
-          - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo
-                || test -x /usr/bin/cargo; }
-            id: ubuntu-coder-languages
-            exit_status: 0
-          - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x
-                /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-            id: ubuntu-coder-devops
-            exit_status: 0
-          - command: test -x /usr/local/bin/ov
-            id: ubuntu-coder-ov
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:2222}
-            id: ubuntu-coder-sshd-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
-          - command: ov version
-            id: ubuntu-coder-ov-version
-            scope: deploy
-            in_container: true
-            exit_status: 0
-          - addr: 127.0.0.1:${HOST_PORT:18765}
-            id: ubuntu-coder-mcp-port
-            timeout: 5s
-            scope: deploy
-            reachable: true
+            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
+              id: ubuntu-coder-ai-clis
+              exit_status: 0
+            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
+              id: ubuntu-coder-languages
+              exit_status: 0
+            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
+              id: ubuntu-coder-devops
+              exit_status: 0
+            - command: test -x /usr/local/bin/ov
+              id: ubuntu-coder-ov
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:2222}
+              id: ubuntu-coder-sshd-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
+            - command: ov version
+              id: ubuntu-coder-ov-version
+              scope: deploy
+              in_container: true
+              exit_status: 0
+            - addr: 127.0.0.1:${HOST_PORT:18765}
+              id: ubuntu-coder-mcp-port
+              timeout: 5s
+              scope: deploy
+              reachable: true
     unsloth-studio:
         enabled: false
         base: nvidia
         platforms:
-          - linux/amd64
+            - linux/amd64
         layers:
-          - agent-forwarding
-          - unsloth-studio
-          - notebook-finetuning
-          - dbus
-          - ov
+            - agent-forwarding
+            - unsloth-studio
+            - notebook-finetuning
+            - dbus
+            - ov
         ports:
-          - 8888:8888
-          - 8000:8000
+            - 8888:8888
+            - 8000:8000
     valkey-test:
         enabled: false
         base: fedora
         layers:
-          - agent-forwarding
-          - supervisord
-          - valkey
+            - agent-forwarding
+            - supervisord
+            - valkey
         ports:
-          - 6379:6379
-
+            - 6379:6379
     # Throwaway benchmark target used by `ov eval run eval-target`.
     # The eval-target layer ships a deliberately-failing BDD scenario
     # that an AI solves by adding a write: task. Fedora base + minimal
@@ -1118,105 +1093,104 @@ images:
     eval-target:
         base: fedora
         layers:
-          - claude-code
-          - ov-mcp
-          - eval-target-layer
+            - claude-code
+            - ov-mcp
+            - eval-target-layer
         ports:
-          - 18765:18765
-
+            - 18765:18765
     # ov harness `default` score — per-pod target images.
     os:
         base: fedora
         layers:
-          - supervisord
-          - os-layer
+            - supervisord
+            - os-layer
     web:
         base: fedora
         layers:
-          - supervisord
-          - web-layer
+            - supervisord
+            - web-layer
         ports:
-          - 8080:8080
+            - 8080:8080
     tier1:
         enabled: false
         base: fedora
         layers:
-          - eval-tier1-layer
+            - eval-tier1-layer
     tier23:
         enabled: false
         base: fedora
         layers:
-          - supervisord
-          - eval-tier23-layer
+            - supervisord
+            - eval-tier23-layer
         ports:
-          - 8080:8080
+            - 8080:8080
     redis:
         enabled: false
         base: fedora
         layers:
-          - supervisord
-          - redis
-          - eval-redis-init-layer
+            - supervisord
+            - redis
+            - eval-redis-init-layer
         ports:
-          - 6379:6379
+            - 6379:6379
     # tier4-redis: server bound to 0.0.0.0 for cross-pod access (deploys as `redis`).
     redis-server:
         base: fedora
         layers:
-          - supervisord
-          - redis-server-layer
+            - supervisord
+            - redis-server-layer
         ports:
-          - 6379:6379
+            - 6379:6379
     # tier4-redis: client pod with redis-cli only (deploys as `redis-client`).
     redis-client:
         base: fedora
         layers:
-          - supervisord
-          - redis-client-layer
+            - supervisord
+            - redis-client-layer
     # mcp-protocol-probe: full Jupyter image (deploys as `mcp`).
     mcp:
         base: fedora
         layers:
-          - agent-forwarding
-          - jupyter
-          - notebook-templates
-          - dbus
-          - ov
+            - agent-forwarding
+            - jupyter
+            - notebook-templates
+            - dbus
+            - ov
         ports:
-          - 8888:8888
+            - 8888:8888
     # kubernetes-cluster: fake k8s API server (deploys as `k8s`).
     k8s:
         base: fedora
         layers:
-          - supervisord
-          - k8s-layer
+            - supervisord
+            - k8s-layer
         ports:
-          - 6443:6443
+            - 6443:6443
     # phase5 selftest: minimal sshd-only image for selftest-layer pod.
     selftest-layer:
         base: fedora
         layers:
-          - sshd
+            - sshd
     # phase5 selftest: minimal ov-only image for selftest-image pod.
     selftest-image:
         base: fedora
         layers:
-          - ov
+            - ov
     # phase6 selftest: combines sshd + ov + composition marker for composition-app pod.
     composition-app:
         base: fedora
         layers:
-          - sshd
-          - ov
-          - eval-composition-layer
+            - sshd
+            - ov
+            - eval-composition-layer
 builders:
     pacstrap:
         kind: bootstrap
         privileged: true
         output_artifact: /out/rootfs.tar.gz
         cache_mounts:
-          - dst: /var/cache/pacman/pkg
-            sharing: locked
+            - dst: /var/cache/pacman/pkg
+              sharing: locked
         phases:
             install:
                 container: |
@@ -1236,8 +1210,8 @@ builders:
         privileged: true
         output_artifact: /out/rootfs.tar.gz
         cache_mounts:
-          - dst: /var/cache/apt/archives
-            sharing: locked
+            - dst: /var/cache/apt/archives
+              sharing: locked
         phases:
             install:
                 container: |
@@ -1290,8 +1264,8 @@ builders:
     aur:
         detect_config: aur
         cache_mounts:
-          - dst: /var/cache/pacman/pkg
-            sharing: locked
+            - dst: /var/cache/pacman/pkg
+              sharing: locked
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER root
@@ -1309,23 +1283,23 @@ builders:
                 mkdir -p /tmp/aur-pkgs && \
                 find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
         copy_artifacts:
-          - src: /tmp/aur-pkgs/
-            dst: /tmp/aur-pkgs/
+            - src: /tmp/aur-pkgs/
+              dst: /tmp/aur-pkgs/
     cargo:
         detect_files:
-          - Cargo.toml
+            - Cargo.toml
         requires_src_dir: true
         inline: true
         cache_mounts:
-          - dst: /tmp/cargo-cache
+            - dst: /tmp/cargo-cache
         install_template: |
             RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
                 {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
     npm:
         detect_files:
-          - package.json
+            - package.json
         cache_mounts:
-          - dst: /tmp/npm-cache
+            - dst: /tmp/npm-cache
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER {{.UID}}
@@ -1337,17 +1311,17 @@ builders:
             COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
             RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
         copy_artifacts:
-          - src: '{{.Home}}'
-            dst: '{{.Home}}'
-            chown: true
+            - src: '{{.Home}}'
+              dst: '{{.Home}}'
+              chown: true
     pixi:
         detect_files:
-          - pixi.toml
-          - pyproject.toml
-          - environment.yml
+            - pixi.toml
+            - pyproject.toml
+            - environment.yml
         cache_mounts:
-          - dst: /tmp/pixi-cache
-          - dst: /tmp/rattler-cache
+            - dst: /tmp/pixi-cache
+            - dst: /tmp/rattler-cache
         env:
             PIXI_CACHE_DIR: /tmp/pixi-cache
             RATTLER_CACHE_DIR: /tmp/rattler-cache
@@ -1360,8 +1334,8 @@ builders:
         # without needing pixi as a top-level layer for sibling-grouped
         # auto-intermediate inheritance.
         path_contributions:
-          - "~/.pixi/bin"
-          - "~/.pixi/envs/default/bin"
+            - "~/.pixi/bin"
+            - "~/.pixi/envs/default/bin"
         runtime_env:
             PIXI_CACHE_DIR: "~/.cache/pixi"
             RATTLER_CACHE_DIR: "~/.cache/rattler"
@@ -1390,9 +1364,9 @@ builders:
             RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
         build_script: build.sh
         copy_artifacts:
-          - src: '{{.Home}}'
-            dst: '{{.Home}}'
-            chown: true
+            - src: '{{.Home}}'
+              dst: '{{.Home}}'
+              chown: true
         copy_binary:
             src: /usr/local/bin/pixi
             dst: /usr/local/bin/pixi
@@ -1401,16 +1375,16 @@ distros:
         bootstrap:
             install_cmd: pacman -Syu --noconfirm
             packages:
-              - curl
-              - ca-certificates
+                - curl
+                - ca-certificates
             cache_mounts:
-              - dst: /var/cache/pacman/pkg
-                sharing: locked
+                - dst: /var/cache/pacman/pkg
+                  sharing: locked
         formats:
             aur:
                 cache_mounts:
-                  - dst: /var/cache/pacman/pkg
-                    sharing: locked
+                    - dst: /var/cache/pacman/pkg
+                      sharing: locked
                 section_fields:
                     options: list
                     packages: list
@@ -1421,8 +1395,8 @@ distros:
                         rm -rf /tmp/aur-pkgs
             pac:
                 cache_mounts:
-                  - dst: /var/cache/pacman/pkg
-                    sharing: locked
+                    - dst: /var/cache/pacman/pkg
+                      sharing: locked
                 section_fields:
                     keys: list
                     options: list
@@ -1445,16 +1419,16 @@ distros:
                           {{.}}{{end}}
         pacstrap:
             base_packages:
-              - base
-              - base-devel
-              - linux
-              - linux-firmware
-              - openssh
-              - sudo
-              - cloud-init
-              - grub
-              - efibootmgr
-              - mkinitcpio
+                - base
+                - base-devel
+                - linux
+                - linux-firmware
+                - openssh
+                - sudo
+                - cloud-init
+                - grub
+                - efibootmgr
+                - mkinitcpio
             keyring_init_cmd: |
                 pacman-key --init && pacman-key --populate archlinux
             mirrorlist_url: https://archlinux.org/mirrorlist/all/
@@ -1559,46 +1533,46 @@ distros:
         inherits: archlinux
         pacstrap:
             base_packages:
-              - base
-              - base-devel
-              - linux-cachyos
-              - linux-cachyos-headers
-              - linux-firmware
-              - openssh
-              - sudo
-              - cloud-init
-              - grub
-              - efibootmgr
-              - mkinitcpio
+                - base
+                - base-devel
+                - linux-cachyos
+                - linux-cachyos-headers
+                - linux-firmware
+                - openssh
+                - sudo
+                - cloud-init
+                - grub
+                - efibootmgr
+                - mkinitcpio
             keyring_init_cmd: |
                 pacman-key --init && pacman-key --populate archlinux && \
                 pacman-key --recv-keys F3B607488DB35A47 && \
                 pacman-key --lsign-key F3B607488DB35A47
             mirrorlist_url: https://mirror.cachyos.org/mirrorlist.txt
             extra_repos:
-              - {name: cachyos-v3,      server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
-              - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
-              - {name: cachyos,         server: "https://mirror.cachyos.org/repo/$arch/$repo"}
-              - {name: cachyos-extra,   server: "https://mirror.cachyos.org/repo/$arch/$repo"}
+                - {name: cachyos-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
+                - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
+                - {name: cachyos, server: "https://mirror.cachyos.org/repo/$arch/$repo"}
+                - {name: cachyos-extra, server: "https://mirror.cachyos.org/repo/$arch/$repo"}
     debian:
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends
             packages:
-              - curl
-              - ca-certificates
-              - gnupg
+                - curl
+                - ca-certificates
+                - gnupg
             cache_mounts:
-              - dst: /var/cache/apt
-                sharing: locked
-              - dst: /var/lib/apt
-                sharing: locked
+                - dst: /var/cache/apt
+                  sharing: locked
+                - dst: /var/lib/apt
+                  sharing: locked
         formats:
             deb:
                 cache_mounts:
-                  - dst: /var/cache/apt
-                    sharing: locked
-                  - dst: /var/lib/apt
-                    sharing: locked
+                    - dst: /var/cache/apt
+                      sharing: locked
+                    - dst: /var/lib/apt
+                      sharing: locked
                 section_fields:
                     options: list
                     packages: list
@@ -1626,35 +1600,35 @@ distros:
             variant: minbase
             components: "main"
             include_packages:
-              - ca-certificates
-              - gnupg
+                - ca-certificates
+                - gnupg
             base_packages:
-              # systemd-sysv provides /sbin/init -> /lib/systemd/systemd.
-              # WITHOUT it, run-init from the initramfs aborts with
-              # "Target filesystem doesn't have requested /sbin/init"
-              # and the VM drops into an emergency busybox shell.
-              - systemd-sysv
-              - dbus
-              # initramfs-tools is only Recommended (not Depended) by
-              # linux-image-*, and we use --no-install-recommends. Without
-              # it, no /usr/sbin/update-initramfs binary, no initrd.img
-              # binary written, and the kernel panics "VFS: Cannot open
-              # root device" because there's no userspace to resolve
-              # root=UUID=<x>.
-              - initramfs-tools
-              - linux-image-amd64
-              - grub-efi-amd64
-              - efibootmgr
-              - openssh-server
-              - sudo
-              - cloud-init
-              - qemu-guest-agent
-              - systemd-resolved
-              - systemd-timesyncd
-              - locales
-              - netbase
-              - iproute2
-              - iputils-ping
+                # systemd-sysv provides /sbin/init -> /lib/systemd/systemd.
+                # WITHOUT it, run-init from the initramfs aborts with
+                # "Target filesystem doesn't have requested /sbin/init"
+                # and the VM drops into an emergency busybox shell.
+                - systemd-sysv
+                - dbus
+                # initramfs-tools is only Recommended (not Depended) by
+                # linux-image-*, and we use --no-install-recommends. Without
+                # it, no /usr/sbin/update-initramfs binary, no initrd.img
+                # binary written, and the kernel panics "VFS: Cannot open
+                # root device" because there's no userspace to resolve
+                # root=UUID=<x>.
+                - initramfs-tools
+                - linux-image-amd64
+                - grub-efi-amd64
+                - efibootmgr
+                - openssh-server
+                - sudo
+                - cloud-init
+                - qemu-guest-agent
+                - systemd-resolved
+                - systemd-timesyncd
+                - locales
+                - netbase
+                - iproute2
+                - iputils-ping
         bootloader:
             install_template: |
                 # Seed common /etc files mkinitcpio-style hooks expect.
@@ -1776,18 +1750,18 @@ distros:
         bootstrap:
             install_cmd: dnf install -y --setopt=install_weak_deps=False
             packages:
-              - curl
-              - ca-certificates
+                - curl
+                - ca-certificates
             cache_mounts:
-              - dst: /var/cache/libdnf5
-                sharing: locked
+                - dst: /var/cache/libdnf5
+                  sharing: locked
         workarounds:
-          - rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true
+            - rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true
         formats:
             rpm:
                 cache_mounts:
-                  - dst: /var/cache/libdnf5
-                    sharing: locked
+                    - dst: /var/cache/libdnf5
+                      sharing: locked
                 section_fields:
                     copr: list
                     exclude: list
@@ -1851,34 +1825,34 @@ distros:
             # debootstrap --components expects comma-separated, not space.
             components: "main,universe"
             include_packages:
-              - ca-certificates
-              - gnupg
+                - ca-certificates
+                - gnupg
             base_packages:
-              # systemd-sysv provides /sbin/init (see distro.debian).
-              - systemd-sysv
-              - dbus
-              # initramfs-tools is Recommended-only; with --no-install-
-              # recommends, missing → no initrd → kernel panic on boot.
-              - initramfs-tools
-              - linux-image-generic
-              - grub-efi-amd64
-              - efibootmgr
-              - openssh-server
-              - sudo
-              - cloud-init
-              - qemu-guest-agent
-              - systemd-resolved
-              - systemd-timesyncd
-              - locales
-              - netbase
-              - iproute2
-              - iputils-ping
-        # bootloader: inherited verbatim from debian — update-grub /
-        # update-initramfs / chroot-grub-install are identical on Ubuntu.
+                # systemd-sysv provides /sbin/init (see distro.debian).
+                - systemd-sysv
+                - dbus
+                # initramfs-tools is Recommended-only; with --no-install-
+                # recommends, missing → no initrd → kernel panic on boot.
+                - initramfs-tools
+                - linux-image-generic
+                - grub-efi-amd64
+                - efibootmgr
+                - openssh-server
+                - sudo
+                - cloud-init
+                - qemu-guest-agent
+                - systemd-resolved
+                - systemd-timesyncd
+                - locales
+                - netbase
+                - iproute2
+                - iputils-ping
+                # bootloader: inherited verbatim from debian — update-grub /
+                # update-initramfs / chroot-grub-install are identical on Ubuntu.
 inits:
     supervisord:
         layer_fields:
-          - service
+            - service
         depends_layer: supervisord
         model: fragment_assembly
         header_file: templates/supervisord.header.conf
@@ -1896,8 +1870,7 @@ inits:
             redirect_stderr=true
         stage_name: supervisord-conf
         stage_header_copy: COPY templates/supervisord.header.conf /supervisor/00-header.conf
-        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}}
-            /supervisor/{{.FileName}}
+        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /supervisor/{{.FileName}}
         assembly_template: |
             # Assemble supervisord.conf
             # chmod 0644 explicitly — relying on umask yields 0600 on Arch (breaks
@@ -1907,13 +1880,13 @@ inits:
                 cat /supervisor/*.conf > /etc/supervisord.conf && \
                 chmod 0644 /etc/supervisord.conf
         entrypoint:
-          - supervisord
-          - -n
-          - -c
-          - /etc/supervisord.conf
+            - supervisord
+            - -n
+            - -c
+            - /etc/supervisord.conf
         fallback_entrypoint:
-          - sleep
-          - infinity
+            - sleep
+            - infinity
         management_tool: supervisorctl
         management_commands:
             restart: restart {{.Service}}
@@ -1987,16 +1960,15 @@ inits:
                 {{- end}}
     systemd:
         layer_fields:
-          - service
+            - service
         layer_files:
-          - '*.service'
+            - '*.service'
         requires_capabilities:
-          - preserve_user
+            - preserve_user
         model: file_copy
         fragment_dir: systemd
         stage_name: systemd-services
-        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}}
-            /systemd/{{.FileName}}
+        stage_fragment_copy: COPY .build/{{.ImageName}}/{{.FragmentDir}}/{{.FileName}} /systemd/{{.FileName}}
         assembly_template: |
             # Install systemd user services
             RUN --mount=type=bind,from=systemd-services,source=/systemd,target=/systemd \
@@ -2009,8 +1981,8 @@ inits:
         post_assembly_template: |
             RUN bootc container lint
         fallback_entrypoint:
-          - sleep
-          - infinity
+            - sleep
+            - infinity
         management_tool: systemctl
         management_commands:
             restart: --user restart {{.Service}}
@@ -2083,7 +2055,6 @@ inits:
                 {{- else}}
                 WantedBy=multi-user.target
                 {{- end}}
-
 # vm — phase 7 (vm-control-libvirt-spice). The libvirt domain
 # `ov-vm` is defined externally (not via `ov vm build`); this
 # entity exists so `ov test libvirt info vm` and
@@ -2096,12 +2067,12 @@ vm:
             builder_image: archlinux-pacstrap-builder
             distro: archlinux
             packages:
-              - sudo
-              - openssh
-              - qemu-guest-agent
-              - cloud-init
-              - grub
-              - efibootmgr
+                - sudo
+                - openssh
+                - qemu-guest-agent
+                - cloud-init
+                - grub
+                - efibootmgr
             rootfs: ext4
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
@@ -2117,15 +2088,15 @@ vm:
             key_source: generate
         cloud_init:
             users:
-              - name: arch
-                sudo: true
-                shell: /bin/bash
+                - name: arch
+                  sudo: true
+                  shell: /bin/bash
             runcmd:
-              - systemctl enable --now sshd
-              - systemctl enable --now qemu-guest-agent
-              # Diagnostic: write network + sshd state to /boot so it can
-              # be mount-inspected after a failed-boot cycle.
-              - "{ ip a; echo ===listen===; ss -tlnp; echo ===sshd===; systemctl status sshd --no-pager; } > /boot/ov-diag.txt 2>&1"
+                - systemctl enable --now sshd
+                - systemctl enable --now qemu-guest-agent
+                # Diagnostic: write network + sshd state to /boot so it can
+                # be mount-inspected after a failed-boot cycle.
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===sshd===; systemctl status sshd --no-pager; } > /boot/ov-diag.txt 2>&1"
     cachyos-vm:
         source:
             kind: bootstrap
@@ -2133,12 +2104,12 @@ vm:
             builder_image: cachyos-pacstrap-builder
             distro: cachyos
             packages:
-              - sudo
-              - openssh
-              - qemu-guest-agent
-              - cloud-init
-              - grub
-              - efibootmgr
+                - sudo
+                - openssh
+                - qemu-guest-agent
+                - cloud-init
+                - grub
+                - efibootmgr
             rootfs: btrfs
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 25G
@@ -2154,12 +2125,12 @@ vm:
             key_source: generate
         cloud_init:
             users:
-              - name: cachy
-                sudo: true
-                shell: /bin/bash
+                - name: cachy
+                  sudo: true
+                  shell: /bin/bash
             runcmd:
-              - systemctl enable --now sshd
-              - systemctl enable --now qemu-guest-agent
+                - systemctl enable --now sshd
+                - systemctl enable --now qemu-guest-agent
     debian-debootstrap:
         source:
             kind: bootstrap
@@ -2167,10 +2138,10 @@ vm:
             builder_image: debian-debootstrap-builder
             distro: debian
             packages:
-              - sudo
-              - openssh-server
-              - qemu-guest-agent
-              - cloud-init
+                - sudo
+                - openssh-server
+                - qemu-guest-agent
+                - cloud-init
             rootfs: ext4
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
@@ -2186,14 +2157,14 @@ vm:
             key_source: generate
         cloud_init:
             users:
-              - name: debian
-                sudo: true
-                shell: /bin/bash
+                - name: debian
+                  sudo: true
+                  shell: /bin/bash
             runcmd:
-              - systemctl enable --now ssh
-              - systemctl enable --now qemu-guest-agent
-              # Diagnostic: write boot state to /boot for post-mortem mount.
-              - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
+                - systemctl enable --now ssh
+                - systemctl enable --now qemu-guest-agent
+                # Diagnostic: write boot state to /boot for post-mortem mount.
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
     ubuntu-debootstrap:
         source:
             kind: bootstrap
@@ -2201,10 +2172,10 @@ vm:
             builder_image: ubuntu-debootstrap-builder
             distro: ubuntu
             packages:
-              - sudo
-              - openssh-server
-              - qemu-guest-agent
-              - cloud-init
+                - sudo
+                - openssh-server
+                - qemu-guest-agent
+                - cloud-init
             rootfs: ext4
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
@@ -2220,13 +2191,13 @@ vm:
             key_source: generate
         cloud_init:
             users:
-              - name: ubuntu
-                sudo: true
-                shell: /bin/bash
+                - name: ubuntu
+                  sudo: true
+                  shell: /bin/bash
             runcmd:
-              - systemctl enable --now ssh
-              - systemctl enable --now qemu-guest-agent
-              - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
+                - systemctl enable --now ssh
+                - systemctl enable --now qemu-guest-agent
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
     vm:
         source:
             kind: cloud_image
@@ -2247,14 +2218,14 @@ vm:
             key_source: generate
         cloud_init:
             packages:
-              - qemu-guest-agent
-              - curl
+                - qemu-guest-agent
+                - curl
             runcmd:
-              - "setenforce 0 || true"
-              - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
-              - "echo '10.89.0.1 ov-web' >> /etc/hosts"
-              - "systemctl enable --now qemu-guest-agent"
-              - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
+                - "setenforce 0 || true"
+                - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
+                - "echo '10.89.0.1 ov-web' >> /etc/hosts"
+                - "systemctl enable --now qemu-guest-agent"
+                - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
         libvirt:
             devices:
                 channels:

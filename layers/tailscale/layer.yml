@@ -4,10 +4,25 @@ layer:
   packages:
     - tailscale
   distros:
+    archlinux: {}
+    debian-13:
+      repos:
+        - name: tailscale
+          url: "https://pkgs.tailscale.com/stable/debian"
+          key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+          suite: trixie
+          components: main
     fedora:
       repos:
         - name: tailscale-stable
           url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
+    ubuntu-24.04:
+      repos:
+        - name: tailscale
+          url: "https://pkgs.tailscale.com/stable/ubuntu"
+          key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+          suite: noble
+          components: main
   tasks:
     - cmd: systemctl enable tailscaled.service 2>/dev/null || true
       user: root

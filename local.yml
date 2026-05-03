@@ -11,6 +11,7 @@ local:
       - gnupg
       - keepassxc
       - keepassxc-keyring
+      - tailscale
       - build-toolchain
       - golang
       - rust

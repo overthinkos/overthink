@@ -294,12 +294,25 @@ func compileTaskSteps(layer *Layer, img *ResolvedImage) []InstallStep {
 	for i := range layer.tasks {
 		task := &layer.tasks[i]
 		userDir, _ := resolveUserSpec(task.User, img)
+		// Snapshot layer.vars per task so the host/local-deploy renderer
+		// can emit `export K=V` lines. Build-time gets these via
+		// Containerfile ENV (emitVarsEnv); deploy-time has no such
+		// mechanism, and references like ${K3D_VERSION} in a download
+		// URL would otherwise expand to empty.
+		var layerVars map[string]string
+		if len(layer.vars) > 0 {
+			layerVars = make(map[string]string, len(layer.vars))
+			for k, v := range layer.vars {
+				layerVars[k] = v
+			}
+		}
 		out = append(out, &TaskStep{
 			Task:         task,
 			LayerName:    layer.Name,
 			LayerDir:     layer.SourceDir,
 			CtxPath:      layer.SourceDir,
 			ResolvedUser: userDir,
+			LayerVars:    layerVars,
 		})
 	}
 	return out

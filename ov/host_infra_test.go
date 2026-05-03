@@ -319,6 +319,46 @@ func TestEnsureAndRemoveManagedBlock(t *testing.T) {
 	}
 }
 
+// TestRenderEnvdBodyPathDoubleQuoted asserts the PATH export in an
+// env.d file uses double quotes so $PATH EXPANDS at sourcing time.
+// A previous version single-quoted the value, which left the PATH
+// literally set to "/some/dir:$PATH" — and each subsequent layer's
+// env.d then clobbered it with another literal "/other/dir:$PATH",
+// losing every previous layer's PATH entries (npm-global, cargo,
+// pixi, ...). The result was that npm-installed binaries weren't
+// on PATH after a target:local deploy unless the user manually
+// fixed up their shell.
+func TestRenderEnvdBodyPathDoubleQuoted(t *testing.T) {
+	body := renderEnvdBody("nodejs", nil, []string{"/home/u/.npm-global/bin"})
+	if !strings.Contains(body, `export PATH="/home/u/.npm-global/bin:$PATH"`) {
+		t.Errorf("PATH export not double-quoted with $PATH expansion; got:\n%s", body)
+	}
+	// Negative: must NOT contain the buggy single-quoted form.
+	if strings.Contains(body, `export PATH='/home/u/.npm-global/bin:$PATH'`) {
+		t.Errorf("PATH export re-introduced the single-quote bug:\n%s", body)
+	}
+}
+
+// TestManagedBlockBodyGlobUnquoted asserts the bash/zsh managed-block
+// snippet leaves the *.env glob UNQUOTED so the shell expands it. A
+// previous version wrapped the path in double quotes which made the
+// loop iterate once over the literal pattern, the `[ -r ]` test
+// fail, and no env files get sourced — leaving deployed layers'
+// PATH / NPM_CONFIG_PREFIX / etc. unset until the user manually
+// sourced ~/.config/overthink/env.d/*.env.
+func TestManagedBlockBodyGlobUnquoted(t *testing.T) {
+	home := "/home/example"
+	body := ManagedBlockBody(ShellBash, home)
+	// The literal that used to be present and broke globbing:
+	if strings.Contains(body, `"/home/example/.config/overthink/env.d/*.env"`) {
+		t.Errorf("managed block re-introduced the quoted-glob bug:\n%s", body)
+	}
+	// Unquoted path with the glob present:
+	if !strings.Contains(body, `for f in /home/example/.config/overthink/env.d/*.env`) {
+		t.Errorf("managed block missing unquoted glob; got:\n%s", body)
+	}
+}
+
 func TestShellInitFilePath(t *testing.T) {
 	home := "/home/atrawog"
 	tests := map[ShellKind]string{
@@ -367,5 +407,26 @@ func TestShQuoteEnv(t *testing.T) {
 		if got := shQuoteEnv(in); got != want {
 			t.Errorf("shQuoteEnv(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestBuildBuilderRunArgsRunAsRoot asserts the RunAsRoot path emits
+// `--user 0:0`. LocalDeployTarget.execBuilder always sets RunAsRoot=true
+// because rootless podman maps in-container uid 0 to the operator's host
+// uid; bind-mounts of $HOME/.cargo / $HOME/.npm-global / etc. are then
+// writable. Without this flag the in-container user is mapped to a
+// subordinate uid that doesn't match the bind-mount owner and writes
+// fail with EACCES.
+func TestBuildBuilderRunArgsRunAsRoot(t *testing.T) {
+	opts := BuilderRunOpts{
+		BuilderImage: "archlinux-builder:latest",
+		LayerDir:     "/home/user/layers/pre-commit",
+		HostHome:     "/home/user",
+		RunAsRoot:    true,
+	}
+	args := buildBuilderRunArgs(opts)
+	full := strings.Join(args, " ")
+	if !strings.Contains(full, "--user 0:0") {
+		t.Errorf("RunAsRoot did not emit --user 0:0; got: %s", full)
 	}
 }

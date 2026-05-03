@@ -195,6 +195,26 @@ func stageInlineContent(buildDir, contextRelPrefix, layerName, content string) (
 	return contextRel, nil
 }
 
+// buildArchExports returns a multi-line shell snippet that exports both
+// BUILD_ARCH (uname-style: x86_64/aarch64) and ARCH (BuildKit-style:
+// amd64/arm64/arm) so layer download URLs templating ${ARCH} match the
+// build-time behavior. The build-time path gets ARCH from BuildKit's
+// TARGETARCH (set via ENV in emitVarsEnv); the host/vm-deploy paths
+// have no such mechanism, so this helper translates uname → BuildKit
+// inline. Used by renderDownloadScript and renderTaskCommand on
+// LocalDeployTarget. Lines end in \n; suitable for direct
+// strings.Builder.WriteString.
+func buildArchExports() string {
+	return "BUILD_ARCH=$(uname -m)\n" +
+		"case \"$BUILD_ARCH\" in\n" +
+		"  x86_64) ARCH=amd64 ;;\n" +
+		"  aarch64) ARCH=arm64 ;;\n" +
+		"  armv7l|armv7|armhf) ARCH=arm ;;\n" +
+		"  *) ARCH=$BUILD_ARCH ;;\n" +
+		"esac\n" +
+		"export BUILD_ARCH ARCH\n"
+}
+
 // emitVarsEnv writes ENV directives for layer.Vars and the build-arg-sourced
 // ARCH auto-export. Sorts vars by key for deterministic output.
 // Emitted once per layer, before the layer's tasks block.
@@ -450,7 +470,7 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 	// bash; no $ / `backtick` substitution happens during heredoc parsing, so
 	// authors' $(cmd) / ${VAR} remain intact for bash itself to evaluate.
 	b.WriteString("bash <<'OVCMD'\n")
-	b.WriteString("BUILD_ARCH=$(uname -m)\n")
+	b.WriteString(buildArchExports())
 	// Export task-declared env vars (including secret_requires values
 	// resolved by InjectSecretsIntoPlans) BEFORE the user's cmd body
 	// runs. Without this, references like `${K3S_CLUSTER_TOKEN}` inside

@@ -1,0 +1,47 @@
+version: 4
+
+local:
+  cachyos-dx:
+    layers:
+      - dev-tools
+      - gh
+      - pre-commit
+      - tmux
+      - direnv
+      - build-toolchain
+      - golang
+      - rust
+      - nodejs
+      - uv
+      - claude-code
+      - codex
+      - gemini
+      - oracle
+      - forgecode
+      - devops-tools
+      - docker-ce
+      - kubernetes
+
+    install_opts:
+      with_services: true
+      allow_repo_changes: true
+      allow_root_tasks: true
+      # Use the locally-cached archlinux-builder for cargo/npm/pixi steps.
+      # FQDN form bypasses the need for podman unqualified-search-registries
+      # config, and archlinux-builder is more appropriate than the project
+      # default fedora-builder for an Arch/CachyOS host.
+      builder_image: ghcr.io/overthinkos/archlinux-builder:2026.122.2252
+
+    env:
+      - EDITOR=nvim
+      - PAGER=less
+
+    description:
+      feature: CachyOS Developer Experience profile
+      narrative: |
+        Kitchen-sink dev workstation: core CLI tools, full Arch build
+        toolchain, Go/Rust/Node/Python runtimes, the full AI-coding-agent
+        fleet (Claude Code, Codex, Gemini, Oracle, ForgeCode), and
+        DevOps/container tooling (docker, kubectl, helm, AWS CLI, jq).
+        Targets the qc CachyOS host via direct local exec.
+      tag: [working]

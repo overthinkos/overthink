@@ -368,6 +368,18 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		Env:          envVars,
 		HostHome:     t.HostHome,
 		DryRun:       opts.DryRun,
+		// Rootless-podman bind-mount semantics: with `--user N:N` (N != 0)
+		// the in-container user is mapped to a subordinate uid from
+		// /etc/subuid that does NOT match the operator's host uid that
+		// owns $HOME/.cargo / $HOME/.npm-global / etc. — bind-mounts
+		// appear as "nobody"-owned and writes fail with EACCES. With
+		// `--user 0:0` rootless podman maps in-container uid 0 → host
+		// invoking-user uid, so files written by container-root are
+		// owned by the operator on the host and bind-mounts are
+		// writable. `--userns=keep-id` would also fix this on paper
+		// but triggers a `readlink \`\`: No such file or directory`
+		// crun bug on common podman 5.x / crun 1.27 combinations.
+		RunAsRoot: true,
 	})
 	if err != nil {
 		return err
@@ -439,6 +451,13 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		if ctxPath != "" {
 			body = strings.ReplaceAll(body, "/ctx/", ctxPath+"/")
 		}
+		// Prepend BUILD_ARCH/ARCH + layer.vars exports so cmd bodies
+		// templating ${ARCH} / ${MY_LAYER_VAR} resolve at deploy-time
+		// the same as they do at build-time. Build-time gets these
+		// from BuildKit's TARGETARCH ENV + emitVarsEnv ENV directives.
+		if preamble := taskShellPreamble(s); preamble != "" {
+			body = preamble + body
+		}
 		return body, nil
 	case task.Mkdir != "":
 		mode := task.Mode
@@ -474,9 +493,30 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
 			mode, shQuoteArg(task.Write), task.Content), nil
 	case task.Download != "":
-		return renderDownloadScript(task), nil
+		return renderDownloadScript(task, s.LayerVars), nil
 	}
 	return "", fmt.Errorf("task has no supported verb: %+v", task)
+}
+
+// taskShellPreamble returns the BUILD_ARCH/ARCH exports plus any
+// layer.vars exports (sorted for deterministic output) so cmd: bodies
+// can reference ${ARCH} / ${MY_LAYER_VAR} at deploy-time the same way
+// they do at build-time. Trailing newline included; safe to prepend
+// to a script.
+func taskShellPreamble(s *TaskStep) string {
+	var b strings.Builder
+	b.WriteString(buildArchExports())
+	if len(s.LayerVars) > 0 {
+		keys := make([]string, 0, len(s.LayerVars))
+		for k := range s.LayerVars {
+			keys = append(keys, k)
+		}
+		sortStrings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(s.LayerVars[k]))
+		}
+	}
+	return b.String()
 }
 
 // renderDownloadScript emits a shell snippet that fetches task.Download
@@ -485,7 +525,12 @@ func (t *LocalDeployTarget) renderTaskCommand(s *TaskStep) (string, error) {
 // / tar.xz / tar.zst / zip / sh / none), strip_components, include,
 // mode (applied to the resulting file or directory), env vars injected
 // during the download (used by install scripts).
-func renderDownloadScript(task *Task) string {
+//
+// layerVars are exported alongside task.Env so layer.yml `vars:` keys
+// referenced inside the download URL (e.g. ${K3D_VERSION}) resolve
+// correctly. Build-time gets these via Containerfile ENV; deploy-time
+// has no equivalent without this.
+func renderDownloadScript(task *Task, layerVars map[string]string) string {
 	url := task.Download
 	to := task.To
 	extract := task.Extract
@@ -508,8 +553,21 @@ func renderDownloadScript(task *Task) string {
 	}
 
 	// Emit each env var as a prefix export so the downloaded script can
-	// see it (matches the container behavior).
+	// see it (matches the container behavior). layerVars come first
+	// (lower priority) so per-task task.Env values override on key
+	// collision — same precedence the container path gets via ENV +
+	// per-RUN env overrides.
 	var envPrefix strings.Builder
+	if len(layerVars) > 0 {
+		lkeys := make([]string, 0, len(layerVars))
+		for k := range layerVars {
+			lkeys = append(lkeys, k)
+		}
+		sortStrings(lkeys)
+		for _, k := range lkeys {
+			fmt.Fprintf(&envPrefix, "export %s=%s\n", k, shQuoteArg(layerVars[k]))
+		}
+	}
 	keys := make([]string, 0, len(task.Env))
 	for k := range task.Env {
 		keys = append(keys, k)
@@ -526,7 +584,14 @@ func renderDownloadScript(task *Task) string {
 	// Must match the container-build renderer in tasks.go which exports the
 	// same var — otherwise the same layer.yml download works at build time
 	// but fails under `ov deploy add host/vm:<name>`.
-	b.WriteString("BUILD_ARCH=$(uname -m)\n")
+	//
+	// ARCH is the BuildKit-style triplet (amd64/arm64/arm) — same format
+	// the container-build path gets from BuildKit's TARGETARCH. Without
+	// this, layers that template `${ARCH}` into a download URL (e.g.
+	// the kubernetes layer's `k3d-linux-${ARCH}`) get an empty value at
+	// host-deploy time and curl 404s. Mapping uname-style → BuildKit
+	// covers the architectures ov officially targets.
+	b.WriteString(buildArchExports())
 	b.WriteString(envPrefix.String())
 	// tmp location deterministic per-task so retries don't leak.
 	b.WriteString("ovtmp=\"$(mktemp -d)\"\n")
@@ -937,18 +1002,24 @@ func renderPixiScript(s *BuilderStep, hostHome string) string {
 	return b.String()
 }
 
-// renderNpmScript matches build.yml builder.npm.stage_template: copy
-// package.json into $HOME, run npm install -g of its dependencies.
+// renderNpmScript matches build.yml builder.npm.stage_template: stage
+// package.json in a writable workdir, run npm install -g of its
+// dependencies. /tmp is used because $HOME on the LocalDeployTarget is
+// only partially bind-mounted (.cargo / .npm-global / .pixi / .cache/ov
+// — see UserScopeBindMounts) and the implicit parent directory inside
+// the builder pod is root-owned, so a `cd "$HOME" && cp ... package.json`
+// fails with Permission denied for the non-root user the builder runs as.
 func renderNpmScript(s *BuilderStep, hostHome string) string {
 	var b strings.Builder
 	b.WriteString("set -e\n")
-	b.WriteString("cd \"$HOME\"\n")
 	b.WriteString("if [ ! -f /work/package.json ]; then echo 'no package.json in /work' >&2; exit 1; fi\n")
-	b.WriteString("cp /work/package.json package.json\n")
+	b.WriteString("STAGE=$(mktemp -d)\n")
+	b.WriteString("cp /work/package.json \"$STAGE/package.json\"\n")
+	b.WriteString("cd \"$STAGE\"\n")
 	// Same dependency extraction as build.yml:244 — read the deps map
 	// and turn it into `pkg@version` or `pkg` tokens for npm install -g.
 	b.WriteString("node -e 'var d=require(\"./package.json\").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v===\"*\"?n:n+\"@\"+v)' | xargs -r npm install -g\n")
-	b.WriteString("rm -f package.json\n")
+	b.WriteString("rm -rf \"$STAGE\"\n")
 	return b.String()
 }
 

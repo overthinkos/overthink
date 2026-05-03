@@ -348,6 +348,27 @@ deployment:
             # contains: operator-map form for substring matching (scalar
             # shorthand under `contains:` is parsed as equals).
             - {id: kv-matching, scope: deploy, matching: "k3s-vm up", contains: {contains: "k3s"}}
+    # =================================================================
+    # qc — this CachyOS workstation, target: local + host: local
+    # ---------------------------------------------------------------
+    # Applies the cachyos-dx kind:local template (defined in local.yml)
+    # directly to the current machine via ShellExecutor — no SSH, no VM,
+    # no container. NOT marked disposable: this is the operator's real
+    # workstation; every install/uninstall is user-authorized.
+    # =================================================================
+    qc:
+        target: local
+        local: cachyos-dx
+        host: local
+        install_opts:
+            with_services: true
+            allow_repo_changes: true
+            allow_root_tasks: true
+        env:
+            - EDITOR=nvim
+        description:
+            feature: Apply cachyos-dx to this workstation
+            tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.
 # Each entity is a build-time spec; deploy-time properties (disposable,

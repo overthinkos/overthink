@@ -1237,6 +1237,20 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Host != "" {
 				existing.Host = overlay.Host
 			}
+			// Schema v4 local cutover (kind:host → kind:local): the
+			// kind:local template ref + Ansible-style SSH overrides. Without
+			// these the per-machine overlay or include-file load silently
+			// drops the template ref, leaving target:local deployments with
+			// an empty layer list (and a no-op runLocal).
+			if overlay.Local != "" {
+				existing.Local = overlay.Local
+			}
+			if overlay.User != "" {
+				existing.User = overlay.User
+			}
+			if overlay.SSHArgs != nil {
+				existing.SSHArgs = overlay.SSHArgs
+			}
 			// Inside is derived from the Nested tree at load time and not
 			// authored — skip overlay merge.
 			// Disposable / Lifecycle (R10-load-bearing). The overlay is

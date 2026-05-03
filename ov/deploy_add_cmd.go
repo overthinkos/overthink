@@ -737,6 +737,21 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if builderCfg != nil {
 		img.BuilderConfig = builderCfg
 	}
+	// Populate img.Builder from cfg.Defaults.Builder. ResolveImage does
+	// this for normal images, but the synthetic-image path used by
+	// `ov deploy add <target:local>` (and the legacy `host`/`vm:<name>`
+	// adhoc paths) skipped it — leaving runLocal/execBuilder with no
+	// builder image when a layer's install needs cargo/npm/pixi/etc.
+	if cfg != nil && len(cfg.Defaults.Builder) > 0 {
+		if img.Builder == nil {
+			img.Builder = make(BuilderMap)
+		}
+		for typ, b := range cfg.Defaults.Builder {
+			if _, set := img.Builder[typ]; !set {
+				img.Builder[typ] = b
+			}
+		}
+	}
 	var plans []*InstallPlan
 	for _, name := range order {
 		p, err := BuildDeployPlan(layers[name], img, hostCtx)
@@ -996,12 +1011,21 @@ func detectHostContext() HostContext {
 // syntheticHostImage returns a minimal ResolvedImage suitable for
 // compiling a single-layer plan against the host. Used when the user
 // invokes `ov deploy add host <layer-ref>` without a containing image.
+//
+// UID/GID/User/Home come from the operator's own process so a layer
+// task carrying `user: ${USER}` resolves to the operator (not root).
+// Without this, resolveUserSpec's `${USER}` branch returns img.UID
+// which would default to 0 — quietly routing the task through
+// ScopeSystem (sudo), installing user-scoped tooling like
+// `cargo install` to /root/.cargo/bin instead of $HOME/.cargo/bin.
 func syntheticHostImage() *ResolvedImage {
 	hd, _ := DetectHostDistro()
 	img := &ResolvedImage{
 		Name:         "host-adhoc",
 		Home:         os.Getenv("HOME"),
 		User:         os.Getenv("USER"),
+		UID:          os.Getuid(),
+		GID:          os.Getgid(),
 		BuildFormats: []string{},
 	}
 	if hd != nil {

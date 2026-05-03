@@ -124,12 +124,30 @@ func renderEnvdBody(layerName string, envVars map[string]string, pathAdd []strin
 		fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteEnv(envVars[k]))
 	}
 	if len(pathAdd) > 0 {
-		// Build PATH prepend entries.
+		// Build PATH prepend entries. Double-quote the value so $PATH
+		// EXPANDS at sourcing time — single-quoting (shQuoteEnv) makes
+		// each layer's env.d set PATH to the literal string
+		// "/some/dir:$PATH", which the next layer's env.d then clobbers
+		// with its own literal "/other/dir:$PATH", losing every prior
+		// layer's PATH entries. Layer-supplied paths are absolute, so
+		// double-quoting is safe; we only escape characters with
+		// special meaning inside double quotes.
 		parts := append([]string(nil), pathAdd...)
 		parts = append(parts, `$PATH`)
-		fmt.Fprintf(&b, "export PATH=%s\n", shQuoteEnv(strings.Join(parts, ":")))
+		fmt.Fprintf(&b, "export PATH=\"%s\"\n", shDoubleQuotePath(strings.Join(parts, ":")))
 	}
 	return b.String()
+}
+
+// shDoubleQuotePath escapes a PATH-list value for use INSIDE double
+// quotes. Only the four chars with special meaning inside POSIX-sh
+// double quotes need escaping: $ ` " \. We DON'T escape $ — the
+// caller wants $PATH to expand. So escape just the others. PATH
+// entries from layer.yml are absolute paths and won't contain those
+// characters in practice; this is purely defensive.
+func shDoubleQuotePath(v string) string {
+	r := strings.NewReplacer(`\`, `\\`, "`", "\\`", `"`, `\"`)
+	return r.Replace(v)
 }
 
 // shQuoteEnv single-quotes a value for POSIX sh. Inside single quotes
@@ -165,7 +183,12 @@ func ManagedBlockBody(shell ShellKind, hostHome string) string {
   end
 end`, envdGlob)
 	default: // bash/zsh POSIX
-		return fmt.Sprintf(`for f in "%s"; do [ -r "$f" ] && . "$f"; done`, envdGlob)
+		// Glob is intentionally UNQUOTED so the shell expands *.env.
+		// Quoting (`"%s"`) suppresses expansion — the loop then iterates
+		// once over the literal pattern, the `[ -r ]` test fails, and
+		// no env files get sourced. The path is ov-controlled so there
+		// are no word-splitting concerns from spaces.
+		return fmt.Sprintf(`for f in %s; do [ -r "$f" ] && . "$f"; done`, envdGlob)
 	}
 }
 

@@ -695,8 +695,10 @@ func renderVmTaskCommand(s *TaskStep) string {
 	// layer authors can declare env vars and have them reach the shell
 	// regardless of target (host/vm). Also required for the secret-
 	// injection path (ov/layer_secrets.go InjectSecretsIntoPlans) to
-	// propagate credential-store-resolved values to VM deploys.
-	envPrelude := ""
+	// propagate credential-store-resolved values to VM deploys. Layer
+	// vars are appended via taskShellPreamble so cmd bodies templating
+	// ${LAYER_VAR} resolve at deploy-time the same as build-time.
+	envPrelude := taskShellPreamble(s)
 	if len(task.Env) > 0 {
 		keys := make([]string, 0, len(task.Env))
 		for k := range task.Env {
@@ -704,6 +706,7 @@ func renderVmTaskCommand(s *TaskStep) string {
 		}
 		sort.Strings(keys)
 		var b strings.Builder
+		b.WriteString(envPrelude)
 		for _, k := range keys {
 			fmt.Fprintf(&b, "export %s=%s\n", k, shQuoteArg(task.Env[k]))
 		}
@@ -753,7 +756,7 @@ func renderVmTaskCommand(s *TaskStep) string {
 		return fmt.Sprintf("install -m%s /dev/stdin %s <<'OV_WRITE'\n%s\nOV_WRITE",
 			mode, deployShellQuote(task.Write), task.Content)
 	case task.Download != "":
-		return renderDownloadScript(task)
+		return renderDownloadScript(task, s.LayerVars)
 	}
 	return ""
 }

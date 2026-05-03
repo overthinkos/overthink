@@ -139,6 +139,53 @@ func TestHasChildren(t *testing.T) {
 	}
 }
 
+// TestMergeDeployConfigsLocalCutoverFields locks in the field-level merge for
+// the schema-v4 local cutover (kind:host → kind:local) additions: Local, User,
+// SSHArgs. Without these, target:local deployments authored in the project
+// deploy.yml lost their template ref + ssh overrides whenever resolveTreeRoot
+// merged via MergeDeployConfigs(projectDC, localDC), leaving runLocal with an
+// empty layer list and a silent no-op install.
+func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
+	project := &DeployConfig{Deployment: map[string]DeploymentNode{
+		"qc": {
+			Target:  "local",
+			Local:   "cachyos-dx",
+			Host:    "local",
+			User:    "alice",
+			SSHArgs: []string{"-o", "ServerAliveInterval=30"},
+		},
+	}}
+	merged := MergeDeployConfigs(project, nil)
+	got, ok := merged.Deployment["qc"]
+	if !ok {
+		t.Fatal("qc dropped by MergeDeployConfigs")
+	}
+	if got.Local != "cachyos-dx" {
+		t.Errorf("Local field lost: got %q want %q", got.Local, "cachyos-dx")
+	}
+	if got.User != "alice" {
+		t.Errorf("User field lost: got %q", got.User)
+	}
+	if !equalSlices(got.SSHArgs, []string{"-o", "ServerAliveInterval=30"}) {
+		t.Errorf("SSHArgs field lost: got %v", got.SSHArgs)
+	}
+	// Per-machine overlay wins on collision (mirrors Host's behavior).
+	overlay := &DeployConfig{Deployment: map[string]DeploymentNode{
+		"qc": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
+	}}
+	merged = MergeDeployConfigs(project, overlay)
+	got = merged.Deployment["qc"]
+	if got.Local != "ci-runner" {
+		t.Errorf("overlay Local should win: got %q", got.Local)
+	}
+	if got.User != "bob" {
+		t.Errorf("overlay User should win: got %q", got.User)
+	}
+	if !equalSlices(got.SSHArgs, []string{"-o", "ProxyJump=bastion"}) {
+		t.Errorf("overlay SSHArgs should win: got %v", got.SSHArgs)
+	}
+}
+
 func equalSlices(a, b []string) bool {
 	if len(a) != len(b) {
 		return false

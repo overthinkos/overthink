@@ -443,6 +443,15 @@ type TaskStep struct {
 	LayerDir     string
 	CtxPath      string // absolute layer-dir path replacing "/ctx/" on host
 	ResolvedUser string // uid:gid or "root" after resolveUserSpec
+
+	// LayerVars are the layer.yml `vars:` map propagated into the task
+	// script as exports. Build-time gets these via Containerfile ENV
+	// directives (emitVarsEnv); host/local-deploy time has no equivalent
+	// mechanism, so the renderer emits `export K=V` lines from this field.
+	// Without this, layers like `kubernetes` whose download URLs reference
+	// ${K3D_VERSION} fetched an empty path-component at deploy time and
+	// curl 404'd.
+	LayerVars map[string]string
 }
 
 func (s *TaskStep) Kind() StepKind { return StepKindTask }

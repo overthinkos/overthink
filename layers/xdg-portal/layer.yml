@@ -1,20 +1,18 @@
 layer:
   name: xdg-portal
-  depends:
+  requires:
     - dbus
     - sway
     - pipewire
-
   env:
     XDG_CURRENT_DESKTOP: "sway"
-
-  rpm:
-    packages:
-      - xdg-desktop-portal
-      - xdg-desktop-portal-wlr
-      - xdg-desktop-portal-gtk
-      - slurp
-
+  distros:
+    fedora:
+      packages:
+        - xdg-desktop-portal
+        - xdg-desktop-portal-wlr
+        - xdg-desktop-portal-gtk
+        - slurp
   tasks:
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
@@ -22,14 +20,12 @@ layer:
       to: "${HOME}/.config/sway/config.d/portal.conf"
       mode: "0644"
       user: "${USER}"
-
     - mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
       user: "${USER}"
     - copy: xdg-desktop-portal-wlr-config
       to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
       mode: "0644"
       user: "${USER}"
-
   eval:
     - id: xdg-desktop-portal-package
       package: xdg-desktop-portal
@@ -46,4 +42,3 @@ layer:
     - id: xdg-portal-sway-conf
       file: ${HOME}/.config/sway/config.d/portal.conf
       exists: true
-

@@ -1,9 +1,8 @@
 layer:
   name: google-cloud-npm
-  depends:
+  requires:
     - google-cloud
     - nodejs
-
   eval:
     - id: firebase-binary
       file: ${HOME}/.npm-global/bin/firebase
@@ -11,4 +10,3 @@ layer:
     - id: firebase-version
       command: ${HOME}/.npm-global/bin/firebase --version
       exit_status: 0
-

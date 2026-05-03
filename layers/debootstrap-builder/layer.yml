@@ -11,20 +11,19 @@ layer:
     Counterpart of layers/pacstrap-builder; both compose the same
     disk-build toolchain (qemu-img + parted + mkfs + grub-efi) plus
     the family-specific bootstrap tool.
-  deb:
-    packages:
-      - debootstrap
-      - debian-archive-keyring
-      - ubuntu-keyring
-      - qemu-utils
-      - dosfstools
-      - e2fsprogs
-      - xfsprogs
-      - btrfs-progs
-      - parted
-      - util-linux
-      - grub-efi-amd64-bin
-      - grub-common
-      - efibootmgr
-      - mount
-      - ca-certificates
+  packages:
+    - debootstrap
+    - debian-archive-keyring
+    - ubuntu-keyring
+    - qemu-utils
+    - dosfstools
+    - e2fsprogs
+    - xfsprogs
+    - btrfs-progs
+    - parted
+    - util-linux
+    - grub-efi-amd64-bin
+    - grub-common
+    - efibootmgr
+    - mount
+    - ca-certificates

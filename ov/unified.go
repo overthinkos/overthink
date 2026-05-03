@@ -81,6 +81,16 @@ type UnifiedFile struct {
 	AI     map[string]*AIConfig      `yaml:"ai,omitempty"`
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
+
+	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
+	// netinstall package group; `target:` ↔ Calamares settings.conf
+	// install target; `module:` ↔ Calamares module.desc descriptor.
+	// Convention files: groups.yml / targets.yml / modules.yml — or
+	// inlined in overthink.yml. Importers/emitters are deferred to a
+	// follow-up additive PR; this cutover lands the schema.
+	Group  map[string]*GroupSpec  `yaml:"group,omitempty"`
+	Target map[string]*TargetSpec `yaml:"target,omitempty"`
+	Module map[string]*ModuleSpec `yaml:"module,omitempty"`
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -94,6 +104,10 @@ type DiscoverConfig struct {
 	Inits       []ScanSpec `yaml:"inits,omitempty"`
 	VM          []ScanSpec `yaml:"vm,omitempty"`
 	Clusters    []ScanSpec `yaml:"clusters,omitempty"` // reserved for Part F
+	// Calamares-aligned kinds.
+	Groups  []ScanSpec `yaml:"groups,omitempty"`
+	Targets []ScanSpec `yaml:"targets,omitempty"`
+	Modules []ScanSpec `yaml:"modules,omitempty"`
 }
 
 // ScanSpec describes one discovery root. Accepts string shorthand
@@ -192,6 +206,10 @@ type kindKeyedDoc struct {
 	AI     *AIDoc     `yaml:"ai,omitempty"`
 	Recipe *RecipeDoc `yaml:"recipe,omitempty"`
 	Score  *ScoreDoc  `yaml:"score,omitempty"`
+	// 2026-05 Calamares cutover.
+	Group  *GroupDoc  `yaml:"group,omitempty"`
+	Target *TargetDoc `yaml:"target,omitempty"`
+	Module *ModuleDoc `yaml:"module,omitempty"`
 }
 
 // AIDoc wraps a single AIConfig with an explicit Name — the kind:ai
@@ -327,6 +345,11 @@ var entityKinds = []entityKind{
 	{Key: "ai", Filename: "ai.yml"},
 	{Key: "recipe", Filename: "recipe.yml"},
 	{Key: "score", Filename: "score.yml"},
+	// 2026-05 Calamares cutover: `group:` (netinstall group),
+	// `target:` (settings.conf), `module:` (module.desc).
+	{Key: "group", Filename: "group.yml"},
+	{Key: "target", Filename: "target.yml"},
+	{Key: "module", Filename: "module.yml"},
 }
 
 // -----------------------------------------------------------------------------
@@ -1108,6 +1131,9 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeAIMap(&dst.AI, src.AI)
 	mergeRecipeMap(&dst.Recipe, src.Recipe)
 	mergeScoreMap(&dst.Score, src.Score)
+	mergeGroupMap(&dst.Group, src.Group)
+	mergeTargetMap(&dst.Target, src.Target)
+	mergeModuleMap(&dst.Module, src.Module)
 	mergeDeployments(&dst.Deployments, src.Deployments)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
@@ -1288,6 +1314,49 @@ func mergeLocalMap(dst *map[string]*LocalSpec, src map[string]*LocalSpec) {
 	}
 }
 
+// Calamares-aligned merge helpers (root-wins, same shape as the rest).
+func mergeGroupMap(dst *map[string]*GroupSpec, src map[string]*GroupSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*GroupSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+func mergeTargetMap(dst *map[string]*TargetSpec, src map[string]*TargetSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*TargetSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
+func mergeModuleMap(dst *map[string]*ModuleSpec, src map[string]*ModuleSpec) {
+	if len(src) == 0 {
+		return
+	}
+	if *dst == nil {
+		*dst = make(map[string]*ModuleSpec)
+	}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
+		}
+	}
+}
+
 func mergeDeployments(dst **DeploymentsSection, src *DeploymentsSection) {
 	if src == nil {
 		return
@@ -1407,6 +1476,15 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		count++
 	}
 	if kd.Score != nil {
+		count++
+	}
+	if kd.Group != nil {
+		count++
+	}
+	if kd.Target != nil {
+		count++
+	}
+	if kd.Module != nil {
 		count++
 	}
 	if count > 1 {
@@ -1558,6 +1636,39 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Score[kd.Score.Name]; !exists {
 			spec := kd.Score.HarnessScore
 			merged.Score[kd.Score.Name] = &spec
+		}
+	case kd.Group != nil:
+		if kd.Group.Name == "" {
+			return fmt.Errorf("group: missing name")
+		}
+		if merged.Group == nil {
+			merged.Group = map[string]*GroupSpec{}
+		}
+		if _, exists := merged.Group[kd.Group.Name]; !exists {
+			spec := kd.Group.GroupSpec
+			merged.Group[kd.Group.Name] = &spec
+		}
+	case kd.Target != nil:
+		if kd.Target.Name == "" {
+			return fmt.Errorf("target: missing name")
+		}
+		if merged.Target == nil {
+			merged.Target = map[string]*TargetSpec{}
+		}
+		if _, exists := merged.Target[kd.Target.Name]; !exists {
+			spec := kd.Target.TargetSpec
+			merged.Target[kd.Target.Name] = &spec
+		}
+	case kd.Module != nil:
+		if kd.Module.Name == "" {
+			return fmt.Errorf("module: missing name")
+		}
+		if merged.Module == nil {
+			merged.Module = map[string]*ModuleSpec{}
+		}
+		if _, exists := merged.Module[kd.Module.Name]; !exists {
+			spec := kd.Module.ModuleSpec
+			merged.Module[kd.Module.Name] = &spec
 		}
 	}
 	_ = srcDir
@@ -1861,15 +1972,16 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 }
 
 // synthesizeInlineLayer produces a *Layer from an inline declaration in the
-// unified file. The effective Path is rootDir (the overthink.yml's dir), and
-// SourceDir honors the layer's `directory:` field via resolveLayerSourceDir.
+// unified file. The effective Path is rootDir (the overthink.yml's dir);
+// SourceDir always equals Path (the `directory:` field was deleted in the
+// 2026-05 Calamares cutover).
 func synthesizeInlineLayer(name string, il *InlineLayer, rootDir string) (*Layer, error) {
 	// Use inline layer body as if it were a parsed layer.yml at rootDir.
 	layer := &Layer{
 		Name: name,
 		Path: rootDir,
 	}
-	layer.SourceDir = resolveLayerSourceDir(rootDir, il.LayerYAML.Directory)
+	layer.SourceDir = rootDir
 	// Populate fields the same way scanLayer does post-parse. We reuse the
 	// logic by duplicating the minimal set a test would notice; the full set
 	// can be factored out alongside Part G's refactor.
@@ -1898,10 +2010,10 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.Status = descriptionStatus(ly.Description)
 	layer.Info = descriptionInfo(ly.Description)
 
-	layer.RawDepends = ly.Depends
-	layer.Depends = make([]string, len(ly.Depends))
-	for i, dep := range ly.Depends {
-		layer.Depends[i] = BareRef(dep)
+	layer.RawRequires = ly.Requires
+	layer.Requires = make([]string, len(ly.Requires))
+	for i, dep := range ly.Requires {
+		layer.Requires[i] = BareRef(dep)
 	}
 	layer.RawIncludedLayers = ly.Layers
 	layer.IncludedLayers = make([]string, len(ly.Layers))
@@ -1917,6 +2029,10 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 		layer.formatSections = make(map[string]*PackageSection)
 	}
 	layer.tagSections = ly.TagSections
+	// 2026-05 Calamares cutover: derive format/tag sections from packages: + distros:.
+	if len(ly.Packages) > 0 || len(ly.Distros) > 0 {
+		derivePackageSectionsFromCalamares(layer, ly)
+	}
 	if layer.HasPorts {
 		layer.ports = make([]string, len(ly.Ports))
 		layer.portSpecs = make([]PortSpec, len(ly.Ports))

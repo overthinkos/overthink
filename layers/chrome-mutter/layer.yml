@@ -1,13 +1,11 @@
 layer:
   name: chrome-mutter
-  depends:
+  requires:
     - mutter
     - supervisord
-
   layers:
     - chrome
     - chrome-cdp
-
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -15,7 +13,6 @@ layer:
       to: "${HOME}/.local/bin/chrome-mutter-wrapper"
       mode: "0755"
       user: "${USER}"
-
   service:
     - name: chrome
       exec: "%(ENV_HOME)s/.local/bin/chrome-mutter-wrapper"
@@ -28,5 +25,3 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
-

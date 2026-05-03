@@ -1,29 +1,17 @@
 layer:
   name: kubernetes
-  rpm:
-    packages:
-      - kubernetes-client
-      - helm
-
-  pac:
-    packages:
-      - kubectl
-      - helm
-
-  # Debian / Ubuntu: kubectl + helm are both installed via curl downloads
-  # from their upstream release mirrors — see tasks below. Using apt repos
-  # is a maintenance burden (pkgs.k8s.io still ships v3 GPG signatures that
-  # Debian 13's stricter sqv policy rejects; baltocdn is intermittently
-  # unreachable from some networks). The standalone binaries are distro-
-  # agnostic, match what k3d already does in this layer, and keep the deb
-  # section minimal.
-  deb:
-    packages: []
-
+  distros:
+    archlinux:
+      packages:
+        - kubectl
+        - helm
+    fedora:
+      packages:
+        - kubernetes-client
+        - helm
   vars:
     K3D_VERSION: v5.8.3
     KUBECTL_VERSION: v1.30.5
-
   tasks:
     # k3d is a standalone binary — no extract, just save + chmod.
     - download: "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-${ARCH}"
@@ -31,7 +19,6 @@ layer:
       to: /usr/bin/k3d
       mode: "0755"
       user: root
-
     # kubectl: standalone binary from the official Kubernetes release mirror.
     # Only runs when the rpm/pac kubectl package isn't already present (the
     # Fedora/Arch paths use their distro's kubernetes-client / kubectl).
@@ -45,7 +32,6 @@ layer:
           chmod 0755 /usr/bin/kubectl
         fi
       user: root
-
     # Helm: official install script (works on every distro). Installs to
     # /usr/local/bin/helm by default; symlink into /usr/bin/helm so the
     # layer's tests pass uniformly. Runs only when the rpm/pac helm package
@@ -59,7 +45,6 @@ layer:
           [ -x /usr/local/bin/helm ] && ln -sf /usr/local/bin/helm /usr/bin/helm || true
         fi
       user: root
-
   eval:
     - id: kubectl-binary
       file: /usr/bin/kubectl
@@ -79,4 +64,3 @@ layer:
     - id: k3d-version
       command: /usr/bin/k3d version
       exit_status: 0
-

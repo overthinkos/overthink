@@ -16,33 +16,31 @@ layer:
     Marking a specific .kdbx group as "Secret Service exposed" is per-database
     state INSIDE the kdbx file — that is a one-time GUI step when the user
     first opens their database; this layer cannot do it.
-
-  depends:
+  requires:
     - keepassxc
     - gnupg
-
-  pac:
-    packages:
-      - pinentry
-      - libsecret
-      - keyutils
-
-  rpm:
-    packages:
-      - pinentry-qt
-      - libsecret
-      - keyutils
-
-  deb:
-    packages:
-      - pinentry-qt
-      - libsecret-tools
-      - keyutils
-
+  packages:
+    - keyutils
+  distros:
+    archlinux:
+      packages:
+        - pinentry
+        - libsecret
+    debian:
+      packages:
+        - pinentry-qt
+        - libsecret-tools
+    fedora:
+      packages:
+        - pinentry-qt
+        - libsecret
+    ubuntu:
+      packages:
+        - pinentry-qt
+        - libsecret-tools
   tasks:
     - mkdir: "${HOME}/.config/keepassxc"
       user: "${USER}"
-
     # Merge our [FdoSecrets] + auto-open settings into keepassxc.ini WITHOUT
     # clobbering user state (specifically [General] LastOpenedDatabases that
     # KeePassXC writes itself). Python configparser preserves unknown keys.
@@ -83,10 +81,8 @@ layer:
         PY
       user: "${USER}"
       comment: Merge KeePassXC FdoSecrets + auto-open + tray-friendly settings (preserves user state like LastOpenedDatabases)
-
     - mkdir: "${HOME}/.config/autostart"
       user: "${USER}"
-
     - write: "${HOME}/.config/autostart/keepassxc.desktop"
       mode: "0644"
       user: "${USER}"
@@ -100,7 +96,6 @@ layer:
         X-GNOME-Autostart-enabled=true
         Hidden=false
         NoDisplay=false
-
     - cmd: |
         set -eu
         autostart_dir="${HOME}/.config/autostart"
@@ -143,7 +138,6 @@ layer:
         done
       user: "${USER}"
       comment: Override system XDG autostart for known Secret Service competitors
-
     - cmd: |
         set -eu
         for unit in \
@@ -171,7 +165,6 @@ layer:
         done
       user: "${USER}"
       comment: Disable systemd --user units + kill running competitor processes for the current session
-
     - cmd: |
         set -eu
 
@@ -214,14 +207,12 @@ layer:
         fi
       user: "${USER}"
       comment: Install generic direnv hook for bash, zsh, and fish
-
     # gpg-agent.conf: pinentry-qt + 8h cache. Mirrors what `ov secrets gpg
     # setup` step 2 writes. Independent of whether the user has a GPG key
     # yet — once they import or generate one, this config is in place.
     - mkdir: "${HOME}/.gnupg"
       mode: "0700"
       user: "${USER}"
-
     - write: "${HOME}/.gnupg/gpg-agent.conf"
       mode: "0600"
       user: "${USER}"
@@ -231,14 +222,12 @@ layer:
         default-cache-ttl 28800
         max-cache-ttl 43200
         allow-preset-passphrase
-
     - cmd: |
         set -eu
         systemctl --user enable --now gpg-agent.socket gpg-agent-extra.socket >/dev/null 2>&1 || true
         gpg-connect-agent reloadagent /bye >/dev/null 2>&1 || true
       user: "${USER}"
       comment: Enable gpg-agent socket + reload to pick up the new gpg-agent.conf
-
     # SSH agent: KeePassXC is a CLIENT to an existing OpenSSH-compatible
     # agent (per upstream docs:
     # https://github.com/keepassxreboot/keepassxc/blob/develop/docs/topics/SSHAgent.adoc).
@@ -250,7 +239,6 @@ layer:
         systemctl --user enable --now ssh-agent.service >/dev/null 2>&1 || true
       user: "${USER}"
       comment: Enable ssh-agent.service (KeePassXC integrates AS A CLIENT to it)
-
     # Export SSH_AUTH_SOCK to the user-session env via systemd-user
     # environment.d. This propagates to all child processes started by
     # systemd-user (including keepassxc.service AND PAM-spawned shells),
@@ -259,7 +247,6 @@ layer:
     # their forwarded socket — that takes precedence (correct behavior).
     - mkdir: "${HOME}/.config/environment.d"
       user: "${USER}"
-
     - write: "${HOME}/.config/environment.d/ssh-agent.conf"
       mode: "0644"
       user: "${USER}"
@@ -267,7 +254,6 @@ layer:
         # Managed by ov keepassxc-keyring layer.
         # Point session SSH_AUTH_SOCK at the systemd-user ssh-agent socket.
         SSH_AUTH_SOCK=${XDG_RUNTIME_DIR}/ssh-agent.socket
-
     # Cleanup: an earlier version of this layer wrote shell-rc hooks
     # pointing at a nonexistent ${XDG_RUNTIME_DIR}/keepassxc/ssh-agent.socket
     # path (KeePassXC does NOT create such a socket — it uses ssh-agent's).
@@ -283,7 +269,6 @@ layer:
         rm -f "${HOME}/.config/fish/conf.d/ssh-auth-sock.fish"
       user: "${USER}"
       comment: Strip obsolete ssh-auth-sock shell-rc hooks (replaced by environment.d)
-
     # systemd user service for KeePassXC: more robust auto-launch than the
     # XDG autostart entry alone — adds Restart=on-failure, journalctl logs,
     # and explicit dependency on graphical-session.target. KeePassXC
@@ -292,7 +277,6 @@ layer:
     # focuses the existing window instead of double-running.
     - mkdir: "${HOME}/.config/systemd/user"
       user: "${USER}"
-
     - write: "${HOME}/.config/systemd/user/keepassxc.service"
       mode: "0644"
       user: "${USER}"
@@ -310,14 +294,12 @@ layer:
 
         [Install]
         WantedBy=graphical-session.target
-
     - cmd: |
         set -eu
         systemctl --user daemon-reload
         systemctl --user enable keepassxc.service >/dev/null 2>&1 || true
       user: "${USER}"
       comment: Reload systemd --user + enable keepassxc.service
-
     # Best-effort: launch KeePassXC in the CURRENT graphical session via
     # systemd --user so the user doesn't have to logout/login to test.
     # Inherits DISPLAY/WAYLAND_DISPLAY from the systemd --user instance.
@@ -337,82 +319,66 @@ layer:
         fi
       user: "${USER}"
       comment: Best-effort start KeePassXC in the current session (no-op if no display)
-
   eval:
     - id: keepassxc-binary
       command: test -x /usr/bin/keepassxc
       exit_status: 0
-
     - id: pinentry-qt-installed
       command: command -v pinentry-qt || command -v pinentry-qt5 || command -v pinentry-qt6
       exit_status: 0
-
     - id: secret-tool-installed
       command: command -v secret-tool
       exit_status: 0
-
     - id: keyutils-installed
       command: command -v keyctl
       exit_status: 0
-
     - id: keepassxc-ini-fdosecrets
       command: grep -q '^Enabled=true' ${HOME}/.config/keepassxc/keepassxc.ini
       scope: deploy
       exit_status: 0
-
     - id: keepassxc-ini-auto-open
       command: grep -q '^OpenPreviousDatabasesOnStartup=true' ${HOME}/.config/keepassxc/keepassxc.ini
       scope: deploy
       exit_status: 0
-
     - id: keepassxc-autostart
       command: test -r ${HOME}/.config/autostart/keepassxc.desktop
       scope: deploy
       exit_status: 0
-
     - id: gpg-agent-conf-installed
       command: grep -q '^pinentry-program /usr/bin/pinentry-qt' ${HOME}/.gnupg/gpg-agent.conf
       scope: deploy
       exit_status: 0
-
     - id: gpg-agent-socket-active
       command: systemctl --user is-active gpg-agent.socket
       scope: deploy
       exit_status: 0
-
     - id: ssh-agent-ini-enabled
       command: |
         python3 -c "import configparser,os; cp=configparser.ConfigParser(); cp.optionxform=str; cp.read(os.path.expanduser('~/.config/keepassxc/keepassxc.ini')); exit(0 if cp.get('SSHAgent','Enabled',fallback='false')=='true' else 1)"
       scope: deploy
       exit_status: 0
-
     - id: keepassxc-systemd-unit-enabled
       command: systemctl --user is-enabled keepassxc.service
       scope: deploy
       exit_status: 0
-
     - id: ssh-agent-service-active
       command: systemctl --user is-active ssh-agent.service
       scope: deploy
       exit_status: 0
-
     - id: environment-d-ssh-auth-sock
       command: grep -q '^SSH_AUTH_SOCK=' ${HOME}/.config/environment.d/ssh-agent.conf
       scope: deploy
       exit_status: 0
-
     - id: gnome-keyring-secrets-disabled
       command: |
         f=${HOME}/.config/autostart/gnome-keyring-secrets.desktop
         ! test -f "$f" || grep -q '^Hidden=true' "$f"
       scope: deploy
       exit_status: 0
-
     - id: direnv-fish-hook
       command: grep -q 'direnv hook fish' ${HOME}/.config/fish/conf.d/direnv.fish
       scope: deploy
       exit_status: 0
-
     - id: direnv-bash-hook
       command: grep -q 'direnv hook bash' ${HOME}/.bashrc
       scope: deploy

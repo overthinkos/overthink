@@ -1,21 +1,18 @@
 layer:
   name: comfyui
-  depends:
+  requires:
     - cuda
     - supervisord
-
-  rpm:
-    packages:
-      - aria2
-      - git-lfs
-
+  distros:
+    fedora:
+      packages:
+        - aria2
+        - git-lfs
   ports:
     - 8188
-
   volumes:
     - name: comfyui
       path: "~/ComfyUI"
-
   tasks:
     # Clone ComfyUI + the Manager into the workspace volume staging dir.
     # || true on the main clone makes this idempotent if an earlier build left
@@ -29,7 +26,6 @@ layer:
         mkdir -p custom_nodes output input user
         git clone --depth 1 https://github.com/ltdrdata/ComfyUI-Manager.git ${HOME}/ComfyUI/custom_nodes/ComfyUI-Manager || true
       user: "${USER}"
-
   service:
     - name: comfyui
       exec: "python %(ENV_HOME)s/ComfyUI/main.py --listen 0.0.0.0"
@@ -37,5 +33,3 @@ layer:
       working_directory: "%(ENV_HOME)s/ComfyUI"
       enable: true
       scope: system
-
-

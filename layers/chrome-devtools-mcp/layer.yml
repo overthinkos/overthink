@@ -1,20 +1,15 @@
 layer:
   name: chrome-devtools-mcp
   description: Chrome DevTools MCP server via mcp-proxy (Streamable HTTP on port 9224)
-
-  depends:
+  requires:
     - nodejs
     - supervisord
-
   ports:
     - 9224
-
   mcp_provides:
     - name: chrome-devtools
       url: "http://{{.ContainerName}}:9224/mcp"
       transport: http
-
-
   eval:
     - id: chrome-devtools-mcp-binary
       file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
@@ -45,12 +40,9 @@ layer:
       stdout:
         - contains: navigate_page
         - contains: take_screenshot
-
   service:
     - name: chrome-devtools-mcp
       exec: "%(ENV_HOME)s/.pixi/envs/default/bin/mcp-proxy --host 0.0.0.0 --port 9224 -- %(ENV_HOME)s/.npm-global/bin/chrome-devtools-mcp --browser-url http://127.0.0.1:9222 --no-usage-statistics"
       restart: always
       enable: true
       scope: system
-
-

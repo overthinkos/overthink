@@ -1,24 +1,22 @@
 layer:
   name: dbus
-  depends:
+  requires:
     - supervisord
-
   env:
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
-
-  rpm:
-    packages:
-      - dbus-daemon
-
-  pac:
-    packages:
-      - dbus
-
-  deb:
-    packages:
-      - dbus
-
-
+  distros:
+    archlinux:
+      packages:
+        - dbus
+    debian:
+      packages:
+        - dbus
+    fedora:
+      packages:
+        - dbus-daemon
+    ubuntu:
+      packages:
+        - dbus
   eval:
     - id: dbus-daemon-binary
       file: /usr/bin/dbus-daemon
@@ -38,7 +36,6 @@ layer:
       scope: deploy
       service: dbus
       running: true
-
   service:
     - name: dbus
       exec: "dbus-daemon --session --nofork --address=unix:path=/tmp/dbus-session"
@@ -48,5 +45,3 @@ layer:
       priority: 2
       enable: true
       scope: system
-
-

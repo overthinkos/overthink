@@ -8,20 +8,17 @@ layer:
       on 8080 and serves /srv/fixture/, plus curl for the self-curl
       probe. Combined with a fedora base + supervisord this satisfies
       every scenario in the network-and-http recipe.
-
-  depends:
+  requires:
     - supervisord
-
-  rpm:
-    packages:
-      - nginx
-      - curl
-      - iproute
-      - procps-ng
-
+  distros:
+    fedora:
+      packages:
+        - nginx
+        - curl
+        - iproute
+        - procps-ng
   ports:
     - 8080
-
   tasks:
     - mkdir: /srv/fixture
       user: root
@@ -86,7 +83,6 @@ layer:
                 }
             }
         }
-
   service:
     - name: fixture-web-nginx
       exec: "/usr/sbin/nginx -g 'daemon off;'"
@@ -94,7 +90,6 @@ layer:
       priority: 50
       enable: true
       scope: system
-
   eval:
     - id: fixture-web-nginx-installed
       package: nginx

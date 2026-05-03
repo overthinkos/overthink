@@ -1,37 +1,30 @@
 layer:
   name: jupyter-ml
-  depends:
+  requires:
     - cuda
     - supervisord
-
   layers:
     - llama-cpp
     - unsloth
     - jupyter-mcp
-
   env:
     NVIDIA_PYTHON_PROJECT: "~/.pixi"
     LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
-
-  rpm:
-    packages:
-      - git
-      - gcc      # Required by triton 3.6+ for JIT kernel compilation during training
-      - gcc-c++  # Required for C++ extensions (flash-attn, custom CUDA kernels)
-
+  distros:
+    fedora:
+      packages:
+        - git
+        - gcc
+        - gcc-c++
   ports:
     - 8888
-
   mcp_provides:
     - name: jupyter
       url: "http://{{.ContainerName}}:8888/mcp"
       transport: http
-
   volumes:
     - name: workspace
       path: ~/workspace
-
-
   eval:
     # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
     # Runs only under `ov test <image>` (deploy-scope). Build-scope and
@@ -52,7 +45,6 @@ layer:
       tool: list_notebooks
       input: "{}"
       exit_status: 0
-
   service:
     - name: jupyter-ml
       exec: "bash -c 'if [ -n \"${JUPYTER_TOKEN_FILE:-}\" ] && [ -f \"${JUPYTER_TOKEN_FILE}\" ]; then TOKEN=$(cat \"${JUPYTER_TOKEN_FILE}\"); exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token=\"$TOKEN\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; else exec jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/workspace --IdentityProvider.token=\"\" --ServerApp.password=\"\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; fi'"
@@ -60,5 +52,3 @@ layer:
       working_directory: "%(ENV_HOME)s"
       enable: true
       scope: system
-
-

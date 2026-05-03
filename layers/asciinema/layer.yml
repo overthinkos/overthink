@@ -1,19 +1,8 @@
 layer:
   name: asciinema
   description: Terminal session recorder (asciinema)
-
-  rpm:
-    packages:
-      - asciinema
-
-  pac:
-    packages:
-      - asciinema
-
-  deb:
-    packages:
-      - asciinema
-
+  packages:
+    - asciinema
   eval:
     - id: asciinema-binary
       file: /usr/bin/asciinema
@@ -23,4 +12,3 @@ layer:
       exit_status: 0
       stdout:
         - contains: "asciinema"
-

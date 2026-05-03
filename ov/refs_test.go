@@ -120,8 +120,8 @@ func TestScanRemoteLayers(t *testing.T) {
 	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "python-ml"), 0755)
 
-	os.WriteFile(filepath.Join(layersDir, "cuda", "layer.yml"), []byte("layer:\n  name: cuda\n  rpm:\n    packages:\n      - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("layer:\n  name: python-ml\n  depends:\n    - cuda\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "cuda", "layer.yml"), []byte("layer:\n  name: cuda\n  packages:\n    - cuda-toolkit\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("layer:\n  name: python-ml\n  requires:\n    - cuda\n"), 0644)
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
 	wantRefs := map[string]bool{
@@ -158,8 +158,8 @@ func TestScanRemoteLayers(t *testing.T) {
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
-	if len(pyml.Depends) != 1 || pyml.Depends[0] != "cuda" {
-		t.Errorf("python-ml.Depends = %v", pyml.Depends)
+	if len(pyml.Requires) != 1 || pyml.Requires[0] != "cuda" {
+		t.Errorf("python-ml.Requires = %v", pyml.Requires)
 	}
 }
 
@@ -191,8 +191,8 @@ func TestCollectRemoteRefs(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", Depends: []string{}},
-		"my-layer": {Name: "my-layer", RawDepends: []string{
+		"pixi": {Name: "pixi", Requires: []string{}},
+		"my-layer": {Name: "my-layer", RawRequires: []string{
 			"@github.com/myorg/service-layers/layers/svc:v2.0.0",
 		}},
 	}
@@ -229,7 +229,7 @@ func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"local": {Name: "local", RawDepends: []string{
+		"local": {Name: "local", RawRequires: []string{
 			"@github.com/org/repo/layers/cuda:v2.0.0",
 		}},
 	}

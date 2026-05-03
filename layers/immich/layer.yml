@@ -1,12 +1,11 @@
 layer:
   name: immich
-  depends:
+  requires:
     - supervisord
     - nodejs24
     - postgresql
     - redis
     - ffmpeg
-
   env:
     IMMICH_VERSION: "v2.7.5"
     IMMICH_HOST: "0.0.0.0"
@@ -23,21 +22,19 @@ layer:
     REDIS_HOSTNAME: "127.0.0.1"
     REDIS_PORT: "6379"
     NODE_ENV: "production"
-
-  rpm:
-    packages:
-      - vips
-      - vips-devel
-      - perl-Image-ExifTool
-      - libheif
-      - LibRaw
-      - gcc-c++
-      - make
-      - unzip
-
+  distros:
+    fedora:
+      packages:
+        - vips
+        - vips-devel
+        - perl-Image-ExifTool
+        - libheif
+        - LibRaw
+        - gcc-c++
+        - make
+        - unzip
   ports:
     - 2283
-
   # Expose the Immich HTTP API URL to every other container that opts in via
   # env_accepts: [IMMICH_API_URL]. Plan §4.3. The templated value resolves to
   # e.g. "http://ov-immich-ml:2283/api" at ov config time for the base instance,
@@ -46,11 +43,9 @@ layer:
   # openwebui and hermes already declare this env var in their env_accepts.
   env_provides:
     IMMICH_API_URL: "http://{{.ContainerName}}:2283/api"
-
   env_accepts:
     - name: IMMICH_API_URL
       description: "Self-accept so the immich container itself sees its own API URL (used by entrypoint/health scripts)"
-
   # Immich API key for programmatic access. Generated in the Immich web UI
   # after first-run setup, then stored once in the credential backend via:
   #
@@ -62,7 +57,6 @@ layer:
     - name: IMMICH_API_KEY
       description: "Immich API key for programmatic access (generated in the Immich admin UI after first-run)"
       key: ov/api-key/immich
-
   volumes:
     - name: library
       path: "~/.immich/library"
@@ -72,24 +66,20 @@ layer:
       path: "~/.immich/import"
     - name: external
       path: "~/.immich/external"
-
   secrets:
     - name: db-password
       env: DB_PASSWORD
     - name: db-password
       env: POSTGRES_PASSWORD
-
   route:
     host: "immich.localhost"
     port: 2283
-
   tasks:
     # Fetch + extract Immich source
     - cmd: |
         curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
         mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
       user: root
-
     # Build the server with pnpm. npm_config_cache is redirected so the root
     # user's build doesn't stash a root-owned ~/.cache that taints later steps.
     - cmd: |
@@ -97,7 +87,6 @@ layer:
         cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich build
         cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter immich deploy --prod /opt/immich/server
       user: root
-
     # Geodata for reverse geocoding
     - cmd: |
         mkdir -p /build/geodata
@@ -111,13 +100,11 @@ layer:
         mkdir -p /build/corePlugin
         cp /tmp/immich/plugins/manifest.json /build/corePlugin/manifest.json
       user: root
-
     # Build web UI
     - cmd: |
         cd /tmp/immich && npm_config_cache=/tmp/npm-root-cache pnpm --filter @immich/sdk --filter immich-web build
         cp -r /tmp/immich/web/build /build/www
       user: root
-
     # Build core plugin (TypeScript → WASM via extism-js). Installs the
     # toolchain, builds, then scrubs the toolchain to keep the final image lean.
     - cmd: |
@@ -141,10 +128,8 @@ layer:
 
         rm -f /usr/local/bin/extism-js /usr/local/bin/wasm-opt /usr/local/bin/wasm-merge /usr/local/bin/wasm-as /usr/local/bin/wasm-dis /usr/local/bin/wasm-ctor-eval /usr/local/bin/wasm-emscripten-finalize /usr/local/bin/wasm-metadce /usr/local/bin/wasm-reduce /usr/local/bin/wasm-shell /usr/local/bin/wasm-split /usr/local/bin/wasm2js
       user: root
-
     - cmd: rm -rf /tmp/immich
       user: root
-
     # Postgres init-sql for immich-specific extensions. write: replaces the
     # original heredoc — file content lives in YAML, no shell heredoc escaping.
     - write: /docker-entrypoint-initdb.d/01-immich-extensions.sql
@@ -154,7 +139,6 @@ layer:
         CREATE EXTENSION IF NOT EXISTS vector;
         CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
         CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
-
     # DB migration wrapper — runs on every container start via supervisord.
     # Idempotent CREATE EXTENSION IF NOT EXISTS handles both fresh and upgraded DBs.
     - write: /usr/local/bin/immich-db-migrate.sh
@@ -192,7 +176,6 @@ layer:
         else
             echo "VectorChord not available — skipping"
         fi
-
     # Immich server startup wrapper — waits for PostgreSQL before starting node.
     - write: /usr/local/bin/immich-server-start.sh
       user: root
@@ -203,7 +186,6 @@ layer:
             sleep 1
         done
         exec node /opt/immich/server/dist/main
-
     # User-phase data directories
     - mkdir: "${HOME}/.immich/library"
       user: "${USER}"
@@ -213,9 +195,6 @@ layer:
       user: "${USER}"
     - mkdir: "${HOME}/.immich/external"
       user: "${USER}"
-
-
-
   eval:
     - id: immich-server-main
       file: /opt/immich/server/dist/main.js
@@ -250,7 +229,6 @@ layer:
       timeout: 10s
       body:
         - contains: "pong"
-
   service:
     - name: immich-db-init
       exec: /usr/local/bin/immich-db-migrate.sh
@@ -260,7 +238,6 @@ layer:
       exit_codes: "0"
       enable: true
       scope: system
-
     - name: immich-server
       exec: /usr/local/bin/immich-server-start.sh
       restart: always
@@ -268,5 +245,3 @@ layer:
       priority: 30
       enable: true
       scope: system
-
-

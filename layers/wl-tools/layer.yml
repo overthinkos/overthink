@@ -1,16 +1,16 @@
 layer:
   name: wl-tools
-  rpm:
-    packages:
-      - wtype
-      - wlrctl
-      - xdotool
-      - xprop
-      - xwininfo
-      - wl-clipboard
-      - wlr-randr
-      - ydotool
-
+  distros:
+    fedora:
+      packages:
+        - wtype
+        - wlrctl
+        - xdotool
+        - xprop
+        - xwininfo
+        - wl-clipboard
+        - wlr-randr
+        - ydotool
   eval:
     - id: wtype-binary
       file: /usr/bin/wtype
@@ -30,4 +30,3 @@ layer:
     - id: ydotool-binary
       file: /usr/bin/ydotool
       exists: true
-

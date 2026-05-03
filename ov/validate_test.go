@@ -399,7 +399,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 		"layer": {
 			Name:     "layer",
 			HasTasks: true,
-			Depends:  []string{"unknown"},
+			Requires:  []string{"unknown"},
 		},
 	}
 
@@ -439,9 +439,9 @@ func TestValidateLayerCycle(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"a": {Name: "a", HasTasks: true, Depends: []string{"b"}},
-		"b": {Name: "b", HasTasks: true, Depends: []string{"c"}},
-		"c": {Name: "c", HasTasks: true, Depends: []string{"a"}},
+		"a": {Name: "a", HasTasks: true, Requires: []string{"b"}},
+		"b": {Name: "b", HasTasks: true, Requires: []string{"c"}},
+		"c": {Name: "c", HasTasks: true, Requires: []string{"a"}},
 	}
 
 	err := Validate(cfg, layers, testProjectDir(t))
@@ -1180,7 +1180,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"supervisord": {Name: "supervisord", Depends: []string{"python"}, HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
+		"supervisord": {Name: "supervisord", Requires: []string{"python"}, HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"supervisor"}}}},
 		"python":      {Name: "python", HasTasks: true},
 		"socat":       {Name: "socat", HasTasks: true, formatSections: map[string]*PackageSection{"rpm": {FormatName: "rpm", Packages: []string{"socat", "iproute"}}}},
 		"chrome": {

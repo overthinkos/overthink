@@ -8,14 +8,13 @@ layer:
       service so that `pgrep -x bash` succeeds. Combined with a fedora
       base + supervisord this satisfies every scenario in the
       single-pod-system-state recipe.
-
-  rpm:
-    packages:
-      - bash
-      - procps-ng
-      - iproute
-      - util-linux
-
+  distros:
+    fedora:
+      packages:
+        - bash
+        - procps-ng
+        - iproute
+        - util-linux
   tasks:
     - mkdir: /etc
       user: root
@@ -25,7 +24,6 @@ layer:
       mode: "0644"
       content: |
         ov-os-content-marker
-
   service:
     - name: os-bash
       exec: "/usr/bin/bash -c 'while true; do sleep 60; done'"
@@ -33,7 +31,6 @@ layer:
       priority: 50
       enable: true
       scope: system
-
   eval:
     - id: os-marker-exists
       file: /etc/ov-os-marker

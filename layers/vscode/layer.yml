@@ -1,13 +1,14 @@
 layer:
   name: vscode
-  rpm:
-    repos:
-      - name: code
-        url: "https://packages.microsoft.com/yumrepos/vscode"
-        gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
-    packages:
-      - code
-
-  aur:
-    packages:
-      - visual-studio-code-bin
+  distros:
+    archlinux:
+      aur:
+        packages:
+          - visual-studio-code-bin
+    fedora:
+      packages:
+        - code
+      repos:
+        - name: code
+          url: "https://packages.microsoft.com/yumrepos/vscode"
+          gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"

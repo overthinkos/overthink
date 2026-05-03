@@ -1,24 +1,21 @@
 layer:
   name: nvidia
   description: NVIDIA GPU runtime support (driver libs + container toolkit for CDI)
-
-  rpm:
-    repos:
-      - name: fedora-multimedia
-        url: "https://negativo17.org/repos/fedora-multimedia.repo"
-        gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-    packages:
-      - nvidia-container-toolkit
-      - libva-nvidia-driver
-
-  pac:
-    packages:
-      - nvidia-utils
-      - nvidia-container-toolkit
-
+  packages:
+    - nvidia-container-toolkit
+  distros:
+    archlinux:
+      packages:
+        - nvidia-utils
+    fedora:
+      packages:
+        - libva-nvidia-driver
+      repos:
+        - name: fedora-multimedia
+          url: "https://negativo17.org/repos/fedora-multimedia.repo"
+          gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   env:
     LD_LIBRARY_PATH: "/usr/lib64"
-
   tasks:
     # Vulkan ICD symlinks for nvidia-ctk CDI. Conditional because the ICD JSON
     # files may or may not be present depending on the driver package — || true
@@ -31,4 +28,3 @@ layer:
         [ -f /usr/share/vulkan/implicit_layer.d/nvidia_layers.json ] && \
           ln -sf /usr/share/vulkan/implicit_layer.d/nvidia_layers.json /etc/vulkan/icd.d/nvidia_layers.json || true
       user: root
-

@@ -1,24 +1,22 @@
 layer:
   name: cloud-init
-  depends:
+  requires:
     - sshd
-
-  rpm:
-    packages:
-      - cloud-init
-      - cloud-utils-growpart
-
-  deb:
-    packages:
-      - cloud-init
-      - cloud-guest-utils
-
-  pac:
-    packages:
-      - cloud-init
-      - cloud-guest-utils
-
-
+  packages:
+    - cloud-init
+  distros:
+    archlinux:
+      packages:
+        - cloud-guest-utils
+    debian:
+      packages:
+        - cloud-guest-utils
+    fedora:
+      packages:
+        - cloud-utils-growpart
+    ubuntu:
+      packages:
+        - cloud-guest-utils
   tasks:
     - mkdir: /etc/cloud/cloud.cfg.d
       user: root
@@ -27,26 +25,20 @@ layer:
       user: root
       content: |
         datasource_list: [ NoCloud, None ]
-
   service:
     - name: cloud-init-local
       use_packaged: cloud-init-local.service
       enable: true
       scope: system
-
     - name: cloud-init
       use_packaged: cloud-init.service
       enable: true
       scope: system
-
     - name: cloud-config
       use_packaged: cloud-config.service
       enable: true
       scope: system
-
     - name: cloud-final
       use_packaged: cloud-final.service
       enable: true
       scope: system
-
-

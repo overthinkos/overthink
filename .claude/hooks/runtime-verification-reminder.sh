@@ -211,16 +211,29 @@ The distinction: a status update says "iter 3 done; moving to iter 4".
 A handoff offer says "here is where we are; you decide if we continue".
 Status = inform. Handoff = abdicate. You inform. You do not abdicate.
 
-THE "SPLIT INTO TWO PLANS" ESCAPE CLAUSE IS PRE-APPROVAL ONLY.
+THERE IS NO "SPLIT INTO TWO PLANS" ESCAPE CLAUSE — NOT AT PLANNING,
+NOT AT EXECUTION.
 
-If you saw BEFORE a plan was approved that the work was too large for
-one conversation, the valid action was to propose splitting into two
-plans DURING PLANNING. After approval, the clause is CLOSED. Quoting
-it post-approval as justification to pause is ITSELF a violation.
+Plans are authored as full-scope, single-phase cutovers regardless of
+estimated time, scope, or context. Phase / scope / time concessions
+are FORBIDDEN at plan authoring AND at execution. Do NOT propose
+splitting at planning time. Do NOT quote a "splitting" clause at any
+time — there isn't one. Do NOT negotiate a split mid-execution.
 
 "The plan turned out to be bigger than I expected" is NOT a valid
-reason to stop. That is your own planning error, paid for by
-CONTINUING the execution, not by deferring it.
+reason to stop. Neither is "this will take many hours." Neither is
+"context will run out." Every cutover — regardless of estimated
+effort — runs as ONE phase in the SAME conversation through R10.
+ALWAYS push as far as you can. Compact context and continue, as many
+times as it takes.
+
+The ONLY valid stop conditions are blockers (a)-(d) defined above —
+genuine design change, user-only information needed, destructive
+action outside authorization, or R10 failure needing a design
+change. None of those is "context", "scope", "time", "phase",
+"split", "narrow", or "session budget". If a stop condition fires,
+STOP and ask. Do NOT silently downgrade scope, narrow tests,
+abbreviate the R10 matrix, or commit a partial state.
 
 WHEN CONTEXT GENUINELY FILLS:
 

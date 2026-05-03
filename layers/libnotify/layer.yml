@@ -1,9 +1,8 @@
 layer:
   name: libnotify
-  depends:
+  requires:
     - dbus
-
-  rpm:
-    packages:
-      - libnotify
-
+  distros:
+    fedora:
+      packages:
+        - libnotify

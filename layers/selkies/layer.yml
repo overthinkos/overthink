@@ -1,46 +1,40 @@
 layer:
   name: selkies
-  depends:
+  requires:
     - supervisord
     - python
     - pipewire
-
   env:
     LANG: "C.UTF-8"
     PIXELFLUX_WAYLAND: "true"
     PULSE_SERVER: "unix:/tmp/pulse/native"
-
   ports:
     - "https+insecure:3000"
-
   security:
     shm_size: "1g"
-
   volumes:
     - name: selkies-config
       path: "~/.config/selkies"
-
-  rpm:
-    packages:
-      - wl-clipboard
-      - libICE
-      - libSM
-      - pulseaudio-libs
-      - pulseaudio-utils
-      - mesa-va-drivers
-      - libva
-      - libva-utils
-      - procps-ng
-      - iproute
-      - iputils
-      - strace
-      - htop
-      - file
-      - lsof
-
+  distros:
+    fedora:
+      packages:
+        - wl-clipboard
+        - libICE
+        - libSM
+        - pulseaudio-libs
+        - pulseaudio-utils
+        - mesa-va-drivers
+        - libva
+        - libva-utils
+        - procps-ng
+        - iproute
+        - iputils
+        - strace
+        - htop
+        - file
+        - lsof
   vars:
     TRAEFIK_VERSION: v3.4.0
-
   tasks:
     # Move pre-built Selkies web UI from the pixi build-stage output into the
     # system share directory. The pixi stage writes to /home/user/.local/share
@@ -51,14 +45,12 @@ layer:
         cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
         rm -rf /home/user/.local/share/selkies-build
       user: root
-
     # Traefik binary (same version the dedicated traefik layer uses).
     - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
       extract: tar.gz
       to: /usr/local/bin
       include: [traefik]
       user: root
-
     # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
     # procedural — stays in cmd: rather than a contrived write: pair.
     - mkdir: /usr/local/share/selkies/certs
@@ -72,7 +64,6 @@ layer:
           -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
         chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
       user: root
-
     # Traefik configs from the layer dir.
     - copy: traefik.yml
       to: /usr/local/share/selkies/traefik.yml
@@ -82,13 +73,11 @@ layer:
       to: /usr/local/share/selkies/traefik-dynamic.yml
       mode: "0644"
       user: root
-
     # User-phase setup: wrappers for the three services.
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/selkies"
       user: "${USER}"
-
     - copy: selkies-wrapper
       to: "${HOME}/.local/bin/selkies-wrapper"
       mode: "0755"
@@ -101,10 +90,6 @@ layer:
       to: "${HOME}/.local/bin/selkies-fileserver"
       mode: "0755"
       user: "${USER}"
-
-
-
-
   eval:
     - id: selkies-wrapper
       file: ${HOME}/.local/bin/selkies-wrapper
@@ -147,7 +132,6 @@ layer:
       status: 200
       allow_insecure: true
       timeout: 10s
-
   service:
     - name: traefik
       exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
@@ -156,7 +140,6 @@ layer:
       start_secs: 1
       enable: true
       scope: system
-
     - name: selkies-fileserver
       exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
       restart: always
@@ -164,7 +147,6 @@ layer:
       start_secs: 1
       enable: true
       scope: system
-
     - name: selkies
       exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
       env:
@@ -175,5 +157,3 @@ layer:
       start_secs: 3
       enable: true
       scope: system
-
-

@@ -1,47 +1,28 @@
 layer:
   name: k3s
   description: k3s binary installer (common base for k3s-server and k3s-agent)
-
-  # Runtime packages k3s needs (R9: every runtime dep must be installed via
-  # the distro package manager, never a manual curl). conntrack and iptables
-  # are required by k3s's networking stack; socat is used by `kubectl port-
-  # forward`; ethtool is used by k3s's cloud-controller-manager; ca-certs
-  # are required for the binary to validate registry TLS.
-  #
-  # fuse-overlayfs is required when k3s runs inside a rootless podman
-  # container (pod target): kernel overlayfs can't nest on top of
-  # podman's own overlayfs, and k3s's containerd fails with
-  # "failed to mount overlay: invalid argument". On VMs and host
-  # deploys the kernel driver works natively and the binary is
-  # installed-but-unused. See layers/k3s-server/layer.yml for the
-  # conditional config.yaml snapshotter flag that selects it.
-  rpm:
-    packages:
-      - ca-certificates
-      - conntrack-tools
-      - ethtool
-      - fuse-overlayfs
-      - iptables
-      - socat
-
-  pac:
-    packages:
-      - ca-certificates
-      - conntrack-tools
-      - ethtool
-      - fuse-overlayfs
-      - iptables-nft
-      - socat
-
-  deb:
-    packages:
-      - ca-certificates
-      - conntrack
-      - ethtool
-      - fuse-overlayfs
-      - iptables
-      - socat
-
+  packages:
+    - ca-certificates
+    - ethtool
+    - fuse-overlayfs
+    - socat
+  distros:
+    archlinux:
+      packages:
+        - conntrack-tools
+        - iptables-nft
+    debian:
+      packages:
+        - conntrack
+        - iptables
+    fedora:
+      packages:
+        - conntrack-tools
+        - iptables
+    ubuntu:
+      packages:
+        - conntrack
+        - iptables
   tasks:
     # Download the k3s binary. Version pinned in-line in the script below
     # — updating it is a deliberate authoring change, not an implicit
@@ -83,7 +64,6 @@ layer:
         ln -sf /usr/local/bin/k3s /usr/local/bin/crictl
         ln -sf /usr/local/bin/k3s /usr/local/bin/ctr
       user: root
-
   eval:
     - id: k3s-binary
       file: /usr/local/bin/k3s

@@ -7,16 +7,6 @@ layer:
     OS keeps native libvirt management. Drops gvisor-tap-vsock and
     podman-machine — both are container/podman-machine artifacts that
     are unneeded on a real Linux host.
-
-  pac:
-    packages: []
-
-  rpm:
-    packages: []
-
-  deb:
-    packages: []
-
   layers:
     - ov
     - virtualization-host

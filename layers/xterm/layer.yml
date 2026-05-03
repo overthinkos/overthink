@@ -1,9 +1,9 @@
 layer:
   name: xterm
-  rpm:
-    packages:
-      - xterm
-
+  distros:
+    fedora:
+      packages:
+        - xterm
   eval:
     - id: xterm-binary
       file: /usr/bin/xterm
@@ -11,4 +11,3 @@ layer:
     - id: xterm-package
       package: xterm
       installed: true
-

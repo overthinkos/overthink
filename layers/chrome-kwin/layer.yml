@@ -1,9 +1,7 @@
 layer:
   name: chrome-kwin
-  depends:
+  requires:
     - kwin
-
   layers:
     - chrome
     - chrome-cdp
-

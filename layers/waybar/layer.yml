@@ -1,18 +1,16 @@
 layer:
   name: waybar
-  depends:
+  requires:
     - sway
-
-  rpm:
-    packages:
-      - waybar
-
+  distros:
+    fedora:
+      packages:
+        - waybar
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/waybar"
       user: "${USER}"
-
     - copy: waybar-wrapper
       to: "${HOME}/.local/bin/waybar-wrapper"
       mode: "0755"
@@ -21,7 +19,6 @@ layer:
       to: "${HOME}/.local/bin/sway-autotile"
       mode: "0755"
       user: "${USER}"
-
     - copy: config.json
       to: "${HOME}/.config/waybar/config"
       mode: "0644"
@@ -30,9 +27,6 @@ layer:
       to: "${HOME}/.config/waybar/style.css"
       mode: "0644"
       user: "${USER}"
-
-
-
   eval:
     - id: waybar-binary
       file: /usr/bin/waybar
@@ -46,7 +40,6 @@ layer:
     - id: sway-autotile-script
       file: ${HOME}/.local/bin/sway-autotile
       exists: true
-
   service:
     - name: waybar
       exec: "%(ENV_HOME)s/.local/bin/waybar-wrapper"
@@ -58,7 +51,6 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
     - name: sway-autotile
       exec: "%(ENV_HOME)s/.local/bin/sway-autotile"
       env:
@@ -69,5 +61,3 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
-

@@ -1,10 +1,8 @@
 layer:
   name: forgecode
   description: Forge AI coding agent CLI (forgecode.dev)
-
-  depends:
+  requires:
     - nodejs
-
   eval:
     - id: forge-binary
       file: ${HOME}/.npm-global/bin/forge
@@ -12,4 +10,3 @@ layer:
     - id: forge-version
       command: ${HOME}/.npm-global/bin/forge --version
       exit_status: 0
-

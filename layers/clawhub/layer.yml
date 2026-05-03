@@ -1,7 +1,5 @@
 layer:
   name: clawhub
   description: ClawHub CLI for searching and installing OpenClaw skills
-
-  depends:
+  requires:
     - nodejs
-

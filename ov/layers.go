@@ -167,13 +167,8 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 type LayerYAML struct {
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	// Directory is the anchor for relative file references in this layer (tasks.copy,
-	// tasks.write inline paths, data.src, extract, install-file detection). Defaults
-	// to "." — the directory containing this layer.yml. Relative values resolve
-	// against that directory; absolute values are used as-is.
-	Directory  string            `yaml:"directory,omitempty"`
 	Layers     []string          `yaml:"layers,omitempty"`
-	Depends    []string          `yaml:"depends,omitempty"`
+	Requires    []string          `yaml:"requires,omitempty"`
 	Engine     string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env        map[string]string `yaml:"env,omitempty"`
 	PathAppend []string          `yaml:"path_append,omitempty"`
@@ -203,6 +198,15 @@ type LayerYAML struct {
 	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"`    // MCP servers provided to OTHER containers when this service is deployed
 	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`    // MCP servers this layer MUST have from the environment
 	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`     // MCP servers this layer CAN optionally use
+
+	// Calamares-aligned package surface (2026-05 cutover). The unified
+	// flat top-level `packages:` is the Calamares group / module package
+	// list shape. Per-distro overrides + format-specific extras (copr,
+	// repos, options, exclude, modules, archlinux AUR sub-block) live
+	// under `distros:` keyed by distro name (or distro-version e.g.
+	// `debian-13`, `ubuntu-24.04`).
+	Packages []PackageItem              `yaml:"packages,omitempty"`
+	Distros  map[string]*DistroPackages `yaml:"distros,omitempty"`
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
 	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
@@ -240,15 +244,21 @@ type LayerYAML struct {
 // layerYAMLKnownFields lists non-format top-level keys in layer.yml.
 // Unknown keys are routed to FormatSections (if matching a build.yml distro format)
 // or TagSections (otherwise).
+//
+// `directory`, `info` deleted in the 2026-05 Calamares cutover (0 YAML files
+// used either; `description:` carries the metadata `info:` previously held).
+// `depends` renamed to `requires`. Calamares-shaped `packages` + `distros`
+// added as the unified package surface; per-format `rpm:`/`deb:`/`pac:`/
+// `aur:` and per-distro tag sections (debian:13: etc.) collapse into them
+// via `ov migrate calamares`.
 var layerYAMLKnownFields = map[string]bool{
-	"description": true, "version": true, "status": true, "info": true,
-	"directory": true,
+	"description": true, "version": true, "status": true,
 	// `name:` and `from:` are consumed by kind-keyed wrappers (LayerDoc,
 	// InlineLayer) — not by LayerYAML itself. Listed here so the custom
 	// UnmarshalYAML's unknown-key router doesn't mistake them for format
 	// sections or tag sections.
 	"name": true, "from": true,
-	"layers": true, "depends": true, "engine": true, "env": true,
+	"layers": true, "requires": true, "engine": true, "env": true,
 	"path_append": true, "ports": true, "route": true, "service": true,
 	"volumes": true, "aliases": true, "extract": true, "security": true,
 	"libvirt": true, "hooks": true,
@@ -256,9 +266,10 @@ var layerYAMLKnownFields = map[string]bool{
 	"env_provides": true, "env_requires": true, "env_accepts": true,
 	"secret_accepts": true, "secret_requires": true,
 	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
-	"vars": true, "tasks": true, "tests": true,
+	"vars": true, "tasks": true, "tests": true, "eval": true,
 	"artifacts":    true,
 	"capabilities": true, "requires_capabilities": true,
+	"packages":     true, "distros": true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -276,6 +287,163 @@ func SetFormatNames(dc *DistroConfig) {
 	}
 	for _, name := range dc.AllFormatNames() {
 		layerYAMLFormatNames[name] = true
+	}
+}
+
+// derivePackageSectionsFromCalamares populates layer.formatSections and
+// layer.tagSections from the post-2026-05 Calamares-aligned top-level
+// `packages:` + `distros:` map. Transitional bridge so the existing
+// install-template renderer (build.go / generate.go) keeps working without
+// per-renderer changes during the cutover. Same root data flows through;
+// only the YAML surface changed.
+//
+// Mapping rules:
+//   - Top-level `packages:` flows into every format section that any
+//     `distros:` entry triggers (the intersection layer).
+//   - `distros.fedora.*`     → FormatSections["rpm"]   + raw extras
+//   - `distros.debian.*`     → FormatSections["deb"]   + raw extras
+//   - `distros.ubuntu.*`     → FormatSections["deb"]   (unioned with debian)
+//   - `distros.archlinux.*`  → FormatSections["pac"]   + raw extras
+//   - `distros.archlinux.aur.*` → FormatSections["aur"]
+//   - `distros.<name>-<ver>.*` → TagSections["<name>:<ver>"] (dash → colon)
+func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
+	topPkgs := PackageNames(ly.Packages)
+
+	distroToFormat := map[string]string{
+		"fedora":    "rpm",
+		"debian":    "deb",
+		"ubuntu":    "deb",
+		"archlinux": "pac",
+	}
+
+	ensureFormat := func(fmtName string) *PackageSection {
+		if layer.formatSections == nil {
+			layer.formatSections = map[string]*PackageSection{}
+		}
+		ps := layer.formatSections[fmtName]
+		if ps == nil {
+			ps = &PackageSection{FormatName: fmtName, Raw: map[string]interface{}{}}
+			layer.formatSections[fmtName] = ps
+		}
+		if ps.Raw == nil {
+			ps.Raw = map[string]interface{}{}
+		}
+		return ps
+	}
+
+	addPackages := func(ps *PackageSection, pkgs []string) {
+		seen := map[string]bool{}
+		for _, p := range ps.Packages {
+			seen[p] = true
+		}
+		for _, p := range pkgs {
+			if !seen[p] {
+				ps.Packages = append(ps.Packages, p)
+				seen[p] = true
+			}
+		}
+		// Reflect into Raw so install templates that read .Raw.packages
+		// (rather than .Packages directly) see the same list.
+		ps.Raw["packages"] = ps.Packages
+	}
+	mergeRaw := func(ps *PackageSection, key string, val interface{}) {
+		if val == nil {
+			return
+		}
+		// Skip overwriting populated Raw entries; first writer wins.
+		if _, exists := ps.Raw[key]; !exists {
+			ps.Raw[key] = val
+		}
+	}
+
+	// Walk distros. Versioned keys (debian-13 etc.) feed TagSections.
+	for distroKey, dp := range ly.Distros {
+		if dp == nil {
+			continue
+		}
+		// Versioned form (e.g. debian-13, ubuntu-24.04) → tag section.
+		if i := strings.IndexByte(distroKey, '-'); i > 0 {
+			bare := distroKey[:i]
+			version := distroKey[i+1:]
+			if knownDistroNames[bare] {
+				tagKey := bare + ":" + version
+				if layer.tagSections == nil {
+					layer.tagSections = map[string]*TagPkgConfig{}
+				}
+				cfg := layer.tagSections[tagKey]
+				if cfg == nil {
+					cfg = &TagPkgConfig{Raw: map[string]interface{}{}}
+					layer.tagSections[tagKey] = cfg
+				}
+				cfg.Packages = append(cfg.Packages, PackageNames(dp.Packages)...)
+				if cfg.Raw == nil {
+					cfg.Raw = map[string]interface{}{}
+				}
+				if cfg.Raw["packages"] == nil {
+					cfg.Raw["packages"] = cfg.Packages
+				}
+				if dp.Repos != nil {
+					cfg.Raw["repos"] = dp.Repos
+				}
+				if dp.Copr != nil {
+					cfg.Raw["copr"] = dp.Copr
+				}
+				if dp.Options != nil {
+					cfg.Raw["options"] = dp.Options
+				}
+				if dp.Exclude != nil {
+					cfg.Raw["exclude"] = dp.Exclude
+				}
+				if dp.Modules != nil {
+					cfg.Raw["modules"] = dp.Modules
+				}
+				continue
+			}
+		}
+
+		fmtName, ok := distroToFormat[distroKey]
+		if !ok {
+			continue
+		}
+		ps := ensureFormat(fmtName)
+		// Top-level packages contribute once; track via the helper's seen set.
+		if len(topPkgs) > 0 {
+			addPackages(ps, topPkgs)
+		}
+		addPackages(ps, PackageNames(dp.Packages))
+		if dp.Copr != nil {
+			mergeRaw(ps, "copr", dp.Copr)
+		}
+		if dp.Repos != nil {
+			mergeRaw(ps, "repos", dp.Repos)
+		}
+		if dp.Exclude != nil {
+			mergeRaw(ps, "exclude", dp.Exclude)
+		}
+		if dp.Options != nil {
+			mergeRaw(ps, "options", dp.Options)
+		}
+		if dp.Modules != nil {
+			mergeRaw(ps, "modules", dp.Modules)
+		}
+		// AUR sub-block under archlinux.
+		if distroKey == "archlinux" && dp.AUR != nil {
+			aurPS := ensureFormat("aur")
+			addPackages(aurPS, PackageNames(dp.AUR.Packages))
+			if dp.AUR.Options != nil {
+				mergeRaw(aurPS, "options", dp.AUR.Options)
+			}
+		}
+	}
+
+	// Top-level packages without any distros entries: feed all known formats
+	// so the install templates pick them up regardless of the resolved image's
+	// distro. Only fires when `distros:` is empty (single-format author intent).
+	if len(ly.Distros) == 0 && len(topPkgs) > 0 {
+		for _, fmtName := range []string{"rpm", "deb", "pac"} {
+			ps := ensureFormat(fmtName)
+			addPackages(ps, topPkgs)
+		}
 	}
 }
 
@@ -500,8 +668,8 @@ type Layer struct {
 	InitSystems    map[string]bool // set of init system names this layer triggers
 	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
-	Depends           []string // bare refs (version stripped) for resolution
-	RawDepends        []string // original refs with :version for remote ref collection
+	Requires           []string // bare refs (version stripped) for resolution
+	RawRequires        []string // original refs with :version for remote ref collection
 	IncludedLayers    []string // bare refs from layers: field (version stripped)
 	RawIncludedLayers []string // original layers: refs with :version
 
@@ -666,8 +834,16 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 			}
 			return nil, fmt.Errorf("%s: ambiguous — `layer:` wrapper present AND other top-level keys %v (pick one form)", path, other)
 		}
+		// 2026-05 Calamares cutover: hard-fail on legacy field shapes.
+		// Every legacy form has a one-shot remediation via `ov migrate calamares`.
+		body := inner.Content[layerIdx]
+		if body != nil && body.Kind == yaml.MappingNode {
+			if err := rejectLegacyLayerKeys(path, body); err != nil {
+				return nil, err
+			}
+		}
 		var ly LayerYAML
-		if err := inner.Content[layerIdx].Decode(&ly); err != nil {
+		if err := body.Decode(&ly); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		return &ly, nil
@@ -677,21 +853,40 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate unified --rewrite-layers` to convert to the canonical `layer:` kind-keyed form", path)
 }
 
-// resolveLayerSourceDir returns the anchor directory for relative file lookups
-// within a layer (tasks.copy, data.src, install-file probes). The `directory:`
-// field in layer.yml overrides the default (path = directory containing layer.yml).
-//
-//   - "" or "." → path (current behavior; full backward compatibility)
-//   - absolute path → used as-is
-//   - relative → joined onto path
-func resolveLayerSourceDir(path, directory string) string {
-	if directory == "" || directory == "." {
-		return path
+// rejectLegacyLayerKeys is the 2026-05 Calamares-cutover hard-fail gate:
+// every legacy field shape produces a clear error pointing at
+// `ov migrate calamares`. Runs before standard YAML decoding so the user
+// sees the migration hint, not a generic "field not found" error.
+func rejectLegacyLayerKeys(path string, body *yaml.Node) error {
+	for i := 0; i+1 < len(body.Content); i += 2 {
+		key := body.Content[i].Value
+		switch key {
+		case "depends":
+			return fmt.Errorf("%s: layer.yml uses legacy `depends:` field. Run: ov migrate calamares", path)
+		case "rpm", "deb", "pac", "aur":
+			return fmt.Errorf("%s: layer.yml uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: ov migrate calamares", path, key)
+		case "directory":
+			return fmt.Errorf("%s: layer.yml uses legacy `directory:` field (removed in 2026-05 cutover). Run: ov migrate calamares", path)
+		case "info":
+			return fmt.Errorf("%s: layer.yml uses legacy `info:` field (removed; use `description:`). Run: ov migrate calamares", path)
+		}
+		// Distro-tag sections like `debian:13:`, `ubuntu:24.04:`,
+		// `debian,ubuntu:` — only fire when the bare leading segment
+		// matches a known distro name (so we don't false-positive on
+		// arbitrary YAML keys with colons).
+		if d, isTag := classifyDistroTag(key); isTag && len(d) > 0 {
+			return fmt.Errorf("%s: layer.yml uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: ov migrate calamares", path, key)
+		}
 	}
-	if filepath.IsAbs(directory) {
-		return filepath.Clean(directory)
-	}
-	return filepath.Clean(filepath.Join(path, directory))
+	return nil
+}
+
+// resolveLayerSourceDir was the resolver for the legacy `directory:` field on
+// layer.yml. The field was deleted in the 2026-05 Calamares cutover; the
+// helper is now a no-op kept only for any external import that still calls
+// it. New code should use `path` directly.
+func resolveLayerSourceDir(path, _ string) string {
+	return path
 }
 
 // scanLayer scans a single layer directory
@@ -713,12 +908,10 @@ func scanLayer(path string, name string) (*Layer, error) {
 		ly = parsed
 	}
 
-	// Resolve SourceDir from `directory:` (defaults to path)
-	var directoryField string
-	if ly != nil {
-		directoryField = ly.Directory
-	}
-	layer.SourceDir = resolveLayerSourceDir(path, directoryField)
+	// SourceDir always equals layer Path (the `directory:` field was deleted
+	// in the 2026-05 Calamares cutover; 0 layers used it).
+	_ = ly
+	layer.SourceDir = path
 
 	// Check for install files (anchored at SourceDir — honors `directory:`)
 	layer.HasPixiToml = fileExists(filepath.Join(layer.SourceDir, "pixi.toml"))
@@ -746,11 +939,11 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.Info = descriptionInfo(ly.Description)
 
 		// Keep raw depends for remote ref collection
-		layer.RawDepends = ly.Depends
+		layer.RawRequires = ly.Requires
 		// Strip :version from remote refs for layer resolution (map keys use bare refs)
-		layer.Depends = make([]string, len(ly.Depends))
-		for i, dep := range ly.Depends {
-			layer.Depends[i] = BareRef(dep)
+		layer.Requires = make([]string, len(ly.Requires))
+		for i, dep := range ly.Requires {
+			layer.Requires[i] = BareRef(dep)
 		}
 
 		// Parse layers: field for layer composition
@@ -772,6 +965,15 @@ func scanLayer(path string, name string) (*Layer, error) {
 			layer.formatSections = make(map[string]*PackageSection)
 		}
 		layer.tagSections = ly.TagSections
+
+		// 2026-05 Calamares cutover: derive format/tag sections from the new
+		// top-level `packages:` + `distros:` map so the legacy renderer reads
+		// the post-migration shape without changes. Transitional during the
+		// cutover; FormatSections/TagSections deletion happens after the
+		// renderer is ported in a follow-up pass.
+		if len(ly.Packages) > 0 || len(ly.Distros) > 0 {
+			derivePackageSectionsFromCalamares(layer, ly)
+		}
 
 		// Pre-populate ports cache
 		if layer.HasPorts {

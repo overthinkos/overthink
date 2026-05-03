@@ -6,58 +6,63 @@ layer:
     them with supervisord-managed daemons. Designed for target:local
     deployments where the OS already manages libvirt natively. Sibling
     of /ov-foundation:virtualization (which is for container images).
-
-  pac:
-    packages:
-      - qemu-full
-      - qemu-img
-      - virtiofsd
-      - libvirt
-      - libguestfs
-      - dnsmasq
-      # bridge-utils is deprecated on Arch (modern users invoke
-      # `ip link` from iproute2, which is libvirt's hard dep anyway).
-
-  rpm:
-    options:
-      - --allowerasing
-    packages:
-      - bindfs
-      - genisoimage
-      - guestfs-tools
-      - libguestfs-tools
-      - libvirt-client
-      - libvirt-daemon
-      - libvirt-daemon-config-network
-      - libvirt-daemon-driver-qemu
-      - libvirt-daemon-driver-network
-      - libvirt-nss
-      - passt
-      - qemu-guest-agent
-      - qemu-img
-      - qemu-kvm
-      - qemu-system-x86-core
-
-  deb:
-    packages:
-      - bindfs
-      - genisoimage
-      - guestfs-tools
-      - libnss-libvirt
-      - libvirt-clients
-      - libvirt-daemon-system
-      - passt
-      - qemu-guest-agent
-      - qemu-system-x86
-      - qemu-utils
-
+  distros:
+    archlinux:
+      packages:
+        - qemu-full
+        - qemu-img
+        - virtiofsd
+        - libvirt
+        - libguestfs
+        - dnsmasq
+    debian:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libnss-libvirt
+        - libvirt-clients
+        - libvirt-daemon-system
+        - passt
+        - qemu-guest-agent
+        - qemu-system-x86
+        - qemu-utils
+    fedora:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libguestfs-tools
+        - libvirt-client
+        - libvirt-daemon
+        - libvirt-daemon-config-network
+        - libvirt-daemon-driver-qemu
+        - libvirt-daemon-driver-network
+        - libvirt-nss
+        - passt
+        - qemu-guest-agent
+        - qemu-img
+        - qemu-kvm
+        - qemu-system-x86-core
+      options:
+        - --allowerasing
+    ubuntu:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libnss-libvirt
+        - libvirt-clients
+        - libvirt-daemon-system
+        - passt
+        - qemu-guest-agent
+        - qemu-system-x86
+        - qemu-utils
   tasks:
     - cmd: usermod -aG libvirt ${USER}
       user: root
-
     - cmd: systemctl enable --now virtqemud.socket virtnetworkd.socket
       user: root
-
   eval:
     - id: libvirt-package-installed
       package: libvirt

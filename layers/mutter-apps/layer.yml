@@ -1,14 +1,13 @@
 layer:
   name: mutter-apps
-  depends:
+  requires:
     - mutter
     - supervisord
-
-  rpm:
-    packages:
-      - gnome-terminal
-      - nautilus
-
+  distros:
+    fedora:
+      packages:
+        - gnome-terminal
+        - nautilus
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -16,7 +15,6 @@ layer:
       to: "${HOME}/.local/bin/mutter-app-wrapper"
       mode: "0755"
       user: "${USER}"
-
   service:
     - name: gnome-terminal
       exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper gnome-terminal --wait"
@@ -29,7 +27,6 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
     - name: nautilus
       exec: "%(ENV_HOME)s/.local/bin/mutter-app-wrapper nautilus"
       env:
@@ -41,5 +38,3 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
-

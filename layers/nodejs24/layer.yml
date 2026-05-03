@@ -1,19 +1,16 @@
 layer:
   name: nodejs24
-  depends: []
-
+  requires: []
   env:
     NPM_CONFIG_PREFIX: "~/.npm-global"
     npm_config_cache: "~/.cache/npm"
-
   path_append:
     - "~/.npm-global/bin"
-
-  rpm:
-    packages:
-      - nodejs24
-      - nodejs24-npm
-
+  distros:
+    fedora:
+      packages:
+        - nodejs24
+        - nodejs24-npm
   tasks:
     - link: /usr/local/bin/node
       target: /usr/bin/node-24
@@ -24,7 +21,6 @@ layer:
     - link: /usr/local/bin/npx
       target: /usr/bin/npx-24
       user: root
-
   eval:
     - id: node24-binary
       file: /usr/local/bin/node
@@ -43,4 +39,3 @@ layer:
     - id: nodejs24-package
       package: nodejs24
       installed: true
-

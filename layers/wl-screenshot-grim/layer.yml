@@ -1,9 +1,9 @@
 layer:
   name: wl-screenshot-grim
-  rpm:
-    packages:
-      - grim
-
+  distros:
+    fedora:
+      packages:
+        - grim
   eval:
     - id: grim-binary
       file: /usr/bin/grim
@@ -11,4 +11,3 @@ layer:
     - id: grim-package
       package: grim
       installed: true
-

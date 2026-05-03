@@ -6,13 +6,12 @@ layer:
       Provides /usr/bin/redis-cli so the harness can run
       `redis-cli -h ov-redis SET ...` and verify cross-pod connectivity.
       No redis service is started in this image — it acts purely as a client.
-
-  rpm:
-    packages:
-      - redis
-      - iproute
-      - procps-ng
-
+  distros:
+    fedora:
+      packages:
+        - redis
+        - iproute
+        - procps-ng
   service:
     - name: keep-alive
       exec: "/usr/bin/sleep infinity"
@@ -20,7 +19,6 @@ layer:
       priority: 10
       enable: true
       scope: system
-
   eval:
     - id: harness-redis-client-cli
       file: /usr/bin/redis-cli

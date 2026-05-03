@@ -1,13 +1,13 @@
 layer:
   name: desktop-fonts
-  rpm:
-    copr:
-      - che/nerd-fonts
-    packages:
-      - jetbrains-mono-fonts
-      - liberation-fonts
-      - nerd-fonts
-
+  distros:
+    fedora:
+      packages:
+        - jetbrains-mono-fonts
+        - liberation-fonts
+        - nerd-fonts
+      copr:
+        - che/nerd-fonts
   eval:
     - id: jetbrains-mono-installed
       package: jetbrains-mono-fonts
@@ -20,4 +20,3 @@ layer:
     - id: nerd-fonts-installed
       package: nerd-fonts
       installed: true
-

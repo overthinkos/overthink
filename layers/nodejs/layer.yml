@@ -3,41 +3,30 @@ layer:
   env:
     NPM_CONFIG_PREFIX: "~/.npm-global"
     npm_config_cache: "~/.cache/npm"
-
   path_append:
     - "~/.npm-global/bin"
-
-  rpm:
-    packages:
-      - nodejs
-      - npm
-
-  deb:
-    packages:
-      - nodejs
-      - npm
-
-  # Ubuntu 24.04 noble ships nodejs 18 in main — too old for modern npm CLIs
-  # (gemini, firebase, oracle all require nodejs >= 20 and fail at startup on
-  # v18 with "zeroWidthClusterRegex" V8 errors). NodeSource's apt repo ships
-  # nodejs 20.x as a drop-in `nodejs` package (bundled npm). No codename in
-  # the URL — the NodeSource `nodistro` repo serves all supported suites.
-  # First-match-wins cascades over the generic deb: above.
-  ubuntu:24.04:
-    repos:
-      - name: nodesource
-        url: "https://deb.nodesource.com/node_20.x"
-        key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
-        suite: nodistro
-        components: main
-    packages:
-      - nodejs
-
-  pac:
-    packages:
-      - nodejs
-      - npm
-
+  packages:
+    - nodejs
+  distros:
+    archlinux:
+      packages:
+        - npm
+    debian:
+      packages:
+        - npm
+    fedora:
+      packages:
+        - npm
+    ubuntu:
+      packages:
+        - npm
+    ubuntu-24.04:
+      repos:
+        - name: nodesource
+          url: "https://deb.nodesource.com/node_20.x"
+          key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
+          suite: nodistro
+          components: main
   eval:
     - id: node-binary
       file: /usr/bin/node
@@ -51,4 +40,3 @@ layer:
     - id: npm-version
       command: /usr/bin/npm --version
       exit_status: 0
-

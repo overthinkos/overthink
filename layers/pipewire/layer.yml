@@ -1,18 +1,16 @@
 layer:
   name: pipewire
-  depends:
+  requires:
     - supervisord
-
   env:
     XDG_RUNTIME_DIR: "/tmp"
-
-  rpm:
-    packages:
-      - pipewire
-      - pipewire-pulseaudio
-      - pipewire-utils
-      - wireplumber
-
+  distros:
+    fedora:
+      packages:
+        - pipewire
+        - pipewire-pulseaudio
+        - pipewire-utils
+        - wireplumber
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -20,8 +18,6 @@ layer:
       to: "${HOME}/.local/bin/pipewire-wrapper"
       mode: "0755"
       user: "${USER}"
-
-
   eval:
     - id: pipewire-binary
       file: /usr/bin/pipewire
@@ -36,7 +32,6 @@ layer:
       scope: deploy
       service: pipewire
       running: true
-
   service:
     - name: pipewire
       exec: "%(ENV_HOME)s/.local/bin/pipewire-wrapper"
@@ -47,5 +42,3 @@ layer:
       start_secs: 2
       enable: true
       scope: system
-
-

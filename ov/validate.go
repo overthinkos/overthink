@@ -454,7 +454,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 		}
 
 		// Validate depends references
-		for _, dep := range layer.Depends {
+		for _, dep := range layer.Requires {
 			resolved := dep
 			// Within a remote repo, short-name depends resolve to siblings in the same repo
 			if layer.Remote && !IsRemoteLayerRef(dep) {
@@ -502,7 +502,7 @@ func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 		}
 
 		depSet := make(map[string]bool)
-		for _, d := range layer.Depends {
+		for _, d := range layer.Requires {
 			depSet[d] = true
 		}
 

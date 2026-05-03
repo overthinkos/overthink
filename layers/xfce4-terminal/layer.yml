@@ -1,12 +1,11 @@
 layer:
   name: xfce4-terminal
-  depends:
+  requires:
     - sway
-
-  rpm:
-    packages:
-      - xfce4-terminal
-
+  distros:
+    fedora:
+      packages:
+        - xfce4-terminal
   tasks:
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
@@ -14,7 +13,6 @@ layer:
       to: "${HOME}/.config/sway/config.d/xfce4-terminal.conf"
       mode: "0644"
       user: "${USER}"
-
   eval:
     - id: xfce4-terminal-binary
       file: /usr/bin/xfce4-terminal
@@ -22,4 +20,3 @@ layer:
     - id: xfce4-terminal-sway-conf
       file: ${HOME}/.config/sway/config.d/xfce4-terminal.conf
       exists: true
-

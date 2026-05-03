@@ -1,11 +1,10 @@
 layer:
   name: wf-recorder
   description: Wayland screen recorder for wlroots compositors
-
-  rpm:
-    packages:
-      - wf-recorder
-
+  distros:
+    fedora:
+      packages:
+        - wf-recorder
   eval:
     - id: wf-recorder-binary
       file: /usr/bin/wf-recorder
@@ -13,4 +12,3 @@ layer:
     - id: wf-recorder-package
       package: wf-recorder
       installed: true
-

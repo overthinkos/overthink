@@ -1,14 +1,12 @@
 layer:
   name: pavucontrol
-  depends:
+  requires:
     - pipewire
-
-  rpm:
-    packages:
-      - pavucontrol
-
+  distros:
+    fedora:
+      packages:
+        - pavucontrol
   eval:
     - id: pavucontrol-binary
       file: /usr/bin/pavucontrol
       exists: true
-

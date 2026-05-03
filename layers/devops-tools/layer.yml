@@ -1,29 +1,24 @@
 layer:
   name: devops-tools
-  depends:
+  requires:
     - nodejs
-
-  rpm:
-    packages:
-      - bind-utils
-      - jq
-      - rsync
-      - unzip
-
-  pac:
-    packages:
-      - bind-tools
-      - jq
-      - rsync
-      - unzip
-
-  deb:
-    packages:
-      - dnsutils        # Debian's equivalent of bind-utils / bind-tools
-      - jq
-      - rsync
-      - unzip
-
+  packages:
+    - jq
+    - rsync
+    - unzip
+  distros:
+    archlinux:
+      packages:
+        - bind-tools
+    debian:
+      packages:
+        - dnsutils
+    fedora:
+      packages:
+        - bind-utils
+    ubuntu:
+      packages:
+        - dnsutils
   tasks:
     # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
     # symlinks into /usr/local/bin.
@@ -33,7 +28,6 @@ layer:
         ./aws/install
         rm -rf /tmp/awscliv2.zip /tmp/aws
       user: root
-
     # Scaleway CLI — GitHub API lookup with a pinned fallback for when the API
     # is rate-limited or offline during builds.
     - cmd: |
@@ -42,14 +36,12 @@ layer:
         curl -fsSL "$SCW_URL" -o /usr/local/bin/scw
         chmod +x /usr/local/bin/scw
       user: root
-
     # kubectx + kubens — plain shell scripts from master
     - cmd: |
         curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubectx" -o /usr/local/bin/kubectx
         curl -fsSL "https://raw.githubusercontent.com/ahmetb/kubectx/master/kubens" -o /usr/local/bin/kubens
         chmod +x /usr/local/bin/kubectx /usr/local/bin/kubens
       user: root
-
     # OpenTofu via official installer script
     - cmd: |
         curl -fsSL "https://get.opentofu.org/install-opentofu.sh" -o /tmp/install-opentofu.sh
@@ -57,7 +49,6 @@ layer:
         bash /tmp/install-opentofu.sh --install-method standalone
         rm -f /tmp/install-opentofu.sh
       user: root
-
   eval:
     - id: aws-binary
       file: /usr/local/bin/aws
@@ -97,4 +88,3 @@ layer:
     - id: jq-version
       command: /usr/bin/jq --version
       exit_status: 0
-

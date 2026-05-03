@@ -1,6 +1,7 @@
 layer:
   name: arch-aur-test
-  aur:
-    packages:
-      - yay-bin
-
+  distros:
+    archlinux:
+      aur:
+        packages:
+          - yay-bin

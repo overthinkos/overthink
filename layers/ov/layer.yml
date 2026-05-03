@@ -1,26 +1,28 @@
 layer:
   name: ov
   description: Overthink CLI (ov) binary
-
-  # The ov binary links against libportaudio (audio recording) and
-  # libopusfile (opus codec) via CGo. Both are required at RUNTIME
-  # or `ov version` exits 127 with "libportaudio.so.2: cannot open
-  # shared object file". CLAUDE.md R9 requires these to live in the
-  # distro-specific install blocks below (and they also live in
-  # pkg/arch/PKGBUILD `depends=` for host-side Arch installs).
-  rpm:
-    packages: [portaudio, opusfile]
-  deb:
-    packages: [libportaudio2, libopusfile0]
-  pac:
-    packages: [portaudio, opusfile]
-
+  distros:
+    archlinux:
+      packages:
+        - portaudio
+        - opusfile
+    debian:
+      packages:
+        - libportaudio2
+        - libopusfile0
+    fedora:
+      packages:
+        - portaudio
+        - opusfile
+    ubuntu:
+      packages:
+        - libportaudio2
+        - libopusfile0
   tasks:
     - copy: bin/ov
       to: /usr/local/bin/ov
       mode: "0755"
       user: root
-
   eval:
     - id: ov-binary
       file: /usr/local/bin/ov
@@ -31,4 +33,3 @@ layer:
       exit_status: 0
       stdout:
         - matches: "[0-9]{4}\\.[0-9]+"
-

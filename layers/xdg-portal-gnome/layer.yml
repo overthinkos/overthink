@@ -1,20 +1,18 @@
 layer:
   name: xdg-portal-gnome
-  depends:
+  requires:
     - dbus
     - mutter
     - pipewire
-
   env:
     XDG_CURRENT_DESKTOP: "GNOME"
-
-  rpm:
-    packages:
-      - xdg-desktop-portal
-      - xdg-desktop-portal-gnome
-      - xdg-desktop-portal-gtk
-      - python3-gobject
-
+  distros:
+    fedora:
+      packages:
+        - xdg-desktop-portal
+        - xdg-desktop-portal-gnome
+        - xdg-desktop-portal-gtk
+        - python3-gobject
   tasks:
     - mkdir: "${HOME}/.config/xdg-desktop-portal"
       user: "${USER}"
@@ -22,4 +20,3 @@ layer:
       to: "${HOME}/.config/xdg-desktop-portal/portals.conf"
       mode: "0644"
       user: "${USER}"
-

@@ -1,18 +1,16 @@
 layer:
   name: xdg-portal-kde
-  depends:
+  requires:
     - dbus
     - kwin
     - pipewire
-
   env:
     XDG_CURRENT_DESKTOP: "KDE"
-
-  rpm:
-    packages:
-      - xdg-desktop-portal
-      - xdg-desktop-portal-kde
-
+  distros:
+    fedora:
+      packages:
+        - xdg-desktop-portal
+        - xdg-desktop-portal-kde
   tasks:
     - mkdir: "${HOME}/.config/xdg-desktop-portal"
       user: "${USER}"
@@ -20,4 +18,3 @@ layer:
       to: "${HOME}/.config/xdg-desktop-portal/portals.conf"
       mode: "0644"
       user: "${USER}"
-

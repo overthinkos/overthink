@@ -39,8 +39,8 @@ func TestLayerPixi(t *testing.T) {
 	if pixi.HasPixiToml {
 		t.Error("pixi should not have pixi.toml")
 	}
-	if len(pixi.Depends) != 0 {
-		t.Errorf("pixi should have no depends, got %v", pixi.Depends)
+	if len(pixi.Requires) != 0 {
+		t.Errorf("pixi should have no depends, got %v", pixi.Requires)
 	}
 }
 
@@ -58,8 +58,8 @@ func TestLayerPython(t *testing.T) {
 	if !python.HasPixiToml {
 		t.Error("python should have pixi.toml")
 	}
-	if !reflect.DeepEqual(python.Depends, []string{"pixi"}) {
-		t.Errorf("python.Depends = %v, want [pixi]", python.Depends)
+	if !reflect.DeepEqual(python.Requires, []string{"pixi"}) {
+		t.Errorf("python.Requires = %v, want [pixi]", python.Requires)
 	}
 }
 
@@ -334,8 +334,8 @@ func TestLayerPixiLocked(t *testing.T) {
 	if locked.PixiManifest() != "pixi.toml" {
 		t.Errorf("pixi-locked.PixiManifest() = %q, want %q", locked.PixiManifest(), "pixi.toml")
 	}
-	if !reflect.DeepEqual(locked.Depends, []string{"pixi"}) {
-		t.Errorf("pixi-locked.Depends = %v, want [pixi]", locked.Depends)
+	if !reflect.DeepEqual(locked.Requires, []string{"pixi"}) {
+		t.Errorf("pixi-locked.Requires = %v, want [pixi]", locked.Requires)
 	}
 }
 

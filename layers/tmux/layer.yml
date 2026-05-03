@@ -1,19 +1,8 @@
 layer:
   name: tmux
   description: Terminal multiplexer
-
-  rpm:
-    packages:
-      - tmux
-
-  pac:
-    packages:
-      - tmux
-
-  deb:
-    packages:
-      - tmux
-
+  packages:
+    - tmux
   eval:
     - id: tmux-binary
       file: /usr/bin/tmux
@@ -26,4 +15,3 @@ layer:
       exit_status: 0
       stdout:
         - matches: "^tmux"
-

@@ -5,10 +5,8 @@ layer:
     direct repo on RPM, AUR on Arch/CachyOS. No CDP scaffolding, no
     supervisord — for headless container CDP automation, compose
     /ov-selkies:chrome-cdp on top.
-
   env:
     CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
-
   env_accepts:
     - name: HTTP_PROXY
       description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
@@ -16,52 +14,41 @@ layer:
       description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
     - name: NO_PROXY
       description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
-
   security:
     shm_size: "1g"
     memory_max: "6g"
     memory_high: "5g"
     memory_swap_max: "2g"
-
-  rpm:
-    repos:
-      - name: google-chrome
-        url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
-        gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
-    packages:
-      - vulkan-loader
-      - mesa-dri-drivers
-      - alsa-lib
-      - at-spi2-core
-      - cups-libs
-      - gtk3
-      - libdrm
-      - libxkbcommon
-      - nss
-      - procps-ng
-      - iproute
-      - libva-utils
-      - google-chrome-stable
-
-  pac:
-    packages:
-      - vulkan-icd-loader
-      - mesa
-      - alsa-lib
-      - at-spi2-core
-      - libcups
-      - gtk3
-      - libdrm
-      - libxkbcommon
-      - nss
-      - procps-ng
-      - iproute2
-      - libva-utils
-
-  aur:
-    packages:
-      - google-chrome
-
+  packages:
+    - alsa-lib
+    - at-spi2-core
+    - gtk3
+    - libdrm
+    - libxkbcommon
+    - nss
+    - procps-ng
+    - libva-utils
+  distros:
+    archlinux:
+      packages:
+        - vulkan-icd-loader
+        - mesa
+        - libcups
+        - iproute2
+      aur:
+        packages:
+          - google-chrome
+    fedora:
+      packages:
+        - vulkan-loader
+        - mesa-dri-drivers
+        - cups-libs
+        - iproute
+        - google-chrome-stable
+      repos:
+        - name: google-chrome
+          url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
+          gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
   tasks:
     # Register chrome as the default browser in xdg-settings. Best-effort
     # only — xdg-settings has a fragile KDE codepath that calls qtpaths,
@@ -69,11 +56,9 @@ layer:
     # deploy: chrome is still installed, just not registered as default.
     - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
       user: "${USER}"
-
   volumes:
     - name: chrome-data
       path: "~/.chrome-debug"
-
   eval:
     - id: google-chrome-binary
       file: /usr/bin/google-chrome-stable

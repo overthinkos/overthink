@@ -81,6 +81,13 @@ var templateFuncs = template.FuncMap{
 	// printf is a template-accessible Sprintf.
 	"printf": fmt.Sprintf,
 
+	// hasSuffix reports whether a string ends with the given suffix.
+	// Used by the rpm install template to distinguish a URL pointing at
+	// a `.repo` configuration file (consumable by `dnf5 config-manager
+	// addrepo --from-repofile`) from a yum baseurl that needs an
+	// inline `.repo` file generated locally.
+	"hasSuffix": strings.HasSuffix,
+
 	// anyRepoHasURL reports whether any repo entry declares a `url` key
 	// (i.e. needs `dnf5 config-manager addrepo`). Lets install_template
 	// conditionally install `dnf5-plugins` — necessary on bootc bases
@@ -199,7 +206,10 @@ func toStringSlice(v interface{}) []string {
 	}
 }
 
-// toMapSlice converts an interface{} to []map[string]interface{}.
+// toMapSlice converts an interface{} to []map[string]interface{}. Accepts
+// both `[]interface{}` (legacy raw-YAML decode shape) and `[]map[string]any`
+// (typed shape produced by the post-2026-05 derivePackageSectionsFromCalamares
+// bridge that copies `DistroPackages.Repos` directly into PackageSection.Raw).
 func toMapSlice(v interface{}) []map[string]interface{} {
 	switch val := v.(type) {
 	case []interface{}:
@@ -209,6 +219,12 @@ func toMapSlice(v interface{}) []map[string]interface{} {
 				result = append(result, m)
 			}
 		}
+		return result
+	case []map[string]interface{}:
+		// Already the right shape (also matches []map[string]any since
+		// `any` is an alias for `interface{}`); just copy.
+		result := make([]map[string]interface{}, len(val))
+		copy(result, val)
 		return result
 	default:
 		return nil

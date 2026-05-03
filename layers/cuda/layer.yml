@@ -1,33 +1,31 @@
 layer:
   name: cuda
-  depends:
+  requires:
     - nvidia
     - ffmpeg
-
   env:
     CUDA_HOME: "/usr"
-
-  rpm:
-    repos:
-      - name: fedora-multimedia
-        url: "https://negativo17.org/repos/fedora-multimedia.repo"
-        gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-    packages:
-      - onnxruntime
-      - libaio-devel
-      - cpio
-      - cuda-nvcc
-      - cuda-cudart-devel
-      - cuda-cudart-static
-      - cuda-nvrtc-devel
-      - cuda-cupti-devel
-      - libcurand-devel
-      - cuda-cccl-devel
-      - cuda-cudnn
-      - libcufile-devel
-    exclude:
-      - "nvidia-driver*"
-
+  distros:
+    fedora:
+      packages:
+        - onnxruntime
+        - libaio-devel
+        - cpio
+        - cuda-nvcc
+        - cuda-cudart-devel
+        - cuda-cudart-static
+        - cuda-nvrtc-devel
+        - cuda-cupti-devel
+        - libcurand-devel
+        - cuda-cccl-devel
+        - cuda-cudnn
+        - libcufile-devel
+      exclude:
+        - "nvidia-driver*"
+      repos:
+        - name: fedora-multimedia
+          url: "https://negativo17.org/repos/fedora-multimedia.repo"
+          gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   tasks:
     # cuDNN headers are shipped in a -devel package that has a hard dependency
     # on the NVIDIA driver. Extract headers + lib symlinks manually via rpm2cpio
@@ -51,7 +49,6 @@ layer:
         fi
         cd / && rm -rf "$CUDNN_DIR"
       user: root
-
   eval:
     - id: cuda-nvcc-binary
       file: /usr/bin/nvcc
@@ -65,4 +62,3 @@ layer:
     - id: onnxruntime-package
       package: onnxruntime
       installed: true
-

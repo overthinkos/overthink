@@ -1,8 +1,7 @@
 layer:
   name: sway
-  depends:
+  requires:
     - dbus
-
   env:
     WLR_BACKENDS: "headless"
     WLR_HEADLESS_OUTPUTS: "1"
@@ -11,38 +10,34 @@ layer:
     WAYLAND_DISPLAY: "wayland-0"
     EGL_LOG_LEVEL: "fatal"
     XKB_DEFAULT_LAYOUT: "us"
-
   env_accepts:
     - name: XKB_DEFAULT_LAYOUT
       description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
     - name: XKB_DEFAULT_VARIANT
       description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
-
-  rpm:
-    packages:
-      - sway
-      - xorg-x11-server-Xwayland
-      - fuzzel
-      - mesa-dri-drivers
-      - mesa-vulkan-drivers
-      - libglvnd-egl
-      - libglvnd-gles
-      - egl-wayland
-      - wlr-randr
-
+  distros:
+    fedora:
+      packages:
+        - sway
+        - xorg-x11-server-Xwayland
+        - fuzzel
+        - mesa-dri-drivers
+        - mesa-vulkan-drivers
+        - libglvnd-egl
+        - libglvnd-gles
+        - egl-wayland
+        - wlr-randr
   tasks:
     # sway ships with cap_sys_nice file capability which prevents execution
     # in rootless containers (kernel blocks exec of binaries with file caps
     # in user namespaces). Strip it — not needed for headless compositor.
     - setcap: /usr/bin/sway
-
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/sway"
       user: "${USER}"
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
-
     - copy: sway-wrapper
       to: "${HOME}/.local/bin/sway-wrapper"
       mode: "0755"
@@ -51,8 +46,6 @@ layer:
       to: "${HOME}/.config/sway/config"
       mode: "0644"
       user: "${USER}"
-
-
   eval:
     - id: sway-binary
       file: /usr/bin/sway
@@ -71,7 +64,6 @@ layer:
       scope: deploy
       service: sway
       running: true
-
   service:
     - name: sway
       exec: "%(ENV_HOME)s/.local/bin/sway-wrapper"
@@ -86,5 +78,3 @@ layer:
       start_secs: 3
       enable: true
       scope: system
-
-

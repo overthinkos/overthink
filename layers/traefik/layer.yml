@@ -1,20 +1,16 @@
 layer:
   name: traefik
-  depends:
+  requires:
     - supervisord
-
   vars:
     TRAEFIK_VERSION: v3.4.0
-
   ports:
     - 8000
     - 8080
     - 443
-
   volumes:
     - name: certs
       path: "~/.traefik/acme"
-
   tasks:
     # Download the traefik binary for the target platform. ${ARCH} is the
     # BuildKit TARGETARCH value (amd64/arm64) emitted via ENV at the top of
@@ -25,20 +21,15 @@ layer:
       to: /usr/local/bin
       include: [traefik]
       user: root
-
     - mkdir: /etc/traefik/dynamic
       user: root
-
     - copy: traefik.yml
       to: /etc/traefik/traefik.yml
       mode: "0644"
       user: root
-
   service:
     - name: traefik
       exec: "/usr/local/bin/traefik --configFile=/etc/traefik/traefik.yml"
       restart: always
       enable: true
       scope: system
-
-

@@ -1,19 +1,8 @@
 layer:
   name: gocryptfs
   description: Encrypted filesystem (gocryptfs) for ov config encrypted volume operations
-
-  rpm:
-    packages:
-      - gocryptfs
-
-  pac:
-    packages:
-      - gocryptfs
-
-  deb:
-    packages:
-      - gocryptfs
-
+  packages:
+    - gocryptfs
   eval:
     - id: gocryptfs-binary
       file: /usr/bin/gocryptfs
@@ -21,4 +10,3 @@ layer:
     - id: gocryptfs-version
       command: /usr/bin/gocryptfs -version
       exit_status: 0
-

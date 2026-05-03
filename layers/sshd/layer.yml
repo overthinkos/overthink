@@ -3,35 +3,32 @@ layer:
   env_accepts:
     - name: SSH_AUTHORIZED_KEYS
       description: "SSH public key(s) for authorized access (one per line). Set via: ov config <image> --ssh-key auto"
-
-  rpm:
-    packages:
-      - openssh-server
-      - openssh-clients
-      - sudo
-
-  pac:
-    packages:
-      - openssh
-      - sudo
-
-  deb:
-    packages:
-      - openssh-server
-      - openssh-client
-      - sudo
-
+  packages:
+    - sudo
+  distros:
+    archlinux:
+      packages:
+        - openssh
+    debian:
+      packages:
+        - openssh-server
+        - openssh-client
+    fedora:
+      packages:
+        - openssh-server
+        - openssh-clients
+    ubuntu:
+      packages:
+        - openssh-server
+        - openssh-client
   ports:
     - tcp:2222
-
   # Supervisord service (containers)
-
   tasks:
     - copy: sshd-wrapper
       to: /usr/local/bin/sshd-wrapper
       mode: "0755"
       user: root
-
     # Sudoers file targets the ACTUAL uid-1000 account, not a hardcoded
     # literal. System-discovery via `getent passwd 1000` works uniformly
     # across both paths: create mode (Fedora/Arch/plain Debian — the account
@@ -49,9 +46,7 @@ layer:
         printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$account" > /etc/sudoers.d/ov-user
         chmod 0440 /etc/sudoers.d/ov-user
       user: root
-
   # Systemd service (bootc images)
-
   eval:
     - id: sshd-binary
       file: /usr/sbin/sshd
@@ -87,13 +82,11 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:2222}
       reachable: true
       timeout: 5s
-
   service:
     - name: sshd
       use_packaged: sshd.service
       enable: true
       scope: system
-
     - name: sshd
       exec: /usr/local/bin/sshd-wrapper
       restart: always
@@ -101,5 +94,3 @@ layer:
       start_secs: 1
       enable: true
       scope: system
-
-

@@ -1,8 +1,7 @@
 layer:
   name: immich-ml
-  depends:
+  requires:
     - immich
-
   env:
     IMMICH_MACHINE_LEARNING_ENABLED: "true"
     IMMICH_MACHINE_LEARNING_URL: "http://127.0.0.1:3003"
@@ -11,17 +10,13 @@ layer:
     MACHINE_LEARNING_WORKERS: "1"
     MACHINE_LEARNING_WORKER_TIMEOUT: "120"
     TRANSFORMERS_CACHE: "~/.immich/models"
-
   ports:
     - 3003
-
   volumes:
     - name: models
       path: "~/.immich/models"
-
   vars:
     IMMICH_VERSION: v2.7.5
-
   tasks:
     # uv (Python package manager) — piped sh installer; env vars redirect it to
     # system path instead of the user's home.
@@ -30,13 +25,11 @@ layer:
       env:
         UV_INSTALL_DIR: /usr/local/bin
       user: root
-
     # Fetch Immich source for the ML module
     - cmd: |
         curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
         mv /tmp/immich-$(echo ${IMMICH_VERSION} | sed 's/^v//') /tmp/immich
       user: root
-
     # Build machine-learning virtualenv + install immich_ml module
     - cmd: |
         uv venv /opt/immich/machine-learning/.venv
@@ -44,14 +37,11 @@ layer:
         cp -r /tmp/immich/machine-learning/immich_ml /opt/immich/machine-learning/
         rm -rf /tmp/immich
       user: root
-
     # User-phase model + cache directories
     - mkdir: "${HOME}/.immich/models"
       user: "${USER}"
     - mkdir: "${HOME}/.cache/immich_ml"
       user: "${USER}"
-
-
   eval:
     - id: immich-ml-venv
       file: /opt/immich/machine-learning/.venv/bin/python
@@ -85,7 +75,6 @@ layer:
       in_container: true
       stdout:
         - contains: "pong"
-
   service:
     - name: immich-ml
       exec: "bash -c 'export PATH=/opt/immich/machine-learning/.venv/bin:$PATH VIRTUAL_ENV=/opt/immich/machine-learning/.venv && python -m immich_ml'"
@@ -97,5 +86,3 @@ layer:
       priority: 40
       enable: true
       scope: system
-
-

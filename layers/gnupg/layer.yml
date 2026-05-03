@@ -1,19 +1,19 @@
 layer:
   name: gnupg
   description: GnuPG encryption and signing tools for GPG agent forwarding
-
-  rpm:
-    packages:
-      - gnupg2
-
-  pac:
-    packages:
-      - gnupg
-
-  deb:
-    packages:
-      - gnupg
-
+  distros:
+    archlinux:
+      packages:
+        - gnupg
+    debian:
+      packages:
+        - gnupg
+    fedora:
+      packages:
+        - gnupg2
+    ubuntu:
+      packages:
+        - gnupg
   eval:
     - id: gpg-binary
       file: /usr/bin/gpg
@@ -23,4 +23,3 @@ layer:
       exit_status: 0
       stdout:
         - contains: "gpg (GnuPG)"
-

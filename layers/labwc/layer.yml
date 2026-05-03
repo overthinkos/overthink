@@ -1,13 +1,11 @@
 layer:
   name: labwc
-  depends:
+  requires:
     - dbus
-
   # autostart script has a wait-for-supervisord-socket guard (see autostart)
   env:
     WAYLAND_DISPLAY: "wayland-0"
     XDG_RUNTIME_DIR: "/tmp"
-
   env_accepts:
     - name: XKB_DEFAULT_LAYOUT
       description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
@@ -17,20 +15,18 @@ layer:
       description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
     - name: XKB_DEFAULT_OPTIONS
       description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
-
-  rpm:
-    packages:
-      - labwc
-      - foot
-      - xorg-x11-server-Xwayland
-      - thunar
-
+  distros:
+    fedora:
+      packages:
+        - labwc
+        - foot
+        - xorg-x11-server-Xwayland
+        - thunar
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/labwc"
       user: "${USER}"
-
     - copy: labwc-wrapper
       to: "${HOME}/.local/bin/labwc-wrapper"
       mode: "0755"
@@ -43,8 +39,6 @@ layer:
       to: "${HOME}/.config/labwc/autostart"
       mode: "0644"
       user: "${USER}"
-
-
   eval:
     - id: labwc-binary
       file: /usr/bin/labwc
@@ -65,7 +59,6 @@ layer:
       scope: deploy
       service: labwc
       running: true
-
   service:
     - name: labwc
       exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
@@ -76,5 +69,3 @@ layer:
       start_secs: 2
       enable: true
       scope: system
-
-

@@ -1,15 +1,13 @@
 layer:
   name: wayvnc
-  depends:
+  requires:
     - supervisord
-
   ports:
     - tcp:5900
-
-  rpm:
-    packages:
-      - wayvnc
-
+  distros:
+    fedora:
+      packages:
+        - wayvnc
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -17,8 +15,6 @@ layer:
       to: "${HOME}/.local/bin/wayvnc-wrapper"
       mode: "0755"
       user: "${USER}"
-
-
   eval:
     - id: wayvnc-binary
       file: /usr/bin/wayvnc
@@ -39,7 +35,6 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:5900}
       reachable: true
       timeout: 5s
-
   service:
     - name: wayvnc
       exec: "%(ENV_HOME)s/.local/bin/wayvnc-wrapper"
@@ -51,5 +46,3 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
-

@@ -1,19 +1,7 @@
 layer:
   name: github-actions
-  rpm:
-    packages:
-      - guestfs-tools
-
-  pac:
-    packages:
-      - guestfs-tools
-
-  # Debian / Ubuntu: guestfs-tools exists in main (same name), wrapped here so
-  # the layer composes on deb-based images.
-  deb:
-    packages:
-      - guestfs-tools
-
+  packages:
+    - guestfs-tools
   tasks:
     # act: version-pinned GitHub release install — unified across Fedora and
     # Arch. The COPR/act-cli Fedora path was dropped in favour of this
@@ -34,7 +22,6 @@ layer:
         chmod +x /usr/bin/act
         rm -f /tmp/act.tar.gz
       user: root
-
     # actionlint: version-pinned to avoid GitHub API rate limits and the
     # greedy-regex bug that broke URL extraction against single-line JSON.
     # Uses /releases/download/<tag>/<asset> which is stable and cacheable.
@@ -52,7 +39,6 @@ layer:
         chmod +x /usr/local/bin/actionlint
         rm -f /tmp/actionlint.tar.gz
       user: root
-
   eval:
     - id: act-binary
       file: /usr/bin/act
@@ -66,4 +52,3 @@ layer:
     - id: actionlint-version
       command: /usr/local/bin/actionlint -version
       exit_status: 0
-

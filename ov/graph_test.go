@@ -8,11 +8,11 @@ import (
 func TestResolveLayerOrder(t *testing.T) {
 	// Create test layers
 	layers := map[string]*Layer{
-		"pixi":    {Name: "pixi", Depends: nil},
-		"python":  {Name: "python", Depends: []string{"pixi"}},
-		"ml-libs": {Name: "ml-libs", Depends: []string{"python"}},
-		"nodejs":  {Name: "nodejs", Depends: nil},
-		"web-ui":  {Name: "web-ui", Depends: []string{"nodejs"}},
+		"pixi":    {Name: "pixi", Requires: nil},
+		"python":  {Name: "python", Requires: []string{"pixi"}},
+		"ml-libs": {Name: "ml-libs", Requires: []string{"python"}},
+		"nodejs":  {Name: "nodejs", Requires: nil},
+		"web-ui":  {Name: "web-ui", Requires: []string{"nodejs"}},
 	}
 
 	tests := []struct {
@@ -88,9 +88,9 @@ func TestResolveLayerOrder(t *testing.T) {
 func TestResolveLayerOrderCycle(t *testing.T) {
 	// Create layers with a cycle: a -> b -> c -> a
 	layers := map[string]*Layer{
-		"a": {Name: "a", Depends: []string{"b"}},
-		"b": {Name: "b", Depends: []string{"c"}},
-		"c": {Name: "c", Depends: []string{"a"}},
+		"a": {Name: "a", Requires: []string{"b"}},
+		"b": {Name: "b", Requires: []string{"c"}},
+		"c": {Name: "c", Requires: []string{"a"}},
 	}
 
 	_, err := ResolveLayerOrder([]string{"a"}, layers, nil)
@@ -370,8 +370,8 @@ func TestExpandLayersWithContent(t *testing.T) {
 func TestResolveLayerOrderWithComposition(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":        {Name: "pixi", HasTasks: true},
-		"python":      {Name: "python", HasTasks: true, Depends: []string{"pixi"}},
-		"supervisord": {Name: "supervisord", HasTasks: true, Depends: []string{"python"}},
+		"python":      {Name: "python", HasTasks: true, Requires: []string{"pixi"}},
+		"supervisord": {Name: "supervisord", HasTasks: true, Requires: []string{"python"}},
 		"svc-stack":   {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
 	}
 
@@ -391,7 +391,7 @@ func TestDependsOnComposingLayer(t *testing.T) {
 		"pipewire":     {Name: "pipewire", HasTasks: true},
 		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
-		"myapp":        {Name: "myapp", HasTasks: true, Depends: []string{"sway-desktop"}},
+		"myapp":        {Name: "myapp", HasTasks: true, Requires: []string{"sway-desktop"}},
 	}
 
 	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)

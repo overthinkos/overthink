@@ -1,98 +1,94 @@
 layer:
   name: virtualization
   description: QEMU/KVM/libvirt stack with a rootless-friendly libvirt session daemon (virtqemud) under supervisord.
-
-  depends:
+  requires:
     - supervisord
-
-  rpm:
-    options:
-      - --allowerasing
-    packages:
-      - bindfs
-      - genisoimage
-      - guestfs-tools
-      - libguestfs-tools
-      # libvirt-daemon set — provides /usr/sbin/virtqemud, virtnetworkd, virsh.
-      # virt-manager pulls some of these transitively, but declare them
-      # explicitly so the image can run the session daemon even without
-      # virt-manager installed (no desktop required).
-      - libvirt-client
-      - libvirt-daemon
-      - libvirt-daemon-config-network
-      - libvirt-daemon-driver-qemu
-      - libvirt-nss
-      - passt
-      - qemu-guest-agent
-      - qemu-img
-      - qemu-kvm
-      - qemu-system-aarch64
-      - qemu-system-arm
-      - qemu-system-x86-core
-      - tigervnc
-      - virt-manager
-      - virt-viewer
-
-  pac:
-    packages:
-      - qemu-full
-      - qemu-img
-      - virtiofsd
-      - libvirt
-
-  # Debian / Ubuntu: libvirt-daemon-system bundles libvirtd + all drivers.
-  # Debian does not split virtqemud/virtnetworkd as separate binaries — the
-  # supervisord service: block below assumes those exist, so on deb-based
-  # images a post-install symlink keeps /usr/sbin/virtqemud and
-  # /usr/sbin/virtnetworkd pointing at libvirtd for compatibility. Drops:
-  # guestfs-tools + libguestfs-tools are in Debian main (kept), bindfs is
-  # separate (kept), genisoimage → genisoimage (same name). virt-manager
-  # pulls GUI deps — drop on headless images (unused on coder).
-  deb:
-    packages:
-      - bindfs
-      - genisoimage
-      - guestfs-tools
-      - libguestfs-tools
-      - libnss-libvirt
-      - libvirt-clients
-      - libvirt-daemon
-      - libvirt-daemon-config-network
-      - libvirt-daemon-driver-network   # provides /usr/sbin/virtnetworkd (Debian 13)
-      - libvirt-daemon-driver-qemu      # provides /usr/sbin/virtqemud (Debian 13)
-      - libvirt-daemon-system
-      - passt
-      - qemu-guest-agent
-      - qemu-system-x86
-      - qemu-utils
-      - virt-viewer
-      - virtinst
-
-  # Ubuntu 24.04 noble: libvirt-daemon-system bundles the network driver (no
-  # separate driver-network package). libvirt-daemon-driver-qemu exists and
-  # provides virtqemud, but virtnetworkd is inside libvirtd itself — the
-  # service: block's virtnetworkd program will fail to find its binary on
-  # Ubuntu. Accepted as a documented gap; the monolithic libvirtd works
-  # fine for the coder use case (virsh + qemu-session calls still work).
-  ubuntu:24.04:
-    packages:
-      - bindfs
-      - genisoimage
-      - guestfs-tools
-      - libguestfs-tools
-      - libnss-libvirt
-      - libvirt-clients
-      - libvirt-daemon
-      - libvirt-daemon-config-network
-      - libvirt-daemon-driver-qemu
-      - libvirt-daemon-system
-      - passt
-      - qemu-guest-agent
-      - qemu-system-x86
-      - qemu-utils
-      - virt-viewer
-      - virtinst
-
+  distros:
+    archlinux:
+      packages:
+        - qemu-full
+        - qemu-img
+        - virtiofsd
+        - libvirt
+    debian:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libguestfs-tools
+        - libnss-libvirt
+        - libvirt-clients
+        - libvirt-daemon
+        - libvirt-daemon-config-network
+        - libvirt-daemon-driver-network
+        - libvirt-daemon-driver-qemu
+        - libvirt-daemon-system
+        - passt
+        - qemu-guest-agent
+        - qemu-system-x86
+        - qemu-utils
+        - virt-viewer
+        - virtinst
+    fedora:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libguestfs-tools
+        - libvirt-client
+        - libvirt-daemon
+        - libvirt-daemon-config-network
+        - libvirt-daemon-driver-qemu
+        - libvirt-nss
+        - passt
+        - qemu-guest-agent
+        - qemu-img
+        - qemu-kvm
+        - qemu-system-aarch64
+        - qemu-system-arm
+        - qemu-system-x86-core
+        - tigervnc
+        - virt-manager
+        - virt-viewer
+      options:
+        - --allowerasing
+    ubuntu:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libguestfs-tools
+        - libnss-libvirt
+        - libvirt-clients
+        - libvirt-daemon
+        - libvirt-daemon-config-network
+        - libvirt-daemon-driver-network
+        - libvirt-daemon-driver-qemu
+        - libvirt-daemon-system
+        - passt
+        - qemu-guest-agent
+        - qemu-system-x86
+        - qemu-utils
+        - virt-viewer
+        - virtinst
+    ubuntu-24.04:
+      packages:
+        - bindfs
+        - genisoimage
+        - guestfs-tools
+        - libguestfs-tools
+        - libnss-libvirt
+        - libvirt-clients
+        - libvirt-daemon
+        - libvirt-daemon-config-network
+        - libvirt-daemon-driver-qemu
+        - libvirt-daemon-system
+        - passt
+        - qemu-guest-agent
+        - qemu-system-x86
+        - qemu-utils
+        - virt-viewer
+        - virtinst
   # virtqemud + virtnetworkd run under supervisord. No `user=` directive —
   # they inherit the parent supervisord's uid (root on fedora-ov/arch-ov/
   # githubrunner; `user` on selkies-desktop-ov). virtqemud honors the
@@ -103,8 +99,6 @@ layer:
   # interactive `ov vm` calls try to connect.
   #
   # --timeout 0 keeps the daemons alive instead of exiting on idle.
-
-
   eval:
     # virtqemud / virtnetworkd ship as separate binaries on Fedora and Arch,
     # but on Debian / Ubuntu the libvirt-daemon-driver-qemu package ships
@@ -154,7 +148,6 @@ layer:
       in_container: true
       stdout:
         - matches: "^[1-9]"
-
   service:
     - name: virtqemud
       exec: "/usr/sbin/virtqemud --timeout 0"
@@ -163,7 +156,6 @@ layer:
       start_secs: 2
       enable: true
       scope: system
-
     - name: virtnetworkd
       exec: "/usr/sbin/virtnetworkd --timeout 0"
       restart: always
@@ -171,5 +163,3 @@ layer:
       start_secs: 2
       enable: true
       scope: system
-
-

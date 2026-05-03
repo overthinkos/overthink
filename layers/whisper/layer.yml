@@ -1,9 +1,7 @@
 layer:
   name: whisper
   description: OpenAI Whisper local speech-to-text
-
-  depends:
+  requires:
     - python
     - cuda
     - ffmpeg
-

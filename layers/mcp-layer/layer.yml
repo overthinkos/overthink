@@ -9,24 +9,20 @@ layer:
       execute_cell) so the mcp-protocol-probe recipe's matchers all
       satisfy. Stdlib-only Python (no fastmcp install) keeps the image
       small and the build fast.
-
-  depends:
+  requires:
     - supervisord
-
-  rpm:
-    packages:
-      - python3
-      - iproute
-      - procps-ng
-
+  distros:
+    fedora:
+      packages:
+        - python3
+        - iproute
+        - procps-ng
   ports:
     - 8888
-
   mcp_provides:
     - name: jupyter
       url: "http://{{.ContainerName}}:8888/mcp"
       transport: http
-
   tasks:
     - mkdir: /opt/harness-mcp
       user: root
@@ -221,7 +217,6 @@ layer:
         if __name__ == "__main__":
             srv = ThreadingHTTPServer(("0.0.0.0", 8888), MCPHandler)
             srv.serve_forever()
-
   service:
     - name: harness-mcp-fixture
       exec: "/usr/bin/python3 -u /opt/harness-mcp/mcp_server.py"
@@ -229,7 +224,6 @@ layer:
       priority: 50
       enable: true
       scope: system
-
   eval:
     - id: harness-mcp-server-script
       file: /opt/harness-mcp/mcp_server.py

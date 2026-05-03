@@ -7,16 +7,17 @@ layer:
     archlinux-pacstrap-builder / cachyos-pacstrap-builder images,
     which run as privileged containers under `ov image build` and
     `ov vm build` for kind:bootstrap source kinds.
-  pac:
-    packages:
-      - arch-install-scripts
-      - qemu-img
-      - dosfstools
-      - e2fsprogs
-      - xfsprogs
-      - btrfs-progs
-      - parted
-      - util-linux
-      - grub
-      - efibootmgr
-      - mkinitcpio
+  distros:
+    archlinux:
+      packages:
+        - arch-install-scripts
+        - qemu-img
+        - dosfstools
+        - e2fsprogs
+        - xfsprogs
+        - btrfs-progs
+        - parted
+        - util-linux
+        - grub
+        - efibootmgr
+        - mkinitcpio

@@ -1,22 +1,16 @@
 layer:
   name: tailscale
   description: Tailscale mesh VPN (tailscaled service)
-
-  rpm:
-    repos:
-      - name: tailscale-stable
-        url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
-    packages:
-      - tailscale
-
-  pac:
-    packages:
-      - tailscale
-
+  packages:
+    - tailscale
+  distros:
+    fedora:
+      repos:
+        - name: tailscale-stable
+          url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
   tasks:
     - cmd: systemctl enable tailscaled.service 2>/dev/null || true
       user: root
-
   eval:
     - id: tailscale-binary
       command: test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled
@@ -24,4 +18,3 @@ layer:
     - id: tailscaled-unit-enabled
       command: systemctl is-enabled tailscaled.service
       exit_status: 0
-

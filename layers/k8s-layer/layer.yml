@@ -16,19 +16,16 @@ layer:
       0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
       `insecure-skip-tls-verify: true` and uses an `http://` server
       URL, which client-go honors.
-
-  depends:
+  requires:
     - supervisord
-
-  rpm:
-    packages:
-      - python3
-      - iproute
-      - procps-ng
-
+  distros:
+    fedora:
+      packages:
+        - python3
+        - iproute
+        - procps-ng
   ports:
     - 6443
-
   tasks:
     - mkdir: /opt/harness-k8s
       user: root
@@ -317,7 +314,6 @@ layer:
             srv = ThreadingHTTPServer(("0.0.0.0", 6443), FakeAPIHandler)
             sys.stderr.write("fake-apiserver: listening on 0.0.0.0:6443\n")
             srv.serve_forever()
-
   service:
     - name: harness-k8s-fixture
       exec: "/usr/bin/python3 -u /opt/harness-k8s/fake_apiserver.py"
@@ -325,7 +321,6 @@ layer:
       priority: 50
       enable: true
       scope: system
-
   eval:
     - id: harness-k8s-server-script
       file: /opt/harness-k8s/fake_apiserver.py

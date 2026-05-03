@@ -186,14 +186,19 @@ un-testable. That is FORBIDDEN.**
   cutover isn't done until every task is done. Confidence attributions
   above `syntax check only` require R10 acceptance on the FINAL code.
 - **Splitting one cutover across conversation turns.** ABSOLUTELY
-  FORBIDDEN. Once a plan is approved, it executes end-to-end through
-  R10 in the same conversation. Never "pause mid-cutover and pick up
-  later." There is no "the work was bigger than expected" escape
-  clause. If an approved plan turns out to exceed session resources,
-  compact context and continue — do not pause, do not split, do not
-  re-plan mid-execution. "Too large" is the state you plan against
-  BEFORE approval (the "Exception" clause below — only usable BEFORE
-  approval); never a valid post-approval reason to stop.
+  FORBIDDEN, with NO exception. Once a plan is approved, it executes
+  end-to-end through R10 in the same conversation. ALWAYS push as far
+  as you can. Compact context and continue, as many times as it takes.
+  Time, context space, session budget, scope size, and "the work was
+  bigger than expected" are NEVER valid stop reasons — not before
+  approval, not during execution, not ever. There is no pre-approval
+  split clause. There is no post-approval split clause. There is no
+  "resume in the next session". There is no "author it as two plans"
+  fallback. An approved plan is a CONTRACT; implement it as written.
+  The ONLY valid mid-execution stop conditions are (a) an error you
+  cannot resolve that requires user input, or (b) the plan contradicts
+  itself, CLAUDE.md, or a loaded skill — in either case STOP and ask,
+  do NOT silently downgrade scope or commit a partial state.
 - **Premature R10 launch.** Starting any LIVE artifact-producing or
   artifact-consuming command — `ov rebuild`, `ov image build`,
   `ov eval run`, `ov vm build/create`, `ov deploy add` against a
@@ -271,11 +276,22 @@ A matching one-shot `ov migrate <name>` command transforms legacy configs
 in-place; residual legacy fields raise hard load-time errors with a
 remediation hint.
 
-**Exception (PRE-APPROVAL ONLY):** the user explicitly instructs a
-phased rollout AND that phasing is recorded in the plan file BEFORE
-approval. After a plan has been approved, this exception is closed —
-the plan runs end-to-end through R10. There is no post-approval split
-and no "resume in the next session." An approved plan is a CONTRACT.
+**No exception clause — at planning time or at execution time.** There
+is no pre-approval split, no post-approval split, no phased rollout,
+no grace period, no "resume in the next session", no "author it as
+two plans" fallback. Plans are authored as full-scope, single-phase
+cutovers regardless of estimated time, scope, or context. Phase /
+scope / time concessions are FORBIDDEN at plan authoring AND at
+execution. Do not propose phasing, narrowing, or scope reduction at
+plan-authoring time; do not negotiate them mid-execution. Every
+cutover — regardless of estimated effort — runs as ONE phase in the
+SAME conversation through R10. ALWAYS push as far as you can.
+Compact context and continue, as many times as it takes. An approved
+plan is a CONTRACT; implement it as written. The ONLY valid stop
+conditions, at any stage, are (a) an error you cannot resolve that
+requires user input, or (b) the plan contradicts itself, CLAUDE.md,
+or a loaded skill — STOP and ask in either case; do NOT silently
+downgrade scope or commit a partial state.
 
 See `/ov-dev:cutover-policy` for forbidden patterns, required deliverables,
 and the anti-pattern catalog. See `/ov:migrate` for the `ov migrate <name>`

@@ -1,37 +1,33 @@
 layer:
   name: kwin
-  depends:
+  requires:
     - dbus
-
   env:
     XDG_RUNTIME_DIR: "/tmp"
     WAYLAND_DISPLAY: "wayland-0"
     XDG_CURRENT_DESKTOP: "KDE"
     EGL_LOG_LEVEL: "fatal"
-
-  rpm:
-    packages:
-      - kwin-wayland
-      - kpipewire
-      - xorg-x11-server-Xwayland
-      - mesa-dri-drivers
-      - mesa-vulkan-drivers
-      - libglvnd-egl
-      - libglvnd-gles
-      - egl-wayland
-
+  distros:
+    fedora:
+      packages:
+        - kwin-wayland
+        - kpipewire
+        - xorg-x11-server-Xwayland
+        - mesa-dri-drivers
+        - mesa-vulkan-drivers
+        - libglvnd-egl
+        - libglvnd-gles
+        - egl-wayland
   tasks:
     # kwin_wayland ships with cap_sys_nice which blocks exec in rootless user
     # namespaces. Strip — not needed for headless compositor.
     - setcap: /usr/bin/kwin_wayland
-
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: kwin-wrapper
       to: "${HOME}/.local/bin/kwin-wrapper"
       mode: "0755"
       user: "${USER}"
-
   service:
     - name: kwin
       exec: "%(ENV_HOME)s/.local/bin/kwin-wrapper"
@@ -42,5 +38,3 @@ layer:
       start_secs: 3
       enable: true
       scope: system
-
-

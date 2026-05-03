@@ -1,41 +1,41 @@
 layer:
   name: gh
   description: GitHub CLI, git, and git-lfs
-
-  rpm:
-    packages:
-      - gh
-      - git
-      - git-lfs
-    options:
-      - "--setopt=tsflags=noscripts"
-
-  pac:
-    packages:
-      - github-cli
-      - git
-      - git-lfs
-
-  # Debian / Ubuntu: gh is not in Debian main. Use the official GitHub CLI apt
-  # repo (cli.github.com). The repo suite is a fixed "stable" (distro-agnostic).
-  deb:
-    repos:
-      - name: github-cli
-        url: "https://cli.github.com/packages"
-        key: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
-        suite: "stable"
-        components: "main"
-    packages:
-      - gh
-      - git
-      - git-lfs
-
+  packages:
+    - git
+    - git-lfs
+  distros:
+    archlinux:
+      packages:
+        - github-cli
+    debian:
+      packages:
+        - gh
+      repos:
+        - name: github-cli
+          url: "https://cli.github.com/packages"
+          key: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+          suite: "stable"
+          components: "main"
+    fedora:
+      packages:
+        - gh
+      options:
+        - "--setopt=tsflags=noscripts"
+    ubuntu:
+      packages:
+        - gh
+      repos:
+        - name: github-cli
+          url: "https://cli.github.com/packages"
+          key: "https://cli.github.com/packages/githubcli-archive-keyring.gpg"
+          suite: "stable"
+          components: "main"
   tasks:
     # git-lfs post-install config (package installed with noscripts above so
     # the systemd-triggered git-lfs install step doesn't run in the build).
     - cmd: /usr/bin/git-lfs install --system --skip-repo 2>/dev/null || true
       user: root
-
   eval:
     - id: gh-binary
       file: /usr/bin/gh
@@ -55,4 +55,3 @@ layer:
     - id: git-lfs-version
       command: /usr/bin/git-lfs --version
       exit_status: 0
-

@@ -1,35 +1,27 @@
 layer:
   name: ollama
-  depends:
+  requires:
     - cuda
     - supervisord
-
   env:
     OLLAMA_HOST: "0.0.0.0"
     OLLAMA_MODELS: "~/.ollama/models"
-
   env_provides:
     OLLAMA_HOST: "http://{{.ContainerName}}:11434"
-
   ports:
     - 11434
-
   volumes:
     - name: models
       path: "~/.ollama"
-
   aliases:
     - name: ollama
       command: ollama
-
   tasks:
     # Ollama binary release tarball (no systemd)
     - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
       extract: tar.zst
       to: /usr
       user: root
-
-
   eval:
     # Build-scope invariants on the installed artifact.
     - id: ollama-binary
@@ -45,12 +37,9 @@ layer:
       command: ollama --version
       stdout:
         - matches: "^ollama version"
-
   service:
     - name: ollama
       exec: "ollama serve"
       restart: always
       enable: true
       scope: system
-
-

@@ -1,19 +1,19 @@
 layer:
   name: golang
   description: Go programming language compiler
-
-  rpm:
-    packages:
-      - golang-bin
-
-  pac:
-    packages:
-      - go
-
-  deb:
-    packages:
-      - golang-go
-
+  distros:
+    archlinux:
+      packages:
+        - go
+    debian:
+      packages:
+        - golang-go
+    fedora:
+      packages:
+        - golang-bin
+    ubuntu:
+      packages:
+        - golang-go
   eval:
     - id: go-binary
       file: /usr/bin/go
@@ -21,4 +21,3 @@ layer:
     - id: go-version
       command: /usr/bin/go version
       exit_status: 0
-

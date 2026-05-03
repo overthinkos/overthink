@@ -1,8 +1,7 @@
 layer:
   name: sqlite
   description: SQLite database CLI
-
-  rpm:
-    packages:
-      - sqlite
-
+  distros:
+    fedora:
+      packages:
+        - sqlite

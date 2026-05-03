@@ -121,7 +121,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		}
 
 		// Add dependencies
-		for _, dep := range layer.Depends {
+		for _, dep := range layer.Requires {
 			if err := addTransitive(dep, newPath); err != nil {
 				return err
 			}
@@ -167,7 +167,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 	for name := range needed {
 		layer := layers[name]
 		var deps []string
-		for _, dep := range layer.Depends {
+		for _, dep := range layer.Requires {
 			deps = append(deps, resolveDepEdges(dep)...)
 		}
 		// Included layers that have content are also dependencies (must install before)

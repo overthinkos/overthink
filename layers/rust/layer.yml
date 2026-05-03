@@ -2,21 +2,22 @@ layer:
   name: rust
   path_append:
     - "~/.cargo/bin"
-
-  rpm:
-    packages:
-      - rust
-      - cargo
-
-  pac:
-    packages:
-      - rust
-
-  deb:
-    packages:
-      - rustc
-      - cargo
-
+  distros:
+    archlinux:
+      packages:
+        - rust
+    debian:
+      packages:
+        - rustc
+        - cargo
+    fedora:
+      packages:
+        - rust
+        - cargo
+    ubuntu:
+      packages:
+        - rustc
+        - cargo
   eval:
     - id: rustc-binary
       file: /usr/bin/rustc
@@ -30,4 +31,3 @@ layer:
     - id: cargo-version
       command: /usr/bin/cargo --version
       exit_status: 0
-

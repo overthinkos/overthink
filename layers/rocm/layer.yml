@@ -2,15 +2,13 @@ layer:
   name: rocm
   env:
     ROCM_PATH: "/usr"
-
   security:
     group_add:
       - keep-groups
-
-  rpm:
-    packages:
-      - rocm-hip-runtime
-      - rocm-opencl
-      - rocm-clinfo
-      - rocm-smi
-
+  distros:
+    fedora:
+      packages:
+        - rocm-hip-runtime
+        - rocm-opencl
+        - rocm-clinfo
+        - rocm-smi

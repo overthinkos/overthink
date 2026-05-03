@@ -6,10 +6,10 @@ layer:
     init_system_hint: systemd
     oci_labels:
       dev.containers.bootc: "true"
-  rpm:
-    packages:
-      - sway-systemd
-
+  distros:
+    fedora:
+      packages:
+        - sway-systemd
   tasks:
     # Autologin on tty1 for desktop boot
     - mkdir: /etc/systemd/system/getty@tty1.service.d
@@ -21,7 +21,6 @@ layer:
         [Service]
         ExecStart=
         ExecStart=-/sbin/agetty --autologin user --noclear %I $TERM
-
     # User-level systemd unit that runs supervisord under the `user` session.
     # The selkies-desktop sublayers (labwc/waybar-labwc/selkies/chrome/swaync)
     # ship their orchestration as supervisord `[program:*]` fragments assembled
@@ -55,7 +54,6 @@ layer:
 
         [Install]
         WantedBy=default.target
-
     # Default to graphical target; enable user-global PipeWire + WirePlumber.
     # Enable supervisord.service globally (per-user --global enable) so that
     # any user session started via tty1 autologin brings the desktop tier up.
@@ -68,7 +66,6 @@ layer:
         systemctl --global enable wireplumber.service 2>/dev/null || true
         systemctl --global enable supervisord.service 2>/dev/null || true
       user: root
-
     # Belt-and-suspenders: enable linger for `user` so systemd --user starts
     # even without a tty1 autologin session (e.g. diagnostics via SSH-only).
     # loginctl can't run in an offline bootc build, so we plant the sentinel
@@ -78,4 +75,3 @@ layer:
       mode: "0755"
     - cmd: touch /var/lib/systemd/linger/user
       user: root
-

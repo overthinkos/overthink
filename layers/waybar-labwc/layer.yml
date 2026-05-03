@@ -1,23 +1,20 @@
 layer:
   name: waybar-labwc
-  depends:
+  requires:
     - labwc
-
-  rpm:
-    packages:
-      - waybar
-
+  distros:
+    fedora:
+      packages:
+        - waybar
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/waybar"
       user: "${USER}"
-
     - copy: waybar-labwc-wrapper
       to: "${HOME}/.local/bin/waybar-labwc-wrapper"
       mode: "0755"
       user: "${USER}"
-
     - copy: config.json
       to: "${HOME}/.config/waybar/config"
       mode: "0644"
@@ -26,8 +23,6 @@ layer:
       to: "${HOME}/.config/waybar/style.css"
       mode: "0644"
       user: "${USER}"
-
-
   eval:
     - id: waybar-binary
       file: /usr/bin/waybar
@@ -42,7 +37,6 @@ layer:
     - id: waybar-style
       file: ${HOME}/.config/waybar/style.css
       exists: true
-
   service:
     - name: waybar
       exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
@@ -54,5 +48,3 @@ layer:
       start_secs: 0
       enable: true
       scope: system
-
-

@@ -1,19 +1,19 @@
 layer:
   name: ssh-client
   description: OpenSSH client tools for SSH agent forwarding
-
-  rpm:
-    packages:
-      - openssh-clients
-
-  pac:
-    packages:
-      - openssh
-
-  deb:
-    packages:
-      - openssh-client
-
+  distros:
+    archlinux:
+      packages:
+        - openssh
+    debian:
+      packages:
+        - openssh-client
+    fedora:
+      packages:
+        - openssh-clients
+    ubuntu:
+      packages:
+        - openssh-client
   eval:
     - id: ssh-binary
       file: /usr/bin/ssh
@@ -26,4 +26,3 @@ layer:
       exit_status: 0
       stderr:
         - contains: "OpenSSH"
-

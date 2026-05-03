@@ -1,7 +1,5 @@
 layer:
   name: mcporter
   description: MCP server CLI for listing, configuring, and calling MCP tools
-
-  depends:
+  requires:
     - nodejs
-

@@ -1,41 +1,36 @@
 layer:
   name: github-runner
-  depends:
+  requires:
     - supervisord
-
-  rpm:
-    packages:
-      - skopeo
-      - jq
-      - libcap
-      - util-linux-script
-      - osbuild-selinux
-      - systemd-container
-      - openssh-clients
-      - cloud-utils-growpart
-      - podman
-      - buildah
-      - golang
-      - git
-      - qemu-user-static-aarch64
-
+  distros:
+    fedora:
+      packages:
+        - skopeo
+        - jq
+        - libcap
+        - util-linux-script
+        - osbuild-selinux
+        - systemd-container
+        - openssh-clients
+        - cloud-utils-growpart
+        - podman
+        - buildah
+        - golang
+        - git
+        - qemu-user-static-aarch64
   volumes:
     - name: state
       path: /opt/actions-runner
     - name: storage
       path: /var/lib/containers/storage
-
   security:
     privileged: true
-
   env:
     RUNNER_ALLOW_RUNASROOT: "1"
     RUNNER_WORK_DIR: "/opt/actions-runner/_work"
     RUNNER_GROUP: "Default"
     OV_BUILD_ENGINE: "podman"
     OV_RUN_ENGINE: "podman"
-
-
   hooks:
     post_enable: |
       : "${RUNNER_NAME:=${OV_CONTAINER_NAME:-runner}}"
@@ -49,7 +44,6 @@ layer:
     pre_remove: |
       /opt/actions-runner/config.sh remove \
         --token "${RUNNER_TOKEN}"
-
   tasks:
     # GitHub Actions runner binary — pinned to the latest stable tag at build time
     - cmd: |
@@ -66,26 +60,22 @@ layer:
         cd /opt/actions-runner && ./bin/installdependencies.sh || true
         chmod +x /opt/actions-runner/run.sh /opt/actions-runner/config.sh
       user: root
-
     # cosign — pinned version
     - download: "https://github.com/sigstore/cosign/releases/download/v3.0.2/cosign-linux-${ARCH}"
       extract: none
       to: /usr/local/bin/cosign
       mode: "0755"
       user: root
-
     # File capabilities for rootless container support
     - setcap: /usr/bin/newuidmap
       caps: "cap_setuid=ep"
     - setcap: /usr/bin/newgidmap
       caps: "cap_setgid=ep"
-
     # subuid/subgid for rootless podman inside the runner container
     - cmd: |
         echo "root:100000:65536" >> /etc/subuid
         echo "root:100000:65536" >> /etc/subgid
       user: root
-
     # Registry mirror for ghcr.io (host mirror at 127.0.0.1:5000)
     - mkdir: /etc/containers/registries.conf.d
       user: root
@@ -99,7 +89,6 @@ layer:
         [[registry.mirror]]
         location = "127.0.0.1:5000"
         insecure = true
-
   service:
     - name: github-runner
       exec: /opt/actions-runner/run.sh
@@ -107,5 +96,3 @@ layer:
       working_directory: /opt/actions-runner
       enable: true
       scope: system
-
-

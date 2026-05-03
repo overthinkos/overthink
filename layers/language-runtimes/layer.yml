@@ -1,75 +1,50 @@
 layer:
   name: language-runtimes
-  depends:
+  requires:
     - nodejs
     - rust
-
-  rpm:
-    packages:
-      - dotnet-sdk-9.0
-      - golang-bin
-      - golang-bazil-fuse-devel
-      - libicu
-      - php
-      - python3-devel
-      - python3-ramalama
-      - nodejs-devel
-
-  # Arch equivalents. `dotnet-sdk` is in `extra`; `go`/`php`/`icu`/`python`
-  # are core. Arch ships headers with the main package (no -devel split),
-  # so `nodejs-devel`/`python3-devel` have no separate pac: entries. Dropped
-  # packages on Arch: `python3-ramalama` (not packaged — install via
-  # `uv tool install ramalama` at runtime if needed) and
-  # `golang-bazil-fuse-devel` (Go library fetched via `go get`, not a
-  # system package on Arch).
-  pac:
-    packages:
-      - dotnet-sdk
-      - go
-      - icu
-      - php
-      - python
-
-  # Debian/Ubuntu: dotnet-sdk-9.0 is not in Debian or Ubuntu main repositories.
-  # Microsoft publishes a codename-keyed apt repo at packages.microsoft.com —
-  # so we need per-distro-version tag sections to pick the right URL + suite.
-  # First-match-wins via the image's distro: priority list. The plain `deb:`
-  # fallback below stays as documentation for any deb-based distro that
-  # doesn't have its own override yet.
-  #
-  # Drops (same for all deb-family distros): python3-ramalama (not packaged;
-  # uv tool install ramalama at runtime), golang-bazil-fuse-devel (Go library
-  # fetched via `go get`), nodejs-devel (Debian/Ubuntu's nodejs already ships
-  # the needed headers; no separate -dev split required).
-  deb:
-    packages:
-      - golang-go
-      - libicu-dev
-      - php-cli
-      - python3-dev
-
-  # Distro-version tag sections install the non-Microsoft packages via the
-  # standard apt path. dotnet-sdk-9.0 is handled by the task: block below
-  # via Microsoft's packages-microsoft-prod.deb bootstrap — Microsoft
-  # periodically rotates their signing keys (as of 2026-02 the InRelease
-  # signature uses key EE4D7792F748182B which microsoft.asc alone no longer
-  # validates), and their bootstrap .deb is the documented stable way to
-  # track those rotations without baking specific key fingerprints into
-  # layer config.
-  debian:13:
-    packages:
-      - golang-go
-      - libicu-dev
-      - php-cli
-      - python3-dev
-
-  ubuntu:24.04:
-    packages:
-      - golang-go
-      - libicu-dev
-      - php-cli
-      - python3-dev
-
+  distros:
+    archlinux:
+      packages:
+        - dotnet-sdk
+        - go
+        - icu
+        - php
+        - python
+    debian:
+      packages:
+        - golang-go
+        - libicu-dev
+        - php-cli
+        - python3-dev
+    debian-13:
+      packages:
+        - golang-go
+        - libicu-dev
+        - php-cli
+        - python3-dev
+    fedora:
+      packages:
+        - dotnet-sdk-9.0
+        - golang-bin
+        - golang-bazil-fuse-devel
+        - libicu
+        - php
+        - python3-devel
+        - python3-ramalama
+        - nodejs-devel
+    ubuntu:
+      packages:
+        - golang-go
+        - libicu-dev
+        - php-cli
+        - python3-dev
+    ubuntu-24.04:
+      packages:
+        - golang-go
+        - libicu-dev
+        - php-cli
+        - python3-dev
   tasks:
     # dotnet-sdk-9.0 installer — distro-agnostic gate.
     #
@@ -108,7 +83,6 @@ layer:
         ln -sf /usr/share/dotnet/dotnet /usr/bin/dotnet
         rm -f /tmp/dotnet-install.sh
       user: root
-
   eval:
     - id: dotnet-binary
       file: /usr/bin/dotnet
@@ -128,4 +102,3 @@ layer:
     - id: system-python3-version
       command: /usr/bin/python3 --version
       exit_status: 0
-

@@ -1,11 +1,10 @@
 layer:
   name: fastfetch
   description: Fast system information tool (neofetch successor)
-
-  rpm:
-    packages:
-      - fastfetch
-
+  distros:
+    fedora:
+      packages:
+        - fastfetch
   eval:
     - id: fastfetch-binary
       file: /usr/bin/fastfetch
@@ -13,4 +12,3 @@ layer:
     - id: fastfetch-package
       package: fastfetch
       installed: true
-

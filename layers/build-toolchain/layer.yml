@@ -2,136 +2,129 @@ layer:
   name: build-toolchain
   env:
     CCACHE_DISABLE: "1"
-
-  rpm:
-    packages:
-      - autoconf
-      - automake
-      - binutils
-      - bison
-      - cargo
-      - ccache
-      - clang-devel          # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
-      - cli11-devel
-      - cmake
-      - ffmpeg-devel         # ffmpeg-sys-next (RPM Fusion free)
-      - flex
-      - gcc
-      - gcc-c++
-      - gdb
-      - git
-      - glibc-devel
-      - libdrm-devel         # gbm / drm transitive
-      - libinput-devel       # smithay backend_libinput
-      - libjpeg-turbo-devel  # turbojpeg-sys (system path)
-      - libseat-devel        # smithay session handling
-      - libtool
-      - libudev-devel        # smithay backend_udev
-      - libva-devel          # libva-sys (VA-API)
-      - libxkbcommon-devel   # keyboard backend
-      - make
-      - mesa-libgbm-devel    # smithay backend_gbm
-      - nasm                 # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
-      - ninja-build
-      - opusfile-devel       # ov binary's CGo build (audio recording / opus codec)
-      - patch                # for source patching in cargo/pip build stages
-      - pixman-devel         # smithay renderer_pixman feature
-      - portaudio-devel      # ov binary's CGo build (audio recording)
-      - pkgconf
-      - pkgconf-m4
-      - pkgconf-pkg-config
-      - redhat-rpm-config
-      - rpm-build
-      - rpm-sign
-      - rust                 # rustc + cargo for setuptools-rust (pixelflux_wayland)
-      - systemd-devel        # smithay backend_udev via libudev
-      - wayland-devel        # smithay wayland_frontend / backend_* features
-      - x264-devel           # x264-sys (RPM Fusion free)
-
-  pac:
-    packages:
-      - autoconf
-      - automake
-      - binutils
-      - bison
-      - ccache
-      - clang             # libclang for bindgen (x264-sys, ffmpeg-sys-next build.rs)
-      - cmake
-      - ffmpeg            # provides ffmpeg + dev headers (Arch doesn't split -devel)
-      - flex
-      - gcc
-      - gdb
-      - git
-      - glibc
-      - libdrm            # gbm / drm transitive
-      - libinput          # smithay backend_libinput
-      - libjpeg-turbo     # turbojpeg-sys (headers bundled on Arch)
-      - seatd             # smithay session handling (Arch ships libseat inside seatd)
-      - libtool
-      - libva             # libva-sys (VA-API)
-      - libxkbcommon      # keyboard backend
-      - make
-      - mesa              # smithay backend_gbm (provides libgbm)
-      - nasm              # turbojpeg-sys vendored libjpeg-turbo SIMD assembly
-      - ninja
-      - opusfile          # ov binary's CGo build (audio recording / opus codec)
-      - patch             # for source patching in cargo/pip build stages
-      - pixman            # smithay renderer_pixman feature
-      - pkgconf
-      - portaudio         # ov binary's CGo build (audio recording)
-      - rust              # rustc + cargo for setuptools-rust (pixelflux_wayland)
-      - systemd           # smithay backend_udev via libudev
-      - wayland           # smithay wayland_frontend / backend_* features
-      - x264              # x264-sys
-
-  # Debian / Ubuntu equivalents. Naming conventions:
-  #   *-devel (Fedora) → lib*-dev / *-dev (Debian)
-  #   build-essential bundles gcc/g++/make/libc6-dev (Debian meta-package)
-  #   ffmpeg-devel is split across libav{codec,format,util,swscale}-dev on Debian
-  #   ninja-build is Debian's package name for ninja
-  # Drops (RPM-specific or unpackaged): redhat-rpm-config, rpm-build, rpm-sign,
-  # pkgconf-m4, pkgconf-pkg-config (absorbed into pkg-config), cli11-devel
-  # (header-only; install via cmake FetchContent if actually needed).
-  deb:
-    packages:
-      - autoconf
-      - automake
-      - binutils
-      - bison
-      - build-essential
-      - cargo
-      - ccache
-      - clang
-      - cmake
-      - flex
-      - gdb
-      - git
-      - libavcodec-dev
-      - libavformat-dev
-      - libavutil-dev
-      - libclang-dev
-      - libdrm-dev
-      - libgbm-dev
-      - libinput-dev
-      - libturbojpeg0-dev
-      - libpixman-1-dev
-      - libseat-dev
-      - libsystemd-dev
-      - libswscale-dev
-      - libtool
-      - libudev-dev
-      - libva-dev
-      - libwayland-dev
-      - libx264-dev
-      - libxkbcommon-dev
-      - nasm
-      - ninja-build
-      - libopusfile-dev      # ov binary's CGo build (audio recording / opus codec)
-      - patch
-      - pkg-config
-      - portaudio19-dev      # ov binary's CGo build (audio recording)
-      - rustc
-
+  packages:
+    - autoconf
+    - automake
+    - binutils
+    - bison
+    - ccache
+    - cmake
+    - flex
+    - gdb
+    - git
+    - libtool
+    - nasm
+    - patch
+  distros:
+    archlinux:
+      packages:
+        - clang
+        - ffmpeg
+        - gcc
+        - glibc
+        - libdrm
+        - libinput
+        - libjpeg-turbo
+        - seatd
+        - libva
+        - libxkbcommon
+        - make
+        - mesa
+        - ninja
+        - opusfile
+        - pixman
+        - pkgconf
+        - portaudio
+        - rust
+        - systemd
+        - wayland
+        - x264
+    debian:
+      packages:
+        - build-essential
+        - cargo
+        - clang
+        - libavcodec-dev
+        - libavformat-dev
+        - libavutil-dev
+        - libclang-dev
+        - libdrm-dev
+        - libgbm-dev
+        - libinput-dev
+        - libturbojpeg0-dev
+        - libpixman-1-dev
+        - libseat-dev
+        - libsystemd-dev
+        - libswscale-dev
+        - libudev-dev
+        - libva-dev
+        - libwayland-dev
+        - libx264-dev
+        - libxkbcommon-dev
+        - ninja-build
+        - libopusfile-dev
+        - pkg-config
+        - portaudio19-dev
+        - rustc
+    fedora:
+      packages:
+        - cargo
+        - clang-devel
+        - cli11-devel
+        - ffmpeg-devel
+        - gcc
+        - gcc-c++
+        - glibc-devel
+        - libdrm-devel
+        - libinput-devel
+        - libjpeg-turbo-devel
+        - libseat-devel
+        - libudev-devel
+        - libva-devel
+        - libxkbcommon-devel
+        - make
+        - mesa-libgbm-devel
+        - ninja-build
+        - opusfile-devel
+        - pixman-devel
+        - portaudio-devel
+        - pkgconf
+        - pkgconf-m4
+        - pkgconf-pkg-config
+        - redhat-rpm-config
+        - rpm-build
+        - rpm-sign
+        - rust
+        - systemd-devel
+        - wayland-devel
+        - x264-devel
+    ubuntu:
+      packages:
+        - build-essential
+        - cargo
+        - clang
+        - libavcodec-dev
+        - libavformat-dev
+        - libavutil-dev
+        - libclang-dev
+        - libdrm-dev
+        - libgbm-dev
+        - libinput-dev
+        - libturbojpeg0-dev
+        - libpixman-1-dev
+        - libseat-dev
+        - libsystemd-dev
+        - libswscale-dev
+        - libudev-dev
+        - libva-dev
+        - libwayland-dev
+        - libx264-dev
+        - libxkbcommon-dev
+        - ninja-build
+        - libopusfile-dev
+        - pkg-config
+        - portaudio19-dev
+        - rustc
   eval:
     - id: gcc-binary
       file: /usr/bin/gcc
@@ -151,4 +144,3 @@ layer:
     - id: cmake-version
       command: /usr/bin/cmake --version
       exit_status: 0
-

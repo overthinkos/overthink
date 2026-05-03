@@ -1,36 +1,30 @@
 layer:
   name: hermes-playwright
   description: Playwright Chromium browser for Hermes Agent
-
-  depends:
+  requires:
     - hermes
-
   env:
     PLAYWRIGHT_BROWSERS_PATH: "/tmp/.cache/ms-playwright"
-
-  rpm:
-    packages:
-      # Chromium runtime dependencies (Playwright --with-deps doesn't support Fedora)
-      - alsa-lib
-      - at-spi2-core
-      - cups-libs
-      - gtk3
-      - libdrm
-      - libxkbcommon
-      - nss
-      - mesa-dri-drivers
-      - vulkan-loader
-      - libXcomposite
-      - libXdamage
-      - libXrandr
-      - pango
-      - cairo
-
+  distros:
+    fedora:
+      packages:
+        - alsa-lib
+        - at-spi2-core
+        - cups-libs
+        - gtk3
+        - libdrm
+        - libxkbcommon
+        - nss
+        - mesa-dri-drivers
+        - vulkan-loader
+        - libXcomposite
+        - libXdamage
+        - libXrandr
+        - pango
+        - cairo
   security:
     shm_size: "1g"
-
   tasks:
     # Install Chromium browser binary only (system deps handled by rpm packages)
     - cmd: HOME=/tmp npx playwright install chromium
       user: "${USER}"
-

@@ -1,18 +1,15 @@
 layer:
   name: hermes
   description: Hermes self-improving AI agent by Nous Research
-
-  depends:
+  requires:
     - nodejs
     - supervisord
     - ripgrep
     - ffmpeg
     - pipewire
-
   env:
     HERMES_HOME: "/opt/data"
     TERMINAL_ENV: "local"
-
   env_accepts:
     - name: OLLAMA_HOST
       description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
@@ -24,7 +21,6 @@ layer:
       description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
     - name: IMMICH_API_URL
       description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
-
   # Credential-store-backed env vars. Values live in the user's credential
   # backend (keyring/kdbx/config) and are injected at runtime via podman
   # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
@@ -47,28 +43,24 @@ layer:
     - name: IMMICH_API_KEY
       description: "Immich API key for programmatic access to the running immich instance"
       key: ov/api-key/immich
-
   mcp_accepts:
     - name: jupyter
       description: "JupyterLab CRDT MCP server for notebook manipulation"
     - name: chrome-devtools
       description: "Chrome DevTools MCP server for browser automation and inspection"
-
-  rpm:
-    packages:
-      - alsa-lib
-      - portaudio
-
+  distros:
+    fedora:
+      packages:
+        - alsa-lib
+        - portaudio
   volumes:
     - name: data
       path: "/opt/data"
-
   aliases:
     - name: hermes
       command: hermes
     - name: hermes-agent
       command: hermes-agent
-
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -76,9 +68,6 @@ layer:
       to: "${HOME}/.local/bin/hermes-entrypoint"
       mode: "0755"
       user: "${USER}"
-
-
-
   eval:
     - id: hermes-entrypoint
       file: ${HOME}/.local/bin/hermes-entrypoint
@@ -95,7 +84,6 @@ layer:
       scope: deploy
       service: hermes
       running: true
-
   service:
     - name: hermes
       exec: "%(ENV_HOME)s/.local/bin/hermes-entrypoint"
@@ -103,12 +91,9 @@ layer:
       working_directory: "%(ENV_HOME)s"
       enable: true
       scope: system
-
     - name: hermes-whatsapp
       exec: "node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js"
       restart: always
       working_directory: "%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge"
       enable: true
       scope: system
-
-

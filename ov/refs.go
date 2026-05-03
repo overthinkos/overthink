@@ -246,7 +246,7 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 
 	// Scan layer.yml depends and layers: fields
 	for layerName, layer := range layers {
-		for _, dep := range layer.RawDepends {
+		for _, dep := range layer.RawRequires {
 			if err := addRef(dep, fmt.Sprintf("layer %s depends", layerName)); err != nil {
 				return nil, err
 			}

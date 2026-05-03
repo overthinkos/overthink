@@ -1,8 +1,7 @@
 layer:
   name: wl-screenshot-pixelflux
-  depends:
+  requires:
     - selkies
-
   tasks:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
@@ -10,10 +9,8 @@ layer:
       to: "${HOME}/.local/bin/pixelflux-screenshot"
       mode: "0755"
       user: "${USER}"
-
   eval:
     - id: pixelflux-screenshot-script
       file: ${HOME}/.local/bin/pixelflux-screenshot
       exists: true
       mode: "0755"
-

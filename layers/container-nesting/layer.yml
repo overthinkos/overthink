@@ -1,89 +1,71 @@
 layer:
   name: container-nesting
   description: Container-in-container support (rootless nested podman, buildah, skopeo).
-
-  rpm:
-    repos:
-      - name: tailscale-stable
-        url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
-    packages:
-      - buildah
-      - fuse-overlayfs
-      - shadow-utils
-      - skopeo
-      - tailscale
-      - libsecret
-
-  pac:
-    packages:
-      - buildah
-      - crun
-      - fuse-overlayfs
-      - libsecret
-      - podman
-      - shadow
-      - skopeo
-      - tailscale
-
-  # Debian / Ubuntu family-level shared packages (podman, buildah, skopeo,
-  # crun, fuse-overlayfs, libsecret are all in Debian/Ubuntu main with
-  # identical names). Tailscale uses codename-specific suites, so it's pulled
-  # in via the per-version tag overrides below — not here.
-  debian,ubuntu:
-    packages:
-      - buildah
-      - crun
-      - fuse-overlayfs
-      - libsecret-1-0
-      - passwd        # provides newuidmap/newgidmap and the shadow-utils bits
-      - podman
-      - skopeo
-      - uidmap
-
-  # Tailscale: the apt repo uses codename-specific suites (trixie / noble).
-  # These sections override the family-level debian,ubuntu: section above
-  # via first-match-wins, so we re-list the base packages alongside
-  # tailscale + the upstream repo.
-  debian:13:
-    repos:
-      - name: tailscale
-        url: "https://pkgs.tailscale.com/stable/debian"
-        key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
-        suite: trixie
-        components: main
-    packages:
-      - buildah
-      - crun
-      - fuse-overlayfs
-      - libsecret-1-0
-      - passwd
-      - podman
-      - skopeo
-      - tailscale
-      - uidmap
-
-  ubuntu:24.04:
-    repos:
-      - name: tailscale
-        url: "https://pkgs.tailscale.com/stable/ubuntu"
-        key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
-        suite: noble
-        components: main
-    packages:
-      - buildah
-      - crun
-      - fuse-overlayfs
-      - libsecret-1-0
-      - passwd
-      - podman
-      - skopeo
-      - tailscale
-      - uidmap
-
+  packages:
+    - buildah
+    - fuse-overlayfs
+    - skopeo
+  distros:
+    archlinux:
+      packages:
+        - crun
+        - libsecret
+        - podman
+        - shadow
+        - tailscale
+    debian:
+      packages:
+        - crun
+        - libsecret-1-0
+        - passwd
+        - podman
+        - uidmap
+    debian-13:
+      packages:
+        - crun
+        - libsecret-1-0
+        - passwd
+        - podman
+        - tailscale
+        - uidmap
+      repos:
+        - name: tailscale
+          url: "https://pkgs.tailscale.com/stable/debian"
+          key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
+          suite: trixie
+          components: main
+    fedora:
+      packages:
+        - shadow-utils
+        - tailscale
+        - libsecret
+      repos:
+        - name: tailscale-stable
+          url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
+    ubuntu:
+      packages:
+        - crun
+        - libsecret-1-0
+        - passwd
+        - podman
+        - uidmap
+    ubuntu-24.04:
+      packages:
+        - crun
+        - libsecret-1-0
+        - passwd
+        - podman
+        - tailscale
+        - uidmap
+      repos:
+        - name: tailscale
+          url: "https://pkgs.tailscale.com/stable/ubuntu"
+          key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
+          suite: noble
+          components: main
   volumes:
     - name: storage
       path: /var/lib/containers/storage
-
   security:
     # NO cap_add — rootless nested podman needs zero additive capabilities
     # when the mount_too_revealing kernel check is bypassed at the mount
@@ -115,7 +97,6 @@ layer:
       # containers.conf sets netns=host; absence causes an init-time warning
       # that can mask later failures.
       - /dev/net/tun
-
   env:
     OV_BUILD_ENGINE: "podman"
     OV_RUN_ENGINE: "podman"
@@ -134,7 +115,6 @@ layer:
     #   namespace and re-triggers the same kernel check during builds.
     _CONTAINERS_USERNS_CONFIGURED: ""
     BUILDAH_ISOLATION: "chroot"
-
   tasks:
     # Rootless podman: subuid/subgid mappings that fit inside the outer
     # rootless user namespace's visible subid window.
@@ -164,7 +144,6 @@ layer:
           } >> /etc/subgid
         fi
       user: root
-
     # File capabilities for newuidmap/newgidmap — required for subid
     # delegation to a nested user namespace. File caps attach to the binary.
     - cmd: |
@@ -173,15 +152,12 @@ layer:
           setcap cap_setgid=ep /usr/bin/newgidmap
         fi
       user: root
-
     - mkdir: /etc/containers
       user: root
-
     # Also ensure the user's config dir exists — rootless podman prefers
     # ~/.config/containers/* over /etc/containers/*.
     - mkdir: "${HOME}/.config/containers"
       user: "${USER}"
-
     # containers.conf — matches quay.io/podman/stable's canonical config.
     # All five namespaces=host so the inner podman stays in the outer's
     # user/network/ipc/uts/cgroup namespace. Critical: userns=host is what
@@ -212,7 +188,6 @@ layer:
       user: "${USER}"
       mode: "0644"
       content: *containers_conf_content
-
     # policy.json — required by podman pull/run for image signature policy.
     - write: /etc/containers/policy.json
       user: root
@@ -223,7 +198,6 @@ layer:
       user: "${USER}"
       mode: "0644"
       content: *policy_json_content
-
     # System-wide storage.conf (used by root images: fedora-ov/arch-ov/
     # githubrunner). fuse-overlayfs at /var/lib/containers/storage.
     - write: /etc/containers/storage.conf
@@ -238,7 +212,6 @@ layer:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         mountopt = "nodev,fsync=0"
-
     # User-level storage.conf — user-writable paths under $HOME so rootless
     # podman can initialize its storage without root. The default would point
     # to /var/lib/containers/storage which the uid-1000 user cannot write.
@@ -254,7 +227,6 @@ layer:
         [storage.options.overlay]
         mount_program = "/usr/bin/fuse-overlayfs"
         mountopt = "nodev,fsync=0"
-
   eval:
     - id: podman-binary
       file: /usr/bin/podman
@@ -283,4 +255,3 @@ layer:
     - id: tailscale-version
       command: /usr/bin/tailscale version
       exit_status: 0
-

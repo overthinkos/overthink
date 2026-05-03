@@ -1,13 +1,13 @@
 layer:
   name: desktop-apps
-  rpm:
-    packages:
-      - btop
-      - chromium
-      - cloud-init
-      - cockpit
-      - keepassxc
-      - transmission
-      - vlc
-      - zsh
-
+  distros:
+    fedora:
+      packages:
+        - btop
+        - chromium
+        - cloud-init
+        - cockpit
+        - keepassxc
+        - transmission
+        - vlc
+        - zsh

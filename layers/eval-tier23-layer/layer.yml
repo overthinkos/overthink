@@ -6,19 +6,16 @@ layer:
       Tier 2: HTTP server on port 8080 returning a body containing "ov benchmark".
       Tier 3: curl installed + persistent /srv/bench/version.txt.
       Both tiers share the same pod (harness-tier23).
-
-  depends: []
-
-  rpm:
-    packages:
-      - curl
-      - python3
-      - iproute
-      - procps-ng
-
+  requires: []
+  distros:
+    fedora:
+      packages:
+        - curl
+        - python3
+        - iproute
+        - procps-ng
   ports:
     - 8080
-
   tasks:
     - mkdir: /srv/bench
       user: root
@@ -37,7 +34,6 @@ layer:
         <h1>ov benchmark</h1>
         <p>tier2 + tier3 are happy.</p>
         </body></html>
-
   service:
     - name: bench-http
       exec: "/usr/bin/python3 -m http.server --bind 0.0.0.0 --directory /srv/bench 8080"
@@ -45,7 +41,6 @@ layer:
       priority: 20
       enable: true
       scope: system
-
   eval:
     - id: tier23-curl-binary
       file: /usr/bin/curl

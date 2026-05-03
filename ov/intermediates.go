@@ -89,7 +89,7 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 			continue
 		}
 		var deps []string
-		for _, dep := range layer.Depends {
+		for _, dep := range layer.Requires {
 			if _, inUse := popularity[dep]; inUse {
 				deps = append(deps, dep)
 			}
@@ -593,7 +593,7 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 	if !ok {
 		return
 	}
-	for _, dep := range layer.Depends {
+	for _, dep := range layer.Requires {
 		if excluded[dep] || needed[dep] {
 			continue
 		}

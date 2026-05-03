@@ -1,17 +1,5 @@
 layer:
   name: nodejs
-  rpm:
-    packages:
-      - nodejs
-      - npm
-
-  deb:
-    packages:
-      - nodejs
-      - npm
-
-  pac:
-    packages:
-      - nodejs
-      - npm
-
+  packages:
+    - nodejs
+    - npm

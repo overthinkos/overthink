@@ -1,178 +1,105 @@
 layer:
   name: dev-tools
-  rpm:
-    packages:
-      - android-tools
-      - apptainer
-      - apptainer-suid
-      - arch-install-scripts
-      - asciinema
-      - bat
-      - bcc
-      - bpftop
-      - bpftrace
-      - bridge-utils
-      - debootstrap
-      - direnv
-      - dislocker
-      - ecryptfs-utils
-      - fastfetch
-      - fd-find
-      - fdupes
-      - fuse-devel
-      - fuse-dislocker
-      - fuse3-devel
-      - html2text
-      - htop
-      - jdupes
-      - mosh
-      - neovim
-      - podman-compose
-      - podman-machine
-      - podman-remote
-      - podman-tui
-      - qemu-kvm
-      - qemu-user-binfmt
-      - qemu-user-static
-      - rclone
-      - restic
-      - ripgrep
-      - ShellCheck
-      - squashfuse
-      - strace
-      - sysstat
-      - thefuck
-      - yamllint
-      - yq
-      - zoxide
-    options:
-      - "--setopt=tsflags=noscripts"
-
-  # Arch-native equivalents. Name swaps: fd-find→fd, ShellCheck→shellcheck,
-  # fuse-devel→fuse2 (Arch doesn't split -devel), fuse3-devel→fuse3.
-  # qemu-kvm → qemu-desktop (Arch's all-in-one KVM stack; qemu-base is
-  # minimal, qemu-full includes GUI front-ends). podman-remote is bundled
-  # into Arch's `podman` package so no separate entry.
-  #
-  # Not bundled in this layer's pac:/aur: list (left to runtime install
-  # via `yay -S <pkg>` inside arch-coder via the container-nesting
-  # layer's rootless yay): apptainer, bpftop, bridge-utils (deprecated;
-  # use iproute2 `ip link` instead), debootstrap, dislocker,
-  # ecryptfs-utils, fuse-dislocker, jdupes, podman-machine, podman-tui,
-  # qemu-user-binfmt, qemu-user-static, thefuck. Could be promoted to
-  # this layer's aur: section if any Arch consumer needs them
-  # baked-in — multi-distro layers can carry rpm: + pac: + aur:
-  # together (the validator gates aur: by image BuildFormats, so Fedora
-  # consumers harmlessly skip aur sections at IR-compile time).
-  pac:
-    packages:
-      - android-tools
-      - arch-install-scripts
-      - asciinema
-      - bat
-      - bcc
-      - bpftrace
-      - direnv
-      - fastfetch
-      - fd
-      - fdupes
-      - fuse2
-      - fuse3
-      - html2text
-      - htop
-      - mosh
-      - neovim
-      - podman-compose
-      - qemu-desktop
-      - rclone
-      - restic
-      - ripgrep
-      - shellcheck
-      - squashfuse
-      - strace
-      - sysstat
-      - yamllint
-      - yq
-      - zoxide
-
-  # Debian / Ubuntu equivalents. Name swaps (matching the tests: file checks):
-  #   fd-find → fd-find (Debian keeps the Fedora name; binary installs as fdfind
-  #     — a symlink to /usr/bin/fd is created by the package on Debian 13+)
-  #   ShellCheck → shellcheck (lowercase)
-  #   fuse-devel/fuse3-devel → libfuse-dev/libfuse3-dev
-  #   qemu-kvm + qemu-user-{static,binfmt} → qemu-system-x86 + qemu-user-static
-  #     (bundles binfmt registration)
-  #   android-tools → android-sdk-platform-tools (Debian split; adb + fastboot inside)
-  # Dropped (unpackaged on Debian 13 main — same policy as Arch drop):
-  #   apptainer / apptainer-suid (only in backports), bcc, bpftop (upstream-only),
-  #   dislocker, ecryptfs-utils, fuse-dislocker, jdupes, podman-machine (ships
-  #   via podman-plugins), podman-remote (bundled in podman), podman-tui,
-  #   thefuck, arch-install-scripts.
-  deb:
-    packages:
-      - android-sdk-platform-tools
-      - bat
-      - bpftrace
-      - bridge-utils
-      - debootstrap
-      - fastfetch
-      - fd-find
-      - fdupes
-      - htop
-      - html2text
-      - libfuse-dev
-      - libfuse3-dev
-      - mosh
-      - neovim
-      - podman-compose
-      - qemu-system-x86
-      - qemu-user-static
-      - qemu-utils
-      - rclone
-      - restic
-      - ripgrep
-      - shellcheck
-      - squashfuse
-      - strace
-      - sysstat
-      - yamllint
-      - yq
-      - zoxide
-
-  # Ubuntu 24.04 noble override: fastfetch is not in Ubuntu main (Debian 13
-  # trixie ships it). Rest is identical to deb:. The `ubuntu:24.04` tag beats
-  # the generic `deb:` format section via first-match-wins on the image's
-  # distro priority list (`["ubuntu:24.04", ubuntu, debian]`).
-  ubuntu:24.04:
-    packages:
-      - android-sdk-platform-tools
-      - bat
-      - bpftrace
-      - bridge-utils
-      - debootstrap
-      - fd-find
-      - fdupes
-      - htop
-      - html2text
-      - libfuse-dev
-      - libfuse3-dev
-      - mosh
-      - neovim
-      - podman-compose
-      - qemu-system-x86
-      - qemu-user-static
-      - qemu-utils
-      - rclone
-      - restic
-      - ripgrep
-      - shellcheck
-      - squashfuse
-      - strace
-      - sysstat
-      - yamllint
-      - yq
-      - zoxide
-
+  packages:
+    - bat
+    - bpftrace
+    - fdupes
+    - html2text
+    - htop
+    - mosh
+    - neovim
+    - podman-compose
+    - rclone
+    - restic
+    - ripgrep
+    - squashfuse
+    - strace
+    - sysstat
+    - yamllint
+    - yq
+    - zoxide
+  distros:
+    archlinux:
+      packages:
+        - android-tools
+        - arch-install-scripts
+        - asciinema
+        - bcc
+        - direnv
+        - fastfetch
+        - fd
+        - fuse2
+        - fuse3
+        - qemu-desktop
+        - shellcheck
+    debian:
+      packages:
+        - android-sdk-platform-tools
+        - bridge-utils
+        - debootstrap
+        - fastfetch
+        - fd-find
+        - libfuse-dev
+        - libfuse3-dev
+        - qemu-system-x86
+        - qemu-user-static
+        - qemu-utils
+        - shellcheck
+    fedora:
+      packages:
+        - android-tools
+        - apptainer
+        - apptainer-suid
+        - arch-install-scripts
+        - asciinema
+        - bcc
+        - bpftop
+        - bridge-utils
+        - debootstrap
+        - direnv
+        - dislocker
+        - ecryptfs-utils
+        - fastfetch
+        - fd-find
+        - fuse-devel
+        - fuse-dislocker
+        - fuse3-devel
+        - jdupes
+        - podman-machine
+        - podman-remote
+        - podman-tui
+        - qemu-kvm
+        - qemu-user-binfmt
+        - qemu-user-static
+        - ShellCheck
+        - thefuck
+      options:
+        - "--setopt=tsflags=noscripts"
+    ubuntu:
+      packages:
+        - android-sdk-platform-tools
+        - bridge-utils
+        - debootstrap
+        - fastfetch
+        - fd-find
+        - libfuse-dev
+        - libfuse3-dev
+        - qemu-system-x86
+        - qemu-user-static
+        - qemu-utils
+        - shellcheck
+    ubuntu-24.04:
+      packages:
+        - android-sdk-platform-tools
+        - bridge-utils
+        - debootstrap
+        - fd-find
+        - libfuse-dev
+        - libfuse3-dev
+        - qemu-system-x86
+        - qemu-user-static
+        - qemu-utils
+        - shellcheck
   # Distro-tolerant post-install: Debian/Ubuntu package `bat` installs the
   # binary as /usr/bin/batcat (the `bat` name collides with a legacy Debian
   # utility). Provide /usr/bin/bat as a symlink so downstream docs, scripts,
@@ -185,7 +112,6 @@ layer:
           ln -sf /usr/bin/batcat /usr/bin/bat
         fi
       user: root
-
   eval:
     - id: ripgrep-binary
       file: /usr/bin/rg
@@ -209,4 +135,3 @@ layer:
     - id: htop-binary
       file: /usr/bin/htop
       exists: true
-

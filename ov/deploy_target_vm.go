@@ -54,6 +54,12 @@ type VmDeployTarget struct {
 
 	// DryRunWriter receives dry-run output. Nil defaults to os.Stderr.
 	DryRunWriter *os.File
+
+	// shellsPresent caches the shell-detection probe result for the
+	// duration of one Emit() call. Same shape as
+	// LocalDeployTarget.shellsPresent — populated lazily on the first
+	// ShellSnippetStep encountered.
+	shellsPresent map[string]bool
 }
 
 // Name returns the target's display name.
@@ -273,12 +279,93 @@ func (t *VmDeployTarget) emitPlan(ctx context.Context, plan *InstallPlan, opts E
 				return rec, err
 			}
 
+		case *ShellSnippetStep:
+			if err := t.execShellSnippet(ctx, s, plan, opts); err != nil {
+				return rec, err
+			}
+			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
+
 		default:
 			fmt.Fprintf(os.Stderr, "VmDeployTarget: skipping unsupported step kind %T\n", step)
 		}
 	}
 
 	return rec, nil
+}
+
+// execShellSnippet renders one (layer, shell) snippet onto the VM
+// guest. Same shape as LocalDeployTarget.execShellSnippet — probes
+// shell presence on the guest via SSH, writes drop-in or applies
+// managed-block to existing rc file. Probe result cached on the
+// target struct for the duration of Emit().
+func (t *VmDeployTarget) execShellSnippet(ctx context.Context, s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts) error {
+	if err := t.ensureShellProbe(ctx, opts); err != nil {
+		return err
+	}
+	if !t.shellsPresent[s.Shell] {
+		fmt.Fprintf(os.Stderr, "vm:%s skip: shell-snippet %s/%s: %s not installed on guest\n",
+			t.VMName, s.LayerName, s.Shell, s.Shell)
+		return nil
+	}
+	if opts.DryRun {
+		fmt.Fprintf(os.Stderr, "[dry-run] vm:%s shell-snippet %s/%s -> %s (use_dropin=%v)\n",
+			t.VMName, s.LayerName, s.Shell, s.Destination, s.UseDropin)
+		return nil
+	}
+	body := s.Snippet
+	var fileBytes []byte
+	if s.UseDropin {
+		fileBytes = []byte(body)
+		if !strings.HasSuffix(body, "\n") {
+			fileBytes = append(fileBytes, '\n')
+		}
+	} else {
+		existing, err := t.Exec.GetFile(ctx, s.Destination, false, opts)
+		if err != nil && !isFileNotFoundErr(err) {
+			return fmt.Errorf("read %s on guest: %w", s.Destination, err)
+		}
+		updated := replaceOrAppendManagedBlock(string(existing), strings.TrimRight(body, "\n"), s.Marker)
+		fileBytes = []byte(updated)
+	}
+	tmpDir, err := os.MkdirTemp("", "ov-shell-snippet-")
+	if err != nil {
+		return fmt.Errorf("tempdir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	tmpPath := filepath.Join(tmpDir, "snippet")
+	if err := os.WriteFile(tmpPath, fileBytes, 0644); err != nil {
+		return fmt.Errorf("stage snippet: %w", err)
+	}
+	if err := t.Exec.PutFile(ctx, tmpPath, s.Destination, 0644, false, opts); err != nil {
+		return fmt.Errorf("write %s on guest: %w", s.Destination, err)
+	}
+	return nil
+}
+
+// ensureShellProbe populates t.shellsPresent on first call. Each shell
+// in the allowlist is probed with `command -v <shell>` over the SSH
+// executor; presence is cached for the rest of Emit().
+func (t *VmDeployTarget) ensureShellProbe(ctx context.Context, opts EmitOpts) error {
+	if t.shellsPresent != nil {
+		return nil
+	}
+	t.shellsPresent = make(map[string]bool, len(ShellAllowlist))
+	if opts.DryRun {
+		for shell := range ShellAllowlist {
+			t.shellsPresent[shell] = true
+		}
+		return nil
+	}
+	for shell := range ShellAllowlist {
+		stdout, _, _, err := t.Exec.RunCapture(ctx,
+			fmt.Sprintf("command -v %s >/dev/null 2>&1 && echo yes || echo no", shell))
+		if err != nil {
+			t.shellsPresent[shell] = false
+			continue
+		}
+		t.shellsPresent[shell] = strings.TrimSpace(stdout) == "yes"
+	}
+	return nil
 }
 
 // execSystemPackages runs the distro's package install command on the

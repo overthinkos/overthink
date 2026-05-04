@@ -154,6 +154,7 @@ const (
 	StepKindServicePackaged StepKind = "ServicePackaged"
 	StepKindServiceCustom   StepKind = "ServiceCustom"
 	StepKindShellHook       StepKind = "ShellHook"
+	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
 )
 
@@ -716,6 +717,80 @@ func (s *ShellHookStep) Reverse() []ReverseOp {
 		Targets: []string{s.EnvFile},
 		Scope:   ScopeUserProfile,
 		Extra:   map[string]string{"layer": s.LayerName},
+	}}
+}
+
+// ---------------------------------------------------------------------------
+// ShellSnippetStep — per-layer per-shell init snippet for layer.yml `shell:`.
+// ---------------------------------------------------------------------------
+
+// ShellSnippetStep records a per-(layer, shell) init snippet emitted from
+// a layer's `shell:` block. The compiler emits one step per (layer, shell)
+// pair after applying the selection rule (per-shell ByShell entry wins
+// over generic, with ${SHELL_NAME} substitution).
+//
+// Per-target rendering:
+//   - OCITarget: snippet bytes are content-address-staged and COPYed to
+//     a system-wide drop-in (/etc/profile.d/ov-<layer>.sh for bash/zsh/sh,
+//     /etc/fish/conf.d/ov-<layer>.fish for fish).
+//   - LocalDeployTarget / VmDeployTarget: managed-block append to the
+//     user's rc file (~/.bashrc, ~/.zshrc, ~/.profile) keyed by
+//     `# overthink:begin <Marker>` fence; for fish, a per-layer drop-in at
+//     ~/.config/fish/conf.d/ov-<layer>.fish (no fence needed, file IS the
+//     unit). UseDropin discriminates the two paths.
+//   - K8sDeployTarget: skipped (no shell in pods).
+type ShellSnippetStep struct {
+	LayerName   string   // layer this snippet belongs to (also Marker source)
+	Origin      string   // "<layer>" or "image" or "deploy" (for ledger refcount + LabelShell origin)
+	Shell       string   // bash | zsh | fish | sh
+	Snippet     string   // rendered body, ${SHELL_NAME}-substituted, ready to write
+	PathAppend  []string // already rendered into Snippet by the compiler; tracked here for label round-trip / overlay
+	Destination string   // resolved per-target at compile time; absolute path on the target
+	Marker      string   // managed-block marker tag (= LayerName) — used by replaceOrAppendManagedBlock
+	UseDropin   bool     // true: write whole file (fish, container drop-in); false: managed-block append into existing rc file
+	Priority    int      // load-order hint, 0 = default
+}
+
+func (s *ShellSnippetStep) Kind() StepKind { return StepKindShellSnippet }
+
+// Scope: SnippetStep is system-wide for build-mode (Container drop-ins live
+// under /etc/profile.d/ — root-owned), and user-profile for host/vm deploy-
+// mode (managed block in ~/.bashrc etc.). The compiler picks the right
+// Scope when constructing the step based on the destination path; the
+// step records the choice so each emitter doesn't have to re-derive it.
+func (s *ShellSnippetStep) Scope() Scope {
+	if pathIsSystemScoped(s.Destination) {
+		return ScopeSystem
+	}
+	return ScopeUserProfile
+}
+
+func (s *ShellSnippetStep) Venue() Venue       { return VenueHostNative }
+func (s *ShellSnippetStep) RequiresGate() Gate { return GateNone }
+
+func (s *ShellSnippetStep) Reverse() []ReverseOp {
+	if s.UseDropin {
+		// Whole-file write: removal is a plain rm of the destination.
+		kind := ReverseOpRmFileUser
+		if pathIsSystemScoped(s.Destination) {
+			kind = ReverseOpRmFileSystem
+		}
+		return []ReverseOp{{
+			Kind:    kind,
+			Targets: []string{s.Destination},
+			Scope:   s.Scope(),
+			Extra:   map[string]string{"layer": s.LayerName, "shell": s.Shell},
+		}}
+	}
+	// Managed-block append: removal strips just our fence pair from the
+	// existing rc file (which may belong to the user and contain unrelated
+	// content). Marker carries the per-layer fence tag so multiple layers
+	// can coexist in one rc file.
+	return []ReverseOp{{
+		Kind:    ReverseOpRemoveManaged,
+		Targets: []string{s.Destination},
+		Scope:   s.Scope(),
+		Extra:   map[string]string{"layer": s.LayerName, "shell": s.Shell, "marker": s.Marker},
 	}}
 }
 

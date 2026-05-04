@@ -69,6 +69,14 @@ type LocalDeployTarget struct {
 
 	// DryRunWriter receives dry-run output. Nil defaults to os.Stderr.
 	DryRunWriter *os.File
+
+	// shellsPresent caches the shell-detection probe result for the
+	// duration of one Emit() call. Populated lazily on the first
+	// ShellSnippetStep encountered. Keys are bash/zsh/fish/sh; values
+	// indicate whether `command -v <shell>` returned success on the
+	// target. Steps for absent shells become no-ops with a logged
+	// skip reason — same shape as ScopeSkip in the IR.
+	shellsPresent map[string]bool
 }
 
 // exec returns the configured executor, defaulting to a local one
@@ -102,7 +110,17 @@ func (t *LocalDeployTarget) Name() string { return "host" }
 // all steps from plan N run before any step from plan N+1.
 func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if t.HostHome == "" {
-		t.HostHome = os.Getenv("HOME")
+		// Resolve the deploying-user's $HOME via the executor. For the
+		// local ShellExecutor this is the operator's $HOME; for an
+		// SSHExecutor (`host: user@machine`) it's the REMOTE user's
+		// $HOME — fixes the long-standing bug where rc-file edits over
+		// SSH were landing in the operator's $HOME instead of the
+		// guest user's. Bundled with the 2026-05 shell:-schema cutover.
+		home, err := t.exec().ResolveHome(opts.ContextOrDefault(), "")
+		if err != nil {
+			return fmt.Errorf("LocalDeployTarget: resolve HOME: %w", err)
+		}
+		t.HostHome = home
 	}
 	if t.HostHome == "" {
 		return fmt.Errorf("LocalDeployTarget: cannot determine HOME")
@@ -221,8 +239,127 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		return t.execServiceCustom(s, plan, opts, rec, start)
 	case *RepoChangeStep:
 		return t.execRepoChange(s, plan, opts, rec, start)
+	case *ShellSnippetStep:
+		return t.execShellSnippet(s, plan, opts, rec, start)
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
+}
+
+// execShellSnippet renders one (layer, shell) snippet onto the target
+// venue. Shell-detection probe runs once per Emit() (cached on the
+// target struct). Snippets for absent shells become VenueSkip-style
+// no-ops with a logged reason. UseDropin=true writes the file
+// outright; UseDropin=false applies replaceOrAppendManagedBlock to the
+// existing rc file under a per-layer fence pair.
+func (t *LocalDeployTarget) execShellSnippet(s *ShellSnippetStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
+	if err := t.ensureShellProbe(opts); err != nil {
+		return err
+	}
+	if !t.shellsPresent[s.Shell] {
+		t.logSkipReason(fmt.Sprintf("shell-snippet %s/%s: %s not installed on target", s.LayerName, s.Shell, s.Shell), opts)
+		return nil
+	}
+	if opts.DryRun {
+		fmt.Fprintf(t.stderr(), "[dry-run] shell-snippet %s/%s -> %s (use_dropin=%v)\n",
+			s.LayerName, s.Shell, s.Destination, s.UseDropin)
+		t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
+			fmt.Sprintf("layer=%s shell=%s dest=%s", s.LayerName, s.Shell, s.Destination), start)
+		return nil
+	}
+	body := s.Snippet
+	var fileBytes []byte
+	if s.UseDropin {
+		fileBytes = []byte(body)
+		if !strings.HasSuffix(body, "\n") {
+			fileBytes = append(fileBytes, '\n')
+		}
+	} else {
+		// Read existing rc file (empty if absent), apply managed-block.
+		exec := t.exec()
+		existing, err := exec.GetFile(opts.ContextOrDefault(), s.Destination, false, opts)
+		if err != nil && !isFileNotFoundErr(err) {
+			return fmt.Errorf("read %s: %w", s.Destination, err)
+		}
+		updated := replaceOrAppendManagedBlock(string(existing), strings.TrimRight(body, "\n"), s.Marker)
+		fileBytes = []byte(updated)
+	}
+	// Write via tempfile + PutFile. Mode 0644 — rc files are world-
+	// readable by convention. ownerRoot=false: snippets land in user-
+	// scope rc files OR in container drop-ins which we don't reach via
+	// LocalDeployTarget (those flow through OCITarget).
+	tmpDir, err := os.MkdirTemp("", "ov-shell-snippet-")
+	if err != nil {
+		return fmt.Errorf("tempdir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+	tmpPath := filepath.Join(tmpDir, "snippet")
+	if err := os.WriteFile(tmpPath, fileBytes, 0644); err != nil {
+		return fmt.Errorf("stage snippet: %w", err)
+	}
+	if err := t.exec().PutFile(opts.ContextOrDefault(), tmpPath, s.Destination, 0644, false, opts); err != nil {
+		return fmt.Errorf("write %s: %w", s.Destination, err)
+	}
+	t.noteStep(rec, StepKindShellSnippet, s.Scope(), s.Venue(),
+		fmt.Sprintf("layer=%s shell=%s dest=%s", s.LayerName, s.Shell, s.Destination), start)
+	rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
+	return nil
+}
+
+// ensureShellProbe populates t.shellsPresent on first call. Each shell
+// in the allowlist is probed with `command -v <shell>` over the
+// configured executor; presence is cached for the rest of Emit().
+func (t *LocalDeployTarget) ensureShellProbe(opts EmitOpts) error {
+	if t.shellsPresent != nil {
+		return nil
+	}
+	t.shellsPresent = make(map[string]bool, len(ShellAllowlist))
+	if opts.DryRun {
+		// In dry-run, assume all shells present so the planner can show
+		// what WOULD be written. Real probes only fire on live runs.
+		for shell := range ShellAllowlist {
+			t.shellsPresent[shell] = true
+		}
+		return nil
+	}
+	exec := t.exec()
+	for shell := range ShellAllowlist {
+		stdout, _, _, err := exec.RunCapture(opts.ContextOrDefault(),
+			fmt.Sprintf("command -v %s >/dev/null 2>&1 && echo yes || echo no", shell))
+		if err != nil {
+			// Probe failure (executor unreachable, etc.) — treat as missing.
+			t.shellsPresent[shell] = false
+			continue
+		}
+		t.shellsPresent[shell] = strings.TrimSpace(stdout) == "yes"
+	}
+	return nil
+}
+
+// logSkipReason emits a single line on the target's stderr describing
+// why a step was skipped. Mirrors the existing logSkip / logGated
+// helpers but for per-step skip reasons not tied to VenueSkip / Gate.
+func (t *LocalDeployTarget) logSkipReason(reason string, opts EmitOpts) {
+	if opts.DryRun {
+		fmt.Fprintf(t.stderr(), "[dry-run] skip: %s\n", reason)
+		return
+	}
+	fmt.Fprintf(t.stderr(), "skip: %s\n", reason)
+}
+
+// isFileNotFoundErr returns true when err indicates "the file we tried
+// to read doesn't exist". We treat that as a recoverable case for
+// managed-block writes (no existing rc file → start fresh).
+func isFileNotFoundErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if os.IsNotExist(err) {
+		return true
+	}
+	// PutFile/GetFile wrap; fall back to substring sniffing for the
+	// common ssh/cat case ("No such file or directory").
+	return strings.Contains(err.Error(), "No such file or directory") ||
+		strings.Contains(err.Error(), "no such file")
 }
 
 // ---------------------------------------------------------------------------

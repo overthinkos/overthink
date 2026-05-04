@@ -208,6 +208,32 @@ func (n *NestedExecutor) RunCapture(ctx context.Context, script string) (string,
 	return n.Parent.RunCapture(ctx, wrapped)
 }
 
+// ResolveHome returns $HOME for `user` inside the leaf environment of
+// this nested executor. Implementation: shell out a small `getent passwd`
+// command via RunCapture (which already routes through the jump chain).
+// Empty user resolves to the leaf-shell's $HOME.
+func (n *NestedExecutor) ResolveHome(ctx context.Context, user string) (string, error) {
+	var script string
+	if user == "" {
+		script = "printf %s \"$HOME\""
+	} else {
+		quoted := strings.ReplaceAll(user, `'`, `'\''`)
+		script = "entry=$(getent passwd '" + quoted + "' 2>/dev/null) && printf %s \"$(printf %s \"$entry\" | cut -d: -f6)\""
+	}
+	stdout, _, exit, err := n.RunCapture(ctx, script)
+	if err != nil {
+		return "", fmt.Errorf("NestedExecutor.ResolveHome(%q): %w", user, err)
+	}
+	if exit != 0 {
+		return "", fmt.Errorf("NestedExecutor.ResolveHome(%q): exit %d", user, exit)
+	}
+	home := strings.TrimSpace(stdout)
+	if home == "" {
+		return "", fmt.Errorf("NestedExecutor.ResolveHome(%q): empty result", user)
+	}
+	return home, nil
+}
+
 // Kind reports the venue's coarse classification, derived from the
 // LEAF jump (this NestedExecutor's own Jump). The parent chain doesn't
 // affect Kind because tests care about what their probe lands in, not

@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 // DeployExecutor abstracts shell execution + file placement for deploy
@@ -90,6 +92,24 @@ type DeployExecutor interface {
 	// Replaces the test-time Executor.Kind() method deleted in the
 	// 2026-04 executor-hierarchy cutover.
 	Kind() string
+
+	// ResolveHome returns the absolute path of $HOME for the named user
+	// on the venue. Empty user means "the executor's default user" (the
+	// invoking operator for ShellExecutor; the SSH login user for
+	// SSHExecutor). Implementations consult `getent passwd` so they
+	// don't depend on $HOME being set in the calling environment — that
+	// matters for SSH executors where the operator's $HOME has nothing
+	// to do with the remote user's home, and for ShellExecutor when the
+	// caller wants a different user's home (e.g. running as root but
+	// resolving an unprivileged user's home).
+	//
+	// Bundled as part of the 2026-05 shell:-schema cutover. Replaces the
+	// `LocalDeployTarget.HostHome = os.Getenv("HOME")` static-field
+	// initialization that mis-targeted SSH deploys: the operator's
+	// $HOME is not the remote user's home, so every shell-rc edit
+	// (env.d sourcing block included) was landing in the wrong place
+	// for `host: user@machine` deploys.
+	ResolveHome(ctx context.Context, user string) (string, error)
 }
 
 // ShellExecutor implements DeployExecutor against the invoking user's shell
@@ -169,6 +189,48 @@ func (ShellExecutor) RunCapture(ctx context.Context, script string) (string, str
 // Kind reports "host" — ShellExecutor's commands run on the
 // operator's machine.
 func (ShellExecutor) Kind() string { return "host" }
+
+// ResolveHome returns $HOME for `user` on the local host. Empty user
+// resolves to the invoking operator's $HOME (matches today's
+// `os.Getenv("HOME")` behaviour). Non-empty user goes through
+// `getent passwd <user>` so callers can resolve any user's home.
+func (ShellExecutor) ResolveHome(ctx context.Context, user string) (string, error) {
+	if user == "" {
+		if h := os.Getenv("HOME"); h != "" {
+			return h, nil
+		}
+		// Last-ditch: ask getent for our own uid.
+		user = os.Getenv("USER")
+		if user == "" {
+			return "", fmt.Errorf("ResolveHome: $HOME and $USER both empty")
+		}
+	}
+	cmd := exec.CommandContext(ctx, "getent", "passwd", user)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("getent passwd %s: %w", user, err)
+	}
+	return parseGetentHome(stdout.String(), user)
+}
+
+// parseGetentHome extracts the home directory (field 6) from a getent
+// passwd line. Shared between ShellExecutor and SSHExecutor.
+func parseGetentHome(line, user string) (string, error) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return "", fmt.Errorf("getent passwd %s: no entry found", user)
+	}
+	fields := strings.Split(line, ":")
+	if len(fields) < 6 {
+		return "", fmt.Errorf("getent passwd %s: malformed entry: %q", user, line)
+	}
+	home := fields[5]
+	if home == "" {
+		return "", fmt.Errorf("getent passwd %s: empty home field", user)
+	}
+	return home, nil
+}
 
 // runCaptureCmd is the shared output-capture helper. Identical behaviour
 // to the pre-cutover testrun.go's runCapture (which lived on the now-

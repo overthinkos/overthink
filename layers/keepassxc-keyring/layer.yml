@@ -19,6 +19,7 @@ layer:
   requires:
     - keepassxc
     - gnupg
+    - direnv
   packages:
     - keyutils
   distros:
@@ -38,6 +39,37 @@ layer:
       packages:
         - pinentry-qt
         - libsecret-tools
+  # Shell-init exports for KeePassXC-as-Secret-Service-provider. Mirrors
+  # what ~/.config/environment.d/ssh-agent.conf already provides for
+  # systemd-bootstrapped sessions; this block covers shells that aren't
+  # spawned via pam_systemd (tmux from a screen-locked session, ssh-in
+  # shells without graphical login, container-spawned shells, scripts).
+  # The two paths coexist with no conflict — environment.d wins when
+  # systemd is in the loop, the shell-rc lines fill the gap otherwise.
+  shell:
+    init: |
+      # KeePassXC as freedesktop.org Secret Service + ssh-agent host:
+      # point SSH_AUTH_SOCK at the systemd-user ssh-agent socket
+      # KeePassXC integrates with as a client (no socket of its own).
+      if [ -z "${SSH_AUTH_SOCK:-}" ] && [ -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket" ]; then
+        export SSH_AUTH_SOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/ssh-agent.socket"
+      fi
+      # GPG_TTY for the pinentry-qt → libsecret → KeePassXC chain when
+      # gpg-agent falls back to TTY mode.
+      export GPG_TTY="$(tty 2>/dev/null || echo /dev/tty)"
+    fish:
+      init: |
+        # KeePassXC ssh-agent socket (fish syntax — set/test idiom).
+        if test -z "$SSH_AUTH_SOCK"
+            set -l _kpx_sock "$XDG_RUNTIME_DIR/ssh-agent.socket"
+            if test -z "$XDG_RUNTIME_DIR"
+                set _kpx_sock "/run/user/"(id -u)"/ssh-agent.socket"
+            end
+            if test -S "$_kpx_sock"
+                set -gx SSH_AUTH_SOCK "$_kpx_sock"
+            end
+        end
+        set -gx GPG_TTY (tty 2>/dev/null; or echo /dev/tty)
   tasks:
     - mkdir: "${HOME}/.config/keepassxc"
       user: "${USER}"
@@ -165,48 +197,9 @@ layer:
         done
       user: "${USER}"
       comment: Disable systemd --user units + kill running competitor processes for the current session
-    - cmd: |
-        set -eu
-
-        FENCE_BEGIN="# overthink:begin direnv-hook (managed by ov; do not edit inside this block)"
-        FENCE_END="# overthink:end direnv-hook"
-
-        mkdir -p "${HOME}/.config/fish/conf.d"
-        cat > "${HOME}/.config/fish/conf.d/direnv.fish" <<EOF
-        $FENCE_BEGIN
-        if status --is-interactive
-            direnv hook fish | source
-        end
-        $FENCE_END
-        EOF
-
-        BASHRC="${HOME}/.bashrc"
-        [ -f "$BASHRC" ] || touch "$BASHRC"
-        if ! grep -qF "$FENCE_BEGIN" "$BASHRC"; then
-          cat >> "$BASHRC" <<EOF
-
-        $FENCE_BEGIN
-        if [ -t 0 ] && command -v direnv >/dev/null 2>&1; then
-          eval "\$(direnv hook bash)"
-        fi
-        $FENCE_END
-        EOF
-        fi
-
-        ZSHRC="${HOME}/.zshrc"
-        [ -f "$ZSHRC" ] || touch "$ZSHRC"
-        if ! grep -qF "$FENCE_BEGIN" "$ZSHRC"; then
-          cat >> "$ZSHRC" <<EOF
-
-        $FENCE_BEGIN
-        if [[ -o interactive ]] && command -v direnv >/dev/null 2>&1; then
-          eval "\$(direnv hook zsh)"
-        fi
-        $FENCE_END
-        EOF
-        fi
-      user: "${USER}"
-      comment: Install generic direnv hook for bash, zsh, and fish
+    # Direnv shell hooks now live in the direnv layer's `shell:` block
+    # (post-2026-05 cutover). keepassxc-keyring depends on direnv via
+    # `requires:`, so the hook lands automatically.
     # gpg-agent.conf: pinentry-qt + 8h cache. Mirrors what `ov secrets gpg
     # setup` step 2 writes. Independent of whether the user has a GPG key
     # yet — once they import or generate one, this config is in place.
@@ -269,6 +262,33 @@ layer:
         rm -f "${HOME}/.config/fish/conf.d/ssh-auth-sock.fish"
       user: "${USER}"
       comment: Strip obsolete ssh-auth-sock shell-rc hooks (replaced by environment.d)
+    # Cleanup: pre-2026-05 versions of this layer wrote direnv-hook
+    # fenced blocks via inline cmd: heredoc. The 2026-05 cutover moved
+    # direnv hook installation to the direnv layer's `shell:` schema
+    # (new fence marker = `direnv`, old marker = `direnv-hook`). On
+    # hosts that had a prior deploy of the legacy version, strip the
+    # orphaned `direnv-hook` blocks so they don't shadow the new
+    # `direnv` blocks. Idempotent — does nothing on hosts that never
+    # had the legacy version, AND does nothing on a second run after
+    # cleanup. Targets the bash/zsh fenced blocks AND the legacy fish
+    # `~/.config/fish/conf.d/direnv.fish` (the new path is
+    # `ov-direnv.fish` written by the direnv layer's shell: emitter).
+    - cmd: |
+        set -eu
+        for rc in "${HOME}/.bashrc" "${HOME}/.zshrc"; do
+          if [ -f "$rc" ] && grep -qF '# overthink:begin direnv-hook' "$rc"; then
+            sed -i '/# overthink:begin direnv-hook/,/# overthink:end direnv-hook/d' "$rc"
+          fi
+        done
+        # Legacy fish drop-in path (no ov- prefix) — DELETED in the
+        # cutover; the direnv layer's shell: schema writes to
+        # ~/.config/fish/conf.d/ov-direnv.fish instead.
+        legacy_fish="${HOME}/.config/fish/conf.d/direnv.fish"
+        if [ -f "$legacy_fish" ] && grep -qF '# overthink:begin direnv-hook' "$legacy_fish"; then
+          rm -f "$legacy_fish"
+        fi
+      user: "${USER}"
+      comment: "Strip pre-2026-05 direnv-hook shell-rc hooks (now provided by direnv layer's shell: schema)"
     # systemd user service for KeePassXC: more robust auto-launch than the
     # XDG autostart entry alone — adds Restart=on-failure, journalctl logs,
     # and explicit dependency on graphical-session.target. KeePassXC

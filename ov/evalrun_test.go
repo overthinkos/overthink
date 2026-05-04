@@ -41,6 +41,9 @@ func (f *fakeExecutor) RunCapture(ctx context.Context, cmd string) (string, stri
 
 func (f *fakeExecutor) Kind() string  { return "fake" }
 func (f *fakeExecutor) Venue() string { return "fake" }
+func (f *fakeExecutor) ResolveHome(_ context.Context, _ string) (string, error) {
+	return "/home/fake", nil
+}
 
 // Stubs satisfying the rest of DeployExecutor — never called by these tests.
 func (f *fakeExecutor) RunSystem(_ context.Context, _ string, _ EmitOpts) error    { return nil }

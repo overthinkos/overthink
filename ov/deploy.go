@@ -73,6 +73,16 @@ type DeploymentNode struct {
 	// with id:X and skip:true effectively disables the baked check.
 	Eval []Check `yaml:"eval,omitempty"`
 
+	// Shell is the deploy-level overlay for the org.overthinkos.shell
+	// label. Same id-based replace/skip/append semantics as Eval —
+	// applied via MergeDeployShell at deploy time. 2026-05 cutover.
+	// Each entry carries optional `id:` (matches a baked layer/image
+	// origin or "<origin>:<shell>") and either a generic body /
+	// per-shell sub-blocks (replaces the baked entry) or `skip: true`
+	// (drops the baked entry). Entries without a matching id append
+	// to the deploy bucket with origin="deploy" if not set.
+	Shell []DeployShellOverlay `yaml:"shell,omitempty"`
+
 	// --- BuildTarget refactor fields (Task 13) ---
 	//
 	// Target selects the deploy destination. Empty or "container" →
@@ -275,6 +285,99 @@ type DeploymentNode struct {
 	// reference Inside is DERIVED from this tree at load time; authored
 	// `inside:` entries are rejected.
 	Nested map[string]*DeploymentNode `yaml:"nested,omitempty"`
+}
+
+// DeployShellOverlay is one entry in deploy.yml `shell:`. ID matches
+// a baked LabelShell entry's ID for replace/skip; absent ID makes the
+// entry a fresh deploy-scope contribution. Skip:true drops the matched
+// baked entry. The body fields (Init, PathAppend, Path, Priority,
+// ByShell) mirror ShellSpec — when populated, they replace the baked
+// entry's body wholesale.
+type DeployShellOverlay struct {
+	ID       string                `yaml:"id,omitempty"`
+	Origin   string                `yaml:"origin,omitempty"`
+	Skip     bool                  `yaml:"skip,omitempty"`
+	Init     string                `yaml:"init,omitempty"`
+	PathAppend []string            `yaml:"path_append,omitempty"`
+	Path     string                `yaml:"path,omitempty"`
+	Priority int                   `yaml:"priority,omitempty"`
+	ByShell  map[string]*ShellSpec `yaml:"-"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
+}
+
+// UnmarshalYAML two-pass parses a deploy.yml shell-overlay entry,
+// recognising both the intrinsic fields and the per-shell allowlist
+// keys (bash/zsh/fish/sh) — same pattern as ShellConfig.UnmarshalYAML.
+// Unknown non-allowlist keys raise a hard error so authors don't
+// silently typo a shell name.
+func (o *DeployShellOverlay) UnmarshalYAML(value *yaml.Node) error {
+	type overlayAlias DeployShellOverlay
+	var alias overlayAlias
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*o = DeployShellOverlay(alias)
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	known := map[string]bool{
+		"id": true, "origin": true, "skip": true,
+		"init": true, "path_append": true, "path": true, "priority": true,
+	}
+	for i := 0; i < len(value.Content)-1; i += 2 {
+		key := value.Content[i].Value
+		if known[key] {
+			continue
+		}
+		if !ShellAllowlist[key] {
+			return fmt.Errorf("deploy.shell: unknown key %q (expected id/origin/skip/init/path_append/path/priority or bash/zsh/fish/sh)", key)
+		}
+		var spec ShellSpec
+		if err := value.Content[i+1].Decode(&spec); err != nil {
+			return fmt.Errorf("deploy.shell.%s: %w", key, err)
+		}
+		if o.ByShell == nil {
+			o.ByShell = make(map[string]*ShellSpec)
+		}
+		o.ByShell[key] = &spec
+	}
+	return nil
+}
+
+// ToShellEntry converts a deploy.yml overlay into the LabelShell
+// ShellEntry shape consumed by MergeDeployShell.
+func (o *DeployShellOverlay) ToShellEntry() ShellEntry {
+	entry := ShellEntry{
+		Origin:   o.Origin,
+		ID:       o.ID,
+		Priority: o.Priority,
+	}
+	if !o.Skip {
+		hasGeneric := o.Init != "" || len(o.PathAppend) > 0 || o.Path != ""
+		if hasGeneric {
+			entry.Generic = &ShellSpec{
+				Init:       o.Init,
+				PathAppend: append([]string(nil), o.PathAppend...),
+				Path:       o.Path,
+			}
+		}
+		if len(o.ByShell) > 0 {
+			entry.ByShell = make(map[string]*ShellSpec, len(o.ByShell))
+			for k, v := range o.ByShell {
+				if v == nil {
+					continue
+				}
+				entry.ByShell[k] = &ShellSpec{
+					Init:       v.Init,
+					PathAppend: append([]string(nil), v.PathAppend...),
+					Path:       v.Path,
+				}
+			}
+		}
+	}
+	// Skip == true → leave Generic/ByShell nil; MergeDeployShell's
+	// replaceShellEntryByID treats both-nil as the "drop matched entry"
+	// signal.
+	return entry
 }
 
 // IsDisposable returns true when the node is explicitly disposable OR

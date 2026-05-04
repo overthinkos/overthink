@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -1309,6 +1310,37 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		}
 	}
 
+	// 5. Shell-init snippets from layer.yml `shell:` block.
+	// Reuses the InstallPlan compiler so the legacy generator and the
+	// new OCITarget path share one source of truth for selection-rule +
+	// destination resolution. We emit the resulting steps inline as
+	// RUN-heredoc directives (parallel to how OCITarget.emitShellSnippet
+	// renders them — same sha256-derived end-marker).
+	if shellSteps := compileShellSnippetSteps(layer, img, HostContext{}); len(shellSteps) > 0 {
+		// Shell snippets are root-owned system drop-ins; reset to root
+		// before emission so RUN runs as root.
+		if asUser {
+			b.WriteString("USER root\n")
+			asUser = false
+		}
+		for _, step := range shellSteps {
+			s, ok := step.(*ShellSnippetStep)
+			if !ok || s == nil || s.Snippet == "" {
+				continue
+			}
+			h := sha256.Sum256([]byte(s.Snippet))
+			marker := fmt.Sprintf("OV_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
+			fmt.Fprintf(b,
+				"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
+				shellQuote(filepath.Dir(s.Destination)),
+				shellQuote(s.Destination),
+				marker,
+				s.Snippet,
+				marker,
+			)
+		}
+	}
+
 	// Reset to root for next layer (skip for last layer when no root steps follow)
 	if asUser && !skipRootReset {
 		b.WriteString("USER root\n")
@@ -1624,6 +1656,17 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	descriptions := CollectDescriptions(g.Config, g.Layers, imageName)
 	if descriptions != nil {
 		writeJSONLabel(b, LabelDescription, descriptions)
+	}
+
+	// Shell-init manifest: three-section JSON of per-(origin, shell)
+	// contributions. Layer entries come from each layer's `shell:`
+	// block (resolved via the selection rule); image entries from the
+	// image-level `shell:` (when present). Deploy-scope defaults baked
+	// here; local deploy.yml `shell:` overlays merge at deploy time
+	// via MergeDeployShell.
+	shellSet := CollectShell(g.Config, g.Layers, imageName)
+	if shellSet != nil && (len(shellSet.Layer) > 0 || len(shellSet.Image) > 0 || len(shellSet.Deploy) > 0) {
+		writeJSONLabel(b, LabelShell, shellSet)
 	}
 
 	// VM config + libvirt snippets labels removed in the hard-cutover.

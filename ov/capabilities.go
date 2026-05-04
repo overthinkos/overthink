@@ -110,6 +110,12 @@ var CapabilityLabelMap = map[string]string{
 	// the BDD cutover; those remain on ImageMetadata during the additive
 	// foundation phase and are removed in the hard-cutover commit.
 	"Description": LabelDescription,
+
+	// Shell-init manifest — three-section (layer/image/deploy) per-shell
+	// rc-snippet contributions. 2026-05 cutover. Read by `ov image
+	// inspect`, `ov deploy from-image`, and the deploy.yml `shell:`
+	// overlay merge in MergeDeployShell.
+	"Shell": LabelShell,
 }
 
 // deployOnlyCapabilityFields are ImageMetadata fields that are NOT baked

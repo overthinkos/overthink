@@ -147,6 +147,77 @@ type MCPServerYAML struct {
 	Transport string `yaml:"transport,omitempty" json:"transport,omitempty"` // "http" (default), "sse"
 }
 
+// ShellConfig represents a layer's shell-init declarations (the `shell:`
+// field in layer.yml). Mirrors the per-distro / per-package pattern: an
+// intrinsic body (init, path_append, path, priority) plus per-shell
+// sub-blocks (bash, zsh, fish, sh) that override the intrinsic for that
+// shell. Selection rule applied at install time: per-shell ByShell entry
+// wins when present; otherwise the intrinsic body is used with
+// ${SHELL_NAME} substituted.
+type ShellConfig struct {
+	Init       string                `yaml:"init,omitempty" json:"init,omitempty"`
+	PathAppend []string              `yaml:"path_append,omitempty" json:"path_append,omitempty"`
+	Path       string                `yaml:"path,omitempty" json:"path,omitempty"`
+	Priority   int                   `yaml:"priority,omitempty" json:"priority,omitempty"`
+	ByShell    map[string]*ShellSpec `yaml:"-" json:"by_shell,omitempty"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
+}
+
+// ShellSpec is one per-shell init declaration nested inside a ShellConfig
+// (the body of shell.bash:, shell.zsh:, shell.fish:, shell.sh:).
+type ShellSpec struct {
+	Init       string   `yaml:"init,omitempty" json:"init,omitempty"`
+	PathAppend []string `yaml:"path_append,omitempty" json:"path_append,omitempty"`
+	Path       string   `yaml:"path,omitempty" json:"path,omitempty"`
+}
+
+// ShellAllowlist enumerates valid per-shell sub-block keys inside `shell:`.
+// Adding a new shell here is a renderer change (new managed-block / drop-in
+// destination); keep in sync with deploy_target_local.go shell-detection
+// probe and OCITarget.emitShellSnippet destination table.
+var ShellAllowlist = map[string]bool{"bash": true, "zsh": true, "fish": true, "sh": true}
+
+// shellConfigKnownFields enumerates the intrinsic field keys inside `shell:`.
+var shellConfigKnownFields = map[string]bool{
+	"init": true, "path_append": true, "path": true, "priority": true,
+}
+
+// UnmarshalYAML two-pass parses the `shell:` body: standard decode for
+// intrinsic fields (init/path_append/path/priority), then a manual walk
+// over remaining keys to pick up per-shell sub-blocks (bash/zsh/fish/sh)
+// into ByShell. Mirrors the LayerYAML.UnmarshalYAML alias-trick pattern.
+// Unknown keys (not intrinsic, not in ShellAllowlist) raise a hard error
+// so authors don't silently typo a shell name.
+func (sc *ShellConfig) UnmarshalYAML(value *yaml.Node) error {
+	type shellConfigAlias ShellConfig
+	var alias shellConfigAlias
+	if err := value.Decode(&alias); err != nil {
+		return err
+	}
+	*sc = ShellConfig(alias)
+
+	if value.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i < len(value.Content)-1; i += 2 {
+		key := value.Content[i].Value
+		if shellConfigKnownFields[key] {
+			continue
+		}
+		if !ShellAllowlist[key] {
+			return fmt.Errorf("shell: unknown key %q (expected one of init/path_append/path/priority or bash/zsh/fish/sh)", key)
+		}
+		var spec ShellSpec
+		if err := value.Content[i+1].Decode(&spec); err != nil {
+			return fmt.Errorf("shell.%s: %w", key, err)
+		}
+		if sc.ByShell == nil {
+			sc.ByShell = make(map[string]*ShellSpec)
+		}
+		sc.ByShell[key] = &spec
+	}
+	return nil
+}
+
 // sortedEnvDeps returns a deterministic slice from a name-keyed map, sorted by Name.
 func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 	keys := make([]string, 0, len(m))
@@ -212,6 +283,15 @@ type LayerYAML struct {
 	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
 	Tasks []Task            `yaml:"tasks,omitempty"` // ordered install operations
 
+	// Shell-init declarations: an intrinsic body (init/path_append/path/
+	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
+	// the org.overthinkos.shell OCI label (layer section) and is applied
+	// at `ov image build` time (snippets land in /etc/profile.d/,
+	// /etc/fish/conf.d/) and at `ov deploy add` time on target:local /
+	// target:vm (managed-block in user rc files; per-layer drop-in for
+	// fish). See ShellConfig type and /ov-build:layer "Shell Init Surface".
+	Shell *ShellConfig `yaml:"shell,omitempty"`
+
 	// Tests are declarative checks contributed by this layer. They travel
 	// in the org.overthinkos.tests OCI label (layer section) and run under
 	// `ov image test` (build-time) and `ov test` (deploy-time).
@@ -270,6 +350,7 @@ var layerYAMLKnownFields = map[string]bool{
 	"artifacts":    true,
 	"capabilities": true, "requires_capabilities": true,
 	"packages":     true, "distros": true,
+	"shell":        true,
 }
 
 // layerYAMLFormatNames caches known format names from build.yml for YAML parsing.
@@ -708,6 +789,7 @@ type Layer struct {
 	tasks          []Task            // ordered install operations (from layer.yml tasks:)
 	tests          []Check           // declarative checks (from layer.yml tests:)
 	artifacts      []LayerArtifact   // files to retrieve after setup (from layer.yml artifacts:)
+	shell          *ShellConfig      // shell-init declarations (from layer.yml shell:)
 	description    *Description      // Gherkin-shaped self-description (from layer.yml description:)
 
 	// Layer-contributed image-level facts (capabilities: block in layer.yml)
@@ -1105,6 +1187,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.vars = ly.Vars
 		layer.tasks = ly.Tasks
 		layer.HasTasks = len(ly.Tasks) > 0
+		layer.shell = ly.Shell
 	}
 
 	return layer, nil
@@ -1330,6 +1413,15 @@ func (l *Layer) Libvirt() []string {
 // Hooks returns the lifecycle hooks config (pre-populated from layer.yml, nil if not set)
 func (l *Layer) Hooks() *HooksConfig {
 	return l.hooks
+}
+
+// Shell returns the shell-init declarations (pre-populated from layer.yml,
+// nil if not set). The returned config carries an intrinsic body (init,
+// path_append, path, priority) plus per-shell sub-blocks (bash/zsh/fish/
+// sh) in ByShell. Selection rule applied at install time — see
+// compileShellSnippetSteps in install_build.go.
+func (l *Layer) Shell() *ShellConfig {
+	return l.shell
 }
 
 // Secrets returns the secret declarations (pre-populated from layer.yml)

@@ -144,6 +144,13 @@ type ImageConfig struct {
 	// entries default to scope: deploy and land in the deploy section of
 	// the OCI label; local deploy.yml can override them by id.
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
+
+	// Shell is an image-level shell-init contribution layered on top of
+	// what the included layers contribute. Same shape as the layer.yml
+	// `shell:` field — generic body + per-shell overrides. Travels in
+	// the org.overthinkos.shell OCI label under the Image section.
+	// 2026-05 cutover.
+	Shell *ShellConfig `yaml:"shell,omitempty"`
 }
 
 // IsEnabled returns true if the image is enabled (nil defaults to true)

@@ -103,6 +103,12 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	svcSteps := compileServiceSteps(layer, img, hostCtx)
 	plan.Steps = append(plan.Steps, svcSteps...)
 
+	// 5. Shell-init snippets: layer.yml `shell:` block. Generic body +
+	// per-shell sub-blocks (bash/zsh/fish/sh). Selection rule: per-shell
+	// wins over generic with ${SHELL_NAME} substitution.
+	shellSteps := compileShellSnippetSteps(layer, img, hostCtx)
+	plan.Steps = append(plan.Steps, shellSteps...)
+
 	return plan, nil
 }
 
@@ -192,6 +198,166 @@ func compileShellHookStep(layer *Layer, img *ResolvedImage) *ShellHookStep {
 		EnvVars:   vars,
 		PathAdd:   paths,
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Shell-init snippet compilation
+// ---------------------------------------------------------------------------
+
+// compileShellSnippetSteps returns one ShellSnippetStep per (layer, shell)
+// pair the layer contributes. Selection rule (mirrors TagPkgConfig):
+//   1. If layer.Shell.ByShell[shell] exists, render it.
+//   2. Else if layer.Shell.Init is non-empty, render the generic body with
+//      ${SHELL_NAME} substituted to the active shell name.
+//   3. Else this shell gets nothing from this layer.
+//
+// path_append entries are rendered into the snippet body using
+// shell-appropriate syntax (PATH=... for bash/zsh/sh, fish_add_path for
+// fish) before the step is emitted, so each DeployTarget emitter can
+// write the snippet bytes verbatim.
+//
+// Destination resolution is target-aware:
+//   - Container build (hostCtx.Target empty / "oci"): system-wide
+//     drop-in (/etc/profile.d/ov-<layer>-<shell>.sh, /etc/fish/conf.d/
+//     ov-<layer>.fish). UseDropin=true.
+//   - target:local, target:vm (hostCtx.Target = "host" or "vm"):
+//     bash/zsh/sh → managed-block append in the user's rc file (UseDropin
+//     =false); fish → per-layer drop-in in ~/.config/fish/conf.d/
+//     (UseDropin=true).
+//
+// Returns nil when the layer has no shell: block.
+func compileShellSnippetSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
+	cfg := layer.Shell()
+	if cfg == nil {
+		return nil
+	}
+	out := make([]InstallStep, 0, len(ShellAllowlist))
+	// Stable iteration: walk the allowlist in fixed order so plan output
+	// is deterministic across runs.
+	for _, shell := range []string{"bash", "zsh", "fish", "sh"} {
+		spec, body, paths, ok := resolveShellSpec(cfg, shell)
+		if !ok {
+			continue
+		}
+		dest, useDropin := shellSnippetDestination(layer.Name, shell, hostCtx, img.Home, spec.Path)
+		if dest == "" {
+			continue
+		}
+		// Render path_append into the body using shell-appropriate syntax.
+		body = appendShellPathLines(body, paths, shell, img.Home)
+		if body == "" {
+			continue
+		}
+		out = append(out, &ShellSnippetStep{
+			LayerName:   layer.Name,
+			Origin:      layer.Name,
+			Shell:       shell,
+			Snippet:     body,
+			PathAppend:  paths,
+			Destination: dest,
+			Marker:      layer.Name,
+			UseDropin:   useDropin,
+			Priority:    cfg.Priority,
+		})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// resolveShellSpec applies the per-shell-wins-over-generic selection rule.
+// Returns the resolved spec, the rendered init body (with ${SHELL_NAME}
+// substituted for the generic case), the path_append slice, and whether
+// the shell has anything to contribute. Generic init wins when no
+// per-shell override exists; per-shell wins otherwise.
+func resolveShellSpec(cfg *ShellConfig, shell string) (*ShellSpec, string, []string, bool) {
+	if cfg == nil {
+		return nil, "", nil, false
+	}
+	if spec, ok := cfg.ByShell[shell]; ok && spec != nil {
+		// Per-shell override. We do NOT substitute ${SHELL_NAME} here —
+		// the override is meant to be shell-specific, so the author wrote
+		// the literal shell syntax already.
+		body := spec.Init
+		paths := append([]string(nil), spec.PathAppend...)
+		if body == "" && len(paths) == 0 {
+			return spec, "", nil, false
+		}
+		return spec, body, paths, true
+	}
+	// Fall back to generic body. Substitute ${SHELL_NAME}.
+	if cfg.Init == "" && len(cfg.PathAppend) == 0 {
+		return nil, "", nil, false
+	}
+	body := strings.ReplaceAll(cfg.Init, "${SHELL_NAME}", shell)
+	paths := append([]string(nil), cfg.PathAppend...)
+	// Synthesize a spec view for the caller (carries Path override if set
+	// at the generic level).
+	view := &ShellSpec{Init: body, PathAppend: paths, Path: cfg.Path}
+	return view, body, paths, true
+}
+
+// shellSnippetDestination resolves the destination file path for a layer's
+// snippet given the shell and target. When pathOverride is non-empty, it
+// takes precedence (with ~/ expansion via ExpandPath). Returns the
+// resolved path and a UseDropin discriminator (true: full-file write;
+// false: managed-block append).
+func shellSnippetDestination(layerName, shell string, hostCtx HostContext, home, pathOverride string) (string, bool) {
+	isHost := hostCtx.Target == "host" || hostCtx.Target == "vm"
+	if pathOverride != "" {
+		expanded := ExpandPath(pathOverride, home)
+		// Author override implies they know what they want; fish + drop-in
+		// only differ from rc-append by where the path points, so treat
+		// any override as drop-in (whole-file write) for predictability.
+		return expanded, true
+	}
+	if isHost {
+		switch shell {
+		case "bash":
+			return ExpandPath("~/.bashrc", home), false
+		case "zsh":
+			return ExpandPath("~/.zshrc", home), false
+		case "sh":
+			return ExpandPath("~/.profile", home), false
+		case "fish":
+			return ExpandPath(fmt.Sprintf("~/.config/fish/conf.d/ov-%s.fish", layerName), home), true
+		}
+		return "", false
+	}
+	// Container build (oci/empty target): system-wide drop-in files.
+	switch shell {
+	case "bash", "zsh", "sh":
+		return fmt.Sprintf("/etc/profile.d/ov-%s-%s.sh", layerName, shell), true
+	case "fish":
+		return fmt.Sprintf("/etc/fish/conf.d/ov-%s.fish", layerName), true
+	}
+	return "", false
+}
+
+// appendShellPathLines appends path_append entries to the snippet body
+// using shell-appropriate syntax. bash/zsh/sh use POSIX `PATH=$PATH:X`
+// exports; fish uses `fish_add_path X`. Idempotent: if body already ends
+// with a newline, no extra blank line is inserted.
+func appendShellPathLines(body string, paths []string, shell, home string) string {
+	if len(paths) == 0 {
+		return body
+	}
+	var sb strings.Builder
+	sb.WriteString(body)
+	if body != "" && !strings.HasSuffix(body, "\n") {
+		sb.WriteString("\n")
+	}
+	for _, p := range paths {
+		expanded := ExpandPath(p, home)
+		switch shell {
+		case "fish":
+			sb.WriteString(fmt.Sprintf("fish_add_path -gP %s\n", shellQuote(expanded)))
+		default:
+			sb.WriteString(fmt.Sprintf("export PATH=\"$PATH:%s\"\n", expanded))
+		}
+	}
+	return sb.String()
 }
 
 // ---------------------------------------------------------------------------

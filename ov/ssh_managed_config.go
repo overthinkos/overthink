@@ -76,7 +76,7 @@ func EnsureSshConfigInclude(home string) error {
 	if data, err := os.ReadFile(cfgPath); err == nil {
 		existing = string(data)
 	}
-	updated := replaceOrAppendManagedBlock(existing, body)
+	updated := replaceOrAppendManagedBlock(existing, body, "")
 	return os.WriteFile(cfgPath, []byte(updated), 0o600)
 }
 
@@ -91,7 +91,7 @@ func RemoveSshConfigInclude(home string) error {
 		}
 		return err
 	}
-	stripped := stripManagedBlock(string(data))
+	stripped := stripManagedBlock(string(data), "")
 	if strings.TrimSpace(stripped) == "" {
 		return os.Remove(cfgPath)
 	}
@@ -232,7 +232,7 @@ func saveStanzas(path string, stanzas map[string]string) error {
 	if data, err := os.ReadFile(path); err == nil {
 		existing = string(data)
 	}
-	updated := replaceOrAppendManagedBlock(existing, strings.TrimRight(body, "\n"))
+	updated := replaceOrAppendManagedBlock(existing, strings.TrimRight(body, "\n"), "")
 	return os.WriteFile(path, []byte(updated), 0o600)
 }
 

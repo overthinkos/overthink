@@ -22,6 +22,7 @@ type MigrateCmdGroup struct {
 	Description MigrateDescriptionCmd `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
 	TargetLocal MigrateTargetLocalCmd `cmd:"target-local" help:"Rename kind:host → kind:local (host.yml → local.yml, target:host → target:local, host:<template> → local:<template>); drop legacy status:/info: scalars + VmDeployState.ssh_key_path; idempotent"`
 	Calamares   MigrateCalamaresCmd   `cmd:"calamares" help:"Align layer.yml authoring with Calamares vocabulary: rename depends:→requires:, collapse rpm:/deb:/pac:/aur: + per-distro tag sections (debian:13:, ubuntu:24.04:, debian,ubuntu:) into top-level packages: + per-distro distros: map; AUR under distros.archlinux.aur; delete dead directory:/info: keys; idempotent"`
+	ShellSchema MigrateShellSchemaCmd `cmd:"shell-schema" help:"Convert legacy cmd: shell-rc heredoc tasks (the # overthink:begin direnv-hook / ssh-auth-sock fence patterns) into the structured shell: schema; idempotent"`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

@@ -491,6 +491,76 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 				errs.Add("layer %q: extract dest must be absolute (got %q)", name, ext.Dest)
 			}
 		}
+
+		// Validate shell:-schema declarations (2026-05 cutover).
+		validateLayerShell(name, layer.Shell(), errs)
+	}
+}
+
+// validateLayerShell enforces the shell:-schema invariants:
+//   - Per-shell sub-block keys are restricted to the ShellAllowlist
+//     (bash/zsh/fish/sh). Anything else is a hard error.
+//   - When `init:` is declared (intrinsic OR per-shell), it must be
+//     non-empty.
+//   - `path:` overrides must not contain `..` traversal sequences and,
+//     when present, must be either absolute or `~/`-prefixed.
+//   - `path_append` entries follow the same path-traversal guard.
+//   - Empty config (no init, no path_append, no per-shell subs, no
+//     intrinsic path) is allowed and produces no warning — the parser
+//     would have rejected anything genuinely malformed.
+func validateLayerShell(layerName string, cfg *ShellConfig, errs *ValidationError) {
+	if cfg == nil {
+		return
+	}
+	checkSpec := func(label string, spec *ShellSpec) {
+		if spec == nil {
+			return
+		}
+		if spec.Init != "" && strings.TrimSpace(spec.Init) == "" {
+			errs.Add("layer %q: shell.%s.init must not be whitespace-only", layerName, label)
+		}
+		if spec.Path != "" {
+			validateShellPath(layerName, fmt.Sprintf("shell.%s.path", label), spec.Path, errs)
+		}
+		for _, p := range spec.PathAppend {
+			validateShellPath(layerName, fmt.Sprintf("shell.%s.path_append", label), p, errs)
+		}
+	}
+	// Intrinsic body — same checks as a per-shell spec.
+	if cfg.Init != "" && strings.TrimSpace(cfg.Init) == "" {
+		errs.Add("layer %q: shell.init must not be whitespace-only", layerName)
+	}
+	if cfg.Path != "" {
+		validateShellPath(layerName, "shell.path", cfg.Path, errs)
+	}
+	for _, p := range cfg.PathAppend {
+		validateShellPath(layerName, "shell.path_append", p, errs)
+	}
+	// Per-shell sub-blocks — UnmarshalYAML already enforced the
+	// allowlist, but defend in depth in case ByShell is populated by
+	// hand-rolled label-side data.
+	for shell, spec := range cfg.ByShell {
+		if !ShellAllowlist[shell] {
+			errs.Add("layer %q: shell.%s: unknown shell name (must be one of bash/zsh/fish/sh)", layerName, shell)
+			continue
+		}
+		checkSpec(shell, spec)
+	}
+}
+
+// validateShellPath rejects path-traversal sequences and accepts only
+// absolute paths or `~/`-prefixed paths (which ExpandPath resolves at
+// install time).
+func validateShellPath(layerName, field, p string, errs *ValidationError) {
+	if p == "" {
+		return
+	}
+	if strings.Contains(p, "..") {
+		errs.Add("layer %q: %s contains traversal sequence (got %q)", layerName, field, p)
+		return
+	}
+	if !strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "~/") && p != "~" {
+		errs.Add("layer %q: %s must be absolute or ~/-prefixed (got %q)", layerName, field, p)
 	}
 }
 

@@ -209,6 +209,48 @@ func (e *SSHExecutor) RunCapture(ctx context.Context, script string) (string, st
 // "[user@]host[:port]" or ssh-config aliases).
 func (e *SSHExecutor) Kind() string { return "ssh" }
 
+// ResolveHome returns $HOME for `user` on the SSH-reachable target.
+// Empty user resolves to whoever ssh logged in as (via `echo $HOME`),
+// non-empty user goes through `getent passwd <user>` so callers can
+// resolve any user's home on the guest.
+//
+// This replaces the bug where `LocalDeployTarget.HostHome` was
+// initialized from `os.Getenv("HOME")` — the operator's home, not the
+// guest user's. Any subsequent shell-rc edit (env.d sourcing block,
+// new shell:-schema managed-block, etc.) now lands in the right place.
+func (e *SSHExecutor) ResolveHome(ctx context.Context, user string) (string, error) {
+	args := e.sshBaseArgs()
+	var script string
+	if user == "" {
+		// $HOME on the SSH-login user's session.
+		script = "printf %s \"$HOME\""
+	} else {
+		// getent passwd <user> | cut -d: -f6
+		// Fallback to ~user expansion if getent isn't available.
+		script = `entry=$(getent passwd ` + shellSingleQuoteSSH(user) + ` 2>/dev/null) && printf %s "$(printf %s "$entry" | cut -d: -f6)" || eval "printf %s ~` + shellSingleQuoteSSH(user) + `"`
+	}
+	args = append(args, "bash", "-c", script)
+	cmd := exec.CommandContext(ctx, "ssh", args...)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("SSHExecutor.ResolveHome(%q): %w", user, err)
+	}
+	home := strings.TrimSpace(stdout.String())
+	if home == "" {
+		return "", fmt.Errorf("SSHExecutor.ResolveHome(%q): empty result", user)
+	}
+	return home, nil
+}
+
+// shellSingleQuoteSSH quotes `s` for safe inclusion in a bash -c script
+// passed via ssh. Mirrors the shellQuote helper in wl.go but kept local
+// to deploy_executor_ssh.go so the SSH-quoting concern stays bundled
+// with the SSH transport code.
+func shellSingleQuoteSSH(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 // WaitForSSH polls the guest's sshd until it accepts connections
 // (bounded by maxWaitSeconds). Returns nil on first successful
 // connect, error on timeout. Used by VmDeployTarget right after

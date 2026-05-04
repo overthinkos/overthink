@@ -76,6 +76,13 @@ const (
 	// per-entry spec, not just names). Source-less deploy (`ov deploy from-image`)
 	// reads this to reconstruct every service's config without the repo.
 	LabelServices = "org.overthinkos.services"
+	// LabelShell — three-section JSON shell-init manifest.
+	// Each section (layer/image/deploy) carries an ordered list of
+	// ShellEntry contributions (origin = layer name / "image" / "deploy",
+	// id, generic body, per-shell ByShell map). Source of truth for
+	// `ov image inspect`, `ov deploy from-image`, and the deploy.yml
+	// `shell:` overlay merge — same shape as LabelEval.
+	LabelShell = "org.overthinkos.shell"
 )
 
 // LabelSchemaVersion is the current label schema version.
@@ -183,6 +190,32 @@ type ImageMetadata struct {
 	MCPAccepts     []EnvDependency      // MCP servers image can optionally use
 	Eval           *LabelEvalSet        // three-section (layer/image/deploy) declarative test spec
 	Description    *LabelDescriptionSet // three-section Gherkin-shaped self-description (layer/image/deploy)
+	Shell          *LabelShellSet       // three-section (layer/image/deploy) shell-init manifest (2026-05 cutover)
+}
+
+// LabelShellSet is the three-section JSON manifest carried in
+// org.overthinkos.shell. Mirrors LabelEvalSet's bucketing — Layer
+// holds per-layer contributions (origin = layer name); Image holds
+// image.yml-level shell: declarations; Deploy holds deploy-scope
+// defaults baked at build time. The deploy.yml `shell:` overlay
+// merges into a separate runtime-only set via MergeDeployShell.
+type LabelShellSet struct {
+	Layer  []ShellEntry `json:"layer,omitempty"`
+	Image  []ShellEntry `json:"image,omitempty"`
+	Deploy []ShellEntry `json:"deploy,omitempty"`
+}
+
+// ShellEntry is one origin's full shell-init contribution. ID is the
+// stable handle for deploy.yml overlay keying ("<origin>" or
+// "<origin>:<shell>"). Origin = layer name / "image" / "deploy".
+// Generic body + per-shell ByShell map mirror the in-memory
+// ShellConfig struct.
+type ShellEntry struct {
+	Origin   string                `json:"origin"`
+	ID       string                `json:"id,omitempty"`
+	Generic  *ShellSpec            `json:"generic,omitempty"`
+	ByShell  map[string]*ShellSpec `json:"by_shell,omitempty"`
+	Priority int                   `json:"priority,omitempty"`
 }
 
 // InspectLabels reads OCI labels from a local image via engine inspect.
@@ -505,6 +538,15 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 			return nil, fmt.Errorf("parsing %s: %w", LabelEval, err)
 		}
 		meta.Eval = &ts
+	}
+
+	// Shell-init manifest (three-section, layer/image/deploy)
+	if v := labels[LabelShell]; v != "" {
+		var ss LabelShellSet
+		if err := json.Unmarshal([]byte(v), &ss); err != nil {
+			return nil, fmt.Errorf("parsing %s: %w", LabelShell, err)
+		}
+		meta.Shell = &ss
 	}
 
 	// Description (three-section Gherkin-shaped self-description)

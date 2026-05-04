@@ -215,7 +215,7 @@ func EnsureManagedBlock(shell ShellKind, hostHome string) (string, error) {
 	}
 	existing, _ := os.ReadFile(path) // may not exist yet; ignore error
 	body := ManagedBlockBody(shell, hostHome)
-	updated := replaceOrAppendManagedBlock(string(existing), body)
+	updated := replaceOrAppendManagedBlock(string(existing), body, "")
 	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
 		return "", fmt.Errorf("EnsureManagedBlock write %s: %w", path, err)
 	}
@@ -233,7 +233,7 @@ func RemoveManagedBlock(shell ShellKind, hostHome string) error {
 		}
 		return fmt.Errorf("RemoveManagedBlock read %s: %w", path, err)
 	}
-	stripped := stripManagedBlock(string(existing))
+	stripped := stripManagedBlock(string(existing), "")
 	// Only write if something changed — preserves file mtime when
 	// there's nothing to remove.
 	if stripped == string(existing) {
@@ -242,25 +242,40 @@ func RemoveManagedBlock(shell ShellKind, hostHome string) error {
 	return os.WriteFile(path, []byte(stripped), 0644)
 }
 
-// replaceOrAppendManagedBlock finds `# overthink:begin ... # overthink:end`
-// in `existing` and replaces its body; if the markers are absent, it
-// appends a fresh block at end-of-file.
-func replaceOrAppendManagedBlock(existing, body string) string {
-	if strings.Contains(existing, managedBlockBegin) {
+// markersForTag returns the begin/end fence pair for a given marker tag.
+// Empty tag yields the global-block fence (used for env.d sourcing and
+// the VM ssh-config Include); non-empty tag yields a per-layer fence so
+// multiple layers can coexist in one rc file.
+func markersForTag(marker string) (begin, end string) {
+	if marker == "" {
+		return managedBlockBegin, managedBlockEnd
+	}
+	return fmt.Sprintf("# overthink:begin %s (managed by ov; do not edit inside this block)", marker),
+		fmt.Sprintf("# overthink:end %s", marker)
+}
+
+// replaceOrAppendManagedBlock finds the begin/end fence pair (tagged
+// with `marker` — empty for the global block) in `existing` and replaces
+// its body; if the markers are absent, appends a fresh block at end-of-
+// file. Marker is required (use "" for the global block; non-empty for
+// per-layer blocks).
+func replaceOrAppendManagedBlock(existing, body, marker string) string {
+	begin, end := markersForTag(marker)
+	if strings.Contains(existing, begin) {
 		scanner := bufio.NewScanner(strings.NewReader(existing))
 		var out strings.Builder
 		inBlock := false
 		for scanner.Scan() {
 			line := scanner.Text()
-			if strings.Contains(line, managedBlockBegin) {
+			if strings.Contains(line, begin) {
 				inBlock = true
-				out.WriteString(managedBlockBegin + "\n")
+				out.WriteString(begin + "\n")
 				out.WriteString(body + "\n")
 				continue
 			}
-			if inBlock && strings.Contains(line, managedBlockEnd) {
+			if inBlock && strings.Contains(line, end) {
 				inBlock = false
-				out.WriteString(managedBlockEnd + "\n")
+				out.WriteString(end + "\n")
 				continue
 			}
 			if !inBlock {
@@ -277,13 +292,14 @@ func replaceOrAppendManagedBlock(existing, body string) string {
 	if prefix != "" {
 		prefix += "\n"
 	}
-	return prefix + managedBlockBegin + "\n" + body + "\n" + managedBlockEnd + "\n"
+	return prefix + begin + "\n" + body + "\n" + end + "\n"
 }
 
-// stripManagedBlock removes the `# overthink:begin ... # overthink:end`
-// block (including its body) from existing.
-func stripManagedBlock(existing string) string {
-	if !strings.Contains(existing, managedBlockBegin) {
+// stripManagedBlock removes the begin/end fence pair (tagged with
+// `marker` — empty for the global block) and its body from `existing`.
+func stripManagedBlock(existing, marker string) string {
+	begin, end := markersForTag(marker)
+	if !strings.Contains(existing, begin) {
 		return existing
 	}
 	var out strings.Builder
@@ -291,11 +307,11 @@ func stripManagedBlock(existing string) string {
 	inBlock := false
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.Contains(line, managedBlockBegin) {
+		if strings.Contains(line, begin) {
 			inBlock = true
 			continue
 		}
-		if inBlock && strings.Contains(line, managedBlockEnd) {
+		if inBlock && strings.Contains(line, end) {
 			inBlock = false
 			continue
 		}
@@ -304,4 +320,42 @@ func stripManagedBlock(existing string) string {
 		}
 	}
 	return strings.TrimRight(out.String(), "\n") + "\n"
+}
+
+// EnsureManagedBlockAt inserts/updates a managed block at the absolute
+// file path `path`, creating the parent directory if needed. Marker is
+// required (use "" for the global block, non-empty for per-layer
+// blocks).
+func EnsureManagedBlockAt(path, body, marker string) (string, error) {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return "", fmt.Errorf("EnsureManagedBlockAt mkdir: %w", err)
+	}
+	existing, _ := os.ReadFile(path)
+	updated := replaceOrAppendManagedBlock(string(existing), body, marker)
+	if err := os.WriteFile(path, []byte(updated), 0644); err != nil {
+		return "", fmt.Errorf("EnsureManagedBlockAt write %s: %w", path, err)
+	}
+	return path, nil
+}
+
+// RemoveManagedBlockAt strips the managed block (tagged with `marker`)
+// from the file at `path`. If `path` doesn't exist, no-op. If `path`
+// exists and the strip leaves the file empty or whitespace-only, the
+// file is removed.
+func RemoveManagedBlockAt(path, marker string) error {
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("RemoveManagedBlockAt read %s: %w", path, err)
+	}
+	stripped := stripManagedBlock(string(existing), marker)
+	if strings.TrimSpace(stripped) == "" {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("RemoveManagedBlockAt remove %s: %w", path, err)
+		}
+		return nil
+	}
+	return os.WriteFile(path, []byte(stripped), 0644)
 }

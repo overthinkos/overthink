@@ -17,7 +17,9 @@ package main
 // same tasks executed, same services configured.
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"path/filepath"
 	"strings"
 )
 
@@ -105,8 +107,39 @@ func (t *OCITarget) emitStep(step InstallStep, plan *InstallPlan) error {
 		return t.emitServiceCustom(s)
 	case *RepoChangeStep:
 		return t.emitRepoChange(s)
+	case *ShellSnippetStep:
+		return t.emitShellSnippet(s)
 	}
 	return fmt.Errorf("OCITarget: unknown step kind %q", step.Kind())
+}
+
+// emitShellSnippet renders a layer's per-shell init snippet into the
+// container's system-wide drop-in directory. bash/zsh/sh land in
+// /etc/profile.d/ov-<layer>-<shell>.sh; fish lands in
+// /etc/fish/conf.d/ov-<layer>.fish (paths are computed by
+// compileShellSnippetSteps based on hostCtx.Target).
+//
+// Uses a heredoc with a randomized end-marker to avoid collision with
+// snippet bodies that contain literal `OV_SNIPPET` on their own line.
+// The container drop-in is always root-owned + 0644 — sourced by the
+// shell at user login, no need for execute bit.
+func (t *OCITarget) emitShellSnippet(s *ShellSnippetStep) error {
+	if s.Snippet == "" {
+		return nil
+	}
+	// Pick an end-marker derived from the snippet hash so a malicious or
+	// pathological body containing the literal marker can't break out.
+	h := sha256.Sum256([]byte(s.Snippet))
+	marker := fmt.Sprintf("OV_SHELL_%s_%x", strings.ToUpper(s.Shell), h[:4])
+	fmt.Fprintf(&t.buf,
+		"RUN mkdir -p %s && cat > %s <<'%s'\n%s\n%s\n",
+		shellQuote(filepath.Dir(s.Destination)),
+		shellQuote(s.Destination),
+		marker,
+		s.Snippet,
+		marker,
+	)
+	return nil
 }
 
 // emitShellHook renders `env:` and `path_append:` as ENV directives.

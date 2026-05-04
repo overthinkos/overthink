@@ -13,6 +13,15 @@ layer:
       to: /usr/local/bin
       user: root
 
+  # Shell-init: put ~/.pixi/bin (where pixi installs per-user environments
+  # and global tools) on the interactive shell PATH. Container images get
+  # this via build.yml runtime_env on the pixi BUILDER definition; this
+  # block covers target:local host deploys where the interactive shell
+  # has its own PATH discovery (no Containerfile ENV directive in scope).
+  shell:
+    path_append:
+      - "~/.pixi/bin"
+
   eval:
     - id: pixi-binary
       file: /usr/local/bin/pixi

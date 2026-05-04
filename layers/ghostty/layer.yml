@@ -1,0 +1,19 @@
+layer:
+  name: ghostty
+  description: Ghostty terminal emulator
+  distros:
+    archlinux:
+      packages:
+        - ghostty
+  eval:
+    - id: ghostty-binary
+      file: /usr/bin/ghostty
+      exists: true
+    - id: ghostty-package
+      package: ghostty
+      installed: true
+    - id: ghostty-version
+      command: /usr/bin/ghostty --version
+      exit_status: 0
+      stdout:
+        - matches: "^Ghostty"

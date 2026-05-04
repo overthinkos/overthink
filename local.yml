@@ -26,6 +26,7 @@ local:
       - docker-ce
       - kubernetes
       - vscode
+      - ghostty
       - chrome
       - ov-full-host
 

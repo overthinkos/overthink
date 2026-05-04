@@ -29,6 +29,22 @@ local:
       - chrome
       - ov-full-host
 
+    # Container images that must be present in podman storage before
+    # tests can run. The deploy logic ensures each is present (try
+    # `ov image pull <ref>` first, fall back to `ov image build <name>`
+    # if pull fails AND the image is buildable from this project).
+    # 2026-05 cutover (`kind: local` `images:` field).
+    #
+    # eval-target — the eval-pod base for `ov eval run`.
+    # openclaw-sway-browser — sway-pod test bed.
+    # fedora-coder — kitchen-sink dev image used as a pod-target by
+    #   several eval scenarios; also the default operator-side ov host
+    #   image for nested deploys.
+    images:
+      - eval-target
+      - openclaw-sway-browser
+      - fedora-coder
+
     install_opts:
       with_services: true
       allow_repo_changes: true

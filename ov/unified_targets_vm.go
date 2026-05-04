@@ -144,12 +144,14 @@ type vmReverseExec struct {
 	DryRun          bool
 	KeepRepoChanges bool
 	KeepServices    bool
+	ReclaimImages   bool
 	Runner          ReverseRunner
 }
 
 func (e *vmReverseExec) reverseDryRun() bool          { return e.DryRun }
 func (e *vmReverseExec) reverseKeepRepoChanges() bool { return e.KeepRepoChanges }
 func (e *vmReverseExec) reverseKeepServices() bool    { return e.KeepServices }
+func (e *vmReverseExec) reverseReclaimImages() bool   { return e.ReclaimImages }
 func (e *vmReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Test runs deploy-scope checks against the live VM via its SSHExecutor.

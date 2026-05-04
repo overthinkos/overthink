@@ -36,12 +36,14 @@ type hostReverseExec struct {
 	DryRun          bool
 	KeepRepoChanges bool
 	KeepServices    bool
+	ReclaimImages   bool
 	Runner          ReverseRunner
 }
 
 func (e *hostReverseExec) reverseDryRun() bool          { return e.DryRun }
 func (e *hostReverseExec) reverseKeepRepoChanges() bool { return e.KeepRepoChanges }
 func (e *hostReverseExec) reverseKeepServices() bool    { return e.KeepServices }
+func (e *hostReverseExec) reverseReclaimImages() bool   { return e.ReclaimImages }
 func (e *hostReverseExec) reverseRunner() ReverseRunner { return e.Runner }
 
 // Del tears down every host deploy in the ledger. Body extracted from

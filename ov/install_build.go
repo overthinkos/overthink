@@ -361,6 +361,45 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 }
 
 // ---------------------------------------------------------------------------
+// kind:local images: pre-pass (template-level image-presence ensure)
+// ---------------------------------------------------------------------------
+
+// compileImagesSteps emits one EnsureImageStep per entry in a
+// kind:local template's `images:` list. Called from
+// LocalDeployTarget.Emit BEFORE the layer plan walk so any layer step
+// that wants to consume an image (none today, but future-proof) sees
+// it pre-cached. Engine resolution is left to runtime — we don't
+// commit to podman vs docker at compile time so the same plan can
+// retarget if the executor's preferred engine differs.
+//
+// templateName carries the kind:local entry name (e.g. "cachyos-dx")
+// for ledger origin tagging. deployID is the parent deploy's stable
+// hash, used by the ledger to refcount image presence across multiple
+// deploys (so two deploys that both declare `eval-target` keep the
+// image around until BOTH are removed).
+func compileImagesSteps(spec *LocalSpec, templateName, deployID, engine string) []InstallStep {
+	if spec == nil || len(spec.Images) == 0 {
+		return nil
+	}
+	out := make([]InstallStep, 0, len(spec.Images))
+	for _, img := range spec.Images {
+		if img == "" {
+			continue
+		}
+		out = append(out, &EnsureImageStep{
+			LayerName:   "_local-images_",
+			Origin:      "local:" + templateName,
+			Image:       img,
+			Engine:      engine,
+			PullFirst:   true,
+			BuildOnFail: true,
+			DeployID:    deployID,
+		})
+	}
+	return out
+}
+
+// ---------------------------------------------------------------------------
 // System package compilation
 // ---------------------------------------------------------------------------
 

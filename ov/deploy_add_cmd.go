@@ -64,6 +64,7 @@ type DeployDelCmd struct {
 	KeepRepoChanges bool `long:"keep-repo-changes" help:"Don't revert repo config even at zero refcount"`
 	KeepServices    bool `long:"keep-services" help:"Don't disable systemd units (just stop tracking)"`
 	KeepImage       bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
+	ReclaimImages   bool `long:"reclaim-images" help:"Remove kind:local images: entries from podman storage at zero refcount (default: keep — pulls are expensive)"`
 	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
 	// Runner is populated by runVmDel / runLocalDel etc. to route reverse
@@ -785,8 +786,19 @@ func (c *DeployAddCmd) printPlans(plans []*InstallPlan, opts EmitOpts) error {
 func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir string, opts EmitOpts) error {
 	hostDistro, _ := DetectHostDistro()
 	tgt := &LocalDeployTarget{
-		HostHome: os.Getenv("HOME"),
-		Distro:   hostDistro,
+		HostHome:   os.Getenv("HOME"),
+		Distro:     hostDistro,
+		ProjectDir: dir,
+	}
+	// Resolve the kind:local template (when the deployment has a
+	// `local: <name>` ref) so its `images:` pre-pass + Eval/DeployEval
+	// reach the target. nil when the deployment uses inline
+	// add_layers: instead.
+	if node != nil && strings.TrimSpace(node.Local) != "" {
+		tgt.LocalSpec = findLocalSpec(dir, strings.TrimSpace(node.Local))
+	}
+	if cfg, cfgErr := LoadConfig(dir); cfgErr == nil {
+		tgt.Cfg = cfg
 	}
 	// Pick the executor.
 	var exec DeployExecutor = ShellExecutor{}

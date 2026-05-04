@@ -17,6 +17,7 @@ type mockReverseExecutor struct {
 func (m *mockReverseExecutor) reverseDryRun() bool          { return m.dryRun }
 func (m *mockReverseExecutor) reverseKeepRepoChanges() bool { return m.keepRepo }
 func (m *mockReverseExecutor) reverseKeepServices() bool    { return m.keepServices }
+func (m *mockReverseExecutor) reverseReclaimImages() bool   { return false }
 func (m *mockReverseExecutor) reverseRunner() ReverseRunner { return nil }
 
 func TestReverseOpsUserScopeFileRemove(t *testing.T) {

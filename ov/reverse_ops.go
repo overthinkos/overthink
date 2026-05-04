@@ -28,6 +28,7 @@ type ReverseExecutor interface {
 	reverseDryRun() bool
 	reverseKeepRepoChanges() bool
 	reverseKeepServices() bool
+	reverseReclaimImages() bool // 2026-05: opt-in `podman rmi` of kind:local images: entries
 	reverseRunner() ReverseRunner
 }
 
@@ -47,6 +48,7 @@ type ReverseRunner interface {
 func (c *DeployDelCmd) reverseDryRun() bool          { return c.DryRun }
 func (c *DeployDelCmd) reverseKeepRepoChanges() bool { return c.KeepRepoChanges }
 func (c *DeployDelCmd) reverseKeepServices() bool    { return c.KeepServices }
+func (c *DeployDelCmd) reverseReclaimImages() bool   { return c.ReclaimImages }
 func (c *DeployDelCmd) reverseRunner() ReverseRunner { return c.Runner }
 
 // runReverseOps executes ops in REVERSE order (last-installed, first-
@@ -97,8 +99,44 @@ func runReverseOp(op ReverseOp, re ReverseExecutor) error {
 		return reverseRemoveRepoFile(op, re)
 	case ReverseOpCoprDisable:
 		return reverseCoprDisable(op, re)
+	case ReverseOpRemoveImage:
+		return reverseRemoveImage(op, re)
 	}
 	return fmt.Errorf("runReverseOp: unknown kind %q", op.Kind)
+}
+
+// reverseRemoveImage runs `podman rmi <ref>` for an image previously
+// ensured by the kind:local images: pre-pass. Gated behind the
+// `--reclaim-images` flag — image removal is OPT-IN because images
+// are expensive to re-pull and most operators want them retained
+// across redeploys. The flag is signalled via op.Extra["reclaim"];
+// when absent or "false", the reverse op is a no-op (logged).
+func reverseRemoveImage(op ReverseOp, re ReverseExecutor) error {
+	if len(op.Targets) == 0 {
+		return nil
+	}
+	if !re.reverseReclaimImages() {
+		// Default behaviour: leave the image in place.
+		fmt.Fprintf(os.Stderr, "ensure-image: keeping %v in local storage (pass --reclaim-images to remove)\n", op.Targets)
+		return nil
+	}
+	engine := op.Extra["engine"]
+	if engine == "" {
+		engine = "podman"
+	}
+	binary := EngineBinary(engine)
+	runner := re.reverseRunner()
+	for _, ref := range op.Targets {
+		argv := []string{"rmi", "-f", ref}
+		script := strings.Join(append([]string{binary}, argv...), " ")
+		if err := runner.RunUser(script); err != nil {
+			// Soft-fail: image rmi can fail if other deploys still
+			// reference it via tag. Log + continue rather than abort
+			// the whole teardown.
+			fmt.Fprintf(os.Stderr, "ensure-image: rmi %s: %v (continuing)\n", ref, err)
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

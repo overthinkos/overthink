@@ -156,6 +156,7 @@ const (
 	StepKindShellHook       StepKind = "ShellHook"
 	StepKindShellSnippet    StepKind = "ShellSnippet"
 	StepKindRepoChange      StepKind = "RepoChange"
+	StepKindEnsureImage     StepKind = "EnsureImage"
 )
 
 // ---------------------------------------------------------------------------
@@ -202,6 +203,7 @@ const (
 	ReverseOpRemoveEnvdFile ReverseOpKind = "remove-envd-file"
 	ReverseOpRemoveRepoFile ReverseOpKind = "remove-repo-file"
 	ReverseOpCoprDisable    ReverseOpKind = "copr-disable"
+	ReverseOpRemoveImage    ReverseOpKind = "remove-image"
 )
 
 // ReverseOp is a single teardown action. Serialized into the ledger so
@@ -822,6 +824,57 @@ func (s *RepoChangeStep) Reverse() []ReverseOp {
 		Targets: []string{s.File},
 		Scope:   ScopeSystem,
 		Extra:   map[string]string{"layer": s.LayerName, "format": s.Format},
+	}}
+}
+
+// ---------------------------------------------------------------------------
+// EnsureImageStep — kind:local `images:` field; pre-deploy image presence.
+// ---------------------------------------------------------------------------
+
+// EnsureImageStep records a request to ensure a container image is
+// present in local podman storage before the deploy is considered
+// complete. Compiled from a kind:local template's `images:` list.
+//
+// Three-step runtime resolution (see execEnsureImage in
+// deploy_target_local.go):
+//   1. LocalImageExists short-circuit — already present, no-op.
+//   2. `ov image pull <ref>` — preferred when the image exists in the
+//      registry. Routed through the executor so SSH-routed deploys
+//      pull on the REMOTE machine, not the operator's.
+//   3. `ov image build <name>` — fallback when pull fails AND the
+//      image is buildable from this project (short-name resolves to
+//      cfg.Images[<name>]).
+//
+// Origin = "local:<template>" so the install ledger tracks per-template
+// image refcounts. Reverse() emits ReverseOpRemoveImage; image removal
+// at `ov deploy del` is gated behind --reclaim-images because images
+// are expensive to re-pull and operators usually want them retained
+// across redeploys.
+type EnsureImageStep struct {
+	LayerName   string // synthetic layer name for ledger refcount (e.g. "_local-images_")
+	Origin      string // "local:<template>" for traceability
+	Image       string // user-authored identifier (any of three forms)
+	Engine      string // resolved engine: "podman" | "docker"
+	PullFirst   bool   // default true; set false to skip-pull and build-only
+	BuildOnFail bool   // default true; fall back to ov image build on pull failure
+	DeployID    string // for refcount + ledger
+}
+
+func (s *EnsureImageStep) Kind() StepKind     { return StepKindEnsureImage }
+func (s *EnsureImageStep) Scope() Scope       { return ScopeSystem }
+func (s *EnsureImageStep) Venue() Venue       { return VenueHostNative }
+func (s *EnsureImageStep) RequiresGate() Gate { return GateNone }
+
+func (s *EnsureImageStep) Reverse() []ReverseOp {
+	return []ReverseOp{{
+		Kind:    ReverseOpRemoveImage,
+		Targets: []string{s.Image},
+		Scope:   ScopeSystem,
+		Extra: map[string]string{
+			"layer":  s.LayerName,
+			"engine": s.Engine,
+			"deploy": s.DeployID,
+		},
 	}}
 }
 

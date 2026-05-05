@@ -1,6 +1,6 @@
 #!/bin/sh
 # Wait for Wayland socket, then launch swaync.
-# Works with any wlroots compositor (sway, labwc, niri).
+# Works with any wlroots compositor (sway, labwc).
 
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 

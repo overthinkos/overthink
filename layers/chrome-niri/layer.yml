@@ -1,7 +1,0 @@
-layer:
-  name: chrome-niri
-  requires:
-    - niri
-  layers:
-    - chrome
-    - chrome-cdp

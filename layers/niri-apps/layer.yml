@@ -1,9 +1,0 @@
-layer:
-  name: niri-apps
-  requires:
-    - niri
-  distros:
-    fedora:
-      packages:
-        - xfce4-terminal
-        - thunar

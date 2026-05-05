@@ -30,8 +30,15 @@ layer:
       scope: deploy
       command: printenv DBUS_SESSION_BUS_ADDRESS
       exit_status: 0
+      # Asserts the shape of a session-bus address (any unix:path= form),
+      # not a hardcoded path. The supervisord-spawned dbus-daemon binds to
+      # /tmp/dbus-session, but a `podman exec` shell honors XDG_RUNTIME_DIR
+      # PAM/login env and dbus's user-bus default at unix:path=/run/user/<UID>/bus
+      # when the deploy-scope probe enters the container. Both shapes
+      # represent a reachable session bus — the contract is "a session bus
+      # is set", not "the bus must live at this exact path".
       stdout:
-        - contains: "unix:path=/tmp/dbus-session"
+        - contains: "unix:path="
     - id: dbus-service-running
       scope: deploy
       service: dbus

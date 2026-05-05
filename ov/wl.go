@@ -41,7 +41,7 @@ type WlCmd struct {
 }
 
 // WlSwayCmd groups sway IPC commands. These require the sway compositor
-// and use swaymsg. They will error on non-sway compositors (labwc, niri).
+// and use swaymsg. They will error on non-sway compositors (labwc).
 type WlSwayCmd struct {
 	Floating   WlSwayFloatingCmd   `cmd:"" help:"Toggle floating on focused window"`
 	Focus      WlSwayFocusCmd      `cmd:"" help:"Focus window by direction or criteria"`
@@ -345,7 +345,7 @@ func (c *WlStatusCmd) Run() error {
 	}
 
 	if !gotResolution {
-		// Fall back to wlr-randr (works on labwc, niri, any wlroots compositor).
+		// Fall back to wlr-randr (works on labwc, any wlroots compositor).
 		randrOut, randrErr := captureWlCmd(engine, name, "wlr-randr 2>/dev/null | head -3")
 		if randrErr == nil {
 			lines := strings.TrimSpace(string(randrOut))
@@ -487,7 +487,7 @@ func FindX11WindowGeometry(engine, containerName, target string) (int, int, erro
 // --- Phase 2: Window management commands (wlrctl toplevel) ---
 
 // WlToplevelCmd lists Wayland toplevel windows via wlrctl.
-// Works on all wlroots compositors (sway, labwc, niri).
+// Works on all wlroots compositors (sway, labwc).
 type WlToplevelCmd struct {
 	Image    string `arg:"" help:"Image name (use . for local)"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -582,7 +582,7 @@ func (c *WlExecCmd) Run() error {
 }
 
 // WlResolutionCmd sets the output resolution via wlr-randr.
-// Works on all wlroots compositors (sway, labwc, niri).
+// Works on all wlroots compositors (sway, labwc).
 type WlResolutionCmd struct {
 	Image      string `arg:"" help:"Image name (use . for local)"`
 	Resolution string `arg:"" help:"Resolution (e.g. 1920x1080)"`
@@ -1498,7 +1498,7 @@ func shellQuote(s string) string {
 // --- Helper functions ---
 
 // wlrctlToplevel runs a wlrctl toplevel action matching by app_id.
-// Works on all wlroots compositors (sway, labwc, niri).
+// Works on all wlroots compositors (sway, labwc).
 func wlrctlToplevel(engine, containerName, action, target string) error {
 	shellCmd := fmt.Sprintf("wlrctl toplevel %s %s", action, shellQuote(target))
 	return execWlCmdSilent(engine, containerName, shellCmd)

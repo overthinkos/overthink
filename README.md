@@ -354,15 +354,15 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 | **Foundations** | `pixi`, `python`, `nodejs`, `nodejs24`, `rust`, `golang`, `build-toolchain`, `yay` | Package managers and language runtimes |
 | **Services & Infrastructure** | `supervisord`, `traefik`, `postgresql`, `vectorchord`, `redis`, `valkey`, `docker-ce`, `kubernetes` | Init, reverse proxy, databases, container-in-container |
 | **GPU & ML** | `cuda`, `rocm`, `nvidia`, `llama-cpp`, `python-ml`, `jupyter`, `jupyter-ml`, `unsloth`, `unsloth-studio`, `ollama`, `comfyui` | NVIDIA/AMD runtimes and ML stacks |
-| **Desktop Compositors** | `sway`, `labwc`, `niri`, `mutter`, `kwin`, `wayvnc`, `pipewire`, `selkies` | Wayland/X11 servers, audio, browser-streamed desktops |
-| **Chrome variants** | `chrome`, `chrome-sway`, `chrome-niri`, `chrome-mutter`, `chrome-kwin`, `chrome-x11` | Chrome DevTools on `:9222` + DevTools MCP on `:9224` (29 tools) per compositor |
+| **Desktop Compositors** | `sway`, `labwc`, `mutter`, `kwin`, `wayvnc`, `pipewire`, `selkies` | Wayland/X11 servers, audio, browser-streamed desktops |
+| **Chrome variants** | `chrome`, `chrome-sway`, `chrome-mutter`, `chrome-kwin`, `chrome-x11` | Chrome DevTools on `:9222` + DevTools MCP on `:9224` (29 tools) per compositor |
 | **AI & Agents** | `openclaw`, `hermes`, `hermes-full`, `hermes-playwright`, `openwebui`, `claude-code`, `codex`, `gemini`, `forgecode`, `oracle` | AI gateways, agents, LLM UIs, and coding CLIs |
 | **Applications** | `immich`, `immich-ml`, `github-runner`, `steam`, `heroic`, `vscode`, `dev-tools`, `filebrowser`, `devops-tools` | End-user apps and workstation tooling |
 | **Desktop Utilities** | `ffmpeg`, `wf-recorder`, `wl-record-pixelflux`, `wl-screenshot-pixelflux`, `wl-overlay`, `asciinema`, `libnotify`, `fastfetch` | Multimedia, recording, overlays, notifications |
 | **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting`, `tailscale`, `keepassxc` | Agent forwarding, encrypted storage, mesh VPN, password manager, nesting |
 | **OS / Bootc** | `bootc-base`, `bootc-config`, `cloud-init`, `os-config`, `os-system-files`, `qemu-guest-agent`, `socat` | Bootable disk image and VM integration |
 
-**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `niri-desktop`, `x11-desktop`, `mutter-desktop`, `kwin-desktop`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-layers:<name>` skill for the exact composition recipe.
+**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `x11-desktop`, `mutter-desktop`, `kwin-desktop`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-layers:<name>` skill for the exact composition recipe.
 
 ### Data Layers
 

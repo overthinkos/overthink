@@ -58,9 +58,13 @@ rpm:
 	}
 }
 
-func TestResolveDeployRefAmbiguousName(t *testing.T) {
+// TestResolveDeployRefCrossKindNameReuse — same name in both image: and
+// layers/ is permitted (cross-kind name reuse, 2026-05 cutover). The
+// primary `<ref>` resolver returns image-first; ResolveDeployRefAsLayer
+// (used by `--add-layer <ref>`) returns layer-first. Each kind remains
+// reachable via explicit paths.
+func TestResolveDeployRefCrossKindNameReuse(t *testing.T) {
 	dir := t.TempDir()
-	// Put the same name in both overthink.yml and layers/ — expect an error.
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(`
 version: 4
 image:
@@ -78,9 +82,23 @@ rpm:
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := ResolveDeployRef("dup", dir)
-	if err == nil {
-		t.Fatalf("expected ambiguity error, got nil")
+
+	// Primary `<ref>` positional → image-first.
+	got, err := ResolveDeployRef("dup", dir)
+	if err != nil {
+		t.Fatalf("ResolveDeployRef: %v", err)
+	}
+	if got.Kind != RefKindImage {
+		t.Errorf("primary ref: kind = %v, want image (image-first precedence)", got.Kind)
+	}
+
+	// `--add-layer` context → layer-first.
+	got, err = ResolveDeployRefAsLayer("dup", dir)
+	if err != nil {
+		t.Fatalf("ResolveDeployRefAsLayer: %v", err)
+	}
+	if got.Kind != RefKindLayer {
+		t.Errorf("add-layer ref: kind = %v, want layer (layer-first precedence)", got.Kind)
 	}
 }
 

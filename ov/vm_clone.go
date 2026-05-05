@@ -23,7 +23,7 @@ import (
 //     so the guest re-runs identity setup on first boot.
 //
 //   - writeVmCloneDeclaration — invoked by `ov vm clone` to persist a
-//     kind:vm entry into vm.yml/overthink.yml. Pure config-file
+//     kind:vm entry into overthink.yml. Pure config-file
 //     mutation; no disk operations.
 
 // BuildClone is the source.kind == "clone" build path.
@@ -113,27 +113,23 @@ func appendCloudInitClean(existing []string) []string {
 }
 
 // writeVmCloneDeclaration persists a kind:vm entry for a clone into
-// vm.yml (or overthink.yml when vm.yml doesn't exist), preserving
-// comments + key order via the yaml.v3 Node API.
+// overthink.yml, preserving comments + key order via the yaml.v3 Node
+// API.
 //
-// V1 always writes to vm.yml in the project root. If neither vm.yml
-// nor overthink.yml exists, returns an error pointing at `ov new project`.
+// Schema v4 (2026-05) makes overthink.yml the only canonical authoring
+// target. If overthink.yml is missing, errors with a remediation hint
+// pointing at `ov image new project` / `ov migrate unified`.
 func writeVmCloneDeclaration(name, srcVm, srcSnap string, cloudInitClean bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(cwd, "vm.yml")
+	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			// Try overthink.yml.
-			alt := filepath.Join(cwd, "overthink.yml")
-			if _, err2 := os.Stat(alt); err2 == nil {
-				target = alt
-			} else {
-				return fmt.Errorf("neither vm.yml nor overthink.yml found in %s; run `ov new project` first or author the kind:vm entry by hand", cwd)
-			}
+			return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` first or `ov migrate unified` to convert legacy configs", cwd)
 		}
+		return fmt.Errorf("stat overthink.yml: %w", err)
 	}
 
 	data, err := os.ReadFile(target)

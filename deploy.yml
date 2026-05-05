@@ -349,15 +349,22 @@ deployment:
             # shorthand under `contains:` is parsed as equals).
             - {id: kv-matching, scope: deploy, matching: "k3s-vm up", contains: {contains: "k3s"}}
     # =================================================================
-    # qc — this CachyOS workstation, target: local + host: local
+    # cachyos-dx — this CachyOS workstation, target: local + host: local
     # ---------------------------------------------------------------
     # Applies the cachyos-dx kind:local template (defined in local.yml)
     # directly to the current machine via ShellExecutor — no SSH, no VM,
     # no container. Marked disposable: operator has authorized this host
-    # as a test system, so `ov rebuild qc` (full destroy + reinstall via
-    # the install ledger) is allowed for strict R10 verification.
+    # as a test system, so `ov rebuild cachyos-dx` (full destroy +
+    # reinstall via the install ledger) is allowed for strict R10
+    # verification.
+    #
+    # The deployment shares the name `cachyos-dx` with the kind:local
+    # template it applies — cross-kind name reuse is permitted as of
+    # 2026-05; verbs disambiguate by command context (ov image build
+    # cachyos-dx → image:cachyos-dx; ov rebuild cachyos-dx → the
+    # deployment entry below).
     # =================================================================
-    qc:
+    cachyos-dx:
         target: local
         local: cachyos-dx
         host: local

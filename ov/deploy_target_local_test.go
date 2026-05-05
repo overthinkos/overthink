@@ -149,7 +149,10 @@ func TestRenderTaskCommandMkdir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if cmd != "install -d -m0700 /etc/foo" {
+	// renderTaskCommand shell-quotes the path via shDoubleQuote so
+	// paths with spaces or shell metacharacters survive RUN-shell
+	// expansion. Plain paths get harmless surrounding quotes.
+	if cmd != `install -d -m0700 "/etc/foo"` {
 		t.Errorf("cmd = %q", cmd)
 	}
 }

@@ -56,7 +56,7 @@ func (c *NewImageCmd) Run() error {
 	if err := AddImage(dir, c.Name, c.Base, c.Layers); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Added image %s to image.yml\n", c.Name)
+	fmt.Fprintf(os.Stderr, "Added image %s to overthink.yml\n", c.Name)
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (c *NewImageCmd) Run() error {
 // `ov image set <dotpath> <value>`
 
 type ImageSetCmd struct {
-	Path  string `arg:"" help:"Dot-path into image.yml (e.g. defaults.tag, images.foo.layers)"`
+	Path  string `arg:"" help:"Dot-path into overthink.yml (e.g. defaults.tag, image.foo.layers)"`
 	Value string `arg:"" help:"Value (parsed as YAML; use [a,b] for lists, {x: y} for maps)"`
 }
 
@@ -73,7 +73,11 @@ func (c *ImageSetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return SetByDotPath(filepath.Join(dir, "image.yml"), c.Path, c.Value)
+	target := filepath.Join(dir, "overthink.yml")
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate unified` to convert a legacy image.yml", dir)
+	}
+	return SetByDotPath(target, c.Path, c.Value)
 }
 
 // ---------------------------------------------------------------------------

@@ -270,49 +270,44 @@ func ListUnmanagedDomains() ([]string, error) {
 }
 
 // loadManagedVmSet returns the set of VM names recorded in the
-// project's vm.yml (or overthink.yml). Returns an empty set on any
-// error; ListUnmanagedDomains tolerates missing config gracefully.
+// project's overthink.yml. Returns an empty set on any error;
+// ListUnmanagedDomains tolerates missing config gracefully.
+//
+// Schema v4 (2026-05): overthink.yml is the canonical authoring root.
+// A legacy per-kind vm.yml is reachable transparently via includes:,
+// so a single read of overthink.yml suffices.
 func loadManagedVmSet() (map[string]bool, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return map[string]bool{}, err
 	}
-	for _, fn := range []string{"vm.yml", "overthink.yml"} {
-		path := filepath.Join(cwd, fn)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var doc struct {
-			Vm map[string]any `yaml:"vm"`
-		}
-		_ = yaml.Unmarshal(data, &doc)
-		out := map[string]bool{}
-		for k := range doc.Vm {
-			out[k] = true
-		}
-		return out, nil
+	uf, ok, err := LoadUnified(cwd)
+	if err != nil || !ok || uf == nil {
+		return map[string]bool{}, nil
 	}
-	return map[string]bool{}, nil
+	out := map[string]bool{}
+	for k := range uf.VM {
+		out[k] = true
+	}
+	return out, nil
 }
 
 // WriteVmImportDeclaration persists a kind:vm declaration with
-// source.kind: imported into vm.yml (or overthink.yml).
+// source.kind: imported into overthink.yml. Schema v4 (2026-05) makes
+// overthink.yml the only canonical authoring target; a legacy vm.yml
+// at the project root is loaded transparently via includes: but new
+// entries land in overthink.yml.
 func WriteVmImportDeclaration(name string, spec *VmSpec) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	target := filepath.Join(cwd, "vm.yml")
+	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			alt := filepath.Join(cwd, "overthink.yml")
-			if _, err2 := os.Stat(alt); err2 == nil {
-				target = alt
-			} else {
-				return fmt.Errorf("neither vm.yml nor overthink.yml found in %s; run `ov new project` first or create vm.yml manually", cwd)
-			}
+			return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` first or `ov migrate unified` to convert legacy configs", cwd)
 		}
+		return fmt.Errorf("stat overthink.yml: %w", err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
@@ -383,21 +378,17 @@ func UpdateImportedVm(name, domainName string, replaceLibvirt bool) (*VmSpec, er
 	}
 	freshSpec.Source.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
 
-	// Locate the existing entry in vm.yml / overthink.yml.
+	// Locate the existing entry in overthink.yml.
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, err
 	}
-	target := filepath.Join(cwd, "vm.yml")
+	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			alt := filepath.Join(cwd, "overthink.yml")
-			if _, err2 := os.Stat(alt); err2 == nil {
-				target = alt
-			} else {
-				return nil, fmt.Errorf("neither vm.yml nor overthink.yml found in %s", cwd)
-			}
+			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` or `ov migrate unified`", cwd)
 		}
+		return nil, fmt.Errorf("stat overthink.yml: %w", err)
 	}
 	data, err := os.ReadFile(target)
 	if err != nil {
@@ -463,9 +454,13 @@ func UpdateImportedVm(name, domainName string, replaceLibvirt bool) (*VmSpec, er
 }
 
 // DiffImported compares the live libvirt XML against the on-disk
-// vm.yml entry's source-derived fields and returns a human-readable
+// kind:vm entry's source-derived fields and returns a human-readable
 // list of differences. Empty list means "no drift". Each line has the
 // shape "field: <on-disk-value> → <fresh-value>".
+//
+// Schema v4 (2026-05): reads through LoadUnified so any vm.yml / vms.yml
+// pulled in via includes: is transparent. The canonical authoring root
+// is overthink.yml.
 func DiffImported(name, domainName string) ([]string, error) {
 	if domainName == "" {
 		domainName = name
@@ -475,22 +470,16 @@ func DiffImported(name, domainName string) ([]string, error) {
 		return nil, err
 	}
 	cwd, _ := os.Getwd()
-	for _, fn := range []string{"vm.yml", "overthink.yml"} {
-		path := filepath.Join(cwd, fn)
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		var doc struct {
-			Vm map[string]VmSpec `yaml:"vm"`
-		}
-		if err := yaml.Unmarshal(data, &doc); err != nil {
-			continue
-		}
-		existing, ok := doc.Vm[name]
-		if !ok {
-			continue
-		}
+	uf, ok, err := LoadUnified(cwd)
+	if err != nil {
+		return nil, fmt.Errorf("loading overthink.yml: %w", err)
+	}
+	if !ok || uf == nil {
+		return nil, fmt.Errorf("overthink.yml not found in %s", cwd)
+	}
+	existingPtr, present := uf.VM[name]
+	if present && existingPtr != nil {
+		existing := *existingPtr
 		var diffs []string
 		if existing.Source.LibvirtName != freshSpec.Source.LibvirtName {
 			diffs = append(diffs, fmt.Sprintf("source.libvirt_name: %q → %q", existing.Source.LibvirtName, freshSpec.Source.LibvirtName))
@@ -526,7 +515,7 @@ func DiffImported(name, domainName string) ([]string, error) {
 		}
 		return diffs, nil
 	}
-	return nil, fmt.Errorf("no vm.yml or overthink.yml entry for %q", name)
+	return nil, fmt.Errorf("no kind:vm entry %q in overthink.yml", name)
 }
 
 // findMapEntryByKey returns the value node of a key in a mapping,

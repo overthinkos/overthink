@@ -552,6 +552,16 @@ func validateDeploymentTree(section *DeploymentsSection) error {
 			return err
 		}
 	}
+	// Hard load-time error for the retired `qc` deployment key. The
+	// 2026-05 cross-kind name reuse cutover renamed this operator-
+	// specific shorthand to the kind:local-template name `cachyos-dx`
+	// so the kind:local entity, the kind:deployment entry, and any
+	// future kind:image / kind:vm with that name all share the slot.
+	if _, present := section.Images["qc"]; present {
+		return fmt.Errorf(
+			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate qc-rename",
+		)
+	}
 	return nil
 }
 

@@ -21,11 +21,15 @@ package main
 //      existing refs.go `@`-prefixed form is also accepted for backward
 //      compat with image.yml depends:/layers: already in the tree.
 //
-// Disambiguation rules:
+// Disambiguation rules (post 2026-05 cross-kind name reuse):
 //   - Any ref containing "/layers/" resolves to a layer.
 //   - Any ref containing "/images/" resolves to an image.
-//   - A local name found in BOTH image.yml and layers/ is a hard error
-//     (authoring bug).
+//   - A local name found in BOTH image.yml and layers/ is permitted —
+//     each kind has its own namespace. Precedence is decided by the
+//     CALLER's context: ResolveDeployRef defaults to image-first
+//     (the primary `<ref>` positional almost always means "deploy
+//     this image"); ResolveDeployRefAsLayer prefers layers (used by
+//     `--add-layer <ref>` where the user explicitly asked for a layer).
 //   - A YAML file with a top-level `base:` or `images:` key is an image;
 //     one with `rpm:`/`deb:`/`pac:`/`aur:`/`tasks:`/`services:` is a layer.
 
@@ -71,7 +75,28 @@ type DeployRef struct {
 // downstream loading (LoadLayerFromFile / LoadImageFromFile / remote
 // download). The function does not fetch remote repos — that happens
 // at Emit time when the plan actually needs the content.
+//
+// When the same name exists as BOTH an image and a layer (cross-kind
+// name reuse — permitted since 2026-05), this entry point prefers
+// image. For the `--add-layer` context where the user asked for a
+// layer specifically, use ResolveDeployRefAsLayer instead.
 func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
+	return resolveDeployRefWithPref(ref, projectDir, RefKindImage)
+}
+
+// ResolveDeployRefAsLayer is the layer-preferring sibling of
+// ResolveDeployRef. Used for `--add-layer <ref>` resolution where the
+// user has explicitly asked for a layer overlay; if the same name
+// exists as both an image and a layer, layer wins.
+func ResolveDeployRefAsLayer(ref, projectDir string) (*DeployRef, error) {
+	return resolveDeployRefWithPref(ref, projectDir, RefKindLayer)
+}
+
+// resolveDeployRefWithPref is the shared implementation; preferKind
+// only affects the local-name codepath when a name resolves to both
+// an image and a layer. Remote refs and explicit local paths classify
+// themselves unambiguously.
+func resolveDeployRefWithPref(ref, projectDir string, preferKind RefKind) (*DeployRef, error) {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
 		return nil, fmt.Errorf("ResolveDeployRef: empty ref")
@@ -95,8 +120,9 @@ func ResolveDeployRef(ref, projectDir string) (*DeployRef, error) {
 		return resolveLocalPath(ref, projectDir)
 	}
 
-	// Forms 1 + 2: local name. Check image.yml then layers/; error if ambiguous.
-	return resolveLocalName(ref, projectDir)
+	// Forms 1 + 2: local name. Check image.yml AND layers/; cross-kind
+	// reuse permitted, preferKind decides which wins.
+	return resolveLocalName(ref, projectDir, preferKind)
 }
 
 // looksLikeRemoteRef returns true if ref resembles a remote repo ref:
@@ -209,10 +235,10 @@ func classifyYAMLFile(path string) (RefKind, error) {
 	return "", fmt.Errorf("ResolveDeployRef: %s has no recognized image or layer keys", path)
 }
 
-// resolveLocalName checks image.yml, images.yml (unified), then layers/
-// for a matching name. Ambiguity is a hard error per the plan's
-// disambiguation rule.
-func resolveLocalName(name, projectDir string) (*DeployRef, error) {
+// resolveLocalName checks the unified loader's images and layers/ for
+// a matching name. Cross-kind name reuse is permitted (since 2026-05);
+// preferKind decides precedence when the name exists in both kinds.
+func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, error) {
 	imgYml := filepath.Join(projectDir, "image.yml")
 	imagesYml := filepath.Join(projectDir, "images.yml")
 	layersDir := filepath.Join(projectDir, "layers", name)
@@ -236,25 +262,38 @@ func resolveLocalName(name, projectDir string) (*DeployRef, error) {
 		inLayers = true
 	}
 
-	switch {
-	case inImageYml && inLayers:
-		return nil, fmt.Errorf("ResolveDeployRef: name %q is both an image and a layer — use an explicit path or remote ref to disambiguate", name)
-	case inImageYml:
+	imageRef := func() *DeployRef {
 		return &DeployRef{
 			Raw:    name,
 			Kind:   RefKindImage,
 			Source: RefSourceLocalName,
 			Name:   name,
 			Path:   resolvedImgPath,
-		}, nil
-	case inLayers:
+		}
+	}
+	layerRef := func() *DeployRef {
 		return &DeployRef{
 			Raw:    name,
 			Kind:   RefKindLayer,
 			Source: RefSourceLocalName,
 			Name:   name,
 			Path:   layerYML,
-		}, nil
+		}
+	}
+
+	switch {
+	case inImageYml && inLayers:
+		// Cross-kind name reuse — preferKind decides. Both kinds
+		// remain reachable via explicit paths (./layers/<name>/ or
+		// ./image.yml#<name>) or via ResolveDeployRefAsLayer.
+		if preferKind == RefKindLayer {
+			return layerRef(), nil
+		}
+		return imageRef(), nil
+	case inImageYml:
+		return imageRef(), nil
+	case inLayers:
+		return layerRef(), nil
 	}
 
 	return nil, fmt.Errorf("ResolveDeployRef: %q not found as image in %s or %s or layer in %s",

@@ -6,8 +6,8 @@ local:
       # Establish passwordless wheel sudo before any other root task
       # runs. On a fresh CachyOS install this turns a one-time `sudo -v`
       # password prompt into durable passwordless sudo; on the existing
-      # qc host it's idempotent (file already present, atrawog already
-      # in wheel) and serves as a self-healing regression guard.
+      # cachyos-dx host it's idempotent (file already present, atrawog
+      # already in wheel) and serves as a self-healing regression guard.
       - wheel-nopasswd
       - dev-tools
       - gh
@@ -73,7 +73,7 @@ local:
         toolchain, Go/Rust/Node/Python runtimes, the full AI-coding-agent
         fleet (Claude Code, Codex, Gemini, Oracle, ForgeCode), and
         DevOps/container tooling (docker, kubectl, helm, AWS CLI, jq).
-        Targets the qc CachyOS host via direct local exec.
+        Targets the operator's CachyOS host via direct local exec.
       tag: [working]
 
     # Deploy-scope eval probe. The wheel-nopasswd layer (first in the
@@ -82,10 +82,10 @@ local:
     # established by the deploy itself, not assumed from CachyOS installer
     # state. This probe catches regressions BETWEEN deploys (e.g. someone
     # manually deletes the drop-in or removes the user from wheel) so
-    # `ov test cachyos-dx` flags them before the next `ov rebuild qc`
-    # aborts mid-flight on a sudo prompt. The same %wheel ALL=(ALL:ALL)
-    # NOPASSWD: ALL convention is mirrored inside ephemeral AUR-builder
-    # containers by ov/deploy_target_local.go renderAurScript.
+    # `ov test cachyos-dx` flags them before the next `ov rebuild
+    # cachyos-dx` aborts mid-flight on a sudo prompt. The same %wheel
+    # ALL=(ALL:ALL) NOPASSWD: ALL convention is mirrored inside ephemeral
+    # AUR-builder containers by ov/deploy_target_local.go renderAurScript.
     eval:
       - id: passwordless-sudo-host
         scope: deploy

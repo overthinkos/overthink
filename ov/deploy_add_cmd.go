@@ -262,7 +262,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		}
 	}
 	for _, al := range addLayers {
-		alRef, err := ResolveDeployRef(al, dir)
+		alRef, err := ResolveDeployRefAsLayer(al, dir)
 		if err != nil {
 			return fmt.Errorf("resolving --add-layer %q: %w", al, err)
 		}

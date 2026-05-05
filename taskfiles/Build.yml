@@ -25,11 +25,28 @@ tasks:
         case " $ID $ID_LIKE " in
           *" arch "*|*" manjaro "*|*" archarm "*|*" endeavouros "*)
             if command -v makepkg >/dev/null 2>&1; then
+              # pkg/arch/PKGBUILD declares mandatory AUR deps
+              # (cloudflared-bin, gvisor-tap-vsock). Pre-install them via
+              # an AUR helper FIRST, then run makepkg directly inside
+              # pkg/arch. NEVER use yay -B / yay -Bi against the local
+              # checkout — that mode runs `git pull` against pkg/arch's
+              # subrepo and can reset uncommitted edits in the working
+              # tree (war-story 2026-05-05).
+              AUR_DEPS="cloudflared-bin gvisor-tap-vsock"
+              if command -v yay >/dev/null 2>&1; then
+                yay -S --needed --noconfirm $AUR_DEPS
+              elif command -v paru >/dev/null 2>&1; then
+                paru -S --needed --noconfirm $AUR_DEPS
+              else
+                echo "WARNING: yay/paru not found — AUR deps must be"
+                echo "         pre-installed manually for makepkg to succeed."
+                echo "         Install an AUR helper, then re-run."
+              fi
               cd pkg/arch
               mkdir -p src/ov-git
               cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
               makepkg -efi --noconfirm
-              echo "Installed system-wide via pacman (makepkg)"
+              echo "Installed system-wide via pacman (makepkg in pkg/arch)"
               exit 0
             fi
             ;;
@@ -48,12 +65,23 @@ tasks:
         esac
 
   install-arch:
-    desc: Force Arch package install via makepkg (overrides distro detection)
-    dir: "{{.ROOT_DIR}}/pkg/arch"
+    desc: Force Arch package install (pre-resolves AUR deps via yay/paru, then makepkg)
+    dir: "{{.ROOT_DIR}}"
     cmds:
-      - mkdir -p src/ov-git
-      - cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
-      - makepkg -efi --noconfirm
+      - |
+        set -e
+        AUR_DEPS="cloudflared-bin gvisor-tap-vsock"
+        if command -v yay >/dev/null 2>&1; then
+          yay -S --needed --noconfirm $AUR_DEPS
+        elif command -v paru >/dev/null 2>&1; then
+          paru -S --needed --noconfirm $AUR_DEPS
+        else
+          echo "WARNING: yay/paru not found — AUR deps must be pre-installed."
+        fi
+        cd pkg/arch
+        mkdir -p src/ov-git
+        cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
+        makepkg -efi --noconfirm
 
   install-portable:
     desc: Force portable install to $HOME/.local/bin/ov (overrides distro detection)

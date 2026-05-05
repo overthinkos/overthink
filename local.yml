@@ -9,6 +9,11 @@ local:
       # ov-cachyos host it's idempotent (file already present, atrawog
       # already in wheel) and serves as a self-healing regression guard.
       - wheel-nopasswd
+      # yay AUR helper — required by pkg/arch/PKGBUILD's mandatory
+      # AUR deps (cloudflared-bin, gvisor-tap-vsock); the
+      # taskfiles/Build.yml install task drives package builds via
+      # `yay -Bi pkg/arch` so AUR deps resolve unattended.
+      - yay
       - dev-tools
       - gh
       - pre-commit

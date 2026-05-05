@@ -7,9 +7,9 @@ package main
 // Container targets have their own path (ProvisionPodmanSecrets, see
 // secrets.go) that mounts secrets as podman secrets / env at container-run
 // time. That path runs AFTER build and does not inject env into the layer's
-// setup.sh. For install-plan-based targets, the setup scripts run directly
-// on the deploy target, so the credential-store value must be resolved on the
-// operator side and passed through as env on the step.
+// build-time tasks. For install-plan-based targets, the layer's tasks run
+// directly on the deploy target, so the credential-store value must be
+// resolved on the operator side and passed through as env on the step.
 //
 // This file provides a small, substrate-neutral helper that takes a Layer
 // and returns the resolved env map. Caller responsibility: merge into the

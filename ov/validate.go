@@ -179,6 +179,8 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 // validateLocalTemplates checks each kind:local entity for: layer
 // references that resolve, an empty `layers: []` (warning, allowed for
 // stub placeholders), and a missing `layers:` field entirely (error).
+// Also hard-errors on legacy `images:` fields surviving the 2026-05
+// deploy-fetch-narrowing cutover (see validateLegacyLocalImagesField).
 func validateLocalTemplates(dir string, layers map[string]*Layer, errs *ValidationError) {
 	uf, _, err := LoadUnified(dir)
 	if err != nil || uf == nil {
@@ -197,68 +199,20 @@ func validateLocalTemplates(dir string, layers map[string]*Layer, errs *Validati
 				errs.Add("kind:local %q: layer %q not found", name, layerName)
 			}
 		}
-		// images: entries must resolve via image.yml (short names) OR
-		// be a fully-qualified registry ref OR an @github.com/...
-		// remote ref. Network calls deferred to deploy time.
-		validateLocalImages(name, spec.Images, uf, errs)
 	}
+	validateLegacyLocalImagesField(dir, errs)
 }
 
-// validateLocalImages enforces resolvability of each kind:local
-// images: entry. Short names must exist in the project's images map;
-// full refs and remote refs are syntax-validated only.
-func validateLocalImages(templateName string, images []string, uf *UnifiedFile, errs *ValidationError) {
-	if len(images) == 0 {
-		return
-	}
-	seen := make(map[string]bool, len(images))
-	cfg := uf.ProjectConfig()
-	for _, img := range images {
-		img = strings.TrimSpace(img)
-		if img == "" {
-			continue
-		}
-		if seen[img] {
-			errs.Add("kind:local %q: duplicate image %q in images:", templateName, img)
-			continue
-		}
-		seen[img] = true
-
-		stripped := StripURLScheme(img)
-		// Remote ref: @github.com/org/repo/image[:version]
-		if IsRemoteImageRef(stripped) {
-			continue // syntax-valid; resolution deferred to deploy time
-		}
-		// Fully-qualified ref: contains a registry segment.
-		if looksLikeFullRef(img) {
-			continue
-		}
-		// Short name: must resolve via cfg.Images.
-		if cfg == nil || cfg.Images == nil {
-			errs.Add("kind:local %q: image %q is a short name but no project image.yml is reachable", templateName, img)
-			continue
-		}
-		if _, ok := cfg.Images[img]; !ok {
-			suggestion := findSimilarName(img, ImageNames(cfg.Images))
-			if suggestion != "" {
-				errs.Add("kind:local %q: image %q not found (did you mean %q?)", templateName, img, suggestion)
-			} else {
-				errs.Add("kind:local %q: image %q not found in project image.yml/overthink.yml", templateName, img)
-			}
-		}
-	}
-}
-
-// ImageNames returns a sorted slice of image names from a config's
-// Images map. Used by validateLocalImages for similar-name suggestion
-// on missing entries.
-func ImageNames(images map[string]ImageConfig) []string {
-	out := make([]string, 0, len(images))
-	for name := range images {
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
+// validateLegacyLocalImagesField hard-errors on any surviving
+// `images:` key nested under `local.<name>` in YAML. The field was
+// removed from kind:local in the 2026-05 deploy-fetch-narrowing
+// cutover; legacy configs must be migrated via `ov migrate
+// local-images`. We walk raw YAML (not the typed struct) because the
+// typed struct no longer carries the field — a soft `LoadUnified`
+// would silently ignore it. Surfacing it here gives the operator the
+// migration breadcrumb at config-load time.
+func validateLegacyLocalImagesField(dir string, errs *ValidationError) {
+	walkYAMLForLegacyLocalImages(dir, errs)
 }
 
 // validateLocalDeployments checks every target:local deployment:

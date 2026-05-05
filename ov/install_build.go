@@ -362,45 +362,6 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 }
 
 // ---------------------------------------------------------------------------
-// kind:local images: pre-pass (template-level image-presence ensure)
-// ---------------------------------------------------------------------------
-
-// compileImagesSteps emits one EnsureImageStep per entry in a
-// kind:local template's `images:` list. Called from
-// LocalDeployTarget.Emit BEFORE the layer plan walk so any layer step
-// that wants to consume an image (none today, but future-proof) sees
-// it pre-cached. Engine resolution is left to runtime — we don't
-// commit to podman vs docker at compile time so the same plan can
-// retarget if the executor's preferred engine differs.
-//
-// templateName carries the kind:local entry name (e.g. "ov-cachyos")
-// for ledger origin tagging. deployID is the parent deploy's stable
-// hash, used by the ledger to refcount image presence across multiple
-// deploys (so two deploys that both declare `eval-target` keep the
-// image around until BOTH are removed).
-func compileImagesSteps(spec *LocalSpec, templateName, deployID, engine string) []InstallStep {
-	if spec == nil || len(spec.Images) == 0 {
-		return nil
-	}
-	out := make([]InstallStep, 0, len(spec.Images))
-	for _, img := range spec.Images {
-		if img == "" {
-			continue
-		}
-		out = append(out, &EnsureImageStep{
-			LayerName:   "_local-images_",
-			Origin:      "local:" + templateName,
-			Image:       img,
-			Engine:      engine,
-			PullFirst:   true,
-			BuildOnFail: true,
-			DeployID:    deployID,
-		})
-	}
-	return out
-}
-
-// ---------------------------------------------------------------------------
 // System package compilation
 // ---------------------------------------------------------------------------
 
@@ -636,9 +597,37 @@ func collectBuilderContext(layer *Layer, builderName string, bDef *BuilderDef, i
 	case "aur":
 		if section := layer.FormatSection("aur"); section != nil {
 			ctx["packages"] = append([]string(nil), section.Packages...)
+			// `replaces:` lists distro-repo packages that conflict with
+			// the AUR build artifact and must be removed (`pacman -Rs
+			// --noconfirm`) before `pacman -U`. Idempotent — host-side
+			// removal silently skips entries that aren't installed.
+			if raw, ok := section.Raw["replaces"]; ok {
+				if list, ok := stringSliceFromYAML(raw); ok {
+					ctx["replaces"] = list
+				}
+			}
 		}
 	}
 	return ctx
+}
+
+// stringSliceFromYAML coerces a YAML-decoded value into []string. The
+// decoder produces []interface{} for sequences; we tolerate already-
+// stringified slices for callers that pre-process.
+func stringSliceFromYAML(v interface{}) ([]string, bool) {
+	switch s := v.(type) {
+	case []string:
+		return append([]string(nil), s...), true
+	case []interface{}:
+		out := make([]string, 0, len(s))
+		for _, e := range s {
+			if str, ok := e.(string); ok {
+				out = append(out, str)
+			}
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 // pixiDefaultEnvName returns the default pixi env name for a layer.

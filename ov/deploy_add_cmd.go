@@ -64,7 +64,6 @@ type DeployDelCmd struct {
 	KeepRepoChanges bool `long:"keep-repo-changes" help:"Don't revert repo config even at zero refcount"`
 	KeepServices    bool `long:"keep-services" help:"Don't disable systemd units (just stop tracking)"`
 	KeepImage       bool `long:"keep-image" help:"Don't remove the synthesized overlay image (container target only)"`
-	ReclaimImages   bool `long:"reclaim-images" help:"Remove kind:local images: entries from podman storage at zero refcount (default: keep — pulls are expensive)"`
 	DryRun          bool `long:"dry-run" help:"Print the teardown plan without executing"`
 
 	// Runner is populated by runVmDel / runLocalDel etc. to route reverse

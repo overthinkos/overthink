@@ -60,6 +60,16 @@ func (p PackageItem) MarshalYAML() (interface{}, error) {
 type AURPackages struct {
 	Packages []PackageItem `yaml:"packages,omitempty" json:"packages,omitempty"`
 	Options  []string      `yaml:"options,omitempty" json:"options,omitempty"`
+	// Replaces lists distro-repo packages whose file paths conflict
+	// with the AUR build artifact. Each entry is removed via
+	// `pacman -Rs --noconfirm <pkg>` BEFORE the AUR `pacman -U`
+	// install on host (`target: local`) deploys. Idempotent — entries
+	// not currently installed are silently skipped. Required when the
+	// AUR build owns paths also owned by an Arch repo package (e.g.
+	// `visual-studio-code-bin` and `code` both own /usr/bin/code).
+	// OCI image builds ignore this field — fresh rootfs has no
+	// conflicting package.
+	Replaces []string `yaml:"replaces,omitempty" json:"replaces,omitempty"`
 }
 
 // DistroPackages carries per-distro package overrides plus format-specific

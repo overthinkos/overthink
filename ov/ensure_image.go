@@ -1,49 +1,164 @@
 package main
 
-// ensure_image.go — helpers backing kind:local `images:` (the
-// 2026-05 cutover that lets a local-target deploy declare container
-// images that must be present before tests can run).
+// ensure_image.go — THE CANONICAL ENSURE-IMAGE PATH for ov.
 //
-// Three input forms (mirror ImagePullCmd.Run):
-//   - Short name ("eval-target") — resolved via cfg.Images
-//   - Fully-qualified ref ("ghcr.io/overthinkos/eval-target:tag") — pass-through
-//   - Remote project ref ("@github.com/...") — resolves the repo, reads
-//     its image.yml, returns the declared registry ref
+// `EnsureImagePresent` is the single source of truth used by every
+// command that needs a container image present in local podman
+// storage: deploys (BuilderRun), the eval preflight, the operator-
+// facing `ov image pull` verb, and the engine-transfer path
+// (`EnsureImage` in transfer.go). One contract, one implementation,
+// one set of failure modes — no per-caller divergence (R3).
 //
-// Pull path: routed through DeployExecutor.RunSystem so SSH-routed
-// kind:local deploys (host: user@machine) pull on the REMOTE machine.
+// Three input forms accepted, mirroring `ov image pull`:
 //
-// Build fallback path: in-process invocation of BuildCmd.Run via a
-// minimal command struct. Only viable when the executor is a local
-// ShellExecutor (we build LOCALLY and trust the local image is what
-// the deploy needs); SSH executors return a friendly error pointing
-// the operator at manual `ov image build` then re-run.
+//   - Short name (e.g. "eval-target") — resolved via `cfg.Images`
+//     to a registry ref, then pulled. Build-fallback uses the same
+//     short name as the input to `ov image build`.
+//
+//   - Fully-qualified registry ref (e.g.
+//     "ghcr.io/overthinkos/eval-target:2026.124.1253") — pulled as-is.
+//     Build-fallback reverse-resolves the basename against
+//     `cfg.Images`; when the basename matches a project image entry,
+//     the local build runs that entry. This is what makes the
+//     operator's `ghcr.io/overthinkos/archlinux-builder:<tag>`
+//     buildable on a CachyOS host that has no ghcr.io credentials.
+//
+//   - Remote project ref (e.g.
+//     "@github.com/overthinkos/overthink/eval-target:latest") —
+//     resolved via `ResolveRemoteImage` (operator-side repo download)
+//     to a registry ref, then pulled. No build fallback for remote
+//     refs (the remote repo's image.yml resolution already gave us
+//     the canonical ref).
+//
+// Algorithm:
+//   1. LocalImageExists short-circuit — already present, no-op.
+//   2. `podman pull <ref>` — preferred path.
+//   3. `ov image build <name>` — fallback when (a) the ref maps to a
+//      project image (short-name lookup or basename reverse-resolve),
+//      AND (b) the pull failed for any reason. Build is local; SSH
+//      executors are not in scope for this surface.
+//
+// Stateless — no install ledger, no ReverseOp, no `--reclaim-images`
+// flag. Operators who want podman storage reclaimed run
+// `podman image prune` or `podman rmi` themselves.
 
 import (
 	"context"
 	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 )
 
+// EnsureImagePresent is the canonical helper. Every command that
+// needs a container image MUST go through this entry point — never
+// shell out to `podman pull` or rely on `podman run`'s implicit
+// auto-pull.
+func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectDir string) error {
+	if image == "" {
+		return fmt.Errorf("EnsureImagePresent: empty image identifier")
+	}
+
+	// Short-circuit if the image is already present in local storage.
+	// For short names we resolve to a registry ref first; for full
+	// refs the input is already the storage key.
+	if ref, _ := resolveImageRefForEnsure(image, cfg, projectDir); ref != "" {
+		if LocalImageExists("podman", ref) {
+			fmt.Fprintf(os.Stderr, "ensure-image: %s present\n", ref)
+			return nil
+		}
+	}
+
+	// Try pull. Resolves remote (@github.com/...) refs via
+	// ResolveRemoteImage; full refs pass through; short names resolve
+	// to a registry ref via cfg.
+	pullRef, perr := pullRefForEnsure(image, cfg, projectDir)
+	if perr == nil && pullRef != "" {
+		fmt.Fprintf(os.Stderr, "ensure-image: pulling %s\n", pullRef)
+		if err := podmanPullForEnsure(ctx, pullRef); err == nil {
+			return nil
+		} else {
+			fmt.Fprintf(os.Stderr, "ensure-image: pull %s failed: %v\n", pullRef, err)
+		}
+	} else if perr != nil {
+		fmt.Fprintf(os.Stderr, "ensure-image: resolve %s: %v\n", image, perr)
+	}
+
+	// Fallback: remote ref → build from the cached @github.com/... repo
+	// using the same workflow as `ov image build @<ref>`.
+	stripped := StripURLScheme(image)
+	if IsRemoteImageRef(stripped) {
+		if rctx, err := ResolveRemoteImage(stripped, ""); err == nil {
+			fmt.Fprintf(os.Stderr, "ensure-image: building remote %s from cached source\n", image)
+			rt, rerr := ResolveRuntime()
+			if rerr == nil {
+				if berr := rctx.BuildImage(rt, ""); berr == nil {
+					return nil
+				} else {
+					return fmt.Errorf("ensure-image %q: pull failed and remote build failed: %w", image, berr)
+				}
+			}
+		}
+	}
+
+	// Fallback: short-name local build. Applies when the identifier
+	// maps to a short-name entry in `cfg.Images` — directly (it IS a
+	// short name) or via basename reverse-resolution (it's a full ref
+	// whose basename matches an entry).
+	short := buildableShortName(image, cfg)
+	if short != "" {
+		fmt.Fprintf(os.Stderr, "ensure-image: building %s locally\n", short)
+		bcmd := &BuildCmd{Images: []string{short}, Jobs: 4}
+		if berr := bcmd.Run(); berr != nil {
+			return fmt.Errorf("ensure-image %q: pull failed and local build failed: %w", image, berr)
+		}
+		// The build produced the project's current-calver-tagged ref;
+		// when the input ref pinned a specific tag (e.g. an older
+		// builder version on a kind:local install_opt), alias the
+		// just-built image to that tag so callers using
+		// `--pull=never` find the requested ref locally. Skipped when
+		// the input was already a short name (no pinned tag).
+		if cfg != nil {
+			if resolved, err := cfg.ResolveImage(short, "", projectDir); err == nil {
+				produced := resolveShellImageRef(resolved.Registry, resolved.Name, "")
+				if produced != "" && produced != image && looksLikeFullRef(image) {
+					if terr := podmanTagAlias(ctx, produced, image); terr != nil {
+						fmt.Fprintf(os.Stderr, "ensure-image: warning: tag alias %s -> %s failed: %v\n", produced, image, terr)
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	return fmt.Errorf("ensure-image %q: not present locally, pull failed, and no buildable short-name match in image.yml — make the registry public, log in to the registry, or pre-build the image manually", image)
+}
+
+// podmanTagAlias adds a second tag to an existing local image. Used to
+// satisfy a tag-pinned input ref after a local build produced a
+// different (calver) tag of the same image.
+func podmanTagAlias(ctx context.Context, src, dst string) error {
+	cmd := exec.CommandContext(ctx, "podman", "tag", src, dst)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // resolveImageRefForEnsure converts a user-authored image identifier
-// into a fully-qualified registry ref usable for podman pull.
-//
-// Short names require a *Config (image.yml resolution); fully-qualified
-// refs and @github.com/... refs are returned as-is (the latter still
-// needs ResolveRemoteImage at pull time, which runImagePull handles).
+// into a fully-qualified registry ref usable for `LocalImageExists`.
+// Short names need cfg; full refs and remote refs pass through (the
+// caller routes remote refs via pullRefForEnsure at pull time).
 func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (string, error) {
 	if image == "" {
-		return "", fmt.Errorf("resolveImageRefForEnsure: empty image")
+		return "", fmt.Errorf("empty image")
 	}
 	stripped := StripURLScheme(image)
-	// Remote ref: caller routes through ResolveRemoteImage at pull time.
 	if IsRemoteImageRef(stripped) {
 		return image, nil
 	}
-	// Fully-qualified ref: registry segment present.
 	if looksLikeFullRef(image) {
 		return image, nil
 	}
-	// Short name: resolve via cfg.Images.
 	if cfg == nil {
 		return "", fmt.Errorf("short name %q requires a project directory with image.yml", image)
 	}
@@ -54,74 +169,72 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 	return resolveShellImageRef(resolved.Registry, resolved.Name, ""), nil
 }
 
-// runImagePull pulls a registry ref through the supplied executor. The
-// executor pattern lets the same pull logic land on the operator's
-// machine (ShellExecutor) or on a remote SSH target (SSHExecutor —
-// the pull happens on the REMOTE side, which is what kind:local
-// deploys with `host: user@machine` want).
-//
-// Handles all three input forms by delegating registry resolution
-// before the actual pull:
-//   - @github.com/... — resolves via ResolveRemoteImage (operator-side
-//     repo download), then pulls the resulting registry ref via
-//     executor.
-//   - looksLikeFullRef — pulled as-is.
-//   - Short name — resolved against cfg before pull.
-func runImagePull(ctx context.Context, exec DeployExecutor, image string, cfg *Config, projectDir string, opts EmitOpts) error {
+// pullRefForEnsure returns the registry ref to hand to `podman pull`.
+// Same as resolveImageRefForEnsure EXCEPT remote
+// (@github.com/...) refs are walked through ResolveRemoteImage,
+// which performs the operator-side repo download and returns the
+// canonical registry ref declared in the remote project's image.yml.
+func pullRefForEnsure(image string, cfg *Config, projectDir string) (string, error) {
 	stripped := StripURLScheme(image)
 	if IsRemoteImageRef(stripped) {
-		// Operator-side repo download to determine the registry ref;
-		// then pull on the executor's venue.
 		rctx, err := ResolveRemoteImage(stripped, "")
 		if err != nil {
-			return fmt.Errorf("resolving remote ref %q: %w", image, err)
+			return "", fmt.Errorf("resolving remote ref %q: %w", image, err)
 		}
-		return execPodmanPull(ctx, exec, rctx.ImageRef, opts)
+		return rctx.ImageRef, nil
 	}
-	if looksLikeFullRef(image) {
-		return execPodmanPull(ctx, exec, image, opts)
-	}
-	// Short name: use cfg to resolve.
-	ref, err := resolveImageRefForEnsure(image, cfg, projectDir)
-	if err != nil {
-		return err
-	}
-	return execPodmanPull(ctx, exec, ref, opts)
+	return resolveImageRefForEnsure(image, cfg, projectDir)
 }
 
-// execPodmanPull issues a single `podman pull <ref>` through the
-// executor. Errors propagate verbatim — runImagePull's caller (the
-// EnsureImageStep emitter) decides whether to fall back to a local
-// build.
-func execPodmanPull(ctx context.Context, exec DeployExecutor, ref string, opts EmitOpts) error {
-	if exec == nil {
-		return fmt.Errorf("execPodmanPull: nil executor")
-	}
-	// Single-quoted to defend against malicious refs (although
-	// resolveImageRefForEnsure should have filtered any).
-	script := fmt.Sprintf("podman pull %s", shellSingleQuote(ref))
-	return exec.RunUser(ctx, script, opts)
+// podmanPullForEnsure invokes `podman pull <ref>` on the local
+// machine. Errors propagate verbatim; the caller decides whether to
+// fall back to a local build.
+func podmanPullForEnsure(ctx context.Context, ref string) error {
+	cmd := exec.CommandContext(ctx, "podman", "pull", ref)
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
-// runImageBuild builds a short-name image locally via the same
-// BuildCmd code path operators hit on the CLI. ONLY runs when the
-// executor is a local ShellExecutor — for SSH executors, we don't
-// have a generic "build on remote and don't ship over scp" pattern
-// (would require remote project + source presence + remote ov), so
-// we return an actionable error.
-func runImageBuild(ctx context.Context, exec DeployExecutor, name string, opts EmitOpts) error {
-	if exec == nil {
-		return fmt.Errorf("runImageBuild: nil executor")
+// buildableShortName returns the short name (project image.yml key)
+// that this identifier maps to, or "" when no fallback is possible.
+//
+// Algorithm:
+//   - Short names (no slash, no @prefix) are returned as-is when
+//     `cfg.Images[name]` exists.
+//   - Full registry refs have their basename (last path segment,
+//     before the tag) extracted and checked against `cfg.Images`.
+//     This is what lets `ghcr.io/overthinkos/archlinux-builder:<tag>`
+//     fall back to building the project's `archlinux-builder` image.
+//   - Remote `@github.com/...` refs are skipped — the remote
+//     project's image.yml already determined the canonical ref;
+//     local build-fallback is not applicable.
+func buildableShortName(image string, cfg *Config) string {
+	if cfg == nil || cfg.Images == nil || image == "" {
+		return ""
 	}
-	if _, isLocal := exec.(ShellExecutor); !isLocal {
-		return fmt.Errorf("runImageBuild: image %q: pull failed and remote-side local build is not supported via %s — pre-build the image on the target then re-run, or use a fully-qualified ref that's publicly pullable", name, exec.Venue())
+	stripped := StripURLScheme(image)
+	if IsRemoteImageRef(stripped) {
+		return ""
 	}
-	// In-process invocation of the BuildCmd Run path via a fresh struct.
-	// This mirrors what `ov image build <name>` does on the CLI; running
-	// it from inside another command keeps the same behaviour without
-	// shelling out.
-	bcmd := &BuildCmd{Images: []string{name}, Jobs: 4}
-	return bcmd.Run()
+	// Strip tag if present. Be careful: a registry like
+	// "localhost:5000/foo" has a colon BEFORE the first slash that's
+	// the port, not the tag separator.
+	work := image
+	firstSlash := strings.Index(work, "/")
+	lastColon := strings.LastIndex(work, ":")
+	if lastColon >= 0 && (firstSlash < 0 || lastColon > firstSlash) {
+		work = work[:lastColon]
+	}
+	// Take the last path segment.
+	if i := strings.LastIndex(work, "/"); i >= 0 {
+		work = work[i+1:]
+	}
+	if work == "" {
+		return ""
+	}
+	if _, ok := cfg.Images[work]; ok {
+		return work
+	}
+	return ""
 }
-
-// (shellSingleQuote is defined in tasks.go and reused here.)

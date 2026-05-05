@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -56,23 +57,56 @@ func TransferImage(srcEngine, dstEngine, imageRef string) error {
 	return nil
 }
 
-// EnsureImage ensures the image is available in the run engine's local store,
-// transferring from the build engine if needed. Returns ErrImageNotLocal
-// (wrapped with the image ref) when the image is absent from both engines —
-// callers unwrap this at the CLI boundary to render the "ov image pull"
-// recommendation.
+// EnsureImage ensures the image is available in the run engine's local store.
+// Three-tier fallback (each step independent):
+//
+//  1. Already-present short-circuit (LocalImageExists in run engine).
+//  2. Cross-engine transfer (`docker save | podman load`) when build
+//     engine != run engine AND the image is present in the build
+//     engine's storage.
+//  3. Canonical `EnsureImagePresent` — pulls from the registry and
+//     falls back to a local `ov image build <name>` when the ref maps
+//     to a project image.yml entry. This is the same code path
+//     BuilderRun, the eval preflight, and `ov image pull` all go
+//     through (see ov/ensure_image.go).
+//
+// Returns ErrImageNotLocal (wrapped with the ref) only when ALL three
+// tiers fail.
 func EnsureImage(imageRef string, rt *ResolvedRuntime) error {
 	if LocalImageExists(rt.RunEngine, imageRef) {
 		return nil
 	}
 
-	if rt.BuildEngine == rt.RunEngine {
-		return fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
+	// Cross-engine transfer first when applicable: it's faster than a
+	// network pull and works offline.
+	if rt.BuildEngine != rt.RunEngine && LocalImageExists(rt.BuildEngine, imageRef) {
+		return TransferImage(rt.BuildEngine, rt.RunEngine, imageRef)
 	}
 
-	if !LocalImageExists(rt.BuildEngine, imageRef) {
-		return fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
+	// Generic ensure: pull, fall back to local build for project
+	// images. Loads the project cfg if cwd has one; gracefully
+	// degrades to pull-only when no project is reachable.
+	cfg, projectDir := loadProjectCfgFromCwd()
+	if err := EnsureImagePresent(context.Background(), imageRef, cfg, projectDir); err == nil {
+		return nil
 	}
 
-	return TransferImage(rt.BuildEngine, rt.RunEngine, imageRef)
+	return fmt.Errorf("%w: %s", ErrImageNotLocal, imageRef)
+}
+
+// loadProjectCfgFromCwd returns the project config + dir when the
+// caller's cwd is inside an ov project; (nil, "") otherwise. EnsureImage
+// (and any caller of EnsureImagePresent that doesn't carry project
+// state) uses this to opportunistically opt into the build-fallback
+// path.
+func loadProjectCfgFromCwd() (*Config, string) {
+	dir, err := os.Getwd()
+	if err != nil || dir == "" {
+		return nil, ""
+	}
+	cfg, err := LoadConfig(dir)
+	if err != nil || cfg == nil {
+		return nil, dir
+	}
+	return cfg, dir
 }

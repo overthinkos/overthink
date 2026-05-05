@@ -45,6 +45,15 @@ type BuilderRunOpts struct {
 	LayerDir     string // absolute path to layer source (bind-mounted as /work)
 	ScriptBody   string // shell script contents to pass to bash -c
 
+	// Cfg + ProjectDir feed `EnsureImagePresent` so a builder image
+	// missing from local podman storage AND unavailable on the
+	// registry (401, network outage, image not yet pushed) falls
+	// back to a local `ov image build <basename>` when the basename
+	// matches a project image.yml entry. The canonical "every command
+	// uses one ensure path" contract — see ov/ensure_image.go.
+	Cfg        *Config
+	ProjectDir string
+
 	// Bind-mounts. Keys are container paths; values are host paths.
 	// Set by the caller based on the builder kind — pixi/npm/cargo use
 	// the same HOME-subdir layout, aur uses a tmpdir for /tmp/aur-pkgs.
@@ -93,6 +102,18 @@ func BuilderRun(ctx context.Context, opts BuilderRunOpts) ([]byte, error) {
 		return nil, nil
 	}
 
+	// Ensure the builder image is present in local podman storage
+	// before we hand it to `podman run`. Going through the canonical
+	// ensure path means a 401 / unreachable-registry / not-yet-pushed
+	// failure falls back to a local `ov image build` when the image
+	// is project-buildable, instead of `podman run`'s implicit
+	// auto-pull blowing up with a stale auth error.
+	if opts.BuilderImage != "" {
+		if err := EnsureImagePresent(ctx, opts.BuilderImage, opts.Cfg, opts.ProjectDir); err != nil {
+			return nil, fmt.Errorf("BuilderRun: ensure %s: %w", opts.BuilderImage, err)
+		}
+	}
+
 	cmd := exec.CommandContext(ctx, engine, args...)
 	cmd.Stdin = strings.NewReader(opts.ScriptBody)
 	// Stream stdout+stderr live to the operator's terminal AND
@@ -118,6 +139,12 @@ func buildBuilderRunArgs(opts BuilderRunOpts) []string {
 	gid := os.Getgid()
 
 	args := []string{"run", "--rm"}
+	// EnsureImagePresent handled the pull/build before this call, so
+	// disable podman's implicit auto-pull. Without this flag, podman
+	// would re-attempt the registry pull on its own and the same 401 /
+	// auth / network failure that EnsureImagePresent already worked
+	// around would resurface here.
+	args = append(args, "--pull=never")
 	if opts.RunAsRoot {
 		args = append(args, "--user", "0:0")
 	} else {

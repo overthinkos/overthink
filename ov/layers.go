@@ -514,6 +514,9 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 			if dp.AUR.Options != nil {
 				mergeRaw(aurPS, "options", dp.AUR.Options)
 			}
+			if dp.AUR.Replaces != nil {
+				mergeRaw(aurPS, "replaces", dp.AUR.Replaces)
+			}
 		}
 	}
 

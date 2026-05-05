@@ -44,29 +44,15 @@ type LocalSpec struct {
 	Eval       []Check `yaml:"eval,omitempty"`
 	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
-	// Images is the list of container images this template needs
-	// available in local podman storage before tests can run. Each
-	// entry is an identifier resolvable via the same three input
-	// forms `ov image pull` accepts:
-	//
-	//   - Short name (e.g. "eval-target") — resolved via cfg.Images
-	//     to a registry ref at deploy time.
-	//   - Fully-qualified registry ref (e.g.
-	//     "ghcr.io/overthinkos/eval-target:2026.124.1253") — passed
-	//     through unchanged.
-	//   - Remote project ref (e.g.
-	//     "@github.com/overthinkos/overthink/eval-target:latest") —
-	//     resolves the repo, reads its image.yml, then pulls the
-	//     declared registry ref.
-	//
-	// At deploy time, LocalDeployTarget runs an ensure-images
-	// pre-pass: for each entry, short-circuit when LocalImageExists,
-	// else try `ov image pull <ref>`, else fall back to
-	// `bin/ov image build <name>` if the image is buildable from this
-	// project. See compileImagesSteps in install_build.go for the IR
-	// emission and execEnsureImage in deploy_target_local.go for the
-	// runtime path. 2026-05 cutover.
-	Images []string `yaml:"images,omitempty"`
+	// Note: there is NO image-fetch surface on a kind:local template.
+	// Deploys apply layers (host packages + configs) only; container
+	// images required for `ov eval run` / `ov test` are ensured by the
+	// eval preflight (see ov/eval_image_preflight.go), sourced from the
+	// score's `target_image:` + scenario `pod:` declarations. The
+	// previous template-level `images:` field was removed in the
+	// 2026-05 deploy-fetch-narrowing cutover; legacy YAML carrying it
+	// hard-errors at validate time with a pointer to
+	// `ov migrate local-images`.
 }
 
 // findLocalSpec looks up a LocalSpec by name from the unified loader.

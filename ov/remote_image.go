@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -77,19 +76,6 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	}, nil
 }
 
-// PullImage attempts to pull the image from the registry.
-func (ctx *RemoteImageContext) PullImage(engine string) error {
-	binary := EngineBinary(engine)
-	fmt.Fprintf(os.Stderr, "Pulling %s...\n", ctx.ImageRef)
-	cmd := exec.Command(binary, "pull", ctx.ImageRef)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pulling %s: %w", ctx.ImageRef, err)
-	}
-	return nil
-}
-
 // BuildImage builds the image locally from the cached source.
 func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error {
 	gen, err := NewGenerator(ctx.CacheDir, "")
@@ -111,21 +97,6 @@ func (ctx *RemoteImageContext) BuildImage(rt *ResolvedRuntime, tag string) error
 	defer os.Chdir(origDir)
 
 	return buildCmd.Run()
-}
-
-// PullOrBuild tries to pull the image from the registry first.
-// If pull fails or forceBuild is true, builds locally from cached source.
-func (ctx *RemoteImageContext) PullOrBuild(rt *ResolvedRuntime, tag string, forceBuild bool) error {
-	if !forceBuild {
-		if ctx.Resolved.Registry != "" {
-			if err := ctx.PullImage(rt.RunEngine); err == nil {
-				return nil
-			}
-			fmt.Fprintf(os.Stderr, "Pull failed, building locally...\n")
-		}
-	}
-
-	return ctx.BuildImage(rt, tag)
 }
 
 // ContainerName returns the container name for a remote image.

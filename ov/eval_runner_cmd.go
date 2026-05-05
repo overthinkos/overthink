@@ -233,6 +233,15 @@ func (c *EvalRunCmd) Run() error {
 
 	switch tk {
 	case TargetKindHost:
+		// Test-bed image preflight. The deploy that prepared the host
+		// installs layers (host packages + configs) only; container
+		// images that scenarios spawn need to be pulled or built
+		// before the score's runner walks them.
+		if !c.DryRun {
+			if err := ensureScoreImages(context.Background(), score, uf, cwd); err != nil {
+				return err
+			}
+		}
 		return runLocalInProcess(args, c.Score, runID, score, uf, cwd)
 	case TargetKindPod:
 		return dispatchToPod(tn, c.Score, args)

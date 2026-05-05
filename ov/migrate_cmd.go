@@ -24,6 +24,7 @@ type MigrateCmdGroup struct {
 	Calamares   MigrateCalamaresCmd   `cmd:"calamares" help:"Align layer.yml authoring with Calamares vocabulary: rename depends:→requires:, collapse rpm:/deb:/pac:/aur: + per-distro tag sections (debian:13:, ubuntu:24.04:, debian,ubuntu:) into top-level packages: + per-distro distros: map; AUR under distros.archlinux.aur; delete dead directory:/info: keys; idempotent"`
 	ShellSchema MigrateShellSchemaCmd `cmd:"shell-schema" help:"Convert legacy cmd: shell-rc heredoc tasks (the # overthink:begin direnv-hook / ssh-auth-sock fence patterns) into the structured shell: schema; idempotent"`
 	OvCachyos   MigrateOvCachyosCmd   `cmd:"ov-cachyos" help:"Rename the operator-specific CachyOS deployment to its 2026-05 canonical name 'ov-cachyos'. Collapses qc → cachyos-dx → ov-cachyos into a single hop, handles BOTH legacy keys, also moves the matching kind:local template name. Walks overthink.yml + ~/.config/ov/deploy.yml. Idempotent."`
+	LocalImages MigrateLocalImagesCmd `cmd:"local-images" help:"Migrate kind:local 'images:' field to comment-form per the 2026-05 deploy-fetch-narrowing cutover; idempotent. After migration, run 'ov image validate' to verify. The deploy now fetches NOTHING speculative — test-bed image preflight moved to 'ov eval run'."`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

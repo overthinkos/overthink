@@ -208,7 +208,8 @@ func TestBuildBuilderRunArgs(t *testing.T) {
 	args := buildBuilderRunArgs(opts)
 	want := []string{
 		"run", "--rm",
-		"--user", // we don't check the exact uid because it varies
+		"--pull=never", // EnsureImagePresent has already handled the pull/build; suppress podman's auto-pull.
+		"--user",       // we don't check the exact uid because it varies
 	}
 	if len(args) < len(want) {
 		t.Fatalf("args too short: %v", args)

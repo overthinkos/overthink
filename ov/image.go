@@ -1,10 +1,10 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -48,66 +48,30 @@ type ImagePullCmd struct {
 }
 
 func (c *ImagePullCmd) Run() error {
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	// Remote ref: @github.com/org/repo/image[:version]
-	ref := StripURLScheme(c.Image)
-	if IsRemoteImageRef(ref) {
-		ctx, err := ResolveRemoteImage(ref, c.Tag)
-		if err != nil {
-			return err
+	// `ov image pull` is the operator-facing alias for the canonical
+	// EnsureImagePresent path: pull from registry, fall back to a
+	// local build when the identifier maps to a project image.yml
+	// entry. Same contract as BuilderRun, the eval preflight, and
+	// EnsureImage in transfer.go (R3, no per-command divergence).
+	dir, _ := os.Getwd()
+	cfg, _ := LoadConfig(dir)
+	if c.Tag != "" {
+		// Tag override: only meaningful for short-name input. Resolve
+		// the canonical short-name ref FIRST so the build-fallback
+		// path picks up the requested tag.
+		if !looksLikeFullRef(c.Image) && !IsRemoteImageRef(StripURLScheme(c.Image)) {
+			if cfg == nil {
+				return fmt.Errorf("short name %q with --tag requires a project directory with image.yml", c.Image)
+			}
+			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir)
+			if err != nil {
+				return err
+			}
+			ref := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
+			return EnsureImagePresent(context.Background(), ref, cfg, dir)
 		}
-		if err := ctx.PullImage(rt.RunEngine); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "Pulled %s\n", ctx.ImageRef)
-		return nil
 	}
-
-	// Fully-qualified ref: contains a "/" (registry segment) or explicit ":tag"
-	// beyond bare "name:tag".
-	if looksLikeFullRef(c.Image) {
-		return c.pullRef(rt.RunEngine, c.Image)
-	}
-
-	// Short name: resolve registry via image.yml.
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	cfg, cfgErr := LoadConfig(dir)
-	if cfgErr != nil {
-		return fmt.Errorf("short name %q requires a project directory with image.yml; pass a fully-qualified ref (e.g. 'ghcr.io/org/%s:<tag>') to pull from anywhere", c.Image, c.Image)
-	}
-	resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir)
-	if err != nil {
-		return err
-	}
-	imageRef := resolveShellImageRef(resolved.Registry, resolved.Name, c.Tag)
-	return c.pullRef(rt.RunEngine, imageRef)
-}
-
-// pullRef pulls a fully-qualified image reference via the configured engine.
-func (c *ImagePullCmd) pullRef(engine, imageRef string) error {
-	binary := EngineBinary(engine)
-	args := []string{"pull"}
-	if c.Platform != "" {
-		args = append(args, "--platform", c.Platform)
-	}
-	args = append(args, imageRef)
-
-	fmt.Fprintf(os.Stderr, "Pulling %s...\n", imageRef)
-	cmd := exec.Command(binary, args...)
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("pulling %s: %w", imageRef, err)
-	}
-	fmt.Fprintf(os.Stderr, "Pulled %s\n", imageRef)
-	return nil
+	return EnsureImagePresent(context.Background(), c.Image, cfg, dir)
 }
 
 // looksLikeFullRef returns true if the image ref contains a registry segment

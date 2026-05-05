@@ -46,21 +46,15 @@ local:
       # entries" for the unification mechanism.
       - ov-full
 
-    # Container images that must be present in podman storage before
-    # tests can run. The deploy logic ensures each is present (try
-    # `ov image pull <ref>` first, fall back to `ov image build <name>`
-    # if pull fails AND the image is buildable from this project).
-    # 2026-05 cutover (`kind: local` `images:` field).
-    #
-    # eval-target — the eval-pod base for `ov eval run`.
-    # openclaw-sway-browser — sway-pod test bed.
-    # fedora-coder — kitchen-sink dev image used as a pod-target by
-    #   several eval scenarios; also the default operator-side ov host
-    #   image for nested deploys.
-    images:
-      - eval-target
-      - openclaw-sway-browser
-      - fedora-coder
+    # 2026-05 deploy-fetch-narrowing cutover: 'images:' field removed.
+    # The deploy now fetches NOTHING speculative — host packages and
+    # configs only. Test-bed container images are ensured by
+    # `ov eval run` preflight, sourced from each score's
+    # `target_image:` + scenario `pod:` declarations. The historical
+    # list (eval-target, openclaw-sway-browser, fedora-coder) is
+    # discoverable through any score that already declares them as
+    # `pod:` or `target_image:` — no operator action is needed to
+    # keep `ov eval run --on-host ov-cachyos` working.
 
     install_opts:
       with_services: true

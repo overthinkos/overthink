@@ -80,15 +80,15 @@ type LocalDeployTarget struct {
 
 	// LocalSpec is the resolved kind:local template. Populated by the
 	// deploy dispatcher when a deployment carries `local: <name>`.
-	// Drives the images: pre-pass (compileImagesSteps) before any
-	// layer plan walks. Nil when the deployment uses inline
-	// add_layers: instead of a template — in that case there's no
-	// images: list to honour.
+	// Used for layer-stack composition only — there is NO image-fetch
+	// surface on a kind:local template (see local_spec.go for the
+	// post-2026-05 contract). Nil when the deployment uses inline
+	// add_layers: instead of a template.
 	LocalSpec *LocalSpec
 
-	// Cfg + ProjectDir give resolveImageRefForEnsure / runImagePull /
-	// runImageBuild access to image.yml resolution. Populated from
-	// the deploy dispatcher's resolved cfg.
+	// Cfg + ProjectDir are kept on the target for downstream callers
+	// that resolve layer.yml / image.yml during the plan walk. Not
+	// used for any image-fetch logic.
 	Cfg        *Config
 	ProjectDir string
 }
@@ -163,17 +163,6 @@ func (t *LocalDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 	if !opts.AssumeYes && !opts.DryRun {
 		if err := sudoRefresh(); err != nil {
 			return fmt.Errorf("sudo preflight: %w", err)
-		}
-	}
-
-	// Pre-pass: kind:local templates can declare `images:` (test-bed
-	// container images that must be present in local podman storage
-	// before layer steps run). Resolve + ensure each entry. Failures
-	// at this stage abort the whole deploy — the operator can't run
-	// `ov eval run` without the eval-pod image. 2026-05 cutover.
-	if t.LocalSpec != nil && len(t.LocalSpec.Images) > 0 {
-		if err := t.runImagesPrePass(plans, opts); err != nil {
-			return fmt.Errorf("ensure-images: %w", err)
 		}
 	}
 
@@ -266,135 +255,8 @@ func (t *LocalDeployTarget) execStep(step InstallStep, plan *InstallPlan, opts E
 		return t.execRepoChange(s, plan, opts, rec, start)
 	case *ShellSnippetStep:
 		return t.execShellSnippet(s, plan, opts, rec, start)
-	case *EnsureImageStep:
-		return t.execEnsureImage(s, plan, opts, rec, start)
 	}
 	return fmt.Errorf("LocalDeployTarget: unknown step kind %T", step)
-}
-
-// runImagesPrePass compiles + executes EnsureImageStep entries for the
-// LocalSpec's images: list before any layer plan walks. Records each
-// step under a synthetic layer ledger key so `ov deploy del` can
-// refcount image presence (with --reclaim-images) and reverse cleanly.
-//
-// templateName is best-effort: derived from t.LocalSpec's pointer
-// identity since the resolved spec doesn't carry a back-reference.
-// deployID is taken from the first plan's DeployID — every plan in
-// one Emit call shares a deploy ID by construction.
-func (t *LocalDeployTarget) runImagesPrePass(plans []*InstallPlan, opts EmitOpts) error {
-	deployID := ""
-	for _, p := range plans {
-		if p != nil && p.DeployID != "" {
-			deployID = p.DeployID
-			break
-		}
-	}
-	templateName := localTemplateNameForSpec(t.LocalSpec, t.Cfg)
-	steps := compileImagesSteps(t.LocalSpec, templateName, deployID, "podman")
-	if len(steps) == 0 {
-		return nil
-	}
-	rec := &LayerRecord{
-		Layer:      "_local-images_",
-		Version:    "",
-		DeployedAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	for _, step := range steps {
-		s, ok := step.(*EnsureImageStep)
-		if !ok {
-			continue
-		}
-		if err := t.execEnsureImage(s, nil, opts, rec, time.Now().UTC()); err != nil {
-			_ = t.recordImagesPrePassRec(rec, deployID, opts)
-			return err
-		}
-	}
-	return t.recordImagesPrePassRec(rec, deployID, opts)
-}
-
-// recordImagesPrePassRec persists the synthetic _local-images_ layer
-// record so `ov deploy del` can replay the ReverseOps in LIFO order.
-// Refcounts via the same AddLayerDeploymentVia helper that real
-// layer records use — when no remaining deploy references the image,
-// the reverse op fires (gated by --reclaim-images per ReverseOp
-// handler).
-func (t *LocalDeployTarget) recordImagesPrePassRec(rec *LayerRecord, deployID string, opts EmitOpts) error {
-	if opts.DryRun || deployID == "" || rec == nil {
-		return nil
-	}
-	return AddLayerDeploymentVia(t.Executor, t.LedgerPaths, rec.Layer, deployID, func(existing *LayerRecord) {
-		existing.Steps = append(existing.Steps, rec.Steps...)
-		existing.ReverseOps = append(existing.ReverseOps, rec.ReverseOps...)
-	})
-}
-
-// execEnsureImage handles one EnsureImageStep: short-circuit if the
-// image is already present, try pull, fall back to build (only when
-// the executor is local). Records the outcome in rec for the ledger.
-func (t *LocalDeployTarget) execEnsureImage(s *EnsureImageStep, _ *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
-	ctx := opts.ContextOrDefault()
-	engine := s.Engine
-	if engine == "" {
-		engine = "podman"
-	}
-	// Resolve to a fully-qualified registry ref for the existence
-	// short-circuit. Errors here aren't fatal — we'll let runImagePull
-	// retry resolution + actually attempt the pull.
-	ref, _ := resolveImageRefForEnsure(s.Image, t.Cfg, t.ProjectDir)
-	if ref != "" && LocalImageExists(engine, ref) {
-		if !opts.DryRun {
-			fmt.Fprintf(t.stderr(), "ensure-image: %s present\n", ref)
-		}
-		t.noteStep(rec, StepKindEnsureImage, s.Scope(), s.Venue(),
-			fmt.Sprintf("image=%s present", ref), start)
-		rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-		return nil
-	}
-	if opts.DryRun {
-		fmt.Fprintf(t.stderr(), "[dry-run] ensure-image: %s\n", s.Image)
-		t.noteStep(rec, StepKindEnsureImage, s.Scope(), s.Venue(),
-			fmt.Sprintf("image=%s [dry-run]", s.Image), start)
-		return nil
-	}
-	// Pull via the executor (for SSH-routed deploys, pull lands on the
-	// remote machine).
-	if s.PullFirst {
-		fmt.Fprintf(t.stderr(), "ensure-image: pulling %s ...\n", s.Image)
-		if err := runImagePull(ctx, t.exec(), s.Image, t.Cfg, t.ProjectDir, opts); err == nil {
-			t.noteStep(rec, StepKindEnsureImage, s.Scope(), s.Venue(),
-				fmt.Sprintf("image=%s pulled", s.Image), start)
-			rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-			return nil
-		} else {
-			fmt.Fprintf(t.stderr(), "ensure-image: pull %s failed: %v (will try local build)\n", s.Image, err)
-		}
-	}
-	if s.BuildOnFail {
-		fmt.Fprintf(t.stderr(), "ensure-image: building %s locally ...\n", s.Image)
-		if err := runImageBuild(ctx, t.exec(), s.Image, opts); err != nil {
-			return fmt.Errorf("ensure-image %q: pull failed and local build failed: %w", s.Image, err)
-		}
-		t.noteStep(rec, StepKindEnsureImage, s.Scope(), s.Venue(),
-			fmt.Sprintf("image=%s built locally", s.Image), start)
-		rec.ReverseOps = append(rec.ReverseOps, s.Reverse()...)
-		return nil
-	}
-	return fmt.Errorf("ensure-image %q: not available locally, pull failed, and BuildOnFail disabled", s.Image)
-}
-
-// localTemplateNameForSpec finds the kind:local template name that
-// matches the given spec by pointer-identity walking the unified loader's
-// Local map. Returns "unknown" when the cfg/loader can't be reached or
-// the spec isn't tracked there.
-func localTemplateNameForSpec(spec *LocalSpec, cfg *Config) string {
-	if spec == nil {
-		return "unknown"
-	}
-	// Cfg doesn't directly carry the kind:local map; we look through
-	// the unified loader at the project directory. For the simpler
-	// case where we can't reach it, return "unknown" — this only
-	// affects the ledger origin tag string, not correctness.
-	return "kind:local"
 }
 
 // execShellSnippet renders one (layer, shell) snippet onto the target
@@ -657,6 +519,8 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 		Env:          envVars,
 		HostHome:     t.HostHome,
 		DryRun:       opts.DryRun,
+		Cfg:          t.Cfg,
+		ProjectDir:   t.ProjectDir,
 		// Rootless-podman bind-mount semantics: with `--user N:N` (N != 0)
 		// the in-container user is mapped to a subordinate uid from
 		// /etc/subuid that does NOT match the operator's host uid that
@@ -695,6 +559,16 @@ func (t *LocalDeployTarget) execBuilder(s *BuilderStep, plan *InstallPlan, opts 
 			pkgList := extractStringSlice(s.RawStageContext, "packages")
 			return fmt.Errorf("aur builder for layer %q produced zero .pkg.tar.zst artifacts in %s; expected packages: %v. Check the BuilderRun output above for the actual yay/makepkg failure",
 				s.LayerName, aurStage, pkgList)
+		}
+		// Pre-removal of `replaces:` entries — distro-repo packages
+		// that conflict with the AUR build artifact (file ownership
+		// collisions). `pacman -U` would otherwise abort with
+		// "unresolvable package conflicts". Idempotent — entries that
+		// aren't installed are skipped silently.
+		if replaces := extractStringSlice(s.RawStageContext, "replaces"); len(replaces) > 0 {
+			if err := removeInstalledPacmanPackages(replaces, opts); err != nil {
+				return fmt.Errorf("aur replaces (pacman -Rs): %w", err)
+			}
 		}
 		args := append([]string{"pacman", "-U", "--noconfirm"}, matches...)
 		if err := runSudoArgs(args, opts); err != nil {
@@ -1067,6 +941,32 @@ func runSudoShell(script string, opts EmitOpts) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// removeInstalledPacmanPackages runs `pacman -Rs --noconfirm <pkgs>`
+// for the subset of `pkgs` that are actually installed. Used by the
+// AUR `replaces:` mechanism to clear distro-repo packages that
+// conflict (on file ownership) with an AUR build artifact, BEFORE
+// the `pacman -U` install. Idempotent — packages not installed are
+// silently skipped, so re-runs of the deploy don't error.
+func removeInstalledPacmanPackages(pkgs []string, opts EmitOpts) error {
+	var installed []string
+	for _, pkg := range pkgs {
+		if pkg == "" {
+			continue
+		}
+		// `pacman -Qq <pkg>` exits 0 when installed, non-zero otherwise.
+		// Stdout/stderr discarded; we only care about the exit status.
+		probe := exec.Command("pacman", "-Qq", pkg)
+		if probe.Run() == nil {
+			installed = append(installed, pkg)
+		}
+	}
+	if len(installed) == 0 {
+		return nil
+	}
+	args := append([]string{"pacman", "-Rs", "--noconfirm"}, installed...)
+	return runSudoArgs(args, opts)
 }
 
 // runSudoArgs spawns sudo with explicit argv (no shell interpretation).

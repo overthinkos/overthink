@@ -33,7 +33,7 @@ func (c *DeployAddCmd) runK8s(plans []*InstallPlan, dir string, opts EmitOpts) e
 	// BEFORE any kustomize/kubectl invocation. Same one-line pattern
 	// as runVM and runContainer.
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+		if node, ok := dc.Deploy[c.Name]; ok && node.IsEphemeral() {
 			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
 			}
@@ -48,7 +48,7 @@ func (c *DeployAddCmd) runK8s(plans []*InstallPlan, dir string, opts EmitOpts) e
 	if dc == nil {
 		return fmt.Errorf("deploy %q: no deploy.yml; nothing to deploy", c.Name)
 	}
-	node, ok := dc.Deployment[c.Name]
+	node, ok := dc.Deploy[c.Name]
 	if !ok {
 		return fmt.Errorf("deploy %q: no deployment entry in deploy.yml", c.Name)
 	}
@@ -93,7 +93,7 @@ func (c *DeployAddCmd) runK8s(plans []*InstallPlan, dir string, opts EmitOpts) e
 	overlayPath, err := GenerateK8sKustomize(K8sGenerateOpts{
 		DeploymentName: c.Name,
 		ImageRef:       imageRef,
-		Deployment:     node,
+		Deploy:     node,
 		Capabilities:   caps,
 		Cluster:        cluster,
 		OutputDir:      outDir,
@@ -147,7 +147,7 @@ func (c *DeployDelCmd) runK8sDel(paths *LedgerPaths) error {
 
 	// Ephemeral lifecycle teardown.
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+		if node, ok := dc.Deploy[c.Name]; ok && node.IsEphemeral() {
 			if tdErr := TeardownEphemeralLifecycle(&node, c.Name); tdErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
 			}

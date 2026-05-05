@@ -82,7 +82,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 	return "ov/secret", dep.Name
 }
 
-// MigratePlaintextEnvSecrets scans dc.Deployment[deployKey(image, instance)].Env
+// MigratePlaintextEnvSecrets scans dc.Deploy[deployKey(image, instance)].Env
 // for any KEY=VAL entries whose KEY is declared as secret_accepts or
 // secret_requires on the given image metadata. For each match, it:
 //
@@ -102,7 +102,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 // a no-op. Running it on a host that never had plaintext credentials is a
 // no-op.
 func MigratePlaintextEnvSecrets(dc *DeployConfig, meta *ImageMetadata, image, instance string) (int, error) {
-	if dc == nil || dc.Deployment == nil {
+	if dc == nil || dc.Deploy == nil {
 		return 0, nil
 	}
 	declared := secretDeclaredOnImage(meta)
@@ -111,7 +111,7 @@ func MigratePlaintextEnvSecrets(dc *DeployConfig, meta *ImageMetadata, image, in
 	}
 
 	key := deployKey(image, instance)
-	entry, ok := dc.Deployment[key]
+	entry, ok := dc.Deploy[key]
 	if !ok || len(entry.Env) == 0 {
 		return 0, nil
 	}
@@ -178,7 +178,7 @@ func MigratePlaintextEnvSecrets(dc *DeployConfig, meta *ImageMetadata, image, in
 	}
 
 	entry.Env = staying
-	dc.Deployment[key] = entry
+	dc.Deploy[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
 		return migrated, fmt.Errorf("persisting cleaned deploy.yml after migration: %w (backup at %s)", err, backupPath)
 	}

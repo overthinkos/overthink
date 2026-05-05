@@ -265,6 +265,11 @@ discover:
 	}
 }
 
+// TestLoadUnified_DeploymentsSection — post-2026-05 kind-files cutover,
+// the legacy v3 plural `deployments:` is hard-rejected at load time with
+// a hint pointing at `ov migrate kind-files`. Pre-cutover this test
+// asserted the alias was accepted; the inverse assertion enforces R5
+// (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
@@ -274,16 +279,15 @@ deployments:
       ports: ["8080:80"]
       target: container
 `)
-	uf, _, err := LoadUnified(root)
-	if err != nil {
-		t.Fatalf("LoadUnified: %v", err)
+	_, _, err := LoadUnified(root)
+	if err == nil {
+		t.Fatal("expected hard-error for legacy v3 plural deployments:, got nil")
 	}
-	if uf.Deployments == nil || uf.Deployments.Images == nil {
-		t.Fatal("Deployments section missing")
+	if !strings.Contains(err.Error(), "ov migrate kind-files") {
+		t.Errorf("error must point at `ov migrate kind-files`, got: %v", err)
 	}
-	d := uf.Deployments.Images["openclaw"]
-	if len(d.Ports) != 1 || d.Ports[0] != "8080:80" {
-		t.Errorf("openclaw.Ports = %v, want [8080:80]", d.Ports)
+	if !strings.Contains(err.Error(), "deployments:") {
+		t.Errorf("error must mention the offending root-key, got: %v", err)
 	}
 }
 

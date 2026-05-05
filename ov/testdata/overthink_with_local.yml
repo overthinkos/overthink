@@ -20,7 +20,7 @@ local:
     install_opts: {}
     description: {feature: ov-cachyos (placeholder), tag: [testing]}
 
-deployment:
+deploy:
   # Default — direct local exec (host: omitted == "local").
   my-laptop:
     target: local

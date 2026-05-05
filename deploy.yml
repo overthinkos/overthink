@@ -34,6 +34,19 @@
 #                                  native kernel + cgroup tree and the
 #                                  whole problem class disappears.
 #
+# Per-kind R10 smoke beds (fast fedora-minimal:43 base, one bed per kind):
+#   eval-image-pod    (target: pod)   — exercises `image build` + `eval image`
+#                                       + pod deploy (single-layer composition)
+#   eval-layer-pod    (target: pod)   — exercises layer composition order
+#                                       (eval-image-layer → eval-layer-layer)
+#   eval-pod-pod      (target: pod)   — exercises pod runtime + ports + the
+#                                       supervisord render path (nc on :18794)
+#   eval-deploy-pod   (target: pod)   — exercises every DeployTarget rendering
+#                                       path (Containerfile + supervisord +
+#                                       service eval probe)
+#   eval-local-deploy (target: local) — exercises kind:local layer application
+#                                       via ShellExecutor on the operator host
+#
 # Zero-operator-side-effect audit:
 #   arch-vm            libvirt /var/lib/libvirt/images/  (standard qcow2)
 #   arch-vm.arch-host  INSIDE arch-vm guest — zero operator FS writes
@@ -53,7 +66,7 @@
 # =============================================================================
 
 version: 4
-deployment:
+deploy:
     arch-pacstrap-vm:
         target: vm
         vm: arch-pacstrap
@@ -379,6 +392,54 @@ deployment:
         description:
             feature: Apply ov-cachyos to this workstation
             tag: [testing]
+    # =================================================================
+    # Per-kind R10 smoke beds — disposable, fast (fedora-minimal:43).
+    # One bed per kind so a single `ov eval live <bed>` end-to-end runs
+    # smoke-tests every kind path without rebuilding heavy images.
+    # =================================================================
+    eval-image-pod:
+        target: pod
+        image: eval-image
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising kind:image
+            tag: [working]
+    eval-layer-pod:
+        target: pod
+        image: eval-layer
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising kind:layer composition
+            tag: [working]
+    eval-pod-pod:
+        target: pod
+        image: eval-pod
+        disposable: true
+        lifecycle: dev
+        ports:
+            - 18794:18794
+        description:
+            feature: Fast pod bed exercising kind:pod runtime
+            tag: [working]
+    eval-deploy-pod:
+        target: pod
+        image: eval-deploy
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising DeployTarget rendering
+            tag: [working]
+    eval-local-deploy:
+        target: local
+        local: eval-local
+        host: local
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast local bed exercising kind:local layer application
+            tag: [working]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.
 # Each entity is a build-time spec; deploy-time properties (disposable,
@@ -434,7 +495,14 @@ vm:
                   cd /home/arch/ov-src/pkg/arch && pacman -U --noconfirm ov-git-*-x86_64.pkg.tar.zst
                   '
             ov_install:
-                strategy: skip
+                # `auto` scps the host's ov binary into the guest after
+                # cloud-init reaches steady-state. Replaces the legacy
+                # cloud-init build-from-source path which races
+                # cloud-init's runcmd timeout when go + base-devel
+                # downloads slow down (mirror geography). The runcmd
+                # above stays as a defence-in-depth: if scp fails the
+                # build path is the fallback.
+                strategy: auto
         libvirt:
             devices:
                 channels:

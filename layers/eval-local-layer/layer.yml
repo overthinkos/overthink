@@ -1,0 +1,21 @@
+layer:
+  name: eval-local-layer
+  description:
+    feature: Drop /etc/eval-local-marker on the host filesystem
+    narrative: |
+      Used by the eval-local kind:local template to exercise the
+      ShellExecutor + HostDeployTarget path. Marker file is written by
+      a write: task; deploy-scope eval probe runs on the host (not in a
+      container) to verify the file is present after `ov deploy add`.
+    tag: [working]
+  tasks:
+    - write: /etc/eval-local-marker
+      user: root
+      mode: "0644"
+      content: |
+        eval-local v1
+  eval:
+    - id: eval-local-marker-exists
+      scope: deploy
+      command: "test -f /etc/eval-local-marker"
+      in_container: false

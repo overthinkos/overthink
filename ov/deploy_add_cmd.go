@@ -852,7 +852,7 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 		artifactEnv[k] = v
 	}
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, exists := dc.Deployment[c.Name]; exists {
+		if entry, exists := dc.Deploy[c.Name]; exists {
 			for _, line := range entry.Env {
 				if idx := strings.Index(line, "="); idx > 0 {
 					artifactEnv[line[:idx]] = line[idx+1:]
@@ -892,7 +892,7 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// snapshot refcount (containers don't have backing chains), so
 	// the helper handles only timer + parent linkage in this path.
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+		if node, ok := dc.Deploy[c.Name]; ok && node.IsEphemeral() {
 			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
 			}

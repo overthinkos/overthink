@@ -146,12 +146,12 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 		if imgs := findMappingValue(deps, "images"); imgs != nil && imgs.Kind == yaml.MappingNode {
 			// Replace the root's `deployments:` entry with a flat
 			// `deployment:` entry whose value is the inner images map.
-			setRootKey(root, "deployments", "deployment", imgs)
+			setRootKey(root, "deployments", "deploy", imgs)
 			result.Transforms = append(result.Transforms, "deployments.images.* → deployment.*")
 			changed = true
 		} else {
 			// deployments: is a flat map — rename key to deployment:
-			if renameRootKey(root, "deployments", "deployment") {
+			if renameRootKey(root, "deployments", "deploy") {
 				result.Transforms = append(result.Transforms, "deployments: → deployment:")
 				changed = true
 			}
@@ -182,7 +182,7 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 	}
 
 	// 4. For each kind:deployment entry (flat map), rename fields.
-	if deps := findMappingValue(root, "deployment"); deps != nil && deps.Kind == yaml.MappingNode {
+	if deps := findMappingValue(root, "deploy"); deps != nil && deps.Kind == yaml.MappingNode {
 		for i := 1; i < len(deps.Content); i += 2 {
 			entry := deps.Content[i]
 			if entry.Kind != yaml.MappingNode {

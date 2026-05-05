@@ -170,7 +170,7 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 	}
 	var existingState *VmDeployState
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if e, ok := dc.Deployment["vm:"+vmName]; ok {
+		if e, ok := dc.Deploy["vm:"+vmName]; ok {
 			existingState = e.VmState
 		}
 	}

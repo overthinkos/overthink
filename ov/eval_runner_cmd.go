@@ -189,7 +189,7 @@ func (c *EvalRunCmd) Run() error {
 	// unchanged.
 	if tk == TargetKindPod {
 		if cfg, _ := LoadDeployConfig(); cfg != nil {
-			if entry, ok := cfg.Deployment[tn]; ok && entry.IsDisposable() {
+			if entry, ok := cfg.Deploy[tn]; ok && entry.IsDisposable() {
 				unit := "ov-" + tn + ".service"
 				container := "ov-" + tn
 				fmt.Fprintf(os.Stderr,
@@ -512,7 +512,7 @@ func (c *EvalSelfEvalCmd) Run() error {
 	// re-runs against live systems, producing fresh artifacts at the
 	// recipe-declared `artifact:` paths.
 	ctx := context.Background()
-	live, err := RunEvalLive(ctx, resolvedScore.Deployment, score, scenarios, RunScoringOpts{})
+	live, err := RunEvalLive(ctx, resolvedScore.Deploy, score, scenarios, RunScoringOpts{})
 	if err != nil {
 		return fmt.Errorf("ov eval self-evaluate: live scoring: %w", err)
 	}

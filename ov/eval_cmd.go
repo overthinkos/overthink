@@ -38,6 +38,7 @@ type EvalCmd struct {
 	Live   EvalLiveCmd   `cmd:"" help:"Full-stack eval against a running deployment"`
 	Run    EvalRunCmd    `cmd:"" help:"Drive an AI through iteration cycles for the named score"`
 	Recipe EvalRecipeCmd `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
+	Kind   EvalKindCmd   `cmd:"" name:"kind" help:"Run the canonical R10 sequence (build → deploy → eval live → fresh-rebuild) on a per-kind eval bed"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
@@ -125,17 +126,17 @@ func (c *EvalLiveCmd) Run() error {
 	var deployOverlay *DeploymentNode
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		if pc := uf.ProjectDeployConfig(); pc != nil {
-			if entry, ok := pc.Deployment[c.Image]; ok {
+			if entry, ok := pc.Deploy[c.Image]; ok {
 				projectTests = entry.Eval
 			}
 		}
 	}
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if entry, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if entry, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			localTests = entry.Eval
 			deployOverlay = &entry
-		} else if entry, ok := dc.Deployment[c.Image]; ok {
+		} else if entry, ok := dc.Deploy[c.Image]; ok {
 			localTests = entry.Eval
 			deployOverlay = &entry
 		}
@@ -188,9 +189,9 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 		}
 	}
 	// Schema v4: kind:deployment name with target:vm (possibly dotted).
-	if uf.Deployments != nil && uf.Deployments.Images != nil {
+	if uf.Deploys != nil && uf.Deploys.Images != nil {
 		// Simple deployment-key lookup.
-		if entry, present := uf.Deployments.Images[c.Image]; present {
+		if entry, present := uf.Deploys.Images[c.Image]; present {
 			if entry.Target == "vm" {
 				return true
 			}
@@ -201,7 +202,7 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 		// parent's SSH substrate).
 		if idx := strings.Index(c.Image, "."); idx > 0 {
 			root := c.Image[:idx]
-			if entry, present := uf.Deployments.Images[root]; present && entry.Target == "vm" {
+			if entry, present := uf.Deploys.Images[root]; present && entry.Target == "vm" {
 				return true
 			}
 		}
@@ -260,16 +261,16 @@ func (c *EvalLiveCmd) runVm() error {
 	//       the parent's SSH substrate.
 	vmName := c.Image
 	var nestedLeaf *DeploymentNode
-	if uf.Deployments != nil && uf.Deployments.Images != nil {
-		if entry, ok := uf.Deployments.Images[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
+	if uf.Deploys != nil && uf.Deploys.Images != nil {
+		if entry, ok := uf.Deploys.Images[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
 			vmName = entry.Vm
 		} else if idx := strings.Index(c.Image, "."); idx > 0 {
 			root := c.Image[:idx]
-			if parent, present := uf.Deployments.Images[root]; present && parent.Target == "vm" {
+			if parent, present := uf.Deploys.Images[root]; present && parent.Target == "vm" {
 				if parent.Vm != "" {
 					vmName = parent.Vm
 				}
-				nestedLeaf = resolveNestedNode(uf.Deployments.Images, c.Image)
+				nestedLeaf = resolveNestedNode(uf.Deploys.Images, c.Image)
 			}
 		}
 	}
@@ -321,12 +322,12 @@ func (c *EvalLiveCmd) runVm() error {
 	if nestedLeaf != nil {
 		projectTests = nestedLeaf.Eval
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry := findVmEntry(pc.Deployment); entry != nil {
+		if entry := findVmEntry(pc.Deploy); entry != nil {
 			projectTests = entry.Eval
 		}
 	}
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry := findVmEntry(dc.Deployment); entry != nil {
+		if entry := findVmEntry(dc.Deploy); entry != nil {
 			localTests = entry.Eval
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {

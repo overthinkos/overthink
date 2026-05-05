@@ -1,0 +1,45 @@
+layer:
+  name: eval-pod-layer
+  description:
+    feature: Tiny supervisord-managed listener on :18794 for kind:pod smoke
+    narrative: |
+      Installs ncat + iproute and runs `nc -lk -p 18794` under the
+      configured init system. Mixed `service:` schema — the use_packaged
+      entry is a no-op marker for systemd targets (fedora-minimal ships
+      no nc unit), the exec entry drives supervisord on container targets.
+      Probes verify the marker file (build scope), the listening port,
+      and the in-container ss output (deploy scope).
+    tag: [working]
+  distros:
+    fedora:
+      packages:
+        - iproute
+        - ncat
+        - supervisor
+  tasks:
+    - write: /etc/eval-pod-marker
+      user: root
+      mode: "0644"
+      content: |
+        eval-pod v1
+  service:
+    - name: eval-pod-listener
+      exec: "/usr/bin/nc -lk 18794"
+      restart: always
+      priority: 20
+      autostart: true
+      enable: true
+      scope: system
+  eval:
+    - id: eval-pod-marker-exists
+      file: /etc/eval-pod-marker
+      exists: true
+    - id: eval-pod-port-listening
+      scope: deploy
+      port: 18794
+      listening: true
+    - id: eval-pod-ss-listening
+      scope: deploy
+      command: "ss -tlnp 2>/dev/null | grep ':18794'"
+      exit_status: 0
+      in_container: true

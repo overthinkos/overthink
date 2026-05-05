@@ -302,19 +302,19 @@ func (c *Collector) enabledQuadlets(seen map[string]bool) []ContainerSnapshot {
 // the canonical deployKey() shape first, then a few legacy fallbacks for
 // bed-rolled keys (joined container name minus ov- prefix).
 func (c *Collector) lookupDeploy(image, instance, joinedContainerName string) (DeploymentNode, bool) {
-	if c.deploy == nil || c.deploy.Deployment == nil {
+	if c.deploy == nil || c.deploy.Deploy == nil {
 		return DeploymentNode{}, false
 	}
 	if image != "" {
-		if dn, ok := c.deploy.Deployment[deployKey(image, instance)]; ok {
+		if dn, ok := c.deploy.Deploy[deployKey(image, instance)]; ok {
 			return dn, true
 		}
-		if dn, ok := c.deploy.Deployment[image]; ok && instance == "" {
+		if dn, ok := c.deploy.Deploy[image]; ok && instance == "" {
 			return dn, true
 		}
 	}
 	stripped := strings.TrimPrefix(joinedContainerName, "ov-")
-	if dn, ok := c.deploy.Deployment[stripped]; ok {
+	if dn, ok := c.deploy.Deploy[stripped]; ok {
 		return dn, true
 	}
 	return DeploymentNode{}, false

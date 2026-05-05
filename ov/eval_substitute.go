@@ -71,7 +71,7 @@ type SubstContext struct {
 	PhaseIntro    string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
 
 	// Deployment name the harness scores against (drives ${DEPLOYMENT})
-	Deployment string
+	Deploy string
 
 	// Timing
 	Deadline string // RFC3339 string, or "" when no deadline
@@ -183,7 +183,7 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 	case "PHASE_INTRO":
 		return ctx.PhaseIntro
 	case "DEPLOYMENT":
-		return ctx.Deployment
+		return ctx.Deploy
 	case "TAG":
 		return ctx.Tag
 	case "DEADLINE":

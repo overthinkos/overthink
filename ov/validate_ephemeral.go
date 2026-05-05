@@ -106,7 +106,7 @@ func ValidateEphemeralAcrossDeploy(dc *DeployConfig, errs *ValidationError) {
 	if dc == nil {
 		return
 	}
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		ValidateEphemeralOnNode(name, &node, errs)
 	}
 }

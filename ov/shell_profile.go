@@ -295,6 +295,47 @@ func replaceOrAppendManagedBlock(existing, body, marker string) string {
 	return prefix + begin + "\n" + body + "\n" + end + "\n"
 }
 
+// replaceOrPrependManagedBlock is the same as replaceOrAppendManagedBlock
+// but PREPENDS when the markers aren't present. Used for ssh_config(5),
+// where Include directives must land at the top of the file (outside any
+// Host block) — otherwise every Host stanza in the included file is
+// gated on matching whatever Host block was open at the Include point.
+// Replace-in-place semantics are preserved when the markers already exist.
+func replaceOrPrependManagedBlock(existing, body, marker string) string {
+	begin, end := markersForTag(marker)
+	if strings.Contains(existing, begin) {
+		// Same in-place replacement as replaceOrAppendManagedBlock.
+		scanner := bufio.NewScanner(strings.NewReader(existing))
+		var out strings.Builder
+		inBlock := false
+		for scanner.Scan() {
+			line := scanner.Text()
+			if strings.Contains(line, begin) {
+				inBlock = true
+				out.WriteString(begin + "\n")
+				out.WriteString(body + "\n")
+				continue
+			}
+			if inBlock && strings.Contains(line, end) {
+				inBlock = false
+				out.WriteString(end + "\n")
+				continue
+			}
+			if !inBlock {
+				out.WriteString(line + "\n")
+			}
+		}
+		return strings.TrimRight(out.String(), "\n") + "\n"
+	}
+	// Not found — PREPEND (with a blank-line separator before the
+	// rest of the file when the rest is non-empty).
+	suffix := existing
+	if suffix != "" && !strings.HasPrefix(suffix, "\n") {
+		suffix = "\n" + suffix
+	}
+	return begin + "\n" + body + "\n" + end + "\n" + suffix
+}
+
 // stripManagedBlock removes the begin/end fence pair (tagged with
 // `marker` — empty for the global block) and its body from `existing`.
 func stripManagedBlock(existing, marker string) string {

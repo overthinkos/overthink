@@ -71,7 +71,7 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) string {
 	dc, _ := LoadDeployConfig()
 	if dc != nil {
-		if entry, ok := dc.Deployment[deployKey(imageName, instance)]; ok && entry.Engine != "" {
+		if entry, ok := dc.Deploy[deployKey(imageName, instance)]; ok && entry.Engine != "" {
 			return entry.Engine
 		}
 	}

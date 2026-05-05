@@ -88,7 +88,7 @@ type HarnessScore struct {
 	// Deployment names the running deployment the harness scores
 	// against. Required: the AI must `ov deploy add <Deployment> <ref>`
 	// before exiting.
-	Deployment string `yaml:"deployment,omitempty"`
+	Deploy string `yaml:"deploy,omitempty"`
 
 	// Prompt template. Standard ${TOKEN} substitution applied per iter.
 	Prompt string `yaml:"prompt,omitempty"`

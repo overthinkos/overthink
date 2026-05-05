@@ -596,7 +596,7 @@ func runOneIteration(
 	}
 	deploymentName := ""
 	if opts.Score != nil {
-		deploymentName = opts.Score.Deployment
+		deploymentName = opts.Score.Deploy
 	}
 	scoreDelta := 0
 	if k > 1 {
@@ -655,7 +655,7 @@ func runOneIteration(
 		PhaseTotal:       opts.PhaseTotal,
 		PhaseRecipes:     phaseRecipesJoined,
 		PhaseIntro:       phaseIntro,
-		Deployment:       deploymentName,
+		Deploy:       deploymentName,
 		Tag:              opts.Tag,
 		Timeout:          opts.AI.Timeout,
 	}
@@ -720,7 +720,7 @@ func runOneIteration(
 		}
 		if checkInterval > 0 {
 			scoringScenarios := opts.ScoringScenarios
-			deployment := opts.Score.Deployment
+			deployment := opts.Score.Deploy
 			scoreName := opts.ScoreName
 			phase, phaseTotal, iterK := opts.Phase, opts.PhaseTotal, k
 			stderr := opts.Stderr
@@ -885,7 +885,7 @@ func runOneIteration(
 
 	if useRecipeScenarios {
 		testStart := time.Now()
-		live, scoreErr := RunEvalLive(ctx, opts.Score.Deployment, opts.ScoreName, opts.ScoringScenarios, RunScoringOpts{
+		live, scoreErr := RunEvalLive(ctx, opts.Score.Deploy, opts.ScoreName, opts.ScoringScenarios, RunScoringOpts{
 			ValidateAiArtifacts: opts.Score.ValidateAiArtifacts,
 			// Freshness floor uses benchmarkStart so artifacts
 			// produced in earlier phases survive scoring across

@@ -48,7 +48,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// any libvirt or qemu-img call. The handle is ephemeral-runtime
 	// metadata persisted into deploy.yml; teardown reads it from there.
 	if dc != nil {
-		if node, ok := dc.Deployment[c.Name]; ok && node.IsEphemeral() {
+		if node, ok := dc.Deploy[c.Name]; ok && node.IsEphemeral() {
 			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
 			}
@@ -56,7 +56,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	}
 	var state *VmDeployState
 	if dc != nil {
-		if entry, exists := dc.Deployment[c.Name]; exists && entry.VmState != nil {
+		if entry, exists := dc.Deploy[c.Name]; exists && entry.VmState != nil {
 			state = entry.VmState
 		}
 	}
@@ -80,9 +80,12 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Publish (or refresh) the managed ssh-config Host stanza for this
 	// VM and ensure the Include line is present in ~/.ssh/config. After
 	// these two calls, `ssh ov-<vmname>` works from any terminal and
-	// our SSHExecutor needs only the alias as Host.
+	// our SSHExecutor needs only the alias as Host. The alias keys off
+	// the unprefixed VM template name (vmName) — c.Name carries the
+	// legacy "vm:<name>" sentinel which would produce a malformed
+	// "ov-vm:<name>" alias (colons aren't valid SSH config Host names).
 	if err := WriteVmSshStanza(home, VmSshStanza{
-		Alias:          VmSshAlias(c.Name),
+		Alias:          VmSshAlias(vmName),
 		Hostname:       "127.0.0.1",
 		Port:           sshPort,
 		User:           sshUser,
@@ -105,7 +108,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// ~/.ssh/config Includes ~/.config/ov/ssh_config (managed by
 	// EnsureSshConfigInclude). For nested VMs, the same alias works
 	// inside the parent's venue.
-	alias := VmSshAlias(c.Name)
+	alias := VmSshAlias(vmName)
 	var exec DeployExecutor = &SSHExecutor{
 		Host:           alias,
 		ConnectTimeout: 10,
@@ -163,7 +166,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	if uf != nil {
 		if pdc := uf.ProjectDeployConfig(); pdc != nil {
 			for _, k := range envLookupKeys {
-				if entry, exists := pdc.Deployment[k]; exists {
+				if entry, exists := pdc.Deploy[k]; exists {
 					for _, line := range entry.Env {
 						if idx := strings.Index(line, "="); idx > 0 {
 							artifactEnv[line[:idx]] = line[idx+1:]
@@ -178,7 +181,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// wins, operator overlay is "later").
 	if dc != nil {
 		for _, k := range envLookupKeys {
-			if entry, exists := dc.Deployment[k]; exists {
+			if entry, exists := dc.Deploy[k]; exists {
 				for _, line := range entry.Env {
 					if idx := strings.Index(line, "="); idx > 0 {
 						artifactEnv[line[:idx]] = line[idx+1:]
@@ -315,13 +318,25 @@ func findVmDeployRecord(paths *LedgerPaths, vmName string) (*DeployRecord, error
 }
 
 // buildVmReverseRunner constructs a ReverseRunner pointed at the VM
-// via its managed ssh-config alias (ov-<deployName>). All SSH connection
-// details (User, Port, IdentityFile, host-key checking) live in the
-// managed Host stanza written by `ov vm create` / runVmAdd; ssh(1)
-// reads them from ~/.ssh/config so we need only the alias here.
+// via its managed ssh-config alias (ov-<vmName>). The deployName arg
+// may be the legacy "vm:<name>" form (rewritten by the dispatcher in
+// deploy_add_cmd.go) or already the unprefixed form. We strip the
+// "vm:" prefix so the alias matches what `ov vm create` wrote
+// ("ov-<vmName>") — without this, VmSshAlias("vm:arch") would
+// produce "ov-vm:arch" which is invalid SSH-config Host syntax.
+// All SSH connection details (User, Port, IdentityFile, host-key
+// checking) live in the managed Host stanza written by `ov vm
+// create` / runVmAdd; ssh(1) reads them from ~/.ssh/config so we
+// need only the alias here.
 func buildVmReverseRunner(deployName string) (*sshReverseRunner, error) {
+	vmName, err := vmNameFromDeployName(deployName)
+	if err != nil {
+		// Fallback: if the name doesn't carry the legacy "vm:" prefix,
+		// use it directly. Pre-cutover callers passed plain names.
+		vmName = deployName
+	}
 	exec := &SSHExecutor{
-		Host:           VmSshAlias(deployName),
+		Host:           VmSshAlias(vmName),
 		ConnectTimeout: 10,
 	}
 	return &sshReverseRunner{exec: exec}, nil
@@ -402,11 +417,11 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	if dc == nil {
 		dc = &DeployConfig{}
 	}
-	if dc.Deployment == nil {
-		dc.Deployment = map[string]DeploymentNode{}
+	if dc.Deploy == nil {
+		dc.Deploy = map[string]DeploymentNode{}
 	}
 
-	entry, exists := dc.Deployment[deployName]
+	entry, exists := dc.Deploy[deployName]
 	if !exists {
 		entry = DeploymentNode{}
 	}
@@ -414,7 +429,7 @@ func saveVmDeployState(deployName string, state *VmDeployState, spec *VmSpec) er
 	vmName, _ := vmNameFromDeployName(deployName)
 	entry.Vm = vmName
 	entry.VmState = state
-	dc.Deployment[deployName] = entry
+	dc.Deploy[deployName] = entry
 
 	return SaveDeployConfig(dc)
 }
@@ -425,10 +440,10 @@ func removeVmDeployEntry(deployName string) error {
 	if err != nil {
 		return err
 	}
-	if dc == nil || dc.Deployment == nil {
+	if dc == nil || dc.Deploy == nil {
 		return nil
 	}
-	delete(dc.Deployment, deployName)
+	delete(dc.Deploy, deployName)
 	return SaveDeployConfig(dc)
 }
 

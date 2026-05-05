@@ -221,7 +221,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
+				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
 					layers, err := ScanAllLayersWithConfig(dir, cfg)
 					if err == nil {
 						portProtos := make(map[int]string)
@@ -259,7 +259,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
-				if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 					for _, dv := range overlay.Volumes {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}

@@ -78,7 +78,7 @@ func (t *PodUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 
 	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deployment[t.NodeName]; ok && node.IsEphemeral() {
+		if node, ok := dc.Deploy[t.NodeName]; ok && node.IsEphemeral() {
 			if tdErr := TeardownEphemeralLifecycle(&node, t.NodeName); tdErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle teardown: %v\n", tdErr)
 			}

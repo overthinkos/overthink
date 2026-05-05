@@ -426,7 +426,7 @@ func TestRenderJSON_StructuredPorts(t *testing.T) {
 func TestCollector_LookupDeploy_KeyShapes(t *testing.T) {
 	c := &Collector{
 		deploy: &DeployConfig{
-			Deployment: map[string]DeploymentNode{
+			Deploy: map[string]DeploymentNode{
 				"selkies-desktop":      {Ports: []string{"3000:3000"}},
 				"selkies-desktop/work": {Ports: []string{"3001:3000"}, Tunnel: &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}},
 				"weird-joined-name":    {Ports: []string{"7777:7777"}},

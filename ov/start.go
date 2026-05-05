@@ -57,7 +57,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -79,7 +79,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
 			return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
 		}
 	}
@@ -157,7 +157,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	// Inject agent forwarding mounts and env (direct mode only)
 	var deployImage *DeploymentNode
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay
 		}
 	}

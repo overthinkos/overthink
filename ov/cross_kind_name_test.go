@@ -61,7 +61,7 @@ local:
   ov-cachyos:
     layers: [ov-cachyos]
 
-deployment:
+deploy:
   ov-cachyos:
     target: local
     local: ov-cachyos
@@ -91,10 +91,10 @@ deployment:
 	if _, present := uf.Local["ov-cachyos"]; !present {
 		t.Error("local.ov-cachyos missing")
 	}
-	if uf.Deployments == nil {
+	if uf.Deploys == nil {
 		t.Fatal("deployments section missing")
 	}
-	if _, present := uf.Deployments.Images["ov-cachyos"]; !present {
+	if _, present := uf.Deploys.Images["ov-cachyos"]; !present {
 		t.Error("deployment.ov-cachyos missing")
 	}
 }
@@ -114,7 +114,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 		{
 			name: "deployment.qc",
 			overthink: `version: 4
-deployment:
+deploy:
   qc:
     target: local
     host: local
@@ -125,7 +125,7 @@ deployment:
 		{
 			name: "deployment.cachyos-dx",
 			overthink: `version: 4
-deployment:
+deploy:
   cachyos-dx:
     target: local
     host: local
@@ -168,7 +168,7 @@ local:
 func TestMigrateOvCachyos_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	deployYml := `# Top-level comment
-deployment:
+deploy:
     # qc — this CachyOS workstation
     qc:
         target: local

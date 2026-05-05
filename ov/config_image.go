@@ -161,7 +161,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		deployVolumes = parseVolumeEnv(c.Image)
 	}
 	if len(deployVolumes) == 0 && dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -237,7 +237,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	// Check deploy.yml env_file
 	if quadletEnvFile == "" && dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 	}
@@ -330,7 +330,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve sidecars: embedded templates + deploy.yml + --sidecar flags
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deploySidecars = overlay.Sidecars
 		}
 	}
@@ -641,9 +641,9 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			// Update deploy.yml with seeded state
 			if seeded > 0 {
 				if dc == nil {
-					dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+					dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 				}
-				imgDeploy := dc.Deployment[deployKey(c.Image, c.Instance)]
+				imgDeploy := dc.Deploy[deployKey(c.Image, c.Instance)]
 				for i := range imgDeploy.Volumes {
 					for _, entry := range dataMeta.DataEntries {
 						if imgDeploy.Volumes[i].Name == entry.Volume {
@@ -652,7 +652,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 						}
 					}
 				}
-				dc.Deployment[deployKey(c.Image, c.Instance)] = imgDeploy
+				dc.Deploy[deployKey(c.Image, c.Instance)] = imgDeploy
 				if err := SaveDeployConfig(dc); err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: could not save data seeded state to deploy.yml: %v\n", err)
 				}
@@ -1073,13 +1073,13 @@ func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 		return nil
 	}
 	if *dc == nil {
-		*dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+		*dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	}
-	if (*dc).Deployment == nil {
-		(*dc).Deployment = make(map[string]DeploymentNode)
+	if (*dc).Deploy == nil {
+		(*dc).Deploy = make(map[string]DeploymentNode)
 	}
 	key := deployKey(c.Image, c.Instance)
-	entry := (*dc).Deployment[key]
+	entry := (*dc).Deploy[key]
 	if entry.Security == nil {
 		entry.Security = &SecurityConfig{}
 	}
@@ -1095,7 +1095,7 @@ func (c *ImageConfigSetupCmd) persistResourceCaps(dc **DeployConfig) error {
 	if c.Cpus != "" {
 		entry.Security.Cpus = c.Cpus
 	}
-	(*dc).Deployment[key] = entry
+	(*dc).Deploy[key] = entry
 	return SaveDeployConfig(*dc)
 }
 
@@ -1141,7 +1141,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -1202,7 +1202,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -1387,7 +1387,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 	}
 
 	var updated []string
-	for key := range dc.Deployment {
+	for key := range dc.Deploy {
 		if key == skipImage {
 			continue
 		}
@@ -1436,7 +1436,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Build volumes from metadata
 		var deployVolumes []DeployVolumeConfig
 		var deploySidecars map[string]SidecarDef
-		if overlay, ok := dc.Deployment[key]; ok {
+		if overlay, ok := dc.Deploy[key]; ok {
 			deployVolumes = overlay.Volumes
 			deploySidecars = overlay.Sidecars
 		}
@@ -1447,7 +1447,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 
 		// Resolve env file
 		var quadletEnvFile string
-		if overlay, ok := dc.Deployment[key]; ok && overlay.EnvFile != "" {
+		if overlay, ok := dc.Deploy[key]; ok && overlay.EnvFile != "" {
 			quadletEnvFile = expandHostHome(overlay.EnvFile)
 		}
 		if quadletEnvFile == "" {

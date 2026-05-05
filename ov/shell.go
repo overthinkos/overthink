@@ -96,7 +96,7 @@ func (c *ShellCmd) Run() error {
 	dc, _ := LoadDeployConfig()
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deployVolumes = overlay.Volumes
 		}
 	}
@@ -147,7 +147,7 @@ func (c *ShellCmd) Run() error {
 	// Resolve agent forwarding (SSH/GPG socket mounts)
 	var deployImage *DeploymentNode
 	if dc != nil {
-		if overlay, ok := dc.Deployment[deployKey(c.Image, c.Instance)]; ok {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			deployImage = &overlay
 		}
 	}

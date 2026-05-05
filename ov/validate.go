@@ -229,7 +229,7 @@ func validateLocalDeployments(dir string, errs *ValidationError) {
 	if dc == nil {
 		return
 	}
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		if node.Target != "local" && node.Target != "" {
 			continue
 		}

@@ -27,7 +27,7 @@ func (c *ReapOrphansCmd) Run() error {
 		return nil
 	}
 	var orphans []string
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}

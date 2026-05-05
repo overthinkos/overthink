@@ -194,7 +194,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	if dc == nil {
 		return
 	}
-	imgDeploy, ok := dc.Deployment[deployKey(c.Image, c.Instance)]
+	imgDeploy, ok := dc.Deploy[deployKey(c.Image, c.Instance)]
 	if !ok {
 		return
 	}
@@ -227,7 +227,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 				}
 			}
 		}
-		dc.Deployment[deployKey(c.Image, c.Instance)] = imgDeploy
+		dc.Deploy[deployKey(c.Image, c.Instance)] = imgDeploy
 		if err := SaveDeployConfig(dc); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not save data source to deploy.yml: %v\n", err)
 		}

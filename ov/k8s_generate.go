@@ -36,7 +36,7 @@ type K8sGenerateOpts struct {
 	DeploymentName string // map key from overthink.yml:deployments.images (base image name)
 	Instance       string // "" for the bare overlay; non-empty for image/instance
 	ImageRef       string // fully qualified image ref (registry/name:tag)
-	Deployment     DeploymentNode
+	Deploy     DeploymentNode
 	Capabilities   *Capabilities
 	Cluster        *K8sSpec
 	OutputDir      string // usually <projectDir>/.overthink/k8s
@@ -113,12 +113,12 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 	}
 
 	// Copy raw manifests from deployment.kubernetes.raw into base/raw/
-	if opts.Deployment.Kubernetes != nil && len(opts.Deployment.Kubernetes.Raw) > 0 {
+	if opts.Deploy.Kubernetes != nil && len(opts.Deploy.Kubernetes.Raw) > 0 {
 		rawDir := filepath.Join(baseDir, "raw")
 		if err := os.MkdirAll(rawDir, 0755); err != nil {
 			return "", err
 		}
-		for _, src := range opts.Deployment.Kubernetes.Raw {
+		for _, src := range opts.Deploy.Kubernetes.Raw {
 			name := filepath.Base(src)
 			data, err := os.ReadFile(src)
 			if err != nil {
@@ -159,9 +159,9 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 		overlayKustomization["namespace"] = ns
 	}
 	// Translate deployment.kubernetes.patches into the kustomize "patches" list.
-	if opts.Deployment.Kubernetes != nil && len(opts.Deployment.Kubernetes.Patches) > 0 {
+	if opts.Deploy.Kubernetes != nil && len(opts.Deploy.Kubernetes.Patches) > 0 {
 		var patches []map[string]any
-		for _, p := range opts.Deployment.Kubernetes.Patches {
+		for _, p := range opts.Deploy.Kubernetes.Patches {
 			entry := map[string]any{
 				"patch": p.Patch,
 			}
@@ -195,10 +195,10 @@ func GenerateK8sKustomize(opts K8sGenerateOpts) (string, error) {
 
 func selectWorkloadKind(opts K8sGenerateOpts) string {
 	// Explicit override wins.
-	if k8s := opts.Deployment.Kubernetes; k8s != nil && k8s.Workload != "" {
+	if k8s := opts.Deploy.Kubernetes; k8s != nil && k8s.Workload != "" {
 		return k8s.Workload
 	}
-	kind := opts.Deployment.Kind
+	kind := opts.Deploy.Kind
 	if kind == "" {
 		kind = "service"
 	}
@@ -212,7 +212,7 @@ func selectWorkloadKind(opts K8sGenerateOpts) string {
 	case "oneshot":
 		return "Pod"
 	case "service":
-		if len(opts.Deployment.Storage) > 0 {
+		if len(opts.Deploy.Storage) > 0 {
 			return "StatefulSet"
 		}
 		return "Deployment"
@@ -231,7 +231,7 @@ func generateWorkload(opts K8sGenerateOpts) (map[string]any, string) {
 	switch kind {
 	case "CronJob":
 		spec := map[string]any{
-			"schedule": opts.Deployment.Schedule,
+			"schedule": opts.Deploy.Schedule,
 			"jobTemplate": map[string]any{
 				"spec": map[string]any{
 					"template": map[string]any{
@@ -297,8 +297,8 @@ func generateWorkload(opts K8sGenerateOpts) (map[string]any, string) {
 }
 
 func effectiveReplicas(opts K8sGenerateOpts) int {
-	if opts.Deployment.Replicas > 0 {
-		return opts.Deployment.Replicas
+	if opts.Deploy.Replicas > 0 {
+		return opts.Deploy.Replicas
 	}
 	return 1
 }
@@ -333,7 +333,7 @@ func mergedLabels(opts K8sGenerateOpts) map[string]string {
 }
 
 func deployNamespace(opts K8sGenerateOpts) string {
-	if k8s := opts.Deployment.Kubernetes; k8s != nil && k8s.Namespace != "" {
+	if k8s := opts.Deploy.Kubernetes; k8s != nil && k8s.Namespace != "" {
 		return k8s.Namespace
 	}
 	if opts.Cluster != nil && opts.Cluster.DefaultNamespace != "" {
@@ -363,24 +363,24 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 	}
 
 	// Env from deployment.Env
-	if env := generateEnv(opts.Deployment.Env); len(env) > 0 {
+	if env := generateEnv(opts.Deploy.Env); len(env) > 0 {
 		container["env"] = env
 	}
 
 	// Resources: requests from deployment.Resources, limits from Security
-	resources := generateResources(opts.Deployment)
+	resources := generateResources(opts.Deploy)
 	if len(resources) > 0 {
 		container["resources"] = resources
 	}
 
 	// Volume mounts from storage entries
-	mounts := generateVolumeMounts(opts.Deployment)
+	mounts := generateVolumeMounts(opts.Deploy)
 	if len(mounts) > 0 {
 		container["volumeMounts"] = mounts
 	}
 
 	// Probes (target-agnostic → K8s probe translation)
-	if p := opts.Deployment.Probes; p != nil {
+	if p := opts.Deploy.Probes; p != nil {
 		if lp := checkToProbe(p.Liveness); lp != nil {
 			container["livenessProbe"] = lp
 		}
@@ -431,7 +431,7 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 	// Restart policy (only meaningful on Pod/Job).
 	kind := selectWorkloadKind(opts)
 	if kind == "Pod" || kind == "Job" || kind == "CronJob" {
-		rp := opts.Deployment.Restart
+		rp := opts.Deploy.Restart
 		if rp == "" {
 			if kind == "Pod" {
 				rp = "Always"
@@ -615,7 +615,7 @@ func accessMode(cluster *K8sSpec, access string) string {
 
 func generatePVCs(opts K8sGenerateOpts) []map[string]any {
 	var out []map[string]any
-	for _, s := range opts.Deployment.Storage {
+	for _, s := range opts.Deploy.Storage {
 		spec := map[string]any{
 			"accessModes": []string{accessMode(opts.Cluster, s.Access)},
 		}
@@ -639,7 +639,7 @@ func generatePVCs(opts K8sGenerateOpts) []map[string]any {
 
 func generateVolumeClaimTemplates(opts K8sGenerateOpts) []map[string]any {
 	var out []map[string]any
-	for _, s := range opts.Deployment.Storage {
+	for _, s := range opts.Deploy.Storage {
 		spec := map[string]any{
 			"accessModes": []string{accessMode(opts.Cluster, s.Access)},
 		}
@@ -683,7 +683,7 @@ func generatePodVolumes(opts K8sGenerateOpts) []map[string]any {
 		return nil
 	}
 	var out []map[string]any
-	for _, s := range opts.Deployment.Storage {
+	for _, s := range opts.Deploy.Storage {
 		out = append(out, map[string]any{
 			"name": s.Name,
 			"persistentVolumeClaim": map[string]any{
@@ -699,7 +699,7 @@ func generatePodVolumes(opts K8sGenerateOpts) []map[string]any {
 // -----------------------------------------------------------------------------
 
 func generateIngress(opts K8sGenerateOpts) map[string]any {
-	expose := opts.Deployment.Expose
+	expose := opts.Deploy.Expose
 	if expose == nil || expose.Host == "" {
 		return nil
 	}

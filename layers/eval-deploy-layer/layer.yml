@@ -1,0 +1,38 @@
+layer:
+  name: eval-deploy-layer
+  description:
+    feature: Supervisord-managed sleep service for kind:deploy DeployTarget smoke
+    narrative: |
+      Drops /etc/eval-deploy-marker and runs `sleep infinity` under the
+      configured init system. Exercises ALL DeployTarget rendering paths
+      (Containerfile generation + supervisord fragment emission + service
+      probe). No use_packaged form — fedora-minimal ships no systemd unit
+      for sleep, so the layer is supervisord-only.
+    tag: [working]
+  distros:
+    fedora:
+      packages:
+        - coreutils
+        - supervisor
+  tasks:
+    - write: /etc/eval-deploy-marker
+      user: root
+      mode: "0644"
+      content: |
+        eval-deploy v1
+  service:
+    - name: eval-deploy
+      exec: "/usr/bin/sleep infinity"
+      restart: always
+      priority: 20
+      autostart: true
+      enable: true
+      scope: system
+  eval:
+    - id: eval-deploy-marker-exists
+      file: /etc/eval-deploy-marker
+      exists: true
+    - id: eval-deploy-service-running
+      scope: deploy
+      service: eval-deploy
+      running: true

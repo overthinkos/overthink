@@ -1,0 +1,23 @@
+layer:
+  name: eval-layer-layer
+  description:
+    feature: Compose on top of eval-image-layer to verify layer ordering
+    narrative: |
+      Drops /etc/eval-layer-marker AND asserts /etc/eval-image-marker is
+      already present from the prior layer in the stack. Used by
+      `ov eval kind layer` to prove that layer composition order survives
+      the build pipeline.
+    tag: [working]
+  tasks:
+    - write: /etc/eval-layer-marker
+      user: root
+      mode: "0644"
+      content: |
+        eval-layer v1
+  eval:
+    - id: eval-layer-marker-exists
+      file: /etc/eval-layer-marker
+      exists: true
+    - id: eval-image-marker-from-prior-layer
+      file: /etc/eval-image-marker
+      exists: true

@@ -19,7 +19,7 @@ import (
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type DeployConfig struct {
 	Provides   *ProvidesConfig           `yaml:"provides,omitempty"`
-	Deployment map[string]DeploymentNode `yaml:"deployment"`
+	Deploy map[string]DeploymentNode `yaml:"deploy"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in
@@ -914,7 +914,7 @@ func (dc *DeployConfig) DeployedContainerNames() []string {
 	}
 	var names []string
 	seen := map[string]bool{}
-	for key := range dc.Deployment {
+	for key := range dc.Deploy {
 		img, inst := parseDeployKey(key)
 		name := containerNameInstance(img, inst)
 		if !seen[name] {
@@ -967,10 +967,10 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// load-bearing exception to /ov-dev:disposable's anti-derivation
 	// rule — ephemeral STRENGTHENS the disposability contract; see
 	// classification.go for the rationale).
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		if node.IsEphemeral() && !node.Disposable {
 			node.Disposable = true
-			dc.Deployment[name] = node
+			dc.Deploy[name] = node
 		}
 	}
 
@@ -978,7 +978,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// here are surfaced at load time with a clear remediation hint.
 	verrs := &ValidationError{}
 	ValidateEphemeralAcrossDeploy(&dc, verrs)
-	for name := range dc.Deployment {
+	for name := range dc.Deploy {
 		ValidateVmNamingGuard(name, verrs)
 	}
 	if verrs.HasErrors() {
@@ -992,11 +992,11 @@ func LoadDeployConfig() (*DeployConfig, error) {
 // Field-level replace: deploy.yml value fully replaces image.yml value.
 // Unknown images in deploy.yml are silently ignored.
 func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
-	if dc == nil || dc.Deployment == nil {
+	if dc == nil || dc.Deploy == nil {
 		return
 	}
 
-	for name, overlay := range dc.Deployment {
+	for name, overlay := range dc.Deploy {
 		img, ok := cfg.Images[name]
 		if !ok {
 			continue // silently ignore unknown images
@@ -1033,11 +1033,11 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 // MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
 // Same field-level replace semantics as MergeDeployOverlay.
 func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance string) {
-	if dc == nil || dc.Deployment == nil || meta == nil {
+	if dc == nil || dc.Deploy == nil || meta == nil {
 		return
 	}
 
-	overlay, ok := dc.Deployment[deployKey(meta.Image, instance)]
+	overlay, ok := dc.Deploy[deployKey(meta.Image, instance)]
 	if !ok {
 		return
 	}
@@ -1271,13 +1271,13 @@ func SaveDeployConfig(dc *DeployConfig) error {
 // MergeDeployConfigs merges multiple DeployConfigs left-to-right.
 // Later configs take precedence (field-level replace per image).
 func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
-	result := &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+	result := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	for _, dc := range configs {
-		if dc == nil || dc.Deployment == nil {
+		if dc == nil || dc.Deploy == nil {
 			continue
 		}
-		for name, overlay := range dc.Deployment {
-			existing := result.Deployment[name]
+		for name, overlay := range dc.Deploy {
+			existing := result.Deploy[name]
 			if overlay.Tunnel != nil {
 				existing.Tunnel = overlay.Tunnel
 			}
@@ -1386,7 +1386,7 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.VmState != nil {
 				existing.VmState = overlay.VmState
 			}
-			result.Deployment[name] = existing
+			result.Deploy[name] = existing
 		}
 	}
 	return result
@@ -1394,8 +1394,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 
 // RemoveImageDeploy removes an image's entry from a deploy config.
 func RemoveImageDeploy(dc *DeployConfig, imageName string) {
-	if dc != nil && dc.Deployment != nil {
-		delete(dc.Deployment, imageName)
+	if dc != nil && dc.Deploy != nil {
+		delete(dc.Deploy, imageName)
 	}
 }
 
@@ -1410,7 +1410,7 @@ func cleanDeployEntry(imageName, instance string) {
 
 	key := deployKey(imageName, instance)
 	hasImage := false
-	if _, ok := dc.Deployment[key]; ok {
+	if _, ok := dc.Deploy[key]; ok {
 		hasImage = true
 		RemoveImageDeploy(dc, key)
 	}
@@ -1441,7 +1441,7 @@ func cleanDeployEntry(imageName, instance string) {
 		} else {
 			// Base image removal: only remove if no other entries for the same base image remain
 			hasOtherEntries := false
-			for k := range dc.Deployment {
+			for k := range dc.Deploy {
 				base, _ := parseDeployKey(k)
 				if base == imageName {
 					hasOtherEntries = true
@@ -1476,7 +1476,7 @@ func cleanDeployEntry(imageName, instance string) {
 		return
 	}
 
-	if len(dc.Deployment) == 0 && dc.Provides == nil {
+	if len(dc.Deploy) == 0 && dc.Provides == nil {
 		if path, pathErr := DeployConfigPath(); pathErr == nil {
 			os.Remove(path)
 		}
@@ -1551,10 +1551,13 @@ type SaveDeployStateInput struct {
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+	}
+	if dc.Deploy == nil {
+		dc.Deploy = make(map[string]DeploymentNode)
 	}
 	key := deployKey(imageName, instance)
-	entry := dc.Deployment[key] // preserve existing fields (tunnel, volumes, etc.)
+	entry := dc.Deploy[key] // preserve existing fields (tunnel, volumes, etc.)
 	if input.Volumes != nil {
 		entry.Volumes = input.Volumes
 	}
@@ -1599,7 +1602,7 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if input.SetLifecycle {
 		entry.Lifecycle = input.Lifecycle
 	}
-	dc.Deployment[key] = entry
+	dc.Deploy[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
 	}
@@ -1662,7 +1665,7 @@ func mergeEnvVars(existing, newVars []string) []string {
 
 // ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.
 func ExportAllImages(cfg *Config) *DeployConfig {
-	dc := &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+	dc := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	for name, img := range cfg.Images {
 		if !img.IsEnabled() {
 			continue
@@ -1682,7 +1685,7 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 		if entry.Version != "" || entry.Description != nil ||
 			entry.Ports != nil || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
-			dc.Deployment[name] = entry
+			dc.Deploy[name] = entry
 		}
 	}
 	return dc

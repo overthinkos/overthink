@@ -1,0 +1,186 @@
+#  Per-kind file for vm entries. Sibling of overthink.yml — included via
+#  overthink.yml's `includes:` list. The schema kind discriminator is
+#  `kind: vm` for kind-keyed entries; root-shape map is `vm:` (this file).
+#  2026-05 kind-files cutover.
+version: 4
+vm:
+    arch-pacstrap:
+        source:
+            kind: bootstrap
+            builder: pacstrap
+            builder_image: archlinux-pacstrap-builder
+            distro: archlinux
+            packages:
+                - sudo
+                - openssh
+                - qemu-guest-agent
+                - cloud-init
+                - grub
+                - efibootmgr
+            rootfs: ext4
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 20G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: arch
+            port: 12225
+            key_source: generate
+        cloud_init:
+            users:
+                - name: arch
+                  sudo: true
+                  shell: /bin/bash
+            runcmd:
+                - systemctl enable --now sshd
+                - systemctl enable --now qemu-guest-agent
+                # Diagnostic: write network + sshd state to /boot so it can
+                # be mount-inspected after a failed-boot cycle.
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===sshd===; systemctl status sshd --no-pager; } > /boot/ov-diag.txt 2>&1"
+    cachyos-vm:
+        source:
+            kind: bootstrap
+            builder: pacstrap
+            builder_image: cachyos-pacstrap-builder
+            distro: cachyos
+            packages:
+                - sudo
+                - openssh
+                - qemu-guest-agent
+                - cloud-init
+                - grub
+                - efibootmgr
+            rootfs: btrfs
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 25G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: cachy
+            port: 12226
+            key_source: generate
+        cloud_init:
+            users:
+                - name: cachy
+                  sudo: true
+                  shell: /bin/bash
+            runcmd:
+                - systemctl enable --now sshd
+                - systemctl enable --now qemu-guest-agent
+    debian-debootstrap:
+        source:
+            kind: bootstrap
+            builder: debootstrap
+            builder_image: debian-debootstrap-builder
+            distro: debian
+            packages:
+                - sudo
+                - openssh-server
+                - qemu-guest-agent
+                - cloud-init
+            rootfs: ext4
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 20G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: debian
+            port: 12227
+            key_source: generate
+        cloud_init:
+            users:
+                - name: debian
+                  sudo: true
+                  shell: /bin/bash
+            runcmd:
+                - systemctl enable --now ssh
+                - systemctl enable --now qemu-guest-agent
+                # Diagnostic: write boot state to /boot for post-mortem mount.
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
+    ubuntu-debootstrap:
+        source:
+            kind: bootstrap
+            builder: debootstrap
+            builder_image: ubuntu-debootstrap-builder
+            distro: ubuntu
+            packages:
+                - sudo
+                - openssh-server
+                - qemu-guest-agent
+                - cloud-init
+            rootfs: ext4
+            kernel_args: console=tty0 console=ttyS0,115200
+        disk_size: 20G
+        ram: 4G
+        cpus: 2
+        machine: q35
+        firmware: uefi-insecure
+        network:
+            mode: user
+        ssh:
+            user: ubuntu
+            port: 12228
+            key_source: generate
+        cloud_init:
+            users:
+                - name: ubuntu
+                  sudo: true
+                  shell: /bin/bash
+            runcmd:
+                - systemctl enable --now ssh
+                - systemctl enable --now qemu-guest-agent
+                - "{ ip a; echo ===listen===; ss -tlnp; echo ===ssh===; systemctl status ssh --no-pager; } > /boot/ov-diag.txt 2>&1"
+    vm:
+        source:
+            kind: cloud_image
+            url: https://download.fedoraproject.org/pub/fedora/linux/releases/41/Cloud/x86_64/images/Fedora-Cloud-Base-Generic-41-1.4.x86_64.qcow2
+            checksum:
+                type: sha256
+                value: 6205ae0c524b4d1816dbd3573ce29b5c44ed26c9fbc874fbe48c41c89dd0bac2
+            base_user: fedora
+        disk_size: 6G
+        ram: 2G
+        cpus: 2
+        firmware: bios
+        network:
+            mode: user
+        ssh:
+            user: fedora
+            port: 12222
+            key_source: generate
+        cloud_init:
+            packages:
+                - qemu-guest-agent
+                - curl
+            runcmd:
+                - "setenforce 0 || true"
+                - "sed -i 's/^SELINUX=.*/SELINUX=permissive/' /etc/selinux/config || true"
+                - "echo '10.89.0.1 ov-web' >> /etc/hosts"
+                - "systemctl enable --now qemu-guest-agent"
+                - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
+        libvirt:
+            devices:
+                channels:
+                    - type: unix
+                      name: org.qemu.guest_agent.0
+                      path: '{{.VmStateDir}}/qga.sock'
+                graphics:
+                    - type: spice
+                      autoport: "yes"
+                      listen: 127.0.0.1
+                video:
+                    - model: virtio
+                      heads: 1
+                      accel3d: false

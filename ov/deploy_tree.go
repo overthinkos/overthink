@@ -185,11 +185,18 @@ func containerChildExecutor(node *DeploymentNode, parentExec DeployExecutor) (De
 // ShellExecutor), the child gets a plain SSHExecutor — no
 // nesting overhead for the common case of a VM on localhost.
 //
-// deployName is the deployment's name (e.g. "arch-vm") and selects
-// the managed ssh-config alias (ov-<deployName>) that `ov vm create`
-// or `ov deploy add` previously published into ~/.config/ov/ssh_config.
+// The SSH alias keys off node.Vm (the kind:vm entity name), NOT
+// deployName (the bed name) — `ov vm create <vm>` writes the managed
+// stanza for `ov-<vm>`. Falling back to deployName here would produce
+// a `ov-<bed>` alias with no matching stanza (e.g., bed `arch-vm` →
+// `ov-arch-vm`, but the stanza is `ov-arch`). deployName is kept for
+// log messages where the deployment identity matters.
 func vmChildExecutor(node *DeploymentNode, parentExec DeployExecutor, deployName string) (DeployExecutor, error) {
-	ssh := sshParamsForVm(deployName)
+	vmName := node.Vm
+	if vmName == "" {
+		vmName = deployName // fallback for legacy nodes without `vm:` set
+	}
+	ssh := sshParamsForVm(vmName)
 	// If parent is localhost-equivalent, use a direct SSHExecutor —
 	// no need to hop through a trivial wrapper.
 	if parentExec == nil {
@@ -283,10 +290,10 @@ func resolveTreeRoot(dir string) (map[string]DeploymentNode, error) {
 	}
 	localDC, _ := LoadDeployConfig()
 	merged := MergeDeployConfigs(projectDC, localDC)
-	if merged == nil || merged.Deployment == nil {
+	if merged == nil || merged.Deploy == nil {
 		return nil, nil
 	}
-	return merged.Deployment, nil
+	return merged.Deploy, nil
 }
 
 // Suppressor for imports only used in doc comments / future

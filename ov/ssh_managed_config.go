@@ -63,9 +63,14 @@ func SshConfigPath(home string) string {
 
 // EnsureSshConfigInclude inserts the managed `Include ~/.config/ov/ssh_config`
 // directive into the user's ~/.ssh/config (creating the file if needed).
-// Idempotent: calling twice yields the same content. The Include line is
-// itself wrapped in the begin/end fence so RemoveSshConfigInclude can
-// reverse it cleanly.
+// Idempotent: calling twice yields the same content.
+//
+// The Include line MUST be at the TOP of the file (outside any Host block)
+// because ssh_config(5) processes Include directives in the lexical context
+// they appear. If the Include lands inside a `Host pawsdev` block, every
+// `Host` stanza inside the included file is gated on matching `pawsdev` —
+// effectively dead. So the global-block append behavior in
+// replaceOrAppendManagedBlock is wrong for ssh config; we prepend instead.
 func EnsureSshConfigInclude(home string) error {
 	cfgPath := SshConfigPath(home)
 	if err := os.MkdirAll(filepath.Dir(cfgPath), 0o700); err != nil {
@@ -76,7 +81,7 @@ func EnsureSshConfigInclude(home string) error {
 	if data, err := os.ReadFile(cfgPath); err == nil {
 		existing = string(data)
 	}
-	updated := replaceOrAppendManagedBlock(existing, body, "")
+	updated := replaceOrPrependManagedBlock(existing, body, "")
 	return os.WriteFile(cfgPath, []byte(updated), 0o600)
 }
 

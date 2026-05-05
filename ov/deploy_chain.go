@@ -132,7 +132,15 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath s
 		}, nil
 
 	case "vm":
-		ssh := sshParamsForVm(flatPath)
+		// VM SSH alias keys off node.Vm (the kind:vm entity name) which
+		// matches the stanza written by `ov vm create`. Falling back to
+		// flatPath (the deploy bed name) would produce an ov-<bed> alias
+		// for which no stanza exists.
+		vmName := node.Vm
+		if vmName == "" {
+			vmName = flatPath
+		}
+		ssh := sshParamsForVm(vmName)
 		// If the parent chain is just ShellExecutor, return a
 		// plain SSHExecutor — no NestedExecutor wrapper needed.
 		if _, isLocal := chain.(ShellExecutor); isLocal {

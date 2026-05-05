@@ -55,7 +55,7 @@ local:
 func TestLoadUnified_RejectLegacyTargetHost(t *testing.T) {
 	dir := t.TempDir()
 	src := `version: 4
-deployment:
+deploy:
   my-laptop:
     target: host
     add_layers: [ripgrep]

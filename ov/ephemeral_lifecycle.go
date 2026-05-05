@@ -314,9 +314,9 @@ func persistEphemeralRuntime(deployName string, h *EphemeralHandle) error {
 		return err
 	}
 	if dc == nil {
-		dc = &DeployConfig{Deployment: map[string]DeploymentNode{}}
+		dc = &DeployConfig{Deploy: map[string]DeploymentNode{}}
 	}
-	node, ok := dc.Deployment[deployName]
+	node, ok := dc.Deploy[deployName]
 	if !ok {
 		node = DeploymentNode{}
 	}
@@ -333,7 +333,7 @@ func persistEphemeralRuntime(deployName string, h *EphemeralHandle) error {
 		Status:          "active",
 		InstanceName:    h.InstanceName,
 	}
-	dc.Deployment[deployName] = node
+	dc.Deploy[deployName] = node
 	return SaveDeployConfig(dc)
 }
 
@@ -343,7 +343,7 @@ func clearEphemeralRuntime(deployName string) error {
 	if err != nil || dc == nil {
 		return err
 	}
-	node, ok := dc.Deployment[deployName]
+	node, ok := dc.Deploy[deployName]
 	if !ok {
 		return nil
 	}
@@ -351,7 +351,7 @@ func clearEphemeralRuntime(deployName string) error {
 		return nil
 	}
 	node.VmState.Ephemeral = nil
-	dc.Deployment[deployName] = node
+	dc.Deploy[deployName] = node
 	return SaveDeployConfig(dc)
 }
 
@@ -362,7 +362,7 @@ func bumpParentChildRefcount(parentID string, delta int) error {
 	if err != nil || dc == nil {
 		return err
 	}
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}
@@ -373,7 +373,7 @@ func bumpParentChildRefcount(parentID string, delta int) error {
 		if node.VmState.Ephemeral.ChildRefcount < 0 {
 			node.VmState.Ephemeral.ChildRefcount = 0
 		}
-		dc.Deployment[name] = node
+		dc.Deploy[name] = node
 		return SaveDeployConfig(dc)
 	}
 	return nil
@@ -386,7 +386,7 @@ func lookupEphemeralByID(id string) (*EphemeralRuntime, error) {
 	if err != nil || dc == nil {
 		return nil, fmt.Errorf("loading deploy.yml: %w", err)
 	}
-	for _, node := range dc.Deployment {
+	for _, node := range dc.Deploy {
 		if node.VmState == nil || node.VmState.Ephemeral == nil {
 			continue
 		}
@@ -407,7 +407,7 @@ func teardownChildren(deployName string) error {
 		return err
 	}
 	parentID := ""
-	if node, ok := dc.Deployment[deployName]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
+	if node, ok := dc.Deploy[deployName]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
 		parentID = node.VmState.Ephemeral.ID
 	}
 	if parentID == "" {
@@ -419,7 +419,7 @@ func teardownChildren(deployName string) error {
 
 func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]bool) error {
 	var toDel []string
-	for name, node := range dc.Deployment {
+	for name, node := range dc.Deploy {
 		if visited[name] {
 			continue
 		}
@@ -434,7 +434,7 @@ func teardownChildrenRec(dc *DeployConfig, parentID string, visited map[string]b
 	for _, name := range toDel {
 		visited[name] = true
 		// Recurse into the child first (depth-first).
-		if node, ok := dc.Deployment[name]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
+		if node, ok := dc.Deploy[name]; ok && node.VmState != nil && node.VmState.Ephemeral != nil {
 			if err := teardownChildrenRec(dc, node.VmState.Ephemeral.ID, visited); err != nil {
 				return err
 			}

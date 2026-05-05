@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -64,10 +65,11 @@ type UnifiedFile struct {
 	ImageSingular map[string]ImageConfig  `yaml:"image,omitempty"`
 	Layers        map[string]*InlineLayer `yaml:"layers,omitempty"`
 	VM            map[string]*VmSpec      `yaml:"vm,omitempty"`
-	Deployments   *DeploymentsSection     `yaml:"deployments,omitempty"`
-	// Schema v4 singular alias for Deployments. Populated via
-	// DeploymentSingular; merged post-load.
-	DeploymentSingular map[string]DeploymentNode `yaml:"deployment,omitempty"`
+	Deploys   *DeploymentsSection     `yaml:"deployments,omitempty"`
+	// Schema v4 singular alias for Deploys. Populated via
+	// DeploySingular; merged post-load. YAML tag flipped from
+	// "deployment" → "deploy" in the 2026-05 kind-files cutover.
+	DeploySingular map[string]DeploymentNode `yaml:"deploy,omitempty"`
 
 	// Schema v4: first-class target template maps (singular keys).
 	Pod   map[string]*PodSpec   `yaml:"pod,omitempty"`
@@ -98,7 +100,7 @@ type UnifiedFile struct {
 type DiscoverConfig struct {
 	Layers      []ScanSpec `yaml:"layers,omitempty"`
 	Images      []ScanSpec `yaml:"images,omitempty"`
-	Deployments []ScanSpec `yaml:"deployments,omitempty"`
+	Deploys     []ScanSpec `yaml:"deploys,omitempty"`
 	Builders    []ScanSpec `yaml:"builders,omitempty"`
 	Distros     []ScanSpec `yaml:"distros,omitempty"`
 	Inits       []ScanSpec `yaml:"inits,omitempty"`
@@ -193,7 +195,7 @@ type DeploymentsSection struct {
 type kindKeyedDoc struct {
 	Layer      *LayerDoc      `yaml:"layer,omitempty"`
 	Image      *ImageDoc      `yaml:"image,omitempty"`
-	Deployment *DeploymentDoc `yaml:"deployment,omitempty"`
+	Deploy     *DeployDoc `yaml:"deploy,omitempty"`
 	Builder    *BuilderDoc    `yaml:"builder,omitempty"`
 	Distro     *DistroDoc     `yaml:"distro,omitempty"`
 	Init       *InitDoc       `yaml:"init,omitempty"`
@@ -281,8 +283,8 @@ type ImageDoc struct {
 	ImageConfig `yaml:",inline"`
 }
 
-// DeploymentDoc wraps a single DeploymentNode.
-type DeploymentDoc struct {
+// DeployDoc wraps a single DeploymentNode.
+type DeployDoc struct {
 	Name           string `yaml:"name"`
 	DeploymentNode `yaml:",inline"`
 }
@@ -328,7 +330,7 @@ type entityKind struct {
 var entityKinds = []entityKind{
 	{Key: "layer", Filename: "layer.yml"},
 	{Key: "image", Filename: "image.yml"},
-	{Key: "deployment", Filename: "deploy.yml"},
+	{Key: "deploy", Filename: "deploy.yml"},
 	{Key: "builder", Filename: "builder.yml"},
 	{Key: "distro", Filename: "distro.yml"},
 	{Key: "init", Filename: "init.yml"},
@@ -370,6 +372,57 @@ var entityKinds = []entityKind{
 // references against templates that no longer exist (the new `host:`
 // field is destination-only). All three are fixed by
 // `ov migrate target-local` in one pass.
+// rejectLegacyDeploymentRefs scans every *.yml at the project root for
+// residual `deployment:` / `deployments:` / `kind: deployment` references
+// retired by the 2026-05 kind-files cutover. Catches data-loss footguns
+// where a YAML key would silently fail to bind after the rename.
+func rejectLegacyDeploymentRefs(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil // Loader will surface the dir issue elsewhere.
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yml") {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		dec := yaml.NewDecoder(bytes.NewReader(data))
+		for docIdx := 0; ; docIdx++ {
+			var doc yaml.Node
+			if err := dec.Decode(&doc); err != nil {
+				break
+			}
+			if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+				continue
+			}
+			root := doc.Content[0]
+			// Case A: root-key `deployment:` (post-v4-pre-cutover singular alias).
+			if v := findMappingValue(root, "deployment"); v != nil {
+				return fmt.Errorf(
+					"%s (doc %d): root-key `deployment:` is retired (2026-05 kind-files cutover).\n  Renamed to `deploy:`. Run: ov migrate kind-files",
+					path, docIdx)
+			}
+			// Case B: root-key `deployments:` (v3 legacy plural).
+			if v := findMappingValue(root, "deployments"); v != nil {
+				return fmt.Errorf(
+					"%s (doc %d): root-key `deployments:` is retired (legacy v3 plural).\n  Run: ov migrate kind-files (which also covers ov migrate schema-v4)",
+					path, docIdx)
+			}
+			// Case C: kind-keyed wrapper `kind: deployment` scalar.
+			if v := findMappingValue(root, "kind"); v != nil && v.Kind == yaml.ScalarNode && v.Value == "deployment" {
+				return fmt.Errorf(
+					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `kind: deploy`. Run: ov migrate kind-files",
+					path, docIdx)
+			}
+		}
+	}
+	return nil
+}
+
 func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 	if merged == nil {
 		return nil
@@ -392,15 +445,15 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 		}
 		return nil
 	}
-	if merged.Deployments != nil {
-		for name, node := range merged.Deployments.Images {
+	if merged.Deploys != nil {
+		for name, node := range merged.Deploys.Images {
 			n := node
 			if err := walk(name, &n); err != nil {
 				return err
 			}
 		}
 	}
-	for name, node := range merged.DeploymentSingular {
+	for name, node := range merged.DeploySingular {
 		n := node
 		if err := walk(name, &n); err != nil {
 			return err
@@ -413,6 +466,13 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	root := filepath.Join(dir, UnifiedFileName)
 	if !fileExists(root) {
 		return nil, false, nil
+	}
+	// 2026-05 kind-files cutover: hard-reject residual `deployment:` /
+	// `deployments:` / `kind: deployment` in any project YAML. These
+	// were renamed to `deploy:` / `kind: deploy`. The migration command
+	// rewrites them in-place.
+	if err := rejectLegacyDeploymentRefs(dir); err != nil {
+		return nil, true, err
 	}
 	merged := &UnifiedFile{}
 	visited := map[string]bool{}
@@ -431,7 +491,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyLocalSurface(root, merged); err != nil {
 		return nil, true, err
 	}
-	if err := validateDeploymentTree(merged.Deployments); err != nil {
+	if err := validateDeploymentTree(merged.Deploys); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	// Hard load-time error for the retired `local.cachyos-dx` key.
@@ -740,12 +800,14 @@ var rootShapeKeys = map[string]bool{
 	"version": true, "includes": true, "discover": true, "defaults": true,
 	"distros": true, "builders": true, "inits": true,
 	"layers": true,
-	// v4 singular kind maps:
+	// v4 singular kind maps (after 2026-05 kind-files cutover):
 	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
-	"deployment": true,
+	"deploy": true,
 	// legacy aliases accepted for transitional compatibility; migration
-	// rewrites them:
-	"images": true, "deployments": true,
+	// rewrites them. `deployment:` was the pre-cutover v4 alias —
+	// `ov migrate kind-files` rewrites it to `deploy:`. `deployments:`
+	// is the v3 legacy plural — `ov migrate schema-v4` flattens it.
+	"images": true, "deployments": true, "deployment": true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how image/pod/vm work.
@@ -1103,19 +1165,19 @@ func normalizeV4Aliases(u *UnifiedFile) {
 		}
 		u.ImageSingular = nil
 	}
-	if len(u.DeploymentSingular) > 0 {
-		if u.Deployments == nil {
-			u.Deployments = &DeploymentsSection{}
+	if len(u.DeploySingular) > 0 {
+		if u.Deploys == nil {
+			u.Deploys = &DeploymentsSection{}
 		}
-		if u.Deployments.Images == nil {
-			u.Deployments.Images = make(map[string]DeploymentNode)
+		if u.Deploys.Images == nil {
+			u.Deploys.Images = make(map[string]DeploymentNode)
 		}
-		for k, v := range u.DeploymentSingular {
-			if _, ok := u.Deployments.Images[k]; !ok {
-				u.Deployments.Images[k] = v
+		for k, v := range u.DeploySingular {
+			if _, ok := u.Deploys.Images[k]; !ok {
+				u.Deploys.Images[k] = v
 			}
 		}
-		u.DeploymentSingular = nil
+		u.DeploySingular = nil
 	}
 }
 
@@ -1138,7 +1200,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 		}
 		dst.Discover.Layers = append(dst.Discover.Layers, src.Discover.Layers...)
 		dst.Discover.Images = append(dst.Discover.Images, src.Discover.Images...)
-		dst.Discover.Deployments = append(dst.Discover.Deployments, src.Discover.Deployments...)
+		dst.Discover.Deploys = append(dst.Discover.Deploys, src.Discover.Deploys...)
 		dst.Discover.Builders = append(dst.Discover.Builders, src.Discover.Builders...)
 		dst.Discover.Distros = append(dst.Discover.Distros, src.Discover.Distros...)
 		dst.Discover.Inits = append(dst.Discover.Inits, src.Discover.Inits...)
@@ -1160,7 +1222,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeGroupMap(&dst.Group, src.Group)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
-	mergeDeployments(&dst.Deployments, src.Deployments)
+	mergeDeployments(&dst.Deploys, src.Deploys)
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
 	_ = srcDir
@@ -1471,7 +1533,7 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 	if kd.Image != nil {
 		count++
 	}
-	if kd.Deployment != nil {
+	if kd.Deploy != nil {
 		count++
 	}
 	if kd.Builder != nil {
@@ -1540,18 +1602,18 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if _, exists := merged.Images[kd.Image.Name]; !exists {
 			merged.Images[kd.Image.Name] = kd.Image.ImageConfig
 		}
-	case kd.Deployment != nil:
-		if kd.Deployment.Name == "" {
+	case kd.Deploy != nil:
+		if kd.Deploy.Name == "" {
 			return fmt.Errorf("deployment: missing name")
 		}
-		if merged.Deployments == nil {
-			merged.Deployments = &DeploymentsSection{}
+		if merged.Deploys == nil {
+			merged.Deploys = &DeploymentsSection{}
 		}
-		if merged.Deployments.Images == nil {
-			merged.Deployments.Images = map[string]DeploymentNode{}
+		if merged.Deploys.Images == nil {
+			merged.Deploys.Images = map[string]DeploymentNode{}
 		}
-		if _, exists := merged.Deployments.Images[kd.Deployment.Name]; !exists {
-			merged.Deployments.Images[kd.Deployment.Name] = kd.Deployment.DeploymentNode
+		if _, exists := merged.Deploys.Images[kd.Deploy.Name]; !exists {
+			merged.Deploys.Images[kd.Deploy.Name] = kd.Deploy.DeploymentNode
 		}
 	case kd.Builder != nil:
 		if kd.Builder.Name == "" {
@@ -1723,7 +1785,7 @@ func (uf *UnifiedFile) ApplyDiscover(rootDir string) error {
 	if err := applyScanSpecsImages(cfg.Images, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsDeployments(cfg.Deployments, rootDir, uf); err != nil {
+	if err := applyScanSpecsDeploys(cfg.Deploys, rootDir, uf); err != nil {
 		return err
 	}
 	if err := applyScanSpecsBuilders(cfg.Builders, rootDir, uf); err != nil {
@@ -1824,13 +1886,13 @@ func applyScanSpecsImages(specs []ScanSpec, rootDir string, uf *UnifiedFile) err
 	})
 }
 
-func applyScanSpecsDeployments(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
+func applyScanSpecsDeploys(specs []ScanSpec, rootDir string, uf *UnifiedFile) error {
 	return applyScanSpecsKindKeyed(specs, rootDir, "deploy.yml", func(doc *kindKeyedDoc, srcDir string) error {
-		if doc.Deployment == nil {
+		if doc.Deploy == nil {
 			return fmt.Errorf("expected deployment: wrapper")
 		}
-		if doc.Deployment.Name == "" {
-			doc.Deployment.Name = filepath.Base(srcDir)
+		if doc.Deploy.Name == "" {
+			doc.Deploy.Name = filepath.Base(srcDir)
 		}
 		return mergeKindDoc(uf, doc, srcDir)
 	})
@@ -1955,12 +2017,12 @@ func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
 // of the authored file, independent of any per-machine ~/.config/ov/deploy.yml
 // which remains loaded separately by LoadDeployConfig).
 func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
-	if uf.Deployments == nil {
+	if uf.Deploys == nil {
 		return nil
 	}
 	return &DeployConfig{
-		Provides:   uf.Deployments.Provides,
-		Deployment: uf.Deployments.Images,
+		Provides:   uf.Deploys.Provides,
+		Deploy: uf.Deploys.Images,
 	}
 }
 

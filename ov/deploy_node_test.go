@@ -149,7 +149,7 @@ func TestHasChildren(t *testing.T) {
 // Fixture name `ov-cachyos` matches the in-repo deployment key (renamed
 // from `qc` in the 2026-05 cross-kind name reuse cutover).
 func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
-	project := &DeployConfig{Deployment: map[string]DeploymentNode{
+	project := &DeployConfig{Deploy: map[string]DeploymentNode{
 		"ov-cachyos": {
 			Target:  "local",
 			Local:   "ov-cachyos",
@@ -159,7 +159,7 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 		},
 	}}
 	merged := MergeDeployConfigs(project, nil)
-	got, ok := merged.Deployment["ov-cachyos"]
+	got, ok := merged.Deploy["ov-cachyos"]
 	if !ok {
 		t.Fatal("ov-cachyos dropped by MergeDeployConfigs")
 	}
@@ -173,11 +173,11 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 		t.Errorf("SSHArgs field lost: got %v", got.SSHArgs)
 	}
 	// Per-machine overlay wins on collision (mirrors Host's behavior).
-	overlay := &DeployConfig{Deployment: map[string]DeploymentNode{
+	overlay := &DeployConfig{Deploy: map[string]DeploymentNode{
 		"ov-cachyos": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
 	}}
 	merged = MergeDeployConfigs(project, overlay)
-	got = merged.Deployment["ov-cachyos"]
+	got = merged.Deploy["ov-cachyos"]
 	if got.Local != "ci-runner" {
 		t.Errorf("overlay Local should win: got %q", got.Local)
 	}

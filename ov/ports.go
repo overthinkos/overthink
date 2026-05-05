@@ -283,16 +283,16 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 func SavePortOverride(image, instance string, ports []string) error {
 	dc, _ := LoadDeployConfig()
 	if dc == nil {
-		dc = &DeployConfig{Deployment: make(map[string]DeploymentNode)}
+		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	}
-	if dc.Deployment == nil {
-		dc.Deployment = make(map[string]DeploymentNode)
+	if dc.Deploy == nil {
+		dc.Deploy = make(map[string]DeploymentNode)
 	}
 
 	key := deployKey(image, instance)
-	overlay := dc.Deployment[key]
+	overlay := dc.Deploy[key]
 	overlay.Ports = ports
-	dc.Deployment[key] = overlay
+	dc.Deploy[key] = overlay
 
 	return SaveDeployConfig(dc)
 }

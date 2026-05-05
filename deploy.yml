@@ -461,6 +461,17 @@ vm:
         # deployments.images.arch-vm (deploy-level property).
         disposable: true
         lifecycle: dev
+        # `backend: libvirt` is REQUIRED — the arch-vm bed's eval list
+        # contains 8 `ov eval libvirt …` probes + 2 `ov eval spice …`
+        # probes that all hit the libvirt user-session daemon socket.
+        # With `backend: auto` and the daemon NOT running on the
+        # operator's machine, resolveVmBackend silently falls through
+        # to direct-qemu and every libvirt-RPC probe fails with
+        # "no such file or directory". Explicit `backend: libvirt`
+        # makes resolveVmBackend fail loudly with a `systemctl --user
+        # enable --now virtqemud.service` hint instead. See
+        # /ov-advanced:vm "Backend matrix" for the prereq.
+        backend: libvirt
         disk_size: 40G
         ram: 8G
         cpus: 4
@@ -474,34 +485,57 @@ vm:
         cloud_init:
             timezone: UTC
             packages:
+                # The host's ov binary (PKGBUILD `depends=()`) is built
+                # with cgo for SPICE audio: `gordonklaus/portaudio`
+                # links against libportaudio.so.2; the SPICE protocol
+                # path also pulls `libopusfile.so.0` and `libopus.so.0`
+                # transitively. Under `ov_install.strategy: auto` the
+                # host binary is scp'd into the guest, so the guest
+                # MUST ship those .so files — `portaudio` and
+                # `opusfile` (which pulls `opus`) cover all three.
+                # Without any of them, `ov version` exits 127 with
+                # "error while loading shared libraries".
+                #
+                # `base-devel` and `git` are required by the bed's
+                # `package:` eval probes (deploy.yml lines ~145, ~146).
+                # They were dropped in error during the runcmd cleanup
+                # of the 2026-05 R10 follow-up; re-added 2026-05-06.
                 - sudo
                 - spice-vdagent
                 - qemu-guest-agent
-                - git
-                - go
+                - portaudio
+                - opusfile
                 - base-devel
+                - git
             runcmd:
+                # Activate the desktop / agent units that came in with
+                # cloud_init.packages. The legacy ov-from-source build
+                # block (git clone + makepkg + pacman -U) was DELETED
+                # in the 2026-05 R10 follow-up: it was redundant with
+                # `ov_install.strategy: auto` (which scps the host
+                # binary post-boot via VmDeployTarget) AND timed out
+                # under load — leaving non-empty errors[] in
+                # /var/lib/cloud/data/result.json that broke the
+                # `cloud-init no-errors` eval probe.
+                #
+                # `pacman-key --init && --populate archlinux` is
+                # required for post-boot pacman invocations driven
+                # by `ov deploy add arch-vm <ref>` (layer install via
+                # SSH). Without it, `pacman -Sy <pkg>` fails with
+                # `keyring is not writable / required key missing`.
+                # Cloud-init's own `packages:` step is unaffected
+                # (cloud-init bootstraps its own keyring); only the
+                # later operator-driven pacman calls need this.
+                - pacman-key --init
+                - pacman-key --populate archlinux
                 - systemctl enable --now spice-vdagentd
                 - systemctl enable --now qemu-guest-agent
-                # Build and install ov from the repo's PKGBUILD so
-                # `command: ov version` and related probes work in-guest.
-                - |
-                  bash -lc '
-                  set -euxo pipefail
-                  rm -rf /home/arch/ov-src
-                  sudo -u arch -H git clone --depth 1 --recurse-submodules --shallow-submodules \
-                      https://github.com/overthinkos/overthink.git /home/arch/ov-src
-                  sudo -u arch -H bash -lc "cd /home/arch/ov-src/pkg/arch && makepkg -s --noconfirm --needed"
-                  cd /home/arch/ov-src/pkg/arch && pacman -U --noconfirm ov-git-*-x86_64.pkg.tar.zst
-                  '
             ov_install:
-                # `auto` scps the host's ov binary into the guest after
-                # cloud-init reaches steady-state. Replaces the legacy
-                # cloud-init build-from-source path which races
-                # cloud-init's runcmd timeout when go + base-devel
-                # downloads slow down (mirror geography). The runcmd
-                # above stays as a defence-in-depth: if scp fails the
-                # build path is the fallback.
+                # `auto` scps the host's ov binary into the guest
+                # after cloud-init reaches steady-state. Sole install
+                # path; no defence-in-depth runcmd fallback (it could
+                # not consume the scp's failure signal anyway because
+                # cloud-init runs before VmDeployTarget.Emit fires).
                 strategy: auto
         libvirt:
             devices:
@@ -542,6 +576,11 @@ vm:
             checksum:
                 type: sha256
             base_user: arch
+        # `backend: libvirt` matches arch — `ov eval kind k8s` shares
+        # the dispatcher path with `ov eval kind vm` and reaches the
+        # same libvirt-RPC eval list. See the matching note on the
+        # arch: VM template above.
+        backend: libvirt
         disk_size: 20G
         ram: 4G
         cpus: 2

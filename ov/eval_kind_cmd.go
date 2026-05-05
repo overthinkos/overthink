@@ -238,11 +238,17 @@ func (c *EvalKindCmd) runOne(exe, kind string, spec bedSpec) (*kindResult, error
 	// `arch-pacstrap`). Pod / local beds use `ov deploy add <bed>
 	// <ref>`.
 	if spec.IsVM {
-		// VM beds: best-effort destroy first to clear any lingering
-		// libvirt domain or qemu process from a previous interrupted
-		// run (the cleanup hook can fail to fire on hard exits).
-		// Then build (idempotent) → create (auto-boots qemu) →
-		// deploy-add (applies bed's add_layers: in-guest via SSH).
+		// VM beds need libvirt's user-session daemon for the eval
+		// probes (`ov eval libvirt …`, `ov eval spice …`) to work AND
+		// for the deploy.yml `backend: libvirt` resolver in
+		// resolveVmBackend(). Best-effort start before any VM step;
+		// downstream gate surfaces missing-daemon as a clear error.
+		startLibvirtUserSession()
+		// Best-effort destroy first to clear any lingering libvirt
+		// domain or qemu process from a previous interrupted run
+		// (the cleanup hook can fail to fire on hard exits). Then
+		// build (idempotent) → create (auto-boots qemu) → deploy-add
+		// (applies bed's add_layers: in-guest via SSH).
 		_ = exec.Command(exe, "vm", "destroy", spec.VmTemplate).Run()
 		if err := step("vm-build", []string{"vm", "build", spec.VmTemplate}); err != nil {
 			c.writeSummary(logDir, res)
@@ -254,6 +260,17 @@ func (c *EvalKindCmd) runOne(exe, kind string, spec bedSpec) (*kindResult, error
 			cleanup()
 			return res, fmt.Errorf("vm create %s: %w", spec.VmTemplate, err)
 		}
+		// `ov vm create` auto-starts the libvirt domain after applying
+		// snippet injections (no separate `ov vm start` needed — that
+		// would error with "domain is already running"). However, the
+		// in-guest sshd takes 30-90s on cold boot (cloud-init has to
+		// install qemu-guest-agent + portaudio + run pacman-key
+		// --populate). The subsequent deploy-add invokes WaitForSSH
+		// against the managed `ov-<vm>` alias — poll until ssh
+		// connects successfully so deploy-add starts at a known-ready
+		// state. Best-effort: silent on timeout (deploy-add surfaces
+		// the real error if VM is genuinely broken).
+		waitForVmSshReady(spec.VmTemplate, 120*time.Second)
 		if err := step("deploy-add", []string{"deploy", "add", spec.Bed, spec.VmTemplate}); err != nil {
 			c.writeSummary(logDir, res)
 			cleanup()
@@ -343,6 +360,39 @@ func runCapture(exe string, args []string) ([]byte, error) {
 	cmd.Stdin = os.Stdin
 	err := cmd.Run()
 	return buf.Bytes(), err
+}
+
+// waitForVmSshReady polls the VM's managed ssh-config alias until ssh
+// accepts a connection (or timeout). `ov vm create` returns when the
+// libvirt domain is defined + first started, but a snippet-injection
+// post-step stops + restarts the domain; the second start can take
+// 5-30s on slow hosts. Without this poll, the dispatcher's deploy-add
+// runs WaitForSSH which fast-fails when ssh can't even resolve the
+// alias (race against the SSH config Include's re-prepend).
+//
+// vmName is the kind:vm entity name (e.g., "arch"); the SSH alias is
+// "ov-" + vmName matching what publishVmSshAlias writes.
+//
+// Best-effort: silent on timeout. The downstream deploy-add surfaces
+// the real error if the VM genuinely isn't accepting SSH.
+func waitForVmSshReady(vmName string, timeout time.Duration) {
+	alias := "ov-" + vmName
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		cmd := exec.Command("ssh",
+			"-o", "BatchMode=yes",
+			"-o", "ConnectTimeout=2",
+			"-o", "LogLevel=ERROR",
+			alias, "true")
+		if err := cmd.Run(); err == nil {
+			// One brief settle to give cloud-init a beat to finish
+			// any first-boot package install before deploy-add fires
+			// another pacman invocation.
+			time.Sleep(2 * time.Second)
+			return
+		}
+		time.Sleep(1 * time.Second)
+	}
 }
 
 // waitForContainerReady polls until the container is exec-able AND its

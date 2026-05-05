@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // SSHExecutor implements DeployExecutor against an SSH-reachable guest.
@@ -255,12 +256,22 @@ func shellSingleQuoteSSH(s string) string {
 // (bounded by maxWaitSeconds). Returns nil on first successful
 // connect, error on timeout. Used by VmDeployTarget right after
 // `ov vm create`.
+//
+// The loop uses a wall-clock deadline (not an iteration count) and
+// a 1-second sleep between attempts. The previous design (300
+// iterations with no sleep) fast-failed in ~15 seconds when each
+// SSH attempt errored quickly — connection-refused returns in
+// ~50 ms, host-key-mismatch in ~20 ms — burning the entire
+// "300-second budget" in a tiny window. With a 1 s sleep between
+// attempts, slow-to-boot guests get the full polling window
+// they were always supposed to receive. Fixed during the
+// 2026-05-06 R10 follow-up.
 func (e *SSHExecutor) WaitForSSH(ctx context.Context, maxWaitSeconds int) error {
 	if maxWaitSeconds <= 0 {
 		maxWaitSeconds = 120
 	}
-	deadline := maxWaitSeconds / 3 // try 3× per second on average
-	for i := 0; i < deadline*3; i++ {
+	deadline := time.Now().Add(time.Duration(maxWaitSeconds) * time.Second)
+	for time.Now().Before(deadline) {
 		args := e.sshBaseArgs()
 		args = append(args, "-o", "BatchMode=yes", "-o", "ConnectTimeout=2", "true")
 		cmd := exec.CommandContext(ctx, "ssh", args...)
@@ -272,7 +283,7 @@ func (e *SSHExecutor) WaitForSSH(ctx context.Context, maxWaitSeconds int) error 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
+		case <-time.After(1 * time.Second):
 		}
 	}
 	return fmt.Errorf("timed out waiting for sshd on %s:%d after %d seconds", e.Host, e.Port, maxWaitSeconds)

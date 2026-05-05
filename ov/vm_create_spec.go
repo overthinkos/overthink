@@ -179,15 +179,35 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 // stanza for this VM and ensures the Include line is present in the
 // user's ~/.ssh/config. Idempotent — safe to call on every `ov vm
 // create` invocation including reruns.
+//
+// Clears the per-VM known_hosts file as part of the refresh: each
+// `ov vm create` boots a fresh guest (or recreates a destroyed one)
+// whose sshd regenerates its host key on first boot. The stale entry
+// in known_hosts from a previous incarnation would trigger ssh's
+// "REMOTE HOST IDENTIFICATION HAS CHANGED" rejection — and because
+// the stanza sets `StrictHostKeyChecking accept-new`, ssh accepts
+// brand-new keys but REFUSES changed ones. Clearing on every create
+// matches the disposable-VM semantics: the on-disk state machine
+// resets to empty when the domain is recreated. The first ssh after
+// vm create writes the new key into known_hosts.
+//
+// Without this fix, dispatcher loops that destroy + recreate VMs
+// (`ov eval kind vm`, `ov rebuild <vm-bed>`) fail at the post-create
+// SSH step with "Host key verification failed", which surfaces in
+// VmDeployTarget.WaitForSSH as "Could not resolve hostname" — see the
+// 2026-05-06 R10 follow-up RCA.
 func publishVmSshAlias(home, vmName, deployName string, spec *VmSpec, rt VmRuntimeParams) error {
 	stateDir := filepath.Join(home, ".local", "share", "ov", "vm", "ov-"+vmName)
+	knownHostsPath := filepath.Join(stateDir, "known_hosts")
+	// Best-effort: ignore "no such file" on first-create.
+	_ = os.Remove(knownHostsPath)
 	stanza := VmSshStanza{
 		Alias:          VmSshAlias(deployName),
 		Hostname:       "127.0.0.1",
 		Port:           rt.SshPort,
 		User:           resolveVmSshUser(spec),
 		IdentityFile:   filepath.Join(stateDir, "id_ed25519"),
-		KnownHostsFile: filepath.Join(stateDir, "known_hosts"),
+		KnownHostsFile: knownHostsPath,
 	}
 	if err := WriteVmSshStanza(home, stanza); err != nil {
 		return err

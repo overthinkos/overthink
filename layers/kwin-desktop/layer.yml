@@ -1,8 +1,0 @@
-layer:
-  name: kwin-desktop
-  layers:
-    - pipewire
-    - xdg-portal-kde
-    - chrome-kwin
-    - kwin-apps
-

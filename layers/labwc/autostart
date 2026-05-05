@@ -1,5 +1,5 @@
 # Launch Chrome via chrome-wrapper. Matches every other compositor's
-# autostart pattern (sway, mutter, kwin) — chrome-wrapper handles
+# autostart pattern (sway) — chrome-wrapper handles
 # CDP flags, GPU detection, Windows-UA spoofing, and the
 # --user-data-dir contract.
 chrome-wrapper --force-renderer-accessibility --no-first-run --start-maximized &

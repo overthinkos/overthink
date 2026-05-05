@@ -1,9 +1,0 @@
-layer:
-  name: kwin-apps
-  requires:
-    - kwin
-  distros:
-    fedora:
-      packages:
-        - dolphin
-        - konsole

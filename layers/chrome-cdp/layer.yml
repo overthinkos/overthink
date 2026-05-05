@@ -9,7 +9,7 @@ layer:
     /ov-selkies:chrome-devtools-mcp for the MCP server on port 9224.
 
     Use this layer in container streaming desktops (selkies-desktop,
-    openclaw-*, sway-desktop, mutter-desktop, kwin-desktop)
+    openclaw-*, sway-desktop)
     where headless Chrome needs to expose CDP for cross-container
     automation. Do NOT use on target:local host installs — every
     feature here assumes a containerized headless context.

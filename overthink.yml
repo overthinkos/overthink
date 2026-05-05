@@ -2057,8 +2057,8 @@ inits:
                 {{- end}}
 # vm — phase 7 (vm-control-libvirt-spice). The libvirt domain
 # `ov-vm` is defined externally (not via `ov vm build`); this
-# entity exists so `ov test libvirt info vm` and
-# `ov test spice * vm` resolve their session-libvirt domain.
+# entity exists so `ov eval libvirt info vm` and
+# `ov eval spice * vm` resolve their session-libvirt domain.
 vm:
     arch-pacstrap:
         source:

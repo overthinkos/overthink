@@ -1643,7 +1643,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 
 	// Tests: three-section (layer/image/deploy) declarative manifest. Shipped
 	// so every pulled image is self-describing at all three levels. Local
-	// deploy.yml overlays (by id) are applied at ov test time, not here.
+	// deploy.yml overlays (by id) are applied at ov eval live time, not here.
 	tests := CollectEval(g.Config, g.Layers, imageName)
 	if tests != nil {
 		writeJSONLabel(b, LabelEval, tests)

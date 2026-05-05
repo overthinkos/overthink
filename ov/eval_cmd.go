@@ -15,7 +15,7 @@ import (
 // EvalCmd is the unified `ov eval` command tree — declarative evaluation,
 // AI-driven iteration, and live-container probe verbs all under one
 // prefix. Three primary verbs (image / live / run) replace the old
-// `ov image test` / `ov test <image>` / `ov eval run <score>` split:
+// `ov eval image` / `ov eval live <image>` / `ov eval run <score>` split:
 //
 //   - `ov eval image <image>` — pure-image artifact eval (disposable
 //     container, build-scope checks only, no host port mapping, no
@@ -290,7 +290,7 @@ func (c *EvalLiveCmd) runVm() error {
 	//
 	// Schema v3: also accept plain-identifier deployment entries whose
 	// `target: vm` + `vm_source: <c.Image>` resolves to the same VM.
-	// This is what makes `ov test <deploy-name>` work for beds like
+	// This is what makes `ov eval live <deploy-name>` work for beds like
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
 	// Merge by id (local replaces project); same rules as MergeDeployEval.
 	findVmEntry := func(images map[string]DeploymentNode) *DeploymentNode {

@@ -19,7 +19,7 @@ package main
 //   - Del()/Test()/Update() and the lifecycle methods (Start/Stop/
 //     Status/Logs/Shell/Rebuild) are STUBS that return a typed
 //     ErrNotYetImplemented sentinel. Phase 3 extracts the existing
-//     runLocalDel / runContainerDel / runVmDel / ov test / ov start /
+//     runLocalDel / runContainerDel / runVmDel / ov eval live / ov start /
 //     ov stop / etc. bodies from their cmd files into these methods.
 //   - ResolveTarget returns a concrete adapter given a DeploymentNode.
 //     For now, only legacy-compatible targets are instantiable; full

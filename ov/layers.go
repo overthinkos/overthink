@@ -294,7 +294,7 @@ type LayerYAML struct {
 
 	// Tests are declarative checks contributed by this layer. They travel
 	// in the org.overthinkos.tests OCI label (layer section) and run under
-	// `ov image test` (build-time) and `ov test` (deploy-time).
+	// `ov eval image` (build-time) and `ov eval live` (deploy-time).
 	// See testspec.go for the Check type.
 	Eval []Check `yaml:"eval,omitempty"`
 

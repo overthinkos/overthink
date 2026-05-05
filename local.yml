@@ -92,7 +92,7 @@ local:
     # established by the deploy itself, not assumed from CachyOS installer
     # state. This probe catches regressions BETWEEN deploys (e.g. someone
     # manually deletes the drop-in or removes the user from wheel) so
-    # `ov test ov-cachyos` flags them before the next `ov rebuild
+    # `ov eval live ov-cachyos` flags them before the next `ov rebuild
     # ov-cachyos` aborts mid-flight on a sudo prompt. The same %wheel
     # ALL=(ALL:ALL) NOPASSWD: ALL convention is mirrored inside ephemeral
     # AUR-builder containers by ov/deploy_target_local.go renderAurScript.

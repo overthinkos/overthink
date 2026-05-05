@@ -8,7 +8,7 @@ package main
 // cannot:
 //   1. Merge the retrieved kubeconfig into ~/.kube/config under a context
 //      named after the deploy, so `kubectl --context <deploy> …` and
-//      `ov test k8s nodes --cluster <deploy>` both work immediately.
+//      `ov eval k8s nodes --cluster <deploy>` both work immediately.
 //   2. Write a ClusterProfile at ~/.config/ov/clusters/<deploy>.yaml with
 //      ingress.class=traefik and storage.class_default=local-path so any
 //      subsequent `ov deploy add <app> --target kubernetes` that selects

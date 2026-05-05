@@ -8,7 +8,7 @@ import (
 
 // FeatureCmd groups the `ov feature` authoring + inspection verbs.
 // Additional run-verbs live on EvalCmd / ImageCmd as Feature children
-// so that `ov test feature run <deployment>` and `ov image feature run
+// so that `ov eval feature run <deployment>` and `ov image feature run
 // <image>` fit the existing test-command hierarchy.
 type FeatureCmd struct {
 	List     FeatureListCmd     `cmd:"list"     help:"Enumerate every kind: entity and the scenarios declared on its description: block"`

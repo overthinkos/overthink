@@ -54,7 +54,7 @@ func RenderDomainXML(spec *VmSpec, rt VmRuntimeParams) (string, error) {
 }
 
 // BuildLibvirtDomainXML builds a libvirtxml.Domain tree. Exposed so
-// callers (e.g. `ov test libvirt passwd`) can mutate the tree before
+// callers (e.g. `ov eval libvirt passwd`) can mutate the tree before
 // marshaling.
 func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain, error) {
 	d := &libvirtxml.Domain{

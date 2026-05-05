@@ -11,7 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// mcp.go contains the `ov test mcp …` Kong subcommand tree. Each leaf
+// mcp.go contains the `ov eval mcp …` Kong subcommand tree. Each leaf
 // resolves the image's mcp_provides declaration via OCI labels, opens a
 // session using the Anthropic Go SDK (StreamableClientTransport for
 // `transport: http` / empty; SSEClientTransport for `transport: sse`), and
@@ -24,7 +24,7 @@ import (
 // with Run() methods + positional args + `-i` flag). Live-container wiring
 // (runMcp + method allowlist) lives in testrun_ov_verbs.go.
 
-// McpCmd groups the seven `ov test mcp …` leaves.
+// McpCmd groups the seven `ov eval mcp …` leaves.
 type McpCmd struct {
 	Ping          McpPingCmd          `cmd:"" help:"Ping an MCP server (liveness check)"`
 	Servers       McpServersCmd       `cmd:"" help:"Enumerate MCP servers declared by an image (no dial)"`
@@ -50,7 +50,7 @@ type mcpCommonFlags struct {
 // Leaf commands
 // ---------------------------------------------------------------------------
 
-// McpPingCmd: `ov test mcp ping <image>`
+// McpPingCmd: `ov eval mcp ping <image>`
 type McpPingCmd struct {
 	Image string `arg:"" help:"Image name"`
 	mcpCommonFlags
@@ -73,7 +73,7 @@ func (c *McpPingCmd) Run() error {
 	return nil
 }
 
-// McpServersCmd: `ov test mcp servers <image>` — discovery-only.
+// McpServersCmd: `ov eval mcp servers <image>` — discovery-only.
 type McpServersCmd struct {
 	Image    string `arg:"" help:"Image name"`
 	Instance string `short:"i" long:"instance" help:"Instance name"`
@@ -125,7 +125,7 @@ func (c *McpServersCmd) Run() error {
 	return nil
 }
 
-// McpListToolsCmd: `ov test mcp list-tools <image>`
+// McpListToolsCmd: `ov eval mcp list-tools <image>`
 type McpListToolsCmd struct {
 	Image string `arg:"" help:"Image name"`
 	mcpCommonFlags
@@ -164,7 +164,7 @@ func (c *McpListToolsCmd) Run() error {
 	return nil
 }
 
-// McpListResourcesCmd: `ov test mcp list-resources <image>`
+// McpListResourcesCmd: `ov eval mcp list-resources <image>`
 type McpListResourcesCmd struct {
 	Image string `arg:"" help:"Image name"`
 	mcpCommonFlags
@@ -203,7 +203,7 @@ func (c *McpListResourcesCmd) Run() error {
 	return nil
 }
 
-// McpListPromptsCmd: `ov test mcp list-prompts <image>`
+// McpListPromptsCmd: `ov eval mcp list-prompts <image>`
 type McpListPromptsCmd struct {
 	Image string `arg:"" help:"Image name"`
 	mcpCommonFlags
@@ -242,7 +242,7 @@ func (c *McpListPromptsCmd) Run() error {
 	return nil
 }
 
-// McpCallCmd: `ov test mcp call <image> <tool> [args-json]`
+// McpCallCmd: `ov eval mcp call <image> <tool> [args-json]`
 type McpCallCmd struct {
 	Image string `arg:"" help:"Image name"`
 	Tool  string `arg:"" help:"Tool name (matches a name from list-tools)"`
@@ -288,7 +288,7 @@ func (c *McpCallCmd) Run() error {
 	return nil
 }
 
-// McpReadCmd: `ov test mcp read <image> <uri>`
+// McpReadCmd: `ov eval mcp read <image> <uri>`
 type McpReadCmd struct {
 	Image string `arg:"" help:"Image name"`
 	URI   string `arg:"" help:"Resource URI (match a URI from list-resources)"`

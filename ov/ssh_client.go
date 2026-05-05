@@ -2,7 +2,7 @@ package main
 
 // Shared SSH client plumbing for programmatic TCP/UNIX forwarding
 // (ov/ssh_tunnel.go) and for SPICE/VNC auto-tunneling inside the
-// `ov test` commands. Built on `golang.org/x/crypto/ssh`, which is
+// `ov eval` commands. Built on `golang.org/x/crypto/ssh`, which is
 // already a transitive dependency.
 //
 // The executor used by `ov deploy add vm:<name>` (in

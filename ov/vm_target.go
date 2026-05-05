@@ -1,6 +1,6 @@
 package main
 
-// Shared VM target resolution for `ov test spice` and `ov test libvirt`.
+// Shared VM target resolution for `ov eval spice` and `ov eval libvirt`.
 //
 // ResolveVmTarget opens a session-scoped libvirt connection, finds
 // the running domain whose name matches the vms.yml entity, and

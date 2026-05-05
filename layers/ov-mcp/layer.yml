@@ -56,7 +56,7 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:18765}
       reachable: true
       timeout: 5s
-    # MCP server exercised live via the in-repo MCP client (ov test mcp).
+    # MCP server exercised live via the in-repo MCP client (ov eval mcp).
     # Confirms the server initialises and enumerates tools derived from the
     # Kong CLI model. mcp_name: ov disambiguates on images that also expose
     # other MCP servers (jupyter, chrome-devtools).

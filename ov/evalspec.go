@@ -49,7 +49,7 @@ type Check struct {
 	// Test-mode live-container verbs — each is a method-name discriminator
 	// validated against the CLI's subcommand surface. Dispatched by runCdp/
 	// runWl/runDbus/runVnc/runMcp/runRecord/runSpice/runLibvirt in
-	// testrun_ov_verbs.go via subprocess delegation to `ov test <verb> <method>`.
+	// testrun_ov_verbs.go via subprocess delegation to `ov eval <verb> <method>`.
 	// See /ov:test for authoring, /ov:cdp, /ov:wl, /ov:dbus, /ov:vnc, /ov:mcp,
 	// /ov:record, /ov:spice, /ov:libvirt for per-verb method semantics.
 	Cdp     string `yaml:"cdp,omitempty"     json:"cdp,omitempty"`
@@ -93,7 +93,7 @@ type Check struct {
 	K8sGroup    string `yaml:"k8s_group,omitempty"    json:"k8s_group,omitempty"`
 	K8sVersion  string `yaml:"k8s_version,omitempty"  json:"k8s_version,omitempty"`
 	// JSON modifies the `k8s: raw` verb's list-mode output: when true,
-	// the underlying `ov test k8s raw` invocation passes --json so the
+	// the underlying `ov eval k8s raw` invocation passes --json so the
 	// full Kubernetes List object (with .kind, .apiVersion, .items[])
 	// is emitted instead of the default `<namespace>/<name>` per
 	// line. Recipe authors expecting `stdout: { contains: "kind" }`
@@ -299,7 +299,7 @@ type Check struct {
 	URI     string `yaml:"uri,omitempty"      json:"uri,omitempty"`      // mcp: resource URI for the `read` method
 	Input   string `yaml:"input,omitempty"    json:"input,omitempty"`    // mcp: JSON argument blob for the `call` method (e.g. '{"path":"x.ipynb"}')
 
-	// record-specific modifiers — record: verb wraps `ov test record <method>`.
+	// record-specific modifiers — record: verb wraps `ov eval record <method>`.
 	// The Artifact + ArtifactMinBytes modifiers are reused: for `record: stop`
 	// Artifact is the host-side file path (-o flag) and ArtifactMinBytes
 	// enforces the post-copy size assertion. Command is reused for

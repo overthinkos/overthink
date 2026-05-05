@@ -12,8 +12,8 @@ import (
 // Pre-cutover (2026-04), four call sites built executor chains (or partial
 // chains) independently:
 //   - ov deploy add  → deriveChildExecutorForPath in deploy_add_cmd.go
-//   - ov test <name> → ad-hoc construction in test_cmd.go runHost/runContainer/runVm
-//   - ov test parent.child → resolveNestedNode + a *flat* VmTestExecutor
+//   - ov eval live <name> → ad-hoc construction in eval_cmd.go runHost/runContainer/runVm
+//   - ov eval live parent.child → resolveNestedNode + a *flat* VmTestExecutor
 //                            (silent single-hop bug — leaf tests ran on the
 //                            parent VM via SSH instead of inside the leaf pod)
 //   - ov eval     → hardcoded ContainerExecutor{ContainerName: "ov-"+pod}
@@ -156,7 +156,7 @@ func appendHopForFlatPath(chain DeployExecutor, node *DeploymentNode, flatPath s
 
 // ContainerChain returns a one-hop chain that exec's into a single named
 // running container (`<engine> exec <name> bash`). Convenience for the
-// simple `ov test <name>` path where there is no nested dotted path to
+// simple `ov eval live <name>` path where there is no nested dotted path to
 // walk — equivalent to ResolveDeployChain on a single-segment dotted
 // path that resolves to a pod node, but skips the tree lookup.
 func ContainerChain(engine, containerName string) DeployExecutor {

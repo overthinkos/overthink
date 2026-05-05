@@ -51,7 +51,7 @@ layer:
       body:
         - contains: "version"
     # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-    # Runs only under `ov test <image>` (deploy-scope).
+    # Runs only under `ov eval live <image>` (deploy-scope).
     - id: mcp-jupyter-ping
       scope: deploy
       mcp: ping

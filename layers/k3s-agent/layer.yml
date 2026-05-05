@@ -73,7 +73,7 @@ layer:
       exists: true
       mode: "0600"
     # Deploy-scope: verify this node actually joined the cluster.
-    # Uses ov test k8s wait-nodes --name <hostname> — the cluster flag
+    # Uses ov eval k8s wait-nodes --name <hostname> — the cluster flag
     # resolves to the sibling k3s-server's ClusterProfile (the operator
     # must name the cluster profile to match, e.g., via ${K3S_CLUSTER}).
     - id: agent-joined

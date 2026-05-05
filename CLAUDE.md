@@ -108,7 +108,7 @@ These rules exist because (a) failing tests have been deferred as 'pre-existing'
   1. `ov image build <image>` — build a concrete image (not just generate Containerfile).
   2. `ov eval image <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R8).
   3. `ov start <image>` (or `ov deploy add <image> <image>` / `ov update <image>` for an existing deploy) — container must reach `Active: active (running)`.
-  4. `ov test <image>` — full three-section run including deploy probes must pass.
+  4. `ov eval live <image>` — full three-section run including deploy probes must pass.
   5. If any step fails, the task is NOT done — invoke R1's RCA mandate.
 
   A container that crash-loops on `supervisord: PermissionError: /var/log/supervisor/supervisord.log` exposes what no unit test would.
@@ -250,7 +250,7 @@ migration may have introduced. A migration command that looked correct in
 isolation may miss a field; a struct rename may have left a stale
 reference in a code path that unit tests don't exercise; a layer
 composition may quietly produce a different effective image. Only a fresh
-`ov rebuild <disposable>` + `ov test <disposable>` exercises every code
+`ov rebuild <disposable>` + `ov eval live <disposable>` exercises every code
 path the cutover touched. That's the point: R10 assumes the migration
 introduced unseen regressions and flushes them out.
 

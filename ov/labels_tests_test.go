@@ -73,7 +73,7 @@ func TestExtractMetadata_Tests(t *testing.T) {
 		t.Errorf("deploy status = %d", d.Status)
 	}
 	// Crucial: parameterized vars must survive verbatim in the label so
-	// ResolveTestVars can substitute them at ov test time.
+	// ResolveTestVars can substitute them at ov eval live time.
 	if d.HTTP != "http://${CONTAINER_IP}:${HOST_PORT:6379}/health" {
 		t.Errorf("deploy HTTP lost template: %q", d.HTTP)
 	}

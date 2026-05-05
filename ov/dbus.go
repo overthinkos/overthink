@@ -188,7 +188,7 @@ func dbusIntrospectLocal(dest, path string) error {
 
 // --- Remote D-Bus operations (host → container delegation) ---
 
-// dbusNotifyRemoteStrict sends a notification to a container, returning errors (for ov test dbus notify).
+// dbusNotifyRemoteStrict sends a notification to a container, returning errors (for ov eval dbus notify).
 func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 	// Try native ov binary first
 	if checkToolAvailable(engine, name, "ov") == nil {
@@ -198,7 +198,7 @@ func dbusNotifyRemoteStrict(engine, name, title, body string) error {
 		if err := cmd.Run(); err == nil {
 			return nil
 		}
-		fmt.Fprintf(os.Stderr, "Warning: in-container ov test dbus failed, trying gdbus fallback\n")
+		fmt.Fprintf(os.Stderr, "Warning: in-container ov eval dbus failed, trying gdbus fallback\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "Warning: ov binary not found in container, falling back to gdbus\n"+
 			"  For native D-Bus support, add the 'ov' layer to your image.\n")

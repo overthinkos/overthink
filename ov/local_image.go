@@ -67,7 +67,7 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 
 // resolveLocalImageRef resolves a user-supplied image reference against the
 // engine's local storage — never reads image.yml. Used by test-mode commands
-// (ov test, ov image test) so they stay within the test-mode input set.
+// (ov eval live, ov eval image) so they stay within the test-mode input set.
 //
 // For full refs (registry prefix present) it validates the image exists
 // locally and passes through unchanged. For short names it resolves via

@@ -34,7 +34,7 @@ import (
 // `ov image test --format yaml` parser
 // ---------------------------------------------------------------------------
 
-// EvalRunResults is the structured result of one `ov image test` run,
+// EvalRunResults is the structured result of one `ov eval image` run,
 // as produced by `--format yaml`. The YAML shape is documented in
 // description_report.go; this type is the Go-side mirror.
 //

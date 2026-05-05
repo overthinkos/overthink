@@ -228,7 +228,7 @@ func TestNestedExecutor_EnvVarsPropagated_XdgRuntimeDir(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `ov test libvirt info vm`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "vm"}, `ov eval libvirt info vm`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-2")
 	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
 
-	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "ov-fixture-desktop"}, `ov test wl status fixture-desktop`, false)
+	wrapped, err := wrapWithJump(NestedJump{Kind: JumpPodmanExec, Target: "ov-fixture-desktop"}, `ov eval wl status fixture-desktop`, false)
 	if err != nil {
 		t.Fatalf("wrapWithJump: %v", err)
 	}

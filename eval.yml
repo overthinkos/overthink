@@ -374,7 +374,7 @@ recipe:
               `mcp` pod. The recipe imports the full
               jupyter test surface via `from:` so the assertions
               and their expected values are exactly the ones the
-              jupyter image's own `ov test jupyter` flow runs.
+              jupyter image's own `ov eval live jupyter` flow runs.
     from:
       # Import EVERY test the jupyter image already carries — layer +
       # image + deploy sections. No select/exclude/scope filters: each
@@ -2173,11 +2173,11 @@ score:
 
   # ─────────────────────────────────────────────────────────────────────
   # Default benchmark — progressive verb-coverage curriculum across the
-  # full `ov test` surface. 8 phases, one recipe added per phase.
+  # full `ov eval` surface. 8 phases, one recipe added per phase.
   # ─────────────────────────────────────────────────────────────────────
   default:
     description:
-      feature: "Default benchmark — progressive verb-coverage curriculum across the full `ov test` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
+      feature: "Default benchmark — progressive verb-coverage curriculum across the full `ov eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
     pod: eval-pod                    # iterations + scoring run inside ov-eval-pod
     ai: [claude]
     plateau_iteration: 3

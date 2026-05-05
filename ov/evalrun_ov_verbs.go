@@ -53,7 +53,7 @@ var artifactValidatableMethods = map[string]bool{
 }
 
 // testrun_ov_verbs.go implements the cdp/wl/dbus/vnc test verbs. Each verb
-// is a thin wrapper around the corresponding `ov test <verb> <method>` CLI
+// is a thin wrapper around the corresponding `ov eval <verb> <method>` CLI
 // path — the test framework spawns a subprocess for each check, captures
 // stdout/stderr/exit, and feeds the output through the existing matcher
 // pipeline (Stdout/Stderr/ExitStatus + artifact size via ArtifactMinBytes).
@@ -208,7 +208,7 @@ var vncMethods = map[string]methodSpec{
 // mcp methods
 // ---------------------------------------------------------------------------
 //
-// The mcp verb dispatches to `ov test mcp <method> <image> …`, which uses
+// The mcp verb dispatches to `ov eval mcp <method> <image> …`, which uses
 // github.com/modelcontextprotocol/go-sdk to connect to the declared MCP
 // server. Methods mirror the SDK's ClientSession surface. See
 // mcp.go / mcp_client.go for the host-side implementation.
@@ -224,7 +224,7 @@ var mcpMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
-// record methods — `ov test record <method>` drives in-container recording
+// record methods — `ov eval record <method>` drives in-container recording
 // sessions (asciinema terminal / pixelflux-record / wf-recorder desktop).
 // Container-only: resolveContainer does not know about VMs, so a `record:`
 // check on a `vm:<name>` deploy will fail at subprocess dispatch. Documented
@@ -245,7 +245,7 @@ var recordMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
-// spice methods — `ov test spice <method>` speaks the SPICE wire protocol
+// spice methods — `ov eval spice <method>` speaks the SPICE wire protocol
 // (github.com/Shells-com/spice) to a running VM's SPICE port. Host-side;
 // only applicable to `vm:<name>` deploys that expose SPICE graphics.
 // ---------------------------------------------------------------------------
@@ -261,7 +261,7 @@ var spiceMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
-// libvirt methods — `ov test libvirt <method>` uses go-libvirt RPC against
+// libvirt methods — `ov eval libvirt <method>` uses go-libvirt RPC against
 // a running VM. Host-side; only applicable to `vm:<name>` deploys. Nested
 // subgroups (guest/*, snapshot/*) are flattened via slash-separated method
 // names so authors write `libvirt: guest/ping` or `libvirt: snapshot/list`.
@@ -308,7 +308,7 @@ var libvirtMethods = map[string]methodSpec{
 }
 
 // ---------------------------------------------------------------------------
-// k8s methods — `ov test k8s <method>` probes a Kubernetes cluster via the
+// k8s methods — `ov eval k8s <method>` probes a Kubernetes cluster via the
 // vendored client-go SDK. Cluster selection is via --cluster <profile> /
 // --context / --kubeconfig (see cmd_test_k8s.go). Host-side; applicable to
 // any deploy whose post-provision registered a ClusterProfile (typically
@@ -337,7 +337,7 @@ var k8sMethods = map[string]methodSpec{
 // k8s positional-arg builders — every method emits --cluster/--context/
 // --kubeconfig + its method-specific flags. Because k8s probes are run
 // against a cluster (not a container/image), the --image positional from
-// runOvVerb is still passed, but `ov test k8s ...` ignores it by accepting
+// runOvVerb is still passed, but `ov eval k8s ...` ignores it by accepting
 // arbitrary trailing args under Kong's default catch-all policy.
 // ---------------------------------------------------------------------------
 
@@ -438,7 +438,7 @@ func posK8sRaw(c *Check) []string {
 	}
 	if c.JSON {
 		// Recipe `json: true` → `--json` flag on the underlying
-		// `ov test k8s raw` invocation. List-mode then emits the
+		// `ov eval k8s raw` invocation. List-mode then emits the
 		// full Kubernetes List JSON document instead of one
 		// `<namespace>/<name>` per line.
 		args = append(args, "--json")
@@ -645,7 +645,7 @@ func posKeyNameSplit(c *Check) []string {
 // the QEMU guest-agent wants a real argv list (no shell, no metachars).
 // Prefixes `--` so kong does not interpret embedded `-flag`-like tokens
 // (e.g. `-s` in `uname -s`, `-fsS` in `curl -fsS …`) as CLI flags of the
-// outer `ov test libvirt guest exec` invocation.
+// outer `ov eval libvirt guest exec` invocation.
 // For commands containing real shell metacharacters (pipes, redirects,
 // quoted spaces), use `command: "sh -c '<full command>'"` so the recipe-side
 // argv is `sh`, `-c`, `<full command>`.
@@ -715,10 +715,10 @@ func (r *Runner) runK8s(ctx context.Context, c *Check) EvalResult {
 // assertion. Returns the EvalResult directly.
 func (r *Runner) runOvVerb(ctx context.Context, c *Check, verb, method string, allowlist map[string]methodSpec) EvalResult {
 	if r.Mode == RunModeImage {
-		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under ov image test)", verb, method))
+		return skipf(c, fmt.Sprintf("%s: %s requires a running container (skip under ov eval image)", verb, method))
 	}
 	if r.Image == "" {
-		return skipf(c, fmt.Sprintf("%s: %s runner has no image context (should not happen under ov test)", verb, method))
+		return skipf(c, fmt.Sprintf("%s: %s runner has no image context (should not happen under ov eval)", verb, method))
 	}
 
 	spec, ok := allowlist[method]

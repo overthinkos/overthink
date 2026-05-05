@@ -66,7 +66,7 @@ type UnifiedDeployTarget interface {
 	Del(ctx context.Context, opts DelOpts) error
 
 	// Test runs the given deploy-scope checks against the live
-	// target. Equivalent to `ov test <name>`. Returns nil only if
+	// target. Equivalent to `ov eval live <name>`. Returns nil only if
 	// every non-skipped check passes.
 	Test(ctx context.Context, checks []Check, opts TestOpts) error
 
@@ -132,7 +132,7 @@ type DelOpts struct {
 	RemoveVolumes bool
 }
 
-// TestOpts parameterizes `ov test` against a live deployment.
+// TestOpts parameterizes `ov eval live` against a live deployment.
 type TestOpts struct {
 	// OnlyIDs restricts the run to the listed check IDs. Empty =
 	// run every check defined on the deployment.

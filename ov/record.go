@@ -37,7 +37,7 @@ func (c *RecordStartCmd) Run() error {
 
 	session := recordSessionName(c.Name)
 	if tmuxHasSession(engine, name, session) {
-		return fmt.Errorf("recording %q already active (session %s). Stop it first with: ov test record stop %s -n %s",
+		return fmt.Errorf("recording %q already active (session %s). Stop it first with: ov eval record stop %s -n %s",
 			c.Name, session, c.Image, c.Name)
 	}
 
@@ -92,7 +92,7 @@ func (c *RecordStartCmd) Run() error {
 
 	fmt.Fprintf(os.Stderr, "Recording started (mode: %s, tool: %s, session: %s)\n", mode, tool, session)
 	fmt.Fprintf(os.Stderr, "  Output: %s (inside container)\n", outFile)
-	fmt.Fprintf(os.Stderr, "  Stop with: ov test record stop %s -n %s [-o local-file]\n", c.Image, c.Name)
+	fmt.Fprintf(os.Stderr, "  Stop with: ov eval record stop %s -n %s [-o local-file]\n", c.Image, c.Name)
 	return nil
 }
 
@@ -135,7 +135,7 @@ func (c *RecordStopCmd) Run() error {
 
 	session := recordSessionName(c.Name)
 	if !tmuxHasSession(engine, name, session) {
-		return fmt.Errorf("no active recording %q (session %s not found). Use 'ov test record list %s' to see active recordings",
+		return fmt.Errorf("no active recording %q (session %s not found). Use 'ov eval record list %s' to see active recordings",
 			c.Name, session, c.Image)
 	}
 
@@ -190,7 +190,7 @@ func (c *RecordStopCmd) Run() error {
 		}
 	} else {
 		fmt.Fprintf(os.Stderr, "Recording stopped. File inside container: %s\n", outFile)
-		fmt.Fprintf(os.Stderr, "  Copy with: ov test record stop %s -n %s -o <local-path>\n", c.Image, c.Name)
+		fmt.Fprintf(os.Stderr, "  Copy with: ov eval record stop %s -n %s -o <local-path>\n", c.Image, c.Name)
 	}
 
 	return nil

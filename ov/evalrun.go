@@ -62,9 +62,9 @@ type EvalResult struct {
 
 // RunMode selects routing rules for a Run() invocation.
 //
-//   - RunModeLive: ov test — against a running container. In-container
+//   - RunModeLive: ov eval live — against a running container. In-container
 //     probes via Exec; host-side verbs (http/dns/addr) from the ov process.
-//   - RunModeImage: ov image test — against a disposable container
+//   - RunModeImage: ov eval image — against a disposable container
 //     (podman run --rm). All probes via Exec; host-side reachability is
 //     not meaningful and those checks are skipped.
 type RunMode int

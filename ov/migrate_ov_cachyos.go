@@ -176,7 +176,7 @@ func applyOvCachyosRewrites(src string) string {
 		{"'ov rebuild cachyos-dx'", "'ov rebuild ov-cachyos'"},
 		{"ov rebuild cachyos-dx", "ov rebuild ov-cachyos"},
 		{"ov deploy add cachyos-dx", "ov deploy add ov-cachyos"},
-		{"ov test cachyos-dx", "ov test ov-cachyos"},
+		{"ov test cachyos-dx", "ov eval live ov-cachyos"},
 		{"cachyos-dx CachyOS host", "ov-cachyos CachyOS host"},
 		{"`cachyos-dx` (kind:local template, applied via the `cachyos-dx` deployment", "`ov-cachyos` (kind:local template, applied via the `ov-cachyos` deployment"},
 		{"`cachyos-dx` deployment", "`ov-cachyos` deployment"},

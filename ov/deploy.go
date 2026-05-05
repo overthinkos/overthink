@@ -1316,7 +1316,7 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			// local deploy.yml overlays via field-level replace — so a
 			// per-machine add_layers list fully replaces the project list,
 			// and per-machine tests replace project tests. For tests the
-			// caller (ov test) can run MergeDeployEval to merge by id.
+			// caller (ov eval live) can run MergeDeployEval to merge by id.
 			if overlay.Target != "" {
 				existing.Target = overlay.Target
 			}

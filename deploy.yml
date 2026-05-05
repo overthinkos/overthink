@@ -3,12 +3,12 @@
 # =============================================================================
 #
 # Four disposable deployments, one per target kind (host / vm / pod / k8s),
-# together exercising every ov test verb (19 verbs: file, package, service,
+# together exercising every ov eval verb (19 verbs: file, package, service,
 # port, process, command, http, dns, user, group, interface, kernel-param,
 # mount, addr, matching, cdp, wl, dbus, vnc, mcp, record, spice, libvirt, k8s).
 #
-# A `./ov test arch-vm && ./ov test arch-host && ./ov test openclaw-sway-browser-pod &&
-# ./ov test k3s-vm` smoke run catches regressions across the entire ov stack.
+# A `./ov eval live arch-vm && ./ov eval live arch-host && ./ov eval live openclaw-sway-browser-pod &&
+# ./ov eval live k3s-vm` smoke run catches regressions across the entire ov stack.
 #
 # Bed-to-verb coverage map:
 #   arch-vm       (target: vm)   — libvirt, spice, command (SSH-in-guest),
@@ -278,7 +278,7 @@ deployment:
             # --- record: verb (asciinema / pixelflux) ----------------
             # start exercises the verb surface; cmd+stop require
             # multi-step orchestration state that doesn't survive
-            # the declarative-probe boundary. Use `ov test record`
+            # the declarative-probe boundary. Use `ov eval record`
             # CLI interactively for full record→cmd→stop cycles.
             - {id: sp-record-terminal-start, scope: deploy, record: start, record_name: test-term, record_mode: terminal}
             # --- matching: verb smoke -----------------------------

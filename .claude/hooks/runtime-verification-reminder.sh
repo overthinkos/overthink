@@ -100,8 +100,8 @@ TRIGGER → SKILL MAPPING. Consult BEFORE the first tool call:
   ov rebuild / ov vm / vms.yml         →  /ov:vm + /ov-dev:vm-deploy-target
   ov deploy add/del                    →  /ov:deploy
   host-target / nested host deploy     →  /ov:host-deploy + /ov-dev:host-infra
-  ov test run / cdp / wl / dbus / vnc  →  /ov:test
-  ov test k8s                          →  /ov:test-k8s
+  ov eval run / cdp / wl / dbus / vnc  →  /ov-build:eval
+  ov eval k8s                          →  /ov-advanced:eval-k8s
   Editing layer.yml                    →  /ov:layer
   Editing image.yml                    →  /ov:image
   ov image build / generate            →  /ov:build + /ov:generate

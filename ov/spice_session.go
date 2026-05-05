@@ -1,6 +1,6 @@
 package main
 
-// Thin wrapper over github.com/Shells-com/spice for `ov test spice`.
+// Thin wrapper over github.com/Shells-com/spice for `ov eval spice`.
 //
 // The upstream library needs:
 //   - A Connector (we dial a TCP connection to the resolved SPICE host:port).

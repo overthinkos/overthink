@@ -1,7 +1,7 @@
 package main
 
 // SSH local-forward helper built on golang.org/x/crypto/ssh. Used by
-// `ov test spice|libvirt|vnc --uri qemu+ssh://…` auto-tunneling and
+// `ov eval spice|libvirt|vnc --uri qemu+ssh://…` auto-tunneling and
 // by the user-facing `ov ssh tunnel` command (ov/ssh.go).
 //
 // Two forward modes:

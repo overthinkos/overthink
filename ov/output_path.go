@@ -1,8 +1,8 @@
 package main
 
 // Shared "`-` means stdout" convention for file-output args across
-// ov verbs. Used by `ov test spice screenshot`, `ov test libvirt
-// screenshot`, `ov test vnc vm screenshot`, `ov test cdp screenshot`,
+// ov verbs. Used by `ov eval spice screenshot`, `ov eval libvirt
+// screenshot`, `ov eval vnc vm screenshot`, `ov eval cdp screenshot`,
 // and anything else that writes a binary artifact.
 //
 // Guidelines for callers:

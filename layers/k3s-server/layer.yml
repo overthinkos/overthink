@@ -162,7 +162,7 @@ layer:
     # above, so there is no build-scope file check for it — the service
     # running at deploy time (next tests) is the real invariant.
 
-    # Deploy-scope tests: hit the running cluster via the new ov test k8s
+    # Deploy-scope tests: hit the running cluster via the new ov eval k8s
     # verb. These run during `ov deploy add vm:k3s-srv` after the k3s
     # service reaches Active and kubeconfig artifact retrieval has
     # written ~/.cache/ov/clusters/<deploy>/kubeconfig.yaml (the cluster

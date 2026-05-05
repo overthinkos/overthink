@@ -1,7 +1,7 @@
 package main
 
-// `ov test vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
-// declared in vms.yml, mirroring the shape of `ov test spice`.
+// `ov eval vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
+// declared in vms.yml, mirroring the shape of `ov eval spice`.
 //
 // For VMs whose <graphics type='vnc'> listens on a UNIX socket,
 // we dial the socket directly (local) or tunnel it over SSH (remote);
@@ -30,8 +30,8 @@ type VncVmCmd struct {
 	Mouse      VncVmMouseCmd      `cmd:"" help:"Move pointer to x,y (no click)"`
 }
 
-// vncVmFlags is the shared flag surface for every `ov test vnc vm …`
-// verb. --uri follows the same convention as `ov test libvirt --uri`.
+// vncVmFlags is the shared flag surface for every `ov eval vnc vm …`
+// verb. --uri follows the same convention as `ov eval libvirt --uri`.
 type vncVmFlags struct {
 	Uri string `name:"uri" env:"OV_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session)."`
 }

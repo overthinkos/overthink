@@ -231,7 +231,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 		}
 		// k3s-server post-hook: merge retrieved kubeconfig into
 		// ~/.kube/config and write a ClusterProfile so the new cluster
-		// is immediately usable via `ov test k8s --cluster <name>` and
+		// is immediately usable via `ov eval k8s --cluster <name>` and
 		// `ov deploy add <app> --target kubernetes --kubernetes-cluster <name>`.
 		if deployHasLayer(layerList, "k3s-server") {
 			if pErr := K3sPostProvision(c.Name); pErr != nil {

@@ -1,9 +1,9 @@
 package main
 
-// `ov test k8s <method>` — Kubernetes cluster probe verbs.
+// `ov eval k8s <method>` — Kubernetes cluster probe verbs.
 //
 // Sibling of libvirt / spice / vnc / cdp / wl / dbus / mcp / record under
-// `ov test`. Hermetic: speaks the Kubernetes API directly via the minimal
+// `ov eval`. Hermetic: speaks the Kubernetes API directly via the minimal
 // client-go subset (clientcmd + dynamic + apimachinery). No dependency on
 // an external kubectl on PATH. Cluster selection via --cluster <profile>
 // (ClusterProfile in ov/k8s_config.go), --context <ctx>, or --kubeconfig
@@ -33,7 +33,7 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// K8sCmd — the Kong command tree mounted at `ov test k8s`.
+// K8sCmd — the Kong command tree mounted at `ov eval k8s`.
 // ---------------------------------------------------------------------------
 
 type K8sCmd struct {

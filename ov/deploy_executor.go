@@ -78,7 +78,7 @@ type DeployExecutor interface {
 	// escalation — callers add `sudo` explicitly when needed; mirrors the
 	// previous test-time Executor.Exec semantics. After the executor-
 	// hierarchy cutover (2026-04), this is the single capture-output
-	// method used by every probe across `ov test`, `ov image test`, and
+	// method used by every probe across `ov eval live`, `ov eval image`, and
 	// `ov eval` scoring.
 	RunCapture(ctx context.Context, script string) (stdout, stderr string, exit int, err error)
 

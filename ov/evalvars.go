@@ -98,8 +98,8 @@ func defaultInspectContainer(engine, containerName string) (*ContainerInspection
 	return &arr[0], nil
 }
 
-// EvalVarResolver holds the materials for variable expansion under `ov test`
-// (running container present) and `ov image test` (build-time, no container).
+// EvalVarResolver holds the materials for variable expansion under `ov eval live`
+// (running container present) and `ov eval image` (build-time, no container).
 // Builders for each scope are ResolveEvalVarsRuntime and ResolveEvalVarsBuild.
 type EvalVarResolver struct {
 	// Env is the final flat map: plain refs use the name as key, parameterized
@@ -118,7 +118,7 @@ func ResolveEvalVarsBuild(meta *ImageMetadata) *EvalVarResolver {
 	return &EvalVarResolver{Env: env, HasRuntime: false}
 }
 
-// ResolveEvalVarsRuntime builds a variable map for `ov test` against a
+// ResolveEvalVarsRuntime builds a variable map for `ov eval live` against a
 // running container. It combines image metadata (build-time knowledge),
 // deploy overlay (per-host knowledge), and podman inspect (effective runtime
 // state). Any of the inputs may be nil.
@@ -148,7 +148,7 @@ func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine,
 }
 
 // buildTimeVars populates the ImageMetadata-derived subset of the variable
-// map. This is the only part of the map available at `ov image test` time.
+// map. This is the only part of the map available at `ov eval image` time.
 func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
 	env := map[string]string{}
 	if meta == nil {

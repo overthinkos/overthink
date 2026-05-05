@@ -27,7 +27,7 @@ layer:
       reachable: true
       timeout: 5s
     # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-    # Runs only under `ov test <image>` (deploy-scope). No `call` test — the
+    # Runs only under `ov eval live <image>` (deploy-scope). No `call` test — the
     # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
     # safe non-destructive probes.
     - id: mcp-chrome-devtools-ping

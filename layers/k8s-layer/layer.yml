@@ -8,7 +8,7 @@ layer:
       delegate the `cpuset` cgroup controller — k3s aborts with
       "failed to find cpuset cgroup (v2)" before kubelet starts.
       Instead, this layer runs a minimal Python http.server that
-      replays just the GET endpoints `ov test k8s` (client-go dynamic)
+      replays just the GET endpoints `ov eval k8s` (client-go dynamic)
       reaches: nodes, services, storageclasses, ingressclasses, the
       three k3s addons (traefik / local-path-provisioner /
       svclb-traefik). Every list returns a single Ready object so the
@@ -38,7 +38,7 @@ layer:
         """Minimal fake Kubernetes apiserver for the harness phase 5 recipe.
 
         Serves just enough of the Kubernetes REST API for client-go's
-        dynamic.Interface to satisfy the eight `ov test k8s` probes
+        dynamic.Interface to satisfy the eight `ov eval k8s` probes
         the kubernetes-cluster recipe runs:
 
           - GET /api/v1/nodes                                  → 1 Ready Node

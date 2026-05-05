@@ -1,6 +1,6 @@
 package main
 
-// `ov test spice <vm-name> <verb>` — SPICE wire client.
+// `ov eval spice <vm-name> <verb>` — SPICE wire client.
 //
 // Connect to the VM's SPICE port (via libvirtxml-extracted address),
 // handshake, and exercise the wire protocol: display channel

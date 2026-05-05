@@ -944,21 +944,38 @@ func runSudoShell(script string, opts EmitOpts) error {
 }
 
 // removeInstalledPacmanPackages runs `pacman -Rs --noconfirm <pkgs>`
-// for the subset of `pkgs` that are actually installed. Used by the
-// AUR `replaces:` mechanism to clear distro-repo packages that
-// conflict (on file ownership) with an AUR build artifact, BEFORE
-// the `pacman -U` install. Idempotent — packages not installed are
-// silently skipped, so re-runs of the deploy don't error.
+// for the subset of `pkgs` that are actually installed UNDER THAT
+// EXACT NAME. Used by the AUR `replaces:` mechanism to clear
+// distro-repo packages that conflict (on file ownership) with an
+// AUR build artifact, BEFORE the `pacman -U` install. Idempotent —
+// packages not installed are silently skipped, so re-runs of the
+// deploy don't error.
+//
+// `pacman -Qq <pkg>` resolves virtual `Provides=` aliases: querying
+// `code` on a host where `visual-studio-code-bin` is installed
+// (which declares `Provides=code`) returns `visual-studio-code-bin`
+// and exits 0. `pacman -Rs <pkg>`, by contrast, only accepts real
+// package names and exits with `target not found` for provides-only
+// names. To preserve idempotency on re-runs after a successful AUR
+// install, the precheck must compare the returned name to the
+// queried name and only add to the remove-list on an exact match.
+// Otherwise a re-run after vscode (visual-studio-code-bin Provides=code)
+// halts the entire deploy with `error: target not found: code`.
 func removeInstalledPacmanPackages(pkgs []string, opts EmitOpts) error {
 	var installed []string
 	for _, pkg := range pkgs {
 		if pkg == "" {
 			continue
 		}
-		// `pacman -Qq <pkg>` exits 0 when installed, non-zero otherwise.
-		// Stdout/stderr discarded; we only care about the exit status.
-		probe := exec.Command("pacman", "-Qq", pkg)
-		if probe.Run() == nil {
+		// `pacman -Qq <pkg>` returns the real package name on stdout
+		// (resolving Provides= aliases). Only treat as installed when
+		// the returned name exactly matches the queried name — that's
+		// the only case `pacman -Rs <pkg>` will accept downstream.
+		out, err := exec.Command("pacman", "-Qq", pkg).Output()
+		if err != nil {
+			continue
+		}
+		if pacmanQqInstalledExactly(pkg, out) {
 			installed = append(installed, pkg)
 		}
 	}
@@ -967,6 +984,14 @@ func removeInstalledPacmanPackages(pkgs []string, opts EmitOpts) error {
 	}
 	args := append([]string{"pacman", "-Rs", "--noconfirm"}, installed...)
 	return runSudoArgs(args, opts)
+}
+
+// pacmanQqInstalledExactly returns true when `pacman -Qq <queried>`
+// stdout, after trimming, equals the queried name — i.e., the package
+// is actually installed under that exact name, NOT via a virtual
+// Provides= alias. Pure helper, unit-tested in deploy_target_local_test.go.
+func pacmanQqInstalledExactly(queried string, qqOutput []byte) bool {
+	return strings.TrimSpace(string(qqOutput)) == queried
 }
 
 // runSudoArgs spawns sudo with explicit argv (no shell interpretation).

@@ -372,3 +372,73 @@ func TestAppendEnvUnique(t *testing.T) {
 		t.Errorf("expected original value preserved, got %q", env[1])
 	}
 }
+
+// TestGpuUsableViaCDI exercises the pure decision helper that backs
+// defaultDetectGPU. The contract: GPU is usable only when the driver is
+// loaded AND CDI is achievable (existing spec OR nvidia-ctk on PATH).
+func TestGpuUsableViaCDI(t *testing.T) {
+	missing := func(string) error { return os.ErrNotExist }
+	present := func(string) error { return nil }
+	specAt := func(target string) func(string) error {
+		return func(p string) error {
+			if p == target {
+				return nil
+			}
+			return os.ErrNotExist
+		}
+	}
+
+	tests := []struct {
+		name         string
+		driverLoaded bool
+		statFn       func(string) error
+		lookPathFn   func(string) error
+		want         bool
+	}{
+		{
+			name:         "driver missing → false even when CDI tooling is present",
+			driverLoaded: false,
+			statFn:       present,
+			lookPathFn:   present,
+			want:         false,
+		},
+		{
+			name:         "driver loaded + no spec + no nvidia-ctk → false (the bug we fixed)",
+			driverLoaded: true,
+			statFn:       missing,
+			lookPathFn:   missing,
+			want:         false,
+		},
+		{
+			name:         "driver loaded + spec at /etc/cdi/nvidia.yaml → true",
+			driverLoaded: true,
+			statFn:       specAt("/etc/cdi/nvidia.yaml"),
+			lookPathFn:   missing,
+			want:         true,
+		},
+		{
+			name:         "driver loaded + spec at /var/run/cdi/nvidia.yaml → true",
+			driverLoaded: true,
+			statFn:       specAt("/var/run/cdi/nvidia.yaml"),
+			lookPathFn:   missing,
+			want:         true,
+		},
+		{
+			name:         "driver loaded + no spec + nvidia-ctk on PATH → true (EnsureCDI can generate)",
+			driverLoaded: true,
+			statFn:       missing,
+			lookPathFn:   present,
+			want:         true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := gpuUsableViaCDI(tc.driverLoaded, tc.statFn, tc.lookPathFn)
+			if got != tc.want {
+				t.Errorf("gpuUsableViaCDI(driverLoaded=%v) = %v, want %v",
+					tc.driverLoaded, got, tc.want)
+			}
+		})
+	}
+}

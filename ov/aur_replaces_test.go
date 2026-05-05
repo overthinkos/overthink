@@ -67,3 +67,73 @@ func TestExtractStringSlice_AurReplacesShape(t *testing.T) {
 		t.Errorf("absent key: got %v, want []", got)
 	}
 }
+
+// TestPacmanQqInstalledExactly covers the precheck used by
+// removeInstalledPacmanPackages to decide whether a `replaces:` entry
+// is actually installed under that exact name.
+//
+// Background: `pacman -Qq <pkg>` resolves virtual Provides= aliases
+// and returns the REAL package name on stdout. `pacman -Rs <pkg>`,
+// in contrast, only accepts real package names and exits with
+// `target not found` for provides-only names. The bug we fixed:
+// a re-run of `ov rebuild ov-cachyos` after a successful vscode
+// install hit `pacman -Qq code` returning `visual-studio-code-bin`,
+// the precheck said "installed", and `pacman -Rs --noconfirm code`
+// then failed and halted the entire deploy.
+//
+// The corrected precheck only treats the queried name as installed
+// when `pacman -Qq` returns the queried name verbatim.
+func TestPacmanQqInstalledExactly(t *testing.T) {
+	cases := []struct {
+		name    string
+		queried string
+		qqOut   string
+		want    bool
+	}{
+		{
+			name:    "exact match — pkg actually installed under queried name",
+			queried: "code",
+			qqOut:   "code\n",
+			want:    true,
+		},
+		{
+			name:    "provides alias — visual-studio-code-bin returned for query 'code' (the bug)",
+			queried: "code",
+			qqOut:   "visual-studio-code-bin\n",
+			want:    false,
+		},
+		{
+			name:    "exact match without trailing newline",
+			queried: "neovim",
+			qqOut:   "neovim",
+			want:    true,
+		},
+		{
+			name:    "exact match with surrounding whitespace",
+			queried: "tmux",
+			qqOut:   "  tmux  \n",
+			want:    true,
+		},
+		{
+			name:    "name-prefix collision is NOT a match",
+			queried: "code",
+			qqOut:   "code-features",
+			want:    false,
+		},
+		{
+			name:    "empty pacman stdout — pkg not installed",
+			queried: "anything",
+			qqOut:   "",
+			want:    false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := pacmanQqInstalledExactly(c.queried, []byte(c.qqOut))
+			if got != c.want {
+				t.Errorf("pacmanQqInstalledExactly(%q, %q) = %v, want %v",
+					c.queried, c.qqOut, got, c.want)
+			}
+		})
+	}
+}

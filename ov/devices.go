@@ -18,14 +18,18 @@ type AutoDetectFlags struct {
 
 // DetectedDevices holds the results of host device auto-detection.
 type DetectedDevices struct {
-	GPU           bool     // NVIDIA GPU detected (use CDI/--gpus)
+	GPU           bool     // NVIDIA GPU detected AND CDI achievable (driver + (spec OR nvidia-ctk))
 	AMDGPU        bool     // AMD GPU detected (/dev/kfd + video/render groups)
 	AMDGFXVersion string   // AMD GFX version for HSA_OVERRIDE_GFX_VERSION (e.g. "10.3.0")
 	RenderNode    string   // First /dev/dri/renderD* path for DRINODE/DRI_NODE
 	Devices       []string // Other device paths to pass via --device
 }
 
-// DetectGPU checks whether an NVIDIA GPU is available by running nvidia-smi.
+// DetectGPU checks whether an NVIDIA GPU is usable via CDI: the driver must
+// be loaded AND a CDI spec must be reachable (existing at /etc/cdi/nvidia.yaml
+// or /var/run/cdi/nvidia.yaml, OR nvidia-ctk on PATH so EnsureCDI() can
+// generate one). Driver-only is NOT enough — emitting AddDevice=nvidia.com/gpu=all
+// in a quadlet whose host has no CDI spec causes podman setup to fail.
 // It is a package-level var for testability.
 var DetectGPU = defaultDetectGPU
 
@@ -33,7 +37,27 @@ func defaultDetectGPU() bool {
 	cmd := exec.Command("nvidia-smi")
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	return cmd.Run() == nil
+	driverLoaded := cmd.Run() == nil
+	return gpuUsableViaCDI(driverLoaded,
+		func(p string) error { _, err := os.Stat(p); return err },
+		func(name string) error { _, err := exec.LookPath(name); return err },
+	)
+}
+
+// gpuUsableViaCDI is the pure decision helper: given whether the NVIDIA
+// driver is loaded plus injected stat / look-path probes, return whether
+// the GPU is usable via CDI. Tests inject closures so the real filesystem
+// and PATH are not touched.
+func gpuUsableViaCDI(driverLoaded bool, statFn func(string) error, lookPathFn func(string) error) bool {
+	if !driverLoaded {
+		return false
+	}
+	for _, p := range []string{"/etc/cdi/nvidia.yaml", "/var/run/cdi/nvidia.yaml"} {
+		if statFn(p) == nil {
+			return true
+		}
+	}
+	return lookPathFn("nvidia-ctk") == nil
 }
 
 // DetectAMDGPU checks whether an AMD GPU is available by reading the DRM driver

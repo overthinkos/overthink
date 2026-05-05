@@ -39,6 +39,12 @@ local:
       - vscode
       - ghostty
       - chrome
+      # nvidia-container-toolkit registers /etc/cdi/nvidia.yaml via
+      # the pacman post-install hook (driver is loaded → hook
+      # succeeds). Required so podman can resolve
+      # AddDevice=nvidia.com/gpu=all on every GPU-using container
+      # ov produces (selkies-*, openclaw-sway-browser, jupyter-ml, …).
+      - nvidia
       # ov-full now provides the full ov toolchain for BOTH host and
       # container targets — the previous host-specific ov-full-host
       # was deleted in the 2026-05 init-system-polymorphism cutover.
@@ -95,4 +101,15 @@ local:
         scope: deploy
         command: sudo -n true
         exit_status: 0
+        in_container: false
+
+      - id: nvidia-ctk-present
+        scope: deploy
+        command: command -v nvidia-ctk
+        exit_status: 0
+        in_container: false
+
+      - id: nvidia-cdi-spec
+        scope: deploy
+        file: /etc/cdi/nvidia.yaml
         in_container: false

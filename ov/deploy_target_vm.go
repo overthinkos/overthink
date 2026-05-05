@@ -463,16 +463,13 @@ func (t *VmDeployTarget) execServicePackaged(ctx context.Context, s *ServicePack
 // compiler says rendering "happens at deploy time because the compiler
 // doesn't know the target init system yet". For a VM deploy the init
 // system is systemd (cloud_image VMs ship systemd; bootc VMs also do).
-// We resolve the systemd InitDef + the ServiceEntry from layer.yml
-// lazily and call RenderService to populate the step. Without this,
-// the install command below would execute with an empty path and
-// produce `install: cannot overwrite directory ” with non-directory
-// '/dev/stdin'` — the symptom observed on k3s-vm.
+// UnitText/UnitPath are populated at compile time by `compileServiceSteps`
+// in install_build.go (the unified init-system polymorphism filter); the
+// previous lazy `renderCustomServiceForSystemdTarget` fallback was
+// deleted in the 2026-05 unification cutover.
 func (t *VmDeployTarget) execServiceCustom(ctx context.Context, s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts) error {
 	if s.UnitText == "" || s.UnitPath == "" {
-		if err := renderCustomServiceForSystemdTarget(s); err != nil {
-			return fmt.Errorf("service %s: %w", s.Name, err)
-		}
+		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
 	script := fmt.Sprintf(`
 set -e
@@ -651,96 +648,6 @@ rm -f %[1]s/*.pkg.tar.zst 2>/dev/null || true
 		return fmt.Errorf("guest pacman -U: %w", err)
 	}
 
-	return nil
-}
-
-// renderCustomServiceForSystemdTarget populates s.UnitText + s.UnitPath
-// for a ServiceCustomStep whose compile-time rendering was deferred to
-// deploy time. Reads the project's overthink.yml to resolve the systemd
-// InitDef and the originating ServiceEntry from the layer's service: list,
-// then calls RenderService (same helper used by generate.go:1067 for
-// build-time fragment emission).
-//
-// The step's Name field follows the convention set in
-// install_build.go:compileServiceSteps — `ov-<layer>-<entry>`. We strip
-// the `ov-<layer>-` prefix to recover the original entry name.
-func renderCustomServiceForSystemdTarget(s *ServiceCustomStep) error {
-	if s.LayerName == "" {
-		return fmt.Errorf("ServiceCustomStep missing LayerName; cannot render unit")
-	}
-	dir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("getwd: %w", err)
-	}
-	_, _, initCfg, err := LoadBuildConfigForImage(dir)
-	if err != nil {
-		return fmt.Errorf("loading build.yml for init resolve: %w", err)
-	}
-	if initCfg == nil {
-		return fmt.Errorf("no init: section in overthink.yml; cannot render systemd unit for %s", s.Name)
-	}
-	def, ok := initCfg.Init["systemd"]
-	if !ok || def == nil {
-		return fmt.Errorf("no systemd InitDef in overthink.yml init: section")
-	}
-
-	cfg, err := LoadConfig(dir)
-	if err != nil {
-		return fmt.Errorf("loading config for layer lookup: %w", err)
-	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
-	if err != nil {
-		return fmt.Errorf("scanning layers: %w", err)
-	}
-	layer, ok := layers[s.LayerName]
-	if !ok || layer == nil {
-		return fmt.Errorf("layer %q not found for service rendering", s.LayerName)
-	}
-
-	entryName := strings.TrimPrefix(s.Name, "ov-"+s.LayerName+"-")
-	var origEntry *ServiceEntry
-	for i := range layer.Service() {
-		if layer.Service()[i].Name == entryName {
-			origEntry = &layer.Service()[i]
-			break
-		}
-	}
-	if origEntry == nil {
-		return fmt.Errorf("service entry %q not found in layer %q", entryName, s.LayerName)
-	}
-
-	// RenderService at service_render.go:210 sets ctx.Name = entry.Name
-	// unconditionally — we can't feed the prefixed step name via the
-	// context. Clone the entry with Name overridden to the step's
-	// prefixed form so the rendered UnitPath and the executor's
-	// `systemctl enable s.Name` agree on the unit filename.
-	entryClone := *origEntry
-	entryClone.Name = s.Name
-	entry := &entryClone
-
-	// Minimal context — RenderService populates Name/Scope/Env/After/etc.
-	// from the entry fields. We only fill the Layer tag and the
-	// scope-aware unit directories referenced by unit_path_template.
-	ctx := ServiceRenderContext{
-		Layer:         s.LayerName,
-		SystemUnitDir: "/etc/systemd/system",
-	}
-	if homeDir, _ := os.UserHomeDir(); homeDir != "" {
-		ctx.Home = homeDir
-		ctx.UserUnitDir = homeDir + "/.config/systemd/user"
-	}
-	rendered, err := RenderService(entry, def, ctx)
-	if err != nil {
-		return fmt.Errorf("RenderService: %w", err)
-	}
-	if rendered == nil {
-		return fmt.Errorf("RenderService returned nil for %s/%s", s.LayerName, entryName)
-	}
-	s.UnitText = rendered.UnitText
-	s.UnitPath = rendered.UnitPath
-	if s.UnitText == "" || s.UnitPath == "" {
-		return fmt.Errorf("RenderService produced empty UnitText/UnitPath for %s/%s", s.LayerName, entryName)
-	}
 	return nil
 }
 

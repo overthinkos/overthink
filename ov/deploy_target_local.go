@@ -1011,9 +1011,7 @@ func (t *LocalDeployTarget) execServicePackaged(s *ServicePackagedStep, plan *In
 
 func (t *LocalDeployTarget) execServiceCustom(s *ServiceCustomStep, plan *InstallPlan, opts EmitOpts, rec *LayerRecord, start time.Time) error {
 	if s.UnitPath == "" || s.UnitText == "" {
-		// Renderer didn't populate the unit. For the skeleton we don't
-		// synthesize an empty unit — we warn and skip.
-		return fmt.Errorf("service %s: no unit text rendered yet", s.Name)
+		return fmt.Errorf("service %s: no unit text rendered (compile-time render skipped this entry; check that the layer's mixed-`service:` pair is well-formed)", s.Name)
 	}
 	if err := detectPackagedUnitConflict(s.UnitPath, s.TargetScope, rec.Layer); err != nil {
 		return err

@@ -20,6 +20,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -372,7 +373,7 @@ func appendShellPathLines(body string, paths []string, shell, home string) strin
 // commit to podman vs docker at compile time so the same plan can
 // retarget if the executor's preferred engine differs.
 //
-// templateName carries the kind:local entry name (e.g. "cachyos-dx")
+// templateName carries the kind:local entry name (e.g. "ov-cachyos")
 // for ledger origin tagging. deployID is the parent deploy's stable
 // hash, used by the ledger to refcount image presence across multiple
 // deploys (so two deploys that both declare `eval-target` keep the
@@ -662,32 +663,125 @@ func pixiDefaultEnvName(layer *Layer) string {
 // either a ServicePackagedStep (use_packaged:) or a ServiceCustomStep
 // (custom exec). Legacy fields (raw-INI service:, system_services:) are
 // gone — external layers must run `ov migrate unified --rewrite-layers`.
+//
+// **Init-system polymorphism filter (2026-05).** When a layer declares
+// the same service `name:` twice — once with `use_packaged:` and once
+// with custom `exec:` (the mixed-entry polymorphism pattern documented
+// in CLAUDE.md "Init-system polymorphism via mixed `service:` entries"
+// and `/ov-build:layer` "Service Declaration") — the compiler picks ONE
+// based on the target's init system:
+//
+//   - systemd target (host / vm) → emit the packaged form, SKIP the
+//     custom-exec sibling (the packaged unit handles the daemon).
+//   - supervisord target (oci/pod build) → SKIP the packaged form
+//     (supervisord can't consume systemd units), emit the custom form.
+//
+// For singleton entries (no mixed pair), each entry renders as-is on
+// the matching init system; mismatched singletons (e.g. a lone
+// `use_packaged:` entry on a supervisord target) are silently skipped.
+//
+// For systemd targets, the compiler ALSO pre-populates UnitText/UnitPath
+// on the ServiceCustomStep by calling RenderService, so executors don't
+// need a runtime lazy-render step. This consolidates what used to live
+// in three different places (the deleted VmDeployTarget lazy fallback,
+// the OCI build's per-entry routing, and the legacy nothing-rendered
+// path on LocalDeployTarget) into ONE compile-time filter.
 func compileServiceSteps(layer *Layer, img *ResolvedImage, hostCtx HostContext) []InstallStep {
 	var out []InstallStep
+	initIsSystemd := hostCtx.Target == "host" || hostCtx.Target == "vm"
+
+	// Detect mixed-entry pairs: which names have a use_packaged form?
+	namesWithPackaged := map[string]bool{}
+	for i := range layer.Service() {
+		if layer.Service()[i].IsPackaged() {
+			namesWithPackaged[layer.Service()[i].Name] = true
+		}
+	}
+
+	// Lazy-loaded systemd InitDef + render context — only loaded if the
+	// target is systemd AND at least one custom entry needs rendering.
+	var systemdDef *InitDef
+	var renderCtx ServiceRenderContext
+	loadedSystemd := false
+	loadSystemd := func() bool {
+		if loadedSystemd {
+			return systemdDef != nil
+		}
+		loadedSystemd = true
+		dir, err := os.Getwd()
+		if err != nil {
+			return false
+		}
+		_, _, initCfg, err := LoadBuildConfigForImage(dir)
+		if err != nil || initCfg == nil {
+			return false
+		}
+		def, ok := initCfg.Init["systemd"]
+		if !ok || def == nil {
+			return false
+		}
+		systemdDef = def
+		renderCtx = ServiceRenderContext{
+			Layer:         layer.Name,
+			SystemUnitDir: "/etc/systemd/system",
+		}
+		if homeDir, _ := os.UserHomeDir(); homeDir != "" {
+			renderCtx.Home = homeDir
+			renderCtx.UserUnitDir = homeDir + "/.config/systemd/user"
+		}
+		return true
+	}
+
 	for i := range layer.Service() {
 		entry := &layer.Service()[i]
 		scope := ScopeSystem
 		if entry.EffectiveScope() == "user" {
 			scope = ScopeUser
 		}
+
 		if entry.IsPackaged() {
+			// supervisord can't consume systemd packaged units.
+			if !initIsSystemd {
+				continue
+			}
 			out = append(out, &ServicePackagedStep{
 				Unit:        ensureServiceSuffix(entry.UsePackaged),
 				TargetScope: scope,
 				Enable:      entry.Enable,
 				LayerName:   layer.Name,
-				// OverridesText / OverridesPath are populated by
-				// DeployTarget.Emit at render time — the compiler
-				// doesn't know the target init system yet.
 			})
 			continue
 		}
-		out = append(out, &ServiceCustomStep{
+
+		// Custom-exec entry. On systemd targets, if a same-name
+		// use_packaged sibling exists, the packaged form wins —
+		// skip the custom entry entirely (mixed-pair polymorphism).
+		if initIsSystemd && namesWithPackaged[entry.Name] {
+			continue
+		}
+
+		step := &ServiceCustomStep{
 			Name:        fmt.Sprintf("ov-%s-%s", layer.Name, entry.Name),
 			TargetScope: scope,
 			Enable:      entry.Enable,
 			LayerName:   layer.Name,
-		})
+		}
+
+		// On systemd targets, pre-render the unit text now so the
+		// executor doesn't need a lazy fallback. On supervisord
+		// targets, the supervisord init pipeline renders its own
+		// fragment — leave UnitText empty.
+		if initIsSystemd && loadSystemd() {
+			entryClone := *entry
+			entryClone.Name = step.Name
+			rendered, rerr := RenderService(&entryClone, systemdDef, renderCtx)
+			if rerr == nil && rendered != nil {
+				step.UnitText = rendered.UnitText
+				step.UnitPath = rendered.UnitPath
+			}
+		}
+
+		out = append(out, step)
 	}
 	return out
 }

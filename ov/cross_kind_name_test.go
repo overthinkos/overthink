@@ -1,7 +1,7 @@
 package main
 
 // cross_kind_name_test.go — locks in the cross-kind name reuse policy
-// introduced 2026-05. The same identifier (e.g. cachyos-dx) MAY exist
+// introduced 2026-05. The same identifier (e.g. ov-cachyos) MAY exist
 // simultaneously across multiple namespaces:
 //
 //   - layer (under layers/<name>/)
@@ -14,8 +14,8 @@ package main
 //
 // The unified loader does NOT enforce global uniqueness across these
 // namespaces — uniqueness is scoped to each kind. ov verbs disambiguate
-// by command context: `ov image build cachyos-dx` reaches into the
-// image: map, `ov vm create cachyos-dx` reaches into the vm: map, and
+// by command context: `ov image build ov-cachyos` reaches into the
+// image: map, `ov vm create ov-cachyos` reaches into the vm: map, and
 // so on.
 
 import (
@@ -25,15 +25,15 @@ import (
 )
 
 // TestCrossKindNameReuse_LoaderAcceptsAllKinds — write an overthink.yml
-// with the SAME identifier `cachyos-dx` under every kind-keyed map, plus
-// a layer at layers/cachyos-dx/. LoadUnified must accept it without a
+// with the SAME identifier `ov-cachyos` under every kind-keyed map, plus
+// a layer at layers/ov-cachyos/. LoadUnified must accept it without a
 // uniqueness error.
 func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "layers", "cachyos-dx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "layers", "ov-cachyos"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "layers", "cachyos-dx", "layer.yml"),
+	if err := os.WriteFile(filepath.Join(dir, "layers", "ov-cachyos", "layer.yml"),
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -43,28 +43,28 @@ defaults:
   build: [rpm]
 
 image:
-  cachyos-dx:
+  ov-cachyos:
     base: fedora
-    layers: [cachyos-dx]
+    layers: [ov-cachyos]
 
 pod:
-  cachyos-dx:
-    image: cachyos-dx
+  ov-cachyos:
+    image: ov-cachyos
 
 vm:
-  cachyos-dx:
+  ov-cachyos:
     source:
       kind: cloud_image
       url: https://example.invalid/img.qcow2
 
 local:
-  cachyos-dx:
-    layers: [cachyos-dx]
+  ov-cachyos:
+    layers: [ov-cachyos]
 
 deployment:
-  cachyos-dx:
+  ov-cachyos:
     target: local
-    local: cachyos-dx
+    local: ov-cachyos
     host: local
 `
 	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(overthink), 0o644); err != nil {
@@ -79,55 +79,93 @@ deployment:
 		t.Fatal("LoadUnified returned ok=false")
 	}
 	// Every kind-keyed map must contain the shared name.
-	if _, present := uf.Images["cachyos-dx"]; !present {
-		t.Error("image.cachyos-dx missing")
+	if _, present := uf.Images["ov-cachyos"]; !present {
+		t.Error("image.ov-cachyos missing")
 	}
-	if _, present := uf.Pod["cachyos-dx"]; !present {
-		t.Error("pod.cachyos-dx missing")
+	if _, present := uf.Pod["ov-cachyos"]; !present {
+		t.Error("pod.ov-cachyos missing")
 	}
-	if _, present := uf.VM["cachyos-dx"]; !present {
-		t.Error("vm.cachyos-dx missing")
+	if _, present := uf.VM["ov-cachyos"]; !present {
+		t.Error("vm.ov-cachyos missing")
 	}
-	if _, present := uf.Local["cachyos-dx"]; !present {
-		t.Error("local.cachyos-dx missing")
+	if _, present := uf.Local["ov-cachyos"]; !present {
+		t.Error("local.ov-cachyos missing")
 	}
 	if uf.Deployments == nil {
 		t.Fatal("deployments section missing")
 	}
-	if _, present := uf.Deployments.Images["cachyos-dx"]; !present {
-		t.Error("deployment.cachyos-dx missing")
+	if _, present := uf.Deployments.Images["ov-cachyos"]; !present {
+		t.Error("deployment.ov-cachyos missing")
 	}
 }
 
-// TestCrossKindNameReuse_QcDeploymentKeyRejected — the load-time hard
-// error for residual `qc:` deployment keys, paired with the migration
-// command remediation hint.
-func TestCrossKindNameReuse_QcDeploymentKeyRejected(t *testing.T) {
-	dir := t.TempDir()
-	overthink := `version: 4
+// TestCrossKindNameReuse_RetiredKeysRejected — the load-time hard
+// errors for the THREE retired CachyOS-deployment keys, all pointing
+// at the consolidated migration command:
+//   - deployment.qc           (pre-2026-05-05 form)
+//   - deployment.cachyos-dx   (post-2026-05-05, pre-2026-05 polymorphism cutover form)
+//   - local.cachyos-dx        (kind:local namespace; same vintage)
+func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
+	cases := []struct {
+		name      string
+		overthink string
+		mustHint  string
+	}{
+		{
+			name: "deployment.qc",
+			overthink: `version: 4
 deployment:
   qc:
     target: local
     host: local
-    local: cachyos-dx
-`
-	if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(overthink), 0o644); err != nil {
-		t.Fatal(err)
+    local: ov-cachyos
+`,
+			mustHint: "ov migrate ov-cachyos",
+		},
+		{
+			name: "deployment.cachyos-dx",
+			overthink: `version: 4
+deployment:
+  cachyos-dx:
+    target: local
+    host: local
+    local: ov-cachyos
+`,
+			mustHint: "ov migrate ov-cachyos",
+		},
+		{
+			name: "local.cachyos-dx",
+			overthink: `version: 4
+local:
+  cachyos-dx:
+    layers: [example]
+`,
+			mustHint: "ov migrate ov-cachyos",
+		},
 	}
-	_, _, err := LoadUnified(dir)
-	if err == nil {
-		t.Fatal("expected load-time error for residual `qc:` key, got nil")
-	}
-	if got := err.Error(); !crossKindContains(got, "qc-rename") {
-		t.Errorf("error message must point at `ov migrate qc-rename`, got: %q", got)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "overthink.yml"), []byte(tc.overthink), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, _, err := LoadUnified(dir)
+			if err == nil {
+				t.Fatalf("expected load-time error for retired key %s, got nil", tc.name)
+			}
+			if got := err.Error(); !crossKindContains(got, tc.mustHint) {
+				t.Errorf("error message must point at %q, got: %q", tc.mustHint, got)
+			}
+		})
 	}
 }
 
-// TestMigrateQcRename_Idempotent — running the migration twice produces
-// byte-identical output on the second pass, and a `qc:` entry becomes
-// `cachyos-dx:`. The migration is opportunistic per file (missing files
-// are not errors) and rewrites a deliberate set of comment idioms.
-func TestMigrateQcRename_Idempotent(t *testing.T) {
+// TestMigrateOvCachyos_Idempotent — running the consolidated migration
+// twice produces byte-identical output on the second pass. The
+// migration handles BOTH legacy keys (qc, cachyos-dx) AND moves the
+// matching kind:local template name. Migration is opportunistic per
+// file (missing files are not errors).
+func TestMigrateOvCachyos_Idempotent(t *testing.T) {
 	dir := t.TempDir()
 	deployYml := `# Top-level comment
 deployment:
@@ -135,28 +173,39 @@ deployment:
     qc:
         target: local
         local: cachyos-dx
+
+    # cachyos-dx — second-stage legacy form
+    cachyos-dx:
+        target: local
+        local: cachyos-dx
 `
 	path := filepath.Join(dir, "deploy.yml")
 	if err := os.WriteFile(path, []byte(deployYml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := MigrateQcRename(dir, false); err != nil {
+	if _, err := MigrateOvCachyos(dir, false); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !crossKindContains(string(got), "cachyos-dx:") {
-		t.Errorf("expected qc → cachyos-dx rename; got:\n%s", got)
+	if !crossKindContains(string(got), "ov-cachyos:") {
+		t.Errorf("expected → ov-cachyos rename; got:\n%s", got)
 	}
 	if crossKindContains(string(got), "\n    qc:\n") {
 		t.Errorf("residual `qc:` deployment key after rename:\n%s", got)
 	}
+	if crossKindContains(string(got), "\n    cachyos-dx:\n") {
+		t.Errorf("residual `cachyos-dx:` deployment key after rename:\n%s", got)
+	}
+	if crossKindContains(string(got), "local: cachyos-dx") {
+		t.Errorf("residual `local: cachyos-dx` cross-reference after rename:\n%s", got)
+	}
 	first := string(got)
 
 	// Second run — should be byte-identical (idempotent).
-	if _, err := MigrateQcRename(dir, false); err != nil {
+	if _, err := MigrateOvCachyos(dir, false); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 	got2, _ := os.ReadFile(path)

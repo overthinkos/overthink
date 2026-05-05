@@ -12,13 +12,13 @@ local:
     install_opts: {with_services: true, allow_root_tasks: true}
     description: {feature: CI runner profile, tag: [working]}
 
-  cachyos-dx:
+  ov-cachyos:
     # Empty placeholder — `layers: []` is a load-time WARNING (allowed
     # for staged name reservation); a missing `layers:` field would be
     # a hard error.
     layers: []
     install_opts: {}
-    description: {feature: CachyOS DX (placeholder), tag: [testing]}
+    description: {feature: ov-cachyos (placeholder), tag: [testing]}
 
 deployment:
   # Default — direct local exec (host: omitted == "local").

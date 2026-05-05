@@ -1,12 +1,12 @@
 version: 4
 
 local:
-  cachyos-dx:
+  ov-cachyos:
     layers:
       # Establish passwordless wheel sudo before any other root task
       # runs. On a fresh CachyOS install this turns a one-time `sudo -v`
       # password prompt into durable passwordless sudo; on the existing
-      # cachyos-dx host it's idempotent (file already present, atrawog
+      # ov-cachyos host it's idempotent (file already present, atrawog
       # already in wheel) and serves as a self-healing regression guard.
       - wheel-nopasswd
       - dev-tools
@@ -34,7 +34,12 @@ local:
       - vscode
       - ghostty
       - chrome
-      - ov-full-host
+      # ov-full now provides the full ov toolchain for BOTH host and
+      # container targets — the previous host-specific ov-full-host
+      # was deleted in the 2026-05 init-system-polymorphism cutover.
+      # See CLAUDE.md "Init-system polymorphism via mixed `service:`
+      # entries" for the unification mechanism.
+      - ov-full
 
     # Container images that must be present in podman storage before
     # tests can run. The deploy logic ensures each is present (try
@@ -82,8 +87,8 @@ local:
     # established by the deploy itself, not assumed from CachyOS installer
     # state. This probe catches regressions BETWEEN deploys (e.g. someone
     # manually deletes the drop-in or removes the user from wheel) so
-    # `ov test cachyos-dx` flags them before the next `ov rebuild
-    # cachyos-dx` aborts mid-flight on a sudo prompt. The same %wheel
+    # `ov test ov-cachyos` flags them before the next `ov rebuild
+    # ov-cachyos` aborts mid-flight on a sudo prompt. The same %wheel
     # ALL=(ALL:ALL) NOPASSWD: ALL convention is mirrored inside ephemeral
     # AUR-builder containers by ov/deploy_target_local.go renderAurScript.
     eval:

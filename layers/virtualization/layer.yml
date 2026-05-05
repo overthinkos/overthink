@@ -1,8 +1,15 @@
 layer:
   name: virtualization
-  description: QEMU/KVM/libvirt stack with a rootless-friendly libvirt session daemon (virtqemud) under supervisord.
-  requires:
-    - supervisord
+  description: |
+    QEMU/KVM/libvirt stack that runs identically on container/pod
+    targets (under supervisord) AND on host/bootc/local targets
+    (under systemd) via the mixed-`service:` schema pattern. Each
+    daemon (virtqemud, virtnetworkd) carries TWO entries with the
+    same name: a `use_packaged:` form for systemd init, and a
+    custom `exec:` form for supervisord init. The init system at
+    deploy time renders only the matching form. NEVER author a
+    `virtualization-host` sibling — see CLAUDE.md "Init-system
+    polymorphism via mixed `service:` entries".
   distros:
     archlinux:
       packages:
@@ -10,9 +17,12 @@ layer:
         - qemu-img
         - virtiofsd
         - libvirt
+        - libguestfs
+        - dnsmasq
     debian:
       packages:
         - bindfs
+        - dnsmasq
         - genisoimage
         - guestfs-tools
         - libguestfs-tools
@@ -32,12 +42,14 @@ layer:
     fedora:
       packages:
         - bindfs
+        - dnsmasq
         - genisoimage
         - guestfs-tools
         - libguestfs-tools
         - libvirt-client
         - libvirt-daemon
         - libvirt-daemon-config-network
+        - libvirt-daemon-driver-network
         - libvirt-daemon-driver-qemu
         - libvirt-nss
         - passt
@@ -55,6 +67,7 @@ layer:
     ubuntu:
       packages:
         - bindfs
+        - dnsmasq
         - genisoimage
         - guestfs-tools
         - libguestfs-tools
@@ -74,6 +87,7 @@ layer:
     ubuntu-24.04:
       packages:
         - bindfs
+        - dnsmasq
         - genisoimage
         - guestfs-tools
         - libguestfs-tools
@@ -89,30 +103,27 @@ layer:
         - qemu-utils
         - virt-viewer
         - virtinst
-  # virtqemud + virtnetworkd run under supervisord. No `user=` directive —
-  # they inherit the parent supervisord's uid (root on fedora-ov/arch-ov/
-  # githubrunner; `user` on selkies-desktop-ov). virtqemud honors the
-  # qemu:///session path keyed by $XDG_RUNTIME_DIR at either uid.
-  #
-  # priority=5/6 places these ahead of desktop priorities (labwc=12,
-  # selkies=18) so the libvirt socket is available when later services or
-  # interactive `ov vm` calls try to connect.
-  #
-  # --timeout 0 keeps the daemons alive instead of exiting on idle.
+  # Add the deploying user to the libvirt group on host targets so
+  # qemu:///system access works without prompting. Harmless on
+  # container deploys: libvirt group exists from the libvirt package
+  # postinst, the user gets added, and qemu:///session (the default
+  # for in-container ov vm operations) doesn't consult the group at
+  # all. Same task, both targets.
+  tasks:
+    - cmd: |
+        if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
+          usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
+        fi
+      user: root
   eval:
-    # virtqemud / virtnetworkd ship as separate binaries on Fedora and Arch,
-    # but on Debian / Ubuntu the libvirt-daemon-driver-qemu package ships
-    # a plugin library instead — the monolithic `libvirtd` absorbs the QEMU
-    # and network drivers. Test by package install, not binary path, so the
-    # probe is honest across all distros.
     - id: libvirt-qemu-driver-package
       package: libvirt-daemon-driver-qemu
       package_map:
         archlinux: libvirt
         fedora: libvirt-daemon-driver-qemu
         fedora:43: libvirt-daemon-driver-qemu
-        debian: libvirt-daemon-driver-qemu
-        ubuntu: libvirt-daemon-driver-qemu
+        debian: libvirt-daemon-system
+        ubuntu: libvirt-daemon-system
       installed: true
     - id: virsh-binary
       file: /usr/bin/virsh
@@ -123,37 +134,36 @@ layer:
     - id: qemu-img-binary
       file: /usr/bin/qemu-img
       exists: true
-    # Deploy-scope service checks: virtqemud / virtnetworkd launched by
-    # supervisord on Fedora / Arch where those binaries exist. On Debian /
-    # Ubuntu these programs fail at supervisord start-up because the binaries
-    # aren't separate — accept this gap as documented. The libvirt-session
-    # tests below still validate functional behavior through virsh.
-    - id: virtqemud-running
-      scope: deploy
-      service: virtqemud
-      running: true
-    - id: virtnetworkd-running
-      scope: deploy
-      service: virtnetworkd
-      running: true
-    - id: libvirt-session-list
-      scope: deploy
-      command: virsh -c qemu:///session list --all
-      exit_status: 0
-      in_container: true
-    - id: libvirt-kvm-acceleration
-      scope: deploy
-      command: virsh -c qemu:///session domcapabilities 2>/dev/null | grep -c '<domain>kvm</domain>'
-      exit_status: 0
-      in_container: true
-      stdout:
-        - matches: "^[1-9]"
+  # Mixed-entry `service:` pattern (CLAUDE.md "Init-system
+  # polymorphism via mixed `service:` entries"). Each daemon
+  # appears twice with the same `name:` — one entry rendered by
+  # systemd-init (use_packaged), the other by supervisord-init
+  # (custom exec). The init system picks at deploy time. The
+  # canonical reference for this pattern is `/ov-coder:sshd`.
   service:
+    # ----- virtqemud -----
+    # systemd render: enables the packaged socket+service unit so
+    # virsh -c qemu:///system works on host targets.
+    - name: virtqemud
+      use_packaged: virtqemud.socket
+      enable: true
+      scope: system
+    # supervisord render: foreground daemon (--timeout 0 keeps it
+    # alive instead of self-exiting on idle). priority=5 places it
+    # ahead of every desktop service. No `user=` directive — the
+    # daemon inherits supervisord's uid (root on fedora-ov/arch-ov,
+    # user on selkies-desktop-ov); qemu:///session keys off
+    # $XDG_RUNTIME_DIR so both work.
     - name: virtqemud
       exec: "/usr/sbin/virtqemud --timeout 0"
       restart: always
       priority: 5
       start_secs: 2
+      enable: true
+      scope: system
+    # ----- virtnetworkd -----
+    - name: virtnetworkd
+      use_packaged: virtnetworkd.socket
       enable: true
       scope: system
     - name: virtnetworkd

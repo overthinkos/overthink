@@ -12,7 +12,7 @@ import (
 func TestEnsureImageStep_Reverse(t *testing.T) {
 	step := &EnsureImageStep{
 		LayerName: "_local-images_",
-		Origin:    "local:cachyos-dx",
+		Origin:    "local:ov-cachyos",
 		Image:     "eval-target",
 		Engine:    "podman",
 		PullFirst: true,
@@ -56,7 +56,7 @@ func TestCompileImagesSteps_EmitsOnePerEntry(t *testing.T) {
 	spec := &LocalSpec{
 		Images: []string{"eval-target", "openclaw-sway-browser", "fedora-coder"},
 	}
-	steps := compileImagesSteps(spec, "cachyos-dx", "deploy123", "podman")
+	steps := compileImagesSteps(spec, "ov-cachyos", "deploy123", "podman")
 	if len(steps) != 3 {
 		t.Fatalf("expected 3 steps, got %d", len(steps))
 	}
@@ -72,7 +72,7 @@ func TestCompileImagesSteps_EmitsOnePerEntry(t *testing.T) {
 		if es.DeployID != "deploy123" {
 			t.Errorf("step %d DeployID = %q", i, es.DeployID)
 		}
-		if es.Origin != "local:cachyos-dx" {
+		if es.Origin != "local:ov-cachyos" {
 			t.Errorf("step %d Origin = %q", i, es.Origin)
 		}
 		if !es.PullFirst || !es.BuildOnFail {

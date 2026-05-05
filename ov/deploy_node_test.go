@@ -146,25 +146,25 @@ func TestHasChildren(t *testing.T) {
 // merged via MergeDeployConfigs(projectDC, localDC), leaving runLocal with an
 // empty layer list and a silent no-op install.
 //
-// Fixture name `cachyos-dx` matches the in-repo deployment key (renamed
+// Fixture name `ov-cachyos` matches the in-repo deployment key (renamed
 // from `qc` in the 2026-05 cross-kind name reuse cutover).
 func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	project := &DeployConfig{Deployment: map[string]DeploymentNode{
-		"cachyos-dx": {
+		"ov-cachyos": {
 			Target:  "local",
-			Local:   "cachyos-dx",
+			Local:   "ov-cachyos",
 			Host:    "local",
 			User:    "alice",
 			SSHArgs: []string{"-o", "ServerAliveInterval=30"},
 		},
 	}}
 	merged := MergeDeployConfigs(project, nil)
-	got, ok := merged.Deployment["cachyos-dx"]
+	got, ok := merged.Deployment["ov-cachyos"]
 	if !ok {
-		t.Fatal("cachyos-dx dropped by MergeDeployConfigs")
+		t.Fatal("ov-cachyos dropped by MergeDeployConfigs")
 	}
-	if got.Local != "cachyos-dx" {
-		t.Errorf("Local field lost: got %q want %q", got.Local, "cachyos-dx")
+	if got.Local != "ov-cachyos" {
+		t.Errorf("Local field lost: got %q want %q", got.Local, "ov-cachyos")
 	}
 	if got.User != "alice" {
 		t.Errorf("User field lost: got %q", got.User)
@@ -174,10 +174,10 @@ func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	}
 	// Per-machine overlay wins on collision (mirrors Host's behavior).
 	overlay := &DeployConfig{Deployment: map[string]DeploymentNode{
-		"cachyos-dx": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
+		"ov-cachyos": {Local: "ci-runner", User: "bob", SSHArgs: []string{"-o", "ProxyJump=bastion"}},
 	}}
 	merged = MergeDeployConfigs(project, overlay)
-	got = merged.Deployment["cachyos-dx"]
+	got = merged.Deployment["ov-cachyos"]
 	if got.Local != "ci-runner" {
 		t.Errorf("overlay Local should win: got %q", got.Local)
 	}

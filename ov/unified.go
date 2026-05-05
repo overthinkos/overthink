@@ -434,6 +434,16 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := validateDeploymentTree(merged.Deployments); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
+	// Hard load-time error for the retired `local.cachyos-dx` key.
+	// Pairs with the deployment-side checks in validateDeploymentTree.
+	// All three retired keys (deployment.qc, deployment.cachyos-dx,
+	// local.cachyos-dx) point at the consolidated migration command.
+	if _, present := merged.Local["cachyos-dx"]; present {
+		return nil, true, fmt.Errorf(
+			"%s: kind:local key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
+			root,
+		)
+	}
 	if err := expandRecipeFromIfNeeded(merged, dir); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
@@ -552,14 +562,20 @@ func validateDeploymentTree(section *DeploymentsSection) error {
 			return err
 		}
 	}
-	// Hard load-time error for the retired `qc` deployment key. The
-	// 2026-05 cross-kind name reuse cutover renamed this operator-
-	// specific shorthand to the kind:local-template name `cachyos-dx`
-	// so the kind:local entity, the kind:deployment entry, and any
-	// future kind:image / kind:vm with that name all share the slot.
+	// Hard load-time errors for the retired CachyOS-deployment keys.
+	// The qc → cachyos-dx → ov-cachyos rename chain (2026-05) collapsed
+	// in the second cutover to ONE canonical name `ov-cachyos` shared
+	// by the kind:local template and the kind:deployment entry that
+	// applies it. Any residual `qc:` or `cachyos-dx:` deployment key
+	// (or `cachyos-dx:` kind:local key) needs a one-shot migration.
 	if _, present := section.Images["qc"]; present {
 		return fmt.Errorf(
-			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate qc-rename",
+			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate ov-cachyos",
+		)
+	}
+	if _, present := section.Images["cachyos-dx"]; present {
+		return fmt.Errorf(
+			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
 		)
 	}
 	return nil

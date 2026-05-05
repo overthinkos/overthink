@@ -49,6 +49,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | Secret management / `ov secrets` / `.kdbx` | `/ov-build:secrets` |
 | Schema v4 migration / legacy → new format | `/ov-build:migrate` |
 | Hard-cutover concerns / rename sweeps | `/ov-dev:cutover-policy` |
+| Engineering-discipline triggers (failure surfaced / dup pattern / ad-hoc fix tempting / "out of scope" framing) | `/ov-dev:strict-policy` |
 | Disposable-flag semantics / `disposable: true` authorization | `/ov-dev:disposable` |
 | Go source work (adding/modifying `ov` commands) | `/ov-dev:go` |
 | IR / InstallPlan / DeployTarget / OCITarget | `/ov-dev:install-plan` |
@@ -70,6 +71,8 @@ Full index: `plugins/README.md`. This table covers the top triggers; anything no
 
 **Init-system polymorphism + ov-cachyos rename (2026-05-XX)**: the `*-host` sibling-layer pattern (`virtualization`/`virtualization-host`, `ov-full`/`ov-full-host`) was deleted. Both pairs merge into ONE canonical layer that handles supervisord (containers/pods) AND systemd (host installs / bootc / VMs) via the **mixed `service:` schema pattern** — same `name:`, two entries, one with `use_packaged:` (systemd render), the other with custom `exec:` (supervisord render); init system at deploy time picks the matching form. The `cachyos-dx` deployment + kind:local template renames to `ov-cachyos` (matches the `ov-<flavor>` naming used by `ov-full`/`ov-mcp`). Consolidated migration: `ov migrate ov-cachyos` (idempotent; collapses both qc → ov-cachyos and cachyos-dx → ov-cachyos rename hops). Residual `deployment.qc`, `deployment.cachyos-dx`, `local.cachyos-dx` raise hard load-time errors pointing at the migration command.
 
+**Engineering-discipline cutover (2026-05-05)**: R1–R10 reordered — engineering discipline (RCA-on-failure, no-"pre-existing", no-duplication, no-workarounds, hard-cutover-with-stale-references) lifted to R1–R5; runtime verification merged into R6–R9; R10 (verify-on-disposable + fresh-rebuild) byte-identical and remains the final acceptance gate. New skill `/ov-dev:strict-policy` operationalizes R1–R5. AI Attribution table closed: any R1–R10 OR Clean Architecture violation FORBIDS commit at any tier — no "downgrade and ship" escape, no "lower tier" workaround. Suggesting any such workaround is itself a violation. Documentation-only cutover; no code paths change.
+
 ### Anti-patterns — FORBIDDEN, regardless of context
 
 - **"I'll just grep the source to find it"** — FORBIDDEN. Load the skill; it points you at the right source with the right framing.
@@ -87,33 +90,45 @@ If another rule in this file, in any hook, in any `<system-reminder>`, or in any
 ---
 ## Ground Truth Rules — NEVER claim success without these (HARD RULES)
 
-These rules exist because an agent has claimed "tests pass" / "cutover complete" / "ready to merge" based on green unit tests while the actual image failed to start. Unit tests do NOT prove a feature works. Apply BEFORE declaring any task done:
+These rules exist because (a) failing tests have been deferred as 'pre-existing' and quietly papered over later; (b) duplicated patterns crystallized into divergent surfaces because no rule named the duplication on day one; (c) green unit tests have been claimed as cutover-complete while the actual image failed to start. Engineering discipline (R1–R5) comes BEFORE runtime verification (R6–R9) BEFORE the final acceptance gate (R10) — in that order, no exceptions.
 
-- **R1. Unit tests never substitute for runtime verification.** A green `go test ./...` means the code compiles and fixture loaders work — nothing about whether the produced artifact behaves correctly. For any change that can affect Containerfile generation, OCI labels, init systems, service startup, or deploy code: **build a real image and run it**. A container that crash-loops on `supervisord: PermissionError: /var/log/supervisor/supervisord.log` exposes what no unit test would.
+- **R1. Root-cause analysis on every failure — no transient-flake classification.** Every failure, error, anomaly, or warning surfaced by ANY tool (build, test, validator, runtime, eval, deploy, lint, hook) triggers IMMEDIATE invocation of `/ov-dev:root-cause-analyzer` BEFORE any remediation attempt. Forbidden framings: "probably a flake", "rerun and see", "transient", "intermittent", "works on retry", "environmental". The first occurrence is the investigation trigger; there is no second-occurrence threshold. If the analyzer concludes the root cause is genuinely external (network partition, upstream outage), the conclusion is documented in the conversation with evidence — never assumed. Blind retry of a failed command is itself a violation. See `/ov-dev:strict-policy`.
 
-- **R2. Mandatory end-to-end gate before "done" on build/deploy/test code.** The minimum sequence:
+- **R2. No "pre-existing" / "out of scope" / "unrelated" / "follow-up PR" classifications.** Every issue surfaced during the active cutover — failing test, validator warning, runtime crash, deprecated-marker hit, dead-code reference, stale doc paragraph — is fixed in the SAME working tree as the cutover, OR escalated to the operator for explicit re-scoping. The classifications "pre-existing", "unrelated to this change", "out of scope", "follow-up PR", "tracked separately", "we'll get to it later" are FORBIDDEN. **Cautionary tale**: `TestRenderTaskCommandMkdir` was deferred as "pre-existing, unrelated" in 8a275e8 and only landed in 22b5d0d; the fix should have been part of 8a275e8. This rule extends old-R6 ("I'll fix it in Phase 2 is not in the approved plan") to cover incidentally-surfaced issues, not just plan-defined phasing. See `/ov-dev:strict-policy`.
+
+- **R3. No code duplication; generic, reusable solutions over ad-hoc patches.** On the FIRST surface where the same pattern, predicate, filter, transform, or guard appears in two places, refactor to ONE shared abstraction in the SAME working tree. Sibling-layer naming (`<name>-host`, `<name>-pod`), parallel filter functions, and per-call-site re-implementations of the same predicate are FORBIDDEN. Every fix MUST apply cleanly to ALL surfaces it logically covers, not just the surface that prompted the report. **Cautionary tale**: the `*-host` sibling-layer pattern (`virtualization`/`virtualization-host`, `ov-full`/`ov-full-host`) accumulated for months because no rule banned the duplication on day one. **Worked example**: 22b5d0d collapsed three previously-divergent service-filter paths into ONE compile-time filter in `compileServiceSteps`. The first attempt added a band-aid in one path; the operator caught it. Generic > ad-hoc, every time. See `/ov-dev:strict-policy`.
+
+- **R4. No ad-hoc workarounds — sleep loops, retry-on-flake, magic-number tuning, "works on my machine" fixes are FORBIDDEN.** Forbidden patterns: `sleep 5; retry`, `for i in 1..3 do try; done`, hardcoded port numbers chosen because "8080 was busy", environment-specific paths, default-fallbacks that hide a missing config, "this is what worked when I tried it locally". If a race or timing dependency exists, the fix is the synchronization primitive (file lock, readiness probe, condition variable, deterministic ordering), NEVER a sleep. If a value is magic, it is named, sourced from config, and validated on load. If a fix only works on one machine, it is not a fix — it is a bug report. See `/ov-dev:strict-policy`.
+
+- **R5. Hard cutover: deprecated path AND every stale reference deleted in the same change.** When a cutover introduces a replacement, the SAME commit deletes (a) the deprecated code path, (b) every comment / TODO / DEPRECATED marker referencing the old path, AND (c) every reference, comment, docstring, error message, skill paragraph, migration help-text, test fixture, or hook string naming a deleted identifier. After commit, `git grep '<deleted-id>'` returns ONLY historical mentions in changelog / history-note / migration-help-text contexts. Deleting `image.yml` while the new `overthink.yml` path silently skips a build stage is not a clean cutover — it's a regression masked by the old file's absence. The acceptance test of a cutover is: rebuild from the new config, run the resulting image, observe the service reach steady-state, AND verify zero stale references via the grep self-test. This rule extends old-R5 to cover stale references everywhere, not just the deleted artifact itself. See `/ov-dev:strict-policy`.
+
+- **R6. Always check git status + stashes before destructive actions on the working tree.** `git stash` discards in-progress work; `rm` on a tracked file is destructive. If the sandbox blocks an action, read the reason and find a non-destructive alternative — do not work around it with a cleverer command.
+
+- **R7. Unit tests never substitute for runtime verification — mandatory end-to-end gate.** A green `go test ./...` means the code compiles and fixture loaders work — nothing about whether the produced artifact behaves correctly. For any change that can affect Containerfile generation, OCI labels, init systems, service startup, or deploy code, the minimum sequence applies BEFORE "done":
   1. `ov image build <image>` — build a concrete image (not just generate Containerfile).
-  2. `ov eval image <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R3).
+  2. `ov eval image <image>` — baked layer + image sections pass (NB: passes on zero-content stages too — not a substitute for R8).
   3. `ov start <image>` (or `ov deploy add <image> <image>` / `ov update <image>` for an existing deploy) — container must reach `Active: active (running)`.
   4. `ov test <image>` — full three-section run including deploy probes must pass.
-  5. If any step fails, the task is NOT done.
+  5. If any step fails, the task is NOT done — invoke R1's RCA mandate.
 
-- **R3. "Generated Containerfile contains X" is a testable invariant.** When a refactor touches generation, assert the presence of every critical section in the emitted Containerfile (e.g. `grep supervisord-conf .build/<image>/Containerfile`). A Containerfile that compiles but silently drops the init-system stage produces an image with the **stock RPM config**, not the overthink config — and the stock config almost always breaks at runtime. The emitted file is the source of truth; check it.
+  A container that crash-loops on `supervisord: PermissionError: /var/log/supervisor/supervisord.log` exposes what no unit test would.
 
-- **R4. OCI labels are part of the contract — verify each one post-build.** After `ov image build`, `podman inspect --format '{{index .Config.Labels "org.overthinkos.init"}}'` must return the expected value for every capability label the image claims. An empty or missing label usually means a detection path silently returned nil. Treat missing labels as a failure, not a warning.
+- **R8. Generated-artifact invariants — Containerfile sections AND OCI labels verified.** When a refactor touches generation, assert the presence of every critical section in the emitted Containerfile (e.g. `grep supervisord-conf .build/<image>/Containerfile`). A Containerfile that compiles but silently drops the init-system stage produces an image with the **stock RPM config**, not the overthink config — and the stock config almost always breaks at runtime. The emitted file is the source of truth; check it. After `ov image build`, `podman inspect --format '{{index .Config.Labels "org.overthinkos.init"}}'` must return the expected value for every capability label the image claims. An empty or missing label usually means a detection path silently returned nil. Treat missing labels as a failure, not a warning.
 
-- **R5. Never claim the cutover is clean until the old artifact is gone AND the new one runs.** Deleting `image.yml` while the new overthink.yml path silently skips a build stage is not a clean cutover — it's a regression masked by the old file's absence. The test of a cutover is: rebuild from the new config, run the resulting image, observe the service reach steady-state.
+- **R9. Deployed binary matches source AND runtime deps declared in package management.** Syncthing / git / rsync move *source* between hosts; they don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov eval spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built. A change that relies on an OS package at runtime (`nc`, `socat`, `xorriso`, `qemu-guest-agent`, …) MUST add that package to `setup.sh` (per-distro blocks) AND to `pkg/arch/PKGBUILD` `depends=`. A manual install on one host is a bug report disguised as a fix. Live war-story: virt-manager needed `nc` on the libvirt host; a manual install would have silently broken virt-manager on the next freshly-installed synced host.
 
-- **R6. "I'll fix it in Phase 2" is not in the approved plan unless the plan says so.** If the plan says "clean cutover, zero coexistence, one PR", honor that. Do not invent phases to defer work that the plan required in the current phase. When in doubt, ask the user — do not decide scope unilaterally.
-
-- **R7. Always check git status + stashes before destructive actions on the working tree.** `git stash` discards in-progress work; `rm` on a tracked file is destructive. If the sandbox blocks an action, read the reason and find a non-destructive alternative — do not work around it with a cleverer command.
-
-See `/ov:eval` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically.
+See `/ov:eval` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically. See `/ov-dev:strict-policy` for the operationalization of R1–R5.
 
 ## Prioritize Clean Architecture Above All Else
 
 Always pick the cleanest long-term approach and prioritize having a clean codebase with any deprecated code fully removed above everything.
 You have all the time in the world and taking the time to get things properly done is ALWAYS worth the effort.
+
+**No duplication on first surface.** When the same pattern would land in a second place, refactor to ONE shared abstraction in the SAME working tree before the duplicate ships. Procedural rule R3; architectural framing here. Sibling-layer naming (`<name>-host`, `<name>-pod`), parallel filter functions, and per-call-site re-implementations are the canonical anti-patterns.
+
+**Generic over ad-hoc.** Every fix applies cleanly to ALL surfaces it logically covers. Procedural rule R3; architectural framing here. The 22b5d0d `compileServiceSteps` consolidation is the canonical worked example — three previously-divergent paths collapsed into one compile-time filter.
+
+**No workarounds.** Sleep loops, retry-on-flake, magic-number tuning, "works on my machine" fixes are FORBIDDEN at the architectural level too — not just at the procedural-rule level. Procedural rule R4; architectural framing here. If a race exists, the fix is the synchronization primitive, not a delay.
 
 ## Disposable-Only Autonomy + Mandatory Live-Deploy Verification
 
@@ -124,21 +139,13 @@ On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs de
 **Every change is proved on a freshly built binary on the target host** (the 10 evaluation standards in `/ov:eval`):
 
 1. Build the artifact from the changed source, on the target host.
-2. Verify the deployed binary's version matches what you built (R8).
+2. Verify the deployed binary's version matches what you built (R9).
 3. Verify runtime deps are installed via package management (R9).
 4. For a target with `disposable: true`: `ov rebuild <name>` — unattended. For any other resource: confirm with the user before any destroy.
 5. Exercise the feature end-to-end.
 6. Paste the runtime output back into the conversation.
 7. Leave the target healthy (running, not paused, not crashed).
 8. **After committing the source-level fix, `ov rebuild` the disposable target from clean and re-run the full sequence. This fresh-rebuild re-verification is the acceptance gate** (R10).
-
-### R8 — "Binary ≠ source"
-
-Syncthing / git / rsync move *source* between hosts. They don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov eval spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built.
-
-### R9 — "Runtime deps are part of the contract"
-
-A change that relies on an OS package at runtime (`nc`, `socat`, `xorriso`, `qemu-guest-agent` …) MUST add that package to `setup.sh` (per-distro blocks) AND to `pkg/arch/PKGBUILD` `depends=`. A manual install on one host is a bug report disguised as a fix. Live war-story: virt-manager needed `nc` on the libvirt host; a manual install would have silently broken virt-manager on the next freshly-installed synced host.
 
 ### R10 — "Verify on a `disposable: true` target; prove it on a fresh rebuild"
 
@@ -160,8 +167,11 @@ The verification loop has three rules:
 
 Before saying "done" answer YES to all of these:
 
+- Did `/ov-dev:root-cause-analyzer` run on every failure / warning / anomaly observed during the session (R1)?
+- Was every issue surfaced during the session fixed in this cutover or explicitly escalated (R2)?
+- Does `git grep` on every removed identifier return ONLY changelog/history-note context (R5)?
 - Built a real artifact from the changed source, on the target host?
-- Verified the deployed binary's version matches what you built (R8)?
+- Verified the deployed binary's version matches what you built (R9)?
 - Exercised the feature end-to-end on the live target?
 - Verified every runtime dep is installed via package management (R9)?
 - Did verification run on a target explicitly marked `disposable: true` (never on anything else)?
@@ -319,6 +329,24 @@ command surface.
   track. Backgrounding the rebuild "while finishing task N" is INEXCUSABLE
   — every R10-class action you start before the LAST task completes is a
   protocol violation from the first tool call.
+- **Classifying a surfaced issue as "pre-existing" / "unrelated" / "out
+  of scope" / "follow-up PR" / "tracked separately".** R2 forbids this
+  absolutely — every issue surfaced during the active cutover is fixed
+  in the same working tree or escalated to the operator. Cautionary
+  tale: `TestRenderTaskCommandMkdir` deferred in 8a275e8, quietly
+  fixed in 22b5d0d.
+- **Adding a band-aid to one surface when the same pattern exists on
+  N surfaces.** R3 demands the generic fix on first refactor, applied
+  to ALL N surfaces in the same commit. Worked example: 22b5d0d's
+  `compileServiceSteps` consolidation (3 paths → 1 filter).
+- **Ad-hoc workarounds — sleep loops, retry-on-flake, magic-number
+  tuning, "works on my machine".** R4 forbids these. Synchronize
+  properly or escalate.
+- **Stale references after deletion.** A removed identifier MUST NOT
+  survive in any comment, docstring, error message, skill paragraph,
+  migration help-text, test fixture, or hook string after the cutover
+  commit. R5 self-test: `git grep '<deleted-id>'` returns only
+  changelog/history-note context.
 
 ---
 
@@ -423,6 +451,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
 - **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deployment`) with singular root-shape keys throughout. File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`; the local-cutover (kind:host → kind:local) is `ov migrate target-local`. Nesting of deployments uses `nested:` (was `children:`). See `/ov:migrate`, `/ov:image`, `/ov:deploy`, `/ov:vm`, `/ov-build:local-spec`.
 - **Hard cutover by default.** See `/ov-dev:cutover-policy` and the "Hard Cutover by Default" section above.
+- **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-dev:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) unchanged.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
 - **Project directory resolution.** See `/ov:image` "Project directory resolution".
 - **User policy: adopt over rename.** Declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov:image` "user_policy" and `/ov:build` "base_user:".
@@ -441,8 +470,10 @@ Per [Fedora AI Contribution Policy](https://docs.fedoraproject.org/en-US/council
 |-----------|-------------|
 | `fully tested and validated` | All 10 evaluation standards met + fresh-rebuild re-verification (R10) on every affected `disposable: true` target + the cutover's NEW/CHANGED runner / AI loop / verb evaluation actually executed against the fresh rebuild + R10 outputs (exploratory + fresh-rebuild) pasted in the conversation |
 | `analysed on a live system` | A live invocation of the runner / AI loop / verb evaluation / subprocess that the cutover ADDED OR CHANGED actually ran AND its output is pasted. A eval-pod rebuild WITHOUT the subsequent runner invocation does NOT qualify — that's `syntax check only`. NEVER use this tier when only a `--dry-run` was performed |
-| `syntax check only` | Compile + unit tests + (optionally) validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask |
+| `syntax check only` | Compile + unit tests + validators / dry-run / parse confirmations passed; the live runner did NOT execute. HONEST default when R10 hasn't physically fit yet — pair with explicit "R10 not yet run, awaiting authorization for the live round" AND do NOT commit. Pairing this tier with a commit is a violation; STOP and ask |
 | `theoretical suggestion` | No validation performed — FORBIDDEN as a shipped-code tier |
+
+**Any rule violation forbids commit. Period.** A violation of R1, R2, R3, R4, R5, R6, R7, R8, R9, R10, OR the "Prioritize Clean Architecture Above All Else" section means: NO commit, at any tier, in any submodule, with any wording. There is no "downgrade tier and ship anyway" path — that path does NOT exist. The agent's only authorized responses to a known violation are (a) fix the violation in the same working tree and re-run all verification, or (b) escalate to the operator and STOP. Suggesting any other path — "lower tier", "downgrade", "commit at a reduced confidence", "ship with a caveat", "note the violation in the commit message and proceed" — is itself a rule violation. The four-tier table above describes WHICH tier the proof supports when committing IS permitted; a known rule violation makes commit NOT permitted regardless of tier.
 
 ```
 Fix: Add fuse-overlayfs for container startup

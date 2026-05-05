@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	dbus "github.com/godbus/dbus/v5"
 	"golang.org/x/term"
 )
 
@@ -547,86 +548,133 @@ func checkAgentRunning() bool {
 	return cmd.Run() == nil
 }
 
-// checkSecretServiceAvailable returns true if org.freedesktop.secrets is on D-Bus.
+// checkSecretServiceAvailable returns true if a usable target collection
+// exists. Beyond the D-Bus name probe, it also calls resolveTargetCollection
+// so it surfaces routing problems (no collections, default alias broken, all
+// collections locked) BEFORE downstream code attempts a write.
 func checkSecretServiceAvailable() bool {
-	cmd := exec.Command("dbus-send", "--session", "--dest=org.freedesktop.DBus",
-		"--type=method_call", "--print-reply",
-		"/org/freedesktop/DBus", "org.freedesktop.DBus.ListNames")
-	out, err := cmd.Output()
+	c, err := newSSClient()
 	if err != nil {
 		return false
 	}
-	return strings.Contains(string(out), "org.freedesktop.secrets")
+	defer c.close()
+	if _, _, err := resolveTargetCollection(c, gpgPreferredCollectionLabel()); err != nil {
+		return false
+	}
+	return true
 }
 
-// secretToolLookup looks up a value in Secret Service.
-func secretToolLookup(attrs ...string) (string, error) {
-	if _, err := exec.LookPath("secret-tool"); err != nil {
-		return "", fmt.Errorf("secret-tool not found")
+// gpgPreferredCollectionLabel returns the user-pinned Secret Service
+// collection label. Reuses the existing keyring_collection_label setting so a
+// single pin governs both the credential store and the GPG keystore.
+func gpgPreferredCollectionLabel() string {
+	cfg, err := LoadRuntimeConfig()
+	if err != nil {
+		return ""
 	}
-	args := append([]string{"lookup"}, attrs...)
-	cmd := exec.Command("secret-tool", args...)
-	out, err := cmd.Output()
+	return cfg.KeyringCollectionLabel
+}
+
+// ssGpgEntry is a Secret Service item discovered via ssGpgSearch.
+type ssGpgEntry struct {
+	Path  dbus.ObjectPath
+	Attrs map[string]string
+	Label string
+}
+
+// ssGpgLookup performs an iteration-capable read across every healthy
+// unlocked Secret Service collection, returning the secret value of the FIRST
+// match. Replaces the old default-alias-only `secret-tool lookup` shell-out:
+// entries stored in any collection (not just the one aliased as `default`)
+// are now reachable.
+func ssGpgLookup(attrs map[string]string) (string, error) {
+	c, err := newSSClient()
+	if err != nil {
+		return "", fmt.Errorf("opening Secret Service: %w", err)
+	}
+	defer c.close()
+	item, _, err := c.findItemByAttrsAnyCollection(attrs, gpgPreferredCollectionLabel())
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(out)), nil
-}
-
-// secretToolStore stores a value in Secret Service.
-func secretToolStore(label string, value string, attrs ...string) error {
-	if _, err := exec.LookPath("secret-tool"); err != nil {
-		return fmt.Errorf("secret-tool not found (install libsecret)")
-	}
-	args := append([]string{"store", "--label", label}, attrs...)
-	cmd := exec.Command("secret-tool", args...)
-	cmd.Stdin = strings.NewReader(value)
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-// secretToolSearch searches Secret Service for entries matching attributes.
-func secretToolSearch(attrs ...string) ([]map[string]string, error) {
-	if _, err := exec.LookPath("secret-tool"); err != nil {
-		return nil, fmt.Errorf("secret-tool not found")
-	}
-	args := append([]string{"search", "--all"}, attrs...)
-	cmd := exec.Command("secret-tool", args...)
-	out, err := cmd.CombinedOutput()
+	secret, err := c.getSecret(item)
 	if err != nil {
-		return nil, nil // no results
+		return "", err
 	}
-	var entries []map[string]string
-	var current map[string]string
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.HasPrefix(line, "[") {
-			if current != nil {
-				entries = append(entries, current)
-			}
-			current = make(map[string]string)
+	return string(secret), nil
+}
+
+// ssGpgStore writes an item under the resolved target collection. Routing
+// priority: `default` alias → keyring_collection_label → first healthy
+// unlocked. Entries co-locate with reads, so a key written under a pin is
+// readable by a subsequent ssGpgLookup with the same pin. Replaces the old
+// `secret-tool store` shell-out which was hardcoded to whichever collection
+// the `default` alias happened to point at.
+//
+// On success, prints a one-line stderr confirmation naming the target
+// collection so the user can verify routing.
+func ssGpgStore(label string, value string, attrs map[string]string) error {
+	c, err := newSSClient()
+	if err != nil {
+		return fmt.Errorf("opening Secret Service: %w", err)
+	}
+	defer c.close()
+	target, targetLabel, err := resolveTargetCollection(c, gpgPreferredCollectionLabel())
+	if err != nil {
+		return fmt.Errorf("resolving Secret Service target collection: %w", err)
+	}
+	if _, err := c.createItem(target, attrs, []byte(value), label, true); err != nil {
+		return fmt.Errorf("creating item in collection %q (%s): %w", targetLabel, target, err)
+	}
+	fmt.Fprintf(os.Stderr, "    [routed to collection: %s]\n", targetLabel)
+	return nil
+}
+
+// ssGpgSearch enumerates items matching attrs across every healthy unlocked
+// collection. Returns one ssGpgEntry per match. Used by importFromKeystore
+// (find all keys with schema=org.gnupg.Key) and the doctor (count backed-up
+// keys).
+func ssGpgSearch(attrs map[string]string) ([]ssGpgEntry, error) {
+	c, err := newSSClient()
+	if err != nil {
+		return nil, fmt.Errorf("opening Secret Service: %w", err)
+	}
+	defer c.close()
+
+	paths, err := c.collections()
+	if err != nil {
+		return nil, fmt.Errorf("listing collections: %w", err)
+	}
+
+	var entries []ssGpgEntry
+	for _, p := range paths {
+		if err := c.isCollectionHealthy(p); err != nil {
+			fmt.Fprintf(os.Stderr, "ov: skipping broken collection %s: %v\n", p, err)
 			continue
 		}
-		if current != nil {
-			if idx := strings.Index(line, " = "); idx > 0 {
-				key := strings.TrimSpace(line[:idx])
-				val := strings.TrimSpace(line[idx+3:])
-				current[key] = val
+		if err := c.unlock(p); err != nil {
+			fmt.Fprintf(os.Stderr, "ov: skipping locked collection %s: %v\n", p, err)
+			continue
+		}
+		items, err := c.searchItemsByAttrs(p, attrs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ov: search failed on %s: %v\n", p, err)
+			continue
+		}
+		for _, item := range items {
+			itemLabel, itemAttrs, mderr := c.itemMetadata(item)
+			if mderr != nil {
+				fmt.Fprintf(os.Stderr, "ov: cannot read metadata of %s: %v\n", item, mderr)
+				continue
 			}
+			entries = append(entries, ssGpgEntry{
+				Path:  item,
+				Attrs: itemAttrs,
+				Label: itemLabel,
+			})
 		}
 	}
-	if current != nil {
-		entries = append(entries, current)
-	}
 	return entries, nil
-}
-
-// secretToolClear removes Secret Service entries matching attributes.
-func secretToolClear(attrs ...string) error {
-	args := append([]string{"clear"}, attrs...)
-	cmd := exec.Command("secret-tool", args...)
-	return cmd.Run()
 }
 
 const (
@@ -782,7 +830,10 @@ func diagnoseGPGDecryptionFailure(path, gpgStderr string) {
 				fmt.Fprintf(os.Stderr, "  Key in local keyring:   NO ← likely cause\n")
 			}
 			// Check if key is backed up in Secret Service
-			if val, _ := secretToolLookup("xdg:schema", ssSchemaKey, "keyid", r); val != "" {
+			if val, _ := ssGpgLookup(map[string]string{
+				"xdg:schema": ssSchemaKey,
+				"keyid":      r,
+			}); val != "" {
 				fmt.Fprintf(os.Stderr, "  Key in Secret Service:  YES (restore: ov secrets gpg import-key --from-keystore)\n")
 			}
 		}
@@ -939,7 +990,11 @@ func (c *SecretsGpgImportKeyCmd) importFromKeystore() error {
 		return fmt.Errorf("Secret Service not available on D-Bus (is KeePassXC running and unlocked?)")
 	}
 
-	entries, err := secretToolSearch("xdg:schema", ssSchemaKey)
+	// Iterate ALL healthy unlocked collections and gather every entry with
+	// schema=org.gnupg.Key. Replaces the old search+lookup two-step where
+	// search hit all collections but lookup only hit the default-aliased
+	// one — the silent-skip bug for entries in non-default collections.
+	entries, err := ssGpgSearch(map[string]string{"xdg:schema": ssSchemaKey})
 	if err != nil {
 		return fmt.Errorf("searching Secret Service: %w", err)
 	}
@@ -947,23 +1002,28 @@ func (c *SecretsGpgImportKeyCmd) importFromKeystore() error {
 		return fmt.Errorf("no GPG keys found in Secret Service (schema: %s)", ssSchemaKey)
 	}
 
+	ssClient, err := newSSClient()
+	if err != nil {
+		return fmt.Errorf("opening Secret Service for getSecret: %w", err)
+	}
+	defer ssClient.close()
+
 	imported := 0
 	for _, entry := range entries {
-		keyid := entry["attribute.keyid"]
+		keyid := entry.Attrs["keyid"]
 		if c.KeyID != "" && keyid != c.KeyID {
 			continue
 		}
 
-		// Retrieve the armored key from Secret Service
-		lookupAttrs := []string{"xdg:schema", ssSchemaKey}
-		if keyid != "" {
-			lookupAttrs = append(lookupAttrs, "keyid", keyid)
-		}
-		armoredKey, err := secretToolLookup(lookupAttrs...)
-		if err != nil || armoredKey == "" {
-			fmt.Fprintf(os.Stderr, "  Warning: could not retrieve key %s from Secret Service\n", keyid)
+		// Read the armored payload directly from the discovered item path —
+		// no second search needed. The collection-iteration in ssGpgSearch
+		// already proved the item is reachable.
+		secret, err := ssClient.getSecret(entry.Path)
+		if err != nil || len(secret) == 0 {
+			fmt.Fprintf(os.Stderr, "  Warning: could not retrieve key %s from Secret Service: %v\n", keyid, err)
 			continue
 		}
+		armoredKey := string(secret)
 
 		// Import via stdin (key data on stdin, passphrase via --passphrase if provided)
 		fmt.Fprintf(os.Stderr, "  Importing key %s from Secret Service\n", keyid)
@@ -1000,7 +1060,10 @@ func (c *SecretsGpgImportKeyCmd) importFromKeystore() error {
 	// Check if passphrases are already cached
 	for _, k := range keys {
 		for _, grip := range k.Keygrips {
-			if val, _ := secretToolLookup("xdg:schema", ssSchemaPassphrase, "keygrip", grip); val != "" {
+			if val, _ := ssGpgLookup(map[string]string{
+				"xdg:schema": ssSchemaPassphrase,
+				"keygrip":    grip,
+			}); val != "" {
 				fmt.Fprintf(os.Stderr, "  Passphrase for %s already cached in Secret Service\n", k.KeyID)
 				break
 			}
@@ -1116,13 +1179,15 @@ func (c *SecretsGpgExportKeyCmd) exportToKeystore(keyID string) error {
 		return fmt.Errorf("exporting secret key for keystore: %w\n%s", err, secStderr.String())
 	}
 
-	// Store in Secret Service
+	// Store in Secret Service. Routing goes through resolveTargetCollection
+	// (default alias → keyring_collection_label → first healthy unlocked) so
+	// the entry co-locates with the read path.
 	label := fmt.Sprintf("GPG Key: %s (%s)", uid, keyID)
-	if err := secretToolStore(label, string(armoredKey),
-		"xdg:schema", ssSchemaKey,
-		"keyid", keyID,
-		"uid", uid,
-	); err != nil {
+	if err := ssGpgStore(label, string(armoredKey), map[string]string{
+		"xdg:schema": ssSchemaKey,
+		"keyid":      keyID,
+		"uid":        uid,
+	}); err != nil {
 		return fmt.Errorf("storing key in Secret Service: %w", err)
 	}
 	fmt.Fprintf(os.Stderr, "  Stored key %s in Secret Service\n", keyID)
@@ -1134,10 +1199,10 @@ func (c *SecretsGpgExportKeyCmd) exportToKeystore(keyID string) error {
 			return err
 		}
 		passphraseLabel := fmt.Sprintf("GPG Passphrase: %s", keyID)
-		if err := secretToolStore(passphraseLabel, c.Passphrase,
-			"xdg:schema", ssSchemaPassphrase,
-			"keygrip", keygrip,
-		); err != nil {
+		if err := ssGpgStore(passphraseLabel, c.Passphrase, map[string]string{
+			"xdg:schema": ssSchemaPassphrase,
+			"keygrip":    keygrip,
+		}); err != nil {
 			return fmt.Errorf("storing passphrase in Secret Service: %w", err)
 		}
 		fmt.Fprintf(os.Stderr, "  Stored passphrase for keygrip %s in Secret Service\n", keygrip)
@@ -1399,7 +1464,10 @@ func (c *SecretsGpgSetupCmd) ensurePassphrase() error {
 	// Check if already stored for all keygrips
 	allStored := true
 	for _, grip := range keygrips {
-		if val, _ := secretToolLookup("xdg:schema", ssSchemaPassphrase, "keygrip", grip); val == "" {
+		if val, _ := ssGpgLookup(map[string]string{
+			"xdg:schema": ssSchemaPassphrase,
+			"keygrip":    grip,
+		}); val == "" {
 			allStored = false
 			break
 		}
@@ -1433,7 +1501,10 @@ func (c *SecretsGpgSetupCmd) ensurePassphrase() error {
 	// (all keygrips share the same passphrase)
 	if passphrase == "" {
 		for _, grip := range keygrips {
-			if val, _ := secretToolLookup("xdg:schema", ssSchemaPassphrase, "keygrip", grip); val != "" {
+			if val, _ := ssGpgLookup(map[string]string{
+				"xdg:schema": ssSchemaPassphrase,
+				"keygrip":    grip,
+			}); val != "" {
 				passphrase = val
 				fmt.Fprintf(os.Stderr, "  Reusing passphrase from stored keygrip %s...\n", grip[:16])
 				break
@@ -1462,10 +1533,10 @@ func (c *SecretsGpgSetupCmd) ensurePassphrase() error {
 	// Store passphrase for ALL keygrips (primary + subkeys)
 	for _, grip := range keygrips {
 		label := fmt.Sprintf("GPG Passphrase: %s (keygrip: %s)", keyID, grip[:8])
-		if err := secretToolStore(label, passphrase,
-			"xdg:schema", ssSchemaPassphrase,
-			"keygrip", grip,
-		); err != nil {
+		if err := ssGpgStore(label, passphrase, map[string]string{
+			"xdg:schema": ssSchemaPassphrase,
+			"keygrip":    grip,
+		}); err != nil {
 			return fmt.Errorf("storing passphrase for keygrip %s: %w", grip[:16], err)
 		}
 		fmt.Fprintf(os.Stderr, "  Stored passphrase for keygrip %s...\n", grip[:16])
@@ -1530,7 +1601,10 @@ func presetPassphrasesFromSS(keyID string) {
 			continue
 		}
 		for _, grip := range k.Keygrips {
-			passphrase, _ := secretToolLookup("xdg:schema", ssSchemaPassphrase, "keygrip", grip)
+			passphrase, _ := ssGpgLookup(map[string]string{
+				"xdg:schema": ssSchemaPassphrase,
+				"keygrip":    grip,
+			})
 			if passphrase == "" {
 				continue
 			}
@@ -1646,7 +1720,10 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 				if i > 0 {
 					role = "subkey"
 				}
-				if val, _ := secretToolLookup("xdg:schema", ssSchemaPassphrase, "keygrip", grip); val != "" {
+				if val, _ := ssGpgLookup(map[string]string{
+					"xdg:schema": ssSchemaPassphrase,
+					"keygrip":    grip,
+				}); val != "" {
 					ok(fmt.Sprintf("    passphrase (%s):   stored (keygrip: %s...)", role, grip[:16]))
 				} else {
 					warn(fmt.Sprintf("    passphrase (%s):   NOT stored (keygrip: %s...) — run: ov secrets gpg setup", role, grip[:16]))
@@ -1655,9 +1732,13 @@ func (c *SecretsGpgDoctorCmd) Run() error {
 		}
 
 		// 8. Key backup
-		keyEntries, _ := secretToolSearch("xdg:schema", ssSchemaKey)
+		keyEntries, _ := ssGpgSearch(map[string]string{"xdg:schema": ssSchemaKey})
 		if len(keyEntries) > 0 {
-			ok(fmt.Sprintf("    key backups:           %d key(s) stored", len(keyEntries)))
+			collections := map[string]bool{}
+			for _, e := range keyEntries {
+				collections[fmt.Sprintf("%s", e.Path)] = true
+			}
+			ok(fmt.Sprintf("    key backups:           %d key(s) stored across %d collection-path(s)", len(keyEntries), len(collections)))
 		} else {
 			ok("    key backups:           none (use: ov secrets gpg export-key --to-keystore)")
 		}

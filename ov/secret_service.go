@@ -43,15 +43,20 @@ type ssSecret struct {
 }
 
 // ssOps is the minimal set of Secret Service operations used by
-// findItemAcrossCollections. Defining it as an interface lets tests supply a
-// fake implementation without touching DBus.
+// findItemByAttrsAcrossCollections and resolveTargetCollection. Defining it as
+// an interface lets tests supply a fake implementation without touching DBus.
 type ssOps interface {
 	readAlias(name string) (dbus.ObjectPath, error)
 	collections() ([]dbus.ObjectPath, error)
 	isCollectionHealthy(path dbus.ObjectPath) error
 	collectionLabel(path dbus.ObjectPath) string
 	unlock(path dbus.ObjectPath) error
-	searchItem(path dbus.ObjectPath, service, username string) (dbus.ObjectPath, error)
+	searchItemByAttrs(path dbus.ObjectPath, attrs map[string]string) (dbus.ObjectPath, error)
+	searchItemsByAttrs(path dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error)
+	getSecret(item dbus.ObjectPath) ([]byte, error)
+	itemMetadata(item dbus.ObjectPath) (label string, attrs map[string]string, err error)
+	createItem(path dbus.ObjectPath, attrs map[string]string, secret []byte, label string, replace bool) (dbus.ObjectPath, error)
+	deleteItem(item dbus.ObjectPath) error
 }
 
 // ssClient is a minimal godbus-based Secret Service client focused on the
@@ -176,27 +181,54 @@ func (c *ssClient) unlock(path dbus.ObjectPath) error {
 	return nil
 }
 
-// searchItem finds a single item matching {service, username} attributes in
-// a specific collection. Returns ErrSSNotFound if no match, or the dbus error
-// if the SearchItems call fails.
-func (c *ssClient) searchItem(collectionPath dbus.ObjectPath, service, username string) (dbus.ObjectPath, error) {
-	obj := c.conn.Object(ssServiceName, collectionPath)
-	var results []dbus.ObjectPath
-	attrs := map[string]string{
-		"service":  service,
-		"username": username,
-	}
-	call := obj.Call(ssCollectionInterface+".SearchItems", 0, attrs)
-	if call.Err != nil {
-		return "", fmt.Errorf("SearchItems on %s: %w", collectionPath, call.Err)
-	}
-	if err := call.Store(&results); err != nil {
-		return "", fmt.Errorf("decoding SearchItems on %s: %w", collectionPath, err)
+// searchItemByAttrs finds a single item matching arbitrary string attributes
+// in a specific collection. The attrs map is passed verbatim to libsecret's
+// Collection.SearchItems (Dict<String,String>). Returns ErrSSNotFound if no
+// match, or the dbus error if the SearchItems call fails.
+func (c *ssClient) searchItemByAttrs(collectionPath dbus.ObjectPath, attrs map[string]string) (dbus.ObjectPath, error) {
+	results, err := c.searchItemsByAttrs(collectionPath, attrs)
+	if err != nil {
+		return "", err
 	}
 	if len(results) == 0 {
 		return "", ErrSSNotFound
 	}
 	return results[0], nil
+}
+
+// searchItemsByAttrs returns ALL items matching attrs in a specific
+// collection. Used when callers need to enumerate (e.g. count backed-up GPG
+// keys) rather than fetch the first match.
+func (c *ssClient) searchItemsByAttrs(collectionPath dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
+	obj := c.conn.Object(ssServiceName, collectionPath)
+	var results []dbus.ObjectPath
+	call := obj.Call(ssCollectionInterface+".SearchItems", 0, attrs)
+	if call.Err != nil {
+		return nil, fmt.Errorf("SearchItems on %s: %w", collectionPath, call.Err)
+	}
+	if err := call.Store(&results); err != nil {
+		return nil, fmt.Errorf("decoding SearchItems on %s: %w", collectionPath, err)
+	}
+	return results, nil
+}
+
+// itemMetadata reads an item's Label and Attributes properties.
+func (c *ssClient) itemMetadata(item dbus.ObjectPath) (string, map[string]string, error) {
+	obj := c.conn.Object(ssServiceName, item)
+	labelV, err := obj.GetProperty(ssItemInterface + ".Label")
+	if err != nil {
+		return "", nil, fmt.Errorf("reading Label of %s: %w", item, err)
+	}
+	label, _ := labelV.Value().(string)
+	attrsV, err := obj.GetProperty(ssItemInterface + ".Attributes")
+	if err != nil {
+		return label, nil, fmt.Errorf("reading Attributes of %s: %w", item, err)
+	}
+	attrs, _ := attrsV.Value().(map[string]string)
+	if attrs == nil {
+		attrs = map[string]string{}
+	}
+	return label, attrs, nil
 }
 
 // getSecret retrieves the secret value of an item under the client's session.
@@ -213,16 +245,82 @@ func (c *ssClient) getSecret(item dbus.ObjectPath) ([]byte, error) {
 	return secret.Value, nil
 }
 
+// createItem creates a new item in the named collection with the given
+// attributes, secret payload, and label. When replace is true and an item with
+// matching attributes already exists, libsecret replaces it; otherwise the
+// caller gets back a separate item path. Returns the new (or replacing) item's
+// object path. If the collection requires unlock, the caller must unlock it
+// first via c.unlock(collectionPath).
+func (c *ssClient) createItem(collectionPath dbus.ObjectPath, attrs map[string]string, secret []byte, label string, replace bool) (dbus.ObjectPath, error) {
+	obj := c.conn.Object(ssServiceName, collectionPath)
+	properties := map[string]dbus.Variant{
+		ssItemInterface + ".Label":      dbus.MakeVariant(label),
+		ssItemInterface + ".Attributes": dbus.MakeVariant(attrs),
+	}
+	secretStruct := ssSecret{
+		Session:     c.session,
+		Parameters:  []byte{},
+		Value:       secret,
+		ContentType: "text/plain",
+	}
+	var item dbus.ObjectPath
+	var prompt dbus.ObjectPath
+	call := obj.Call(ssCollectionInterface+".CreateItem", 0, properties, secretStruct, replace)
+	if call.Err != nil {
+		return "", fmt.Errorf("CreateItem on %s: %w", collectionPath, call.Err)
+	}
+	if err := call.Store(&item, &prompt); err != nil {
+		return "", fmt.Errorf("decoding CreateItem on %s: %w", collectionPath, err)
+	}
+	if prompt != dbus.ObjectPath("/") {
+		return "", fmt.Errorf("CreateItem on %s requires interactive prompt %s", collectionPath, prompt)
+	}
+	return item, nil
+}
+
+// deleteItem removes an item by its object path.
+func (c *ssClient) deleteItem(item dbus.ObjectPath) error {
+	obj := c.conn.Object(ssServiceName, item)
+	var prompt dbus.ObjectPath
+	call := obj.Call(ssItemInterface+".Delete", 0)
+	if call.Err != nil {
+		return fmt.Errorf("Delete(%s): %w", item, call.Err)
+	}
+	if err := call.Store(&prompt); err != nil {
+		return fmt.Errorf("decoding Delete(%s): %w", item, err)
+	}
+	if prompt != dbus.ObjectPath("/") {
+		return fmt.Errorf("Delete(%s) requires interactive prompt %s", item, prompt)
+	}
+	return nil
+}
+
 // findItemAnyCollection searches for a credential by iterating Secret Service
-// collections in priority order. See findItemAcrossCollections for the full
-// algorithm. This is the ssClient method wrapper around the testable helper.
+// collections in priority order. Legacy {service, username} signature kept for
+// existing credential-keyring callers — internally builds the attrs map and
+// delegates to findItemByAttrsAcrossCollections.
 func (c *ssClient) findItemAnyCollection(service, username, preferLabel string) (dbus.ObjectPath, string, error) {
 	return findItemAcrossCollections(c, service, username, preferLabel)
 }
 
-// findItemAcrossCollections is the testable body of the credential iteration.
-// It takes an ssOps interface so unit tests can supply a fake implementation.
-// Priority order:
+// findItemByAttrsAnyCollection is the attribute-map-based read path. Used by
+// the GPG keystore code which searches by xdg:schema + keyid (or keygrip).
+func (c *ssClient) findItemByAttrsAnyCollection(attrs map[string]string, preferLabel string) (dbus.ObjectPath, string, error) {
+	return findItemByAttrsAcrossCollections(c, attrs, preferLabel)
+}
+
+// findItemAcrossCollections is the legacy {service, username} wrapper preserved
+// so existing credential-keyring tests and call sites do not need to change.
+func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (dbus.ObjectPath, string, error) {
+	return findItemByAttrsAcrossCollections(c, map[string]string{
+		"service":  service,
+		"username": username,
+	}, preferLabel)
+}
+
+// findItemByAttrsAcrossCollections is the testable body of the credential
+// iteration. It takes an ssOps interface so unit tests can supply a fake
+// implementation. Priority order:
 //
 //  1. The collection aliased as "default" (if it exists and is healthy)
 //  2. A collection matching preferLabel (if non-empty and healthy)
@@ -236,7 +334,7 @@ func (c *ssClient) findItemAnyCollection(service, username, preferLabel string) 
 //
 // Broken collections are skipped with a diagnostic line to stderr so the
 // user can see exactly which collection caused the fallback and why.
-func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (dbus.ObjectPath, string, error) {
+func findItemByAttrsAcrossCollections(c ssOps, attrs map[string]string, preferLabel string) (dbus.ObjectPath, string, error) {
 	tried := make(map[dbus.ObjectPath]bool)
 	var candidates []dbus.ObjectPath
 
@@ -325,7 +423,7 @@ func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (
 			}
 			continue
 		}
-		item, err := c.searchItem(p, service, username)
+		item, err := c.searchItemByAttrs(p, attrs)
 		if err == nil {
 			return item, label, nil
 		}
@@ -344,6 +442,102 @@ func findItemAcrossCollections(c ssOps, service, username, preferLabel string) (
 		return "", "", ErrSSAllBroken
 	}
 	return "", "", ErrSSNotFound
+}
+
+// resolveTargetCollection picks the collection writes should land in. Same
+// priority as the read path (default alias → preferLabel → first healthy
+// unlocked collection) so writes co-locate with reads — a key written under
+// `keyring_collection_label: hexaplant` will be readable by a subsequent
+// findItemByAttrsAcrossCollections call with the same setting.
+//
+// Each candidate is unlocked first (non-interactive). Locked collections that
+// require an interactive prompt are skipped with a diagnostic; the caller
+// gets ErrSSAllBroken / ErrSSInteractiveUnlockRequired as appropriate.
+//
+// Returns the chosen collection path and its label on success.
+func resolveTargetCollection(c ssOps, preferLabel string) (dbus.ObjectPath, string, error) {
+	tried := make(map[dbus.ObjectPath]bool)
+	var candidates []dbus.ObjectPath
+
+	if defPath, err := c.readAlias("default"); err == nil && defPath != "" {
+		if healthErr := c.isCollectionHealthy(defPath); healthErr == nil {
+			candidates = append(candidates, defPath)
+			tried[defPath] = true
+		} else {
+			fmt.Fprintf(os.Stderr,
+				"ov: Secret Service default alias target %s is unhealthy; falling back to collection iteration (%v)\n",
+				defPath, healthErr)
+		}
+	}
+
+	if preferLabel != "" {
+		if paths, err := c.collections(); err == nil {
+			for _, p := range paths {
+				if tried[p] {
+					continue
+				}
+				if c.collectionLabel(p) != preferLabel {
+					continue
+				}
+				if err := c.isCollectionHealthy(p); err != nil {
+					fmt.Fprintf(os.Stderr,
+						"ov: preferred collection %q (%s) is unhealthy: %v\n",
+						preferLabel, p, err)
+					continue
+				}
+				candidates = append(candidates, p)
+				tried[p] = true
+				break
+			}
+		}
+	}
+
+	paths, err := c.collections()
+	if err != nil {
+		if len(candidates) == 0 {
+			return "", "", fmt.Errorf("listing collections: %w", err)
+		}
+		fmt.Fprintf(os.Stderr, "ov: cannot list all collections (%v); trying %d priority candidate(s)\n", err, len(candidates))
+	} else {
+		for _, p := range paths {
+			if tried[p] {
+				continue
+			}
+			if herr := c.isCollectionHealthy(p); herr != nil {
+				fmt.Fprintf(os.Stderr,
+					"ov: skipping broken Secret Service collection %s: %v\n", p, herr)
+				continue
+			}
+			candidates = append(candidates, p)
+			tried[p] = true
+		}
+	}
+
+	if len(candidates) == 0 {
+		return "", "", ErrSSAllBroken
+	}
+
+	lockedCount := 0
+	for _, p := range candidates {
+		label := c.collectionLabel(p)
+		if err := c.unlock(p); err != nil {
+			if errors.Is(err, ErrSSInteractiveUnlockRequired) {
+				lockedCount++
+				fmt.Fprintf(os.Stderr,
+					"ov: collection %q (%s) is locked — interactive unlock required\n", label, p)
+				continue
+			}
+			fmt.Fprintf(os.Stderr,
+				"ov: cannot unlock collection %q (%s): %v\n", label, p, err)
+			continue
+		}
+		return p, label, nil
+	}
+
+	if lockedCount == len(candidates) {
+		return "", "", ErrSSInteractiveUnlockRequired
+	}
+	return "", "", ErrSSAllBroken
 }
 
 // isCollectionUnlockedSignal returns true when sig is a DBus

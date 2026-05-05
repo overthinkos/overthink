@@ -8,6 +8,14 @@ import (
 	dbus "github.com/godbus/dbus/v5"
 )
 
+// fakeItem is a single in-memory entry in fakeSSOps.
+type fakeItem struct {
+	path   dbus.ObjectPath
+	attrs  map[string]string
+	secret []byte
+	label  string
+}
+
 // fakeSSOps is a configurable ssOps implementation for unit tests.
 type fakeSSOps struct {
 	aliasMap       map[string]dbus.ObjectPath
@@ -17,9 +25,20 @@ type fakeSSOps struct {
 	labels         map[dbus.ObjectPath]string
 	healthErrs     map[dbus.ObjectPath]error
 	unlockErrs     map[dbus.ObjectPath]error
-	// items: collectionPath -> service -> username -> itemPath ("" = not found)
-	items      map[dbus.ObjectPath]map[string]map[string]dbus.ObjectPath
+	// items: collectionPath -> list of in-memory entries. Each entry's attrs
+	// map is matched against incoming searchItemByAttrs calls subset-style:
+	// every key/value in the search attrs must equal the entry's attrs. This
+	// mirrors libsecret's `Collection.SearchItems(IN attrs)` semantics.
+	items map[dbus.ObjectPath][]*fakeItem
+	// itemByPath: itemPath -> *fakeItem, owned by the same fake. Lets
+	// getSecret/deleteItem look up by path without scanning collections.
+	itemByPath map[dbus.ObjectPath]*fakeItem
 	searchErrs map[dbus.ObjectPath]error
+	createErrs map[dbus.ObjectPath]error
+	deleteErrs map[dbus.ObjectPath]error
+	// nextItemSeq supplies unique paths to createItem when the test does not
+	// set explicit ones via addItem.
+	nextItemSeq int
 }
 
 func newFakeSSOps() *fakeSSOps {
@@ -29,8 +48,11 @@ func newFakeSSOps() *fakeSSOps {
 		labels:     map[dbus.ObjectPath]string{},
 		healthErrs: map[dbus.ObjectPath]error{},
 		unlockErrs: map[dbus.ObjectPath]error{},
-		items:      map[dbus.ObjectPath]map[string]map[string]dbus.ObjectPath{},
+		items:      map[dbus.ObjectPath][]*fakeItem{},
+		itemByPath: map[dbus.ObjectPath]*fakeItem{},
 		searchErrs: map[dbus.ObjectPath]error{},
+		createErrs: map[dbus.ObjectPath]error{},
+		deleteErrs: map[dbus.ObjectPath]error{},
 	}
 }
 
@@ -62,33 +84,156 @@ func (f *fakeSSOps) unlock(path dbus.ObjectPath) error {
 	return f.unlockErrs[path]
 }
 
-func (f *fakeSSOps) searchItem(path dbus.ObjectPath, service, username string) (dbus.ObjectPath, error) {
-	if err, ok := f.searchErrs[path]; ok && err != nil {
-		return "", err
+// attrsMatch returns true when every key/value in want is present and equal in
+// got — subset semantics, mirroring libsecret's SearchItems behavior.
+func attrsMatch(want, got map[string]string) bool {
+	for k, v := range want {
+		if got[k] != v {
+			return false
+		}
 	}
-	coll, ok := f.items[path]
-	if !ok {
-		return "", ErrSSNotFound
-	}
-	svc, ok := coll[service]
-	if !ok {
-		return "", ErrSSNotFound
-	}
-	item, ok := svc[username]
-	if !ok || item == "" {
-		return "", ErrSSNotFound
-	}
-	return item, nil
+	return true
 }
 
-func (f *fakeSSOps) addItem(coll dbus.ObjectPath, service, username string, item dbus.ObjectPath) {
-	if f.items[coll] == nil {
-		f.items[coll] = map[string]map[string]dbus.ObjectPath{}
+func (f *fakeSSOps) searchItemByAttrs(path dbus.ObjectPath, attrs map[string]string) (dbus.ObjectPath, error) {
+	results, err := f.searchItemsByAttrs(path, attrs)
+	if err != nil {
+		return "", err
 	}
-	if f.items[coll][service] == nil {
-		f.items[coll][service] = map[string]dbus.ObjectPath{}
+	if len(results) == 0 {
+		return "", ErrSSNotFound
 	}
-	f.items[coll][service][username] = item
+	return results[0], nil
+}
+
+func (f *fakeSSOps) searchItemsByAttrs(path dbus.ObjectPath, attrs map[string]string) ([]dbus.ObjectPath, error) {
+	if err, ok := f.searchErrs[path]; ok && err != nil {
+		return nil, err
+	}
+	var out []dbus.ObjectPath
+	for _, it := range f.items[path] {
+		if attrsMatch(attrs, it.attrs) {
+			out = append(out, it.path)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeSSOps) getSecret(item dbus.ObjectPath) ([]byte, error) {
+	it, ok := f.itemByPath[item]
+	if !ok {
+		return nil, fmt.Errorf("getSecret: item %s not found", item)
+	}
+	out := make([]byte, len(it.secret))
+	copy(out, it.secret)
+	return out, nil
+}
+
+func (f *fakeSSOps) itemMetadata(item dbus.ObjectPath) (string, map[string]string, error) {
+	it, ok := f.itemByPath[item]
+	if !ok {
+		return "", nil, fmt.Errorf("itemMetadata: item %s not found", item)
+	}
+	cloned := make(map[string]string, len(it.attrs))
+	for k, v := range it.attrs {
+		cloned[k] = v
+	}
+	return it.label, cloned, nil
+}
+
+func (f *fakeSSOps) createItem(path dbus.ObjectPath, attrs map[string]string, secret []byte, label string, replace bool) (dbus.ObjectPath, error) {
+	if err, ok := f.createErrs[path]; ok && err != nil {
+		return "", err
+	}
+	if replace {
+		// remove any existing entry whose attrs match exactly
+		newList := f.items[path][:0]
+		for _, it := range f.items[path] {
+			if attrsEqual(it.attrs, attrs) {
+				delete(f.itemByPath, it.path)
+				continue
+			}
+			newList = append(newList, it)
+		}
+		f.items[path] = newList
+	}
+	f.nextItemSeq++
+	itemPath := dbus.ObjectPath(fmt.Sprintf("%s/items/auto-%d", path, f.nextItemSeq))
+	cloned := make(map[string]string, len(attrs))
+	for k, v := range attrs {
+		cloned[k] = v
+	}
+	clonedSecret := make([]byte, len(secret))
+	copy(clonedSecret, secret)
+	it := &fakeItem{
+		path:   itemPath,
+		attrs:  cloned,
+		secret: clonedSecret,
+		label:  label,
+	}
+	f.items[path] = append(f.items[path], it)
+	f.itemByPath[itemPath] = it
+	return itemPath, nil
+}
+
+func (f *fakeSSOps) deleteItem(item dbus.ObjectPath) error {
+	if err, ok := f.deleteErrs[item]; ok && err != nil {
+		return err
+	}
+	for coll, list := range f.items {
+		newList := list[:0]
+		for _, it := range list {
+			if it.path == item {
+				delete(f.itemByPath, item)
+				continue
+			}
+			newList = append(newList, it)
+		}
+		f.items[coll] = newList
+	}
+	return nil
+}
+
+// attrsEqual returns true when two attribute maps have the same keys and values.
+func attrsEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// addItem records a {service, username} entry under coll with itemPath as its
+// path. Legacy helper for credential-keyring tests; for arbitrary attribute
+// shapes (GPG keystore tests) use addItemWithAttrs.
+func (f *fakeSSOps) addItem(coll dbus.ObjectPath, service, username string, itemPath dbus.ObjectPath) {
+	f.addItemWithAttrs(coll, map[string]string{
+		"service":  service,
+		"username": username,
+	}, itemPath, nil, "")
+}
+
+// addItemWithAttrs records an arbitrary item under coll, retrievable via
+// searchItemByAttrs (subset match) and getSecret (by path).
+func (f *fakeSSOps) addItemWithAttrs(coll dbus.ObjectPath, attrs map[string]string, itemPath dbus.ObjectPath, secret []byte, label string) {
+	cloned := make(map[string]string, len(attrs))
+	for k, v := range attrs {
+		cloned[k] = v
+	}
+	clonedSecret := make([]byte, len(secret))
+	copy(clonedSecret, secret)
+	it := &fakeItem{
+		path:   itemPath,
+		attrs:  cloned,
+		secret: clonedSecret,
+		label:  label,
+	}
+	f.items[coll] = append(f.items[coll], it)
+	f.itemByPath[itemPath] = it
 }
 
 // --- Test cases ---

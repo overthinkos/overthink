@@ -329,26 +329,27 @@ recipe:
           - then: "the nonce-protected key is readable on the server pod with the correct value"
             command: "redis-cli get bench:${EVAL_NONCE_KEY}"
             stdout: { contains: ["${EVAL_NONCE_VALUE}"] }
-
   # ─────────────────────────────────────────────────────────────────────
-  # Phase 4 — mcp-protocol-probe: deploy an existing project MCP-enabled
-  # image (jupyter is the canonical reference). Imports jupyter's existing
-  # MCP tests via `from:` so the AI's task is "deploy the existing image",
-  # not "implement an MCP server from scratch".
+  # Phase 4 — mcp-protocol-probe: deploy the project's MCP-enabled jupyter
+  # image. Imports jupyter's existing MCP tests via `from:` so the AI's
+  # task is "deploy the existing image", not "implement an MCP server
+  # from scratch". Post-2026-05-06 cutover: 11-tool surface (no
+  # client-side room management); auto-attach in the server.
   # ─────────────────────────────────────────────────────────────────────
   mcp-protocol-probe:
     description:
-      feature: "A Jupyter MCP server reachable on a pod named `mcp` exposes all 15 JupyterLab notebook tools (notebook_*/cell_*/room_* prefixed) and passes every test the project's jupyter image already certifies."
+      feature: "A Jupyter MCP server reachable on a pod named `mcp` exposes the post-2026-05-06 11-tool surface (notebook_*/cell_* + room_list + notebook_list_users), auto-attaches to whichever CRDT room exists for any given notebook, and passes every test the project's jupyter image certifies."
       narrative: |
         Feature: A Jupyter MCP server reachable on a pod named
-          `mcp` exposes the JupyterLab notebook toolset.
+          `mcp` exposes a clean notebook+cell toolset and manages
+          CRDT rooms invisibly.
 
           As an operator,
-          I want a pod named `mcp` running a Jupyter MCP
-            server,
-          So that every test the project's `jupyter` image already
-            certifies passes against that pod, including all 13
-            JupyterLab MCP tools.
+          I want a pod named `mcp` running a Jupyter MCP server,
+          So that every notebook_*/cell_* call works WITH the user
+            (auto-attaches to whatever CRDT room exists, never creates
+            a parallel one) and the project's jupyter image's own test
+            surface passes against the pod.
 
           What must be true to pass this test:
 
@@ -356,446 +357,202 @@ recipe:
 
             - Sending an MCP `ping` to it succeeds.
 
-            - An MCP `list-tools` request returns a list whose
-              output includes EACH of these 15 JupyterLab tool
-              names (uniform `<noun>_<verb>` form):
+            - An MCP `list-tools` request returns a list whose output
+              includes EACH of these 11 JupyterLab tool names
+              (uniform `<noun>_<verb>` form):
               `notebook_list`, `notebook_create`, `notebook_get`,
-              `notebook_watch`, `cell_get`, `cell_update`,
-              `cell_insert`, `cell_delete`, `cell_execute`,
-              `room_open`, `room_close`, `room_close_all`,
-              `room_pick`, `room_list`, `room_list_users`.
+              `notebook_watch`, `notebook_list_users`, `cell_get`,
+              `cell_update`, `cell_insert`, `cell_delete`,
+              `cell_execute`, `room_list`. The list MUST NOT contain
+              the deleted management tools `room_open`, `room_close`,
+              `room_close_all`, `room_pick`.
 
             - An MCP `call` for the `notebook_list` tool with
               JSON input `{}` exits with status 0.
 
+            - Cell mutations preserve the cell's `id` across
+              `cell_update` (no fresh-UUID minting).
+
+            - Sequential `cell_update` calls do not grow the
+              notebook's cell count (no phantom-cell residue).
+
+            - Three different path forms for the same logical file
+              (`foo.ipynb`, `./foo.ipynb`,
+              `/home/user/workspace/foo.ipynb`) converge on a SINGLE
+              room.
+
+            - Host paths (e.g. `/home/atrawog/...`) are rejected.
+
             - Every other test the project's `jupyter` image
               certifies (binaries, packages, services, ports,
-              HTTP endpoints, etc.) passes against the
-              `mcp` pod. The recipe imports the full
-              jupyter test surface via `from:` so the assertions
-              and their expected values are exactly the ones the
-              jupyter image's own `ov eval live jupyter` flow runs.
+              HTTP endpoints, post-cutover regression scenarios)
+              passes against the `mcp` pod.
     from:
-      # Import EVERY test the jupyter image already carries — layer +
-      # image + deploy sections. No select/exclude/scope filters: each
-      # imported Check becomes one ScenarioID, and the AI must satisfy
-      # every one against the `mcp` pod. skip_live_only:false
-      # keeps the mcp:* deploy-scope checks (which are otherwise
-      # filtered as live-only by the loader's default heuristic).
       - kind: image
         name: jupyter
         pod:  mcp
         skip_live_only: false
     scenario:
 
-      # ── Room-lifecycle invariants ──────────────────────────────────
-      # Each scenario verifies one invariant of the post-cutover MCP
-      # tool surface (notebook_*/cell_*/room_* prefixes; explicit room
-      # creation; hard-fail on missing room; room_pick / room_close_all).
-
-      # A. Filesystem semantics: notebook_create does NOT open a room.
-      - name: lifecycle-notebook-create-no-room
+      # A. notebook_create still does NOT open a room. Auto-attach
+      # happens on the FIRST notebook_*/cell_* call, not on create.
+      - name: notebook-create-no-room
         pod: mcp
         setup:
-          - then: "remove any prior notebook + ystore so the path is clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-A.ipynb $HOME/.jupyter_ystore.db*"
+          - then: "remove any prior probe notebook"
+            command: "rm -f /home/user/workspace/mcp-A.ipynb"
             in_container: true
             exit_status: 0
         steps:
           - then: "notebook_create writes the file but does not open a CRDT room"
             mcp: call
             tool: notebook_create
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
+            input: '{"path":"mcp-A.ipynb"}'
             timeout: 30s
-          - then: "room_list does NOT contain mcp-lifecycle-A.ipynb"
+          - then: "room_list does NOT contain mcp-A.ipynb"
             mcp: call
             tool: room_list
             input: '{}'
-            stdout: { not_contains: "mcp-lifecycle-A.ipynb" }
+            stdout: { not_contains: "mcp-A.ipynb" }
             timeout: 30s
 
-      # B. Room creation lifecycle.
-      - name: lifecycle-room-open-creates-one
+      # B. cell_insert on a fresh notebook auto-attaches.
+      - name: cell-insert-auto-attaches-room
         pod: mcp
         setup:
           - then: "clean state"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-A.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create the notebook on disk"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-        steps:
-          - then: "open a room — should create exactly one"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 60s
-          - then: "room_list contains the path"
-            mcp: call
-            tool: room_list
-            input: '{}'
-            stdout: { contains: "mcp-lifecycle-A.ipynb" }
-            timeout: 30s
-        teardown:
-          - then: "close room"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-
-      - name: lifecycle-room-open-idempotent
-        pod: mcp
-        setup:
-          - then: "clean state"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-A.ipynb $HOME/.jupyter_ystore.db*"
+            command: "rm -f /home/user/workspace/mcp-B.ipynb"
             in_container: true
             exit_status: 0
           - then: "create"
             mcp: call
             tool: notebook_create
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-          - then: "open once"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 60s
-        steps:
-          - then: "open again — idempotent, no second room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 60s
-          - then: "the path appears exactly once in room_list"
-            mcp: call
-            tool: room_list
-            input: '{}'
-            stdout: { matches: "mcp-lifecycle-A\\.ipynb[^a-zA-Z]" }
-            timeout: 30s
-        teardown:
-          - then: "close room"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-
-      - name: lifecycle-room-close-removes
-        pod: mcp
-        setup:
-          - then: "clean state"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-A.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-          - then: "open"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 60s
-        steps:
-          - then: "close"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-          - then: "room_list does NOT contain the path"
-            mcp: call
-            tool: room_list
-            input: '{}'
-            stdout: { not_contains: "mcp-lifecycle-A.ipynb" }
-            timeout: 30s
-
-      # C. Hard-fail policy: every room-mutation tool errors when no
-      # room is open for the path. RoomNotOpenError surfaces in the
-      # MCP error response (FastMCP turns Python exceptions into
-      # error responses). The MCP `call` verb propagates these as
-      # non-zero exit_status with the error text in stdout/stderr.
-      - name: lifecycle-cell-execute-fails-without-room
-        pod: mcp
-        setup:
-          - then: "clean state"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create the notebook (no room_open)"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
+            input: '{"path":"mcp-B.ipynb"}'
             timeout: 30s
         steps:
-          - then: "cell_execute without room_open returns RoomNotOpenError"
-            mcp: call
-            tool: cell_execute
-            input: '{"path":"mcp-lifecycle-B.ipynb","index":0}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      - name: lifecycle-cell-update-fails-without-room
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-        steps:
-          - then: "cell_update without room_open returns RoomNotOpenError"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"mcp-lifecycle-B.ipynb","index":0,"source":"x = 1"}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      - name: lifecycle-cell-insert-fails-without-room
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-        steps:
-          - then: "cell_insert without room_open returns RoomNotOpenError"
+          - then: "cell_insert without prior open auto-creates the room"
             mcp: call
             tool: cell_insert
-            input: '{"path":"mcp-lifecycle-B.ipynb","index":0,"source":"y = 2","cell_type":"code"}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      - name: lifecycle-cell-get-fails-without-room
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-        steps:
-          - then: "cell_get without room_open returns RoomNotOpenError"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"mcp-lifecycle-B.ipynb","index":0}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      - name: lifecycle-notebook-get-fails-without-room
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-        steps:
-          - then: "notebook_get without room_open returns RoomNotOpenError"
-            mcp: call
-            tool: notebook_get
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      # D. room_pick semantics.
-      - name: lifecycle-room-pick-finds-existing
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create + open"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-          - then: "open"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
+            input: '{"path":"mcp-B.ipynb","index":0,"source":"x","cell_type":"markdown"}'
             timeout: 60s
-        steps:
-          - then: "room_pick finds the existing room and returns its room_id"
+          - then: "room_list now contains mcp-B.ipynb"
             mcp: call
-            tool: room_pick
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            stdout: { contains: "room_id" }
-            exit_status: 0
-            timeout: 30s
-        teardown:
-          - then: "close"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-
-      - name: lifecycle-room-pick-errors-on-nonexistent
-        pod: mcp
-        setup:
-          - then: "make sure the path is NOT opened"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-C.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-        steps:
-          - then: "room_pick for never-opened path returns RoomNotOpenError"
-            mcp: call
-            tool: room_pick
-            input: '{"path":"mcp-lifecycle-C.ipynb"}'
-            stdout: { contains: "RoomNotOpenError" }
-            timeout: 30s
-
-      # E. room_close_all clears every active room.
-      - name: lifecycle-room-close-all-clears
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-A.ipynb /home/user/workspace/mcp-lifecycle-B.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create A"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 30s
-          - then: "create B"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 30s
-          - then: "open A"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-A.ipynb"}'
-            timeout: 60s
-          - then: "open B"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-B.ipynb"}'
-            timeout: 60s
-        steps:
-          - then: "room_close_all closes every room"
-            mcp: call
-            tool: room_close_all
+            tool: room_list
             input: '{}'
+            stdout: { contains: "mcp-B.ipynb" }
+            timeout: 30s
+
+      # C. UI auto-join: a transient WebSocket connection to the same
+      # path that MCP has been mutating must NOT create a parallel room.
+      - name: ui-autojoin-no-second-room
+        pod: mcp
+        setup:
+          - then: "clean state"
+            command: "rm -f /home/user/workspace/mcp-D.ipynb"
+            in_container: true
+            exit_status: 0
+          - then: "create"
+            mcp: call
+            tool: notebook_create
+            input: '{"path":"mcp-D.ipynb"}'
+            timeout: 30s
+          - then: "MCP-side cell_insert auto-creates the room"
+            mcp: call
+            tool: cell_insert
+            input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
             timeout: 60s
-          - then: "room_list shows neither path remaining"
+        steps:
+          - then: "transient UI-style WebSocket connect (in-container python)"
+            command: |-
+              python3 -c '
+              import asyncio
+              async def main():
+                  try:
+                      import websockets
+                  except ImportError:
+                      print("websockets not installed; skipping ws probe"); return
+                  try:
+                      ws = await asyncio.wait_for(
+                          websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-D.ipynb"),
+                          5,
+                      )
+                      await asyncio.sleep(1)
+                      await ws.close()
+                      print("ws-probe-ok")
+                  except Exception as e:
+                      print(f"ws-probe-noop: {e}")
+              asyncio.run(main())
+              '
+            in_container: true
+            exit_status: 0
+          - then: "room_list still shows EXACTLY one entry for the path"
             mcp: call
             tool: room_list
             input: '{}'
             stdout:
-              - not_contains: "mcp-lifecycle-A.ipynb"
-              - not_contains: "mcp-lifecycle-B.ipynb"
+              - matches: 'mcp-D\.ipynb'
             timeout: 30s
 
-      # F. UI auto-join: opening a transient WebSocket connection to
-      # the same path that the MCP has already opened must not create
-      # a parallel room. We use python (always available in the
-      # jupyter image) + websockets to drive a brief client connect.
-      - name: lifecycle-ui-autojoin-no-second-room
+      # D. Upstream-race regression guard: 2026-05-01 incident logged
+      # `Task exception 'is not in list'` from
+      # YDocWebSocketHandler._clean_room when MCP and UI raced on close.
+      # Post-cutover there is no MCP-side close, but the idle-room
+      # sweeper might race the UI's clean_room when the last UI client
+      # disconnects.
+      - name: no-clean-room-valueerror
         pod: mcp
         setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-D.ipynb $HOME/.jupyter_ystore.db*"
+          - then: "clean state"
+            command: "rm -f /home/user/workspace/mcp-E.ipynb"
             in_container: true
             exit_status: 0
-          - then: "create + open via MCP"
+          - then: "create"
             mcp: call
             tool: notebook_create
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
+            input: '{"path":"mcp-E.ipynb"}'
             timeout: 30s
-          - then: "open"
+          - then: "MCP cell_insert auto-creates the room"
             mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
+            tool: cell_insert
+            input: '{"path":"mcp-E.ipynb","index":0,"source":"x","cell_type":"markdown"}'
             timeout: 60s
-        steps:
-          - then: "transient UI-style WebSocket connect (in-container python)"
-            command: "python3 -c 'import asyncio,sys; \nasync def main():\n    try:\n        import websockets\n    except ImportError:\n        print(\"websockets not installed; skipping ws probe\"); return\n    try:\n        ws = await asyncio.wait_for(websockets.connect(\"ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-lifecycle-D.ipynb\"), 5)\n        await asyncio.sleep(1)\n        await ws.close()\n        print(\"ws-probe-ok\")\n    except Exception as e:\n        print(f\"ws-probe-noop: {e}\")\nasyncio.run(main())'"
-            in_container: true
-            exit_status: 0
-          - then: "room_list still shows exactly one entry for the path"
-            mcp: call
-            tool: room_list
-            input: '{}'
-            stdout: { contains: "mcp-lifecycle-D.ipynb" }
-            timeout: 30s
-        teardown:
-          - then: "close"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
-            timeout: 30s
-
-      # G. Upstream-race regression guard. Captures the failure mode
-      # logged in the live ov-jupyter pod at 2026-05-01 09:37 UTC:
-      # Task exception 'is not in list' from YDocWebSocketHandler._clean_room.
-      # Change B (drop defensive pop + try/except delete_room) makes
-      # this benign even when MCP and UI race on close.
-      - name: lifecycle-no-clean-room-valueerror
-        pod: mcp
-        setup:
-          - then: "clean"
-            command: "rm -f /home/user/workspace/mcp-lifecycle-D.ipynb $HOME/.jupyter_ystore.db*"
-            in_container: true
-            exit_status: 0
-          - then: "create + open"
-            mcp: call
-            tool: notebook_create
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
-            timeout: 30s
-          - then: "open"
-            mcp: call
-            tool: room_open
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
-            timeout: 60s
-          - then: "transient UI-style WebSocket connect to provoke _clean_room"
-            command: "python3 -c 'import asyncio; \nasync def main():\n    try:\n        import websockets\n    except ImportError:\n        return\n    try:\n        ws = await asyncio.wait_for(websockets.connect(\"ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-lifecycle-D.ipynb\"), 5)\n        await asyncio.sleep(0.5)\n        await ws.close()\n    except Exception:\n        pass\nasyncio.run(main())'"
-            in_container: true
-            exit_status: 0
           - then: "snapshot the pod log mark"
-            command: "date +%s > /tmp/mcp-lifecycle-D.markstamp"
+            command: "date +%s > /tmp/mcp-E.markstamp"
             in_container: true
             exit_status: 0
         steps:
-          - then: "MCP close concurrent with UI disconnect should NOT raise unhandled ValueError"
-            mcp: call
-            tool: room_close
-            input: '{"path":"mcp-lifecycle-D.ipynb"}'
-            timeout: 30s
-          - then: "let the upstream _clean_room task settle"
+          - then: "transient UI-style WebSocket connect to provoke _clean_room"
+            command: |-
+              python3 -c '
+              import asyncio
+              async def main():
+                  try:
+                      import websockets
+                  except ImportError:
+                      return
+                  try:
+                      ws = await asyncio.wait_for(
+                          websockets.connect("ws://127.0.0.1:8888/api/yjs/json:notebook:mcp-E.ipynb"),
+                          5,
+                      )
+                      await asyncio.sleep(0.5)
+                      await ws.close()
+                  except Exception:
+                      pass
+              asyncio.run(main())
+              '
+            in_container: true
+            exit_status: 0
+          - then: "let upstream _clean_room settle"
             command: "sleep 2"
             in_container: true
             exit_status: 0
           - then: "no 'Task exception was never retrieved' or 'is not in list' since the mark"
-            command: "MARK=$(cat /tmp/mcp-lifecycle-D.markstamp); LOG=$(journalctl -t supervisord --since \"@$MARK\" 2>/dev/null || cat /tmp/jupyter*.log 2>/dev/null || true); echo \"$LOG\" | grep -E 'Task exception was never retrieved|is not in list' && exit 1 || exit 0"
+            command: |-
+              MARK=$(cat /tmp/mcp-E.markstamp); LOG=$(journalctl -t supervisord --since "@$MARK" 2>/dev/null || cat /tmp/jupyter*.log 2>/dev/null || true); echo "$LOG" | grep -E 'Task exception was never retrieved|is not in list' && exit 1 || exit 0
             in_container: true
             exit_status: 0
 
-  # ─────────────────────────────────────────────────────────────────────
-  # Phase 5 — kubernetes-cluster: pod hosting a k3s cluster with a
-  # predetermined fixture manifest applied.
-  # ─────────────────────────────────────────────────────────────────────
   kubernetes-cluster:
     description:
       feature: "A single-node Kubernetes cluster running a predetermined application manifest."
@@ -1395,780 +1152,6 @@ recipe:
           - then: "a marker file written during the composition self-test is present"
             file: /etc/ov-composition-selftest
             exists: true
-
-  # ─────────────────────────────────────────────────────────────────────
-  # jupyter-concurrency-and-data-safety: pure-declarative concurrency +
-  # data-safety test for the jupyter pod's MCP + jupyter-collaboration
-  # CRDT seam. Uses parallel:/count:/setup:/teardown:/summarize: framework
-  # primitives.
-  #
-  # Targets: disposable instance `jupyter-concurrency-test`
-  # (= deploy.yml entry `jupyter/concurrency-test` with disposable: true,
-  # host port 18888) and `sway-browser-vnc-concurrency-test` (sway-browser
-  # disposable instance for the CDP-driven browser tabs).
-  #
-  # Run: `ov eval recipe jupyter-concurrency-and-data-safety`
-  # ─────────────────────────────────────────────────────────────────────
-  jupyter-concurrency-and-data-safety:
-    description:
-      feature: "Concurrent multi-MCP + multi-CDP-tab access to the same notebook"
-      narrative: |
-        Multiple MCP clients and multiple browser tabs (via CDP) operate
-        on the same .ipynb notebook simultaneously. The MCP server's
-        per-notebook asyncio lock serializes MCP×MCP, but MCP×CDP races
-        through different code paths into the same YDoc — that's the
-        load-bearing CRDT-merge race the test exercises. Save-lag
-        distribution from MCP ack to disk write is the headline metric.
-    scenario:
-
-      # Scenario 1: disjoint cells. N MCP writers each edit a distinct
-      # cell index. CRDT convergence: all nonces present, JSON valid.
-      - name: disjoint-cells
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook installed"
-            command: "rm -f /home/user/workspace/jc-disjoint.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]},{\"cell_type\":\"code\",\"id\":\"b\",\"metadata\":{},\"outputs\":[],\"source\":[\"y = 0\"]},{\"cell_type\":\"code\",\"id\":\"c\",\"metadata\":{},\"outputs\":[],\"source\":[\"z = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-disjoint.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-disjoint.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: writer-${INDEX}
-            parallel: writers
-            count: 3
-            then: "writer-N updates cell N concurrently"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-disjoint.ipynb","index":${INDEX},"source":"# nonce-${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - then: "cell 0 contains nonce-0"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-disjoint.ipynb","index":0}'
-            stdout: { contains: "nonce-0" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-disjoint.ipynb"}'
-            timeout: 30s
-
-      # Scenario 2: same-cell MCP race. All N writers cell_update(0).
-      # MCP server serializes via per-notebook asyncio lock; last writer
-      # wins. Verify: at least one nonce present, JSON valid.
-      - name: same-cell-mcp
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-samecell.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-samecell.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-samecell.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: race-${INDEX}
-            parallel: race
-            count: 4
-            then: "all writers race on cell[0]"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-samecell.ipynb","index":0,"source":"# r${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - then: "cell 0 contains some r-marker (CRDT didn't lose every write)"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-samecell.ipynb","index":0}'
-            stdout: { matches: "# r[0-9]" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-samecell.ipynb"}'
-            timeout: 30s
-
-      # Scenario 3: insert-at-zero race. All N writers cell_insert(0).
-      # Verify: cell count grew by N (no lost inserts).
-      - name: insert-at-zero
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-insert.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-insert.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-insert.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: ins-${INDEX}
-            parallel: ins
-            count: 3
-            then: "writers insert at index 0 concurrently"
-            mcp: call
-            tool: cell_insert
-            input: '{"path":"jc-insert.ipynb","index":0,"source":"# ins-${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - then: "after inserts, cell 0 contains an ins- marker"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-insert.ipynb","index":0}'
-            stdout: { matches: "ins-[0-9]" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-insert.ipynb"}'
-            timeout: 30s
-
-      # Scenario 4: high-volume burst. 4 writers x 10 ops = 40 ops.
-      # Verifies all ops ack + final state JSON-valid. summarize: emits
-      # save-lag distribution metrics for inspection.
-      - name: burst
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-burst.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-burst.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-burst.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: burst-${INDEX}
-            parallel: burst
-            count: 12
-            then: "12 concurrent cell_update ops on cell[0]"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-burst.ipynb","index":0,"source":"# b${INDEX}","cell_type":"code"}'
-            timeout: 60s
-          - id: burst-summary
-            then: "save-lag distribution across the burst"
-            summarize: latency
-            over_ids: ["*burst-*"]
-            metrics: [p50, p95, p99, max, mean]
-            emit_id: burst-latency
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-burst.ipynb"}'
-            timeout: 30s
-
-      # Scenario 5: delete-vs-edit. 1 deleter races against 2 editors on
-      # the same cell K. Verifies no half-state (cell either fully gone
-      # or fully edited; JSON valid).
-      - name: delete-vs-edit
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook with 3 cells"
-            command: "rm -f /home/user/workspace/jc-delvs.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"a\"]},{\"cell_type\":\"code\",\"id\":\"b\",\"metadata\":{},\"outputs\":[],\"source\":[\"b\"]},{\"cell_type\":\"code\",\"id\":\"c\",\"metadata\":{},\"outputs\":[],\"source\":[\"c\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-delvs.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-delvs.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: edit-${INDEX}
-            parallel: race
-            count: 2
-            then: "editors race on cell 1"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-delvs.ipynb","index":1,"source":"# e${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - id: deleter
-            parallel: race
-            then: "deleter removes cell 1 concurrently"
-            mcp: call
-            tool: cell_delete
-            input: '{"path":"jc-delvs.ipynb","index":1}'
-            timeout: 30s
-          - then: "notebook still parses (no half-state)"
-            command: "python3 -c 'import json,sys; d=json.load(open(\"/home/user/workspace/jc-delvs.ipynb\")); print(\"ok cells=\", len(d[\"cells\"]))'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok cells=" }
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-delvs.ipynb"}'
-            timeout: 30s
-
-      # Scenario 6: read-during-write. N writers + 1 reader. Verify
-      # every read returns valid cell JSON (no torn state).
-      - name: read-during-write
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-readwrite.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-readwrite.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-readwrite.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: rw-write-${INDEX}
-            parallel: rw
-            count: 3
-            then: "concurrent writers"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-readwrite.ipynb","index":0,"source":"# w${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - id: rw-read-${INDEX}
-            parallel: rw
-            count: 3
-            then: "concurrent readers see valid JSON"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-readwrite.ipynb","index":0}'
-            stdout: { matches: "cell_type" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-readwrite.ipynb"}'
-            timeout: 30s
-
-      # Scenario 7: execute-vs-edit. 1 executor + 2 editors on cell K.
-      # Verify kernel state stays coherent.
-      - name: execute-vs-edit
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-execvs.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"42\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-execvs.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-execvs.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: exe-edit-${INDEX}
-            parallel: exe
-            count: 2
-            then: "editors race"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-execvs.ipynb","index":0,"source":"# x${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - then: "notebook still parses"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jc-execvs.ipynb\")); print(\"ok\")'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok" }
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-execvs.ipynb"}'
-            timeout: 30s
-
-      # Scenario 8: mixed-mcp-cdp. The headline scenario — N MCP writers
-      # AND M CDP-driven keystrokes against the same cell, simultaneously.
-      # MCP per-notebook lock doesn't apply to the WebSocket path, so this
-      # exercises a true CRDT-merge race between two distinct write paths.
-      # Pre-flight: open browser tab, wait for JupyterLab to be typeable.
-      - name: mixed-mcp-cdp
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "seed notebook"
-            command: "rm -f /home/user/workspace/jc-mixed.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-mixed.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-mixed.ipynb"}'
-            timeout: 60s
-        steps:
-          # MCP writers — 3 concurrent updates on cell 0.
-          - id: mix-mcp-${INDEX}
-            parallel: mix
-            count: 3
-            then: "MCP writers race on cell[0] via per-notebook-lock-serialized path"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-mixed.ipynb","index":0,"source":"# mcp${INDEX}","cell_type":"code"}'
-            timeout: 30s
-          - then: "final cell contains an MCP marker"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-mixed.ipynb","index":0}'
-            stdout: { matches: "mcp[0-9]" }
-            timeout: 30s
-          # CDP half — added 2026-05 once `capture_extract:` (C1) landed.
-          # Open a Chrome tab on the sway-browser-vnc-concurrency-test
-          # pod, capture its hex tab ID via regex, then exercise the
-          # captured ID via cdp eval (proves the captured value flows
-          # through ${CAPTURED:tab_id} into a subsequent CDP step).
-          - id: cdp-open-tab
-            then: "open Chrome tab on the sway-browser-vnc disposable; capture tab id"
-            cdp: open
-            url: "about:blank"
-            on: sway-browser-vnc-concurrency-test
-            capture: tab_id
-            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
-            timeout: 30s
-          - then: "cdp eval against captured tab returns expected result"
-            cdp: eval
-            tab: ${CAPTURED:tab_id}
-            expression: "1+2"
-            on: sway-browser-vnc-concurrency-test
-            stdout: { contains: "3" }
-            timeout: 30s
-          - then: "close the captured tab"
-            cdp: close
-            tab: ${CAPTURED:tab_id}
-            on: sway-browser-vnc-concurrency-test
-            timeout: 15s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-mixed.ipynb"}'
-            timeout: 30s
-
-      # Scenario 9: data-safety-kill. Background a host-side writer that
-      # pumps cell_update ops at the jupyter MCP endpoint, capture its
-      # PID, SIGKILL it mid-stream, then verify the .ipynb still parses
-      # (no half-write). Companion to delete-vs-edit but with forcible
-      # writer death rather than ordered teardown — exercises MCP's
-      # ability to leave the room in a coherent state when a writer
-      # vanishes ungracefully.
-      - name: data-safety-kill
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook"
-            command: "rm -f /home/user/workspace/jc-kill.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-kill.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-kill.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: bg-writer
-            then: "background a host-side writer pumping cell_update at the MCP port"
-            command: "while true; do curl -sS -X POST http://127.0.0.1:18888/mcp -H 'Content-Type: application/json' -H 'Accept: application/json,text/event-stream' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"cell_update\",\"arguments\":{\"path\":\"jc-kill.ipynb\",\"index\":0,\"source\":\"# k\",\"cell_type\":\"code\"}}}' >/dev/null 2>&1 || true; done"
-            in_container: false
-            background: true
-            capture: writer_pid
-            capture_extract: "pid=([0-9]+)"
-          - then: "let the writer make some changes"
-            command: "sleep 2"
-            in_container: false
-            exit_status: 0
-          - then: "SIGKILL the writer mid-stream"
-            kill: ${CAPTURED:writer_pid}
-            signal: KILL
-          - then: "wait for the OS to reap"
-            command: "sleep 1"
-            in_container: false
-            exit_status: 0
-          - then: "writer is gone"
-            command: "kill -0 ${CAPTURED:writer_pid} 2>&1; echo exit=$?"
-            in_container: false
-            stdout: { contains: "exit=1" }
-        teardown:
-          - then: "close MCP session (flushes pending CRDT)"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-kill.ipynb"}'
-            timeout: 30s
-          - then: "notebook still parses (no half-write left by SIGKILL'd writer)"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jc-kill.ipynb\")); print(\"ok cells=\", len(d[\"cells\"]))'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok cells=" }
-
-      # Scenario 10: open-order-cdp-first. Open the browser tab BEFORE
-      # the MCP room. Both rooms can coexist — MCP's CRDT room and
-      # Chrome's CDP tab are orthogonal connections to the same
-      # JupyterLab server. Open order shouldn't matter; this scenario
-      # locks that contract.
-      - name: open-order-cdp-first
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook"
-            command: "rm -f /home/user/workspace/jc-orderc.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-orderc.ipynb"
-            in_container: true
-            exit_status: 0
-        steps:
-          - id: cdp-first
-            then: "STEP 1 — open Chrome tab; capture tab id"
-            cdp: open
-            url: "about:blank"
-            on: sway-browser-vnc-concurrency-test
-            capture: cdp_tab
-            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
-            timeout: 30s
-          - then: "STEP 2 — open MCP room (after cdp tab exists)"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-orderc.ipynb"}'
-            timeout: 60s
-          - then: "MCP write succeeds with cdp tab open"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-orderc.ipynb","index":0,"source":"# cdp-first","cell_type":"code"}'
-            timeout: 30s
-          - then: "CDP eval succeeds with mcp room open"
-            cdp: eval
-            tab: ${CAPTURED:cdp_tab}
-            expression: "5*7"
-            on: sway-browser-vnc-concurrency-test
-            stdout: { contains: "35" }
-            timeout: 30s
-          - then: "MCP read confirms cell contents"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-orderc.ipynb","index":0}'
-            stdout: { contains: "cdp-first" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-orderc.ipynb"}'
-            timeout: 30s
-          - then: "close cdp tab"
-            cdp: close
-            tab: ${CAPTURED:cdp_tab}
-            on: sway-browser-vnc-concurrency-test
-            timeout: 15s
-
-      # Scenario 11: open-order-mcp-first. Mirror of scenario 10 with
-      # the open order reversed — proves order is symmetric.
-      - name: open-order-mcp-first
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook"
-            command: "rm -f /home/user/workspace/jc-orderm.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jc-orderm.ipynb"
-            in_container: true
-            exit_status: 0
-        steps:
-          - then: "STEP 1 — open MCP room first"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jc-orderm.ipynb"}'
-            timeout: 60s
-          - id: cdp-second
-            then: "STEP 2 — open Chrome tab; capture tab id (after mcp room exists)"
-            cdp: open
-            url: "about:blank"
-            on: sway-browser-vnc-concurrency-test
-            capture: cdp_tab2
-            capture_extract: "\\(tab ([A-Fa-f0-9]+)\\)"
-            timeout: 30s
-          - then: "MCP write succeeds with cdp tab open"
-            mcp: call
-            tool: cell_update
-            input: '{"path":"jc-orderm.ipynb","index":0,"source":"# mcp-first","cell_type":"code"}'
-            timeout: 30s
-          - then: "CDP eval succeeds with mcp room open"
-            cdp: eval
-            tab: ${CAPTURED:cdp_tab2}
-            expression: "9*9"
-            on: sway-browser-vnc-concurrency-test
-            stdout: { contains: "81" }
-            timeout: 30s
-          - then: "MCP read confirms cell contents"
-            mcp: call
-            tool: cell_get
-            input: '{"path":"jc-orderm.ipynb","index":0}'
-            stdout: { contains: "mcp-first" }
-            timeout: 30s
-        teardown:
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jc-orderm.ipynb"}'
-            timeout: 30s
-          - then: "close cdp tab"
-            cdp: close
-            tab: ${CAPTURED:cdp_tab2}
-            on: sway-browser-vnc-concurrency-test
-            timeout: 15s
-
-  # ─────────────────────────────────────────────────────────────────────
-  # c4-smoke-drag: SMOKE-only recipe exercising the 2026-05 wl:drag
-  # signature expansion (x1 y1 x2 y2 instead of just x y). Asserts the
-  # drag verb dispatches with all four coords through to the CLI's
-  # `wl drag <image> <x1> <y1> <x2> <y2>` signature.
-  # ─────────────────────────────────────────────────────────────────────
-  c4-smoke-drag:
-    description:
-      feature: "wl: drag verb honors x1/y1/x2/y2 instead of legacy 2-coord form"
-    scenario:
-      - name: drag-with-four-coords
-        pod: sway-browser-vnc-concurrency-test
-        steps:
-          - then: "drag from (100,100) to (200,200) succeeds (CLI writes to stderr)"
-            wl: drag
-            x: 100
-            y: 100
-            x2: 200
-            y2: 200
-            stderr: { contains: "Dragged" }
-            timeout: 15s
-          - then: "stderr reports both endpoints"
-            wl: drag
-            x: 50
-            y: 75
-            x2: 300
-            y2: 400
-            stderr: { matches: "from \\(50, 75\\) to \\(300, 400\\)" }
-            timeout: 15s
-
-  # ─────────────────────────────────────────────────────────────────────
-  # c1-smoke-kill: SMOKE-only recipe exercising the 2026-05 capture_extract:
-  # regex modifier + kill: step verb (sendSIGKILL via captured PID). This
-  # is the C1 cutover's R10 acceptance smoke; remove or keep as the
-  # framework's primary test case. Pod is jupyter-concurrency-test only
-  # because every `pod:` field needs SOME target — the kill itself is
-  # host-side (background: true requires it) and the assertions all
-  # in_container: false.
-  # ─────────────────────────────────────────────────────────────────────
-  c1-smoke-kill:
-    description:
-      feature: "capture_extract: regex + kill: step verb roundtrip"
-    scenario:
-      - name: kill-captured-bg-pid
-        pod: jupyter-concurrency-test
-        steps:
-          - id: bg-writer
-            then: "background a host-side writer; capture its pid via regex"
-            command: "sleep 600"
-            in_container: false
-            background: true
-            capture: writer_pid
-            capture_extract: "pid=([0-9]+)"
-          - then: "writer is alive (kill -0 succeeds before the kill step)"
-            command: "kill -0 ${CAPTURED:writer_pid}"
-            in_container: false
-            exit_status: 0
-          - then: "send SIGKILL to the captured pid"
-            kill: ${CAPTURED:writer_pid}
-            signal: KILL
-          - then: "wait for OS reap"
-            command: "sleep 1"
-            in_container: false
-            exit_status: 0
-          - then: "writer is gone (kill -0 returns non-zero)"
-            command: "kill -0 ${CAPTURED:writer_pid} 2>&1; echo exit=$?"
-            in_container: false
-            stdout: { contains: "exit=1" }
-
-  # ─────────────────────────────────────────────────────────────────────
-  # jupyter-execute-cell-persistence: locks the contract that
-  # mcp__jupyter__cell_execute outputs persist to the on-disk .ipynb
-  # after mcp__jupyter__room_close, and that close evicts
-  # the room so a subsequent open gets a clean CRDT session. Companion
-  # to jupyter-concurrency-and-data-safety (above) which exercises
-  # source-level concurrency only — this recipe covers the execute →
-  # close → disk-read path that bug-bit 2026-05-01 (3 of 4 chart
-  # outputs lost on the consumer notebooks).
-  #
-  # Targets: same disposable instance `jupyter-concurrency-test` as the
-  # concurrency recipe; both recipes share the disposable target so a
-  # full check is `ov eval recipe jupyter-concurrency-and-data-safety`
-  # then `ov eval recipe jupyter-execute-cell-persistence`.
-  #
-  # Run: `ov eval recipe jupyter-execute-cell-persistence`
-  # ─────────────────────────────────────────────────────────────────────
-  jupyter-execute-cell-persistence:
-    description:
-      feature: "cell_execute + room_close round-trip persists outputs to disk; close evicts the CRDT room"
-      narrative: |
-        For each scenario: seed a notebook, open the MCP collaboration
-        room, execute the cell(s), close the room, then read the .ipynb
-        back from disk and assert the captured outputs (plus
-        execution_count) survived the round-trip. The previous bug had
-        cell_execute return outputs to the MCP caller without writing
-        them back to the YNotebook cell, so on-disk outputs were
-        whatever jupyter-collaboration's iopub→CRDT auto-bridge happened
-        to catch — racy across many cells. The fix writes outputs back
-        via the CRDT-aware set_cell path, and room_close
-        synchronously flushes the room save before evicting.
-    scenario:
-
-      # Scenario 1: single-cell print persistence. The headline contract
-      # — one cell_execute, one close, then disk MUST contain the printed
-      # nonce in cells[0]["outputs"][0]["text"] and cells[0]["execution_count"]
-      # MUST be a positive int.
-      - name: execute-output-persistence
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook with single print cell"
-            command: "rm -f /home/user/workspace/jp-single.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"PERSIST_NONCE_42\\\")\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-single.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jp-single.ipynb"}'
-            timeout: 60s
-        steps:
-          - then: "cell_execute returns the nonce in MCP-level stdout"
-            mcp: call
-            tool: cell_execute
-            input: '{"path":"jp-single.ipynb","index":0}'
-            stdout: { contains: "PERSIST_NONCE_42" }
-            timeout: 60s
-          - then: "close MCP session (synchronous flush + delete_room)"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jp-single.ipynb"}'
-            timeout: 30s
-          - then: "disk: cells[0].outputs contains the nonce"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-single.ipynb\")); outs=d[\"cells\"][0].get(\"outputs\",[]); blob=json.dumps(outs); assert \"PERSIST_NONCE_42\" in blob, blob; print(\"ok outputs=\", len(outs))'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok outputs=" }
-          - then: "disk: cells[0].execution_count is a positive int"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-single.ipynb\")); ec=d[\"cells\"][0].get(\"execution_count\"); assert isinstance(ec,int) and ec>0, repr(ec); print(\"ok ec=\", ec)'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok ec=" }
-        teardown: []
-
-      # Scenario 2: multi-cell parallel execution. 4 cells executed
-      # concurrently via parallel:/count:. Catches the "1 of 4 survived"
-      # failure mode the user observed on 06_ccversion_trends — every
-      # cell's output must be on disk after a single close.
-      - name: execute-multi-cell-persistence
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook with 4 distinct print cells"
-            command: "rm -f /home/user/workspace/jp-multi.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_0\\\")\"]},{\"cell_type\":\"code\",\"id\":\"b\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_1\\\")\"]},{\"cell_type\":\"code\",\"id\":\"c\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_2\\\")\"]},{\"cell_type\":\"code\",\"id\":\"d\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"print(\\\"MULTI_NONCE_3\\\")\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-multi.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jp-multi.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: exec-${INDEX}
-            parallel: exec
-            count: 4
-            then: "execute cell ${INDEX} concurrently"
-            mcp: call
-            tool: cell_execute
-            input: '{"path":"jp-multi.ipynb","index":${INDEX}}'
-            stdout: { contains: "MULTI_NONCE_" }
-            timeout: 60s
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jp-multi.ipynb"}'
-            timeout: 30s
-          - then: "disk: every one of the 4 cells has its own nonce in outputs"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-multi.ipynb\")); cells=d[\"cells\"];\nassert len(cells)==4, len(cells)\nfor i,c in enumerate(cells):\n    blob=json.dumps(c.get(\"outputs\",[]))\n    assert f\"MULTI_NONCE_{i}\" in blob, (i, blob)\nprint(\"ok all 4 cells persisted\")'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok all 4 cells persisted" }
-        teardown: []
-
-      # Scenario 3: rich (display_data) output persistence. Exercises the
-      # nbformat.v4.output_from_msg translation for IPython.display.HTML
-      # — a different code path than the `stream` outputs in scenarios
-      # 1 and 2. The HTML output should land as a display_data with a
-      # text/html MIME bundle.
-      - name: execute-rich-output-persistence
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook with HTML display cell"
-            command: "rm -f /home/user/workspace/jp-rich.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"from IPython.display import HTML, display\\ndisplay(HTML(\\\"<div>RICH_NONCE_99</div>\\\"))\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-rich.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jp-rich.ipynb"}'
-            timeout: 60s
-        steps:
-          - then: "cell_execute returns display_data for HTML"
-            mcp: call
-            tool: cell_execute
-            input: '{"path":"jp-rich.ipynb","index":0}'
-            stdout: { contains: "RICH_NONCE_99" }
-            timeout: 60s
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jp-rich.ipynb"}'
-            timeout: 30s
-          - then: "disk: cells[0].outputs has a text/html mime bundle with the nonce"
-            command: "python3 -c 'import json; d=json.load(open(\"/home/user/workspace/jp-rich.ipynb\")); outs=d[\"cells\"][0].get(\"outputs\",[]); html_bundles=[o for o in outs if o.get(\"output_type\")==\"display_data\" and \"text/html\" in (o.get(\"data\") or {})]; assert html_bundles, json.dumps(outs); blob=json.dumps(html_bundles[0][\"data\"][\"text/html\"]); assert \"RICH_NONCE_99\" in blob, blob; print(\"ok html display_data persisted\")'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok html display_data persisted" }
-        teardown: []
-
-      # Scenario 4: room eviction after close. Locks the close_room
-      # contract: room_list must report one fewer room after
-      # room_close than before. Without the
-      # server.rooms.pop fallback in close_room, a regression in
-      # jupyter-server-ydoc's delete_room implementation would leave
-      # the room lingering — this scenario catches that.
-      - name: room-eviction-after-close
-        pod: jupyter-concurrency-test
-        setup:
-          - then: "fresh seed notebook"
-            command: "rm -f /home/user/workspace/jp-evict.ipynb $HOME/.jupyter_ystore.db*; printf '%s' '{\"cells\":[{\"cell_type\":\"code\",\"id\":\"a\",\"metadata\":{},\"outputs\":[],\"execution_count\":null,\"source\":[\"x = 0\"]}],\"metadata\":{\"kernelspec\":{\"display_name\":\"Python 3\",\"language\":\"python\",\"name\":\"python3\"}},\"nbformat\":4,\"nbformat_minor\":5}' > /home/user/workspace/jp-evict.ipynb"
-            in_container: true
-            exit_status: 0
-          - then: "open MCP collaboration room"
-            mcp: call
-            tool: room_open
-            input: '{"path":"jp-evict.ipynb"}'
-            timeout: 60s
-        steps:
-          - id: pre-close-sessions
-            then: "before close: at least one active session"
-            mcp: call
-            tool: room_list
-            input: "{}"
-            stdout: { contains: room_id }
-            timeout: 30s
-          - then: "close MCP session"
-            mcp: call
-            tool: room_close
-            input: '{"path":"jp-evict.ipynb"}'
-            timeout: 30s
-          - then: "after close: this notebook's file_id is no longer in active sessions"
-            command: "python3 -c 'import json,subprocess,sys,re; cmd=[\"curl\",\"-s\",\"-X\",\"POST\",\"-H\",\"Content-Type: application/json\",\"-H\",\"Accept: application/json,text/event-stream\",\"--data-binary\",\"@-\",\"http://127.0.0.1:8888/mcp\"]; req={\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"room_list\",\"arguments\":{}}}; r=subprocess.run(cmd,input=json.dumps(req),capture_output=True,text=True); body=r.stdout; data_lines=[l[6:] for l in body.splitlines() if l.startswith(\"data: \")]; payload=json.loads(data_lines[-1]) if data_lines else json.loads(body); content=payload.get(\"result\",{}).get(\"content\",[]); blob=\"\".join(c.get(\"text\",\"\") for c in content); rooms=re.findall(r\"room_id\", blob); print(\"ok rooms=\",len(rooms),\"blob_chars=\",len(blob))'"
-            in_container: true
-            exit_status: 0
-            stdout: { contains: "ok rooms=" }
-        teardown: []
-
-# kind: score — runner config. References recipes by name; the harness
-# concatenates their scenarios in order and scores against each
-# scenario's `pod:` field.
 score:
 
   # ─────────────────────────────────────────────────────────────────────

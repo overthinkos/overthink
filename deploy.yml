@@ -440,6 +440,16 @@ deploy:
         description:
             feature: Fast local bed exercising kind:local layer application
             tag: [working]
+    jupyter-pod:
+        target: pod
+        image: jupyter
+        disposable: true
+        lifecycle: dev
+        ports:
+            - 28888:8888
+        description:
+            feature: R10 bed for jupyter-mcp regression coverage (auto-attach, canonicalization, idle-room sweep, cell_update id-preservation)
+            tag: [working]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.
 # Each entity is a build-time spec; deploy-time properties (disposable,

@@ -30,9 +30,17 @@ layer:
   # backend (keyring/kdbx/config) and are injected at runtime via podman
   # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
   # or the quadlet file as plaintext. See /ov:secrets and /ov:layer.
+  #
+  # WEBUI_ADMIN_PASSWORD: auto-generated on first deploy as a 32-byte hex
+  # random value via DefaultCredentialStore.Set (see ov/layer_secrets.go
+  # ensureLayerSecret). To use the auto-generated password to log in for
+  # the first time:
+  #   ov secrets get ov/secret WEBUI_ADMIN_PASSWORD
+  # To override with a specific value before deploying:
+  #   ov secrets set ov/secret WEBUI_ADMIN_PASSWORD <password>
   secret_requires:
     - name: WEBUI_ADMIN_PASSWORD
-      description: "Initial admin account password for Open WebUI first-run setup"
+      description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `ov secrets get ov/secret WEBUI_ADMIN_PASSWORD`."
   secret_accepts:
     - name: OPENROUTER_API_KEY
       description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"

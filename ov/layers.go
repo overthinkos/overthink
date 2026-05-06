@@ -116,6 +116,19 @@ type LayerArtifact struct {
 	// Optional is ignored when true and the file doesn't exist on the
 	// target. Default: required (missing file fails the deploy).
 	Optional bool `yaml:"optional,omitempty" json:"optional,omitempty"`
+
+	// WaitSeconds is the deadline (in seconds) for the file to appear on
+	// the target before retrieval. Useful for layers whose service unit
+	// transitions to "active" BEFORE the artifact file is written —
+	// canonical case: k3s.service reaches active when the binary execs,
+	// but /etc/rancher/k3s/k3s.yaml lands ~3-15s later when the API
+	// server starts. Polls exec.GetFile every 1s until success or
+	// deadline. 0 (default) disables the wait — file must already exist
+	// at retrieval time. Recommended: 60-120s for k3s-class artifacts.
+	//
+	// This is a readiness probe (file existence is the synchronization
+	// primitive), not a sleep workaround — R4-compliant.
+	WaitSeconds int `yaml:"wait_seconds,omitempty" json:"wait_seconds,omitempty"`
 }
 
 // LayerArtifactRewrite is a single find/replace pair.

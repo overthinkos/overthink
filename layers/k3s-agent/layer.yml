@@ -3,14 +3,16 @@ layer:
   description: k3s worker (agent) node — joins an existing k3s-server via pre-shared token
   requires:
     - k3s
-  # Same pre-shared token as k3s-server consumes. Because the server and
-  # agent layers both declare secret_requires with the same name, the
-  # single `ov secrets set ov/secret/K3S_CLUSTER_TOKEN <value>` that
-  # authorized the cluster also authorizes every agent — no per-deploy
-  # token dance.
+  # Same pre-shared token as k3s-server consumes. Both layers declare
+  # secret_requires with the same name, so whichever resolves first
+  # auto-generates a 32-byte hex token via the credential store
+  # (DefaultCredentialStore.Set) and the other reads the persisted
+  # value — server and every agent automatically share the token with
+  # zero operator setup. Override only when you need a specific value:
+  #   ov secrets set ov/secret/K3S_CLUSTER_TOKEN <value>
   secret_requires:
     - name: K3S_CLUSTER_TOKEN
-      description: Pre-shared token matching the cluster server's token.
+      description: Pre-shared token matching the cluster server's token. Auto-generated on first deploy; shared via the credential store.
   # K3S_SERVER_URL is declarative (the operator knows the server's URL
   # when authoring deploy.yml). Typical value: https://k3s-srv.lan:6443.
   env_requires:

@@ -135,16 +135,13 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	}
 
 	// Resolve layer secret_requires / secret_accepts and inject them
-	// into the TaskSteps BEFORE emission. Missing required secrets
-	// fail the deploy immediately (R1).
+	// into the TaskSteps BEFORE emission. Missing `secret_requires:`
+	// auto-generate a 32-byte hex token via ensureLayerSecret.
 	layerList, err := LayersForPlans(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv, missing := ResolveSecretsForLayers(layerList)
-	if mErr := FormatMissingSecretsError(missing); mErr != nil {
-		return mErr
-	}
+	secretEnv := ResolveSecretsForLayers(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 
 	// Collect env for artifact substitution — merges resolved secrets +

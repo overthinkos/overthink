@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // RetrieveLayerArtifacts walks every artifact declared by every layer
@@ -71,6 +72,22 @@ func retrieveOne(
 		return fmt.Errorf("invalid artifact declaration (path and retrieve_to are required)")
 	}
 
+	// Optional readiness wait — for artifacts written by a service that
+	// reaches "active" BEFORE its output file lands (canonical case:
+	// k3s.service writes /etc/rancher/k3s/k3s.yaml ~3-15s after the
+	// systemd unit transitions to active). Polls every 1s until the
+	// file exists or the deadline elapses. File existence IS the
+	// synchronization primitive — this is a readiness probe, not a
+	// sleep workaround (R4).
+	if a.WaitSeconds > 0 {
+		if err := waitForArtifactPath(ctx, exec, a.Path, time.Duration(a.WaitSeconds)*time.Second, opts); err != nil {
+			if a.Optional && isMissingFile(err) {
+				return nil
+			}
+			return fmt.Errorf("waiting for %s: %w", a.Path, err)
+		}
+	}
+
 	// GetFile with asRoot=true — artifacts are typically system-owned
 	// files (kubeconfig, service state) that require sudo to read on the
 	// target. Layers that need a user-owned file can add a future
@@ -116,6 +133,49 @@ func retrieveOne(
 	}
 	fmt.Fprintf(os.Stderr, "retrieved artifact %s -> %s\n", a.Path, destPath)
 	return nil
+}
+
+// waitForArtifactPath polls exec.GetFile every 1s until the artifact
+// path exists or the deadline elapses. Returns nil on success, a
+// missing-file error on timeout, or any non-missing error from
+// GetFile (auth failure, network partition) immediately.
+//
+// Used by retrieveOne for artifacts with WaitSeconds > 0. The file's
+// existence is the synchronization primitive — polling cadence is the
+// 1s sleep, not a fixed-duration wait. Honors context cancellation so
+// dispatcher-level timeouts win over the per-artifact deadline.
+func waitForArtifactPath(
+	ctx context.Context,
+	exec DeployExecutor,
+	path string,
+	maxWait time.Duration,
+	opts EmitOpts,
+) error {
+	if opts.DryRun {
+		return nil
+	}
+	deadline := time.Now().Add(maxWait)
+	var lastErr error
+	for {
+		_, err := exec.GetFile(ctx, path, true /*asRoot*/, opts)
+		if err == nil {
+			return nil
+		}
+		// Distinguish missing-file (keep waiting) from other errors
+		// (fail fast — auth/network/permission won't fix itself).
+		if !isMissingFile(err) {
+			return err
+		}
+		lastErr = err
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timeout after %s waiting for %s: %w", maxWait, path, lastErr)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
+	}
 }
 
 // expandArtifactVars resolves ${deploy_name}, ${layer_name}, ${HOME},

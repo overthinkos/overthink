@@ -11,65 +11,35 @@ package main
 // directly on the deploy target, so the credential-store value must be
 // resolved on the operator side and passed through as env on the step.
 //
-// This file provides a small, substrate-neutral helper that takes a Layer
-// and returns the resolved env map. Caller responsibility: merge into the
-// emitted TaskStep's task.env at plan-build time (ov/deploy_add_cmd.go —
-// Task #6), or prepend as a shell prelude in the heredoc renderer.
+// Resolution policy (post 2026-05-06 cutover): `secret_requires:` entries
+// auto-generate a 32-byte hex token via DefaultCredentialStore.Set when
+// missing everywhere (env + store). `secret_accepts:` entries fall back to
+// dep.Default when missing, never auto-generate. The auto-generation is
+// race-free across multiple layers declaring the same secret because
+// DefaultCredentialStore is cached via sync.Once and the first caller's
+// Set is visible to the second caller's ResolveCredential.
 
 import (
-	"fmt"
 	"strings"
 )
 
-// ResolveLayerSecrets walks the layer's secret_requires + secret_accepts
-// and resolves each via the credential store. Returns the env map, plus a
-// list of REQUIRED secrets that failed to resolve (empty = everything is
-// satisfied). Callers should fail the deploy when the missing list is
-// non-empty — per R1, missing required secrets are a hard error, never a
-// silent skip.
+// ensureLayerSecret resolves a secret_requires/secret_accepts EnvDependency
+// against the credential store. For required deps that miss everywhere
+// (env, store), generates a 32-byte hex token, persists via
+// DefaultCredentialStore, and returns the new value. For optional deps
+// that miss, returns "" with source classification from ResolveCredential
+// so the caller can fall back to dep.Default if set.
 //
 // The Key field on an EnvDependency follows the format "<service>/<key>"
 // and must start with "ov/" (enforced by validate.go). When Key is empty,
 // the default lookup is service="ov/secret", key=Name.
-func ResolveLayerSecrets(layer *Layer) (env map[string]string, missingRequired []string) {
-	env = map[string]string{}
-	if layer == nil {
-		return env, nil
-	}
-
-	if layer.HasSecretRequires {
-		for _, dep := range layer.SecretRequires() {
-			val := resolveEnvDepValue(dep)
-			if val == "" {
-				missingRequired = append(missingRequired, dep.Name)
-				continue
-			}
-			env[dep.Name] = val
-		}
-	}
-
-	if layer.HasSecretAccepts {
-		for _, dep := range layer.SecretAccepts() {
-			val := resolveEnvDepValue(dep)
-			if val == "" {
-				// Accepts are optional — fall back to the declared default
-				// if one is set. Absence is not an error.
-				if dep.Default != "" {
-					env[dep.Name] = dep.Default
-				}
-				continue
-			}
-			env[dep.Name] = val
-		}
-	}
-
-	return env, missingRequired
-}
-
-// resolveEnvDepValue looks up one EnvDependency against the credential store.
-// Key format: "<service>/<key>" (must start with "ov/" per validate.go);
-// default lookup is service="ov/secret", key=dep.Name.
-func resolveEnvDepValue(dep EnvDependency) string {
+//
+// Race-free across multiple layers declaring the same secret: the first
+// caller's store.Set lands in the active backend (keyring/kdbx/config
+// fallback per credential_store.go DefaultCredentialStore); the second
+// caller's ResolveCredential reads the persisted value. All callers in
+// one process share the cached singleton.
+func ensureLayerSecret(dep EnvDependency, required bool) (val, source string) {
 	service, key := "ov/secret", dep.Name
 	if dep.Key != "" {
 		if idx := strings.LastIndex(dep.Key, "/"); idx > 0 {
@@ -77,14 +47,53 @@ func resolveEnvDepValue(dep EnvDependency) string {
 			key = dep.Key[idx+1:]
 		}
 	}
-	// Pass dep.Name as envVar so the operator can provide the value
-	// via `export K3S_CLUSTER_TOKEN=…` before invoking deploy — matches
-	// how ResolveCredential is used elsewhere in ov. The credential
-	// store is the preferred source (audit trail), but a plain env var
-	// override is honored for CI scripts, one-shot demos, and Task #12
-	// verification without forcing kdbx setup.
-	val, _ := ResolveCredential(dep.Name, service, key, "")
-	return val
+	// Pass dep.Name as envVar so an operator can override the persisted
+	// value via `export K3S_CLUSTER_TOKEN=…` before invoking deploy
+	// (matches the ResolveCredential pattern used elsewhere).
+	val, source = ResolveCredential(dep.Name, service, key, "")
+	if val != "" {
+		return val, source
+	}
+	if !required {
+		return "", source
+	}
+	return generateAndStoreSecret(service, key)
+}
+
+// ResolveLayerSecrets walks the layer's secret_requires + secret_accepts
+// and resolves each via the credential store. Required entries that miss
+// everywhere auto-generate a 32-byte hex token (see ensureLayerSecret).
+// Optional `secret_accepts:` entries that miss fall back to dep.Default.
+//
+// Returns the env map; never returns an error. The auto-generate policy
+// guarantees every `secret_requires:` resolves to a non-empty value.
+func ResolveLayerSecrets(layer *Layer) map[string]string {
+	env := map[string]string{}
+	if layer == nil {
+		return env
+	}
+
+	if layer.HasSecretRequires {
+		for _, dep := range layer.SecretRequires() {
+			val, _ := ensureLayerSecret(dep, true)
+			env[dep.Name] = val
+		}
+	}
+
+	if layer.HasSecretAccepts {
+		for _, dep := range layer.SecretAccepts() {
+			val, _ := ensureLayerSecret(dep, false)
+			if val == "" && dep.Default != "" {
+				env[dep.Name] = dep.Default
+				continue
+			}
+			if val != "" {
+				env[dep.Name] = val
+			}
+		}
+	}
+
+	return env
 }
 
 // ResolveSecretsForLayers is the batch variant used when multiple layers in
@@ -92,40 +101,14 @@ func resolveEnvDepValue(dep EnvDependency) string {
 // into one env map, with layer-order precedence (later layers win on
 // duplicate names, matching the existing generate.go `secretRequiresMap`
 // semantics in the label-emission path).
-func ResolveSecretsForLayers(layers []*Layer) (env map[string]string, missingRequired []string) {
-	env = map[string]string{}
-	seenMissing := map[string]bool{}
+func ResolveSecretsForLayers(layers []*Layer) map[string]string {
+	env := map[string]string{}
 	for _, l := range layers {
-		perLayer, missing := ResolveLayerSecrets(l)
-		for k, v := range perLayer {
+		for k, v := range ResolveLayerSecrets(l) {
 			env[k] = v
 		}
-		for _, name := range missing {
-			if !seenMissing[name] {
-				seenMissing[name] = true
-				missingRequired = append(missingRequired, name)
-			}
-		}
 	}
-	return env, missingRequired
-}
-
-// FormatMissingSecretsError produces a human-readable error message naming
-// every missing required secret, with the remediation hint pointing at
-// `ov secrets set`. Used by callers that bail out when
-// ResolveLayerSecrets returns a non-empty missingRequired list.
-func FormatMissingSecretsError(missing []string) error {
-	if len(missing) == 0 {
-		return nil
-	}
-	var hints []string
-	for _, name := range missing {
-		hints = append(hints, fmt.Sprintf("  ov secrets set ov/secret/%s <value>", name))
-	}
-	return fmt.Errorf(
-		"missing required secret(s): %s\n\nResolve each by storing in the credential store:\n%s",
-		strings.Join(missing, ", "), strings.Join(hints, "\n"),
-	)
+	return env
 }
 
 // LayersForPlans reloads the layer map and returns the ordered *Layer

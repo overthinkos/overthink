@@ -20,6 +20,26 @@ func generateRandomHex(bytes int) string {
 	return hex.EncodeToString(b)
 }
 
+// generateAndStoreSecret generates a 32-byte hex token, persists it to the
+// active credential store at (service, key), and returns the value with
+// the "auto-generated" source classification. Persistence failures are
+// logged to stderr but not returned as errors — the in-memory value is
+// still usable for the current ov invocation.
+//
+// Used by:
+//   - ProvisionPodmanSecrets — config-time CollectedSecret provisioning
+//     when --password=auto is in effect.
+//   - ensureLayerSecret (layer_secrets.go) — deploy-time secret_requires
+//     resolution on host/VM/SSH targets when the value is missing.
+func generateAndStoreSecret(service, key string) (val, source string) {
+	val = generateRandomHex(32)
+	if err := DefaultCredentialStore().Set(service, key, val); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not persist auto-generated secret %s/%s: %v\n",
+			service, key, err)
+	}
+	return val, "auto-generated"
+}
+
 // SecretYAML represents a secret declaration in layer.yml.
 type SecretYAML struct {
 	Name   string `yaml:"name"`             // unique secret name
@@ -132,14 +152,8 @@ func ProvisionPodmanSecrets(engine, imageName, instance string, secrets []Collec
 					val = cached
 					source = "auto-generated"
 				} else {
-					generated := generateRandomHex(32)
-					store := DefaultCredentialStore()
-					if storeErr := store.Set("ov/secret", s.Name, generated); storeErr != nil {
-						fmt.Fprintf(os.Stderr, "  Warning: could not persist secret '%s': %v\n", s.Name, storeErr)
-					}
-					promptedValues[s.Name] = generated
-					val = generated
-					source = "auto-generated"
+					val, source = generateAndStoreSecret("ov/secret", s.Name)
+					promptedValues[s.Name] = val
 				}
 			} else if interactive {
 				if cached, ok := promptedValues[s.Name]; ok {

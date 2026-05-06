@@ -833,16 +833,14 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 	}
 
 	// Resolve layer secret_requires / secret_accepts and inject them
-	// into each TaskStep's env BEFORE emission. Missing required
-	// secrets fail the deploy immediately (R1).
+	// into each TaskStep's env BEFORE emission. Missing `secret_requires:`
+	// auto-generate a 32-byte hex token and persist to the credential
+	// store (see ensureLayerSecret in layer_secrets.go).
 	layerList, err := LayersForPlans(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv, missing := ResolveSecretsForLayers(layerList)
-	if err := FormatMissingSecretsError(missing); err != nil {
-		return err
-	}
+	secretEnv := ResolveSecretsForLayers(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 
 	// Collect env for artifact substitution — merges resolved secrets +
@@ -957,16 +955,14 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// Resolve + inject layer secrets (secret_requires) so the overlay
 	// Containerfile emits `export VAR=VALUE` before each task's bash
 	// body. Without this, layers like k3s-server fail at build with
-	// "K3S_CLUSTER_TOKEN: unbound variable". Mirrors the runHost /
-	// runVM injection paths.
+	// "K3S_CLUSTER_TOKEN: unbound variable". Missing `secret_requires:`
+	// auto-generate via ensureLayerSecret. Mirrors the runHost / runVM
+	// injection paths.
 	layerList, err := LayersForPlans(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv, missing := ResolveSecretsForLayers(layerList)
-	if err := FormatMissingSecretsError(missing); err != nil {
-		return err
-	}
+	secretEnv := ResolveSecretsForLayers(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 	// Thread ParentExec: when this container is a child of another
 	// deployment, the overlay build (if any) must run in the parent's

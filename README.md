@@ -270,24 +270,24 @@ task build:ov          # builds ov; on Arch, delegates to makepkg -si; elsewhere
 ov image build         # build all images
 ```
 
-On Arch the canonical install is `cd pkg/arch && makepkg -si` (or via an AUR helper — see below); `task build:ov` invokes that path automatically when run on Arch. `task` itself ships in the Arch package as a hard dep, so once `ov-git` is installed any subsequent rebuilds work directly.
+On Arch the canonical install is `cd pkg/arch && makepkg -si` (or via an AUR helper — see below); `task build:ov` invokes that path automatically when run on Arch. `task` itself ships in the Arch package as a hard dep, so once `overthink-git` is installed any subsequent rebuilds work directly.
 
 **Arch Linux package** (Arch / CachyOS / Manjaro — installs `ov` system-wide via `pacman`, with all runtime deps pulled in):
 
 ```bash
 # From the AUR (mirrors this repo's PKGBUILD)
-yay -S ov-git
-# or: paru -S ov-git
+yay -S overthink-git
+# or: paru -S overthink-git
 
 # Or build directly from this checkout — `task install` pre-installs the
-# two AUR deps via your AUR helper, then runs `makepkg -efi` inside
+# two AUR deps via your AUR helper, then runs `makepkg -sefi` inside
 # pkg/arch. (Do NOT use `yay -B` / `yay -Bi pkg/arch` against the local
 # checkout — that mode runs `git pull` on pkg/arch's subrepo and can
 # reset uncommitted edits in the working tree.)
 task build:ov
 ```
 
-The PKGBUILD's `pkgver()` derives the same CalVer string (`YYYY.DDD.HHMM`) that `ov version` prints from the last commit date, so `pacman -Q ov-git` and `ov version` always agree. `depends=` covers the full runtime surface — `podman` + `docker` + `fuse-overlayfs` + `slirp4netns` for rootless/rootful containers, `qemu-full` + `libvirt` + `edk2-ovmf` + `swtpm` + `libisoburn` for `ov vm`, `portaudio` + `opusfile` for `ov eval spice` audio channels, `openbsd-netcat` so virt-manager's `qemu+ssh://` SPICE tunnel works, `gnupg` + `pinentry` + `libsecret` + `gocryptfs` + `tailscale` for the secrets/encrypted-volume/tunnel surfaces, and `go-task` so `task build:ov` works from any fresh checkout. Two AUR-only mandatory deps (`cloudflared-bin`, `gvisor-tap-vsock`) are why an AUR helper is required; bare `makepkg -si` cannot resolve them and will fail at the dep-check step. A fresh install is ready for `ov image build`, `ov vm create`, and `ov eval spice` with no further setup; the bundled pacman post-install hook (`ov-git.install`) enables `docker.service` / `tailscaled.service` / `virtqemud.socket` and adds the installing user to the `docker` and `libvirt` groups automatically.
+The PKGBUILD's `pkgver()` derives the same CalVer string (`YYYY.DDD.HHMM`) that `ov version` prints from the last commit date, so `pacman -Q overthink-git` and `ov version` always agree. `depends=` covers the full runtime surface — `podman` + `docker` + `fuse-overlayfs` + `slirp4netns` for rootless/rootful containers, `qemu-full` + `libvirt` + `edk2-ovmf` + `swtpm` + `libisoburn` for `ov vm`, `portaudio` + `opusfile` for `ov eval spice` audio channels, `openbsd-netcat` so virt-manager's `qemu+ssh://` SPICE tunnel works, `gnupg` + `pinentry` + `libsecret` + `gocryptfs` + `tailscale` for the secrets/encrypted-volume/tunnel surfaces, and `go-task` so `task build:ov` works from any fresh checkout. Two AUR-only mandatory deps (`cloudflared-bin`, `gvisor-tap-vsock`) are why an AUR helper is required; bare `makepkg -si` cannot resolve them and will fail at the dep-check step. A fresh install is ready for `ov image build`, `ov vm create`, and `ov eval spice` with no further setup; the bundled pacman post-install hook (`overthink-git.install`) enables `docker.service` / `tailscaled.service` / `virtqemud.socket` and adds the installing user to the `docker` and `libvirt` groups automatically.
 
 **From source:**
 

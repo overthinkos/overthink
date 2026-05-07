@@ -43,9 +43,9 @@ tasks:
                 echo "         Install an AUR helper, then re-run."
               fi
               cd pkg/arch
-              mkdir -p src/ov-git
-              cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
-              makepkg -efi --noconfirm
+              mkdir -p src/overthink-git
+              cp "{{.ROOT_DIR}}/LICENSE" src/overthink-git/LICENSE
+              makepkg -sefi --noconfirm
               echo "Installed system-wide via pacman (makepkg in pkg/arch)"
               exit 0
             fi
@@ -79,9 +79,9 @@ tasks:
           echo "WARNING: yay/paru not found — AUR deps must be pre-installed."
         fi
         cd pkg/arch
-        mkdir -p src/ov-git
-        cp "{{.ROOT_DIR}}/LICENSE" src/ov-git/LICENSE
-        makepkg -efi --noconfirm
+        mkdir -p src/overthink-git
+        cp "{{.ROOT_DIR}}/LICENSE" src/overthink-git/LICENSE
+        makepkg -sefi --noconfirm
 
   install-portable:
     desc: Force portable install to $HOME/.local/bin/ov (overrides distro detection)

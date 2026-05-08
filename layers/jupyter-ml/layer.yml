@@ -26,6 +26,28 @@ layer:
     - name: workspace
       path: ~/workspace
   eval:
+    # Build-scope smoke for the NLP packages added to pixi.toml — mirrors the
+    # jupyter layer's spacy-import check. Catches model rename / API drift at
+    # image build, not at first notebook open.
+    - id: spacy-import
+      command: ${HOME}/.pixi/envs/default/bin/python -c "import spacy; spacy.load('en_core_web_sm')"
+      exit_code: 0
+    # JupyterLab extension shipped as a PyPI wheel. The wheel installs
+    # files under share/jupyter/labextensions/jupyterlab-quarto/ and a
+    # source dir literally named "jupyterlab-quarto" (hyphen — NOT a
+    # Python-importable module name). The runtime contract is "enabled
+    # in the labextension registry", not "import succeeds" — verify via
+    # `jupyter labextension list`. The `2>&1` is required because the
+    # command writes to stderr.
+    - id: jupyterlab-quarto-enabled
+      command: ${HOME}/.pixi/envs/default/bin/jupyter labextension list 2>&1
+      exit_code: 0
+      stdout:
+        # Regex (not literal contains) because `jupyter labextension list`
+        # emits ANSI color codes inline between "enabled" and "OK" even on
+        # a non-TTY pipe (e.g. \x1b[32menabled\x1b[0m \x1b[32mOK\x1b[0m).
+        # The .* spans them.
+        - matches: "jupyterlab-quarto.*enabled.*OK"
     # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
     # Runs only under `ov eval live <image>` (deploy-scope). Build-scope and
     # functional HTTP checks are contributed by the composed jupyter-mcp layer.
@@ -37,12 +59,12 @@ layer:
       scope: deploy
       mcp: list-tools
       stdout:
-        - contains: insert_cell
-        - contains: execute_cell
+        - contains: cell_insert
+        - contains: cell_execute
     - id: mcp-jupyter-ml-list-notebooks
       scope: deploy
       mcp: call
-      tool: list_notebooks
+      tool: notebook_list
       input: "{}"
       exit_status: 0
   service:

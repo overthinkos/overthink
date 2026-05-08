@@ -578,7 +578,7 @@ image:
               id: jupyter-mcp-extension-enabled
               exit_status: 0
     jupyter-ml:
-        enabled: false
+        enabled: true
         base: nvidia
         platforms:
             - linux/amd64

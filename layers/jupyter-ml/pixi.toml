@@ -23,6 +23,10 @@ python-lsp-server = "*"
 jupyterlab-spellchecker = "*"
 jupyter-resource-usage = "*"
 
+# NLP
+spacy = "*"
+spacy-model-en_core_web_sm = "*"
+
 # ML/AI extensions
 tensorboard = "*"
 wandb = "*"
@@ -167,6 +171,7 @@ bertviz = "*"
 
 # === JupyterLab PyPI Extensions ===
 jupyterlab-nvdashboard = "*"
+jupyterlab-quarto = "*"
 # jupyterlab-tensorboard-pro removed: unmaintained, imports notebook.base which was
 # removed in Notebook 7.0, incompatible with JupyterLab 4.x. Use `tensorboard --logdir`
 # from a terminal instead (the `tensorboard` conda package is still installed above).

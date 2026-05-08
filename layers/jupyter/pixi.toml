@@ -44,6 +44,7 @@ pyyaml = "*"
 
 [pypi-dependencies]
 jupyter-collaboration = ">=4.1.0"
+jupyterlab-quarto = "*"
 
 [tasks]
 start-jupyter = "bash -c 'if [ -n \"${JUPYTER_TOKEN_FILE:-}\" ] && [ -f \"${JUPYTER_TOKEN_FILE}\" ]; then TOKEN=$(cat \"${JUPYTER_TOKEN_FILE}\"); jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token=\"$TOKEN\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; else jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --notebook-dir=$HOME/notebooks --IdentityProvider.token=\"\" --ServerApp.password=\"\" --ServerApp.allow_origin=\"*\" --ServerApp.base_url=\"/\" --ServerApp.allow_root=True; fi'"

@@ -169,8 +169,22 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Con
 		Ports:     snap.Ports, // RUNTIME truth, always wins for running containers
 	}
 
+	// LIVE mounts always win for running containers. snap.Mounts is the
+	// `podman inspect .Mounts[]` view — the actual host paths the
+	// container is bound to RIGHT NOW. This is the source of truth that
+	// distinguishes a `--bind` / `--encrypt` deploy override from the
+	// OCI-label default volume backing. Pre-cutover behavior fell through
+	// to the deploy.yml volume names + image-label fallback — both of
+	// which describe what SHOULD be mounted, not what IS, and missed the
+	// "FUSE-via-`<cipher>/plain`" case that triggered the immich
+	// 2026-04-18 incident's misdiagnosis.
+	if cs.Status == "running" && len(snap.Mounts) > 0 {
+		cs.Volumes = formatLiveMounts(snap.Mounts)
+	}
+
 	// deploy.yml enrichment — preferred for tunnel; only fills ports when
-	// runtime didn't.
+	// runtime didn't. Volume fallback only fires when live mounts are
+	// unavailable (stopped container).
 	if dn, ok := c.lookupDeploy(snap.Image, snap.Instance, snap.Name); ok {
 		if cs.Tunnel == "" && dn.Tunnel != nil {
 			cs.Tunnel = formatTunnelSummary(dn.Tunnel)
@@ -181,9 +195,10 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Con
 		if cs.Network == "" {
 			cs.Network = dn.Network
 		}
-		// Volumes summary: deploy.yml volume names → display string.
-		for _, v := range dn.Volumes {
-			cs.Volumes = append(cs.Volumes, v.Name)
+		if len(cs.Volumes) == 0 {
+			for _, v := range dn.Volumes {
+				cs.Volumes = append(cs.Volumes, v.Name)
+			}
 		}
 	}
 
@@ -415,4 +430,44 @@ func parseQuadletDescription(unitPath string) (image, instance string) {
 		return strings.TrimSpace(body), ""
 	}
 	return "", ""
+}
+
+// formatLiveMounts renders the live `podman inspect .Mounts[]` view as
+// the strings shown in `ov status`'s Volumes column / detail field. For
+// type=volume entries, format is `<name>: <mountpoint> -> <dest>`. For
+// type=bind, format is `<name-or-bind>: <source> -> <dest>` with an
+// `(enc)` suffix when the source path matches the gocryptfs convention
+// `<...>/encrypted/<vol>/plain` — that's the FUSE-mounted plain dir
+// shown to the container, NOT the OCI-label default volume name. The
+// (enc) marker is what was missing during the immich-2026-04-18
+// diagnosis: `ov status` showed `ov-immich-cache -> /home/user/.immich/
+// cache` (the OCI label default) instead of the actual bind to the
+// gocryptfs plain dir, masking the encryption state from the operator.
+func formatLiveMounts(mounts []MountInfo) []string {
+	out := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		name := m.Name
+		if name == "" {
+			name = "bind"
+		}
+		display := fmt.Sprintf("%s: %s -> %s", name, m.Source, m.Destination)
+		if isEncryptedPlainPath(m.Source) {
+			display += " (enc)"
+		}
+		out = append(out, display)
+	}
+	return out
+}
+
+// isEncryptedPlainPath returns true when path looks like a gocryptfs
+// plain dir under an ov-managed encrypted-storage tree, i.e. matches
+// `.../encrypted/<anything>/plain`. Used to flag live mounts as encryption
+// FUSE mountpoints in the status display. Path-only — does NOT verify the
+// FUSE mount is actually live (that's handled by the verifyBindMounts
+// check in /ov-advanced:enc).
+func isEncryptedPlainPath(p string) bool {
+	if !strings.HasSuffix(p, "/plain") {
+		return false
+	}
+	return strings.Contains(p, "/encrypted/")
 }

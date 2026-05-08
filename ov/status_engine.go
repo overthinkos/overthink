@@ -34,6 +34,20 @@ type ContainerSnapshot struct {
 	NetworkMode string        // "host" | "bridge" | "container:<id>" | named network
 	Ports       []PortMapping // runtime mappings from `podman ps`
 	Devices     []string      // /dev/dri/..., nvidia.com/gpu=all, ...
+	Mounts      []MountInfo   // live mounts from podman inspect .Mounts (RUNTIME truth — what the container is ACTUALLY mounting, not the OCI label default)
+}
+
+// MountInfo represents one live container mount point as reported by
+// `podman inspect .Mounts[]`. Source is the host-side path (or volume
+// name for type=volume); Destination is the container-side path. Type
+// is the engine's mount kind ("bind" / "volume" / "tmpfs"). Used by
+// `ov status` to distinguish a `--bind` / `--encrypt` deploy override
+// from the image-label default volume backing.
+type MountInfo struct {
+	Type        string // "bind" | "volume" | "tmpfs"
+	Source      string // host path (bind) or volume name (volume)
+	Destination string // container path
+	Name        string // for type=volume: the named volume; otherwise empty
 }
 
 // HostPortFor returns the host IP + host port that maps to the given
@@ -110,6 +124,7 @@ func (e *EngineClient) SnapshotAll(includeAll bool) ([]ContainerSnapshot, error)
 		if ir, ok := idx[r.Name]; ok {
 			snap.NetworkMode = ir.NetworkMode
 			snap.Devices = ir.Devices
+			snap.Mounts = ir.Mounts
 		}
 		out = append(out, snap)
 	}
@@ -157,6 +172,7 @@ func (e *EngineClient) Snapshot(name string) (*ContainerSnapshot, error) {
 	if inspects, err := e.runInspect([]string{name}); err == nil && len(inspects) > 0 {
 		snap.NetworkMode = inspects[0].NetworkMode
 		snap.Devices = inspects[0].Devices
+		snap.Mounts = inspects[0].Mounts
 	}
 	return snap, nil
 }
@@ -353,6 +369,7 @@ type engineInspectRow struct {
 	Name        string
 	NetworkMode string
 	Devices     []string
+	Mounts      []MountInfo
 }
 
 func (e *EngineClient) runInspect(names []string) ([]engineInspectRow, error) {
@@ -387,6 +404,7 @@ func parseInspect(data []byte) ([]engineInspectRow, error) {
 			row.NetworkMode = stringAt(hc, "NetworkMode")
 			row.Devices = devicesFromHostConfig(hc)
 		}
+		row.Mounts = mountsFromInspect(r)
 		// CDI / GPU detection — both engines surface this slightly
 		// differently; the union covers podman (CDI in HostConfig.Devices /
 		// Annotations / nvidia.com/gpu request) and docker (--gpus →
@@ -397,6 +415,32 @@ func parseInspect(data []byte) ([]engineInspectRow, error) {
 		out = append(out, row)
 	}
 	return out, nil
+}
+
+// mountsFromInspect pulls the .Mounts[] array out of a raw inspect blob.
+// Both podman and docker emit the same shape: an array of objects with
+// Type / Source / Destination / Name keys (Name is empty for type=bind).
+// This is the LIVE mount data — what the container is actually bound to,
+// independent of the OCI label default volume layout.
+func mountsFromInspect(raw map[string]any) []MountInfo {
+	mountsAny, ok := raw["Mounts"].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]MountInfo, 0, len(mountsAny))
+	for _, m := range mountsAny {
+		mm, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, MountInfo{
+			Type:        stringAt(mm, "Type"),
+			Source:      stringAt(mm, "Source"),
+			Destination: stringAt(mm, "Destination"),
+			Name:        stringAt(mm, "Name"),
+		})
+	}
+	return out
 }
 
 func stringAt(m map[string]any, key string) string {

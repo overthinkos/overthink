@@ -246,6 +246,7 @@ func (c *StartCmd) runQuadlet(rt *ResolvedRuntime) error {
 type StopCmd struct {
 	Image    string `arg:"" help:"Image name or remote ref"`
 	Instance string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
+	Unmount  bool   `long:"unmount" help:"After stopping, also tear down encrypted FUSE mounts and gocryptfs scope units (ov-enc-<image>-<volume>.scope) for this image"`
 }
 
 func (c *StopCmd) Run() error {
@@ -276,6 +277,7 @@ func (c *StopCmd) Run() error {
 			return fmt.Errorf("stopping %s: %w", svc, err)
 		}
 		fmt.Fprintf(os.Stderr, "Stopped %s\n", svc)
+		stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
 		return nil
 	}
 
@@ -297,13 +299,29 @@ func (c *StopCmd) Run() error {
 		fallbackCmd := exec.Command(otherBinary, "stop", name)
 		if _, fallbackErr := fallbackCmd.CombinedOutput(); fallbackErr == nil {
 			fmt.Fprintf(os.Stderr, "Stopped %s (via %s)\n", name, otherEngine)
+			stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
 			return nil
 		}
 		return fmt.Errorf("%s stop failed: %w\n%s", engine, err, strings.TrimSpace(string(output)))
 	}
 
 	fmt.Fprintf(os.Stderr, "Stopped %s\n", name)
+	stopUnmountIfRequested(c.Unmount, imageName, c.Instance)
 	return nil
+}
+
+// stopUnmountIfRequested tears down encrypted-volume FUSE mounts after a
+// successful stop, when the user passed --unmount. Best-effort by design
+// (matches the stopTunnelForImage pattern); failures emit a warning but
+// don't propagate, since the container has already stopped and the user
+// can retry the unmount manually with `ov config unmount <image>`.
+func stopUnmountIfRequested(want bool, imageName, instance string) {
+	if !want {
+		return
+	}
+	if err := encUnmount(imageName, instance, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: encrypted-volume unmount failed: %v\n", err)
+	}
 }
 
 // RestartCmd restarts a service container. In quadlet mode it issues a single

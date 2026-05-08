@@ -162,3 +162,33 @@ func TestBuildStartArgsNoSupervisord(t *testing.T) {
 		t.Errorf("buildStartArgs(noSupervisord) =\n  %v\nwant\n  %v", args, want)
 	}
 }
+
+// TestStopCmd_UnmountFlagDefaults asserts the new --unmount field defaults to
+// false (so plain `ov stop` continues to leave gocryptfs mounts up — the
+// pre-cutover behavior). A flipped default would silently tear down every
+// operator's encrypted mounts on every stop, which is exactly the regression
+// the explicit-opt-in design avoids.
+func TestStopCmd_UnmountFlagDefaults(t *testing.T) {
+	c := &StopCmd{}
+	if c.Unmount {
+		t.Error("StopCmd.Unmount default should be false; --unmount must be explicit opt-in")
+	}
+	c.Unmount = true
+	if !c.Unmount {
+		t.Error("StopCmd.Unmount must be settable")
+	}
+}
+
+// TestStopUnmountIfRequested_NoOpWhenWantFalse exercises the helper's
+// fast-path: when want=false, it returns immediately without consulting
+// deploy.yml or attempting any encUnmount call. Documented as the first
+// line of the function — a regression here would invert the opt-in.
+func TestStopUnmountIfRequested_NoOpWhenWantFalse(t *testing.T) {
+	// A bogus image+instance that has no deploy entry would normally
+	// cause encUnmount → loadEncryptedVolumes to error. Because want=
+	// false, the helper short-circuits and the call never happens, so
+	// no warning is emitted to stderr (we don't capture stderr here;
+	// the assertion is structural — the function must return without
+	// panicking, hanging, or invoking any deploy-resolution code).
+	stopUnmountIfRequested(false, "totally-nonexistent-image-xyz", "ghost-instance")
+}

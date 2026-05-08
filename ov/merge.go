@@ -70,7 +70,7 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		return err
 	}
 
-	images, err := cfg.ResolveAllImages("unused", dir)
+	images, err := cfg.ResolveAllImages("unused", dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}
@@ -105,7 +105,7 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 // runOne merges a single image.
 func (c *MergeCmd) runOne(cfg *Config, imageName string) error {
 	dir, _ := os.Getwd()
-	resolved, err := cfg.ResolveImage(imageName, "unused", dir)
+	resolved, err := cfg.ResolveImage(imageName, "unused", dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}

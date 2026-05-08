@@ -116,7 +116,7 @@ func TestResolveImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, tt.calverTag, testProjectDir(t))
+			resolved, err := cfg.ResolveImage(tt.imageName, tt.calverTag, testProjectDir(t), ResolveOpts{})
 			if err != nil {
 				t.Fatalf("ResolveImage() error = %v", err)
 			}
@@ -150,7 +150,7 @@ func TestResolveImageNotFound(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	_, err = cfg.ResolveImage("nonexistent", "2026.45.1415", testProjectDir(t))
+	_, err = cfg.ResolveImage("nonexistent", "2026.45.1415", testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("ResolveImage() expected error for nonexistent image")
 	}
@@ -201,7 +201,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 
 	// Image with no explicit builder inherits defaults.builder
-	resolved, err := cfg.ResolveImage("uses-default", "test", testProjectDir(t))
+	resolved, err := cfg.ResolveImage("uses-default", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -210,7 +210,7 @@ func TestResolveImageBuilders(t *testing.T) {
 	}
 
 	// Image with explicit builder overrides defaults per-type
-	resolved, err = cfg.ResolveImage("uses-custom", "test", testProjectDir(t))
+	resolved, err = cfg.ResolveImage("uses-custom", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"app": {Layers: []string{}},
 		},
 	}
-	resolved, err = cfg2.ResolveImage("app", "test", testProjectDir(t))
+	resolved, err = cfg2.ResolveImage("app", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -248,7 +248,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"my-builder": {Layers: []string{}},
 		},
 	}
-	resolved, err = cfg3.ResolveImage("my-builder", "test", testProjectDir(t))
+	resolved, err = cfg3.ResolveImage("my-builder", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -265,7 +265,7 @@ func TestResolveImageBuilders(t *testing.T) {
 			"child-img":   {Base: "base-img", Layers: []string{}},
 		},
 	}
-	resolved, err = cfg4.ResolveImage("child-img", "test", testProjectDir(t))
+	resolved, err = cfg4.ResolveImage("child-img", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -290,7 +290,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image with explicit ports
-	resolved, err := cfg.ResolveImage("with-ports", "test", testProjectDir(t))
+	resolved, err := cfg.ResolveImage("with-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -299,7 +299,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image inheriting default ports
-	resolved, err = cfg.ResolveImage("inherit-ports", "test", testProjectDir(t))
+	resolved, err = cfg.ResolveImage("inherit-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -308,7 +308,7 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 
 	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
-	resolved, err = cfg.ResolveImage("no-ports", "test", testProjectDir(t))
+	resolved, err = cfg.ResolveImage("no-ports", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -325,7 +325,7 @@ func TestFullTag(t *testing.T) {
 		t.Fatalf("LoadConfig() error = %v", err)
 	}
 
-	resolved, err := cfg.ResolveImage("base", "2026.45.1415", testProjectDir(t))
+	resolved, err := cfg.ResolveImage("base", "2026.45.1415", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
@@ -359,7 +359,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// disabled-image is excluded from ResolveAllImages()
-	all, err := cfg.ResolveAllImages("test", testProjectDir(t))
+	all, err := cfg.ResolveAllImages("test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Fatalf("ResolveAllImages() error = %v", err)
 	}
@@ -368,7 +368,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// ResolveImage returns error for disabled image
-	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t))
+	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("ResolveImage() should return error for disabled image")
 	}
@@ -377,9 +377,80 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// Enabled images still work
-	_, err = cfg.ResolveImage("base", "test", testProjectDir(t))
+	_, err = cfg.ResolveImage("base", "test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("ResolveImage() unexpected error for enabled image: %v", err)
+	}
+
+	// --include-disabled (global) reaches the disabled image
+	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{IncludeDisabled: true})
+	if err != nil {
+		t.Errorf("ResolveImage(IncludeDisabled=true) should succeed for disabled image, got: %v", err)
+	}
+
+	// --include-disabled scoped to a different name still rejects
+	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{
+		IncludeDisabled:      true,
+		IncludeDisabledNames: map[string]bool{"some-other-image": true},
+	})
+	if err == nil {
+		t.Error("scoped IncludeDisabled to a different name should still reject")
+	}
+
+	// --include-disabled scoped to the requested name succeeds
+	_, err = cfg.ResolveImage("disabled-image", "test", testProjectDir(t), ResolveOpts{
+		IncludeDisabled:      true,
+		IncludeDisabledNames: map[string]bool{"disabled-image": true},
+	})
+	if err != nil {
+		t.Errorf("scoped IncludeDisabled to the requested name should succeed, got: %v", err)
+	}
+}
+
+// TestResolveOpts_ShouldIncludeDisabled covers the scoping helper used by
+// ResolveImage / ResolveAllImages / validateImageDAG. The scope semantics
+// matter for `ov image build <name> --include-disabled` so widening the
+// working set doesn't surface unrelated disabled-image dep errors.
+func TestResolveOpts_ShouldIncludeDisabled(t *testing.T) {
+	cases := []struct {
+		name string
+		opts ResolveOpts
+		want map[string]bool // image-name → expected return
+	}{
+		{
+			name: "default opts: never include",
+			opts: ResolveOpts{},
+			want: map[string]bool{"foo": false, "bar": false},
+		},
+		{
+			name: "global IncludeDisabled: include all",
+			opts: ResolveOpts{IncludeDisabled: true},
+			want: map[string]bool{"foo": true, "bar": true},
+		},
+		{
+			name: "scoped IncludeDisabled: only listed names",
+			opts: ResolveOpts{
+				IncludeDisabled:      true,
+				IncludeDisabledNames: map[string]bool{"foo": true},
+			},
+			want: map[string]bool{"foo": true, "bar": false},
+		},
+		{
+			name: "scoped without IncludeDisabled flag: never include (flag is the gate)",
+			opts: ResolveOpts{
+				IncludeDisabledNames: map[string]bool{"foo": true},
+			},
+			want: map[string]bool{"foo": false, "bar": false},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			for image, want := range tc.want {
+				if got := tc.opts.shouldIncludeDisabled(image); got != want {
+					t.Errorf("shouldIncludeDisabled(%q) = %v, want %v", image, got, want)
+				}
+			}
+		})
 	}
 }
 
@@ -430,7 +501,7 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t))
+			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t), ResolveOpts{})
 			if err != nil {
 				t.Fatalf("ResolveImage() error = %v", err)
 			}
@@ -480,7 +551,7 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t))
+			resolved, err := cfg.ResolveImage(tt.imageName, "test", testProjectDir(t), ResolveOpts{})
 			if err != nil {
 				t.Fatalf("ResolveImage() error = %v", err)
 			}

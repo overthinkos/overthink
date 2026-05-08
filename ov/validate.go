@@ -32,8 +32,11 @@ func (e *ValidationError) HasErrors() bool {
 	return len(e.Errors) > 0
 }
 
-// Validate validates the configuration and layers
-func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
+// Validate validates the configuration and layers. opts.IncludeDisabled
+// extends the validation pass to images marked enabled: false (the
+// validator pre-filters them out by default to keep its working-set
+// aligned with the build verb).
+func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpts) error {
 	errs := &ValidationError{}
 
 	// Load default build config for global validation. Unconditional — the
@@ -77,7 +80,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string) error {
 	validateBaseReferences(cfg, errs)
 
 	// Validate no circular dependencies in images
-	validateImageDAG(cfg, layers, dir, errs)
+	validateImageDAG(cfg, layers, dir, opts, errs)
 
 	// Validate ports
 	validatePorts(cfg, layers, errs)
@@ -349,7 +352,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 
 			// Also check base chain — dependency may be provided by a parent image
 			if !hasDepLayer {
-				images, resolveErr := cfg.ResolveAllImages("unused", ".")
+				images, resolveErr := cfg.ResolveAllImages("unused", ".", ResolveOpts{})
 				if resolveErr == nil {
 					allLayers := collectAllImageLayers(imgName, images, layers)
 					for _, l := range allLayers {
@@ -713,15 +716,15 @@ func validateBaseReferences(cfg *Config, errs *ValidationError) {
 }
 
 // validateImageDAG checks for circular image dependencies
-func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, errs *ValidationError) {
+func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpts, errs *ValidationError) {
 	calverTag := "test"
 	// Try to resolve images — some fields may be missing during basic validation
 	images := make(map[string]*ResolvedImage)
 	for name, img := range cfg.Images {
-		if !img.IsEnabled() {
+		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
-		ri, err := cfg.ResolveImage(name, calverTag, dir)
+		ri, err := cfg.ResolveImage(name, calverTag, dir, opts)
 		if err != nil {
 			// Skip images that can't resolve (e.g., missing build: field)
 			continue

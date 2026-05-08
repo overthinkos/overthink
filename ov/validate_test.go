@@ -24,7 +24,7 @@ func TestValidateSuccess(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestValidateInvalidPkg(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid pkg")
 	}
@@ -56,7 +56,7 @@ func TestValidateMissingLayer(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -75,7 +75,7 @@ func TestValidateMissingLayerWithTypo(t *testing.T) {
 		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing layer")
 	}
@@ -92,7 +92,7 @@ func TestValidateLayerNoInstallFiles(t *testing.T) {
 		"empty": {Name: "empty"}, // no install files
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for layer without install files")
 	}
@@ -113,7 +113,7 @@ func TestValidateCargoWithoutSrc(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for Cargo.toml without src/")
 	}
@@ -136,7 +136,7 @@ func TestValidateCoprWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.copr without rpm.packages")
 	}
@@ -159,7 +159,7 @@ func TestValidateReposWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.repos without rpm.packages")
 	}
@@ -182,7 +182,7 @@ func TestValidateModulesWithoutPackages(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for rpm.modules without rpm.packages")
 	}
@@ -204,7 +204,7 @@ func TestValidatePacPkgValue(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("pkg: pac should be valid, got error: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestValidateInvalidPkgValue(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid pkg value")
 	}
@@ -247,7 +247,7 @@ func TestValidatePacReposMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for pac.repos without name")
 	}
@@ -281,7 +281,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for aur packages without builder.aur")
 	}
@@ -319,7 +319,7 @@ func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
 		t.Fatalf("Fedora image (build=[rpm]) consuming a multi-distro layer with rpm:+aur: must not require builder.aur; got: %v", err)
 	}
@@ -350,7 +350,7 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "no builder.aur configured") {
 		t.Fatalf("Arch image with build=[pac] (no aur) must not require builder.aur; got: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestValidatePixiBuilderUnconditional(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for pixi.toml without builder.pixi")
 	}
@@ -403,7 +403,7 @@ func TestValidateUnknownDependency(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for unknown dependency")
 	}
@@ -423,7 +423,7 @@ func TestValidateImageCycle(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for image cycle")
 	}
@@ -444,7 +444,7 @@ func TestValidateLayerCycle(t *testing.T) {
 		"c": {Name: "c", HasTasks: true, Requires: []string{"a"}},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for layer cycle")
 	}
@@ -462,7 +462,7 @@ func TestValidateMultipleErrors(t *testing.T) {
 	}
 	layers := map[string]*Layer{}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected errors")
 	}
@@ -491,7 +491,7 @@ func TestValidateLayerPortsValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -510,7 +510,7 @@ func TestValidateLayerPortsInvalid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -532,7 +532,7 @@ func TestValidateLayerPortsInvalidFromYAML(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port number")
 	}
@@ -559,7 +559,7 @@ func TestValidateImagePortsValid(t *testing.T) {
 		"web": {Name: "web", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -578,7 +578,7 @@ func TestValidateImagePortsInvalid(t *testing.T) {
 		"web": {Name: "web", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port mapping")
 	}
@@ -600,7 +600,7 @@ func TestValidateImagePortsBadFormat(t *testing.T) {
 		"web": {Name: "web", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for bad port format")
 	}
@@ -622,7 +622,7 @@ func TestValidateRouteMissingHost(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route missing host")
 	}
@@ -644,7 +644,7 @@ func TestValidateRouteMissingPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route missing port")
 	}
@@ -666,7 +666,7 @@ func TestValidateRouteInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for route invalid port")
 	}
@@ -692,7 +692,7 @@ func TestValidateRouteWithoutTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -722,7 +722,7 @@ func TestValidateRouteWithTraefik(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -748,7 +748,7 @@ func TestValidateSkipsDisabledImages(t *testing.T) {
 		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() should pass when bad image is disabled, got: %v", err)
 	}
@@ -767,7 +767,7 @@ func TestValidateVolumesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -786,7 +786,7 @@ func TestValidateVolumesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing volume name")
 	}
@@ -808,7 +808,7 @@ func TestValidateVolumesMissingPath(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing volume path")
 	}
@@ -830,7 +830,7 @@ func TestValidateVolumesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid volume name")
 	}
@@ -855,7 +855,7 @@ func TestValidateVolumesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate volume name")
 	}
@@ -883,7 +883,7 @@ func TestValidateAliasesValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -902,7 +902,7 @@ func TestValidateAliasesMissingName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing alias name")
 	}
@@ -924,7 +924,7 @@ func TestValidateAliasesMissingCommand(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for missing alias command")
 	}
@@ -949,7 +949,7 @@ func TestValidateAliasesDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate alias name")
 	}
@@ -971,7 +971,7 @@ func TestValidateAliasesInvalidName(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid alias name")
 	}
@@ -996,7 +996,7 @@ func TestValidateImageAliasesDuplicate(t *testing.T) {
 		"svc": {Name: "svc", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate image alias name")
 	}
@@ -1021,7 +1021,7 @@ func TestValidateSelfBuilder(t *testing.T) {
 		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for self-referencing builder")
 	}
@@ -1045,7 +1045,7 @@ func TestValidateBuilderInheritedSelfNotError(t *testing.T) {
 		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -1067,7 +1067,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 		"pixi": {Name: "pixi", HasTasks: true},
 	}
 
-	err := Validate(cfg, layers, testdataDir)
+	err := Validate(cfg, layers, testdataDir, ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for nonexistent per-image builder")
 	}
@@ -1113,7 +1113,7 @@ func TestValidateLayerWithIncludesNoInstallFiles(t *testing.T) {
 		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("expected no error for composing layer without install files, got: %v", err)
 	}
@@ -1128,7 +1128,7 @@ func TestValidateLayerIncludesCycle(t *testing.T) {
 		"b": {Name: "b", HasTasks: true, IncludedLayers: []string{"a"}},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for circular layer composition")
 	}
@@ -1142,7 +1142,7 @@ func TestValidateLayerIncludesMissing(t *testing.T) {
 		"desktop": {Name: "desktop", IncludedLayers: []string{"nonexistent"}},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for unknown layer in includes")
 	}
@@ -1193,7 +1193,7 @@ func TestValidatePortRelayValid(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
@@ -1214,7 +1214,7 @@ func TestValidatePortRelayInvalidPort(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for invalid port_relay port")
 	}
@@ -1238,7 +1238,7 @@ func TestValidatePortRelayNotInPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay port not in layer ports")
 	}
@@ -1259,7 +1259,7 @@ func TestValidatePortRelayNoPorts(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay without ports")
 	}
@@ -1283,7 +1283,7 @@ func TestValidatePortRelayDuplicate(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for duplicate port_relay port")
 	}
@@ -1309,7 +1309,7 @@ func TestValidatePortRelayMissingSocat(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Error("expected error for port_relay without socat layer")
 	}
@@ -1349,7 +1349,7 @@ func TestValidateDataEntryUnknownVolume(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for data entry referencing unknown volume")
 	}
@@ -1394,7 +1394,7 @@ func TestValidateDataEntryKnownVolume(t *testing.T) {
 		},
 	}
 
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err != nil && strings.Contains(err.Error(), "not declared by any layer") {
 		t.Errorf("unexpected 'unknown volume' error for valid data entry: %v", err)
 	}
@@ -1428,7 +1428,7 @@ func TestValidateSecretAcceptsHappyPath(t *testing.T) {
 			}
 		}),
 	}
-	if err := Validate(cfg, layers, testProjectDir(t)); err != nil {
+	if err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{}); err != nil {
 		t.Errorf("Validate() unexpected error: %v", err)
 	}
 }
@@ -1445,7 +1445,7 @@ func TestValidateSecretRequiresMissingDescription(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for secret_requires entry with no description")
 	}
@@ -1466,7 +1466,7 @@ func TestValidateSecretAcceptsInvalidName(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error for invalid env var name in secret_accepts")
 	}
@@ -1491,7 +1491,7 @@ func TestValidateSecretAcceptsCollidesWithEnvAccepts(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision error between env_accepts and secret_accepts")
 	}
@@ -1516,7 +1516,7 @@ func TestValidateSecretRequiresCollidesWithEnvRequires(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision error between env_requires and secret_requires")
 	}
@@ -1541,7 +1541,7 @@ func TestValidateSecretAcceptsCollidesWithSecretRequires(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected collision between secret_requires and secret_accepts")
 	}
@@ -1567,7 +1567,7 @@ func TestValidateSecretCollidesWithEnvProvides(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error when secret_accepts overlaps env_provides")
 	}
@@ -1589,7 +1589,7 @@ func TestValidateSecretAcceptsKeyMustStartWithOv(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected error when secret_accepts Key does not start with ov/")
 	}
@@ -1617,7 +1617,7 @@ func TestValidateSecretAcceptsKeyValidFormats(t *testing.T) {
 				}
 			}),
 		}
-		if err := Validate(cfg, layers, testProjectDir(t)); err != nil {
+		if err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{}); err != nil {
 			t.Errorf("Validate() unexpected error for Key=%q: %v", k, err)
 		}
 	}
@@ -1644,7 +1644,7 @@ func TestValidateSecretAcceptsKeyInvalidFormats(t *testing.T) {
 				}
 			}),
 		}
-		err := Validate(cfg, layers, testProjectDir(t))
+		err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 		if err == nil {
 			t.Errorf("Validate() should have rejected Key=%q", k)
 		}
@@ -1664,7 +1664,7 @@ func TestValidateSecretAcceptsInvalidSlug(t *testing.T) {
 			}
 		}),
 	}
-	err := Validate(cfg, layers, testProjectDir(t))
+	err := Validate(cfg, layers, testProjectDir(t), ResolveOpts{})
 	if err == nil {
 		t.Fatal("expected slug-validation error")
 	}

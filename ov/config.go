@@ -290,14 +290,44 @@ func LoadConfigRaw(dir string) (*Config, error) {
 	return cfg, nil
 }
 
+// ResolveOpts carries optional knobs for ResolveImage. Zero value is the
+// default behavior used by every code path EXCEPT the explicit operational
+// overrides on `ov image build/inspect/validate --include-disabled` —
+// those set IncludeDisabled to bypass the `enabled: false` gate without
+// requiring the operator to flip authored config.
+//
+// IncludeDisabledNames scopes the override: when non-empty, ONLY images in
+// the set bypass the disabled check; other disabled images stay filtered.
+// Used by `ov image build <name> --include-disabled` so widening the
+// working set doesn't surface unrelated disabled-image dep errors (e.g.
+// images with remote layers that aren't fetched yet). Empty + IncludeDisabled
+// = include every disabled image (the inspect/validate behavior).
+type ResolveOpts struct {
+	IncludeDisabled      bool            // skip the `enabled: false` check
+	IncludeDisabledNames map[string]bool // when non-empty, scope IncludeDisabled to these names only
+}
+
+// shouldIncludeDisabled reports whether name's disabled gate should be
+// bypassed under opts. Centralizes the IncludeDisabled + IncludeDisabledNames
+// interaction so call sites stay simple.
+func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
+	if !opts.IncludeDisabled {
+		return false
+	}
+	if len(opts.IncludeDisabledNames) == 0 {
+		return true
+	}
+	return opts.IncludeDisabledNames[name]
+}
+
 // ResolveImage resolves a single image's configuration by applying defaults
-func (c *Config) ResolveImage(name string, calverTag string, dir string) (*ResolvedImage, error) {
+func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedImage, error) {
 	img, ok := c.Images[name]
 	if !ok {
 		return nil, fmt.Errorf("image %q not found in image.yml", name)
 	}
-	if !img.IsEnabled() {
-		return nil, fmt.Errorf("image %q is disabled", name)
+	if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
+		return nil, fmt.Errorf("image %q is disabled (pass --include-disabled to operate on it without flipping authored config)", name)
 	}
 
 	resolved := &ResolvedImage{
@@ -550,14 +580,17 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string) (*Resol
 	return resolved, nil
 }
 
-// ResolveAllImages resolves all enabled images in the config
-func (c *Config) ResolveAllImages(calverTag string, dir string) (map[string]*ResolvedImage, error) {
+// ResolveAllImages resolves all enabled images in the config. opts.IncludeDisabled
+// extends the working set to images marked enabled: false (the build verb's
+// `--include-disabled` flag flips this for one-off operational rebuilds
+// without modifying authored config).
+func (c *Config) ResolveAllImages(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedImage, error) {
 	resolved := make(map[string]*ResolvedImage)
 	for name, img := range c.Images {
-		if !img.IsEnabled() {
+		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
-		ri, err := c.ResolveImage(name, calverTag, dir)
+		ri, err := c.ResolveImage(name, calverTag, dir, opts)
 		if err != nil {
 			return nil, err
 		}

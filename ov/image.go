@@ -63,7 +63,7 @@ func (c *ImagePullCmd) Run() error {
 			if cfg == nil {
 				return fmt.Errorf("short name %q with --tag requires a project directory with image.yml", c.Image)
 			}
-			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir)
+			resolved, err := cfg.ResolveImage(c.Image, c.Tag, dir, ResolveOpts{})
 			if err != nil {
 				return err
 			}

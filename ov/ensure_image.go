@@ -119,7 +119,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 		// `--pull=never` find the requested ref locally. Skipped when
 		// the input was already a short name (no pinned tag).
 		if cfg != nil {
-			if resolved, err := cfg.ResolveImage(short, "", projectDir); err == nil {
+			if resolved, err := cfg.ResolveImage(short, "", projectDir, ResolveOpts{}); err == nil {
 				produced := resolveShellImageRef(resolved.Registry, resolved.Name, "")
 				if produced != "" && produced != image && looksLikeFullRef(image) {
 					if terr := podmanTagAlias(ctx, produced, image); terr != nil {
@@ -162,7 +162,7 @@ func resolveImageRefForEnsure(image string, cfg *Config, projectDir string) (str
 	if cfg == nil {
 		return "", fmt.Errorf("short name %q requires a project directory with image.yml", image)
 	}
-	resolved, err := cfg.ResolveImage(image, "", projectDir)
+	resolved, err := cfg.ResolveImage(image, "", projectDir, ResolveOpts{})
 	if err != nil {
 		return "", fmt.Errorf("resolving %q via image.yml: %w", image, err)
 	}

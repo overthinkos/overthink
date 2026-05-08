@@ -62,7 +62,7 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedIma
 	if err != nil {
 		t.Fatalf("ScanAllLayersWithConfig: %v", err)
 	}
-	img, err := cfg.ResolveImage(imageName, "testing", dir)
+	img, err := cfg.ResolveImage(imageName, "testing", dir, ResolveOpts{})
 	if err != nil {
 		t.Skipf("ResolveImage(%s): %v (fixture missing?)", imageName, err)
 	}

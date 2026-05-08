@@ -250,7 +250,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 	// compileLayerPlans).
 	var baseImg *ResolvedImage
 	if (target == "pod" || target == "k8s") && refStr != "" {
-		if baseResolved, rerr := cfg.ResolveImage(refStr, tag, dir); rerr == nil {
+		if baseResolved, rerr := cfg.ResolveImage(refStr, tag, dir, ResolveOpts{}); rerr == nil {
 			baseImg = baseResolved
 			if distroCfg != nil {
 				baseImg.DistroDef = distroCfg.ResolveDistro(baseImg.Distro)
@@ -629,7 +629,7 @@ func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *Dist
 func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = distroCfg
 	_ = builderCfg
-	img, err := cfg.ResolveImage(ref.Name, c.Tag, dir)
+	img, err := cfg.ResolveImage(ref.Name, c.Tag, dir, ResolveOpts{})
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -904,7 +904,7 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// render tasks as RUN directives (not comments). Without these the
 	// overlay image would be byte-identical to the base image.
 	dir, _ := os.Getwd()
-	gen, _ := NewGenerator(dir, c.Tag)
+	gen, _ := NewGenerator(dir, c.Tag, ResolveOpts{})
 	var resolvedImg *ResolvedImage
 	if gen != nil && gen.Images != nil {
 		resolvedImg = gen.Images[base]

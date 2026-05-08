@@ -83,7 +83,7 @@ func (c *GenerateCmd) Run() error {
 		return err
 	}
 
-	gen, err := NewGenerator(dir, c.Tag)
+	gen, err := NewGenerator(dir, c.Tag, ResolveOpts{})
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,9 @@ func (c *GenerateCmd) Run() error {
 }
 
 // ValidateCmd validates image.yml and layers
-type ValidateCmd struct{}
+type ValidateCmd struct {
+	IncludeDisabled bool `long:"include-disabled" help:"Include images with enabled: false in validation (does not modify image.yml)"`
+}
 
 func (c *ValidateCmd) Run() error {
 	dir, err := os.Getwd()
@@ -124,14 +126,15 @@ func (c *ValidateCmd) Run() error {
 	// Populate init systems on layers from build.yml config
 	PopulateLayerInitSystems(layers, defaultInitCfg)
 
-	return Validate(cfg, layers, dir)
+	return Validate(cfg, layers, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
 }
 
 // InspectCmd prints resolved config for an image
 type InspectCmd struct {
-	Image    string `arg:"" help:"Image name"`
-	Format   string `long:"format" help:"Output a single field instead of full JSON"`
-	Instance string `short:"i" long:"instance" help:"Instance name"`
+	Image           string `arg:"" help:"Image name"`
+	Format          string `long:"format" help:"Output a single field instead of full JSON"`
+	Instance        string `short:"i" long:"instance" help:"Instance name"`
+	IncludeDisabled bool   `long:"include-disabled" help:"Operate on images with enabled: false (does not modify image.yml)"`
 }
 
 func (c *InspectCmd) Run() error {
@@ -149,7 +152,7 @@ func (c *InspectCmd) Run() error {
 
 func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 	calverTag := ComputeCalVer()
-	resolved, err := cfg.ResolveImage(c.Image, calverTag, dir)
+	resolved, err := cfg.ResolveImage(c.Image, calverTag, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
 	if err != nil {
 		return err
 	}
@@ -392,7 +395,7 @@ func (c *ListTargetsCmd) Run() error {
 	}
 
 	calverTag := ComputeCalVer()
-	images, err := cfg.ResolveAllImages(calverTag, dir)
+	images, err := cfg.ResolveAllImages(calverTag, dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}

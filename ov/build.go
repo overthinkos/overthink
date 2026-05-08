@@ -18,14 +18,15 @@ import (
 
 // BuildCmd builds container images
 type BuildCmd struct {
-	Images     []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
-	Push       bool     `long:"push" help:"Push to registry after building"`
-	Tag        string   `long:"tag" help:"Override tag (default: CalVer)"`
-	Platform   string   `long:"platform" help:"Target platform (default: host platform)"`
-	Cache      string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
-	NoCache    bool     `long:"no-cache" help:"Disable build cache entirely"`
-	Jobs       int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
-	PodmanJobs int      `long:"podman-jobs" help:"Override --jobs passed to podman build (0=auto, default min(NCPU,4)). Capped because podman-5.7.x races under high concurrency with --cache-from on multi-stage builds." env:"OV_PODMAN_JOBS"`
+	Images          []string `arg:"" optional:"" help:"Images to build (default: all enabled). Supports remote refs (github.com/org/repo/image[@version])"`
+	Push            bool     `long:"push" help:"Push to registry after building"`
+	Tag             string   `long:"tag" help:"Override tag (default: CalVer)"`
+	Platform        string   `long:"platform" help:"Target platform (default: host platform)"`
+	Cache           string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
+	NoCache         bool     `long:"no-cache" help:"Disable build cache entirely"`
+	Jobs            int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
+	PodmanJobs      int      `long:"podman-jobs" help:"Override --jobs passed to podman build (0=auto, default min(NCPU,4)). Capped because podman-5.7.x races under high concurrency with --cache-from on multi-stage builds." env:"OV_PODMAN_JOBS"`
+	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in image.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
 }
 
 func (c *BuildCmd) Run() error {
@@ -42,8 +43,21 @@ func (c *BuildCmd) Run() error {
 		return err
 	}
 
-	// Generate Containerfiles
-	gen, err := NewGenerator(dir, c.Tag)
+	// Generate Containerfiles. --include-disabled flows through Generator
+	// so `ov image build <disabled-image> --include-disabled` reaches it
+	// without the operator having to flip enabled: false in image.yml.
+	// When the user named specific images on the command line, scope the
+	// override to those names only — otherwise widening the working set
+	// would surface unrelated disabled-image dep errors (e.g. images that
+	// declare remote layers not yet fetched into the cache).
+	resolveOpts := ResolveOpts{IncludeDisabled: c.IncludeDisabled}
+	if c.IncludeDisabled && len(c.Images) > 0 {
+		resolveOpts.IncludeDisabledNames = make(map[string]bool, len(c.Images))
+		for _, name := range c.Images {
+			resolveOpts.IncludeDisabledNames[name] = true
+		}
+	}
+	gen, err := NewGenerator(dir, c.Tag, resolveOpts)
 	if err != nil {
 		return err
 	}

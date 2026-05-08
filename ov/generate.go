@@ -111,8 +111,10 @@ func (g *Generator) resolveUserContext(img *ResolvedImage) error {
 	return nil
 }
 
-// NewGenerator creates a new generator
-func NewGenerator(dir string, tag string) (*Generator, error) {
+// NewGenerator creates a new generator. opts is propagated through Validate
+// + ResolveAllImages so `ov image build --include-disabled` reaches images
+// flagged enabled: false in image.yml (without modifying the file).
+func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) {
 	cfg, err := LoadConfig(dir)
 	if err != nil {
 		return nil, err
@@ -134,7 +136,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 	// Populate init systems on layers from build.yml config
 	PopulateLayerInitSystems(layers, defaultInitCfg)
 
-	if err := Validate(cfg, layers, dir); err != nil {
+	if err := Validate(cfg, layers, dir, opts); err != nil {
 		return nil, err
 	}
 
@@ -143,7 +145,7 @@ func NewGenerator(dir string, tag string) (*Generator, error) {
 		tag = ComputeCalVer()
 	}
 
-	images, err := cfg.ResolveAllImages(tag, dir)
+	images, err := cfg.ResolveAllImages(tag, dir, opts)
 	if err != nil {
 		return nil, err
 	}

@@ -958,6 +958,22 @@ func LoadDeployConfig() (*DeployConfig, error) {
 		return nil, fmt.Errorf("reading %s: %w", path, err)
 	}
 
+	// Detect legacy schema (`images:` at top level instead of `deploy:`).
+	// yaml.Unmarshal into DeployConfig would silently drop unknown root
+	// keys, so a pre-cutover file with `images:` would parse to an empty
+	// DeployConfig.Deploy map — and downstream commands ("ov deploy show",
+	// "ov config status", quadlet generation) would all behave as if
+	// nothing was configured. Critically, encrypted-volume entries declared
+	// under the legacy `bind_mounts:` field would be invisible to
+	// loadEncryptedVolumes, so encryption guarantees would silently
+	// disappear. Fail loud at load time instead, with a remediation hint.
+	if hasLegacyImagesKey(data) {
+		return nil, fmt.Errorf(
+			"deploy.yml at %s: legacy top-level `images:` field detected — run `ov migrate local-deploy` to convert; the field was renamed to `deploy:` in the 2026-04 unified-config cutover (encryption guarantees disappear silently otherwise)",
+			path,
+		)
+	}
+
 	var dc DeployConfig
 	if err := yaml.Unmarshal(data, &dc); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
@@ -986,6 +1002,40 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	}
 
 	return &dc, nil
+}
+
+// hasLegacyImagesKey reports whether the raw YAML body has a top-level
+// `images:` key — the legacy pre-2026-04 root shape — instead of the modern
+// `deploy:` map. The detection is structural (yaml.v3 Node walk on root-
+// level mapping nodes) rather than line-oriented to avoid false positives on
+// nested `images:` fields inside test fixtures or comment text.
+func hasLegacyImagesKey(data []byte) bool {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return false
+	}
+	if root.Kind != yaml.DocumentNode || len(root.Content) == 0 {
+		return false
+	}
+	mapping := root.Content[0]
+	if mapping.Kind != yaml.MappingNode {
+		return false
+	}
+	hasImages := false
+	hasDeploy := false
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		key := mapping.Content[i]
+		if key.Kind != yaml.ScalarNode {
+			continue
+		}
+		switch key.Value {
+		case "images":
+			hasImages = true
+		case "deploy":
+			hasDeploy = true
+		}
+	}
+	return hasImages && !hasDeploy
 }
 
 // MergeDeployOverlay patches cfg.Images in-place with deployment overrides from deploy.yml.

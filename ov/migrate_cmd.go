@@ -26,6 +26,7 @@ type MigrateCmdGroup struct {
 	OvCachyos   MigrateOvCachyosCmd   `cmd:"ov-cachyos" help:"Rename the operator-specific CachyOS deployment to its 2026-05 canonical name 'ov-cachyos'. Collapses qc → cachyos-dx → ov-cachyos into a single hop, handles BOTH legacy keys, also moves the matching kind:local template name. Walks overthink.yml + ~/.config/ov/deploy.yml. Idempotent."`
 	LocalImages MigrateLocalImagesCmd `cmd:"local-images" help:"Migrate kind:local 'images:' field to comment-form per the 2026-05 deploy-fetch-narrowing cutover; idempotent. After migration, run 'ov image validate' to verify. The deploy now fetches NOTHING speculative — test-bed image preflight moved to 'ov eval run'."`
 	KindFiles   MigrateKindFilesCmd   `cmd:"kind-files" help:"2026-05 kind-files cutover: extract inline image:/vm: from overthink.yml into image.yml/vm.yml siblings, create empty pod.yml/k8s.yml stubs, append entries to includes:, and rename kind: deployment → kind: deploy in every reachable YAML doc + root-key deployment: → deploy: in deploy.yml. Idempotent."`
+	LocalDeploy MigrateLocalDeployCmd `cmd:"local-deploy" help:"Migrate ~/.config/ov/deploy.yml from the pre-2026-04 legacy schema (top-level images: + per-entry bind_mounts: + workspace: scalar) to the modern v4 schema (top-level deploy: + per-entry volumes: with type: encrypted/bind + workspace promoted to a volumes entry). Idempotent. Writes a .bak.<unix-ts> rollback file before rewriting."`
 }
 
 // MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken

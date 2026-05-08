@@ -102,17 +102,13 @@ func (c *SecretsListCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
 	prefix := "ov"
 	if c.Service != "" {
 		prefix = c.Service
 	}
 
-	entries, err := ListAllKdbxEntries(path, pw, keyFile, prefix)
+	entries, err := ListAllKdbxEntries(path, keyFile, prefix)
 	if err != nil {
 		return err
 	}
@@ -141,15 +137,10 @@ func (c *SecretsGetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
-	store := &KdbxStore{path: path, keyFile: keyFile, cachedPass: pw}
-	// Skip the prompt since we already have the password
-	store.passOnce.Do(func() {})
-
+	// KdbxStore.Get prompts (with retry) on first access — no need to
+	// pre-resolve the password.
+	store := &KdbxStore{path: path, keyFile: keyFile}
 	val, err := store.Get(c.Service, c.Key)
 	if err != nil {
 		return err
@@ -176,10 +167,6 @@ func (c *SecretsSetCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
 	var value string
 	if c.Generate {
@@ -201,9 +188,8 @@ func (c *SecretsSetCmd) Run() error {
 		}
 	}
 
-	store := &KdbxStore{path: path, keyFile: keyFile, cachedPass: pw}
-	store.passOnce.Do(func() {})
-
+	// KdbxStore.Set prompts (with retry) on first access.
+	store := &KdbxStore{path: path, keyFile: keyFile}
 	if err := store.Set(c.Service, c.Key, value); err != nil {
 		return err
 	}
@@ -224,14 +210,9 @@ func (c *SecretsDeleteCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
-	store := &KdbxStore{path: path, keyFile: keyFile, cachedPass: pw}
-	store.passOnce.Do(func() {})
-
+	// KdbxStore.Delete prompts (with retry) on first access.
+	store := &KdbxStore{path: path, keyFile: keyFile}
 	if err := store.Delete(c.Service, c.Key); err != nil {
 		return err
 	}
@@ -299,13 +280,9 @@ func (c *SecretsImportCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
-	store := &KdbxStore{path: path, keyFile: keyFile, cachedPass: pw}
-	store.passOnce.Do(func() {})
+	// KdbxStore.Set prompts (with retry) on first access.
+	store := &KdbxStore{path: path, keyFile: keyFile}
 
 	imported := 0
 	fmt.Fprintf(os.Stderr, "Importing %d credential(s):\n", total)
@@ -342,14 +319,10 @@ func (c *SecretsExportCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	pw, err := kdbxAskPassword()
-	if err != nil {
-		return err
-	}
 
 	fmt.Fprintln(os.Stderr, "WARNING: This exports plaintext credentials. Handle with care.")
 
-	entries, err := ListAllKdbxEntries(path, pw, keyFile, "ov")
+	entries, err := ListAllKdbxEntries(path, keyFile, "ov")
 	if err != nil {
 		return err
 	}

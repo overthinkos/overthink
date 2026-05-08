@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,14 +14,15 @@ func setupTestKdbx(t *testing.T) (store *KdbxStore, cleanup func()) {
 
 	// Override password prompt
 	origAsk := kdbxAskPassword
-	kdbxAskPassword = func() (string, error) { return "testpass", nil }
+	kdbxAskPassword = func(bypassCache bool) (string, error) { return "testpass", nil }
 
 	if err := CreateKdbxDatabase(dbPath, "testpass"); err != nil {
 		t.Fatalf("CreateKdbxDatabase: %v", err)
 	}
 
+	// cachedPass is set so the first openValidated bypasses the prompt mock
+	// and goes straight to the kdbx open.
 	store = &KdbxStore{path: dbPath, cachedPass: "testpass"}
-	store.passOnce.Do(func() {}) // mark password as already resolved
 
 	return store, func() { kdbxAskPassword = origAsk }
 }
@@ -165,13 +167,170 @@ func TestKdbxStore_Probe(t *testing.T) {
 	}
 }
 
+// TestIsWrongKdbxPassword covers the error-class matcher used to decide
+// whether to retry. Substring-based because gokeepasslib does not export a
+// typed sentinel; this ensures we don't retry on file-not-found / corruption /
+// unrelated I/O errors.
+func TestIsWrongKdbxPassword(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"wrong-password verbatim", fmt.Errorf("decoding kdbx: Wrong password? Database integrity check failed"), true},
+		{"integrity-only phrasing", fmt.Errorf("Database integrity check failed"), true},
+		{"wrong-password-only phrasing", fmt.Errorf("oops Wrong password thing"), true},
+		{"file-not-found", fmt.Errorf("opening kdbx: open /nonexistent: no such file or directory"), false},
+		{"corruption-non-pwd", fmt.Errorf("decoding kdbx: invalid header magic"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isWrongKdbxPassword(tc.err); got != tc.want {
+				t.Errorf("isWrongKdbxPassword(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestOpenKdbxWithRetry_TwoWrongThenCorrect simulates the user fat-fingering
+// the master password twice and then typing it correctly on the third
+// attempt. The kdbxAskPassword mock returns a different value each call, so
+// the retry loop's bypassCache discipline is also exercised.
+func TestOpenKdbxWithRetry_TwoWrongThenCorrect(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.kdbx")
+	if err := CreateKdbxDatabase(dbPath, "correct"); err != nil {
+		t.Fatalf("CreateKdbxDatabase: %v", err)
+	}
+
+	calls := 0
+	origAsk := kdbxAskPassword
+	defer func() { kdbxAskPassword = origAsk }()
+	kdbxAskPassword = func(bypassCache bool) (string, error) {
+		calls++
+		// First two attempts return wrong; third returns correct.
+		// We also assert bypassCache is true on retries.
+		switch calls {
+		case 1:
+			if bypassCache {
+				t.Errorf("first attempt should NOT bypassCache, got bypassCache=true")
+			}
+			return "wrong-1", nil
+		case 2:
+			if !bypassCache {
+				t.Errorf("second attempt SHOULD bypassCache, got bypassCache=false")
+			}
+			return "wrong-2", nil
+		default:
+			if !bypassCache {
+				t.Errorf("third attempt SHOULD bypassCache, got bypassCache=false")
+			}
+			return "correct", nil
+		}
+	}
+
+	db, pw, err := openKdbxWithRetry(dbPath, "")
+	if err != nil {
+		t.Fatalf("openKdbxWithRetry: %v", err)
+	}
+	if pw != "correct" {
+		t.Errorf("returned password = %q, want %q", pw, "correct")
+	}
+	if db == nil {
+		t.Error("returned db is nil")
+	}
+	if calls != 3 {
+		t.Errorf("kdbxAskPassword called %d times, want 3", calls)
+	}
+}
+
+// TestOpenKdbxWithRetry_AllWrong asserts we give up after exactly
+// kdbxMaxPasswordAttempts (3) failed prompts and surface the wrong-password
+// error to the caller.
+func TestOpenKdbxWithRetry_AllWrong(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.kdbx")
+	if err := CreateKdbxDatabase(dbPath, "correct"); err != nil {
+		t.Fatalf("CreateKdbxDatabase: %v", err)
+	}
+
+	calls := 0
+	origAsk := kdbxAskPassword
+	defer func() { kdbxAskPassword = origAsk }()
+	kdbxAskPassword = func(bypassCache bool) (string, error) {
+		calls++
+		return "always-wrong", nil
+	}
+
+	_, _, err := openKdbxWithRetry(dbPath, "")
+	if err == nil {
+		t.Fatal("openKdbxWithRetry should have failed after all attempts")
+	}
+	if !isWrongKdbxPassword(err) {
+		t.Errorf("expected wrong-password error, got: %v", err)
+	}
+	if calls != kdbxMaxPasswordAttempts {
+		t.Errorf("kdbxAskPassword called %d times, want %d", calls, kdbxMaxPasswordAttempts)
+	}
+}
+
+// TestOpenKdbxWithRetry_NonPasswordErrorNoRetry asserts we DO NOT retry on
+// errors that aren't wrong-password (file not found, corruption, etc.) — those
+// would just fail the same way on every attempt.
+func TestOpenKdbxWithRetry_NonPasswordErrorNoRetry(t *testing.T) {
+	calls := 0
+	origAsk := kdbxAskPassword
+	defer func() { kdbxAskPassword = origAsk }()
+	kdbxAskPassword = func(bypassCache bool) (string, error) {
+		calls++
+		return "anything", nil
+	}
+
+	_, _, err := openKdbxWithRetry("/nonexistent/path.kdbx", "")
+	if err == nil {
+		t.Fatal("expected error on missing file")
+	}
+	if calls != 1 {
+		t.Errorf("kdbxAskPassword called %d times, want 1 (no retry on non-password errors)", calls)
+	}
+}
+
+// TestKdbxStore_OpenValidated_ReusesCachedPassword asserts a successful
+// password is cached across calls — we only prompt once per store.
+func TestKdbxStore_OpenValidated_ReusesCachedPassword(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.kdbx")
+	if err := CreateKdbxDatabase(dbPath, "correct"); err != nil {
+		t.Fatalf("CreateKdbxDatabase: %v", err)
+	}
+
+	calls := 0
+	origAsk := kdbxAskPassword
+	defer func() { kdbxAskPassword = origAsk }()
+	kdbxAskPassword = func(bypassCache bool) (string, error) {
+		calls++
+		return "correct", nil
+	}
+
+	store := &KdbxStore{path: dbPath}
+	for i := 0; i < 5; i++ {
+		if _, err := store.Get("ov/test", "any"); err != nil {
+			t.Fatalf("Get %d: %v", i, err)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("kdbxAskPassword called %d times across 5 ops, want 1", calls)
+	}
+}
+
 func TestDefaultCredentialStore_Kdbx(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "test.kdbx")
 	configPath := filepath.Join(dir, "config.yml")
 
 	origAsk := kdbxAskPassword
-	kdbxAskPassword = func() (string, error) { return "testpass", nil }
+	kdbxAskPassword = func(bypassCache bool) (string, error) { return "testpass", nil }
 	defer func() { kdbxAskPassword = origAsk }()
 
 	CreateKdbxDatabase(dbPath, "testpass")
@@ -197,7 +356,7 @@ func TestAutoDetection_KdbxFallback(t *testing.T) {
 	configPath := filepath.Join(dir, "config.yml")
 
 	origAsk := kdbxAskPassword
-	kdbxAskPassword = func() (string, error) { return "testpass", nil }
+	kdbxAskPassword = func(bypassCache bool) (string, error) { return "testpass", nil }
 	defer func() { kdbxAskPassword = origAsk }()
 
 	CreateKdbxDatabase(dbPath, "testpass")

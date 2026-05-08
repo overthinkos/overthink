@@ -21,30 +21,49 @@ import (
 type KdbxStore struct {
 	path       string
 	keyFile    string
-	cachedPass string
-	passOnce   sync.Once
-	passErr    error
+	mu         sync.Mutex // protects cachedPass
+	cachedPass string     // last password successfully validated against the kdbx
 }
 
+// kdbxMaxPasswordAttempts is the number of prompts the user gets before the
+// command fails. Matches sudo's passwd_tries default.
+const kdbxMaxPasswordAttempts = 3
+
 // kdbxAskPassword prompts for the .kdbx database password.
+// bypassCache=true skips the kernel-keyring cache and the OV_KDBX_PASSWORD env
+// var, forcing a fresh interactive prompt — used on retry after a wrong-
+// password error so a stale cached value doesn't get re-tried indefinitely.
 // Override in tests.
 var kdbxAskPassword = defaultKdbxAskPassword
 
-func defaultKdbxAskPassword() (string, error) {
-	// 1. Environment variable (CI/automation)
-	if pw := os.Getenv("OV_KDBX_PASSWORD"); pw != "" {
-		return pw, nil
+func defaultKdbxAskPassword(bypassCache bool) (string, error) {
+	// 1. Environment variable (CI/automation) — always honored on first attempt;
+	//    bypassed on retry so a wrong env-supplied password doesn't loop forever.
+	if !bypassCache {
+		if pw := os.Getenv("OV_KDBX_PASSWORD"); pw != "" {
+			return pw, nil
+		}
 	}
 
-	// 2. Check kernel keyring cache
+	// 2. Check kernel keyring cache (skipped on retry).
 	cacheEnabled, cacheTimeout := resolveKdbxCacheConfig()
-	if cacheEnabled {
+	if cacheEnabled && !bypassCache {
 		if cached, err := keyringGet(keyringKeyName); err == nil && cached != "" {
 			return cached, nil
 		}
 	}
 
-	// 3. Prompt: systemd-ask-password or terminal fallback
+	// 3. TTY guard — when stdin is not a terminal we cannot prompt; fail
+	//    immediately with an actionable error rather than hang on ReadPassword
+	//    or on systemd-ask-password (the latter passes our stdin through with
+	//    --timeout=0, so it hangs forever in a non-TTY context too — no
+	//    graceful fallback to graphical popup).
+	if !term.IsTerminal(int(os.Stdin.Fd())) {
+		return "", fmt.Errorf("kdbx password required but stdin is not a terminal; set OV_KDBX_PASSWORD=<password> or run interactively")
+	}
+
+	// 4. Prompt: systemd-ask-password (caches in kernel keyring + may show
+	//    graphical agent prompt) or terminal fallback.
 	var pw string
 	var err error
 	if _, lookErr := exec.LookPath("systemd-ask-password"); lookErr == nil {
@@ -62,7 +81,7 @@ func defaultKdbxAskPassword() (string, error) {
 		return "", err
 	}
 
-	// 4. Cache in kernel keyring for future invocations
+	// 5. Cache in kernel keyring for future invocations
 	if cacheEnabled && pw != "" {
 		if storeErr := keyringSet(keyringKeyName, pw, cacheTimeout); storeErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not cache kdbx password in keyring: %v\n", storeErr)
@@ -70,6 +89,48 @@ func defaultKdbxAskPassword() (string, error) {
 	}
 
 	return pw, nil
+}
+
+// isWrongKdbxPassword reports whether err is a kdbx-decode failure caused by
+// an incorrect database password (as opposed to a missing file, malformed
+// blob, etc.). The gokeepasslib decoder maps wrong-password to a generic
+// "Wrong password? Database integrity check failed" error string — we match
+// on the substring because gokeepasslib does not export a typed sentinel.
+func isWrongKdbxPassword(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := err.Error()
+	return strings.Contains(s, "Wrong password") || strings.Contains(s, "Database integrity check failed")
+}
+
+// openKdbxWithRetry opens the kdbx file at path, prompting up to 3 times on
+// wrong-password errors. Each retry calls kdbxAskPassword with bypassCache=true
+// so a stale cached value is not re-tried. Returns the opened (still locked)
+// database and the validated password — the caller is responsible for calling
+// db.UnlockProtectedEntries(). Errors other than wrong-password are returned
+// immediately without retry.
+func openKdbxWithRetry(path, keyFile string) (*gokeepasslib.Database, string, error) {
+	var lastErr error
+	for attempt := 1; attempt <= kdbxMaxPasswordAttempts; attempt++ {
+		bypassCache := attempt > 1
+		pw, err := kdbxAskPassword(bypassCache)
+		if err != nil {
+			return nil, "", err
+		}
+		db, err := openKdbx(path, pw, keyFile)
+		if err == nil {
+			return db, pw, nil
+		}
+		if !isWrongKdbxPassword(err) {
+			return nil, "", err
+		}
+		lastErr = err
+		if attempt < kdbxMaxPasswordAttempts {
+			fmt.Fprintln(os.Stderr, "Sorry, try again.")
+		}
+	}
+	return nil, "", lastErr
 }
 
 // resolveKdbxCacheConfig returns whether kernel keyring caching is enabled and the TTL.
@@ -94,12 +155,36 @@ func resolveKdbxCacheConfig() (enabled bool, timeoutSec int) {
 	return
 }
 
-// password returns the cached database password, prompting at most once per process.
-func (k *KdbxStore) password() (string, error) {
-	k.passOnce.Do(func() {
-		k.cachedPass, k.passErr = kdbxAskPassword()
-	})
-	return k.cachedPass, k.passErr
+// openValidated opens the kdbx, retrying up to kdbxMaxPasswordAttempts times
+// on wrong-password errors. Reuses a previously-validated cached password if
+// the store has one — only if that cached password is now stale does the user
+// see a prompt. Concurrent callers serialize on k.mu so a single prompt
+// satisfies all of them. Returns the opened (still locked) database; callers
+// must invoke db.UnlockProtectedEntries() if they need entry values.
+func (k *KdbxStore) openValidated() (*gokeepasslib.Database, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	// First try the cached password (no prompt) if we have one.
+	if k.cachedPass != "" {
+		db, err := openKdbx(k.path, k.cachedPass, k.keyFile)
+		if err == nil {
+			return db, nil
+		}
+		if !isWrongKdbxPassword(err) {
+			return nil, err
+		}
+		// Cached password no longer matches (database changed externally) —
+		// drop it and fall through to a fresh prompt with retries.
+		k.cachedPass = ""
+	}
+
+	db, pw, err := openKdbxWithRetry(k.path, k.keyFile)
+	if err != nil {
+		return nil, err
+	}
+	k.cachedPass = pw
+	return db, nil
 }
 
 // Probe checks that the .kdbx file exists. Does NOT prompt for password
@@ -115,11 +200,7 @@ func (k *KdbxStore) Probe() error {
 }
 
 func (k *KdbxStore) Get(service, key string) (string, error) {
-	pw, err := k.password()
-	if err != nil {
-		return "", err
-	}
-	db, err := openKdbx(k.path, pw, k.keyFile)
+	db, err := k.openValidated()
 	if err != nil {
 		return "", err
 	}
@@ -137,11 +218,7 @@ func (k *KdbxStore) Get(service, key string) (string, error) {
 }
 
 func (k *KdbxStore) Set(service, key, value string) error {
-	pw, err := k.password()
-	if err != nil {
-		return err
-	}
-	db, err := openKdbx(k.path, pw, k.keyFile)
+	db, err := k.openValidated()
 	if err != nil {
 		return err
 	}
@@ -169,11 +246,7 @@ func (k *KdbxStore) Set(service, key, value string) error {
 }
 
 func (k *KdbxStore) Delete(service, key string) error {
-	pw, err := k.password()
-	if err != nil {
-		return err
-	}
-	db, err := openKdbx(k.path, pw, k.keyFile)
+	db, err := k.openValidated()
 	if err != nil {
 		return err
 	}
@@ -194,11 +267,7 @@ func (k *KdbxStore) Delete(service, key string) error {
 }
 
 func (k *KdbxStore) List(service string) ([]string, error) {
-	pw, err := k.password()
-	if err != nil {
-		return nil, err
-	}
-	db, err := openKdbx(k.path, pw, k.keyFile)
+	db, err := k.openValidated()
 	if err != nil {
 		return nil, err
 	}
@@ -386,17 +455,26 @@ func CreateKdbxDatabase(path, password string) error {
 	return saveKdbx(db, path)
 }
 
-// ListAllKdbxEntries recursively lists all entries under a path prefix.
-func ListAllKdbxEntries(path, password, keyFile, prefix string) ([]struct{ Service, Key, Value string }, error) {
-	db, err := openKdbx(path, password, keyFile)
+// ListAllKdbxEntries opens the kdbx (with retry-on-wrong-password) and
+// recursively lists all entries under prefix. Caller does NOT pre-resolve the
+// password — this function prompts (up to kdbxMaxPasswordAttempts) when the
+// store is locked. Empty prefix means "every entry under every top-level
+// group".
+func ListAllKdbxEntries(path, keyFile, prefix string) ([]struct{ Service, Key, Value string }, error) {
+	db, _, err := openKdbxWithRetry(path, keyFile)
 	if err != nil {
 		return nil, err
 	}
 	db.UnlockProtectedEntries()
+	return walkKdbxEntries(db, prefix), nil
+}
 
+// walkKdbxEntries walks an opened+unlocked kdbx tree from prefix, returning
+// every entry under it as (service, key, plaintext-value) triples.
+func walkKdbxEntries(db *gokeepasslib.Database, prefix string) []struct{ Service, Key, Value string } {
 	var entries []struct{ Service, Key, Value string }
 	if len(db.Content.Root.Groups) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	var walk func(group *gokeepasslib.Group, path string)
@@ -427,7 +505,7 @@ func ListAllKdbxEntries(path, password, keyFile, prefix string) ([]struct{ Servi
 		parts := strings.Split(prefix, "/")
 		target := navigateToGroup(db.Content.Root, parts)
 		if target == nil {
-			return nil, nil
+			return nil
 		}
 		walk(target, prefix)
 	} else {
@@ -435,5 +513,5 @@ func ListAllKdbxEntries(path, password, keyFile, prefix string) ([]struct{ Servi
 			walk(&root.Groups[i], root.Groups[i].Name)
 		}
 	}
-	return entries, nil
+	return entries
 }

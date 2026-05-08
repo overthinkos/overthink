@@ -838,10 +838,27 @@ func hasEncryptedBindMounts(mounts []ResolvedBindMount) bool {
 // verifyBindMounts checks that all bind mounts are ready to use:
 // - Plain mounts: host directory must exist
 // - Encrypted mounts: must be mounted (FUSE)
+//
+// For encrypted mounts where FUSE is unmounted, an extra discrimination
+// fires: if the cipher dir on disk holds real encrypted data (anything
+// beyond the gocryptfs metadata files) AND the plain mount target is
+// empty, we surface a louder error spelling out the data-loss risk.
+// That's the immich-2026-04-incident shape — quadlet without ExecStartPre,
+// FUSE never re-mounted after a reboot, container about to bind an empty
+// plain/ over a populated cipher tree and start writing plaintext on top.
+// The previous generic "not mounted" message was indistinguishable from
+// a fresh-setup state where no harm exists yet.
 func verifyBindMounts(mounts []ResolvedBindMount, imageName string) error {
 	for _, m := range mounts {
 		if m.Encrypted {
 			if !isEncryptedMounted(m.HostPath) {
+				cipherDir := filepath.Join(filepath.Dir(m.HostPath), "cipher")
+				if cipherPopulatedPlainEmpty(cipherDir, m.HostPath) {
+					return fmt.Errorf(
+						"encrypted volume %q: cipher dir at %s is populated but plain mount at %s is empty — refusing to start (would write plaintext over encrypted data); run 'ov config mount %s' first",
+						m.Name, cipherDir, m.HostPath, imageName,
+					)
+				}
 				return fmt.Errorf("encrypted bind mount %q for image %q is not mounted; run 'ov config mount %s' first", m.Name, imageName, imageName)
 			}
 		} else {
@@ -855,4 +872,32 @@ func verifyBindMounts(mounts []ResolvedBindMount, imageName string) error {
 		}
 	}
 	return nil
+}
+
+// cipherPopulatedPlainEmpty reports whether the gocryptfs cipher directory
+// holds user data (anything beyond the gocryptfs.conf + gocryptfs.diriv
+// metadata files) AND the plain mount target is empty. The combination
+// means FUSE is unmounted on top of a populated vault — letting a
+// container start now would silently bind the empty plain/ as a plaintext
+// directory and write new data on top of the encrypted tree.
+//
+// Returns false on stat errors (the surrounding error path will surface
+// those — this helper is only a discrimination hint).
+func cipherPopulatedPlainEmpty(cipherDir, plainDir string) bool {
+	plainEntries, err := os.ReadDir(plainDir)
+	if err != nil || len(plainEntries) > 0 {
+		return false
+	}
+	cipherEntries, err := os.ReadDir(cipherDir)
+	if err != nil {
+		return false
+	}
+	for _, e := range cipherEntries {
+		switch e.Name() {
+		case "gocryptfs.conf", "gocryptfs.diriv":
+			continue
+		}
+		return true
+	}
+	return false
 }

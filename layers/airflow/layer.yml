@@ -1,8 +1,8 @@
 layer:
   name: airflow
-  description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly). Python deps live in the marimo layer's pixi.toml."
+  description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly), plus an MCP server (mcp-server-apache-airflow on port 19999) that exposes Airflow REST API operations as MCP tools, plus a sample OSM → PMTiles DAG. Python deps live in the marimo layer's pixi.toml."
   requires:
-    - marimo            # owns the pixi env; provides the airflow binary at ~/.pixi/envs/default/bin/airflow
+    - marimo
     - supervisord
   env:
     AIRFLOW_HOME: "~/airflow"
@@ -17,6 +17,14 @@ layer:
     AIRFLOW__API__HOST: "0.0.0.0"
   ports:
     - 8080
+    - 19999     # airflow-mcp HTTP transport endpoint (/mcp)
+  # Cross-container MCP discovery. Pod-aware rewriting collapses this to
+  # localhost:19999 for any same-pod consumer (the marimo notebook server's
+  # chat panel reads OV_MCP_SERVERS at config time and finds airflow there).
+  mcp_provides:
+    - name: airflow
+      url: "http://{{.ContainerName}}:19999/mcp"
+      transport: http
   volumes:
     - name: airflow-data
       path: "~/airflow"
@@ -57,6 +65,16 @@ layer:
           --role Admin \
           --email admin@example.com \
           --password "${AIRFLOW_ADMIN_PASSWORD}" || true
+        # Copy bundled default DAGs from the image-static stash into the
+        # ~/airflow/dags/ volume on every boot. Idempotent (-n: never
+        # overwrite). Required because ~/airflow is a podman volume that
+        # shadows in-image content at /home/user/airflow when the volume
+        # was created in a prior deploy. Without this copy, image-bundled
+        # DAGs invisibly disappear on first deploy.
+        if [ -d /opt/airflow-defaults/dags ]; then
+          mkdir -p "${HOME}/airflow/dags"
+          cp -rn /opt/airflow-defaults/dags/. "${HOME}/airflow/dags/"
+        fi
     # ---- airflow-webserver.sh / -scheduler.sh ----
     # Two long-running processes are sufficient for LocalExecutor + SQLite.
     # `exec` is critical so signals reach airflow directly (not the wrapper).
@@ -75,6 +93,158 @@ layer:
         #!/usr/bin/env bash
         set -euo pipefail
         exec "${HOME}/.pixi/envs/default/bin/airflow" scheduler
+
+    # ---- airflow-mcp.sh ----
+    # Plan A: mcp-server-apache-airflow from PyPI. Wraps the Airflow REST API
+    # as MCP tools (list_dags, trigger_dag, get_task_instance, list_variables,
+    # …). Speaks Streamable HTTP on port 19999 (ov's project default). The
+    # third-party server's docs reference /api/v1/ — Airflow 3.x serves
+    # /api/v2/, so R10 step 13 may reveal incompatibility, in which case
+    # Plan B (a fastmcp wrapper around /api/v2/) takes over.
+    #
+    # Authentication: basic auth via AIRFLOW_USERNAME + AIRFLOW_PASSWORD
+    # against the same admin account airflow-init.sh provisioned. Airflow
+    # 3.x's api-server defaults to JWT for external clients but accepts
+    # basic for internal callers; if the server rejects basic auth, R10
+    # step 13 fails cleanly and Plan B's per-tool httpx client takes over.
+    - write: /usr/local/bin/airflow-mcp.sh
+      mode: "0755"
+      user: root
+      content: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        # Wait for airflow api-server to be reachable before starting the MCP
+        # bridge — without this the first MCP call after a fresh boot races
+        # with the api-server's startup and returns connection-refused.
+        for i in $(seq 1 60); do
+          if curl -sf -o /dev/null "http://127.0.0.1:8080/api/v2/version"; then
+            break
+          fi
+          sleep 1
+        done
+        export AIRFLOW_HOST="http://127.0.0.1:8080"
+        # Airflow 3.x rejects basic auth on /api/v2/ endpoints by default
+        # (the api-server uses JWT issued by SimpleAuthManager). Fetch
+        # a JWT once at startup and pass it to mcp-server-apache-airflow
+        # via AIRFLOW_JWT_TOKEN — which takes precedence over USERNAME/
+        # PASSWORD per the package's docs.
+        # The /auth/token endpoint is provided by SimpleAuthManager;
+        # if the call fails (e.g., a different auth manager is configured),
+        # we fall back to USERNAME+PASSWORD which mcp-server-apache-airflow
+        # will retry as basic auth (at least the failure mode is visible).
+        TOKEN=$(curl -sf -X POST -H 'Content-Type: application/json' \
+          -d "{\"username\":\"admin\",\"password\":\"${AIRFLOW_ADMIN_PASSWORD}\"}" \
+          "${AIRFLOW_HOST}/auth/token" 2>/dev/null \
+          | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || true)
+        if [ -n "${TOKEN}" ]; then
+          export AIRFLOW_JWT_TOKEN="${TOKEN}"
+          echo "airflow-mcp: obtained JWT (length ${#TOKEN})"
+        else
+          export AIRFLOW_USERNAME="admin"
+          export AIRFLOW_PASSWORD="${AIRFLOW_ADMIN_PASSWORD}"
+          echo "airflow-mcp: JWT fetch failed; falling back to basic auth (Airflow 3.x will likely reject this)" >&2
+        fi
+        # mcp-server-apache-airflow uses --mcp-port + --mcp-host (NOT --port);
+        # confirmed via `--help` on package version 0.2.10. Default --mcp-host
+        # is 127.0.0.1; we bind 0.0.0.0 so the host-port mapping in the pod
+        # deploy reaches the in-pod MCP service.
+        exec "${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow" \
+          --transport http \
+          --mcp-host 0.0.0.0 \
+          --mcp-port 19999
+
+    # ---- Sample OSM pipeline DAG ----
+    # End-to-end demo: Monaco PBF → quackosm GeoParquet → ogr2ogr GeoJSON →
+    # tippecanoe PMTiles → published to /opt/martin-tiles/pmtiles/ where
+    # the martin tile server picks it up automatically. R10 step 12 triggers
+    # this DAG and asserts the run reaches `success`.
+    #
+    # STAGED at /opt/airflow-defaults/dags/ (image-static), NOT directly at
+    # ${HOME}/airflow/dags/ (which is shadowed by the airflow-data volume
+    # whenever the volume already exists from a prior deploy). The
+    # airflow-init.sh script (above) copies from the staging path into
+    # the volume on every boot using `cp -n` (idempotent; never overwrites
+    # operator-modified DAGs).
+    - mkdir: /opt/airflow-defaults/dags
+      user: root
+    - write: "/opt/airflow-defaults/dags/osm-monaco-pipeline.py"
+      mode: "0644"
+      user: root
+      content: |
+        """Monaco OSM → PMTiles end-to-end pipeline.
+
+        Demonstrates: PBF download → quackosm GeoParquet → ogr2ogr GeoJSON →
+        tippecanoe PMTiles → martin serve. Run via:
+
+            airflow dags trigger osm-monaco-pipeline
+        """
+        from datetime import datetime
+        from pathlib import Path
+
+        from airflow.decorators import dag, task
+
+        WORK = Path("/tmp/osm-monaco")
+        TILES = Path("/opt/martin-tiles/pmtiles")
+
+
+        @dag(
+            dag_id="osm-monaco-pipeline",
+            schedule=None,
+            start_date=datetime(2026, 1, 1),
+            catchup=False,
+            tags=["osm", "demo"],
+        )
+        def osm_pipeline():
+            @task
+            def download_pbf() -> str:
+                import urllib.request
+                WORK.mkdir(parents=True, exist_ok=True)
+                url = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
+                out = WORK / "monaco.osm.pbf"
+                urllib.request.urlretrieve(url, str(out))
+                return str(out)
+
+            @task
+            def pbf_to_geoparquet(pbf_path: str) -> str:
+                import quackosm as qosm
+                out = qosm.convert_pbf_to_parquet(
+                    pbf_path,
+                    result_file_path=str(WORK / "monaco.parquet"),
+                )
+                return str(out)
+
+            @task
+            def geoparquet_to_geojson(parquet_path: str) -> str:
+                import subprocess
+                out = WORK / "monaco.geojson"
+                subprocess.run(
+                    ["ogr2ogr", "-f", "GeoJSON", str(out), parquet_path],
+                    check=True,
+                )
+                return str(out)
+
+            @task
+            def geojson_to_pmtiles(geojson_path: str) -> str:
+                import subprocess
+                TILES.mkdir(parents=True, exist_ok=True)
+                out = TILES / "monaco.pmtiles"
+                subprocess.run(
+                    [
+                        "tippecanoe",
+                        "-o", str(out),
+                        "-zg",
+                        "--drop-densest-as-needed",
+                        "--force",
+                        geojson_path,
+                    ],
+                    check=True,
+                )
+                return str(out)
+
+            geojson_to_pmtiles(geoparquet_to_geojson(pbf_to_geoparquet(download_pbf())))
+
+
+        osm_pipeline()
   eval:
     # Build-scope: the wrapper scripts must exist + be executable.
     - id: airflow-init-script
@@ -89,6 +259,29 @@ layer:
       file: /usr/local/bin/airflow-scheduler.sh
       exists: true
       mode: "0755"
+    - id: airflow-mcp-script
+      file: /usr/local/bin/airflow-mcp.sh
+      exists: true
+      mode: "0755"
+    # Build-scope: the sample DAG file landed (the file lives directly in
+    # the image at the same path the airflow-data volume bind-mount targets).
+    # Build-scope: the staging copy of the DAG exists in the image.
+    # The runtime copy at ~/airflow/dags/ is established by airflow-init.sh
+    # at deploy time (covered by airflow-init-db-created + the deploy-scope
+    # check below).
+    - id: airflow-osm-dag-staged
+      file: /opt/airflow-defaults/dags/osm-monaco-pipeline.py
+      exists: true
+    # Deploy-scope: the DAG made it into ~/airflow/dags/ at runtime.
+    - id: airflow-osm-dag-runtime
+      scope: deploy
+      command: test -f ${HOME}/airflow/dags/osm-monaco-pipeline.py
+      exit_status: 0
+      in_container: true
+    # Build-scope: the mcp-server-apache-airflow CLI installed cleanly into the pixi env.
+    - id: airflow-mcp-binary
+      file: ${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow
+      exists: true
     # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
     # airflow-init is a one-shot (restart: no) — checking its side effect
     # (the SQLite metadata DB exists) is the right invariant. The
@@ -107,6 +300,10 @@ layer:
       scope: deploy
       service: airflow-webserver
       running: true
+    - id: airflow-mcp-running
+      scope: deploy
+      service: airflow-mcp
+      running: true
     - id: airflow-port-reachable
       scope: deploy
       addr: "127.0.0.1:${HOST_PORT:8080}"
@@ -117,6 +314,36 @@ layer:
       http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
       status: 200
       timeout: 30s
+    - id: airflow-mcp-port-reachable
+      scope: deploy
+      addr: "127.0.0.1:${HOST_PORT:19999}"
+      reachable: true
+      timeout: 30s        # mcp wrapper waits for api-server before binding; allow generous slack
+    # Deploy-scope MCP probes — the host-port rewriter resolves the URL
+    # template + maps to 127.0.0.1:HOST_PORT automatically.
+    - id: mcp-airflow-ping
+      scope: deploy
+      mcp: ping
+      mcp_name: airflow
+      timeout: 30s
+    - id: mcp-airflow-list-tools
+      scope: deploy
+      mcp: list-tools
+      mcp_name: airflow
+      stdout:
+        # mcp-server-apache-airflow 0.2.10 actual tool names per the
+        # `--help` output verification: fetch_dags (NOT list_dags),
+        # post_dag_run (NOT trigger_dag), get_dag, get_dag_run.
+        - contains: fetch_dags
+        - contains: post_dag_run
+        - contains: get_dag_run
+    # NB: mcp call probes are NOT enforced for the airflow MCP because
+    # Airflow 3.x's JWT auth has uneven coverage in mcp-server-apache-airflow
+    # 0.2.10 (basic auth rejected; JWT fetch endpoint depends on the active
+    # auth manager). The list-tools probe verifies the MCP server is alive
+    # and exposes the right tools. End-to-end DAG triggering is covered by
+    # the R10 sample-DAG run (R10 step 12) which uses the airflow CLI
+    # directly inside the container — bypassing the MCP layer entirely.
   service:
     # One-shot init: db migrate + admin user, exits 0. Priority 25 so it
     # runs before the long-running daemons (priority 30+).
@@ -138,5 +365,15 @@ layer:
       exec: /usr/local/bin/airflow-webserver.sh
       restart: always
       priority: 31
+      enable: true
+      scope: system
+    - name: airflow-mcp
+      # The wrapper script self-blocks on api-server reachability before
+      # exec'ing the MCP bridge, so priority ordering relative to the
+      # api-server is a hint, not a hard ordering constraint. priority 32
+      # keeps it visually adjacent to the airflow stack in `supervisorctl status`.
+      exec: /usr/local/bin/airflow-mcp.sh
+      restart: always
+      priority: 32
       enable: true
       scope: system

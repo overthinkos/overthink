@@ -466,10 +466,13 @@ deploy:
         disposable: true
         lifecycle: dev
         ports:
-            - 22718:2718
-            - 28080:8080
+            - 22718:2718        # marimo edit + marimo MCP server (/mcp/server)
+            - 28080:8080        # airflow api-server (/api/v2/)
+            - 29999:19999       # airflow-mcp (mcp-server-apache-airflow on /mcp)
+            - 23000:3000        # martin tile server
+            - 28000:8000        # maputnik static editor
         description:
-            feature: R10 bed for marimo-ml — exercises marimo edit, airflow webserver, celery worker against valkey, postgres metadata DB, and the marimo-team/learn curriculum import surface
+            feature: R10 bed for marimo-ml — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface
             tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.

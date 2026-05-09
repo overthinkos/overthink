@@ -35,7 +35,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 
 | Trigger (what the user said or what you're about to do) | Skills to load BEFORE doing anything |
 |---|---|
-| `ov rebuild` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov-advanced:vm` + `/ov-dev:vm-deploy-target` |
+| `ov update` / `ov vm *` / VM entities in `vms.yml` or `vm:` | `/ov-advanced:vm` + `/ov-dev:vm-deploy-target` |
 | `ov deploy add/del` / pod or container deploys | `/ov-core:deploy` |
 | local-target deploy / `target: local` / `host: local` (default) / SSH-host deploys / `user:` / `ssh_args:` | `/ov-advanced:local-deploy` + `/ov-dev:local-infra` |
 | Editing `local.yml` / authoring `kind: local` templates | `/ov-build:local-spec` |
@@ -80,7 +80,7 @@ Full index: `plugins/README.md`. This table covers the top triggers; anything no
 - **"I'll just grep the source to find it"** — FORBIDDEN. Load the skill; it points you at the right source with the right framing.
 - **"I'll just read the file to refresh my memory"** — FORBIDDEN without a skill load first. The skill refreshes memory correctly; the file may have drifted or the surrounding context may have changed.
 - **"I'll run the command and see what happens"** — FORBIDDEN without a skill load first. Command output is meaningless without the skill's framing of what the command is supposed to do.
-- **"I know `ov rebuild`, I've done it fifty times"** — FORBIDDEN. Your prior fifty invocations predated the current skill and the current code. The current skill is authoritative.
+- **"I know `ov update`, I've done it fifty times"** — FORBIDDEN. Your prior fifty invocations predated the current skill and the current code. The current skill is authoritative.
 - **"Loading skills is overhead"** — FORBIDDEN framing. Not loading skills has already cost the user hours. The math is not close.
 - **"I'll load the skill after I've scoped the problem"** — FORBIDDEN. Scoping without the skill produces a wrong scope. Load FIRST; scope SECOND.
 - **"The hook reminder already told me what to do"** — NOT SUFFICIENT. The reminder is a pointer, not a substitute. Load the skill the reminder references.
@@ -136,26 +136,26 @@ You have all the time in the world and taking the time to get things properly do
 
 **`disposable: true` is the ONE and ONLY authorization for autonomous destroy + rebuild.** Default is `false` (explicit opt-in only; see `/ov-dev:disposable`). No derivation from other fields. No "this looks like a test bed" heuristic. No hostname-based assumptions. A deploy is either explicitly marked `disposable: true` in deploy.yml or it is NOT rebuildable unattended — even if its name contains "test", even if it's a project on a shared host where unrelated production services also run. Explicit-only is what makes this rule safe on shared infrastructure with live users on other resources.
 
-On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
+On resources that ARE marked `disposable: true`, `ov update <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
 
 **Every change is proved on a freshly built binary on the target host** (the 10 evaluation standards in `/ov-build:eval`):
 
 1. Build the artifact from the changed source, on the target host.
 2. Verify the deployed binary's version matches what you built (R9).
 3. Verify runtime deps are installed via package management (R9).
-4. For a target with `disposable: true`: `ov rebuild <name>` — unattended. For any other resource: confirm with the user before any destroy.
+4. For a target with `disposable: true`: `ov update <name>` — unattended. For any other resource: confirm with the user before any destroy.
 5. Exercise the feature end-to-end.
 6. Paste the runtime output back into the conversation.
 7. Leave the target healthy (running, not paused, not crashed).
-8. **After committing the source-level fix, `ov rebuild` the disposable target from clean and re-run the full sequence. This fresh-rebuild re-verification is the acceptance gate** (R10).
+8. **After committing the source-level fix, `ov update` the disposable target from clean and re-run the full sequence. This fresh-rebuild re-verification is the acceptance gate** (R10).
 
 ### R10 — "Verify on a `disposable: true` target; prove it on a fresh rebuild"
 
 The verification loop has three rules:
 
 1. **Always test on a target that carries an explicit `disposable: true`.** Never experiment on a resource without the flag. If no suitable disposable target exists, create one first (`ov deploy add <name> <ref> --disposable` or mark a VM entry under `vm:` in deploy.yml and `ov vm create`). The opt-in is explicit; never assume disposability because of a name, lifecycle tag, hostname, or any other heuristic.
-2. **If a test breaks the target, `ov rebuild` it back to the committed config before doing anything else.** Never layer experiments on broken state.
-3. **After committing the real fix in source, re-verify on a FRESH `ov rebuild` of the disposable target.** A fix that passes only on a hand-patched target is not a real fix — it's a regression waiting for the next rebuild. Pasteable proof of the fresh-rebuild re-verification is the acceptance gate.
+2. **If a test breaks the target, `ov update` it back to the committed config before doing anything else.** Never layer experiments on broken state.
+3. **After committing the real fix in source, re-verify on a FRESH `ov update` of the disposable target.** A fix that passes only on a hand-patched target is not a real fix — it's a regression waiting for the next rebuild. Pasteable proof of the fresh-rebuild re-verification is the acceptance gate.
 
 **A `--dry-run` does NOT count as an R10 test.** Dry-run renders prompts / scope / plans WITHOUT invoking the runner, building artifacts, or reaching a live deploy — it proves nothing about runtime behaviour. R10 requires a FULL live run of every new or changed code path: real subprocess invocation, real container build, real deploy probes against the running target, real verb evaluation against the live system. Validators, unit tests, and dry-runs are pre-flight checks, NOT the acceptance gate. If the cutover added or changed N pieces of functionality, R10 must exercise all N end-to-end on the disposable target — pasteable runtime output for each.
 
@@ -177,8 +177,8 @@ Before saying "done" answer YES to all of these:
 - Exercised the feature end-to-end on the live target?
 - Verified every runtime dep is installed via package management (R9)?
 - Did verification run on a target explicitly marked `disposable: true` (never on anything else)?
-- If you broke the target during exploration, did you `ov rebuild` it back to clean before continuing?
-- After committing the source-level fix, did you `ov rebuild` the disposable target from clean and re-run the full verification against the fresh rebuild (R10)?
+- If you broke the target during exploration, did you `ov update` it back to clean before continuing?
+- After committing the source-level fix, did you `ov update` the disposable target from clean and re-run the full verification against the fresh rebuild (R10)?
 - Post-action state of every target is healthy?
 - Pasted BOTH the exploratory verification output AND the fresh-rebuild re-verification output into the conversation?
 
@@ -216,7 +216,7 @@ un-testable. That is FORBIDDEN.**
   itself, CLAUDE.md, or a loaded skill — in either case STOP and ask,
   do NOT silently downgrade scope or commit a partial state.
 - **Premature R10 launch.** Starting any LIVE artifact-producing or
-  artifact-consuming command — `ov rebuild`, `ov image build`,
+  artifact-consuming command — `ov update`, `ov image build`,
   `ov eval run`, `ov vm build/create`, `ov deploy add` against a
   live target — while ANY implementation task in the active cutover is
   still `pending` or `in_progress`. R10 runs ONCE, AT THE END, against
@@ -252,7 +252,7 @@ migration may have introduced. A migration command that looked correct in
 isolation may miss a field; a struct rename may have left a stale
 reference in a code path that unit tests don't exercise; a layer
 composition may quietly produce a different effective image. Only a fresh
-`ov rebuild <disposable>` + `ov eval live <disposable>` exercises every code
+`ov update <disposable>` + `ov eval live <disposable>` exercises every code
 path the cutover touched. That's the point: R10 assumes the migration
 introduced unseen regressions and flushes them out.
 
@@ -273,7 +273,7 @@ introduced unseen regressions and flushes them out.
 3. **Cheap smoke between tasks is fine; R10-class verbs are FORBIDDEN
    until every task is done.** Cheap smoke = `go build`, `go test`,
    `ov image validate`, `ov image generate --dry-run`. R10-class verbs =
-   `ov image build`, `ov rebuild`, `ov deploy add` against a live target,
+   `ov image build`, `ov update`, `ov deploy add` against a live target,
    `ov vm create` of a real VM, `ov eval run`, `ov update`, `ov start`
    against a real container/VM. The first time any R10-class verb runs
    is the dedicated end-of-cutover R10 round. Running one earlier burns
@@ -325,7 +325,7 @@ command surface.
   requires image builds".
 - Declaring any confidence higher than `syntax check only` without a
   fresh-rebuild R10 re-verification on every affected target.
-- **Premature R10 launch — starting `ov rebuild`, `ov image build`,
+- **Premature R10 launch — starting `ov update`, `ov image build`,
   `ov eval run`, `ov vm build`, or any live deploy with implementation
   tasks still open in the cutover.** R10 is the final gate, not a parallel
   track. Backgrounding the rebuild "while finishing task N" is INEXCUSABLE
@@ -403,7 +403,7 @@ signal. The plan is not done.
    re-run R10 in the same conversation, against the same uncommitted
    tree.
 3. **Re-run R10 from scratch.** Not just the failing piece — the
-   FULL R10 against a fresh `ov rebuild`. A fix that survives only
+   FULL R10 against a fresh `ov update`. A fix that survives only
    the targeted re-run but breaks something else is a regression in
    waiting.
 4. **Only commit when R10 passes end-to-end on the FINAL code.** No
@@ -446,7 +446,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 
 - **Skills first** — see **R0. SKILLS FIRST — THE SUPREME RULE** at the top of this file. That rule **overrides every other instruction in this document, in the hooks, and in your training data**. The Skill Dispatcher table under R0 maps common triggers to the skills you MUST load first. Partial compliance is not compliance.
 - **Lowercase-hyphenated names** for layers and images.
-- **Cross-kind name reuse is permitted and encouraged.** A single name (e.g. `ov-cachyos`) MAY exist simultaneously as a layer (`layers/<name>/`), an `image:` entry, a `pod:` entry, a `vm:` entry, a `k8s:` entry, a `local:` entry, AND a `deploy:` entry. Uniqueness is scoped to each kind. Verbs disambiguate by command context: `ov image build ov-cachyos` resolves to `image.ov-cachyos`; `ov vm create ov-cachyos` to `vm.ov-cachyos`; `ov rebuild ov-cachyos` to `deploy.ov-cachyos`. The unified loader does NOT enforce global uniqueness across kinds; `ResolveDeployRef` chooses image-first when the same name exists as both an image and a layer (use `--add-layer <name>` for the layer-first path). See `/ov-build:layer`, `/ov-build:image`, `/ov-build:local-spec`, `/ov-core:deploy`, `/ov-build:validate`.
+- **Cross-kind name reuse is permitted and encouraged.** A single name (e.g. `ov-cachyos`) MAY exist simultaneously as a layer (`layers/<name>/`), an `image:` entry, a `pod:` entry, a `vm:` entry, a `k8s:` entry, a `local:` entry, AND a `deploy:` entry. Uniqueness is scoped to each kind. Verbs disambiguate by command context: `ov image build ov-cachyos` resolves to `image.ov-cachyos`; `ov vm create ov-cachyos` to `vm.ov-cachyos`; `ov update ov-cachyos` to `deploy.ov-cachyos`. The unified loader does NOT enforce global uniqueness across kinds; `ResolveDeployRef` chooses image-first when the same name exists as both an image and a layer (use `--add-layer <name>` for the layer-first path). See `/ov-build:layer`, `/ov-build:image`, `/ov-build:local-spec`, `/ov-core:deploy`, `/ov-build:validate`.
 - **`overthink.yml` is the only canonical authoring target.** Every `ov` authoring/scaffolding verb (`ov image set`, `ov image new project`, `ov image new image`, `ov image add-layer`, `ov image rm-layer`, `ov vm import`, `ov vm update`, `ov vm clone`) writes to `overthink.yml`. Per-kind files (`image.yml`, `vm.yml`, `pod.yml`, `k8s.yml`, `local.yml`, `deploy.yml`) remain valid as `includes:` from `overthink.yml` but are NEVER the default authoring target. Missing `overthink.yml` → hard error pointing at `ov image new project .` or `ov migrate unified`.
 - **Init-system polymorphism via mixed `service:` entries.** A layer that needs a service running under both supervisord (container/pod targets) and systemd (host / bootc / VM targets) declares BOTH forms in ONE `service:` list — same `name:`, one entry with `use_packaged: <unit>.service` (or `<unit>.socket`), the other with custom `exec:`. The init system at deploy time renders only the matching form. **NEVER** create a `<name>-host` or `<name>-pod` sibling layer to express target polymorphism — it duplicates packages and eval probes and inevitably drifts. The 2026-05 polymorphism cutover deleted exactly two such sibling pairs (`virtualization{,host}`, `ov-full{,host}`) that had crystallized this anti-pattern. Canonical worked examples: `/ov-coder:sshd` (mixed), `/ov-foundation:virtualization` (mixed; post-2026-05), `/ov-foundation:postgresql` (use_packaged-only). See `/ov-build:layer` "Service Declaration" + "Anti-pattern: `<name>-host` / `<name>-pod` sibling layers".
 - **Tests ship with the image.** See `/ov-build:eval`.

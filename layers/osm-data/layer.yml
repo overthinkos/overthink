@@ -1,0 +1,143 @@
+layer:
+  name: osm-data
+  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), osmium-tool (PBF inspection/filtering), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server for PMTiles/MBTiles). Designed to compose with the marimo + airflow + quackosm Python stack."
+  requires:
+    - supervisord
+  distros:
+    fedora:
+      packages:
+        # osmium-tool — OSM PBF inspection, filtering, transformation
+        - osmium-tool
+        # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
+        # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
+        - gdal
+        # jq — used by the dynamic-version pmtiles download below to parse
+        # the GitHub release API response. Also useful for inspecting
+        # martin's /catalog endpoint and for pipeline scripts.
+        - jq
+        # Build deps for tippecanoe (which has no Fedora package — felt/
+        # tippecanoe is OSS but ships only source; the build below installs
+        # it). git is also needed for the clone.
+        - git
+        - make
+        - gcc-c++
+        - sqlite-devel
+        - zlib-devel
+  ports:
+    - 3000      # martin tile server HTTP
+  volumes:
+    # Persistent storage for built tiles. The sample airflow DAG writes its
+    # output PMTiles to /opt/martin-tiles/pmtiles/ where martin auto-discovers
+    # them via its source-directory argument.
+    - name: martin-tiles
+      path: /opt/martin-tiles
+  tasks:
+    - mkdir: /opt/martin-tiles
+      user: root
+    - mkdir: /opt/martin-tiles/pmtiles
+      user: root
+
+    # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----
+    # NOT in Fedora repos and upstream (felt/tippecanoe) ships only source —
+    # no GitHub release binaries exist. Build from source in-image. The
+    # build is small (~200 MB git clone, <1 min `make -j`); cleanup keeps
+    # the image lean. Build deps (git/make/gcc-c++/sqlite-devel/zlib-devel)
+    # are declared in distros.fedora.packages above.
+    - cmd: |
+        set -euo pipefail
+        git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
+        cd /tmp/tippecanoe
+        make -j"$(nproc)"
+        make install PREFIX=/usr/local
+        cd /
+        rm -rf /tmp/tippecanoe
+      user: root
+
+    # ---- martin (tile server) ----
+    # Single static Rust binary. The releases/latest/download/ redirect URL
+    # works because martin's asset filenames don't embed the version (only
+    # the target triple). ${BUILD_ARCH} resolves to x86_64 on amd64 builds
+    # at the start of the download RUN (auto-injected by the generator).
+    # If the asset name pattern ever changes upstream, the build will 404
+    # and the URL template here is the single fix point.
+    # NB: musl variant (NOT gnu) — the gnu build hard-depends on
+    # libicuuc.so.74 / libicui18n.so.74 which aren't on Fedora 43
+    # (it ships libicu 77). The musl static build is self-contained.
+    - download: "https://github.com/maplibre/martin/releases/latest/download/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
+      extract: tar.gz
+      to: /usr/local/bin
+      include: [martin]
+      user: root
+
+    # ---- pmtiles CLI (protomaps/go-pmtiles) ----
+    # Asset filenames embed the version (`go-pmtiles_<v>_Linux_x86_64.tar.gz`),
+    # so the releases/latest/download/ static-redirect trick can't reach them.
+    # Resolve the latest tag via the GitHub API, then download + extract +
+    # install in one shell. jq comes from the rpm: list above; curl is
+    # always present in fedora minimal.
+    - cmd: |
+        set -euo pipefail
+        LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
+        VERSION="${LATEST#v}"
+        TMPDIR=$(mktemp -d)
+        cd "$TMPDIR"
+        curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
+          -o pmtiles.tar.gz
+        tar -xzf pmtiles.tar.gz pmtiles
+        install -m 0755 pmtiles /usr/local/bin/pmtiles
+        cd / && rm -rf "$TMPDIR"
+      user: root
+  eval:
+    # Build-scope: every CLI binary present + responds to --version.
+    - id: tippecanoe-installed
+      command: tippecanoe --version
+      exit_status: 0
+    - id: osmium-installed
+      command: osmium --version
+      exit_status: 0
+    - id: gdal-installed
+      command: ogr2ogr --version
+      exit_status: 0
+    - id: jq-installed
+      command: jq --version
+      exit_status: 0
+    - id: martin-installed
+      command: martin --version
+      exit_status: 0
+    - id: pmtiles-installed
+      command: pmtiles version
+      exit_status: 0
+    # Build-scope: martin tile-source dir created.
+    - id: martin-tiles-dir-exists
+      file: /opt/martin-tiles/pmtiles
+      filetype: directory
+      exists: true
+    # Deploy-scope: martin service running + HTTP catalog endpoint responsive.
+    # The catalog is initially empty (no PMTiles published yet); the airflow
+    # DAG populates it. R10 step 9 verifies HTTP 200 here pre-DAG; R10 step 16
+    # re-verifies post-DAG that monaco.pmtiles appears in the catalog.
+    - id: martin-running
+      scope: deploy
+      service: martin
+      running: true
+    - id: martin-port-reachable
+      scope: deploy
+      addr: "127.0.0.1:${HOST_PORT:3000}"
+      reachable: true
+      timeout: 10s
+    - id: martin-http-catalog
+      scope: deploy
+      http: "http://127.0.0.1:${HOST_PORT:3000}/catalog"
+      status: 200
+      timeout: 10s
+  service:
+    - name: martin
+      # martin scans the source directory at startup AND watches for new files.
+      # --listen-addresses 0.0.0.0:3000 binds on all interfaces so the host-side
+      # port-mapping reaches it. Pointing at /opt/martin-tiles/pmtiles publishes
+      # every .pmtiles file in that dir as /<basename>/{z}/{x}/{y}.
+      exec: /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 /opt/martin-tiles/pmtiles
+      restart: always
+      priority: 33
+      enable: true
+      scope: system

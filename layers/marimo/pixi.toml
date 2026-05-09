@@ -1,7 +1,7 @@
 [workspace]
 name = "marimo-environment"
 version = "0.1.0"
-description = "marimo reactive notebooks + lean CUDA ML + marimo-team/learn curriculum + Apache Airflow"
+description = "marimo + Airflow + GPU-accelerated OSM analytics (Polars-GPU/cuDF, quackosm, geopandas) + vector-tile pipeline (tippecanoe → PMTiles → martin) + dual MCP (marimo-as-server, airflow-as-server, marimo-as-client)"
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
@@ -34,7 +34,18 @@ marimo = "*"
 numpy = "*"
 pandas = "*"
 pyarrow = "*"
+
+# === GPU-accelerated DataFrame engine ===
+# cudf-polars-cu13 is the CUDA-13 build of cuDF's Polars executor (RAPIDS
+# 26.4.0 series). Hard-deps: cuda-python<14.0,>=13.0.1 and pylibcudf-cu13
+# (the actual native CUDA-13 backend). It constrains polars to
+# >=1.30,<1.39 itself — uv's resolver picks a compatible polars version
+# automatically. We deliberately do NOT use `polars[gpu]` because that
+# extra pulls cudf-polars-cu12, which would conflict with our cu13 stack.
+# Direct alignment with the cu130 torch wheels below — no forward-compat
+# gamble, no fallback path needed.
 polars = "*"
+cudf-polars-cu13 = "*"
 
 # === Statistics / scientific (learn: probability, optimization, polars) ===
 scipy = "*"
@@ -86,6 +97,32 @@ simpy = "*"
 # default marimo-ml deployment. Add provider extras back if composing
 # with layers/postgresql + layers/valkey for multi-node.
 apache-airflow = "*"
+
+# === MCP server for Apache Airflow + general MCP framework ===
+# Plan A: mcp-server-apache-airflow wraps the Airflow REST API as MCP tools.
+# It documents only /api/v1/; Airflow 3.x serves /api/v2/, so R10 step 13
+# may reveal incompatibility. Plan B (planned in same atomic commit) is a
+# small fastmcp wrapper around /api/v2/ — that's why fastmcp is also
+# explicit here even though it's typically a transitive dep.
+mcp-server-apache-airflow = "*"
+fastmcp = "*"
+
+# === Geospatial stack — OSM ingestion, vector-tile pipeline, mapping ===
+# QuackOSM converts PBF → GeoParquet via DuckDB Spatial (no GDAL needed for
+# the ingest path). geoparquet-io adds cloud-storage I/O ergonomics. The
+# rendering stack (folium, contextily) covers the marimo notebook viz.
+geopandas = "*"
+shapely = "*"
+fiona = "*"
+pyproj = "*"
+quackosm = "*"
+geoparquet-io = "*"
+pmtiles = "*"           # Python bindings for PMTiles inspection
+h3 = "*"                # Uber's hexagonal spatial index
+mercantile = "*"        # tile/zoom math
+folium = "*"            # Leaflet-style mapping for marimo notebooks
+contextily = "*"        # basemap fetching
+mapclassify = "*"       # choropleth classification
 
 [environments]
 default = { features = [], solve-group = "default" }

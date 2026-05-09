@@ -460,8 +460,15 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// SecretNames is passed as the defense-in-depth list that
 	// saveDeployState uses to scrub any plaintext credential that slipped
 	// through the Run() pipeline — see deploy.go:saveDeployState docstring.
+	// Ports: write only when the operator passed --port flags this run.
+	// Without SetPorts gating, `ov config <name>` (no flags) would
+	// silently overwrite operator port overrides with the merged
+	// `meta.Ports` value, since `ports` is computed from image labels
+	// merged with deploy.yml — an idempotent recompute, not an explicit
+	// operator decision to set ports.
 	saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
 		Ports:       ports,
+		SetPorts:    len(c.Port) > 0,
 		Env:         c.Env,
 		CleanEnv:    c.Clean,
 		EnvFile:     quadletEnvFile,

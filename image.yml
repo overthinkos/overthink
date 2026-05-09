@@ -614,13 +614,18 @@ image:
             - linux/amd64
         layers:
             - agent-forwarding
-            - marimo
-            - airflow
+            - marimo            # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
+            - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
+            - osm-data          # tippecanoe + osmium + gdal + martin (PMTiles tile server) + pmtiles CLI
+            - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
             - dbus
             - ov
         ports:
-            - 2718:2718        # marimo edit
-            - 28080:8080       # airflow api-server (host 8080 taken by traefik)
+            - 2718:2718         # marimo edit + marimo MCP server (/mcp/server)
+            - 28080:8080        # airflow api-server (host 8080 taken by traefik)
+            - 19999:19999       # airflow-mcp (deploy.yml overrides host port to 29999)
+            - 3000:3000         # martin tile server (deploy.yml overrides host port to 23000)
+            - 8000:8000         # maputnik static editor (deploy.yml overrides host port to 28000)
     nvidia:
         base: fedora-nonfree
         platforms:

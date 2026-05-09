@@ -146,7 +146,14 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		if err != nil {
 			return err
 		}
-		saveDeployState(c.Image, c.Instance, SaveDeployStateInput{Ports: ports})
+		// SetPorts: true because this branch only runs when len(c.Port)>0
+		// (operator explicitly passed --port flags via ov start). Per
+		// the 2026-05-09 SaveDeployStateInput.SetPorts contract, ports
+		// are written ONLY on explicit operator opt-in.
+		saveDeployState(c.Image, c.Instance, SaveDeployStateInput{
+			Ports:    ports,
+			SetPorts: true,
+		})
 	}
 
 	// Pre-flight port conflict check

@@ -1560,7 +1560,18 @@ func envKey(entry string) string {
 
 // SaveDeployStateInput holds the deployment parameters to persist.
 type SaveDeployStateInput struct {
-	Ports    []string
+	Ports []string
+	// SetPorts gates whether Ports is written to deploy.yml at all.
+	// Added 2026-05-09 in the rebuild→update cutover so `ov config <name>`
+	// (without --port flags) and `ov update <name>` no longer silently
+	// overwrite operator port overrides with image-label defaults. The
+	// pre-cutover behavior — "write Ports whenever input.Ports != nil" —
+	// turned every config-recompute into a port-state reset because the
+	// caller always computed ports from `meta.Ports` (image-label
+	// defaults pre-merged with deploy.yml). With SetPorts, the caller
+	// explicitly opts in to writing only when the operator passed
+	// `--port` flags. Same idiom as SetDisposable/SetLifecycle below.
+	SetPorts bool
 	Env      []string
 	CleanEnv bool // true = replace env list; false = merge (upsert by key)
 	EnvFile  string
@@ -1611,7 +1622,11 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if input.Volumes != nil {
 		entry.Volumes = input.Volumes
 	}
-	if input.Ports != nil {
+	// Ports gated on SetPorts: explicit opt-in required so a recompute
+	// path that always-passes computed `meta.Ports` doesn't silently
+	// overwrite operator overrides. See SaveDeployStateInput.SetPorts
+	// docstring and the 2026-05-09 rebuild→update cutover.
+	if input.SetPorts && input.Ports != nil {
 		entry.Ports = input.Ports
 	}
 	// Defensive scrub: drop credential-backed env vars from both input and

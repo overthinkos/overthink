@@ -52,7 +52,6 @@ type CLI struct {
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
 	Migrate     MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
-	Rebuild     RebuildCmd      `cmd:"" help:"Destroy + rebuild + restart a resource marked disposable: true (autonomous; refuses non-disposable targets)"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
 	Restart     RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
 	Secrets     SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
@@ -742,6 +741,13 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	// Stale-binary guardrail: if cwd is inside an overthink source tree
+	// AND the source tree has .go files newer than this binary, abort
+	// with a clear error pointing at `task build:ov`. See
+	// CheckBinaryFreshness for the full rationale (CLAUDE.md R9 +
+	// the 2026-05-09 cuda-cudnn cache-mount incident).
+	CheckBinaryFreshness(ctx.Command())
 
 	// Cleanup hygiene: install a global signal handler so that registered
 	// temp-file paths are removed on SIGTERM/SIGINT/SIGHUP, and sweep any

@@ -58,9 +58,24 @@ func (c *LogsCmd) Run() error {
 	return nil
 }
 
-// UpdateCmd updates an image and restarts the service if active
+// UpdateCmd updates an image (pulls/builds the latest), preserves the
+// existing deploy config (user-overlay state untouched), and restarts
+// the service to pick up the new image.
+//
+// As of the 2026-05-09 rebuild→update cutover, this verb absorbs the
+// destroy-free responsibilities of the deleted `ov rebuild`. The first
+// arg accepts EITHER a deploy name (looked up in deploy.yml — VM/local/
+// pod targets all dispatch from here) OR a bare image name (existing
+// behavior, for direct image updates not tied to a deploy).
+//
+// Key semantic distinction from the deleted `ov rebuild`: this verb
+// NEVER calls `ov deploy add` to regenerate the user-overlay deploy
+// entry. User-overlay configuration (port overrides, volume bindings,
+// env, tunnel) is preserved across updates. Per the user's directive:
+// "Any config changes should be done via ov config only" — this verb
+// updates ARTIFACTS, ov config updates CONFIG.
 type UpdateCmd struct {
-	Image     string `arg:"" help:"Image name or remote ref (github.com/org/repo/image[@version])"`
+	Image     string `arg:"" help:"Deploy name (resolved via deploy.yml) OR image name. For deploys, the target's update strategy is auto-selected (pod=systemctl restart with new image; vm=in-guest layer re-apply; local=idempotent re-apply)."`
 	Tag       string `long:"tag" help:"Image CalVer tag (empty = newest local CalVer resolved via the org.overthinkos.version OCI label)"`
 	Build     bool   `long:"build" help:"Force local build instead of pulling from registry"`
 	Instance  string `short:"i" long:"instance" help:"Instance name for running multiple containers of the same image"`
@@ -81,78 +96,20 @@ var updateCmdBuildFn = func(image, tag string) error {
 	return bc.Run()
 }
 
+// Run dispatches `ov update <name>` to the target-specific update
+// helper. The argument MUST resolve to a deploy entry in deploy.yml
+// (project + user-overlay merged). There is NO legacy fall-through to
+// "treat the argument as an image name" — to refresh an image artifact
+// without restarting any deploy, use `ov image pull <name>`.
+//
+// Per the 2026-05-09 rebuild→update cutover + the "ruthless cleanup"
+// follow-up: ZERO duplicate code paths, ZERO silent fallbacks. Every
+// branch fails fast with an actionable error message.
 func (c *UpdateCmd) Run() error {
-	// Remote refs (@github.com/...) are handled exclusively by `ov image pull`.
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
-		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov update <image-name>'", c.Image)
+		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first", c.Image)
 	}
-
-	// Defect E fix: honor --build for LOCAL images too. Previously this flag
-	// was only threaded through the runRemoteUpdate path; local images
-	// silently no-op'd because EnsureImage returned early when the image
-	// existed locally, regardless of staleness.
-	if c.Build {
-		if err := updateCmdBuildFn(c.Image, c.Tag); err != nil {
-			return fmt.Errorf("building %s: %w", c.Image, err)
-		}
-	}
-
-	rt, err := ResolveRuntime()
-	if err != nil {
-		return err
-	}
-
-	// Resolve per-image engine from deploy.yml
-	runEngine := ResolveImageEngineForDeploy(c.Image, c.Instance, rt.RunEngine)
-
-	// Resolve image ref from labels (no image.yml dependency)
-	imageRef := fmt.Sprintf("%s:%s", c.Image, c.Tag)
-	meta, metaErr := ExtractMetadata(runEngine, imageRef)
-	if metaErr == nil && meta != nil && meta.Registry != "" {
-		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
-	}
-
-	if rt.RunMode == "quadlet" {
-		podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
-		if err := EnsureImage(imageRef, podmanRT); err != nil {
-			return err
-		}
-
-		// Sync data from new image into bind-backed volumes (merge mode)
-		if c.Seed {
-			c.syncData(runEngine, imageRef, meta, rt)
-		}
-
-		svc := serviceNameInstance(c.Image, c.Instance)
-		check := exec.Command("systemctl", "--user", "is-active", svc)
-		if err := check.Run(); err == nil {
-			fmt.Fprintf(os.Stderr, "Restarting %s\n", svc)
-			restart := exec.Command("systemctl", "--user", "restart", svc)
-			restart.Stdout = os.Stdout
-			restart.Stderr = os.Stderr
-			if err := restart.Run(); err != nil {
-				return fmt.Errorf("restarting %s: %w", svc, err)
-			}
-			fmt.Fprintf(os.Stderr, "Restarted %s\n", svc)
-		} else {
-			fmt.Fprintf(os.Stderr, "Service %s is not active, skipping restart\n", svc)
-		}
-		return nil
-	}
-
-	// Direct mode
-	imageRT := ImageRuntime(rt, runEngine)
-	if err := EnsureImage(imageRef, imageRT); err != nil {
-		return err
-	}
-
-	// Sync data in direct mode too
-	if c.Seed {
-		c.syncData(runEngine, imageRef, meta, rt)
-	}
-
-	fmt.Fprintf(os.Stderr, "Image updated. Restart with: ov stop %s && ov start %s\n", c.Image, c.Image)
-	return nil
+	return c.dispatchByDeployTarget()
 }
 
 // syncData merges data from the (new) image into bind-backed volumes.

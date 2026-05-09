@@ -327,14 +327,17 @@ func (c *EvalKindCmd) runOne(exe, kind string, spec bedSpec) (*kindResult, error
 		}
 	}
 
-	// Step 5: fresh-rebuild re-verify (the R10 acceptance gate).
-	// Suppressed by --no-rebuild for fast smoke runs that exercise
-	// the dispatcher itself without paying the full rebuild cost.
+	// Step 5: fresh-update re-verify (the R10 acceptance gate, post
+	// 2026-05-09 rebuild→update cutover). Suppressed by --no-rebuild
+	// for fast smoke runs that exercise the dispatcher itself without
+	// paying the full update cost. The flag name stays --no-rebuild
+	// for backward CLI compatibility; semantically it now means
+	// "skip the final ov update re-verification step".
 	if !c.NoRebuild {
-		if err := step("rebuild", []string{"rebuild", spec.Bed}); err != nil {
+		if err := step("update", []string{"update", spec.Bed}); err != nil {
 			c.writeSummary(logDir, res)
 			cleanup()
-			return res, fmt.Errorf("rebuild %s: %w", spec.Bed, err)
+			return res, fmt.Errorf("update %s: %w", spec.Bed, err)
 		}
 	}
 

@@ -22,8 +22,8 @@ The four "power-user" images that carry the full `ov` toolchain —
 `fedora-coder`, `fedora-ov`, `arch-ov`, `githubrunner` — all run as
 uid=1000 with passwordless sudo (via the `sshd` layer's
 `/etc/sudoers.d/ov-user` drop-in). Four cross-distro "coder" images —
-`/ov-images:fedora-coder`, `/ov-images:arch-coder`,
-`/ov-images:debian-coder`, `/ov-images:ubuntu-coder` — share the
+`/ov-selkies:fedora-coder`, `/ov-selkies:arch-coder`,
+`/ov-selkies:debian-coder`, `/ov-selkies:ubuntu-coder` — share the
 identical ~30 layers and 80-line test block, differing only in each
 layer's package-format section (`rpm:` / `pac:` / `deb:`) and the
 resolved uid-1000 user (`user` via create mode on fedora/arch/debian;
@@ -33,16 +33,16 @@ rootless libvirt VMs work with zero additive capabilities via the
 surgical `unmask=/proc/*` security_opt from the `container-nesting`
 layer. Historic `uid: 0` / `cap_add: [ALL]` postures were dropped in
 2026-04 once the kernel-level RCA was complete. See
-`/ov-layers:container-nesting` for the `mount_too_revealing()` RCA and
-`/ov-images:fedora-coder` (32-layer kitchen sink) or
-`/ov-images:selkies-desktop-ov` (streaming-desktop variant) for
+`/ov-foundation:container-nesting` for the `mount_too_revealing()` RCA and
+`/ov-selkies:fedora-coder` (32-layer kitchen sink) or
+`/ov-selkies:selkies-desktop-ov` (streaming-desktop variant) for
 canonical compositions.
 
 ### Sandboxed AI Desktops
 
 One of Overthink's design goals is running sandboxed [OpenClaw](https://github.com/overthinkos/openclaw) systems. The approach flips the usual AI sandboxing model: instead of restricting what the AI agent can do, Overthink gives it full access to a complete desktop environment — Chrome, a Wayland compositor, development tools, network services — and sandboxes the entire desktop inside a container managed by `ov`. The AI agent operates freely within its environment while the host stays fully isolated. This is how images like `openclaw-sway-browser` and `openclaw-ollama-sway-browser` work: a full AI workstation with no host compromise.
 
-`/ov-images:selkies-desktop-ov` takes this a step further: the sandboxed streaming desktop itself carries the full `ov` toolchain, so the AI (or the user) can build images, launch nested rootless pods, and create libvirt VMs from a terminal inside the browser-accessible desktop — all at uid 1000 with no `--privileged` and no added capabilities. The rootless-in-rootless recipe (kernel `mount_too_revealing()` RCA, surgical `unmask=/proc/*`, `virtqemud` session daemon) is documented in `/ov-layers:container-nesting` and `/ov-layers:virtualization`.
+`/ov-selkies:selkies-desktop-ov` takes this a step further: the sandboxed streaming desktop itself carries the full `ov` toolchain, so the AI (or the user) can build images, launch nested rootless pods, and create libvirt VMs from a terminal inside the browser-accessible desktop — all at uid 1000 with no `--privileged` and no added capabilities. The rootless-in-rootless recipe (kernel `mount_too_revealing()` RCA, surgical `unmask=/proc/*`, `virtqemud` session daemon) is documented in `/ov-foundation:container-nesting` and `/ov-foundation:virtualization`.
 
 ### AI Agent Integration
 
@@ -89,21 +89,21 @@ discover:
   - "@github.com/team/private/layers"   # remote repo (any ref form)
 ```
 
-Each `layer.yml` uses a strict kind-keyed wrapper (`layer: {...}`); flat-form files are rejected at parse time. Projects predating this format convert in one shot with `ov migrate unified --rewrite-layers` — the command is idempotent and auto-invoked on remote-cache fetches so external repos pull through cleanly. See `/ov:migrate` and `/ov:layer`.
+Each `layer.yml` uses a strict kind-keyed wrapper (`layer: {...}`); flat-form files are rejected at parse time. Projects predating this format convert in one shot with `ov migrate unified --rewrite-layers` — the command is idempotent and auto-invoked on remote-cache fetches so external repos pull through cleanly. See `/ov-build:migrate` and `/ov-build:layer`.
 
 ### Building Layers: Package Managers & Config Files
 
 Each layer lives in its own directory under `layers/` and can use any combination of these files:
 
 - **`layer.yml`** — The layer's manifest: system packages with tag-based dispatch (`rpm:` for Fedora/RHEL, `deb:` for Debian/Ubuntu, `pac:` for Arch Linux, `aur:` for AUR, plus distro/version tags like `fedora:`, `fedora:43:`), dependencies on other layers, environment variables, cross-container env injection (`env_provides`), MCP server discovery (`mcp_provides`), dependency declarations (`env_requires`/`env_accepts`, `mcp_requires`/`mcp_accepts`), ports, services, volumes, routes, metadata (`version`, `status`, `info`), layer-local build variables (`vars:` for `${VAR}` substitution), and the `tasks:` install list.
-- **`tasks:` inside `layer.yml`** — Ordered install operations. Eight verbs: `cmd` (shell), `mkdir`, `copy` (layer-dir file → container), `write` (inline content → container — no shell heredoc), `link` (symlink), `download` (curl + extract, supports `strip_components: N` for tarballs nested under a top-level arch/version dir — new 2026-04), `setcap` (file capabilities), `build` (explicit pixi/npm/cargo placement). Each task carries a `user:` field (`root` / `${USER}` / literal username / `uid:gid`). Strict author-controlled ordering. YAML anchors + `${VAR}` substitution for DRY. See `/ov:layer` for the full verb catalog.
+- **`tasks:` inside `layer.yml`** — Ordered install operations. Eight verbs: `cmd` (shell), `mkdir`, `copy` (layer-dir file → container), `write` (inline content → container — no shell heredoc), `link` (symlink), `download` (curl + extract, supports `strip_components: N` for tarballs nested under a top-level arch/version dir — new 2026-04), `setcap` (file capabilities), `build` (explicit pixi/npm/cargo placement). Each task carries a `user:` field (`root` / `${USER}` / literal username / `uid:gid`). Strict author-controlled ordering. YAML anchors + `${VAR}` substitution for DRY. See `/ov-build:layer` for the full verb catalog.
 - **`pixi.toml`** / **`pyproject.toml`** / **`environment.yml`** — Python and conda packages via the Pixi package manager (multi-stage build, runs as user).
 - **`package.json`** — npm packages for Node.js (multi-stage build, runs as user).
 - **`Cargo.toml`** + **`src/`** — Rust crate compilation (multi-stage build, runs as user).
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
-The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a `build:` entry (commonly split out to `build.yml` and pulled in via `overthink.yml includes:`). Three top-level sections (`distro:`, `builder:`, `init:`), one loader. See `/ov:build` for the full layout.
+The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a `build:` entry (commonly split out to `build.yml` and pulled in via `overthink.yml includes:`). Three top-level sections (`distro:`, `builder:`, `init:`), one loader. See `/ov-build:build` for the full layout.
 
 ### Multi-Distro Support: `distro:` and `build:`
 
@@ -129,7 +129,7 @@ These fields flow through to `layer.yml`:
 
 This means `fedora-ov` and `arch-ov` share the exact same layer list — only the package sets (and rarely, a few shell-guarded tasks) differ per distro. The same applies to the four cross-distro coder images (`fedora-coder` / `arch-coder` / `debian-coder` / `ubuntu-coder`) which share ~30 layers and an identical 80-line test block.
 
-**Tag sections support full install surface (2026-04)** — distro-version tag sections (`debian:13:`, `ubuntu:24.04:`, `fedora:43:`) can carry `repos:`, `keys:`, `options:`, and `packages:`, not just packages. Useful when upstream apt-repo URLs differ per codename (Docker CE, Kubernetes). See `/ov:layer`.
+**Tag sections support full install surface (2026-04)** — distro-version tag sections (`debian:13:`, `ubuntu:24.04:`, `fedora:43:`) can carry `repos:`, `keys:`, `options:`, and `packages:`, not just packages. Useful when upstream apt-repo URLs differ per codename (Docker CE, Kubernetes). See `/ov-build:layer`.
 
 #### user_policy: adopt vs create
 
@@ -141,9 +141,9 @@ Base images differ in whether they ship a pre-existing uid-1000 account. Ubuntu 
 | `adopt` | Always adopt. Hard-errors without a declaration. |
 | `create` | Always create via `useradd`. |
 
-So `ubuntu-coder` runs as `ubuntu:/home/ubuntu` (adopt) while `debian-coder`, `fedora-coder`, `arch-coder` run as `user:/home/user` (create) — zero image-level diff, zero layer-level special cases. Layers that need to reference the uid-1000 account by name use `getent passwd 1000` discovery (see `/ov-layers:sshd`) rather than hardcoding a literal.
+So `ubuntu-coder` runs as `ubuntu:/home/ubuntu` (adopt) while `debian-coder`, `fedora-coder`, `arch-coder` run as `user:/home/user` (create) — zero image-level diff, zero layer-level special cases. Layers that need to reference the uid-1000 account by name use `getent passwd 1000` discovery (see `/ov-foundation:sshd`) rather than hardcoding a literal.
 
-See `/ov:image` "user_policy" and `/ov:build` "base_user:" for the full reference and decision matrix.
+See `/ov-build:image` "user_policy" and `/ov-build:build` "base_user:" for the full reference and decision matrix.
 
 ### Two deploy targets: containers and the host
 
@@ -163,7 +163,7 @@ ov deploy add host fedora-coder --add-layer ./private-overlay.yml
 ov deploy del host --yes
 ```
 
-Everything installed is recorded in a ledger at `~/.config/overthink/installed/` (per-layer JSON with deploy-refcount), so `ov deploy del host` reverses the exact operations that ran. Opt-in gates (`--with-services`, `--allow-repo-changes`, `--allow-root-tasks`) make intent explicit for side-effects that mutate global host state. See `/ov:host-deploy` for the full executor model, ledger layout, and the 15 ReverseOp kinds.
+Everything installed is recorded in a ledger at `~/.config/overthink/installed/` (per-layer JSON with deploy-refcount), so `ov deploy del host` reverses the exact operations that ran. Opt-in gates (`--with-services`, `--allow-repo-changes`, `--allow-root-tasks`) make intent explicit for side-effects that mutate global host state. See `/ov-advanced:local-deploy` for the full executor model, ledger layout, and the 15 ReverseOp kinds.
 
 Layer overlays work on both targets: `ov deploy add my-dev fedora-coder --add-layer team-extras` synthesizes an overlay Containerfile and deploys the overlay image; `ov deploy add host fedora-coder --add-layer team-extras` merges the extra layers into the host-target plan. Same `add_layers:` field in `deploy.yml` drives both.
 
@@ -173,25 +173,25 @@ Docker is the container tool most people know. Podman is a newer alternative fro
 
 ### Init Systems: Generic, Configurable, Extensible
 
-**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares a `service:` list in `layer.yml` (unified structured schema — 22 fields per entry including `kind: eventlistener` for supervisord circuit breakers like chrome's 3-strike crash detector — see `/ov:layer` and `/ov-layers:chrome`), `ov` renders it through the init-system's `service_schema` in `build.yml` (supervisord INI or systemd unit file, depending on the target init) and bundles the result into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
+**Inside containers**, Overthink uses an **init system** to manage services. The default is **supervisord** — a lightweight process manager. When a layer declares a `service:` list in `layer.yml` (unified structured schema — 22 fields per entry including `kind: eventlistener` for supervisord circuit breakers like chrome's 3-strike crash detector — see `/ov-build:layer` and `/ov-selkies:chrome`), `ov` renders it through the init-system's `service_schema` in `build.yml` (supervisord INI or systemd unit file, depending on the target init) and bundles the result into the image. The container starts supervisord as its main process, and supervisord starts and monitors all your services. This is how you get PostgreSQL, Traefik, and your application all running in one container. Images without init system services (like `fedora-ov`) use `sleep infinity` as the container entrypoint instead — keeping the container alive for `ov shell` to exec into.
 
-**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated. When you use `ov deploy add host` to apply layers directly (no container), the same `services:` entries are rendered as systemd units on the host's `systemd` — user-scope at `~/.config/systemd/user/` or system-scope at `/etc/systemd/system/` depending on `scope:`.
+**On the host**, Overthink uses **systemd** — the init system that already manages your Linux machine. When you run `ov config`, it generates a Podman quadlet that registers your container as a systemd service, provisions secrets, and mounts any encrypted volumes — all in one step. So systemd manages the container, and the configured init system (or `sleep infinity`) manages what runs inside it. Two levels, cleanly separated. When you use `ov deploy add host` to apply layers directly (no container), the same `service:` entries are rendered as systemd units on the host's `systemd` — user-scope at `~/.config/systemd/user/` or system-scope at `/etc/systemd/system/` depending on `scope:`.
 
-**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers declare services via the same unified `services:` list; entries with `use_packaged: <unit>` reuse the distro-shipped unit (e.g., `sshd.service` from openssh-server) with optional drop-in overrides, while custom entries become new `.service` files. No supervisord needed because it's a real operating system, not a container.
+**In bootc VM images**, systemd takes over completely — it's PID 1 at the OS level. Layers declare services via the same unified `service:` list; entries with `use_packaged: <unit>` reuse the distro-shipped unit (e.g., `sshd.service` from openssh-server) with optional drop-in overrides, while custom entries become new `.service` files. No supervisord needed because it's a real operating system, not a container.
 
 **Adding new init systems** (like s6-linux-init, runit, or dinit) requires only editing the `init:` section of `build.yml` — zero Go code changes. Each init system declares detection rules, fragment templates, entrypoint commands, and service management commands in YAML.
 
 ### Declarative Testing
 
-Images and deployments come with inline checks. A `tests:` block on any `layer:`, `image:`, or `deploy.yml` entry authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.eval` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov eval image <image>` runs build-scope checks against a disposable container; `ov eval live <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
+Images and deployments come with inline checks. A `eval:` block on any `layer:`, `image:`, or `deploy.yml` entry authors goss-style declarative checks — files, packages, ports, processes, HTTP endpoints, DNS, mounts, services, kernel params, and more. Checks bake into a three-section OCI label (`org.overthinkos.eval` → `{layer, image, deploy}`) so any pulled image is self-testable without its source repo. `ov eval image <image>` runs build-scope checks against a disposable container; `ov eval live <image>` runs all three sections against a live service, substituting deploy-time variables (`${HOST_PORT:N}`, `${VOLUME_PATH:name}`, `${CONTAINER_IP}`, `${ENV_*}`) so a check written once survives `deploy.yml` port remaps and volume rebindings. Local `deploy.yml` can add or override baked checks by `id:`.
 
-Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov:eval`).
+Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov-build:eval`).
 
-`ov eval` is also the parent router for live-container drive verbs: `ov eval cdp` (Chrome DevTools), `ov eval wl` (Wayland), `ov eval dbus` (D-Bus / notifications), `ov eval vnc` (VNC), `ov eval mcp` (Model Context Protocol clients) — see `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `tests:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
+`ov eval` is also the parent router for live-container drive verbs: `ov eval cdp` (Chrome DevTools), `ov eval wl` (Wayland), `ov eval dbus` (D-Bus / notifications), `ov eval vnc` (VNC), `ov eval mcp` (Model Context Protocol clients) — see `/ov-advanced:cdp`, `/ov-advanced:wl`, `/ov-advanced:dbus`, `/ov-advanced:vnc`, `/ov-build:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `eval:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
 
 Running images ship comprehensive coverage: `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92), `selkies-desktop-ov` (91 image-scope · 118 live-service). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov eval mcp` verb. `selkies-desktop-ov` adds extra gates for the nested-podman recipe: its live-service run (`ov eval live selkies-desktop-ov`) verifies nested `podman run quay.io/libpod/alpine:latest`, `virsh -c qemu:///session` domcapabilities, KVM hardware acceleration, and in-container `ov version` / `ov doctor`. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
 
-See `/ov:eval` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
+See `/ov-build:eval` for the verb catalog, matcher forms, runtime variable table, gold-standard pattern (`layers/redis/layer.yml`), 10 authoring gotchas, and deploy.yml overlay rules.
 
 ### Quadlets: Containers as System Services
 
@@ -203,9 +203,9 @@ Normally a container runs *inside* an operating system. Bootc flips this: the co
 
 ### Containers That Become Virtual Machines
 
-This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once as an `image:` entry in `overthink.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-images:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov:vm` for VM lifecycle + bootc-specific build caveats.
+This is where it all comes together. Take a bootc-based image, and `ov vm build` converts it into a QCOW2 or raw disk image. `ov vm create` sets up a libvirt/QEMU virtual machine from that disk — same layers, same composition, but now a full VM with its own kernel, SSH access, GPU passthrough, and persistent storage. Define it once as an `image:` entry in `overthink.yml`, use it everywhere. `selkies-desktop-bootc` is the canonical worked example: a Fedora 43 bootc VM that boots straight into a browser-streamed desktop with Tailscale and KeePassXC. See `/ov-selkies:selkies-desktop-bootc` for the full composition, known caveats, and verification recipes; `/ov-advanced:vm` for VM lifecycle + bootc-specific build caveats.
 
-VM creation also works **rootless** via `qemu:///session` and a supervisord-managed `virtqemud` daemon, so `ov vm create` runs from inside a rootless container (e.g., `/ov-images:selkies-desktop-ov`) as uid 1000 with only `/dev/kvm` passthrough — no root, no `--privileged`, no `CAP_SYS_ADMIN`. See `/ov-layers:virtualization` for the supervisord program definitions and the session-mode setup.
+VM creation also works **rootless** via `qemu:///session` and a supervisord-managed `virtqemud` daemon, so `ov vm create` runs from inside a rootless container (e.g., `/ov-selkies:selkies-desktop-ov`) as uid 1000 with only `/dev/kvm` passthrough — no root, no `--privileged`, no `CAP_SYS_ADMIN`. See `/ov-foundation:virtualization` for the supervisord program definitions and the session-mode setup.
 
 ### VMs: `kind: vm` entities in `vms.yml`
 
@@ -237,7 +237,7 @@ vms:
     ram: 8G
 ```
 
-The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fields are **removed** from `kind: image` entries in the hard cutover. Projects predating this schema convert in one shot with `ov migrate vm-spec` — idempotent, preserves any hand-authored `vms:` keys. See `/ov:migrate` for the command and `/ov-dev:cutover-policy` for the policy.
+The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fields are **removed** from `kind: image` entries in the hard cutover. Projects predating this schema convert in one shot with `ov migrate vm-spec` — idempotent, preserves any hand-authored `vms:` keys. See `/ov-build:migrate` for the command and `/ov-dev:cutover-policy` for the policy.
 
 `ov deploy add vm:<name> <ref>` applies host-deploy-style layer recipes **inside** a provisioned VM over SSH. The same `InstallPlan` IR drives container, host, VM, and K8s deploys — write a layer once, deploy it anywhere. See `/ov-dev:vm-deploy-target` for the SSH-executor model and `/ov-vms:vms` for the full authoring reference.
 
@@ -249,7 +249,7 @@ ov deploy add vm:arch fedora-coder \           # apply kitchen-sink layers in th
 ov deploy del vm:arch                          # reverse applied layers; VM stays up
 ```
 
-See `/ov-vms:arch` for the canonical cloud_image VM with BIOS-firmware + virtio-gpu + resource-sizing RCA write-up, and `/ov-vms:selkies-desktop-bootc-bootc` (+ paired `/ov-images:selkies-desktop-bootc`) for the canonical bootc VM.
+See `/ov-vms:arch` for the canonical cloud_image VM with BIOS-firmware + virtio-gpu + resource-sizing RCA write-up, and `/ov-vms:selkies-desktop-bootc-bootc` (+ paired `/ov-selkies:selkies-desktop-bootc`) for the canonical bootc VM.
 
 ## Install
 
@@ -259,7 +259,7 @@ See `/ov-vms:arch` for the canonical cloud_image VM with BIOS-firmware + virtio-
 go install github.com/overthinkos/overthink/ov@latest
 ```
 
-This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `overthink.yml` and a `layers/` directory. Legacy `image.yml`/`build.yml`/flat-form `layer.yml` projects convert in one shot with `ov migrate unified --rewrite-layers` (see `/ov:migrate`).
+This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `overthink.yml` and a `layers/` directory. Legacy `image.yml`/`build.yml`/flat-form `layer.yml` projects convert in one shot with `ov migrate unified --rewrite-layers` (see `/ov-build:migrate`).
 
 **Full project bootstrap** (to build images from this repo):
 
@@ -299,7 +299,7 @@ cd ov && go build -o ../bin/ov .
 
 Project-level secrets (API keys, credentials) are stored in `.secrets` — a GPG-encrypted file that `ov secrets gpg env` decrypts in memory when direnv loads the directory. No plaintext on disk. Requires a GPG key + gpg-agent (locally or SSH-forwarded), direnv hooked into your shell, and a one-time `direnv allow`. After that, `cd`ing into the project auto-decrypts `.secrets` and exports the variables via `.envrc`'s `eval "$(ov secrets gpg env)"`.
 
-Manage `.secrets` with `ov secrets gpg {env, show, set, unset, edit, encrypt, recipients, import-key, export-key, setup, doctor}`. See `/ov:secrets` for the full command reference, KeePassXC integration for key backup/restore, and headless/SSH workflows.
+Manage `.secrets` with `ov secrets gpg {env, show, set, unset, edit, encrypt, recipients, import-key, export-key, setup, doctor}`. See `/ov-build:secrets` for the full command reference, KeePassXC integration for key backup/restore, and headless/SSH workflows.
 
 ## Quick Taste
 
@@ -347,7 +347,7 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 
 ## The Layer Library
 
-164 layers compose into images via `overthink.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-layers:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
+164 layers compose into images via `overthink.yml`. Dependencies resolve automatically. Every layer has a dedicated skill — invoke `/ov-foundation:<name>` (or see [plugins/README.md](plugins/README.md) for the full index) for the details and composition recipe of any specific layer.
 
 | Category | Representative layers | Purpose |
 |---|---|---|
@@ -362,7 +362,7 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 | **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting`, `tailscale`, `keepassxc` | Agent forwarding, encrypted storage, mesh VPN, password manager, nesting |
 | **OS / Bootc** | `bootc-base`, `bootc-config`, `cloud-init`, `os-config`, `os-system-files`, `qemu-guest-agent`, `socat` | Bootable disk image and VM integration |
 
-**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-layers:<name>` skill for the exact composition recipe.
+**Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-foundation:<name>` skill for the exact composition recipe.
 
 ### Data Layers
 
@@ -378,7 +378,7 @@ data:
     volume: workspace
 ```
 
-At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories; `ov update` merges new data non-destructively. **Data images** (`data_image: true`) take this further: scratch-based images containing only data + OCI labels, consumed via `ov config --data-from <data-image>`. See `/ov:config` and `/ov-layers:notebook-templates` for examples.
+At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories; `ov update` merges new data non-destructively. **Data images** (`data_image: true`) take this further: scratch-based images containing only data + OCI labels, consumed via `ov config --data-from <data-image>`. See `/ov-core:config` and `/ov-foundation:notebook-templates` for examples.
 
 ## The Lifecycle
 
@@ -400,22 +400,22 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 
 | Area | Commands | Skill |
 |---|---|---|
-| **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov:image` (umbrella) + `/ov:build`, `/ov:generate`, `/ov:validate`, `/ov:merge`, `/ov:new`, `/ov:inspect`, `/ov:list`, `/ov:pull` |
-| **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov:image` "Authoring" table + `/ov:new`, `/ov:layer` |
-| **Deployment** | `deploy add`/`del` (unified verb; four targets: `host` → local filesystem, `vm:<name>` → VM via SSH, `kubernetes` → Kustomize tree, any other name → container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov:deploy`, `/ov:host-deploy`, `/ov:kubernetes`, `/ov:config`, `/ov:start`, `/ov:stop`, `/ov:update`, `/ov:remove`, `/ov-dev:vm-deploy-target` |
-| **Schema migration** | `migrate unified` (legacy `image.yml`/`build.yml`/flat-form `layer.yml` → unified `overthink.yml`); `migrate vm-spec` (legacy `image.bootc`/`image.vm:`/`image.libvirt:` → `vms.yml` `kind: vm` entities). Both idempotent; auto-invoked on remote-cache downloads | `/ov:migrate` |
-| **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov:shell`, `/ov:cmd`, `/ov:service`, `/ov:status`, `/ov:logs`, `/ov:tmux` |
-| **Desktop recording** | `record` | `/ov:record` |
-| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov:eval` (parent router), `/ov:cdp`, `/ov:wl`, `/ov:dbus`, `/ov:vnc`, `/ov:mcp` |
-| **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov:mcp` + `/ov-layers:ov-mcp` |
-| **Secrets & config** | `secrets`, `settings`, `alias` | `/ov:secrets`, `/ov:settings`, `/ov:alias` |
-| **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov:doctor`, `/ov:udev`, `/ov:vm`, `/ov-vms:vms` |
-| **Misc** | `version` | `/ov:version` |
+| **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov-build:image` (umbrella) + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull` |
+| **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov-build:image` "Authoring" table + `/ov-build:new`, `/ov-build:layer` |
+| **Deployment** | `deploy add`/`del` (unified verb; four targets: `host` → local filesystem, `vm:<name>` → VM via SSH, `kubernetes` → Kustomize tree, any other name → container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov-core:deploy`, `/ov-advanced:local-deploy`, `/ov-advanced:kubernetes`, `/ov-core:config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:update`, `/ov-core:remove`, `/ov-dev:vm-deploy-target` |
+| **Schema migration** | `migrate unified` (legacy `image.yml`/`build.yml`/flat-form `layer.yml` → unified `overthink.yml`); `migrate vm-spec` (legacy `image.bootc`/`image.vm:`/`image.libvirt:` → `vms.yml` `kind: vm` entities). Both idempotent; auto-invoked on remote-cache downloads | `/ov-build:migrate` |
+| **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:status`, `/ov-core:logs`, `/ov-advanced:tmux` |
+| **Desktop recording** | `record` | `/ov-advanced:record` |
+| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov-build:eval` (parent router), `/ov-advanced:cdp`, `/ov-advanced:wl`, `/ov-advanced:dbus`, `/ov-advanced:vnc`, `/ov-build:mcp` |
+| **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov-build:mcp` + `/ov-foundation:ov-mcp` |
+| **Secrets & config** | `secrets`, `settings`, `alias` | `/ov-build:secrets`, `/ov-build:settings`, `/ov-advanced:alias` |
+| **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov-core:doctor`, `/ov-advanced:udev`, `/ov-advanced:vm`, `/ov-vms:vms` |
+| **Misc** | `version` | `/ov-core:version` |
 
 **Global flags** (apply to every command):
 
 - `-C <dir>` / `--dir <dir>` / `OV_PROJECT_DIR=<dir>` — override the project directory (where `overthink.yml` lives) for build-mode commands. Honoured before Kong dispatches the subcommand.
-- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `overthink.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Remote refs containing legacy `image.yml` are auto-migrated on download (see `/ov:migrate`). Mutually exclusive with `--dir`. See `/ov:image` "Project directory resolution".
+- `--repo <OWNER/REPO[@REF]>` / `OV_PROJECT_REPO=…` — read `overthink.yml` from a remote git repo instead of a local directory. Bare `owner/repo` auto-prefixes `github.com/`; the literal `default` expands to `overthinkos/overthink`. Cached in `~/.cache/ov/repos/` (override with `OV_REPO_CACHE`). Remote refs containing legacy `image.yml` are auto-migrated on download (see `/ov-build:migrate`). Mutually exclusive with `--dir`. See `/ov-build:image` "Project directory resolution".
 - `--kdbx <path>` — override the KeePass credential store location.
 
 Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the host project at `/workspace` with `ov config --bind project=/host/path` (the `ov-mcp` layer default, world-writable), set `OV_PROJECT_REPO=owner/repo@<ref>` to pin an upstream, or let the auto-fallback to `overthinkos/overthink` kick in. **Refined in 2026-04**: the fallback now fires whenever the resolved cwd has no `overthink.yml`, regardless of `OV_PROJECT_DIR` being set. Previously the fallback only fired when `OV_PROJECT_DIR` was empty — but the `ov-mcp` layer permanently sets `OV_PROJECT_DIR=/workspace`, so the fallback was effectively dead code. Now a deployer who forgets `--bind` still gets a working MCP server (backed by the upstream repo) with a clear log line naming the reason. The top-level CLI never auto-fetches — only `ov mcp serve` does; `--no-default-repo` opts out.
@@ -423,15 +423,15 @@ Load-bearing detail for `ov mcp serve` inside a container: either bind-mount the
 A few sample invocations:
 
 ```bash
-ov image build jupyter                 # Build an image (see /ov:build for --push, --no-cache, --jobs)
-ov image pull jupyter                  # Fetch into local storage (see /ov:pull for short/full/remote refs)
-ov config jupyter                      # Unified deploy setup (see /ov:config for --bind, --encrypt, --sidecar, -i, --update-all)
+ov image build jupyter                 # Build an image (see /ov-build:build for --push, --no-cache, --jobs)
+ov image pull jupyter                  # Fetch into local storage (see /ov-build:pull for short/full/remote refs)
+ov config jupyter                      # Unified deploy setup (see /ov-core:config for --bind, --encrypt, --sidecar, -i, --update-all)
 ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
-ov eval cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov:cdp)
-ov eval wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov:wl)
-ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov:vm)
-ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov:mcp Part 2)
+ov eval cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov-advanced:cdp)
+ov eval wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov-advanced:wl)
+ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov-advanced:vm)
+ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov-build:mcp Part 2)
 ```
 
 ### Pulling images from registries
@@ -443,7 +443,7 @@ Error: image "jupyter:latest" is not available locally.
        Run 'ov image pull jupyter:latest' to fetch it first
 ```
 
-`ov image pull` accepts three input forms: short names (resolved via `overthink.yml`'s `image:` entries, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov:pull` for details.
+`ov image pull` accepts three input forms: short names (resolved via `overthink.yml`'s `image:` entries, requires project directory), fully-qualified registry refs (pullable from anywhere), and `@github.com/org/repo/image[:version]` remote refs (downloads the repo and pulls its declared registry ref). See `/ov-build:pull` for details.
 
 ### Multiple Instances
 
@@ -455,7 +455,7 @@ ov config selkies-desktop -i personal -p 3002:3000
 ov start selkies-desktop -i work
 ```
 
-**Tunnel inheritance caveat:** tunnel config is **not** auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's `deploy.yml` entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands. Tunnel config is deploy.yml-only (read-skipped from OCI labels at `labels.go:238`). The `-e` flag merges env vars (upsert by key); `-c` replaces. See `/ov:deploy` for full inheritance semantics and `/ov:config` for the `--update-all` propagation model.
+**Tunnel inheritance caveat:** tunnel config is **not** auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's `deploy.yml` entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands. Tunnel config is deploy.yml-only (read-skipped from OCI labels at `labels.go:238`). The `-e` flag merges env vars (upsert by key); `-c` replaces. See `/ov-core:deploy` for full inheritance semantics and `/ov-core:config` for the `--update-all` propagation model.
 
 ### Sidecar Containers
 
@@ -468,11 +468,11 @@ ov config <image> --sidecar tailscale \
   -e "TS_EXTRA_ARGS=--exit-node=100.80.254.4 --exit-node-allow-lan-access"
 ```
 
-The Tailscale sidecar routes outbound traffic through a Tailscale exit node while keeping the pod on the `ov` bridge for container-to-container connectivity (**dual networking**). Sidecar-related `-e` flags (e.g., `TS_*`) are automatically routed to the sidecar instead of the app container. Assignments persist in `deploy.yml`. See `/ov:sidecar` for the full template list and routing model.
+The Tailscale sidecar routes outbound traffic through a Tailscale exit node while keeping the pod on the `ov` bridge for container-to-container connectivity (**dual networking**). Sidecar-related `-e` flags (e.g., `TS_*`) are automatically routed to the sidecar instead of the app container. Assignments persist in `deploy.yml`. See `/ov-advanced:sidecar` for the full template list and routing model.
 
 ### Wayland Overlays
 
-`ov eval wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov:wl-overlay` for the full API.
+`ov eval wl overlay` drives fullscreen Wayland overlays for screen recordings — title cards, lower-thirds, watermarks, countdowns, region highlights, fade transitions. Rendered by the compositor with true RGBA transparency; no post-production needed. See `/ov-advanced:wl-overlay` for the full API.
 
 ## Troubleshooting
 
@@ -480,27 +480,27 @@ Each entry points to the canonical skill — details belong there, not here.
 
 | Symptom | First step |
 |---------|-----------|
-| Service won't start | `ov status <image>` then `ov logs <image>` (`/ov:status`, `/ov:logs`) |
-| Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov:config`) |
-| Chrome stuck or crash-looping | `/ov-layers:chrome` Resource Caps & Circuit Breaker section |
-| Encrypted volume locked at boot | `ov config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov:enc`) |
-| GPU not detected | `ov doctor` then `/ov:udev` |
-| Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov:config`) |
-| Build cache stale | `ov image build --no-cache <image>` (`/ov:build`) |
-| Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov:deploy`) |
-| Service built fine but broken in production | `ov eval live <image>` runs the baked layer + image + deploy checks against the live container; `ov eval image <image>` checks the disposable build (`/ov:eval`) |
-| `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vms:vms`, `/ov:migrate`) |
+| Service won't start | `ov status <image>` then `ov logs <image>` (`/ov-core:status`, `/ov-core:logs`) |
+| Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov-core:config`) |
+| Chrome stuck or crash-looping | `/ov-selkies:chrome` Resource Caps & Circuit Breaker section |
+| Encrypted volume locked at boot | `ov config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov-advanced:enc`) |
+| GPU not detected | `ov doctor` then `/ov-advanced:udev` |
+| Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov-core:config`) |
+| Build cache stale | `ov image build --no-cache <image>` (`/ov-build:build`) |
+| Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov-core:deploy`) |
+| Service built fine but broken in production | `ov eval live <image>` runs the baked layer + image + deploy checks against the live container; `ov eval image <image>` checks the disposable build (`/ov-build:eval`) |
+| `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vms:vms`, `/ov-build:migrate`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vms:arch` Finding B) |
-| `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov:vm` Backend matrix) |
-| `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov:deploy` "VM target") |
+| `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov-advanced:vm` Backend matrix) |
+| `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov-core:deploy` "VM target") |
 
 ## Adding a Layer
 
 ```bash
 ov image new layer my-layer            # Scaffold the directory
 # Edit layers/my-layer/layer.yml       # Declare packages, deps, env, ports,
-#                                      # and tasks: (see /ov:layer for the verb catalog)
-# Optionally add tests: for file / port / http / command checks (see /ov:eval)
+#                                      # and tasks: (see /ov-build:layer for the verb catalog)
+# Optionally add tests: for file / port / http / command checks (see /ov-build:eval)
 # Optionally add pixi.toml, package.json, or Cargo.toml for auto-detected builders
 
 # Add to an image: entry in overthink.yml:
@@ -509,7 +509,7 @@ ov image new layer my-layer            # Scaffold the directory
 ov image build my-image                # Build it
 ```
 
-See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files. The `/ov:layer` skill is the canonical reference for the `tasks:` verb catalog (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`, `setcap`, `build`), `vars:` substitution, YAML anchors, and execution-order rules.
+See [Building Layers](#building-layers-package-managers--config-files) above for the full list of supported config files. The `/ov-build:layer` skill is the canonical reference for the `tasks:` verb catalog (`cmd`, `mkdir`, `copy`, `write`, `link`, `download`, `setcap`, `build`), `vars:` substitution, YAML anchors, and execution-order rules.
 
 ## Works with Claude Code
 
@@ -541,11 +541,11 @@ Then clone with the plugins submodule:
 git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 ```
 
-This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov:layer` (authoring) and `/ov:eval` (declarative testing).
+This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov-build:layer` (authoring) and `/ov-build:eval` (declarative testing).
 
-The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov eval mcp` (see `/ov:mcp`).
+The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov eval mcp` (see `/ov-build:mcp`).
 
-The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-layers:jupyter`, `/ov-layers:jupyter-mcp`, and `/ov-images:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-layers:jupyter`, `/ov-layers:jupyter-ml`, and their image counterparts for details. Use `ov eval mcp` (see `/ov:mcp`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
+The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-foundation:jupyter`, `/ov-foundation:jupyter-mcp`, and `/ov-selkies:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-foundation:jupyter`, `/ov-foundation:jupyter-ml`, and their image counterparts for details. Use `ov eval mcp` (see `/ov-build:mcp`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

@@ -119,7 +119,7 @@ These rules exist because (a) failing tests have been deferred as 'pre-existing'
 
 - **R9. Deployed binary matches source AND runtime deps declared in package management.** Syncthing / git / rsync move *source* between hosts; they don't rebuild the binary. After pushing code, explicitly rebuild on the target and verify `ov version`. If the version is old, the fix under test isn't really under test. Live war-story: `ov eval spice status` returned the old binary's output against a remote host while claimed success — the new code had been synced but not built. A change that relies on an OS package at runtime (`nc`, `socat`, `xorriso`, `qemu-guest-agent`, …) MUST add that package to `pkg/arch/PKGBUILD` `depends=` (the single source of truth — per-distro shell shims previously duplicated this list and have been retired). A manual install on one host is a bug report disguised as a fix. Live war-story: virt-manager needed `nc` on the libvirt host; a manual install would have silently broken virt-manager on the next freshly-installed synced host.
 
-See `/ov:eval` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically. See `/ov-dev:strict-policy` for the operationalization of R1–R5.
+See `/ov-build:eval` "DO NOT fake success" section for the mandatory sequence applied to test authoring specifically. See `/ov-dev:strict-policy` for the operationalization of R1–R5.
 
 ## Prioritize Clean Architecture Above All Else
 
@@ -138,7 +138,7 @@ You have all the time in the world and taking the time to get things properly do
 
 On resources that ARE marked `disposable: true`, `ov rebuild <name>` performs destroy → (optional image rebuild) → create → start unattended, and is the preferred path. Hesitating to rebuild a disposable target when verification demands it is the OPPOSITE failure mode, and the one that leads to claimed-but-unverified fixes.
 
-**Every change is proved on a freshly built binary on the target host** (the 10 evaluation standards in `/ov:eval`):
+**Every change is proved on a freshly built binary on the target host** (the 10 evaluation standards in `/ov-build:eval`):
 
 1. Build the artifact from the changed source, on the target host.
 2. Verify the deployed binary's version matches what you built (R9).
@@ -182,7 +182,7 @@ Before saying "done" answer YES to all of these:
 - Post-action state of every target is healthy?
 - Pasted BOTH the exploratory verification output AND the fresh-rebuild re-verification output into the conversation?
 
-See `/ov:eval` for the 10 evaluation standards and `/ov-dev:disposable` for the classification schema.
+See `/ov-build:eval` for the 10 evaluation standards and `/ov-dev:disposable` for the classification schema.
 
 ## Hard Cutover by Default — ONE PHASE, test EVERYTHING at the end
 
@@ -310,7 +310,7 @@ or a loaded skill — STOP and ask in either case; do NOT silently
 downgrade scope or commit a partial state.
 
 See `/ov-dev:cutover-policy` for forbidden patterns, required deliverables,
-and the anti-pattern catalog. See `/ov:migrate` for the `ov migrate <name>`
+and the anti-pattern catalog. See `/ov-build:migrate` for the `ov migrate <name>`
 command surface.
 
 ### Anti-patterns that FAIL the cutover
@@ -449,19 +449,19 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Cross-kind name reuse is permitted and encouraged.** A single name (e.g. `ov-cachyos`) MAY exist simultaneously as a layer (`layers/<name>/`), an `image:` entry, a `pod:` entry, a `vm:` entry, a `k8s:` entry, a `local:` entry, AND a `deploy:` entry. Uniqueness is scoped to each kind. Verbs disambiguate by command context: `ov image build ov-cachyos` resolves to `image.ov-cachyos`; `ov vm create ov-cachyos` to `vm.ov-cachyos`; `ov rebuild ov-cachyos` to `deploy.ov-cachyos`. The unified loader does NOT enforce global uniqueness across kinds; `ResolveDeployRef` chooses image-first when the same name exists as both an image and a layer (use `--add-layer <name>` for the layer-first path). See `/ov-build:layer`, `/ov-build:image`, `/ov-build:local-spec`, `/ov-core:deploy`, `/ov-build:validate`.
 - **`overthink.yml` is the only canonical authoring target.** Every `ov` authoring/scaffolding verb (`ov image set`, `ov image new project`, `ov image new image`, `ov image add-layer`, `ov image rm-layer`, `ov vm import`, `ov vm update`, `ov vm clone`) writes to `overthink.yml`. Per-kind files (`image.yml`, `vm.yml`, `pod.yml`, `k8s.yml`, `local.yml`, `deploy.yml`) remain valid as `includes:` from `overthink.yml` but are NEVER the default authoring target. Missing `overthink.yml` → hard error pointing at `ov image new project .` or `ov migrate unified`.
 - **Init-system polymorphism via mixed `service:` entries.** A layer that needs a service running under both supervisord (container/pod targets) and systemd (host / bootc / VM targets) declares BOTH forms in ONE `service:` list — same `name:`, one entry with `use_packaged: <unit>.service` (or `<unit>.socket`), the other with custom `exec:`. The init system at deploy time renders only the matching form. **NEVER** create a `<name>-host` or `<name>-pod` sibling layer to express target polymorphism — it duplicates packages and eval probes and inevitably drifts. The 2026-05 polymorphism cutover deleted exactly two such sibling pairs (`virtualization{,host}`, `ov-full{,host}`) that had crystallized this anti-pattern. Canonical worked examples: `/ov-coder:sshd` (mixed), `/ov-foundation:virtualization` (mixed; post-2026-05), `/ov-foundation:postgresql` (use_packaged-only). See `/ov-build:layer` "Service Declaration" + "Anti-pattern: `<name>-host` / `<name>-pod` sibling layers".
-- **Tests ship with the image.** See `/ov:eval`.
-- **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov:layer`, `/ov:image`, `/ov:migrate`.
-- **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deploy`) with singular root-shape keys throughout (filename and kind name now match: `kind: deploy` in `deploy.yml`, `kind: image` in `image.yml`, etc.). File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`; the local-cutover (kind:host → kind:local) is `ov migrate target-local`; the per-kind file split + `kind: deployment` → `kind: deploy` rename is `ov migrate kind-files`. Nesting of deployments uses `nested:` (was `children:`). See `/ov:migrate`, `/ov:image`, `/ov:deploy`, `/ov:vm`, `/ov-build:local-spec`.
+- **Tests ship with the image.** See `/ov-build:eval`.
+- **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov-build:layer`, `/ov-build:image`, `/ov-build:migrate`.
+- **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deploy`) with singular root-shape keys throughout (filename and kind name now match: `kind: deploy` in `deploy.yml`, `kind: image` in `image.yml`, etc.). File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. Legacy configs migrate via `ov migrate schema-v4`; the local-cutover (kind:host → kind:local) is `ov migrate target-local`; the per-kind file split + `kind: deployment` → `kind: deploy` rename is `ov migrate kind-files`. Nesting of deployments uses `nested:` (was `children:`). See `/ov-build:migrate`, `/ov-build:image`, `/ov-core:deploy`, `/ov-advanced:vm`, `/ov-build:local-spec`.
 - **Hard cutover by default.** See `/ov-dev:cutover-policy` and the "Hard Cutover by Default" section above.
 - **Deploy fetches NOTHING speculative.** Every `ov deploy add` (any target kind: `local`, `pod`, `vm`, `k8s`) MUST emit zero image-pull / image-build steps unless an explicit layer step at deploy time requires the image — and no layer does today. Test-bed image preflight is the test/eval entry point's job, not the deploy's: `ov eval run` collects `score.target_image:` + per-scenario `pod:` declarations and ensures each is present in podman storage BEFORE running scenarios. The retired `kind: local` `images:` field violated this invariant; it was deleted in the 2026-05 deploy-fetch-narrowing cutover. Migration: `ov migrate local-images` (idempotent). See `/ov-build:local-spec`, `/ov-build:eval`.
 - **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-dev:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) unchanged.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-dev:go` "Mode purity".
-- **Project directory resolution.** See `/ov:image` "Project directory resolution".
-- **User policy: adopt over rename.** Declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov:image` "user_policy" and `/ov:build` "base_user:".
-- **Unified `service:` schema.** See `/ov:layer` "Service Declaration".
+- **Project directory resolution.** See `/ov-build:image` "Project directory resolution".
+- **User policy: adopt over rename.** Declarative via `build.yml distro.<name>.base_user:` + `user_policy:`. See `/ov-build:image` "user_policy" and `/ov-build:build` "base_user:".
+- **Unified `service:` schema.** See `/ov-build:layer` "Service Declaration".
 - **Capabilities as OCI-label contract.** See `/ov-dev:capabilities`.
 - **Deploy targets.** `ov deploy add <name> <ref>`: `target: local` + `host: local` (default) → local filesystem via `ShellExecutor`; `target: local` + `host: <user@machine[:port]>` → SSH (ssh-config + agent supply credentials); `target: vm` → VM via managed `ov-<vmname>` ssh-config alias; `target: k8s` → Kustomize tree; `target: pod` (default) → container deploy. See `/ov-core:deploy`, `/ov-advanced:local-deploy`, `/ov-advanced:kubernetes`, `/ov-dev:vm-deploy-target`. Shared IR: `/ov-dev:install-plan`.
-- **k3s cluster provisioning via layers.** `/ov-layers:k3s` + `/ov-layers:k3s-server` + `/ov-layers:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared `K3S_CLUSTER_TOKEN` auto-generates on first deploy via `ensureLayerSecret` (`ov/layer_secrets.go`) — server and every agent automatically share the persisted value with zero operator setup; override with `ov secrets set ov/secret/K3S_CLUSTER_TOKEN <value>` only when reproducing a specific cluster identity. Kubeconfig pulled back via layer `artifacts:` block (with `wait_seconds: 120` so retrieval waits for k3s to write `/etc/rancher/k3s/k3s.yaml`). Schema v4: cluster configuration lives on a `kind: k8s` entity (workload defaults + cluster policy absorbed from the former ClusterProfile). Cluster probes via `/ov:eval-k8s` (`ov eval k8s nodes/addons/wait-ready/…`).
+- **k3s cluster provisioning via layers.** `/ov-foundation:k3s` + `/ov-foundation:k3s-server` + `/ov-foundation:k3s-agent` compose into a full k3s cluster on any substrate (host / VM / container). Pre-shared `K3S_CLUSTER_TOKEN` auto-generates on first deploy via `ensureLayerSecret` (`ov/layer_secrets.go`) — server and every agent automatically share the persisted value with zero operator setup; override with `ov secrets set ov/secret/K3S_CLUSTER_TOKEN <value>` only when reproducing a specific cluster identity. Kubeconfig pulled back via layer `artifacts:` block (with `wait_seconds: 120` so retrieval waits for k3s to write `/etc/rancher/k3s/k3s.yaml`). Schema v4: cluster configuration lives on a `kind: k8s` entity (workload defaults + cluster policy absorbed from the former ClusterProfile). Cluster probes via `/ov-advanced:eval-k8s` (`ov eval k8s nodes/addons/wait-ready/…`).
 
 ---
 

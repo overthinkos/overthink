@@ -196,6 +196,39 @@ deploy:
         # exercising the code path, not installing services.
         # -----------------------------------------------------------------
         nested:
+            # -----------------------------------------------------------------
+            # R10 bed for tailscale + tailscale-up runtime wiring.
+            # ---------------------------------------------------------------
+            # Exercises layers/tailscale (daemon install + systemctl enable)
+            # AND layers/tailscale-up (--operator + --hostname runtime task)
+            # via the nested HostDeployTarget in arch-vm. The arch user
+            # has uid 1000 + passwordless wheel sudo per the cloud-init
+            # config, matching the canonical ov-cachyos host shape.
+            # The test bed's tailscaled is logged out (no auth performed),
+            # which is the layer's expected pass-by-skip state for the
+            # operator-readable / hostname-tracks-system probes — the
+            # explicit baseline probes below cover the daemon-up shape.
+            # -----------------------------------------------------------------
+            ov-cachyos-tailscale-test:
+                target: local
+                disposable: true
+                lifecycle: dev
+                add_layers:
+                    - tailscale
+                    - tailscale-up
+                install_opts:
+                    with_services: true
+                    allow_root_tasks: true
+                description:
+                    feature: R10 bed for tailscale + tailscale-up runtime wiring
+                    tag: [testing]
+                eval:
+                    - {id: tt-tailscale-binary, scope: deploy, command: "test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled"}
+                    - {id: tt-tailscaled-active, scope: deploy, command: "systemctl is-active tailscaled", stdout: {equals: active}}
+                    - {id: tt-tailscaled-enabled, scope: deploy, command: "systemctl is-enabled tailscaled.service", stdout: {matches: "^enabled"}}
+                    # The layer-baked operator-readable + hostname-tracks-system
+                    # probes self-gate via the "Logged out" check and
+                    # pass-by-skip on this bed (no `tailscale up` is performed).
             arch-host:
                 target: local
                 disposable: true

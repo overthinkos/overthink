@@ -438,6 +438,21 @@ func (t *LocalDeployTarget) renderSystemPackageCommand(s *SystemPackagesStep) (s
 // format-by-format). The output is a best-effort heuristic — layers
 // depending on complex repo/key setup should move to the structured
 // templates ASAP.
+//
+// Each format prefixes a database-refresh step before the install:
+//   - apt: `apt-get update` (refresh /var/lib/apt/lists/) before install
+//     — apt-get install does NOT auto-refresh; without this the install
+//     fetches stale URLs and 404s when packages have been version-bumped.
+//   - pacman: `-Sy` (refresh /var/lib/pacman/sync/) before install
+//     — pacman -S does NOT auto-refresh either; same 404-on-stale failure
+//     mode (observed on a-cachy 2026-05: nspr-4.38.2 fetched per stale db,
+//     upstream had moved to 4.39, mirror returned 404). Note: this is
+//     `-Sy` not `-Syu` — refreshing the db is required for correctness;
+//     a bulk system upgrade as a side effect of installing one new tool
+//     is surprising on a user's running workstation. Operators run
+//     `pacman -Syu` themselves when they want a full upgrade.
+//   - dnf: no refresh prefix needed — dnf auto-refreshes metadata via
+//     repo metadata_expire (48h default) and refreshes inline when stale.
 func (t *LocalDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
 		return ""
@@ -454,9 +469,9 @@ func (t *LocalDeployTarget) renderFallbackPkgCmd(s *SystemPackagesStep) string {
 		if len(s.Options) > 0 {
 			opts = " " + strings.Join(s.Options, " ")
 		}
-		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
+		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
 	case "pac":
-		return fmt.Sprintf("pacman -S --noconfirm --needed %s", strings.Join(s.Packages, " "))
+		return fmt.Sprintf("pacman -Sy --noconfirm --needed %s", strings.Join(s.Packages, " "))
 	}
 	return ""
 }

@@ -180,8 +180,14 @@ func TestRenderFallbackPkgCmd(t *testing.T) {
 		want     string
 	}{
 		{"rpm", []string{"ripgrep", "fd-find"}, "dnf install -y ripgrep fd-find"},
-		{"deb", []string{"bat"}, "DEBIAN_FRONTEND=noninteractive apt-get install -y bat"},
-		{"pac", []string{"rg"}, "pacman -S --noconfirm --needed rg"},
+		// deb + pac: prefix database-refresh step before install. apt-get
+		// install + pacman -S do NOT auto-refresh, and a stale db causes
+		// 404 fetches when packages have been version-bumped upstream
+		// (live war-story 2026-05: nspr-4.38.2 fetched per stale db,
+		// upstream had moved to 4.39, fastly mirror returned 404; fix
+		// landed in the same cutover that added /ov-foundation:tailscale-up).
+		{"deb", []string{"bat"}, "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bat"},
+		{"pac", []string{"rg"}, "pacman -Sy --noconfirm --needed rg"},
 	}
 	for _, tc := range tests {
 		s := &SystemPackagesStep{Format: tc.format, Phase: PhaseInstall, Packages: tc.packages}

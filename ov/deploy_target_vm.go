@@ -653,6 +653,12 @@ rm -f %[1]s/*.pkg.tar.zst 2>/dev/null || true
 
 // --- Package-install fallback shared with host (mirrors
 // LocalDeployTarget.renderFallbackPkgCmd). ---
+//
+// Each format prefixes a database-refresh step before the install: see
+// the doc comment on LocalDeployTarget.renderFallbackPkgCmd for the
+// rationale (apt-get and pacman do NOT auto-refresh, and a stale db
+// causes 404 fetches when packages have been version-bumped upstream).
+// Keep this function and renderFallbackPkgCmd in lock-step.
 
 func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
 	if s.Phase != PhaseInstall || len(s.Packages) == 0 {
@@ -666,9 +672,9 @@ func fallbackPackageInstallCmd(s *SystemPackagesStep) string {
 	case "rpm":
 		return fmt.Sprintf("dnf install -y%s %s", opts, strings.Join(s.Packages, " "))
 	case "deb":
-		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
+		return fmt.Sprintf("DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y%s %s", opts, strings.Join(s.Packages, " "))
 	case "pac":
-		return fmt.Sprintf("pacman -S --noconfirm --needed%s %s", opts, strings.Join(s.Packages, " "))
+		return fmt.Sprintf("pacman -Sy --noconfirm --needed%s %s", opts, strings.Join(s.Packages, " "))
 	}
 	return ""
 }

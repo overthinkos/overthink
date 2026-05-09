@@ -6,36 +6,88 @@ import (
 	"text/template"
 )
 
+// CacheMount is the single source of truth for `--mount=type=cache` emission.
+// Every cache-mount string in generated Containerfiles flows through here so
+// (a) the BuildKit syntax is defined exactly once, and (b) the stable `id=`
+// derivation that makes caches survive layer-hash changes is always applied.
+//
+// Without an explicit `id=`, BuildKit/buildah keys cache mounts by the
+// surrounding RUN step's hash — so any upstream layer-content change drops
+// the old cache and re-downloads every package. The id derivation here keys
+// each cache by its destination path (and uid for uid-scoped caches), so the
+// same cache survives across iterations regardless of layer-hash churn.
+//
+// Two flavors:
+//   - Shared (sharing=locked): root-installed system caches like dnf/apt/pacman.
+//   - Owned (uid/gid): non-root user caches like pixi/npm/cargo. The id includes
+//     `-uid<N>` so different-uid builds don't collide on file ownership inside
+//     the same cache volume.
+type CacheMount struct {
+	Dst     string // Container-side mount path; canonical id source.
+	Sharing string // "locked"/"shared"/"private" for shared caches; ignored for owned.
+	UID     int    // For owned caches; sentinel -1 means "shared" form.
+	GID     int
+}
+
+// SharedCacheMount returns a cache-mount value for root-installed system
+// caches (dnf/apt/pacman/downloads). Sharing defaults to "locked".
+func SharedCacheMount(dst, sharing string) CacheMount {
+	if sharing == "" {
+		sharing = "locked"
+	}
+	return CacheMount{Dst: dst, Sharing: sharing, UID: -1}
+}
+
+// OwnedCacheMount returns a cache-mount value for non-root user caches
+// (pixi/npm/cargo). UID becomes part of the id namespace.
+func OwnedCacheMount(dst string, uid, gid int) CacheMount {
+	return CacheMount{Dst: dst, UID: uid, GID: gid}
+}
+
+// String renders the CacheMount as a Containerfile `--mount=type=cache,...`
+// flag. The `id=` field is derived from Dst (and UID for owned caches), keeping
+// the cache stable across layer-hash changes during iterative builds.
+func (m CacheMount) String() string {
+	safe := strings.ReplaceAll(strings.TrimPrefix(m.Dst, "/"), "/", "-")
+	id := "ov-" + safe
+	if m.UID >= 0 {
+		return fmt.Sprintf("--mount=type=cache,id=%s-uid%d,dst=%s,uid=%d,gid=%d", id, m.UID, m.Dst, m.UID, m.GID)
+	}
+	return fmt.Sprintf("--mount=type=cache,id=%s,dst=%s,sharing=%s", id, m.Dst, m.Sharing)
+}
+
+// RenderCacheMounts joins a slice of CacheMountDef into one Containerfile
+// flag string. uid<0 → shared form (sharing-locked); uid>=0 → owned form.
+// `trailing` appends the separator after the last entry — needed by
+// `cacheMountsOwned` which feeds directly into a multi-line RUN body.
+//
+// Single source of truth for the slice-rendering pattern that previously
+// lived inline at four call sites (two template helpers + generate.go +
+// tasks.go cmd-emitter). Every multi-mount site now flows through here,
+// every single-mount site flows through CacheMount.String() directly.
+func RenderCacheMounts(mounts []CacheMountDef, uid, gid int, sep string, trailing bool) string {
+	if len(mounts) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		if uid >= 0 {
+			parts = append(parts, OwnedCacheMount(m.Dst, uid, gid).String())
+		} else {
+			parts = append(parts, SharedCacheMount(m.Dst, m.Sharing).String())
+		}
+	}
+	out := strings.Join(parts, sep)
+	if trailing {
+		out += sep
+	}
+	return out
+}
+
 // templateFuncs provides helper functions for format/builder templates.
 var templateFuncs = template.FuncMap{
-	// cacheMounts renders --mount=type=cache flags for BuildKit.
-	"cacheMounts": func(mounts []CacheMountDef) string {
-		if len(mounts) == 0 {
-			return ""
-		}
-		var parts []string
-		for _, m := range mounts {
-			sharing := m.Sharing
-			if sharing == "" {
-				sharing = "locked"
-			}
-			parts = append(parts, fmt.Sprintf("--mount=type=cache,dst=%s,sharing=%s", m.Dst, sharing))
-		}
-		return strings.Join(parts, " \\\n    ")
-	},
-
-	// cacheMountsOwned renders cache mounts with uid/gid ownership.
-	// Returns the mount flags with a trailing line continuation for chaining.
-	"cacheMountsOwned": func(mounts []CacheMountDef, uid, gid int) string {
-		if len(mounts) == 0 {
-			return ""
-		}
-		var parts []string
-		for _, m := range mounts {
-			parts = append(parts, fmt.Sprintf("--mount=type=cache,dst=%s,uid=%d,gid=%d", m.Dst, uid, gid))
-		}
-		return strings.Join(parts, " \\\n    ") + " \\\n    "
-	},
+	"cacheMounts":      func(m []CacheMountDef) string { return RenderCacheMounts(m, -1, 0, " \\\n    ", false) },
+	"cacheMountsOwned": func(m []CacheMountDef, uid, gid int) string { return RenderCacheMounts(m, uid, gid, " \\\n    ", true) },
 
 	// quote returns a shell-safe quoted string.
 	"quote": func(s interface{}) string {

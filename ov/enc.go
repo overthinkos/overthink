@@ -128,7 +128,7 @@ func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 	}
 	// 3. Auto-generate if requested
 	if autoGenerate {
-		generated := generateRandomHex(32)
+		generated := generateRandomSecretToken(32)
 		store := DefaultCredentialStore()
 		if err := store.Set("ov/enc", imageName, generated); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not persist enc passphrase for %s: %v\n", imageName, err)

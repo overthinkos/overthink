@@ -825,13 +825,7 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 			cacheMounts = formatDef.CacheMounts
 		}
 	}
-	for _, m := range cacheMounts {
-		sharing := m.Sharing
-		if sharing == "" {
-			sharing = "locked"
-		}
-		b.WriteString(fmt.Sprintf("--mount=type=cache,dst=%s,sharing=%s \\\n    ", m.Dst, sharing))
-	}
+	b.WriteString(RenderCacheMounts(cacheMounts, -1, 0, " \\\n    ", true))
 
 	// Install bootstrap packages using distro's install command
 	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Packages) > 0 {
@@ -867,6 +861,28 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 
 	// WORKDIR only - ENV comes from layer env files
 	b.WriteString(fmt.Sprintf("WORKDIR %s\n\n", img.Home))
+}
+
+// escapeContainerfileEnvValue prefixes `\` to every `$` so Docker's ENV-
+// value substitution treats the rest as literal text. The escape is
+// preserved through the shell invocations that consume the env value at
+// runtime (bash strips a single `\$` to `$` and substitutes the var as
+// expected). Without this escape, references like `${POSTGRES_PASSWORD}`
+// in env: block values get emptied by Docker at build time because
+// POSTGRES_PASSWORD is not a build arg — it's a runtime-injected secret.
+//
+// Special exception: leave `${PATH}` intact. The path-append code at the
+// PATH ENV directive depends on Docker substituting the parent layer's
+// PATH value during the build. PATH is the only ENV var ov knows is set
+// at every Containerfile build step (Dockerfile spec guarantees it).
+func escapeContainerfileEnvValue(v string) string {
+	// Replace $ with \$ EXCEPT in `${PATH}` references (rare but documented).
+	// Two-step: protect ${PATH}, escape, restore.
+	const sentinel = "\x00OV_PATH_REF\x00"
+	v = strings.ReplaceAll(v, "${PATH}", sentinel)
+	v = strings.ReplaceAll(v, "$", "\\$")
+	v = strings.ReplaceAll(v, sentinel, "${PATH}")
+	return v
 }
 
 // writeLayerEnv collects env configs from all layers and writes ENV directives.
@@ -910,7 +926,16 @@ func (g *Generator) writeLayerEnv(b *strings.Builder, layerOrder []string, img *
 	}
 	sortStrings(keys)
 	for _, key := range keys {
-		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", key, expanded.Vars[key]))
+		// Docker substitutes ${VAR} and $VAR in ENV values at build time
+		// using build args + previously-set ENVs. Layer-author-supplied
+		// values that reference RUNTIME-injected vars (e.g. POSTGRES_PASSWORD
+		// from a podman secret) would be silently emptied. Escape `$` so
+		// the references survive verbatim into the runtime container, where
+		// shell / *_CMD-style invocations resolve them properly.
+		// Build-arg-style refs (TARGETARCH, ARCH) aren't used in env: blocks
+		// — they're handled via ARG/ENV pairs inserted by emitVarsEnv —
+		// so blanket-escaping `$` is safe here.
+		b.WriteString(fmt.Sprintf("ENV %s=\"%s\"\n", key, escapeContainerfileEnvValue(expanded.Vars[key])))
 	}
 
 	// Append to PATH if there are path additions

@@ -2,7 +2,7 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/hex"
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,20 +11,45 @@ import (
 	"golang.org/x/term"
 )
 
-// generateRandomHex generates a cryptographically random hex string of the given byte length.
-func generateRandomHex(bytes int) string {
-	b := make([]byte, bytes)
+// generateRandomSecretToken returns `byteCount` random bytes encoded as
+// url-safe base64 (RFC 4648 §5). For byteCount=32 this produces a 44-char
+// string (43 base64 chars + 1 `=` pad).
+//
+// Url-safe base64 was chosen over hex because it is a strict superset of
+// what every secret consumer in the codebase needs:
+//   - Postgres / VNC / generic passwords: accept any string. Base64 has
+//     more entropy per character (6 bits vs 4) so 32 random bytes pack
+//     into 44 chars instead of hex's 64 chars.
+//   - Apache Airflow's AIRFLOW__CORE__FERNET_KEY: REQUIRES url-safe
+//     base64 of exactly 32 bytes (cryptography.fernet.Fernet's documented
+//     format). Hex strings are rejected with `binascii.Error: Invalid
+//     base64-encoded string`. This is the load-bearing fix — prior hex
+//     output forced every Fernet-using layer (airflow today, more
+//     tomorrow) to ship a workaround that regenerated the key.
+//   - gocryptfs / Podman / KeePassXC: accept any string; format-agnostic.
+//
+// Url-safe (vs standard base64) avoids `+` and `/` characters that would
+// need shell-escaping in `[Service] Environment=...` quadlet lines and
+// in `--password` CLI args. The `=` padding is benign in every consumer.
+//
+// All consumers in this codebase treat the return value as an opaque
+// string — none decode it back to bytes — so the format change is
+// invisible to existing keyring/kdbx-stored secrets (which remain in
+// whatever format they were originally stored).
+func generateRandomSecretToken(byteCount int) string {
+	b := make([]byte, byteCount)
 	if _, err := rand.Read(b); err != nil {
 		panic("crypto/rand failed: " + err.Error())
 	}
-	return hex.EncodeToString(b)
+	return base64.URLEncoding.EncodeToString(b)
 }
 
-// generateAndStoreSecret generates a 32-byte hex token, persists it to the
-// active credential store at (service, key), and returns the value with
-// the "auto-generated" source classification. Persistence failures are
-// logged to stderr but not returned as errors — the in-memory value is
-// still usable for the current ov invocation.
+// generateAndStoreSecret generates a 32-byte url-safe base64 token (44
+// chars; Fernet-key-compatible — see generateRandomSecretToken), persists
+// it to the active credential store at (service, key), and returns the
+// value with the "auto-generated" source classification. Persistence
+// failures are logged to stderr but not returned as errors — the
+// in-memory value is still usable for the current ov invocation.
 //
 // Used by:
 //   - ProvisionPodmanSecrets — config-time CollectedSecret provisioning
@@ -32,7 +57,7 @@ func generateRandomHex(bytes int) string {
 //   - ensureLayerSecret (layer_secrets.go) — deploy-time secret_requires
 //     resolution on host/VM/SSH targets when the value is missing.
 func generateAndStoreSecret(service, key string) (val, source string) {
-	val = generateRandomHex(32)
+	val = generateRandomSecretToken(32)
 	if err := DefaultCredentialStore().Set(service, key, val); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not persist auto-generated secret %s/%s: %v\n",
 			service, key, err)

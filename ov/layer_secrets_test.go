@@ -59,14 +59,16 @@ func TestEnsureLayerSecret_RequiredMissingAutoGenerates(t *testing.T) {
 	if source != "auto-generated" {
 		t.Errorf("expected source=auto-generated, got %q", source)
 	}
-	// 32 bytes hex-encoded = 64 chars
-	if len(val) != 64 {
-		t.Errorf("expected 64-char hex token, got %d chars: %q", len(val), val)
+	// 32 bytes url-safe base64 = 44 chars (Fernet-key compatible).
+	// See generateRandomSecretToken in secrets.go for rationale.
+	if len(val) != 44 {
+		t.Errorf("expected 44-char url-safe base64 token, got %d chars: %q", len(val), val)
 	}
 	for _, c := range val {
-		isHex := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
-		if !isHex {
-			t.Errorf("expected lowercase hex, found non-hex char %q in %q", c, val)
+		isUrlSafeB64 := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') || c == '-' || c == '_' || c == '='
+		if !isUrlSafeB64 {
+			t.Errorf("expected url-safe base64, found invalid char %q in %q", c, val)
 			break
 		}
 	}
@@ -173,8 +175,8 @@ func TestResolveLayerSecrets_RequiredAutoGen(t *testing.T) {
 	if !ok || val == "" {
 		t.Fatalf("expected K3S_CLUSTER_TOKEN to be resolved (auto-gen), got env=%v", env)
 	}
-	if len(val) != 64 {
-		t.Errorf("expected 64-char hex, got %d chars", len(val))
+	if len(val) != 44 {
+		t.Errorf("expected 44-char url-safe base64 token (Fernet-compatible), got %d chars", len(val))
 	}
 }
 
@@ -214,8 +216,8 @@ func TestResolveSecretsForLayers_TwoLayersSameSecret(t *testing.T) {
 	env := ResolveSecretsForLayers([]*Layer{server, agent})
 
 	val := env["K3S_CLUSTER_TOKEN"]
-	if val == "" || len(val) != 64 {
-		t.Fatalf("expected 64-char hex token, got %q", val)
+	if val == "" || len(val) != 44 {
+		t.Fatalf("expected 44-char url-safe base64 token (Fernet-compatible), got %q", val)
 	}
 	// And the persisted store must have exactly that value.
 	stored, _ := DefaultCredentialStore().Get("ov/secret", "K3S_CLUSTER_TOKEN")

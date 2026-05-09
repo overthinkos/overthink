@@ -431,7 +431,7 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 		cmd += fmt.Sprintf(" && chmod %s %s", t.Mode, dest)
 	}
 
-	b.WriteString("RUN --mount=type=cache,dst=/tmp/downloads bash -c " + shellSingleQuote(cmd) + "\n")
+	b.WriteString("RUN " + SharedCacheMount("/tmp/downloads", "").String() + " bash -c " + shellSingleQuote(cmd) + "\n")
 	return nil
 }
 
@@ -449,17 +449,13 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 
 	if userIsRoot && img != nil && img.DistroDef != nil {
 		if formatDef, ok := img.DistroDef.Formats[img.Pkg]; ok {
-			for _, m := range formatDef.CacheMounts {
-				sharing := m.Sharing
-				if sharing == "" {
-					sharing = "locked"
-				}
-				mounts = append(mounts, fmt.Sprintf("--mount=type=cache,dst=%s,sharing=%s", m.Dst, sharing))
+			if cm := RenderCacheMounts(formatDef.CacheMounts, -1, 0, " ", false); cm != "" {
+				mounts = append(mounts, cm)
 			}
 		}
 	} else {
 		// Non-root: npm cache (matches old writeUserYml)
-		mounts = append(mounts, fmt.Sprintf("--mount=type=cache,dst=/tmp/npm-cache,uid=%d,gid=%d", img.UID, img.GID))
+		mounts = append(mounts, OwnedCacheMount("/tmp/npm-cache", img.UID, img.GID).String())
 	}
 
 	b.WriteString("RUN ")

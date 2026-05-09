@@ -73,55 +73,24 @@ layer:
         url = "http://localhost:19999/mcp"
         transport = "http"
 
-    # ---- Sample notebook for the OSM end-to-end demo ----
-    # Bundled into the workspace at build time so a fresh `ov rebuild` of
-    # marimo-ml-pod immediately surfaces the example without operator setup.
-    # Demonstrates: Polars-GPU aggregation on the GeoParquet output of the
-    # osm-monaco-pipeline DAG + MapLibre rendering of the resulting PMTiles
-    # served by martin (port 3000 inside the pod).
-    - write: "${HOME}/workspace/osm-monaco-viz.py"
-      mode: "0644"
-      user: "${USER}"
-      content: |
-        import marimo
-
-        __generated_with = "0.16.0"
-        app = marimo.App(width="medium")
-
-        @app.cell
-        def __():
-            import polars as pl
-            import folium
-            return pl, folium
-
-        @app.cell
-        def __(pl):
-            # Demonstrate Polars-GPU on the parquet output of the osm-monaco-pipeline DAG.
-            # collect(engine="gpu") routes through cudf-polars-cu12; falls back to CPU
-            # automatically if any operator isn't GPU-accelerated.
-            df = (
-                pl.scan_parquet("/tmp/osm-monaco/monaco.parquet")
-                .group_by("tags")
-                .agg(pl.len().alias("n"))
-                .sort("n", descending=True)
-                .head(20)
-                .collect(engine="gpu")
-            )
-            return (df,)
-
-        @app.cell
-        def __(folium):
-            # Render the Monaco PMTiles served by martin (in-pod localhost:3000).
-            m = folium.Map(location=[43.7384, 7.4246], zoom_start=14, tiles=None)
-            folium.TileLayer(
-                tiles="http://localhost:3000/monaco/{z}/{x}/{y}",
-                attr="OSM via QuackOSM + tippecanoe + martin",
-                name="Monaco OSM",
-            ).add_to(m)
-            return (m,)
-
-        if __name__ == "__main__":
-            app.run()
+    # NB: the sample marimo notebook (osm-monaco-viz.py) used to be
+    # written inline here via `write:` — that's the volume-shadow
+    # anti-pattern (in-image content shadowed by the workspace volume
+    # at runtime, plus root-owned files when DAGs need user write).
+    # Replaced 2026-05-09 with the notebook-osm data layer which seeds
+    # ${HOME}/workspace/notebooks/ via ov's data-layer machinery
+    # (--userns=keep-id ensures user-owned files). See
+    # /ov-build:layer "Data layer" pattern + layers/notebook-templates/
+    # for the canonical reference.
+    #
+    # Stub-out the rest of the prior inline content via a yaml comment-
+    # block so the line-anchored grep / regex targets above don't trip
+    # on stray fragments. The full notebook content lives at
+    # layers/notebook-osm/data/notebooks/osm-monaco-viz.py.
+    #
+    # The full notebook body now lives at
+    # layers/notebook-osm/data/notebooks/osm-monaco-viz.py and is seeded
+    # via the notebook-osm data-only layer.
   eval:
     # Build-scope smoke for the lean ML + curriculum + airflow union.
     # One import line per topic group catches resolver drift at image build,
@@ -152,12 +121,9 @@ layer:
     - id: marimo-toml-installed
       file: ${HOME}/.config/marimo/marimo.toml
       exists: true
-    # Build-scope: sample notebook landed (build-scope is OK because the
-    # workspace volume isn't mounted yet, but the file lives directly in
-    # the image at the same path the volume bind-mount targets).
-    - id: marimo-osm-notebook-installed
-      file: ${HOME}/workspace/osm-monaco-viz.py
-      exists: true
+    # NB: sample notebook check moved to layers/notebook-osm/ (data
+    # layer pattern). Deploy-scope check there asserts the seeded
+    # file at ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py.
     # Deploy-scope smoke — port reachable + HTTP 200 from marimo edit.
     - id: marimo-port-reachable
       scope: deploy

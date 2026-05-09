@@ -15,6 +15,12 @@ layer:
     AIRFLOW__CORE__LOAD_EXAMPLES: "False"
     AIRFLOW__API__PORT: "8080"
     AIRFLOW__API__HOST: "0.0.0.0"
+    # Override the default ${AIRFLOW_HOME}/dags location so DAGs live
+    # under the user-owned workspace volume. Companion data layers
+    # (e.g. dag-osm-monaco) seed ${HOME}/workspace/dags/ at deploy
+    # time via ov's data-layer machinery — no volume-shadow workaround,
+    # no airflow-init.sh copy step, no /opt/airflow-defaults staging.
+    AIRFLOW__CORE__DAGS_FOLDER: "~/workspace/dags"
   ports:
     - 8080
     - 19999     # airflow-mcp HTTP transport endpoint (/mcp)
@@ -65,16 +71,12 @@ layer:
           --role Admin \
           --email admin@example.com \
           --password "${AIRFLOW_ADMIN_PASSWORD}" || true
-        # Copy bundled default DAGs from the image-static stash into the
-        # ~/airflow/dags/ volume on every boot. Idempotent (-n: never
-        # overwrite). Required because ~/airflow is a podman volume that
-        # shadows in-image content at /home/user/airflow when the volume
-        # was created in a prior deploy. Without this copy, image-bundled
-        # DAGs invisibly disappear on first deploy.
-        if [ -d /opt/airflow-defaults/dags ]; then
-          mkdir -p "${HOME}/airflow/dags"
-          cp -rn /opt/airflow-defaults/dags/. "${HOME}/airflow/dags/"
-        fi
+        # NB: prior versions copied bundled DAGs from /opt/airflow-defaults/
+        # to ${HOME}/airflow/dags/ here as a volume-shadow workaround.
+        # Removed 2026-05-09: DAGs are now seeded into ${HOME}/workspace/dags/
+        # via the dag-osm-monaco data layer + AIRFLOW__CORE__DAGS_FOLDER
+        # override. ov's data-layer machinery (--userns=keep-id) handles
+        # user ownership cleanly; no init-time copy required.
     # ---- airflow-webserver.sh / -scheduler.sh ----
     # Two long-running processes are sufficient for LocalExecutor + SQLite.
     # `exec` is critical so signals reach airflow directly (not the wrapper).
@@ -153,98 +155,12 @@ layer:
           --mcp-host 0.0.0.0 \
           --mcp-port 19999
 
-    # ---- Sample OSM pipeline DAG ----
-    # End-to-end demo: Monaco PBF → quackosm GeoParquet → ogr2ogr GeoJSON →
-    # tippecanoe PMTiles → published to /opt/martin-tiles/pmtiles/ where
-    # the martin tile server picks it up automatically. R10 step 12 triggers
-    # this DAG and asserts the run reaches `success`.
-    #
-    # STAGED at /opt/airflow-defaults/dags/ (image-static), NOT directly at
-    # ${HOME}/airflow/dags/ (which is shadowed by the airflow-data volume
-    # whenever the volume already exists from a prior deploy). The
-    # airflow-init.sh script (above) copies from the staging path into
-    # the volume on every boot using `cp -n` (idempotent; never overwrites
-    # operator-modified DAGs).
-    - mkdir: /opt/airflow-defaults/dags
-      user: root
-    - write: "/opt/airflow-defaults/dags/osm-monaco-pipeline.py"
-      mode: "0644"
-      user: root
-      content: |
-        """Monaco OSM → PMTiles end-to-end pipeline.
-
-        Demonstrates: PBF download → quackosm GeoParquet → ogr2ogr GeoJSON →
-        tippecanoe PMTiles → martin serve. Run via:
-
-            airflow dags trigger osm-monaco-pipeline
-        """
-        from datetime import datetime
-        from pathlib import Path
-
-        from airflow.decorators import dag, task
-
-        WORK = Path("/tmp/osm-monaco")
-        TILES = Path("/opt/martin-tiles/pmtiles")
-
-
-        @dag(
-            dag_id="osm-monaco-pipeline",
-            schedule=None,
-            start_date=datetime(2026, 1, 1),
-            catchup=False,
-            tags=["osm", "demo"],
-        )
-        def osm_pipeline():
-            @task
-            def download_pbf() -> str:
-                import urllib.request
-                WORK.mkdir(parents=True, exist_ok=True)
-                url = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
-                out = WORK / "monaco.osm.pbf"
-                urllib.request.urlretrieve(url, str(out))
-                return str(out)
-
-            @task
-            def pbf_to_geoparquet(pbf_path: str) -> str:
-                import quackosm as qosm
-                out = qosm.convert_pbf_to_parquet(
-                    pbf_path,
-                    result_file_path=str(WORK / "monaco.parquet"),
-                )
-                return str(out)
-
-            @task
-            def geoparquet_to_geojson(parquet_path: str) -> str:
-                import subprocess
-                out = WORK / "monaco.geojson"
-                subprocess.run(
-                    ["ogr2ogr", "-f", "GeoJSON", str(out), parquet_path],
-                    check=True,
-                )
-                return str(out)
-
-            @task
-            def geojson_to_pmtiles(geojson_path: str) -> str:
-                import subprocess
-                TILES.mkdir(parents=True, exist_ok=True)
-                out = TILES / "monaco.pmtiles"
-                subprocess.run(
-                    [
-                        "tippecanoe",
-                        "-o", str(out),
-                        "-zg",
-                        "--drop-densest-as-needed",
-                        "--force",
-                        geojson_path,
-                    ],
-                    check=True,
-                )
-                return str(out)
-
-            geojson_to_pmtiles(geoparquet_to_geojson(pbf_to_geoparquet(download_pbf())))
-
-
-        osm_pipeline()
+    # NB: sample OSM pipeline DAG used to be inlined here via `write:`
+    # to /opt/airflow-defaults/dags/ + airflow-init.sh copy. Replaced
+    # 2026-05-09 with the dag-osm-monaco data layer which seeds
+    # ${HOME}/workspace/dags/ via ov's data-layer machinery. The DAG
+    # writes its output to ${HOME}/workspace/tiles/pmtiles/ (martin's
+    # tile source) — all under the user-owned workspace volume.
   eval:
     # Build-scope: the wrapper scripts must exist + be executable.
     - id: airflow-init-script
@@ -265,19 +181,12 @@ layer:
       mode: "0755"
     # Build-scope: the sample DAG file landed (the file lives directly in
     # the image at the same path the airflow-data volume bind-mount targets).
-    # Build-scope: the staging copy of the DAG exists in the image.
-    # The runtime copy at ~/airflow/dags/ is established by airflow-init.sh
-    # at deploy time (covered by airflow-init-db-created + the deploy-scope
-    # check below).
-    - id: airflow-osm-dag-staged
-      file: /opt/airflow-defaults/dags/osm-monaco-pipeline.py
-      exists: true
-    # Deploy-scope: the DAG made it into ~/airflow/dags/ at runtime.
-    - id: airflow-osm-dag-runtime
-      scope: deploy
-      command: test -f ${HOME}/airflow/dags/osm-monaco-pipeline.py
-      exit_status: 0
-      in_container: true
+    # NB: sample-DAG presence is now verified by layers/dag-osm-monaco/
+    # (via its own scope: deploy probe on
+    # ${VOLUME_CONTAINER_PATH:workspace}/dags/osm-monaco-pipeline.py).
+    # The DAG is data-layer-seeded into ${HOME}/workspace/dags/ — the
+    # AIRFLOW__CORE__DAGS_FOLDER override above tells airflow to look
+    # there. No /opt/airflow-defaults staging, no init-script copy.
     # Build-scope: the mcp-server-apache-airflow CLI installed cleanly into the pixi env.
     - id: airflow-mcp-binary
       file: ${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow

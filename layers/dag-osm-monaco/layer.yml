@@ -1,0 +1,41 @@
+layer:
+  name: dag-osm-monaco
+  data:
+    - src: data/dags
+      volume: workspace
+      dest: dags
+  description:
+    feature: "Sample Apache Airflow DAG: Monaco OSM PBF → quackosm → tippecanoe → PMTiles → martin"
+    narrative: |
+      Provisions a starter Airflow DAG into ${HOME}/workspace/dags/ at
+      deploy time. The DAG demonstrates the full marimo-ml pipeline:
+      download Monaco PBF (~12 MB) → quackosm.convert_pbf_to_parquet →
+      ogr2ogr GeoJSON → tippecanoe → PMTiles → published to
+      ${HOME}/workspace/tiles/pmtiles/ where martin auto-serves it.
+
+      Airflow picks up DAGs from this directory because the airflow
+      layer overrides AIRFLOW__CORE__DAGS_FOLDER to ${HOME}/workspace/dags.
+      All paths are user-owned (uid 1000) so the DAG tasks (which run
+      as the container user via supervisord) can write freely without
+      chown tricks.
+
+      Data-only — no packages, no services. Composed by marimo-ml
+      alongside notebook-osm.
+    scenario:
+      - name: OSM pipeline DAG lands in workspace/dags/
+        steps:
+          - then: the dags subdirectory is provisioned in the workspace
+            scope: deploy
+            file: ${VOLUME_CONTAINER_PATH:workspace}/dags
+            filetype: directory
+          - and: the osm-monaco-pipeline DAG file is present
+            scope: deploy
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/dags/
+            exit_status: 0
+            stdout:
+              - matches: "osm-monaco-pipeline"
+  eval:
+    - id: dag-osm-monaco-file-present
+      scope: deploy
+      file: ${VOLUME_CONTAINER_PATH:workspace}/dags/osm-monaco-pipeline.py
+      exists: true

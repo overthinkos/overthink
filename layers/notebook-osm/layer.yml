@@ -1,0 +1,33 @@
+layer:
+  name: notebook-osm
+  data:
+    - src: data/notebooks
+      volume: workspace
+      dest: notebooks
+  description:
+    feature: "Sample marimo notebook for the OSM analytics + vector tile pipeline"
+    narrative: |
+      Provisions a starter marimo notebook into ${HOME}/workspace/notebooks/
+      at deploy time. The notebook demonstrates the full marimo-ml pipeline:
+      Polars-GPU aggregation against the GeoParquet output of the
+      osm-monaco-pipeline DAG, plus MapLibre rendering of the resulting
+      PMTiles served by martin (in-pod localhost:3000). Data-only — no
+      packages, no services. Composed by marimo-ml alongside dag-osm-monaco.
+    scenario:
+      - name: OSM viz notebook lands in workspace/notebooks/
+        steps:
+          - then: the notebooks subdirectory is provisioned in the workspace
+            scope: deploy
+            file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks
+            filetype: directory
+          - and: the osm-monaco-viz notebook is present
+            scope: deploy
+            command: ls ${VOLUME_CONTAINER_PATH:workspace}/notebooks/
+            exit_status: 0
+            stdout:
+              - matches: "osm-monaco-viz"
+  eval:
+    - id: notebook-osm-viz-present
+      scope: deploy
+      file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py
+      exists: true

@@ -1,5 +1,5 @@
 # =============================================================================
-# deploy.yml — Schema v3, disposable-only, zero-operator-side-effect test beds
+# deploy.yml — Schema v4, disposable-only, zero-operator-side-effect test beds
 # =============================================================================
 #
 # Four disposable deployments, one per target kind (host / vm / pod / k8s),
@@ -459,6 +459,17 @@ deploy:
             - 28889:8888
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
+            tag: [testing]
+    marimo-ml-pod:
+        target: pod
+        image: marimo-ml
+        disposable: true
+        lifecycle: dev
+        ports:
+            - 22718:2718
+            - 28080:8080
+        description:
+            feature: R10 bed for marimo-ml — exercises marimo edit, airflow webserver, celery worker against valkey, postgres metadata DB, and the marimo-team/learn curriculum import surface
             tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.

@@ -607,6 +607,20 @@ image:
             - ov
         ports:
             - 8888:8888
+    marimo-ml:
+        enabled: true
+        base: nvidia
+        platforms:
+            - linux/amd64
+        layers:
+            - agent-forwarding
+            - marimo
+            - airflow
+            - dbus
+            - ov
+        ports:
+            - 2718:2718        # marimo edit
+            - 28080:8080       # airflow api-server (host 8080 taken by traefik)
     nvidia:
         base: fedora-nonfree
         platforms:

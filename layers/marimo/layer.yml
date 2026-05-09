@@ -1,0 +1,55 @@
+layer:
+  name: marimo
+  description: "marimo reactive notebook server with lean CUDA ML + full marimo-team/learn curriculum + Apache Airflow Python deps (the airflow layer ships no pixi env)"
+  requires:
+    - cuda
+    - supervisord
+  env:
+    NVIDIA_PYTHON_PROJECT: "~/.pixi"
+    LD_LIBRARY_PATH: "/usr/lib64"
+  distros:
+    fedora:
+      packages:
+        - git
+        - gcc
+        - gcc-c++
+  ports:
+    - 2718
+  volumes:
+    - name: workspace
+      path: "~/workspace"
+  tasks:
+    - mkdir: "${HOME}/workspace"
+      user: "${USER}"
+  eval:
+    # Build-scope smoke for the lean ML + curriculum + airflow union.
+    # One import line per topic group catches resolver drift at image build,
+    # not at first notebook open.
+    - id: marimo-ml-curriculum-imports
+      command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
+      exit_status: 0
+    - id: marimo-binary
+      file: ${HOME}/.pixi/envs/default/bin/marimo
+      exists: true
+    - id: airflow-binary
+      file: ${HOME}/.pixi/envs/default/bin/airflow
+      exists: true
+    # Deploy-scope smoke — port reachable + HTTP 200 from marimo edit.
+    - id: marimo-port-reachable
+      scope: deploy
+      addr: "127.0.0.1:${HOST_PORT:2718}"
+      reachable: true
+      timeout: 5s
+    - id: marimo-http-up
+      scope: deploy
+      http: "http://127.0.0.1:${HOST_PORT:2718}/"
+      status: 200
+      timeout: 10s
+  service:
+    - name: marimo
+      exec: "%(ENV_HOME)s/.pixi/envs/default/bin/marimo edit --host 0.0.0.0 --port 2718 --no-token --headless %(ENV_HOME)s/workspace"
+      restart: always
+      working_directory: "%(ENV_HOME)s"
+      priority: 30
+      enable: true
+      scope: system

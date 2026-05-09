@@ -19,7 +19,7 @@ defaults:
     build:
         - rpm
     merge:
-        auto: true
+        auto: false
         max_mb: 128
     builder:
         cargo: fedora-builder

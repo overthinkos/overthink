@@ -1,0 +1,142 @@
+layer:
+  name: airflow
+  description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly). Python deps live in the marimo layer's pixi.toml."
+  requires:
+    - marimo            # owns the pixi env; provides the airflow binary at ~/.pixi/envs/default/bin/airflow
+    - supervisord
+  env:
+    AIRFLOW_HOME: "~/airflow"
+    # LocalExecutor + SQLite — zero external services. Airflow auto-creates
+    # ${AIRFLOW_HOME}/airflow.db on first `db migrate`. Suitable for
+    # single-node dev / R10 verification. For multi-node production, swap
+    # in CeleryExecutor + Postgres + Valkey (those layers stayed available
+    # under layers/postgresql/ + layers/valkey/).
+    AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    AIRFLOW__API__PORT: "8080"
+    AIRFLOW__API__HOST: "0.0.0.0"
+  ports:
+    - 8080
+  volumes:
+    - name: airflow-data
+      path: "~/airflow"
+  secrets:
+    - name: airflow-fernet-key
+      env: AIRFLOW__CORE__FERNET_KEY
+    - name: airflow-webserver-secret
+      env: AIRFLOW__API__SECRET_KEY
+    - name: airflow-admin-password
+      env: AIRFLOW_ADMIN_PASSWORD
+  tasks:
+    # User-phase data directories (created during build; bind-mount path persists).
+    - mkdir: "${HOME}/airflow"
+      user: "${USER}"
+    - mkdir: "${HOME}/airflow/dags"
+      user: "${USER}"
+    - mkdir: "${HOME}/airflow/logs"
+      user: "${USER}"
+    - mkdir: "${HOME}/airflow/plugins"
+      user: "${USER}"
+    # ---- airflow-init.sh ----
+    # Runs ONCE on container start (supervisord program with restart: no).
+    # `airflow db migrate` is idempotent on the SQLite metadata DB. The
+    # admin user create is also idempotent (`|| true` swallows the
+    # already-exists error on subsequent boots).
+    - write: /usr/local/bin/airflow-init.sh
+      mode: "0755"
+      user: root
+      content: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        AIRFLOW_BIN="${HOME}/.pixi/envs/default/bin/airflow"
+        "$AIRFLOW_BIN" db migrate
+        "$AIRFLOW_BIN" users create \
+          --username admin \
+          --firstname admin \
+          --lastname admin \
+          --role Admin \
+          --email admin@example.com \
+          --password "${AIRFLOW_ADMIN_PASSWORD}" || true
+    # ---- airflow-webserver.sh / -scheduler.sh ----
+    # Two long-running processes are sufficient for LocalExecutor + SQLite.
+    # `exec` is critical so signals reach airflow directly (not the wrapper).
+    - write: /usr/local/bin/airflow-webserver.sh
+      mode: "0755"
+      user: root
+      content: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        # Airflow 3.x: `webserver` was removed; use `api-server` (FastAPI).
+        exec "${HOME}/.pixi/envs/default/bin/airflow" api-server
+    - write: /usr/local/bin/airflow-scheduler.sh
+      mode: "0755"
+      user: root
+      content: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        exec "${HOME}/.pixi/envs/default/bin/airflow" scheduler
+  eval:
+    # Build-scope: the wrapper scripts must exist + be executable.
+    - id: airflow-init-script
+      file: /usr/local/bin/airflow-init.sh
+      exists: true
+      mode: "0755"
+    - id: airflow-webserver-script
+      file: /usr/local/bin/airflow-webserver.sh
+      exists: true
+      mode: "0755"
+    - id: airflow-scheduler-script
+      file: /usr/local/bin/airflow-scheduler.sh
+      exists: true
+      mode: "0755"
+    # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
+    # airflow-init is a one-shot (restart: no) — checking its side effect
+    # (the SQLite metadata DB exists) is the right invariant. The
+    # `service: ...; enabled: true` shape works for long-running services
+    # but reports false for EXITED one-shots even when they succeeded.
+    - id: airflow-init-db-created
+      scope: deploy
+      command: test -f ${HOME}/airflow/airflow.db
+      exit_status: 0
+      in_container: true
+    - id: airflow-scheduler-running
+      scope: deploy
+      service: airflow-scheduler
+      running: true
+    - id: airflow-webserver-running
+      scope: deploy
+      service: airflow-webserver
+      running: true
+    - id: airflow-port-reachable
+      scope: deploy
+      addr: "127.0.0.1:${HOST_PORT:8080}"
+      reachable: true
+      timeout: 10s
+    - id: airflow-http-version
+      scope: deploy
+      http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
+      status: 200
+      timeout: 30s
+  service:
+    # One-shot init: db migrate + admin user, exits 0. Priority 25 so it
+    # runs before the long-running daemons (priority 30+).
+    - name: airflow-init
+      exec: /usr/local/bin/airflow-init.sh
+      restart: "no"
+      priority: 25
+      start_secs: 0
+      exit_codes: "0"
+      enable: true
+      scope: system
+    - name: airflow-scheduler
+      exec: /usr/local/bin/airflow-scheduler.sh
+      restart: always
+      priority: 30
+      enable: true
+      scope: system
+    - name: airflow-webserver
+      exec: /usr/local/bin/airflow-webserver.sh
+      restart: always
+      priority: 31
+      enable: true
+      scope: system

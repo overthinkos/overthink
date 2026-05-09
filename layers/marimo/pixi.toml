@@ -1,0 +1,91 @@
+[workspace]
+name = "marimo-environment"
+version = "0.1.0"
+description = "marimo reactive notebooks + lean CUDA ML + marimo-team/learn curriculum + Apache Airflow"
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+# Pixi resolves conda first, then PyPI against the conda-pinned versions
+# (https://pixi.prefix.dev/latest/concepts/conda_pypi/). Conda's resolver
+# picks the very-latest version of every transitive dep (e.g. starlette
+# 1.0.0 vs the 0.52.x airflow needs), then PyPI can't satisfy and falls
+# back to building ancient apache-airflow 1.10.2 from source — which uses
+# the removed `imp` module. `no-build = true` forbids source builds, and
+# moving every Python package to [pypi-dependencies] gives pip/uv ONE
+# resolver with full visibility — airflow's pins downgrade their own
+# transitive deps cleanly. Validated 2026-05 with 269 packages installing.
+[pypi-options]
+no-build = true
+
+[dependencies]
+# Conda owns ONLY the Python interpreter + non-Python tooling. Every
+# Python package lives in [pypi-dependencies] below to give pip/uv full
+# visibility (avoids the conda-first → pypi-second pinning trap).
+python = "<3.14"   # validated necessary: build #7 picked 3.14, no Python framework supports it yet
+pip = "*"
+uv = "*"
+ruff = "*"
+
+[pypi-dependencies]
+# === marimo notebook server ===
+marimo = "*"
+
+# === Core data stack (marimo-team/learn: python, polars, sql, queueing, duckdb) ===
+numpy = "*"
+pandas = "*"
+pyarrow = "*"
+polars = "*"
+
+# === Statistics / scientific (learn: probability, optimization, polars) ===
+scipy = "*"
+statsmodels = "*"
+scikit-learn = "*"
+
+# === Visualization (learn: altair, duckdb, queueing, probability, optimization) ===
+matplotlib = "*"
+altair = "*"
+plotly = "*"
+
+# === SQL / dataframe ecosystem (learn: sql, duckdb) ===
+duckdb = "*"
+sqlalchemy = "*"
+sqlglot = "*"
+
+# Postgres + Redis drivers were removed when airflow simplified to
+# SQLite + LocalExecutor (no external services). Add them back if you
+# compose layers/postgresql or layers/valkey alongside.
+
+# === PyTorch CUDA 13 stack (general GPU ML beyond the curriculum) ===
+torch = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
+torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
+torchaudio = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
+transformers = "*"
+accelerate = "*"
+safetensors = "*"
+huggingface_hub = "*"
+
+# === marimo-team/learn helpers ===
+marimo-learn = "*"     # learn/sql/05_join.py
+wigglystuff = "*"      # learn/probability + learn/optimization interactive widgets
+drawdata = "*"         # learn/probability/21_logistic_regression.py
+
+# === Convex optimization (learn/optimization 1-7) ===
+cvxpy = "*"
+clarabel = "*"
+
+# === Distributed dataframes (learn/daft) ===
+daft = "*"
+
+# === Discrete event simulation (learn/queueing — `asimpy` per notebook header; simpy as fallback) ===
+asimpy = "*"
+simpy = "*"
+
+# === Apache Airflow with LocalExecutor + SQLite (no provider extras) ===
+# Latest airflow without celery/postgres/redis providers — the airflow
+# layer drops to SQLite metadata + in-process LocalExecutor for the
+# default marimo-ml deployment. Add provider extras back if composing
+# with layers/postgresql + layers/valkey for multi-node.
+apache-airflow = "*"
+
+[environments]
+default = { features = [], solve-group = "default" }

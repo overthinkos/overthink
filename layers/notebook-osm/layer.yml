@@ -5,14 +5,16 @@ layer:
       volume: workspace
       dest: notebooks
   description:
-    feature: "Sample marimo notebook for the OSM analytics + vector tile pipeline"
+    feature: "Standalone marimo notebook for the OSM analytics + vector tile pipeline"
     narrative: |
-      Provisions a starter marimo notebook into ${HOME}/workspace/notebooks/
-      at deploy time. The notebook demonstrates the full marimo-ml pipeline:
-      Polars-GPU aggregation against the GeoParquet output of the
-      osm-monaco-pipeline DAG, plus MapLibre rendering of the resulting
-      PMTiles served by martin (in-pod localhost:3000). Data-only — no
-      packages, no services. Composed by marimo-ml alongside dag-osm-monaco.
+      Provisions a self-contained marimo notebook into
+      ${HOME}/workspace/notebooks/ at deploy time. The notebook
+      self-authors its own Airflow DAG (writing to AIRFLOW_DAGS_DIR
+      and triggering via the Airflow REST API), runs Polars GPU + CPU
+      analysis against the resulting GeoParquet, and renders a folium
+      map via martin's PMTiles (URL sourced from MARTIN_PUBLIC_URL so
+      the user's browser can reach the host port). Data-only layer —
+      no packages, no services, no baked DAGs.
     scenario:
       - name: OSM viz notebook lands in workspace/notebooks/
         steps:

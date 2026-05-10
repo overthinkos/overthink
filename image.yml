@@ -618,8 +618,7 @@ image:
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
             - osm-data          # tippecanoe + osmium + gdal + martin (PMTiles tile server) + pmtiles CLI
             - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
-            - notebook-osm      # data layer: seeds ~/workspace/notebooks/osm-monaco-viz.py
-            - dag-osm-monaco    # data layer: seeds ~/workspace/dags/osm-monaco-pipeline.py
+            - notebook-osm      # data layer: seeds ~/workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
             - dbus
             - ov
         ports:

@@ -504,6 +504,23 @@ deploy:
             - 29999:19999       # airflow-mcp (mcp-server-apache-airflow on /mcp)
             - 23000:3000        # martin tile server
             - 28000:8000        # maputnik static editor
+        env:
+            # Browser-visible URLs — embedded in folium HTML so the
+            # user's BROWSER (on the host) can reach martin and airflow
+            # via the host-port mappings above. NEVER use container-
+            # internal localhost:N here — the browser is not in the pod.
+            - "MARTIN_PUBLIC_URL=http://127.0.0.1:23000"
+            - "AIRFLOW_PUBLIC_URL=http://127.0.0.1:28080"
+            # Notebook-internal URL — used by Python `requests` calls
+            # inside the kernel (e.g. cell-3's airflow REST API trigger).
+            # Same-pod default; for cross-pod airflow on the shared ov
+            # podman network, override to e.g. "http://airflow-pod:8080"
+            # and mount the same workspace volume in both pods.
+            - "AIRFLOW_API_INTERNAL_URL=http://localhost:8080"
+            # DAG drop directory — the notebook writes its self-authored
+            # DAG here. Same-pod uses the workspace volume; for cross-pod
+            # mount the same workspace volume in both pods at this path.
+            - "AIRFLOW_DAGS_DIR=/home/user/workspace/dags"
         description:
             feature: R10 bed for marimo-ml — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface
             tag: [testing]

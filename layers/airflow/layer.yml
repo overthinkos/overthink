@@ -16,11 +16,19 @@ layer:
     AIRFLOW__API__PORT: "8080"
     AIRFLOW__API__HOST: "0.0.0.0"
     # Override the default ${AIRFLOW_HOME}/dags location so DAGs live
-    # under the user-owned workspace volume. Companion data layers
-    # (e.g. dag-osm-monaco) seed ${HOME}/workspace/dags/ at deploy
-    # time via ov's data-layer machinery — no volume-shadow workaround,
-    # no airflow-init.sh copy step, no /opt/airflow-defaults staging.
+    # under the user-owned workspace volume. Notebooks (e.g. the
+    # marimo-ml osm-monaco-viz notebook) self-author their DAGs into
+    # ${AIRFLOW_DAGS_DIR} (= ~/workspace/dags) at runtime — no static
+    # data layer baking DAGs into the image, no /opt/airflow-defaults
+    # staging, no airflow-init.sh copy step.
     AIRFLOW__CORE__DAGS_FOLDER: "~/workspace/dags"
+    # Default is 300s (5 min) — far too slow for the runtime-DAG-write
+    # pattern (notebook drops a .py and triggers it within seconds).
+    # 10s makes the scan effectively interactive at negligible CPU cost
+    # on a single-user dev pod. NB: the Airflow-2 key path
+    # [scheduler] dag_dir_list_interval was moved to
+    # [dag_processor] refresh_interval in Airflow 3.x.
+    AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "10"
   ports:
     - 8080
     - 19999     # airflow-mcp HTTP transport endpoint (/mcp)
@@ -53,9 +61,16 @@ layer:
       user: "${USER}"
     # ---- airflow-init.sh ----
     # Runs ONCE on container start (supervisord program with restart: no).
-    # `airflow db migrate` is idempotent on the SQLite metadata DB. The
-    # admin user create is also idempotent (`|| true` swallows the
-    # already-exists error on subsequent boots).
+    # `airflow db migrate` is idempotent on the SQLite metadata DB.
+    #
+    # Auth provisioning: Airflow 3.x's default auth backend is
+    # SimpleAuthManager, which removed the legacy `airflow users create`
+    # subcommand and auto-generates a RANDOM admin password on first boot,
+    # writing it to ${AIRFLOW_HOME}/simple_auth_manager_passwords.json.generated.
+    # That random value bears no relation to the AIRFLOW_ADMIN_PASSWORD
+    # secret we inject — so JWT auth via /auth/token rejects every
+    # request with 401. Fix: overwrite the passwords file on every boot
+    # with our injected secret. Idempotent + tolerant of secret rotation.
     - write: /usr/local/bin/airflow-init.sh
       mode: "0755"
       user: root
@@ -64,19 +79,18 @@ layer:
         set -euo pipefail
         AIRFLOW_BIN="${HOME}/.pixi/envs/default/bin/airflow"
         "$AIRFLOW_BIN" db migrate
-        "$AIRFLOW_BIN" users create \
-          --username admin \
-          --firstname admin \
-          --lastname admin \
-          --role Admin \
-          --email admin@example.com \
-          --password "${AIRFLOW_ADMIN_PASSWORD}" || true
+        # Bind the SimpleAuthManager admin password to our injected secret.
+        # Overwrite (>) is intentional: secrets may rotate between boots.
+        mkdir -p "${HOME}/airflow"
+        printf '{"admin": "%s"}\n' "${AIRFLOW_ADMIN_PASSWORD}" \
+          > "${HOME}/airflow/simple_auth_manager_passwords.json.generated"
+        chmod 0600 "${HOME}/airflow/simple_auth_manager_passwords.json.generated"
         # NB: prior versions copied bundled DAGs from /opt/airflow-defaults/
-        # to ${HOME}/airflow/dags/ here as a volume-shadow workaround.
-        # Removed 2026-05-09: DAGs are now seeded into ${HOME}/workspace/dags/
-        # via the dag-osm-monaco data layer + AIRFLOW__CORE__DAGS_FOLDER
-        # override. ov's data-layer machinery (--userns=keep-id) handles
-        # user ownership cleanly; no init-time copy required.
+        # to ${HOME}/airflow/dags/ as a volume-shadow workaround. Then a
+        # short-lived dag-osm-monaco data layer seeded a static DAG into
+        # ${HOME}/workspace/dags/ at deploy time. Both are gone: notebooks
+        # now self-author DAGs at runtime via the Airflow REST API + a
+        # write to AIRFLOW__CORE__DAGS_FOLDER. No init-time copy required.
     # ---- airflow-webserver.sh / -scheduler.sh ----
     # Two long-running processes are sufficient for LocalExecutor + SQLite.
     # `exec` is critical so signals reach airflow directly (not the wrapper).
@@ -95,6 +109,18 @@ layer:
         #!/usr/bin/env bash
         set -euo pipefail
         exec "${HOME}/.pixi/envs/default/bin/airflow" scheduler
+    # Airflow 3.x splits the DAG processor out of the scheduler — without
+    # a separate `airflow dag-processor` daemon, the DAGs folder is only
+    # scanned on explicit `airflow dags reserialize`. The notebook
+    # workflow (write DAG, trigger it) requires periodic scanning, so
+    # this service is essential, not optional, in 3.x.
+    - write: /usr/local/bin/airflow-dag-processor.sh
+      mode: "0755"
+      user: root
+      content: |
+        #!/usr/bin/env bash
+        set -euo pipefail
+        exec "${HOME}/.pixi/envs/default/bin/airflow" dag-processor
 
     # ---- airflow-mcp.sh ----
     # Plan A: mcp-server-apache-airflow from PyPI. Wraps the Airflow REST API
@@ -156,11 +182,13 @@ layer:
           --mcp-port 19999
 
     # NB: sample OSM pipeline DAG used to be inlined here via `write:`
-    # to /opt/airflow-defaults/dags/ + airflow-init.sh copy. Replaced
-    # 2026-05-09 with the dag-osm-monaco data layer which seeds
-    # ${HOME}/workspace/dags/ via ov's data-layer machinery. The DAG
-    # writes its output to ${HOME}/workspace/tiles/pmtiles/ (martin's
-    # tile source) — all under the user-owned workspace volume.
+    # to /opt/airflow-defaults/dags/ + airflow-init.sh copy. Then it
+    # was extracted to a dag-osm-monaco data layer that seeded
+    # ${HOME}/workspace/dags/ at deploy time. Both are gone: notebooks
+    # now self-author DAGs at runtime via the Airflow REST API. The
+    # canonical example is layers/notebook-osm/data/notebooks/osm-monaco-viz.py
+    # which writes notebook_osm_pipeline.py into AIRFLOW__CORE__DAGS_FOLDER
+    # and triggers it via POST /api/v2/dags/.../dagRuns.
   eval:
     # Build-scope: the wrapper scripts must exist + be executable.
     - id: airflow-init-script
@@ -175,18 +203,17 @@ layer:
       file: /usr/local/bin/airflow-scheduler.sh
       exists: true
       mode: "0755"
+    - id: airflow-dag-processor-script
+      file: /usr/local/bin/airflow-dag-processor.sh
+      exists: true
+      mode: "0755"
     - id: airflow-mcp-script
       file: /usr/local/bin/airflow-mcp.sh
       exists: true
       mode: "0755"
-    # Build-scope: the sample DAG file landed (the file lives directly in
-    # the image at the same path the airflow-data volume bind-mount targets).
-    # NB: sample-DAG presence is now verified by layers/dag-osm-monaco/
-    # (via its own scope: deploy probe on
-    # ${VOLUME_CONTAINER_PATH:workspace}/dags/osm-monaco-pipeline.py).
-    # The DAG is data-layer-seeded into ${HOME}/workspace/dags/ — the
-    # AIRFLOW__CORE__DAGS_FOLDER override above tells airflow to look
-    # there. No /opt/airflow-defaults staging, no init-script copy.
+    # NB: no static DAG file is baked or seeded by ov anymore. Notebooks
+    # self-author DAGs at runtime; the JWT-issuance probe below is what
+    # proves the path the notebook depends on actually works.
     # Build-scope: the mcp-server-apache-airflow CLI installed cleanly into the pixi env.
     - id: airflow-mcp-binary
       file: ${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow
@@ -204,6 +231,10 @@ layer:
     - id: airflow-scheduler-running
       scope: deploy
       service: airflow-scheduler
+      running: true
+    - id: airflow-dag-processor-running
+      scope: deploy
+      service: airflow-dag-processor
       running: true
     - id: airflow-webserver-running
       scope: deploy
@@ -223,6 +254,23 @@ layer:
       http: "http://127.0.0.1:${HOST_PORT:8080}/api/v2/version"
       status: 200
       timeout: 30s
+    # Proves the JWT auth path notebooks depend on (e.g. the marimo-ml
+    # osm-monaco-viz notebook's cell-3 POSTs /auth/token to get a bearer
+    # token before triggering its self-authored DAG via /api/v2/dagRuns).
+    # in_container: true so $AIRFLOW_ADMIN_PASSWORD is shell-expanded
+    # against the container env (the secret is injected by ov as an env
+    # var, never a file). A green check here is a guarantee that
+    # admin/AIRFLOW_ADMIN_PASSWORD will succeed for any in-pod client.
+    - id: airflow-jwt-issuance
+      scope: deploy
+      command: |
+        curl -fsS -X POST "http://localhost:8080/auth/token" \
+          -H "Content-Type: application/json" \
+          -d "{\"username\":\"admin\",\"password\":\"$AIRFLOW_ADMIN_PASSWORD\"}" \
+        | grep -q '"access_token"'
+      in_container: true
+      exit_status: 0
+      timeout: 15s
     - id: airflow-mcp-port-reachable
       scope: deploy
       addr: "127.0.0.1:${HOST_PORT:19999}"
@@ -268,6 +316,15 @@ layer:
       exec: /usr/local/bin/airflow-scheduler.sh
       restart: always
       priority: 30
+      enable: true
+      scope: system
+    - name: airflow-dag-processor
+      # Airflow 3.x: separate from the scheduler. Without it, DAG files
+      # in AIRFLOW__CORE__DAGS_FOLDER are never scanned (notebooks that
+      # self-author DAGs would deadlock waiting for registration).
+      exec: /usr/local/bin/airflow-dag-processor.sh
+      restart: always
+      priority: 31
       enable: true
       scope: system
     - name: airflow-webserver

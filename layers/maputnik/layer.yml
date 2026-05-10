@@ -41,7 +41,14 @@ layer:
         # and we want deterministic resolution. --no-audit + --no-fund cut
         # ~5 sec of network chatter that only spams stderr.
         npm ci --no-audit --no-fund
-        npm run build
+        # Maputnik's package.json `"build": "tsc && vite build"` runs
+        # vite with its default `--base=/maputnik/`, which bakes
+        # /maputnik/assets/* references into the emitted HTML. We
+        # serve the static dist at `/` via python -m http.server, so
+        # those baked paths 404 in the browser. Override base to `/`
+        # so asset URLs are root-relative and resolve against our
+        # serve path. The `--` forwards the flag through npm to vite.
+        npm run build -- --base=/
         # Maputnik uses Vite (`tsc && vite build --mode=production`); Vite
         # default output is `dist/`, NOT `build/` (the source-tree `build/`
         # is just release scripts). Copy the actual SPA artifact and
@@ -87,6 +94,16 @@ layer:
       http: "http://127.0.0.1:${HOST_PORT:8000}/"
       status: 200
       timeout: 10s
+    # Vite's default `--base=/maputnik/` bakes /maputnik/assets/* into
+    # the emitted index.html — those URLs 404 in the browser when we
+    # serve at root. The build now passes `--base=/`; this assertion
+    # locks it in (regression catches a future revert to the default).
+    - id: maputnik-asset-base-not-prefixed
+      scope: deploy
+      command: |
+        ! curl -fsS http://localhost:8000/ | grep -q '"/maputnik/'
+      in_container: true
+      exit_status: 0
   service:
     - name: maputnik
       # System python3 (from the supervisor RPM's own dependency) — keeps

@@ -91,13 +91,24 @@ def __(Path, os, textwrap):
         def notebook_osm_pipeline():
             @task
             def download_pbf() -> str:
+                # Smart download: re-fetch only if remote is newer than
+                # local. Geofabrik refreshes its extracts daily; checking
+                # Last-Modified avoids re-pulling ~12 MB on every run.
+                import email.utils
                 WORK.mkdir(parents=True, exist_ok=True)
+                url = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
                 out = WORK / "monaco.osm.pbf"
-                if not out.exists():
-                    urllib.request.urlretrieve(
-                        "https://download.geofabrik.de/europe/monaco-latest.osm.pbf",
-                        str(out),
-                    )
+                if out.exists():
+                    req = urllib.request.Request(url, method="HEAD")
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        last_mod = resp.headers.get("Last-Modified")
+                    if last_mod:
+                        remote_ts = email.utils.parsedate_to_datetime(
+                            last_mod
+                        ).timestamp()
+                        if remote_ts <= out.stat().st_mtime:
+                            return str(out)
+                urllib.request.urlretrieve(url, str(out))
                 return str(out)
 
             @task
@@ -260,12 +271,18 @@ def __(parquet_path, pl):
 
 
 @app.cell
-def __(dag_run_state, folium, os):
+def __(folium, os):
     # Class C — lazy client-side fetch from a URL the BROWSER must reach.
     # Tile URL is read from MARTIN_PUBLIC_URL so it carries the host-
     # visible mapping (e.g. http://127.0.0.1:23000), not the container-
     # internal localhost:3000 that wouldn't resolve from the user's host.
-    assert dag_run_state == "success"
+    #
+    # Standalone — does NOT depend on dag_run_state. The folium WIDGET
+    # (tile-URL template) renders immediately on notebook open. Tile
+    # fetches start succeeding once the DAG produces monaco.pmtiles for
+    # martin to serve; before then, the widget shows an empty Leaflet
+    # canvas — same UX as any tile layer whose source goes briefly
+    # offline.
     martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
     m = folium.Map(location=[43.7384, 7.4246], zoom_start=14, tiles=None)
     folium.TileLayer(
@@ -273,7 +290,7 @@ def __(dag_run_state, folium, os):
         attr="OSM via QuackOSM + tippecanoe + martin",
         name="Monaco OSM",
     ).add_to(m)
-    return (m,)
+    m
 
 
 if __name__ == "__main__":

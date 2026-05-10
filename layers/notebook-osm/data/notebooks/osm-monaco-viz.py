@@ -147,9 +147,22 @@ def __(Path, os, textwrap):
                 ], check=True)
                 return str(out)
 
-            geojson_to_pmtiles(
+            @task
+            def reload_martin(pmtiles_path: str) -> str:
+                # Martin caches the pmtiles file mtime when its server
+                # starts, then refuses tile requests with "Underlying
+                # data source was modified" once the file changes.
+                # Restarting martin via supervisord makes it re-scan
+                # the directory and pick up the fresh pmtiles. uid 1000
+                # has supervisorctl access in this image.
+                subprocess.run(
+                    ["supervisorctl", "restart", "martin"], check=True,
+                )
+                return pmtiles_path
+
+            reload_martin(geojson_to_pmtiles(
                 geoparquet_to_geojson(pbf_to_geoparquet(download_pbf()))
-            )
+            ))
 
 
         notebook_osm_pipeline()
@@ -368,34 +381,63 @@ def __(parquet_path, pl):
 
 
 @app.cell
-def __(folium, os):
-    # Class C — lazy client-side fetch from a URL the BROWSER must reach.
-    # Tile URL is read from MARTIN_PUBLIC_URL so it carries the host-
-    # visible mapping (e.g. http://127.0.0.1:23000), not the container-
-    # internal localhost:3000 that wouldn't resolve from the user's host.
+def __(mo, os):
+    # Class C — lazy client-side fetch via MapLibre GL JS pointed at
+    # martin's vector tiles. Why MapLibre, not folium?
+    #   - tippecanoe → pmtiles → martin produces VECTOR tiles
+    #     (Mapbox Vector Tile / PBF format).
+    #   - folium's TileLayer is RASTER-only — it tries to render the
+    #     PBF as a PNG, fails silently → grey map. Verified: martin
+    #     returns Content-Type: application/x-protobuf for /monaco/
+    #     {z}/{x}/{y}, NOT image/png.
+    #   - MapLibre GL JS is the canonical client for vector tiles;
+    #     it parses the TileJSON at /monaco, fetches tiles, and
+    #     renders them client-side per the style spec below.
     #
-    # Standalone — does NOT depend on dag_run_state. The folium WIDGET
-    # (tile-URL template) renders immediately on notebook open. Tile
-    # fetches start succeeding once the DAG produces monaco.pmtiles for
-    # martin to serve; before then, the widget shows an empty Leaflet
-    # canvas — same UX as any tile layer whose source goes briefly
-    # offline.
+    # The MARTIN_PUBLIC_URL env var must be set to the host-visible
+    # martin URL (e.g. http://127.0.0.1:23000). MapLibre runs in the
+    # USER'S browser, so all URLs in the embedded HTML must be
+    # browser-reachable (NOT container-internal localhost:3000).
+    # Martin reflects the marimo Origin in its CORS headers, so the
+    # cross-port (22718 → 23000) XHR works without proxy tricks.
     martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
-    m = folium.Map(location=[43.7384, 7.4246], zoom_start=14, tiles=None)
-    folium.TileLayer(
-        tiles=f"{martin}/monaco/{{z}}/{{x}}/{{y}}",
-        attr="OSM via QuackOSM + tippecanoe + martin",
-        name="Monaco OSM",
-    ).add_to(m)
-    # Set the Figure's (NOT the Map's) height. Branca's _repr_html_
-    # only emits the "Make this Notebook Trusted" wrapper when
-    # figure.height is None — the wrapper exists for Jupyter classic
-    # NB which blocks iframe srcdoc in untrusted notebooks. Setting
-    # any explicit height routes through branca's clean iframe path
-    # with no trust check, which is what we want in marimo (a non-
-    # Jupyter renderer where the wrapper just hides the map).
-    m.get_root().height = "500px"
-    m
+    streets_html = f"""<!DOCTYPE html>
+<html><head>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>html,body{{margin:0;padding:0;}}#map{{height:500px;width:100%;}}</style>
+</head><body>
+<div id="map"></div>
+<script>
+const map = new maplibregl.Map({{
+  container: 'map',
+  style: {{
+    version: 8,
+    sources: {{ monaco: {{ type: 'vector', url: '{martin}/monaco' }} }},
+    layers: [
+      {{ id: 'bg', type: 'background',
+         paint: {{ 'background-color': '#f0ece4' }} }},
+      {{ id: 'fill', type: 'fill', source: 'monaco', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'Polygon'],
+         paint: {{ 'fill-color': '#cfd5c0', 'fill-outline-color': '#7a7a7a',
+                   'fill-opacity': 0.6 }} }},
+      {{ id: 'line', type: 'line', source: 'monaco', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'LineString'],
+         paint: {{ 'line-color': '#444', 'line-width': 0.8 }} }},
+      {{ id: 'circ', type: 'circle', source: 'monaco', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'Point'],
+         paint: {{ 'circle-color': '#c44', 'circle-radius': 1.5,
+                   'circle-stroke-color': '#fff', 'circle-stroke-width': 0.5 }} }}
+    ]
+  }},
+  center: [7.4246, 43.7384],
+  zoom: 13,
+  attributionControl: false
+}});
+map.addControl(new maplibregl.NavigationControl(), 'top-right');
+</script>
+</body></html>"""
+    mo.iframe(streets_html, height="500px")
 
 
 @app.cell

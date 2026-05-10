@@ -83,7 +83,7 @@ type HarnessScore struct {
 	// against in every iteration. Order is significant: scenarios
 	// concatenate in this order, and `${RECIPES}` renders blocks in
 	// this order. MUST be non-empty; duplicates are rejected.
-	Recipes []string `yaml:"recipes,omitempty"`
+	Recipe   []string `yaml:"recipe,omitempty"`
 
 	// Deployment names the running deployment the harness scores
 	// against. Required: the AI must `ov deploy add <Deployment> <ref>`
@@ -239,28 +239,28 @@ func SortedScoreNames(catalog map[string]*HarnessScore) []string {
 }
 
 // ---------------------------------------------------------------------------
-// ResolveScoreRecipes — concatenate scenarios across the score's recipes
+// ResolveScoreRecipe — concatenate scenarios across the score's recipes
 // ---------------------------------------------------------------------------
 
-// ResolveScoreRecipes returns the merged scenario list across every
-// recipe named in score.Recipes (in order), with each appended Scenario
+// ResolveScoreRecipe returns the merged scenario list across every
+// recipe named in score.Recipe (in order), with each appended Scenario
 // stamped with its source recipe name (for ${RECIPES} rendering).
 //
 // Errors:
 //   - empty Recipes list
 //   - duplicate names in Recipes
 //   - any name not present in the recipe catalog
-func ResolveScoreRecipes(score *HarnessScore, recipeCatalog map[string]*HarnessRecipe) ([]Scenario, []*HarnessRecipe, error) {
+func ResolveScoreRecipe(score *HarnessScore, recipeCatalog map[string]*HarnessRecipe) ([]Scenario, []*HarnessRecipe, error) {
 	if score == nil {
-		return nil, nil, errors.New("ResolveScoreRecipes: nil score")
+		return nil, nil, errors.New("ResolveScoreRecipe: nil score")
 	}
-	if len(score.Recipes) == 0 {
+	if len(score.Recipe) == 0 {
 		return nil, nil, errors.New("score.recipes: must reference at least one recipe (got empty list)")
 	}
-	seen := make(map[string]bool, len(score.Recipes))
+	seen := make(map[string]bool, len(score.Recipe))
 	var merged []Scenario
 	var resolved []*HarnessRecipe
-	for _, name := range score.Recipes {
+	for _, name := range score.Recipe {
 		if seen[name] {
 			return nil, nil, fmt.Errorf("score.recipes: duplicate recipe name %q (each recipe may appear at most once)", name)
 		}
@@ -287,7 +287,7 @@ func ResolveScoreRecipes(score *HarnessScore, recipeCatalog map[string]*HarnessR
 // RenderScoreRecipesYAML renders a per-recipe-grouped YAML block: one
 // entry per included recipe, each with name + description + scenarios.
 // Drives the ${RECIPES} substitution token. Order matches the input
-// score.Recipes list.
+// score.Recipe list.
 func RenderScoreRecipesYAML(recipeNames []string, recipeCatalog map[string]*HarnessRecipe) string {
 	type recipeBlock struct {
 		Recipe      string     `yaml:"recipe"`
@@ -347,7 +347,7 @@ func PrintScores(w io.Writer, catalog map[string]*HarnessScore) {
 		if ai == "" {
 			ai = "(none)"
 		}
-		recipes := strings.Join(s.Recipes, ",")
+		recipes := strings.Join(s.Recipe, ",")
 		if recipes == "" {
 			recipes = "(none)"
 		}

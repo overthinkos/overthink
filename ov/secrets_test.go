@@ -516,7 +516,7 @@ func TestCollectLayerSecretAcceptsEnvOverride(t *testing.T) {
 // `Secret=` directives, and `secret_requires` entrypoints crashlooped.
 //
 // The invariant this test locks in: anywhere the ov code path builds the
-// `cfg.Secrets` slice that reaches `quadlet.go:writeSecretsSection`, it MUST
+// `cfg.Secret` slice that reaches `quadlet.go:writeSecretsSection`, it MUST
 // merge both layer-owned (`CollectSecretsFromLabels`) and credential-backed
 // (`CollectLayerSecretAccepts`) collections. The `Run()` path does this at
 // `config_image.go` after the env resolution; the `updateAllDeployedQuadlets`

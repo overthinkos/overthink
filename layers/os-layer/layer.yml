@@ -8,14 +8,14 @@ layer:
       service so that `pgrep -x bash` succeeds. Combined with a fedora
       base + supervisord this satisfies every scenario in the
       single-pod-system-state recipe.
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - bash
         - procps-ng
         - iproute
         - util-linux
-  tasks:
+  task:
     - mkdir: /etc
       user: root
       mode: "0755"

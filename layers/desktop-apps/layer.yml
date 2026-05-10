@@ -1,8 +1,8 @@
 layer:
   name: desktop-apps
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - btop
         - chromium
         - cloud-init

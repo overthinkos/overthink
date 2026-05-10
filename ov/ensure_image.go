@@ -11,14 +11,14 @@ package main
 //
 // Three input forms accepted, mirroring `ov image pull`:
 //
-//   - Short name (e.g. "eval-target") — resolved via `cfg.Images`
+//   - Short name (e.g. "eval-target") — resolved via `cfg.Image`
 //     to a registry ref, then pulled. Build-fallback uses the same
 //     short name as the input to `ov image build`.
 //
 //   - Fully-qualified registry ref (e.g.
 //     "ghcr.io/overthinkos/eval-target:2026.124.1253") — pulled as-is.
 //     Build-fallback reverse-resolves the basename against
-//     `cfg.Images`; when the basename matches a project image entry,
+//     `cfg.Image`; when the basename matches a project image entry,
 //     the local build runs that entry. This is what makes the
 //     operator's `ghcr.io/overthinkos/archlinux-builder:<tag>`
 //     buildable on a CachyOS host that has no ghcr.io credentials.
@@ -102,7 +102,7 @@ func EnsureImagePresent(ctx context.Context, image string, cfg *Config, projectD
 	}
 
 	// Fallback: short-name local build. Applies when the identifier
-	// maps to a short-name entry in `cfg.Images` — directly (it IS a
+	// maps to a short-name entry in `cfg.Image` — directly (it IS a
 	// short name) or via basename reverse-resolution (it's a full ref
 	// whose basename matches an entry).
 	short := buildableShortName(image, cfg)
@@ -201,16 +201,16 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //
 // Algorithm:
 //   - Short names (no slash, no @prefix) are returned as-is when
-//     `cfg.Images[name]` exists.
+//     `cfg.Image[name]` exists.
 //   - Full registry refs have their basename (last path segment,
-//     before the tag) extracted and checked against `cfg.Images`.
+//     before the tag) extracted and checked against `cfg.Image`.
 //     This is what lets `ghcr.io/overthinkos/archlinux-builder:<tag>`
 //     fall back to building the project's `archlinux-builder` image.
 //   - Remote `@github.com/...` refs are skipped — the remote
 //     project's image.yml already determined the canonical ref;
 //     local build-fallback is not applicable.
 func buildableShortName(image string, cfg *Config) string {
-	if cfg == nil || cfg.Images == nil || image == "" {
+	if cfg == nil || cfg.Image == nil || image == "" {
 		return ""
 	}
 	stripped := StripURLScheme(image)
@@ -233,7 +233,7 @@ func buildableShortName(image string, cfg *Config) string {
 	if work == "" {
 		return ""
 	}
-	if _, ok := cfg.Images[work]; ok {
+	if _, ok := cfg.Image[work]; ok {
 		return work
 	}
 	return ""

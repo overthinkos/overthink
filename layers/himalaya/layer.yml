@@ -1,8 +1,8 @@
 layer:
   name: himalaya
   description: Himalaya email CLI (IMAP/SMTP)
-  requires:
+  require:
     - rust
-  tasks:
+  task:
     - cmd: cargo install himalaya --locked
       user: "${USER}"

@@ -2,7 +2,7 @@ layer:
   name: os-config
   description: OS system configuration — SDDM/KDE tweaks, services, cleanup, initramfs rebuild
 
-  tasks:
+  task:
     # Remove gaming desktop entries if present (bootc-specific cleanup)
     - cmd: |
         rm -f /usr/share/applications/steam.desktop 2>/dev/null || true

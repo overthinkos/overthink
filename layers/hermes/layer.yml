@@ -1,7 +1,7 @@
 layer:
   name: hermes
   description: Hermes self-improving AI agent by Nous Research
-  requires:
+  require:
     - nodejs
     - supervisord
     - ripgrep
@@ -10,7 +10,7 @@ layer:
   env:
     HERMES_HOME: "/opt/data"
     TERMINAL_ENV: "local"
-  env_accepts:
+  env_accept:
     - name: OLLAMA_HOST
       description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
     - name: HERMES_MODEL
@@ -27,7 +27,7 @@ layer:
   # or the quadlet file as plaintext. The ov/api-key/* keys are shared with
   # openwebui so one `ov secrets set` populates both consumers. See
   # /ov:secrets and /ov:layer.
-  secret_accepts:
+  secret_accept:
     - name: OPENROUTER_API_KEY
       description: "API key for OpenRouter LLM inference"
       key: ov/api-key/openrouter
@@ -43,25 +43,25 @@ layer:
     - name: IMMICH_API_KEY
       description: "Immich API key for programmatic access to the running immich instance"
       key: ov/api-key/immich
-  mcp_accepts:
+  mcp_accept:
     - name: jupyter
       description: "JupyterLab CRDT MCP server for notebook manipulation"
     - name: chrome-devtools
       description: "Chrome DevTools MCP server for browser automation and inspection"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - alsa-lib
         - portaudio
-  volumes:
+  volume:
     - name: data
       path: "/opt/data"
-  aliases:
+  alias:
     - name: hermes
       command: hermes
     - name: hermes-agent
       command: hermes-agent
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: hermes-entrypoint

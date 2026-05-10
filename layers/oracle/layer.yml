@@ -1,7 +1,7 @@
 layer:
   name: oracle
   description: Oracle CLI for prompt bundling and multi-engine AI queries
-  requires:
+  require:
     - nodejs
   eval:
     - id: oracle-binary

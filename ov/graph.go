@@ -14,11 +14,11 @@ func (e *CycleError) Error() string {
 	return fmt.Sprintf("circular dependency: %s", strings.Join(e.Cycle, " -> "))
 }
 
-// ExpandLayers expands layer composition references (layers: field in layer.yml).
+// ExpandLayer expands layer composition references (layers: field in layer.yml).
 // For each layer that has IncludedLayers, recursively inserts them into the result.
 // Layers without content (no install files, no env/ports/etc.) are omitted.
 // Returns a flat, deduplicated layer list.
-func ExpandLayers(requested []string, layers map[string]*Layer) ([]string, error) {
+func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error) {
 	var result []string
 	seen := make(map[string]bool)
 	expanding := make(map[string]bool)
@@ -40,9 +40,9 @@ func ExpandLayers(requested []string, layers map[string]*Layer) ([]string, error
 			return nil
 		}
 
-		if len(layer.IncludedLayers) > 0 {
+		if len(layer.IncludedLayer) > 0 {
 			expanding[name] = true
-			for _, included := range layer.IncludedLayers {
+			for _, included := range layer.IncludedLayer {
 				if err := expand(included); err != nil {
 					return err
 				}
@@ -80,7 +80,7 @@ func ExpandLayers(requested []string, layers map[string]*Layer) ([]string, error
 // These are excluded from the returned order.
 func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayers map[string]bool) ([]string, error) {
 	// Expand layer composition first
-	expanded, err := ExpandLayers(requested, layers)
+	expanded, err := ExpandLayer(requested, layers)
 	if err != nil {
 		return nil, err
 	}
@@ -114,14 +114,14 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 		newPath := append(path, name)
 
 		// Add included layers (composition)
-		for _, included := range layer.IncludedLayers {
+		for _, included := range layer.IncludedLayer {
 			if err := addTransitive(included, newPath); err != nil {
 				return err
 			}
 		}
 
 		// Add dependencies
-		for _, dep := range layer.Requires {
+		for _, dep := range layer.Require {
 			if err := addTransitive(dep, newPath); err != nil {
 				return err
 			}
@@ -129,7 +129,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 
 		visiting[name] = false
 		// Composing layers without content don't need to be built
-		if len(layer.IncludedLayers) == 0 || layer.HasContent() {
+		if len(layer.IncludedLayer) == 0 || layer.HasContent() {
 			needed[name] = true
 		}
 		return nil
@@ -158,7 +158,7 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 			return nil
 		}
 		var edges []string
-		for _, included := range layer.IncludedLayers {
+		for _, included := range layer.IncludedLayer {
 			edges = append(edges, resolveDepEdges(included)...)
 		}
 		return edges
@@ -167,11 +167,11 @@ func ResolveLayerOrder(requested []string, layers map[string]*Layer, parentLayer
 	for name := range needed {
 		layer := layers[name]
 		var deps []string
-		for _, dep := range layer.Requires {
+		for _, dep := range layer.Require {
 			deps = append(deps, resolveDepEdges(dep)...)
 		}
 		// Included layers that have content are also dependencies (must install before)
-		for _, included := range layer.IncludedLayers {
+		for _, included := range layer.IncludedLayer {
 			deps = append(deps, resolveDepEdges(included)...)
 		}
 		graph[name] = deps
@@ -193,14 +193,14 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 	var parentLayers map[string]bool
 	if !img.IsExternalBase {
 		var err error
-		parentLayers, err = LayersProvidedByImage(img.Base, images, layers)
+		parentLayers, err = LayerProvidedByImage(img.Base, images, layers)
 		if err != nil {
 			return true // conservative
 		}
 	}
 
 	// Resolve this image's own layers (excluding parent)
-	resolved, err := ResolveLayerOrder(img.Layers, layers, parentLayers)
+	resolved, err := ResolveLayerOrder(img.Layer, layers, parentLayers)
 	if err != nil {
 		return true // conservative
 	}
@@ -238,7 +238,7 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 		}
 		// Collect all builder images this image may depend on
 		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builder.AllBuilders() {
+			for _, builder := range img.Builder.AllBuilder() {
 				if builder != name {
 					if _, ok := images[builder]; ok {
 						deps = append(deps, builder)
@@ -388,7 +388,7 @@ func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Lay
 			deps = append(deps, img.Base)
 		}
 		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builder.AllBuilders() {
+			for _, builder := range img.Builder.AllBuilder() {
 				if builder != name {
 					if _, ok := images[builder]; ok {
 						deps = append(deps, builder)
@@ -448,9 +448,9 @@ func findCycle(graph map[string][]string, inDegree map[string]int) []string {
 	return cyclePath
 }
 
-// LayersProvidedByImage returns the set of layers installed by an image
+// LayerProvidedByImage returns the set of layers installed by an image
 // (including those inherited from parent images via base chain)
-func LayersProvidedByImage(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) (map[string]bool, error) {
+func LayerProvidedByImage(imageName string, images map[string]*ResolvedImage, layers map[string]*Layer) (map[string]bool, error) {
 	provided := make(map[string]bool)
 	visited := make(map[string]bool)
 
@@ -474,12 +474,12 @@ func LayersProvidedByImage(imageName string, images map[string]*ResolvedImage, l
 		}
 
 		// Add this image's layers (expand composition)
-		expanded, _ := ExpandLayers(img.Layers, layers)
+		expanded, _ := ExpandLayer(img.Layer, layers)
 		for _, layerName := range expanded {
 			provided[layerName] = true
 		}
 		// Also mark composing layer names as provided
-		for _, layerName := range img.Layers {
+		for _, layerName := range img.Layer {
 			provided[layerName] = true
 		}
 

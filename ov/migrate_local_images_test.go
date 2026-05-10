@@ -13,7 +13,7 @@ const legacyLocalImagesYAML = `version: 4
 
 local:
   ov-cachyos:
-    layers:
+    layer:
       - wheel-nopasswd
       - dev-tools
     # 2026-05 cutover (` + "`kind: local`" + ` ` + "`images:`" + ` field).
@@ -74,7 +74,7 @@ func TestRewriteLegacyLocalImages_NoMatch(t *testing.T) {
 	noImages := `version: 4
 local:
   dev:
-    layers: [ripgrep]
+    layer: [ripgrep]
 `
 	got, n := rewriteLegacyLocalImagesInFile("test.yml", noImages)
 	if n != 0 || got != noImages {
@@ -86,7 +86,7 @@ func TestScanLegacyLocalImages_IgnoresTopLevelImagesMap(t *testing.T) {
 	// Top-level `images:` (image.yml shape) at column 0 must NOT be
 	// rewritten — only `local.<name>.images` is in scope.
 	imageYML := `version: 4
-images:
+image:
   fedora-coder:
     enabled: true
 `
@@ -102,12 +102,12 @@ func TestMigrateLocalImages_WalksAndWrites(t *testing.T) {
 	if err := os.WriteFile(yamlPath, []byte(legacyLocalImagesYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	changed, err := MigrateLocalImages(tmp, false)
+	changed, err := MigrateLocalImage(tmp, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(changed) != 1 || changed[0] != yamlPath {
-		t.Errorf("MigrateLocalImages: unexpected change list: %v", changed)
+		t.Errorf("MigrateLocalImage: unexpected change list: %v", changed)
 	}
 	post, err := os.ReadFile(yamlPath)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestMigrateLocalImages_WalksAndWrites(t *testing.T) {
 		t.Errorf("post-migration file still has images: key:\n%s", post)
 	}
 	// Idempotent on re-run.
-	changed2, _ := MigrateLocalImages(tmp, false)
+	changed2, _ := MigrateLocalImage(tmp, false)
 	if len(changed2) != 0 {
 		t.Errorf("second migration should be no-op, got changes: %v", changed2)
 	}

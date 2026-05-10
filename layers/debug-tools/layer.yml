@@ -6,9 +6,9 @@ layer:
   # (e.g. nmap-ncat vs ncat vs gnu-netcat) so per-distro lists are the
   # honest authoring path — no synthetic "common" package list that
   # would silently install nothing on the wrong distro.
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         # Process inspection
         - procps-ng              # ps, top, kill, pkill, pgrep, free, vmstat, watch
         - htop
@@ -39,7 +39,7 @@ layer:
         - rsync
         - yq                     # YAML manipulator (Fedora ships a Python yq)
     archlinux:
-      packages:
+      package:
         - procps-ng
         - htop
         - iotop
@@ -66,7 +66,7 @@ layer:
         - rsync
         - go-yq                  # mikefarah/yq Go implementation
     debian:
-      packages:
+      package:
         - procps
         - htop
         - iotop
@@ -94,7 +94,7 @@ layer:
         # yq omitted — Debian/Ubuntu ship it via snap; install via pixi
         # if a yq workflow becomes essential.
     ubuntu:
-      packages:
+      package:
         - procps
         - htop
         - iotop

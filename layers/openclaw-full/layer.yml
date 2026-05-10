@@ -2,7 +2,7 @@ layer:
   name: openclaw-full
   description: Maximal OpenClaw deployment (gateway + browser + all feasible tools/skills)
 
-  layers:
+  layer:
     - openclaw
     - chrome
     - chrome-cdp

@@ -113,7 +113,7 @@ func RenderCloudInit(spec *VmSpec, rt CloudInitRuntimeParams) (userData, metaDat
 
 	userMap["users"] = composeUsers(spec, ci, rt)
 
-	packages := composePackages(ci.Packages, spec.Source.Distro)
+	packages := composePackages(ci.Package, spec.Source.Distro)
 	if len(packages) > 0 {
 		userMap["packages"] = packages
 	}

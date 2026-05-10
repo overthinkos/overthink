@@ -55,8 +55,8 @@ type ScenarioEvalResult struct {
 	Name         string             `yaml:"name,omitempty"`
 	Tag         []string           `yaml:"tag,omitempty"`
 	Status       string             `yaml:"status"` // "pass" | "fail" | "skip" | "skipped"
-	PendingSteps int                `yaml:"pending_steps"`
-	Steps        []StepEvalResult   `yaml:"steps,omitempty"`
+	PendingSteps int                `yaml:"pending_step"`
+	Step         []StepEvalResult   `yaml:"step,omitempty"`
 	// SkippedReason is set when Status == "skipped" — the depends_on
 	// upstream that didn't pass. Format: "dep-unmet: <upstream-name>".
 	SkippedReason string `yaml:"skipped_reason,omitempty"`
@@ -176,7 +176,7 @@ func canonicalizeScenario(s Scenario) string {
 	// reordering MUST change the fingerprint.
 	clone := deepCloneScenario(s)
 	sort.Strings(clone.Tag)
-	for i := range clone.Steps {
+	for i := range clone.Step {
 		// Check.Matching tags etc. are not part of the Check struct, so
 		// there is no nested tag list to sort here. Step text is canonical
 		// as-authored.
@@ -185,11 +185,11 @@ func canonicalizeScenario(s Scenario) string {
 	// Sort Examples row keys for deterministic output. Row ORDER is
 	// semantic (examples drive scenario outline expansion order) so
 	// rows themselves stay in document order.
-	for i, row := range clone.Examples {
+	for i, row := range clone.Example {
 		if row == nil {
 			continue
 		}
-		clone.Examples[i] = sortedCopy(row)
+		clone.Example[i] = sortedCopy(row)
 	}
 
 	out, err := yaml.Marshal(clone)
@@ -197,7 +197,7 @@ func canonicalizeScenario(s Scenario) string {
 		// yaml.Marshal cannot realistically fail on a well-formed
 		// Scenario — every field is a basic type. Fall back to a
 		// bespoke formatting that still hashes deterministically.
-		return fmt.Sprintf("MARSHAL_ERR:%s:%d:%d", clone.Name, len(clone.Tag), len(clone.Steps))
+		return fmt.Sprintf("MARSHAL_ERR:%s:%d:%d", clone.Name, len(clone.Tag), len(clone.Step))
 	}
 	return string(out)
 }
@@ -225,19 +225,19 @@ func deepCloneScenario(s Scenario) Scenario {
 	c := Scenario{
 		Name:     s.Name,
 		Tag:     append([]string(nil), s.Tag...),
-		Steps:    append([]Step(nil), s.Steps...),
+		Step:    append([]Step(nil), s.Step...),
 		OnFail:   append([]Step(nil), s.OnFail...),
-		Examples: nil,
+		Example: nil,
 	}
-	if len(s.Examples) > 0 {
-		c.Examples = make([]map[string]string, len(s.Examples))
-		for i, row := range s.Examples {
+	if len(s.Example) > 0 {
+		c.Example = make([]map[string]string, len(s.Example))
+		for i, row := range s.Example {
 			if row == nil {
 				continue
 			}
-			c.Examples[i] = make(map[string]string, len(row))
+			c.Example[i] = make(map[string]string, len(row))
 			for k, v := range row {
-				c.Examples[i][k] = v
+				c.Example[i][k] = v
 			}
 		}
 	}

@@ -41,7 +41,7 @@ func TestOCITargetEmitShellHook(t *testing.T) {
 func TestOCITargetEmitSystemPackagesWithLegacyTemplate(t *testing.T) {
 	// Legacy InstallTemplate set; PhaseTemplate returns it for (install, container).
 	distro := &DistroDef{
-		Formats: map[string]*FormatDef{
+		Format: map[string]*FormatDef{
 			"rpm": {
 				InstallTemplate: "RUN dnf install -y {{join .Packages \" \"}}\n",
 			},
@@ -54,7 +54,7 @@ func TestOCITargetEmitSystemPackagesWithLegacyTemplate(t *testing.T) {
 			Phase:    PhaseInstall,
 			Packages: []string{"ripgrep"},
 			RawInstallContext: map[string]interface{}{
-				"packages": []interface{}{"ripgrep"},
+				"package": []interface{}{"ripgrep"},
 			},
 		},
 	}}
@@ -70,7 +70,7 @@ func TestOCITargetEmitSystemPackagesWithLegacyTemplate(t *testing.T) {
 func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 	// Both legacy and new path set; new path must win.
 	distro := &DistroDef{
-		Formats: map[string]*FormatDef{
+		Format: map[string]*FormatDef{
 			"rpm": {
 				InstallTemplate: "RUN legacy-install\n",
 				Phases: &PhaseSet{
@@ -88,7 +88,7 @@ func TestOCITargetEmitSystemPackagesPrefersNewPhases(t *testing.T) {
 			Phase:    PhaseInstall,
 			Packages: []string{"foo"},
 			RawInstallContext: map[string]interface{}{
-				"packages": []interface{}{"foo"},
+				"package": []interface{}{"foo"},
 			},
 		},
 	}}

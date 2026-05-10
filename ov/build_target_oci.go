@@ -165,10 +165,10 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 // install_template when present. Falls back to legacy InstallTemplate
 // for the (install, container) cell.
 func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {
-	if t.DistroDef == nil || t.DistroDef.Formats == nil {
+	if t.DistroDef == nil || t.DistroDef.Format == nil {
 		return fmt.Errorf("no distro definition for format %s", s.Format)
 	}
-	formatDef := t.DistroDef.Formats[s.Format]
+	formatDef := t.DistroDef.Format[s.Format]
 	if formatDef == nil {
 		return fmt.Errorf("no format %q in distro", s.Format)
 	}
@@ -223,7 +223,7 @@ func (t *OCITarget) emitBuilder(s *BuilderStep, plan *InstallPlan) error {
 			LayerStage:  layer.Name,
 			UID:         t.Image.UID,
 			GID:         t.Image.GID,
-			CacheMounts: bDef.CacheMounts,
+			CacheMounts: bDef.CacheMount,
 		}
 		rendered, err := RenderTemplate(s.Builder+"-inline", bDef.InstallTemplate, ctx)
 		if err != nil {
@@ -358,11 +358,11 @@ func (t *OCITarget) emitRepoChange(s *RepoChangeStep) error {
 }
 
 // formatDefCacheMountDefs returns the cache mounts as the type
-// RenderTemplate's InstallContext expects. FormatDef.CacheMounts is the
+// RenderTemplate's InstallContext expects. FormatDef.CacheMount is the
 // source of truth; this is a no-op bridge.
 func formatDefCacheMountDefs(f *FormatDef) []CacheMountDef {
 	if f == nil {
 		return nil
 	}
-	return f.CacheMounts
+	return f.CacheMount
 }

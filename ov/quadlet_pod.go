@@ -34,7 +34,7 @@ func generatePodQuadlet(cfg QuadletConfig) string {
 	// Pod-level --dns flags provide both resolvers:
 	//   10.89.0.1       — aardvark-dns (container DNS + external forwarding)
 	//   100.100.100.100 — Tailscale MagicDNS (.ts.net names)
-	if hasTailscaleSidecar(cfg.Sidecars) {
+	if hasTailscaleSidecar(cfg.Sidecar) {
 		b.WriteString("PodmanArgs=--dns=10.89.0.1\n")
 		b.WriteString("PodmanArgs=--dns=100.100.100.100\n")
 		b.WriteString("PodmanArgs=--dns-search=dns.podman\n")
@@ -86,7 +86,7 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 	b.WriteString(fmt.Sprintf("ContainerName=%s\n", ctrName))
 
 	// Volumes
-	for _, vol := range sc.Volumes {
+	for _, vol := range sc.Volume {
 		b.WriteString(fmt.Sprintf("Volume=%s:%s\n", vol.VolumeName, vol.ContainerPath))
 	}
 
@@ -106,7 +106,7 @@ func generateSidecarQuadlet(sc ResolvedSidecar, podName string) string {
 	}
 
 	// Secrets (podman Secret= directives)
-	for _, s := range sc.Secrets {
+	for _, s := range sc.Secret {
 		if s.Env != "" {
 			b.WriteString(fmt.Sprintf("Secret=%s,type=env,target=%s\n", s.Name, s.Env))
 		} else if s.Target != "" {

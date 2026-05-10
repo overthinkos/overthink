@@ -2,13 +2,13 @@ version: 4
 
 local:
   dev-workstation:
-    layers: [ripgrep, direnv]
+    layer: [ripgrep, direnv]
     install_opts: {with_services: false, allow_repo_changes: true}
     env: [EDITOR=vim]
     description: {feature: Dev workstation, tag: [working]}
 
   ci-runner:
-    layers: [ripgrep, pre-commit]
+    layer: [ripgrep, pre-commit]
     install_opts: {with_services: true, allow_root_tasks: true}
     description: {feature: CI runner profile, tag: [working]}
 
@@ -16,7 +16,7 @@ local:
     # Empty placeholder — `layers: []` is a load-time WARNING (allowed
     # for staged name reservation); a missing `layers:` field would be
     # a hard error.
-    layers: []
+    layer: []
     install_opts: {}
     description: {feature: ov-cachyos (placeholder), tag: [testing]}
 
@@ -25,7 +25,7 @@ deploy:
   my-laptop:
     target: local
     local: dev-workstation
-    add_layers: [sshkeys]
+    add_layer: [sshkeys]
 
   # Explicit "local" sentinel.
   my-laptop-explicit:
@@ -45,6 +45,6 @@ deploy:
     local: dev-workstation
     host: target.internal
     user: ops
-    ssh_args:
+    ssh_arg:
       - "-o"
       - "ProxyJump=ops@bastion.example.com"

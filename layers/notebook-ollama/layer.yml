@@ -16,7 +16,7 @@ layer:
       LLM stack. Data-only — no packages, no services.
     scenario:
       - name: ollama notebooks land in the workspace volume
-        steps:
+        step:
           - then: the ollama subdirectory is provisioned in the workspace
             scope: deploy
             file: ${VOLUME_CONTAINER_PATH:workspace}/ollama

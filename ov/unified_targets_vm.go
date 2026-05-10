@@ -57,8 +57,8 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 	}
 	if opts.DryRun {
 		fmt.Printf("[dry-run] would tear down VM deploy %s (deploy_id=%s, %d layers)\n",
-			t.NodeName, rec.DeployID, len(rec.Layers))
-		for _, layer := range rec.Layers {
+			t.NodeName, rec.DeployID, len(rec.Layer))
+		for _, layer := range rec.Layer {
 			layerRec, lerr := ReadLayerRecord(paths, layer)
 			if lerr != nil || layerRec == nil {
 				continue
@@ -86,7 +86,7 @@ func (t *VmUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		Runner:          t.RevRunner,
 	}
 
-	for _, layer := range rec.Layers {
+	for _, layer := range rec.Layer {
 		layerRec, shouldRemove, lerr := RemoveLayerDeployment(paths, layer, rec.DeployID)
 		if lerr != nil {
 			return fmt.Errorf("removing layer deployment %s: %w", layer, lerr)

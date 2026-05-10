@@ -1,19 +1,19 @@
 layer:
   name: xdg-portal
-  requires:
+  require:
     - dbus
     - sway
     - pipewire
   env:
     XDG_CURRENT_DESKTOP: "sway"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - xdg-desktop-portal
         - xdg-desktop-portal-wlr
         - xdg-desktop-portal-gtk
         - slurp
-  tasks:
+  task:
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
     - copy: portal.conf

@@ -1,21 +1,21 @@
 layer:
   name: dbus
-  requires:
+  require:
     - supervisord
   env:
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - dbus
     debian:
-      packages:
+      package:
         - dbus
     fedora:
-      packages:
+      package:
         - dbus-daemon
     ubuntu:
-      packages:
+      package:
         - dbus
   eval:
     - id: dbus-daemon-binary

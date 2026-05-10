@@ -277,7 +277,7 @@ type SystemPackagesStep struct {
 	// CacheMounts and RawInstallContext are passed to template rendering.
 	// These are populated by the compiler and consumed by the OCI target;
 	// the host target ignores CacheMounts (no BuildKit outside containers).
-	CacheMounts       []CacheMountSpec
+	CacheMount        []CacheMountSpec
 	RawInstallContext map[string]interface{}
 }
 

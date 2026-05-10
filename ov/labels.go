@@ -122,9 +122,9 @@ type CapabilityService struct {
 	Events           string            `json:"events,omitempty"`
 	AutoStart        *bool             `json:"auto_start,omitempty"`
 	StartRetries     int               `json:"start_retries,omitempty"`
-	StartSecs        int               `json:"start_secs,omitempty"`
+	StartSec         int               `json:"start_sec,omitempty"`
 	StopSignal       string            `json:"stop_signal,omitempty"`
-	ExitCodes        string            `json:"exit_codes,omitempty"`
+	ExitCode         string            `json:"exit_code,omitempty"`
 	Priority         int               `json:"priority,omitempty"`
 	Init             string            `json:"init,omitempty"`  // which init system owns this entry
 	Layer            string            `json:"layer,omitempty"` // source layer name

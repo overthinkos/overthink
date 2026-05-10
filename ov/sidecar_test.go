@@ -13,7 +13,7 @@ func TestLoadEmbeddedSidecarConfig(t *testing.T) {
 		t.Fatal("expected non-nil config")
 	}
 
-	ts, ok := cfg.Sidecars["tailscale"]
+	ts, ok := cfg.Sidecar["tailscale"]
 	if !ok {
 		t.Fatal("expected tailscale sidecar in embedded config")
 	}
@@ -26,14 +26,14 @@ func TestLoadEmbeddedSidecarConfig(t *testing.T) {
 	if ts.Env["TS_DEBUG_FIREWALL_MODE"] != "nftables" {
 		t.Errorf("TS_DEBUG_FIREWALL_MODE = %q, want nftables", ts.Env["TS_DEBUG_FIREWALL_MODE"])
 	}
-	if len(ts.Volumes) != 1 || ts.Volumes[0].Name != "state" {
-		t.Errorf("volumes = %v, want [{state /var/lib/tailscale}]", ts.Volumes)
+	if len(ts.Volume) != 1 || ts.Volume[0].Name != "state" {
+		t.Errorf("volumes = %v, want [{state /var/lib/tailscale}]", ts.Volume)
 	}
 	if len(ts.Security.CapAdd) != 2 {
 		t.Errorf("cap_add = %v, want [NET_ADMIN SYS_MODULE]", ts.Security.CapAdd)
 	}
-	if len(ts.Secrets) != 1 || ts.Secrets[0].Env != "TS_AUTHKEY" {
-		t.Errorf("secrets = %v, want [{ts-authkey TS_AUTHKEY}]", ts.Secrets)
+	if len(ts.Secret) != 1 || ts.Secret[0].Env != "TS_AUTHKEY" {
+		t.Errorf("secrets = %v, want [{ts-authkey TS_AUTHKEY}]", ts.Secret)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestMergeSidecars_EnvMerge(t *testing.T) {
 		},
 	}
 
-	result := MergeSidecars(base, overlay)
+	result := MergeSidecar(base, overlay)
 	ts := result["tailscale"]
 
 	if ts.Image != "tailscale:base" {
@@ -78,14 +78,14 @@ func TestMergeSidecars_EnvMerge(t *testing.T) {
 }
 
 func TestMergeSidecars_NilInputs(t *testing.T) {
-	if result := MergeSidecars(nil, nil); result != nil {
+	if result := MergeSidecar(nil, nil); result != nil {
 		t.Error("nil+nil should return nil")
 	}
-	result := MergeSidecars(nil, map[string]SidecarDef{"a": {Image: "x"}})
+	result := MergeSidecar(nil, map[string]SidecarDef{"a": {Image: "x"}})
 	if result["a"].Image != "x" {
 		t.Error("nil base + overlay should return overlay")
 	}
-	result = MergeSidecars(map[string]SidecarDef{"a": {Image: "x"}}, nil)
+	result = MergeSidecar(map[string]SidecarDef{"a": {Image: "x"}}, nil)
 	if result["a"].Image != "x" {
 		t.Error("base + nil overlay should return copy of base")
 	}
@@ -96,10 +96,10 @@ func TestResolveSidecars(t *testing.T) {
 		"tailscale": {
 			Image: "ts:latest",
 			Env:   map[string]string{"TS_HOSTNAME": "test"},
-			Volumes: []SidecarVolume{
+			Volume: []SidecarVolume{
 				{Name: "state", Path: "/var/lib/tailscale"},
 			},
-			Secrets: []SidecarSecret{
+			Secret: []SidecarSecret{
 				{Name: "ts-authkey", Env: "TS_AUTHKEY"},
 			},
 			Security: &SecurityConfig{
@@ -108,17 +108,17 @@ func TestResolveSidecars(t *testing.T) {
 		},
 	}
 
-	resolved := ResolveSidecars(defs, "my-app", "")
+	resolved := ResolveSidecar(defs, "my-app", "")
 	if len(resolved) != 1 {
 		t.Fatalf("expected 1 sidecar, got %d", len(resolved))
 	}
 
 	sc := resolved[0]
-	if sc.Volumes[0].VolumeName != "ov-my-app-tailscale-state" {
-		t.Errorf("volume name = %q, want ov-my-app-tailscale-state", sc.Volumes[0].VolumeName)
+	if sc.Volume[0].VolumeName != "ov-my-app-tailscale-state" {
+		t.Errorf("volume name = %q, want ov-my-app-tailscale-state", sc.Volume[0].VolumeName)
 	}
-	if sc.Secrets[0].Name != "ov-my-app-tailscale-ts-authkey" {
-		t.Errorf("secret name = %q, want ov-my-app-tailscale-ts-authkey", sc.Secrets[0].Name)
+	if sc.Secret[0].Name != "ov-my-app-tailscale-ts-authkey" {
+		t.Errorf("secret name = %q, want ov-my-app-tailscale-ts-authkey", sc.Secret[0].Name)
 	}
 }
 
@@ -167,12 +167,12 @@ func TestSidecarEnvKeys(t *testing.T) {
 			Env: map[string]string{
 				"TS_STATE_DIR": "/var/lib/tailscale",
 			},
-			Secrets: []SidecarSecret{
+			Secret: []SidecarSecret{
 				{Name: "ts-authkey", Env: "TS_AUTHKEY"},
 			},
 		},
 	}
-	keys := SidecarEnvKeys(sidecars)
+	keys := SidecarEnvKey(sidecars)
 	if keys["TS_STATE_DIR"] != "tailscale" {
 		t.Error("TS_STATE_DIR should map to tailscale")
 	}

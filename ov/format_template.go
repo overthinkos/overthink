@@ -217,10 +217,10 @@ func NewInstallContext(section map[string]interface{}, cacheMounts []CacheMountD
 		CacheMounts: cacheMounts,
 	}
 
-	if pkgs, ok := section["packages"]; ok {
+	if pkgs, ok := section["package"]; ok {
 		ctx.Packages = toStringSlice(pkgs)
 	}
-	if repos, ok := section["repos"]; ok {
+	if repos, ok := section["repo"]; ok {
 		ctx.Repos = toMapSlice(repos)
 	}
 	if opts, ok := section["options"]; ok {
@@ -229,7 +229,7 @@ func NewInstallContext(section map[string]interface{}, cacheMounts []CacheMountD
 	if copr, ok := section["copr"]; ok {
 		ctx.Copr = toStringSlice(copr)
 	}
-	if mods, ok := section["modules"]; ok {
+	if mods, ok := section["module"]; ok {
 		ctx.Modules = toStringSlice(mods)
 	}
 	if excl, ok := section["exclude"]; ok {

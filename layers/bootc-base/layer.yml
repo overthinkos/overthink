@@ -1,6 +1,6 @@
 layer:
   name: bootc-base
-  layers:
+  layer:
     - sshd
     - qemu-guest-agent
     - bootc-config

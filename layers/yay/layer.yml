@@ -1,11 +1,11 @@
 layer:
   name: yay
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - base-devel
         - git
-  tasks:
+  task:
     # yay latest release — GitHub API lookup to find the URL for our arch.
     # Uses BUILD_ARCH (uname-style) because yay release names use x86_64/aarch64.
     - cmd: |

@@ -1,24 +1,24 @@
 layer:
   name: valkey
   description: "Valkey 9.x key-value store (via Remi modular repo)"
-  requires: []
-  distros:
+  require: []
+  distro:
     fedora:
-      packages:
+      package:
         - valkey
-      modules:
+      module:
         - "valkey:remi-9.0"
-      repos:
+      repo:
         - name: remi-modular
           rpm: "https://rpms.remirepo.net/fedora/remi-release-$(rpm -E %fedora).rpm"
   env:
     VALKEY_URL: "redis://127.0.0.1:6379"
-  ports:
+  port:
     - 6379
-  volumes:
+  volume:
     - name: valkey-data
       path: "~/.valkey"
-  tasks:
+  task:
     - mkdir: "${HOME}/.valkey"
       user: "${USER}"
   service:

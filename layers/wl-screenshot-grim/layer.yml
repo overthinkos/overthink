@@ -1,8 +1,8 @@
 layer:
   name: wl-screenshot-grim
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - grim
   eval:
     - id: grim-binary

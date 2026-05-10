@@ -16,7 +16,7 @@
 # --exit-node-allow-lan-access exempts bridge subnets so container-to-container
 # traffic stays on the bridge; only internet-bound traffic goes through the exit node.
 
-sidecars:
+sidecar:
   tailscale:
     description: Tailscale VPN sidecar for exit node routing with dual networking
     image: ghcr.io/tailscale/tailscale:latest
@@ -40,7 +40,7 @@ sidecars:
       # Health check endpoint at TS_LOCAL_ADDR_PORT/healthz
       TS_ENABLE_HEALTH_CHECK: "true"
       TS_LOCAL_ADDR_PORT: "[::]:9002"
-    volumes:
+    volume:
       - name: state
         path: /var/lib/tailscale
     security:
@@ -49,7 +49,7 @@ sidecars:
       cap_add: [NET_ADMIN, SYS_MODULE]
       # TUN/TAP virtual network device (kernel mode only)
       devices: ["/dev/net/tun:/dev/net/tun"]
-    secrets:
+    secret:
       - name: ts-authkey
         env: TS_AUTHKEY
         description: Tailscale auth key or OAuth client secret

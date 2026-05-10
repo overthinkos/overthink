@@ -1,19 +1,19 @@
 layer:
   name: openclaw
-  requires:
+  require:
     - nodejs
     - socat
     - supervisord
   env:
     NODE_ENV: "production"
-  ports:
+  port:
     - 18789
   port_relay:
     - 18789
-  volumes:
+  volume:
     - name: data
       path: "~/.openclaw"
-  aliases:
+  alias:
     - name: openclaw
       command: openclaw
   service:

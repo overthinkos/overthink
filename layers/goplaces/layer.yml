@@ -1,13 +1,13 @@
 layer:
   name: goplaces
   description: Google Places API CLI for location search
-  requires:
+  require:
     - golang
   env:
     GOPATH: "~/go"
   path_append:
     - "~/go/bin"
-  tasks:
+  task:
     - cmd: |
         go install github.com/steipete/goplaces/cmd/goplaces@latest
         go clean -cache

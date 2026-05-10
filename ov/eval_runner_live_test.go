@@ -70,9 +70,9 @@ func TestRunRecipeScenariosLive_PureCycleEmitsFailVerdictsNoPropagation(t *testi
 	// A → B, B → A. Pure cycle.
 	scenarios := []Scenario{
 		{Name: "a", Pod: "test-pod", SourceRecipe: "r1", DependsOn: []string{"b"},
-			Steps: []Step{{Then: "x", Check: Check{File: "/a"}}}},
+			Step: []Step{{Then: "x", Check: Check{File: "/a"}}}},
 		{Name: "b", Pod: "test-pod", SourceRecipe: "r1", DependsOn: []string{"a"},
-			Steps: []Step{{Then: "y", Check: Check{File: "/b"}}}},
+			Step: []Step{{Then: "y", Check: Check{File: "/b"}}}},
 	}
 	res, err := RunEvalLive(context.Background(), "", "test-score", scenarios, RunScoringOpts{})
 	if err != nil {

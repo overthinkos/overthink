@@ -1,7 +1,7 @@
 layer:
   name: asciinema
   description: Terminal session recorder (asciinema)
-  packages:
+  package:
     - asciinema
   eval:
     - id: asciinema-binary

@@ -1,8 +1,8 @@
 layer:
   name: desktop-fonts
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - jetbrains-mono-fonts
         - liberation-fonts
         - nerd-fonts

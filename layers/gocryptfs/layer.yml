@@ -1,7 +1,7 @@
 layer:
   name: gocryptfs
   description: Encrypted filesystem (gocryptfs) for ov config encrypted volume operations
-  packages:
+  package:
     - gocryptfs
   eval:
     - id: gocryptfs-binary

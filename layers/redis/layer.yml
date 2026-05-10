@@ -1,15 +1,15 @@
 layer:
   name: redis
-  requires: []
-  distros:
+  require: []
+  distro:
     fedora:
-      packages:
+      package:
         - redis
   env:
     REDIS_URL: "redis://127.0.0.1:6379"
-  ports:
+  port:
     - 6379
-  tasks:
+  task:
     - mkdir: "${HOME}/.redis"
       user: "${USER}"
   eval:

@@ -115,7 +115,7 @@ defaults:
     - linux/amd64
   build: [rpm]
 
-images:
+image:
   testimage:
     base: "quay.io/fedora/fedora:43"
     distro: ["fedora:43", fedora]

@@ -1,11 +1,11 @@
 layer:
   name: osm-data
   description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), osmium-tool (PBF inspection/filtering), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from ${HOME}/workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
-  requires:
+  require:
     - supervisord
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         # osmium-tool — OSM PBF inspection, filtering, transformation
         - osmium-tool
         # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
@@ -23,9 +23,9 @@ layer:
         - gcc-c++
         - sqlite-devel
         - zlib-devel
-  ports:
+  port:
     - 3000      # martin tile server HTTP
-  tasks:
+  task:
     # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----
     # NOT in Fedora repos and upstream (felt/tippecanoe) ships only source —
     # no GitHub release binaries exist. Build from source in-image. The

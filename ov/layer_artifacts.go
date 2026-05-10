@@ -45,7 +45,7 @@ func RetrieveLayerArtifacts(
 		if layer == nil {
 			continue
 		}
-		artifacts := layer.Artifacts()
+		artifacts := layer.Artifact()
 		if len(artifacts) == 0 {
 			continue
 		}

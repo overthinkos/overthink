@@ -1,12 +1,12 @@
 layer:
   name: swaync
-  requires:
+  require:
     - dbus
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - SwayNotificationCenter
-  tasks:
+  task:
     # Remove D-Bus auto-activation service files to prevent D-Bus from spawning
     # competing swaync instances. In supervisord-managed containers, swaync is
     # started by supervisord — D-Bus activation races with it, causing the
@@ -49,6 +49,6 @@ layer:
         XDG_RUNTIME_DIR: /tmp
       restart: always
       priority: 14
-      start_secs: 2
+      start_sec: 2
       enable: true
       scope: system

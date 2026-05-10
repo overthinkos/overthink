@@ -5,9 +5,9 @@ layer:
   security:
     group_add:
       - keep-groups
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - rocm-hip-runtime
         - rocm-opencl
         - rocm-clinfo

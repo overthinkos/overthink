@@ -1,14 +1,14 @@
 layer:
   name: wayvnc
-  requires:
+  require:
     - supervisord
-  ports:
+  port:
     - tcp:5900
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - wayvnc
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: wayvnc-wrapper
@@ -43,6 +43,6 @@ layer:
         XDG_RUNTIME_DIR: /tmp
       restart: always
       priority: 20
-      start_secs: 0
+      start_sec: 0
       enable: true
       scope: system

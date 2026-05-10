@@ -65,12 +65,12 @@ func (c *MergeCmd) runAll(cfg *Config) error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	images, err := cfg.ResolveAllImages("unused", dir, ResolveOpts{})
+	images, err := cfg.ResolveAllImage("unused", dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}

@@ -1,12 +1,12 @@
 layer:
   name: thunar
-  requires:
+  require:
     - sway
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - thunar
-  tasks:
+  task:
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
     - copy: thunar.conf

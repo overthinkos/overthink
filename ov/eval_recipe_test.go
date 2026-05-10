@@ -118,7 +118,7 @@ func TestResolveRecipe_NotFound(t *testing.T) {
 
 func TestResolveScore_NotFound(t *testing.T) {
 	cat := map[string]*HarnessScore{
-		"foo": {Pod: "p", PlateauIteration: 3, Recipes: []string{"x"}},
+		"foo": {Pod: "p", PlateauIteration: 3, Recipe: []string{"x"}},
 	}
 	if _, err := ResolveScore(cat, "bar"); err == nil {
 		t.Error("expected error for missing score")
@@ -126,7 +126,7 @@ func TestResolveScore_NotFound(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// ResolveScoreRecipes — merging + per-scenario SourceRecipe stamping
+// ResolveScoreRecipe — merging + per-scenario SourceRecipe stamping
 // ---------------------------------------------------------------------------
 
 func TestResolveScoreRecipes_MergesInOrderAndStamps(t *testing.T) {
@@ -138,8 +138,8 @@ func TestResolveScoreRecipes_MergesInOrderAndStamps(t *testing.T) {
 			Scenario: []Scenario{{Name: "s3"}},
 		},
 	}
-	score := &HarnessScore{Recipes: []string{"easy", "hard"}}
-	merged, resolved, err := ResolveScoreRecipes(score, recipes)
+	score := &HarnessScore{Recipe: []string{"easy", "hard"}}
+	merged, resolved, err := ResolveScoreRecipe(score, recipes)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,16 +162,16 @@ func TestResolveScoreRecipes_MergesInOrderAndStamps(t *testing.T) {
 }
 
 func TestResolveScoreRecipes_EmptyList(t *testing.T) {
-	score := &HarnessScore{Recipes: []string{}}
-	if _, _, err := ResolveScoreRecipes(score, map[string]*HarnessRecipe{}); err == nil {
+	score := &HarnessScore{Recipe: []string{}}
+	if _, _, err := ResolveScoreRecipe(score, map[string]*HarnessRecipe{}); err == nil {
 		t.Error("expected error for empty recipes list")
 	}
 }
 
 func TestResolveScoreRecipes_DuplicateRejected(t *testing.T) {
 	recipes := map[string]*HarnessRecipe{"a": {Scenario: []Scenario{{Name: "x"}}}}
-	score := &HarnessScore{Recipes: []string{"a", "a"}}
-	_, _, err := ResolveScoreRecipes(score, recipes)
+	score := &HarnessScore{Recipe: []string{"a", "a"}}
+	_, _, err := ResolveScoreRecipe(score, recipes)
 	if err == nil {
 		t.Fatal("expected error on duplicate recipe name")
 	}
@@ -181,8 +181,8 @@ func TestResolveScoreRecipes_DuplicateRejected(t *testing.T) {
 }
 
 func TestResolveScoreRecipes_UnresolvedRejected(t *testing.T) {
-	score := &HarnessScore{Recipes: []string{"missing"}}
-	_, _, err := ResolveScoreRecipes(score, map[string]*HarnessRecipe{})
+	score := &HarnessScore{Recipe: []string{"missing"}}
+	_, _, err := ResolveScoreRecipe(score, map[string]*HarnessRecipe{})
 	if err == nil {
 		t.Fatal("expected error on unresolved recipe name")
 	}

@@ -7,7 +7,7 @@ layer:
     /ov-selkies:chrome-cdp on top.
   env:
     CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
-  env_accepts:
+  env_accept:
     - name: HTTP_PROXY
       description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
     - name: HTTPS_PROXY
@@ -19,7 +19,7 @@ layer:
     memory_max: "6g"
     memory_high: "5g"
     memory_swap_max: "2g"
-  packages:
+  package:
     - alsa-lib
     - at-spi2-core
     - gtk3
@@ -28,35 +28,35 @@ layer:
     - nss
     - procps-ng
     - libva-utils
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - vulkan-icd-loader
         - mesa
         - libcups
         - iproute2
       aur:
-        packages:
+        package:
           - google-chrome
     fedora:
-      packages:
+      package:
         - vulkan-loader
         - mesa-dri-drivers
         - cups-libs
         - iproute
         - google-chrome-stable
-      repos:
+      repo:
         - name: google-chrome
           url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
           gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
-  tasks:
+  task:
     # Register chrome as the default browser in xdg-settings. Best-effort
     # only — xdg-settings has a fragile KDE codepath that calls qtpaths,
     # which isn't installed on every host. Failure here doesn't break the
     # deploy: chrome is still installed, just not registered as default.
     - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
       user: "${USER}"
-  volumes:
+  volume:
     - name: chrome-data
       path: "~/.chrome-debug"
   eval:

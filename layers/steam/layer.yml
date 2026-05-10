@@ -1,18 +1,18 @@
 layer:
   name: steam
-  requires:
+  require:
     - sway
   env:
     STEAM_RUNTIME_PREFER_HOST_LIBRARIES: "0"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - steam
         - gamescope
       options:
         - --allowerasing
   security:
     shm_size: "1g"
-  volumes:
+  volume:
     - name: steam-data
       path: "~/.local/share/Steam"

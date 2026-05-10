@@ -151,7 +151,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		if err := t.recordLayer(paths, layerRec, plan, opts); err != nil {
 			return fmt.Errorf("VmDeployTarget: recording layer %s: %w", plan.Layer, err)
 		}
-		deployRec.Layers = append(deployRec.Layers, plan.Layer)
+		deployRec.Layer = append(deployRec.Layer, plan.Layer)
 		if deployRec.Image == "" && plan.Layer != "" {
 			// For pure-add_layers vm deploys the deploy-id's "image" slot
 			// stays as the vm: target name so `ov deploy del` can find it.
@@ -159,7 +159,7 @@ func (t *VmDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		}
 	}
 
-	deployRec.AddLayers = append(deployRec.AddLayers, deployRec.Layers...)
+	deployRec.AddLayer = append(deployRec.AddLayer, deployRec.Layer...)
 	if !opts.DryRun {
 		if err := WriteDeployRecordVia(t.Exec, paths, deployRec); err != nil {
 			return fmt.Errorf("VmDeployTarget: writing deploy record: %w", err)

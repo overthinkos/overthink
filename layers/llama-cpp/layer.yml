@@ -8,7 +8,7 @@ layer:
   path_append:
     - "~/llama.cpp"
 
-  tasks:
+  task:
     # Prebuilt llama.cpp binaries — GitHub release layout pins an ubuntu-x64
     # tarball that works on Fedora. Version lookup is runtime so the layer
     # auto-tracks latest.

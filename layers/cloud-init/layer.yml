@@ -1,23 +1,23 @@
 layer:
   name: cloud-init
-  requires:
+  require:
     - sshd
-  packages:
+  package:
     - cloud-init
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - cloud-guest-utils
     debian:
-      packages:
+      package:
         - cloud-guest-utils
     fedora:
-      packages:
+      package:
         - cloud-utils-growpart
     ubuntu:
-      packages:
+      package:
         - cloud-guest-utils
-  tasks:
+  task:
     - mkdir: /etc/cloud/cloud.cfg.d
       user: root
     - write: /etc/cloud/cloud.cfg.d/99-nocloud.cfg

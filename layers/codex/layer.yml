@@ -1,7 +1,7 @@
 layer:
   name: codex
   description: OpenAI Codex CLI coding agent
-  requires:
+  require:
     - nodejs
   eval:
     - id: codex-binary

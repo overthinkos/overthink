@@ -170,7 +170,7 @@ func TestResolveLayerSecrets_RequiredAutoGen(t *testing.T) {
 			{Name: "K3S_CLUSTER_TOKEN"},
 		},
 	}
-	env := ResolveLayerSecrets(layer)
+	env := ResolveLayerSecret(layer)
 	val, ok := env["K3S_CLUSTER_TOKEN"]
 	if !ok || val == "" {
 		t.Fatalf("expected K3S_CLUSTER_TOKEN to be resolved (auto-gen), got env=%v", env)
@@ -192,7 +192,7 @@ func TestResolveLayerSecrets_OptionalDefaultFallback(t *testing.T) {
 			{Name: "OPTIONAL_VAR", Default: "fallback-value"},
 		},
 	}
-	env := ResolveLayerSecrets(layer)
+	env := ResolveLayerSecret(layer)
 	if env["OPTIONAL_VAR"] != "fallback-value" {
 		t.Errorf("expected fallback-value, got %q", env["OPTIONAL_VAR"])
 	}
@@ -213,7 +213,7 @@ func TestResolveSecretsForLayers_TwoLayersSameSecret(t *testing.T) {
 		HasSecretRequires: true,
 		secretRequires:    []EnvDependency{{Name: "K3S_CLUSTER_TOKEN"}},
 	}
-	env := ResolveSecretsForLayers([]*Layer{server, agent})
+	env := ResolveSecretForLayer([]*Layer{server, agent})
 
 	val := env["K3S_CLUSTER_TOKEN"]
 	if val == "" || len(val) != 44 {

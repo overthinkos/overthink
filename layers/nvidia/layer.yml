@@ -1,22 +1,22 @@
 layer:
   name: nvidia
   description: NVIDIA GPU runtime support (driver libs + container toolkit for CDI)
-  packages:
+  package:
     - nvidia-container-toolkit
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - nvidia-utils
     fedora:
-      packages:
+      package:
         - libva-nvidia-driver
-      repos:
+      repo:
         - name: fedora-multimedia
           url: "https://negativo17.org/repos/fedora-multimedia.repo"
           gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
   env:
     LD_LIBRARY_PATH: "/usr/lib64"
-  tasks:
+  task:
     # Vulkan ICD symlinks for nvidia-ctk CDI. Conditional because the ICD JSON
     # files may or may not be present depending on the driver package — || true
     # keeps the RUN from failing on distros that don't ship them here.

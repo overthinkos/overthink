@@ -1,17 +1,17 @@
 layer:
   name: nodejs24
-  requires: []
+  require: []
   env:
     NPM_CONFIG_PREFIX: "~/.npm-global"
     npm_config_cache: "~/.cache/npm"
   path_append:
     - "~/.npm-global/bin"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - nodejs24
         - nodejs24-npm
-  tasks:
+  task:
     - link: /usr/local/bin/node
       target: /usr/bin/node-24
       user: root

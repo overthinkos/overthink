@@ -2,7 +2,7 @@ layer:
   name: agent-forwarding
   description: Agent forwarding support — GPG, SSH, and direnv for .secrets workflow
 
-  layers:
+  layer:
     - gnupg
     - direnv
     - ssh-client

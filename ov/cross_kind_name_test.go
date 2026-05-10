@@ -45,7 +45,7 @@ defaults:
 image:
   ov-cachyos:
     base: fedora
-    layers: [ov-cachyos]
+    layer: [ov-cachyos]
 
 pod:
   ov-cachyos:
@@ -59,7 +59,7 @@ vm:
 
 local:
   ov-cachyos:
-    layers: [ov-cachyos]
+    layer: [ov-cachyos]
 
 deploy:
   ov-cachyos:
@@ -79,7 +79,7 @@ deploy:
 		t.Fatal("LoadUnified returned ok=false")
 	}
 	// Every kind-keyed map must contain the shared name.
-	if _, present := uf.Images["ov-cachyos"]; !present {
+	if _, present := uf.Image["ov-cachyos"]; !present {
 		t.Error("image.ov-cachyos missing")
 	}
 	if _, present := uf.Pod["ov-cachyos"]; !present {
@@ -91,10 +91,10 @@ deploy:
 	if _, present := uf.Local["ov-cachyos"]; !present {
 		t.Error("local.ov-cachyos missing")
 	}
-	if uf.Deploys == nil {
+	if uf.Deploy == nil {
 		t.Fatal("deployments section missing")
 	}
-	if _, present := uf.Deploys.Images["ov-cachyos"]; !present {
+	if _, present := uf.Deploy["ov-cachyos"]; !present {
 		t.Error("deployment.ov-cachyos missing")
 	}
 }
@@ -138,7 +138,7 @@ deploy:
 			overthink: `version: 4
 local:
   cachyos-dx:
-    layers: [example]
+    layer: [example]
 `,
 			mustHint: "ov migrate ov-cachyos",
 		},

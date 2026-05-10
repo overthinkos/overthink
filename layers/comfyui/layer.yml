@@ -1,19 +1,19 @@
 layer:
   name: comfyui
-  requires:
+  require:
     - cuda
     - supervisord
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - aria2
         - git-lfs
-  ports:
+  port:
     - 8188
-  volumes:
+  volume:
     - name: comfyui
       path: "~/ComfyUI"
-  tasks:
+  task:
     # Clone ComfyUI + the Manager into the workspace volume staging dir.
     # || true on the main clone makes this idempotent if an earlier build left
     # a partial clone (rare but observed in failed CI runs).

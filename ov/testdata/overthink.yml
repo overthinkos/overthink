@@ -1,8 +1,8 @@
 version: 4
-includes:
+include:
     - build.yml
     - images.yml
 discover:
-    layers:
+    layer:
         - path: layers
           recursive: true

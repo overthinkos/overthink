@@ -1,7 +1,7 @@
 layer:
   name: airflow
   description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly), plus an MCP server (mcp-server-apache-airflow on port 19999) that exposes Airflow REST API operations as MCP tools, plus a sample OSM → PMTiles DAG. Python deps live in the marimo layer's pixi.toml."
-  requires:
+  require:
     - marimo
     - supervisord
   env:
@@ -29,27 +29,27 @@ layer:
     # [scheduler] dag_dir_list_interval was moved to
     # [dag_processor] refresh_interval in Airflow 3.x.
     AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "10"
-  ports:
+  port:
     - 8080
     - 19999     # airflow-mcp HTTP transport endpoint (/mcp)
   # Cross-container MCP discovery. Pod-aware rewriting collapses this to
   # localhost:19999 for any same-pod consumer (the marimo notebook server's
   # chat panel reads OV_MCP_SERVERS at config time and finds airflow there).
-  mcp_provides:
+  mcp_provide:
     - name: airflow
       url: "http://{{.ContainerName}}:19999/mcp"
       transport: http
-  volumes:
+  volume:
     - name: airflow-data
       path: "~/airflow"
-  secrets:
+  secret:
     - name: airflow-fernet-key
       env: AIRFLOW__CORE__FERNET_KEY
     - name: airflow-webserver-secret
       env: AIRFLOW__API__SECRET_KEY
     - name: airflow-admin-password
       env: AIRFLOW_ADMIN_PASSWORD
-  tasks:
+  task:
     # User-phase data directories (created during build; bind-mount path persists).
     - mkdir: "${HOME}/airflow"
       user: "${USER}"
@@ -308,8 +308,8 @@ layer:
       exec: /usr/local/bin/airflow-init.sh
       restart: "no"
       priority: 25
-      start_secs: 0
-      exit_codes: "0"
+      start_sec: 0
+      exit_code: "0"
       enable: true
       scope: system
     - name: airflow-scheduler

@@ -17,7 +17,7 @@ layer:
       no packages, no services, no baked DAGs.
     scenario:
       - name: OSM viz notebook lands in workspace/notebooks/
-        steps:
+        step:
           - then: the notebooks subdirectory is provisioned in the workspace
             scope: deploy
             file: ${VOLUME_CONTAINER_PATH:workspace}/notebooks

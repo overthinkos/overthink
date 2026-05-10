@@ -1,10 +1,10 @@
 layer:
   name: wl-record-pixelflux
   description: Desktop video recorder via pixelflux H.264 pipeline
-  requires:
+  require:
     - selkies
     - ffmpeg
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: pixelflux-record

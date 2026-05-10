@@ -89,7 +89,7 @@ func (c *BuildCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		order, err = filterImages(order, c.Images, gen.Images)
+		order, err = filterImage(order, c.Images, gen.Images)
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func (c *BuildCmd) Run() error {
 			return err
 		}
 		if len(c.Images) > 0 {
-			order, err = filterImages(order, c.Images, gen.Images)
+			order, err = filterImage(order, c.Images, gen.Images)
 			if err != nil {
 				return err
 			}
@@ -598,9 +598,9 @@ func (c *BuildCmd) buildRemote(ref string) error {
 	return ctx.BuildImage(nil, tag)
 }
 
-// filterImages filters the build order to only include the requested images
+// filterImage filters the build order to only include the requested images
 // and their dependencies.
-func filterImages(order []string, requested []string, images map[string]*ResolvedImage) ([]string, error) {
+func filterImage(order []string, requested []string, images map[string]*ResolvedImage) ([]string, error) {
 	// Validate requested images exist
 	for _, name := range requested {
 		if _, ok := images[name]; !ok {
@@ -620,7 +620,7 @@ func filterImages(order []string, requested []string, images map[string]*Resolve
 		if !img.IsExternalBase {
 			addDeps(img.Base)
 		}
-		for _, builder := range img.Builder.AllBuilders() {
+		for _, builder := range img.Builder.AllBuilder() {
 			if builder != name {
 				if _, ok := images[builder]; ok {
 					addDeps(builder)
@@ -663,7 +663,7 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedImage, requested
 		if !ok {
 			continue
 		}
-		for _, layer := range img.Layers {
+		for _, layer := range img.Layer {
 			if layer == "ov" {
 				needs = true
 				break

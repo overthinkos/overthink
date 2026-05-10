@@ -1,13 +1,13 @@
 layer:
   name: gogcli
   description: Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs)
-  requires:
+  require:
     - golang
   env:
     GOPATH: "~/go"
   path_append:
     - "~/go/bin"
-  tasks:
+  task:
     - cmd: |
         # Pinned to v0.4.2 — go 1.25 compat (v0.13.0 requires go 1.26.2,
         # which the current builder toolchain doesn't carry).

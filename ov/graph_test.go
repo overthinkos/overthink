@@ -8,11 +8,11 @@ import (
 func TestResolveLayerOrder(t *testing.T) {
 	// Create test layers
 	layers := map[string]*Layer{
-		"pixi":    {Name: "pixi", Requires: nil},
-		"python":  {Name: "python", Requires: []string{"pixi"}},
-		"ml-libs": {Name: "ml-libs", Requires: []string{"python"}},
-		"nodejs":  {Name: "nodejs", Requires: nil},
-		"web-ui":  {Name: "web-ui", Requires: []string{"nodejs"}},
+		"pixi":    {Name: "pixi", Require: nil},
+		"python":  {Name: "python", Require: []string{"pixi"}},
+		"ml-libs": {Name: "ml-libs", Require: []string{"python"}},
+		"nodejs":  {Name: "nodejs", Require: nil},
+		"web-ui":  {Name: "web-ui", Require: []string{"nodejs"}},
 	}
 
 	tests := []struct {
@@ -88,9 +88,9 @@ func TestResolveLayerOrder(t *testing.T) {
 func TestResolveLayerOrderCycle(t *testing.T) {
 	// Create layers with a cycle: a -> b -> c -> a
 	layers := map[string]*Layer{
-		"a": {Name: "a", Requires: []string{"b"}},
-		"b": {Name: "b", Requires: []string{"c"}},
-		"c": {Name: "c", Requires: []string{"a"}},
+		"a": {Name: "a", Require: []string{"b"}},
+		"b": {Name: "b", Require: []string{"c"}},
+		"c": {Name: "c", Require: []string{"a"}},
 	}
 
 	_, err := ResolveLayerOrder([]string{"a"}, layers, nil)
@@ -225,19 +225,19 @@ func TestLayersProvidedByImage(t *testing.T) {
 			Name:           "base",
 			Base:           "quay.io/fedora/fedora:43",
 			IsExternalBase: true,
-			Layers:         []string{"pixi"},
+			Layer:         []string{"pixi"},
 		},
 		"cuda": {
 			Name:           "cuda",
 			Base:           "base",
 			IsExternalBase: false,
-			Layers:         []string{"cuda"},
+			Layer:         []string{"cuda"},
 		},
 		"ml-cuda": {
 			Name:           "ml-cuda",
 			Base:           "cuda",
 			IsExternalBase: false,
-			Layers:         []string{"python", "ml-libs"},
+			Layer:         []string{"python", "ml-libs"},
 		},
 	}
 
@@ -267,12 +267,12 @@ func TestLayersProvidedByImage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := LayersProvidedByImage(tt.imageName, images, layers)
+			got, err := LayerProvidedByImage(tt.imageName, images, layers)
 			if err != nil {
-				t.Fatalf("LayersProvidedByImage() error = %v", err)
+				t.Fatalf("LayerProvidedByImage() error = %v", err)
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("LayersProvidedByImage() = %v, want %v", got, tt.want)
+				t.Errorf("LayerProvidedByImage() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -284,18 +284,18 @@ func TestExpandLayers(t *testing.T) {
 		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"chrome":       {Name: "chrome", HasTasks: true},
 		"waybar":       {Name: "waybar", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc", "chrome", "waybar"}},
 		"openclaw":     {Name: "openclaw", HasTasks: true},
 	}
 
 	// Basic expansion
-	result, err := ExpandLayers([]string{"openclaw", "sway-desktop"}, layers)
+	result, err := ExpandLayer([]string{"openclaw", "sway-desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayers() error: %v", err)
+		t.Fatalf("ExpandLayer() error: %v", err)
 	}
 	want := []string{"openclaw", "pipewire", "wayvnc", "chrome", "waybar"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+		t.Errorf("ExpandLayer() = %v, want %v", result, want)
 	}
 }
 
@@ -303,17 +303,17 @@ func TestExpandLayersDedup(t *testing.T) {
 	layers := map[string]*Layer{
 		"pipewire":     {Name: "pipewire", HasTasks: true},
 		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc"}},
 	}
 
 	// pipewire referenced directly AND via sway-desktop — should appear once
-	result, err := ExpandLayers([]string{"pipewire", "sway-desktop"}, layers)
+	result, err := ExpandLayer([]string{"pipewire", "sway-desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayers() error: %v", err)
+		t.Fatalf("ExpandLayer() error: %v", err)
 	}
 	want := []string{"pipewire", "wayvnc"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+		t.Errorf("ExpandLayer() = %v, want %v", result, want)
 	}
 }
 
@@ -322,27 +322,27 @@ func TestExpandLayersNested(t *testing.T) {
 		"pipewire":     {Name: "pipewire", HasTasks: true},
 		"wayvnc":       {Name: "wayvnc", HasTasks: true},
 		"chrome":       {Name: "chrome", HasTasks: true},
-		"vnc-stack":    {Name: "vnc-stack", IncludedLayers: []string{"pipewire", "wayvnc"}},
-		"browser-desk": {Name: "browser-desk", IncludedLayers: []string{"vnc-stack", "chrome"}},
+		"vnc-stack":    {Name: "vnc-stack", IncludedLayer: []string{"pipewire", "wayvnc"}},
+		"browser-desk": {Name: "browser-desk", IncludedLayer: []string{"vnc-stack", "chrome"}},
 	}
 
-	result, err := ExpandLayers([]string{"browser-desk"}, layers)
+	result, err := ExpandLayer([]string{"browser-desk"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayers() error: %v", err)
+		t.Fatalf("ExpandLayer() error: %v", err)
 	}
 	want := []string{"pipewire", "wayvnc", "chrome"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+		t.Errorf("ExpandLayer() = %v, want %v", result, want)
 	}
 }
 
 func TestExpandLayersCycle(t *testing.T) {
 	layers := map[string]*Layer{
-		"a": {Name: "a", IncludedLayers: []string{"b"}},
-		"b": {Name: "b", IncludedLayers: []string{"a"}},
+		"a": {Name: "a", IncludedLayer: []string{"b"}},
+		"b": {Name: "b", IncludedLayer: []string{"a"}},
 	}
 
-	_, err := ExpandLayers([]string{"a"}, layers)
+	_, err := ExpandLayer([]string{"a"}, layers)
 	if err == nil {
 		t.Error("expected circular composition error, got nil")
 	}
@@ -353,26 +353,26 @@ func TestExpandLayersWithContent(t *testing.T) {
 		"pipewire": {Name: "pipewire", HasTasks: true},
 		"wayvnc":   {Name: "wayvnc", HasTasks: true},
 		// Composing layer that also has its own install content
-		"desktop": {Name: "desktop", HasTasks: true, IncludedLayers: []string{"pipewire", "wayvnc"}},
+		"desktop": {Name: "desktop", HasTasks: true, IncludedLayer: []string{"pipewire", "wayvnc"}},
 	}
 
-	result, err := ExpandLayers([]string{"desktop"}, layers)
+	result, err := ExpandLayer([]string{"desktop"}, layers)
 	if err != nil {
-		t.Fatalf("ExpandLayers() error: %v", err)
+		t.Fatalf("ExpandLayer() error: %v", err)
 	}
 	// desktop should stay because it has content
 	want := []string{"pipewire", "wayvnc", "desktop"}
 	if !reflect.DeepEqual(result, want) {
-		t.Errorf("ExpandLayers() = %v, want %v", result, want)
+		t.Errorf("ExpandLayer() = %v, want %v", result, want)
 	}
 }
 
 func TestResolveLayerOrderWithComposition(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":        {Name: "pixi", HasTasks: true},
-		"python":      {Name: "python", HasTasks: true, Requires: []string{"pixi"}},
-		"supervisord": {Name: "supervisord", HasTasks: true, Requires: []string{"python"}},
-		"svc-stack":   {Name: "svc-stack", IncludedLayers: []string{"python", "supervisord"}},
+		"python":      {Name: "python", HasTasks: true, Require: []string{"pixi"}},
+		"supervisord": {Name: "supervisord", HasTasks: true, Require: []string{"python"}},
+		"svc-stack":   {Name: "svc-stack", IncludedLayer: []string{"python", "supervisord"}},
 	}
 
 	order, err := ResolveLayerOrder([]string{"svc-stack"}, layers, nil)
@@ -390,8 +390,8 @@ func TestDependsOnComposingLayer(t *testing.T) {
 	layers := map[string]*Layer{
 		"pipewire":     {Name: "pipewire", HasTasks: true},
 		"wayvnc":       {Name: "wayvnc", HasTasks: true},
-		"sway-desktop": {Name: "sway-desktop", IncludedLayers: []string{"pipewire", "wayvnc"}},
-		"myapp":        {Name: "myapp", HasTasks: true, Requires: []string{"sway-desktop"}},
+		"sway-desktop": {Name: "sway-desktop", IncludedLayer: []string{"pipewire", "wayvnc"}},
+		"myapp":        {Name: "myapp", HasTasks: true, Require: []string{"sway-desktop"}},
 	}
 
 	order, err := ResolveLayerOrder([]string{"myapp"}, layers, nil)

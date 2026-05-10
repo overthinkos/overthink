@@ -113,11 +113,11 @@ func BuildDeployPlan(layer *Layer, img *ResolvedImage, hostCtx HostContext) (*In
 	return plan, nil
 }
 
-// MergePlans combines a list of per-layer plans into one whole-image
+// MergePlan combines a list of per-layer plans into one whole-image
 // plan. Used by deploy targets that want to see all steps in one
 // sequence (for sudo batching, overall dry-run display, etc.) while
 // preserving per-layer provenance for the ledger.
-func MergePlans(plans []*InstallPlan, image string, addLayers []string) *InstallPlan {
+func MergePlan(plans []*InstallPlan, image string, addLayers []string) *InstallPlan {
 	out := &InstallPlan{
 		Image:     image,
 		AddLayers: append([]string(nil), addLayers...),
@@ -390,14 +390,14 @@ func compileSystemPackageSteps(layer *Layer, img *ResolvedImage, hostCtx HostCon
 	// Phase 1: distro tag section
 	for _, tag := range img.Distro {
 		tagCfg := layer.TagSection(tag)
-		if tagCfg == nil || len(tagCfg.Packages) == 0 {
+		if tagCfg == nil || len(tagCfg.Package) == 0 {
 			continue
 		}
-		formatDef := img.DistroDef.Formats[img.Pkg]
+		formatDef := img.DistroDef.Format[img.Pkg]
 		if formatDef == nil {
 			return nil
 		}
-		return []InstallStep{buildSystemPackagesStep(img.Pkg, PhaseInstall, tagCfg.Packages, tagCfg.Raw, formatDef.CacheMounts)}
+		return []InstallStep{buildSystemPackagesStep(img.Pkg, PhaseInstall, tagCfg.Package, tagCfg.Raw, formatDef.CacheMount)}
 	}
 
 	// Phase 2: format sections in build_formats order
@@ -407,11 +407,11 @@ func compileSystemPackageSteps(layer *Layer, img *ResolvedImage, hostCtx HostCon
 		if section == nil || len(section.Packages) == 0 {
 			continue
 		}
-		formatDef := img.DistroDef.Formats[format]
+		formatDef := img.DistroDef.Format[format]
 		if formatDef == nil {
 			continue
 		}
-		steps = append(steps, buildSystemPackagesStep(format, PhaseInstall, section.Packages, section.Raw, formatDef.CacheMounts))
+		steps = append(steps, buildSystemPackagesStep(format, PhaseInstall, section.Packages, section.Raw, formatDef.CacheMount))
 	}
 	return steps
 }
@@ -440,7 +440,7 @@ func buildSystemPackagesStep(format string, phase Phase, packages []string, raw 
 		}
 	}
 	for _, cm := range cacheMounts {
-		step.CacheMounts = append(step.CacheMounts, CacheMountSpec{Dst: cm.Dst, Sharing: cm.Sharing})
+		step.CacheMount = append(step.CacheMount, CacheMountSpec{Dst: cm.Dst, Sharing: cm.Sharing})
 	}
 	return step
 }

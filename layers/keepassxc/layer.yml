@@ -1,7 +1,7 @@
 layer:
   name: keepassxc
   description: KeePassXC password manager
-  packages:
+  package:
     - keepassxc
   eval:
     - id: keepassxc-binary

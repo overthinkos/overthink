@@ -6,7 +6,7 @@ layer:
       Writes /etc/ov-ov-composition-selftest, satisfying the
       composition-handwritten-probe scenario in from-composition-selftest.
 
-  tasks:
+  task:
     - mkdir: /etc
       user: root
       mode: "0755"

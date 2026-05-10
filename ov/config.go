@@ -9,7 +9,7 @@ import (
 // Config represents the image.yml configuration file
 type Config struct {
 	Defaults ImageConfig            `yaml:"defaults"`
-	Images   map[string]ImageConfig `yaml:"images"`
+	Image    map[string]ImageConfig `yaml:"image"`
 }
 
 // BuildFormats handles YAML unmarshal of the build: field.
@@ -84,8 +84,8 @@ func (m BuilderMap) HasBuilder(format string) bool {
 	return m[format] != ""
 }
 
-// AllBuilders returns a deduplicated sorted list of builder image names.
-func (m BuilderMap) AllBuilders() []string {
+// AllBuilder returns a deduplicated sorted list of builder image names.
+func (m BuilderMap) AllBuilder() []string {
 	seen := make(map[string]bool)
 	var builders []string
 	for _, b := range m {
@@ -115,16 +115,16 @@ type ImageConfig struct {
 	Registry              string        `yaml:"registry,omitempty"`
 	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
 	Build                 BuildFormats  `yaml:"build,omitempty"`  // package formats ["rpm"] — all installed in order
-	Layers                []string      `yaml:"layers,omitempty"`
-	Ports                 []string      `yaml:"ports,omitempty"`       // runtime port mappings ["host:container"]
+	Layer                 []string      `yaml:"layer,omitempty"`
+	Port                  []string      `yaml:"port,omitempty"`        // runtime port mappings ["host:container"]
 	User                  string        `yaml:"user,omitempty"`        // username (default: "user")
 	UID                   *int          `yaml:"uid,omitempty"`         // user ID (default: 1000)
 	GID                   *int          `yaml:"gid,omitempty"`         // group ID (default: 1000)
 	UserPolicy            string        `yaml:"user_policy,omitempty"` // how to reconcile user: with base_image's pre-existing account ("auto" (default) | "adopt" | "create")
 	Merge                 *MergeConfig  `yaml:"merge,omitempty"`       // layer merge settings
-	Aliases               []AliasConfig `yaml:"aliases,omitempty"`     // command aliases
+	Alias                 []AliasConfig `yaml:"alias,omitempty"`       // command aliases
 	Builder               BuilderMap    `yaml:"builder,omitempty"`     // build type → builder image (pixi, npm, cargo, aur)
-	Builds                []string      `yaml:"builds,omitempty"`      // what this builder image can build (pixi, npm, cargo, aur)
+	Produce               []string      `yaml:"produce,omitempty"`     // what this builder image can produce (pixi, npm, cargo, aur). Renamed from `builds:` to avoid yaml key collision with the `build:` BuildFormats above (field-singular cutover, 2026-05).
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine removed — they are
 	// deployment choices with no declaration meaning. They live on
 	// DeploymentNode and flow through to consumers via ImageMetadata.
@@ -185,8 +185,8 @@ type ResolvedImage struct {
 	Distro                []string // resolved distro tags: ["fedora:43", "fedora"]
 	BuildFormats          []string // resolved build formats: ["rpm"] or ["pac", "aur"] — all installed in order
 	Tags                  []string // union: ["all"] + Distro + BuildFormats — for task matching
-	Layers                []string
-	Ports                 []string // runtime port mappings
+	Layer                 []string
+	Port                  []string // runtime port mappings
 
 	// User configuration
 	User string // username
@@ -322,7 +322,7 @@ func (opts ResolveOpts) shouldIncludeDisabled(name string) bool {
 
 // ResolveImage resolves a single image's configuration by applying defaults
 func (c *Config) ResolveImage(name string, calverTag string, dir string, opts ResolveOpts) (*ResolvedImage, error) {
-	img, ok := c.Images[name]
+	img, ok := c.Image[name]
 	if !ok {
 		return nil, fmt.Errorf("image %q not found in image.yml", name)
 	}
@@ -362,7 +362,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 		}
 
 		// Check if base is internal (another enabled image in image.yml) or external
-		if baseImg, isInternal := c.Images[resolved.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := c.Image[resolved.Base]; isInternal && baseImg.IsEnabled() {
 			resolved.IsExternalBase = false
 		} else {
 			resolved.IsExternalBase = true
@@ -428,15 +428,15 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 
 	// Layers are not inherited, they're image-specific
 	// Strip @ prefix and :version suffixes — layer map keys use bare refs
-	resolved.Layers = make([]string, len(img.Layers))
-	for i, ref := range img.Layers {
-		resolved.Layers[i] = BareRef(ref)
+	resolved.Layer = make([]string, len(img.Layer))
+	for i, ref := range img.Layer {
+		resolved.Layer[i] = BareRef(ref)
 	}
 
 	// Resolve ports: image -> defaults -> nil
-	resolved.Ports = img.Ports
-	if len(resolved.Ports) == 0 {
-		resolved.Ports = c.Defaults.Ports
+	resolved.Port = img.Port
+	if len(resolved.Port) == 0 {
+		resolved.Port = c.Defaults.Port
 	}
 
 	// Resolve user: image -> defaults -> "user"
@@ -467,7 +467,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 		resolved.Builder[typ] = builder
 	}
 	if !resolved.IsExternalBase {
-		if baseImg, ok := c.Images[resolved.Base]; ok {
+		if baseImg, ok := c.Image[resolved.Base]; ok {
 			for typ, builder := range baseImg.Builder {
 				resolved.Builder[typ] = builder
 			}
@@ -484,7 +484,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	}
 
 	// BuilderCapabilities: image-specific capability declaration, NOT inherited
-	resolved.BuilderCapabilities = img.Builds
+	resolved.BuilderCapabilities = img.Produce
 
 	// Schema v4: DNS / AcmeEmail / Tunnel / Engine no longer resolve from
 	// image config — they are deployment choices and flow through
@@ -580,13 +580,13 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	return resolved, nil
 }
 
-// ResolveAllImages resolves all enabled images in the config. opts.IncludeDisabled
+// ResolveAllImage resolves all enabled images in the config. opts.IncludeDisabled
 // extends the working set to images marked enabled: false (the build verb's
 // `--include-disabled` flag flips this for one-off operational rebuilds
 // without modifying authored config).
-func (c *Config) ResolveAllImages(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedImage, error) {
+func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts) (map[string]*ResolvedImage, error) {
 	resolved := make(map[string]*ResolvedImage)
-	for name, img := range c.Images {
+	for name, img := range c.Image {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
@@ -601,8 +601,8 @@ func (c *Config) ResolveAllImages(calverTag string, dir string, opts ResolveOpts
 
 // ImageNames returns a sorted list of enabled image names
 func (c *Config) ImageNames() []string {
-	names := make([]string, 0, len(c.Images))
-	for name, img := range c.Images {
+	names := make([]string, 0, len(c.Image))
+	for name, img := range c.Image {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -644,7 +644,7 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 			return nil // cycle detected
 		}
 		seen[current] = true
-		baseImg, ok := c.Images[current]
+		baseImg, ok := c.Image[current]
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}
@@ -669,7 +669,7 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 			return nil // cycle detected
 		}
 		seen[current] = true
-		baseImg, ok := c.Images[current]
+		baseImg, ok := c.Image[current]
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}

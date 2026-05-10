@@ -1,24 +1,24 @@
 layer:
   name: ov
   description: Overthink CLI (ov) binary
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - portaudio
         - opusfile
     debian:
-      packages:
+      package:
         - libportaudio2
         - libopusfile0
     fedora:
-      packages:
+      package:
         - portaudio
         - opusfile
     ubuntu:
-      packages:
+      package:
         - libportaudio2
         - libopusfile0
-  tasks:
+  task:
     - copy: bin/ov
       to: /usr/local/bin/ov
       mode: "0755"

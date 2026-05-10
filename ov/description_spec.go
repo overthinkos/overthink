@@ -157,8 +157,8 @@ func (d *Description) UnmarshalJSON(data []byte) error {
 type Scenario struct {
 	Name     string              `yaml:"name"                 json:"name"`
 	Tag      []string            `yaml:"tag,omitempty"        json:"tag,omitempty"`
-	Steps    []Step              `yaml:"steps"                json:"steps,omitempty"`
-	Examples []map[string]string `yaml:"examples,omitempty"   json:"examples,omitempty"`
+	Step     []Step              `yaml:"step"                 json:"step,omitempty"`
+	Example  []map[string]string `yaml:"example,omitempty"    json:"example,omitempty"`
 	OnFail   []Step              `yaml:"on_fail,omitempty"    json:"on_fail,omitempty"`
 
 	// Setup steps run before Steps. A Setup failure aborts the scenario
@@ -180,7 +180,7 @@ type Scenario struct {
 	// in this scenario through `podman exec ov-<pod>`.
 	Pod string `yaml:"pod,omitempty" json:"pod,omitempty"`
 
-	// SourceRecipe is populated by ResolveScoreRecipes when the scenario
+	// SourceRecipe is populated by ResolveScoreRecipe when the scenario
 	// is concatenated from a recipe referenced by a score's `recipes:`
 	// list. Internal-only — never written to YAML or JSON; consumed by
 	// the ${RECIPES} renderer to group rendering by source recipe.
@@ -222,13 +222,13 @@ func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 			if err := v.Decode(&s.Tag); err != nil {
 				return fmt.Errorf("scenario.%s: %w", k.Value, err)
 			}
-		case "steps":
-			if err := v.Decode(&s.Steps); err != nil {
-				return fmt.Errorf("scenario.steps: %w", err)
+		case "step":
+			if err := v.Decode(&s.Step); err != nil {
+				return fmt.Errorf("scenario.step: %w", err)
 			}
-		case "examples":
-			if err := v.Decode(&s.Examples); err != nil {
-				return fmt.Errorf("scenario.examples: %w", err)
+		case "example":
+			if err := v.Decode(&s.Example); err != nil {
+				return fmt.Errorf("scenario.example: %w", err)
 			}
 		case "on_fail":
 			if err := v.Decode(&s.OnFail); err != nil {
@@ -251,7 +251,7 @@ func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 				return fmt.Errorf("scenario.teardown: %w", err)
 			}
 		default:
-			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, pod, depends_on, steps, examples, on_fail, setup, teardown)", k.Value, k.Line)
+			return fmt.Errorf("scenario: unknown key %q at line %d (expected: name, tag, pod, depends_on, step, example, on_fail, setup, teardown)", k.Value, k.Line)
 		}
 	}
 	return nil
@@ -267,8 +267,8 @@ func (s *Scenario) UnmarshalJSON(data []byte) error {
 		Tag      []string            `json:"tag,omitempty"`
 		Tags     []string            `json:"tags,omitempty"`
 		Pod      string              `json:"pod,omitempty"`
-		Steps    []Step              `json:"steps,omitempty"`
-		Examples []map[string]string `json:"examples,omitempty"`
+		Step     []Step              `json:"step,omitempty"`
+		Example  []map[string]string `json:"example,omitempty"`
 		OnFail   []Step              `json:"on_fail,omitempty"`
 		Setup    []Step              `json:"setup,omitempty"`
 		Teardown []Step              `json:"teardown,omitempty"`
@@ -284,8 +284,8 @@ func (s *Scenario) UnmarshalJSON(data []byte) error {
 		s.Tag = r.Tags
 	}
 	s.Pod = r.Pod
-	s.Steps = r.Steps
-	s.Examples = r.Examples
+	s.Step = r.Step
+	s.Example = r.Example
 	s.OnFail = r.OnFail
 	s.Setup = r.Setup
 	s.Teardown = r.Teardown
@@ -445,23 +445,23 @@ type ExpandedScenario struct {
 // to match Gherkin's outline convention and to avoid collision with the
 // ${VAR} grammar that resolves at runtime from the variable resolver.
 func ExpandScenario(s Scenario) []ExpandedScenario {
-	if len(s.Examples) == 0 {
+	if len(s.Example) == 0 {
 		return []ExpandedScenario{{
 			Scenario: s,
 			RowIndex: -1,
 		}}
 	}
 
-	out := make([]ExpandedScenario, 0, len(s.Examples))
-	for rowIdx, row := range s.Examples {
+	out := make([]ExpandedScenario, 0, len(s.Example))
+	for rowIdx, row := range s.Example {
 		materialized := cloneScenario(s)
-		materialized.Examples = nil // already consumed
+		materialized.Example = nil // already consumed
 		placeholders := sortedExampleKeys(row)
 
 		// Substitute in step keyword text + every string field on the embedded Check
 		// for both regular Steps and OnFail steps.
-		for i := range materialized.Steps {
-			applyOutlineSubs(&materialized.Steps[i], row)
+		for i := range materialized.Step {
+			applyOutlineSubs(&materialized.Step[i], row)
 		}
 		for i := range materialized.OnFail {
 			applyOutlineSubs(&materialized.OnFail[i], row)
@@ -560,12 +560,12 @@ func substituteMatchers(ml []Matcher, row map[string]string) {
 // the rest is shallow since the source scenario is never mutated in place.
 func cloneScenario(s Scenario) Scenario {
 	dup := s
-	dup.Steps = append([]Step(nil), s.Steps...)
+	dup.Step = append([]Step(nil), s.Step...)
 	dup.OnFail = append([]Step(nil), s.OnFail...)
 	// Each step's MatcherList slices are shared with the source; we deep-copy
 	// them here so applyOutlineSubs's in-place mutation doesn't leak.
-	for i := range dup.Steps {
-		cloneStepMatchers(&dup.Steps[i])
+	for i := range dup.Step {
+		cloneStepMatchers(&dup.Step[i])
 	}
 	for i := range dup.OnFail {
 		cloneStepMatchers(&dup.OnFail[i])

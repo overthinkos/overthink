@@ -1,20 +1,20 @@
 layer:
   name: heroic
-  requires:
+  require:
     - sway
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - mangohud
         - gamemode
-  volumes:
+  volume:
     - name: heroic-config
       path: "~/.config/heroic"
     - name: heroic-games
       path: "~/Games/Heroic"
   vars:
     HEROIC_VERSION: 2.20.1
-  tasks:
+  task:
     # Heroic ships as an .rpm from GitHub releases — fetch, install with dnf
     # (which pulls in transitive deps), then clean up the staged file.
     - cmd: |

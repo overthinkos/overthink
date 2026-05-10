@@ -99,7 +99,7 @@ func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string,
 	if t.Generator == nil || t.Image == nil || t.Image.InitConfig == nil {
 		return "", "", nil
 	}
-	layerOrder := append([]string{}, t.Image.Layers...)
+	layerOrder := append([]string{}, t.Image.Layer...)
 	layerOrder = append(layerOrder, overlayLayers...)
 	initName, initDef := t.Image.InitConfig.ResolveInitSystem(t.Generator.Layers, layerOrder, t.Image.InitSystem)
 	if initDef == nil || initDef.ServiceSchema == nil {
@@ -551,7 +551,7 @@ func translateHostPathToVenue(hostPath string, parent *DeploymentNode) (string, 
 	// Normalize the input: the bind-mount Host fields are typically
 	// expanded (no ~), absolute, and lack trailing slashes.
 	clean := filepath.Clean(hostPath)
-	for _, v := range parent.Volumes {
+	for _, v := range parent.Volume {
 		if v.Type != "bind" || v.Host == "" || v.Path == "" {
 			continue
 		}

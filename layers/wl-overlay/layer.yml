@@ -1,15 +1,15 @@
 layer:
   name: wl-overlay
   description: Wayland overlay windows via gtk4-layer-shell (for screen recordings)
-  requires:
+  require:
     - dbus
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - gtk4
         - gtk4-layer-shell
         - python3-gobject
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: ov-overlay

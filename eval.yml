@@ -105,70 +105,70 @@ recipe:
     scenario:
       - name: os-marker-file-exists
         pod: os
-        steps:
+        step:
           - then: "the predetermined marker file exists at /etc/ov-os-marker"
             file: /etc/ov-os-marker
             exists: true
 
       - name: os-marker-file-content
         pod: os
-        steps:
+        step:
           - then: "the marker file contains the predetermined content marker"
             file: /etc/ov-os-marker
             contains: ["ov-os-content-marker"]
 
       - name: os-package-installed
         pod: os
-        steps:
+        step:
           - then: "the predetermined system package is installed"
             package: bash
             installed: true
 
       - name: os-process-running
         pod: os
-        steps:
+        step:
           - then: "a predetermined process is running by name"
             process: bash
             running: true
 
       - name: os-user-present
         pod: os
-        steps:
+        step:
           - then: "the predetermined user account is present in the user database"
             user: root
             uid: 0
 
       - name: os-group-present
         pod: os
-        steps:
+        step:
           - then: "the predetermined group is present in the group database"
             group: root
             gid: 0
 
       - name: os-mount-table-includes-proc
         pod: os
-        steps:
+        step:
           - then: "the predetermined mountpoint is listed in the mount table"
             mount: /proc
             filesystem: proc
 
       - name: os-kernel-param
         pod: os
-        steps:
+        step:
           - then: "the predetermined kernel parameter is readable from sysctl"
             kernel-param: kernel.hostname
             value: { matches: "." }
 
       - name: os-interface-loopback
         pod: os
-        steps:
+        step:
           - then: "the loopback interface is present"
             interface: lo
             addrs: ["127.0.0.1/8"]
 
       - name: os-matching-content
         pod: os
-        steps:
+        step:
           - then: "an in-process matcher resolves a literal predetermined string"
             matching: "ov-os-content-marker"
             contains: ["ov-os-content-marker"]
@@ -212,28 +212,28 @@ recipe:
     scenario:
       - name: web-package-installed
         pod: web
-        steps:
+        step:
           - then: "the HTTP server's system package is installed"
             package: nginx
             installed: true
 
       - name: web-port-listening
         pod: web
-        steps:
+        step:
           - then: "the HTTP server's port is listening inside the pod"
             port: 8080
             listening: true
 
       - name: web-port-reachable-from-host
         pod: web
-        steps:
+        step:
           - then: "the HTTP server's port is reachable from the host"
             addr: "127.0.0.1:${HOST_PORT:8080}"
             reachable: true
 
       - name: web-serves-marker
         pod: web
-        steps:
+        step:
           - then: "GET / returns 200 with the predetermined content marker"
             http: "http://localhost:8080/"
             status: 200
@@ -241,7 +241,7 @@ recipe:
 
       - name: web-content-file-on-disk
         pod: web
-        steps:
+        step:
           - then: "the served content file persists on disk with the predetermined marker"
             file: /srv/fixture/index.html
             exists: true
@@ -249,7 +249,7 @@ recipe:
 
       - name: web-self-curl-returns-marker
         pod: web
-        steps:
+        step:
           - then: "a self-curl from inside the pod returns the predetermined marker"
             command: "curl -fsS http://127.0.0.1:8080/"
             exit_status: 0
@@ -296,28 +296,28 @@ recipe:
     scenario:
       - name: redis-server-running
         pod: redis
-        steps:
+        step:
           - then: "the data store's primary process is running"
             process: redis-server
             running: true
 
       - name: redis-reachable-cross-pod
         pod: redis
-        steps:
+        step:
           - then: "the data store is reachable from a separate pod"
             command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
             exit_status: 0
 
       - name: redis-client-has-cli
         pod: redis-client
-        steps:
+        step:
           - then: "the client pod has the data store's client tool installed"
             command: "command -v redis-cli"
             exit_status: 0
 
       - name: redis-cross-pod-set-from-client
         pod: redis-client
-        steps:
+        step:
           - then: "the client pod successfully writes the nonce-protected key into the data store"
             command: "redis-cli -h ov-redis SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
             stdout: { contains: [OK] }
@@ -325,7 +325,7 @@ recipe:
       - name: redis-cross-pod-readback-on-server
         pod: redis
         depends_on: [redis-cross-pod-set-from-client]
-        steps:
+        step:
           - then: "the nonce-protected key is readable on the server pod with the correct value"
             command: "redis-cli get bench:${EVAL_NONCE_KEY}"
             stdout: { contains: ["${EVAL_NONCE_VALUE}"] }
@@ -403,7 +403,7 @@ recipe:
             command: "rm -f /home/user/workspace/mcp-A.ipynb"
             in_container: true
             exit_status: 0
-        steps:
+        step:
           - then: "notebook_create writes the file but does not open a CRDT room"
             mcp: call
             tool: notebook_create
@@ -429,7 +429,7 @@ recipe:
             tool: notebook_create
             input: '{"path":"mcp-B.ipynb"}'
             timeout: 30s
-        steps:
+        step:
           - then: "cell_insert without prior open auto-creates the room"
             mcp: call
             tool: cell_insert
@@ -461,7 +461,7 @@ recipe:
             tool: cell_insert
             input: '{"path":"mcp-D.ipynb","index":0,"source":"hello","cell_type":"markdown"}'
             timeout: 60s
-        steps:
+        step:
           - then: "transient UI-style WebSocket connect (in-container python)"
             command: |-
               python3 -c '
@@ -520,7 +520,7 @@ recipe:
             command: "date +%s > /tmp/mcp-E.markstamp"
             in_container: true
             exit_status: 0
-        steps:
+        step:
           - then: "transient UI-style WebSocket connect to provoke _clean_room"
             command: |-
               python3 -c '
@@ -585,21 +585,21 @@ recipe:
     scenario:
       - name: k8s-nodes-listed
         pod: k8s
-        steps:
+        step:
           - then: "at least one cluster node is listable"
             k8s: nodes
 
       - name: k8s-nodes-ready
         pod: k8s
         depends_on: [k8s-nodes-listed]
-        steps:
+        step:
           - then: "all cluster nodes reach Ready"
             k8s: wait-nodes
 
       - name: k8s-system-pods-ready
         pod: k8s
         depends_on: [k8s-nodes-ready]
-        steps:
+        step:
           - then: "the kube-system coredns Deployment reaches Ready"
             k8s: wait-ready
             k8s_kind: Deployment
@@ -609,28 +609,28 @@ recipe:
       - name: k8s-storage-class-present
         pod: k8s
         depends_on: [k8s-nodes-listed]
-        steps:
+        step:
           - then: "a default storage class is present"
             k8s: storageclass
 
       - name: k8s-ingress-class-present
         pod: k8s
         depends_on: [k8s-nodes-listed]
-        steps:
+        step:
           - then: "an ingress class is registered"
             k8s: ingressclass
 
       - name: k8s-addons-healthy
         pod: k8s
         depends_on: [k8s-system-pods-ready]
-        steps:
+        step:
           - then: "the cluster addons report healthy"
             k8s: addons
 
       - name: k8s-service-readback-shows-fixture
         pod: k8s
         depends_on: [k8s-system-pods-ready]
-        steps:
+        step:
           - then: "the kubernetes Service is listable"
             k8s: service
             stdout: { contains: ["kubernetes"] }
@@ -638,7 +638,7 @@ recipe:
       - name: k8s-raw-returns-known-kind
         pod: k8s
         depends_on: [k8s-nodes-listed]
-        steps:
+        step:
           - then: "a raw API call to the /nodes resource returns a JSON document with a kind field"
             k8s: raw
             k8s_resource: nodes
@@ -706,28 +706,28 @@ recipe:
       # Producer probes — the desktop is up
       - name: desktop-cdp-up
         pod: desktop
-        steps:
+        step:
           - then: "the desktop's Chrome DevTools is reachable"
             cdp: status
             stdout: { contains: ["ok"] }
 
       - name: desktop-wl-up
         pod: desktop
-        steps:
+        step:
           - then: "the desktop's Wayland session is up"
             wl: status
             stdout: { contains: ["ok"] }
 
       - name: desktop-vnc-up
         pod: desktop
-        steps:
+        step:
           - then: "the desktop's VNC server is reachable"
             vnc: status
             stdout: { contains: ["ok"] }
 
       - name: desktop-dbus-up
         pod: desktop
-        steps:
+        step:
           - then: "the desktop's session bus advertises notifications"
             dbus: list
             stdout: { contains: ["org.freedesktop.Notifications"] }
@@ -736,7 +736,7 @@ recipe:
       - name: desktop-cdp-loads-web
         pod: desktop
         depends_on: [desktop-cdp-up]
-        steps:
+        step:
           - then: "the desktop browser navigates to the upstream HTTP fixture URL via CDP"
             cdp: open
             url: "http://ov-web:8080/"
@@ -745,7 +745,7 @@ recipe:
       - name: desktop-cdp-extracts-web-marker
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "CDP extracts the predetermined upstream content marker from the loaded page"
             cdp: text
             tab: "1"
@@ -754,7 +754,7 @@ recipe:
       - name: desktop-cdp-eval-known-expression
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "CDP correctly evaluates a predetermined JavaScript expression on the loaded page"
             cdp: eval
             tab: "1"
@@ -764,7 +764,7 @@ recipe:
       - name: desktop-cdp-screenshot-of-web
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "a CDP screenshot of the loaded page has real, non-uniform content at the expected dimensions"
             cdp: screenshot
             tab: "1"
@@ -777,7 +777,7 @@ recipe:
       - name: desktop-wl-toplevel-includes-window
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "the Wayland toplevel listing includes at least one rendered window"
             wl: toplevel
             stdout: { matches: "." }
@@ -785,7 +785,7 @@ recipe:
       - name: desktop-wl-screenshot-shows-real-content
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "a Wayland screenshot of the desktop has real, non-uniform content at the expected dimensions"
             wl: screenshot
             artifact: /tmp/wl.png
@@ -797,7 +797,7 @@ recipe:
       - name: desktop-vnc-screenshot-shows-real-content
         pod: desktop
         depends_on: [desktop-cdp-loads-web]
-        steps:
+        step:
           - then: "a VNC framebuffer screenshot has real, non-uniform content at the expected dimensions"
             vnc: screenshot
             artifact: /tmp/vnc.png
@@ -809,7 +809,7 @@ recipe:
       - name: desktop-dbus-notify-roundtrip
         pod: desktop
         depends_on: [desktop-dbus-up]
-        steps:
+        step:
           - then: "a desktop notification can be sent with a predetermined body"
             dbus: notify
             text: "ov-dbus-notify-marker"
@@ -818,7 +818,7 @@ recipe:
       # Recording consumer — produces a known-shape artifact
       - name: desktop-record-cast-has-events
         pod: desktop
-        steps:
+        step:
           - then: "a terminal recording is captured with at least the predetermined number of events"
             record: stop
             artifact: /tmp/session.cast
@@ -875,14 +875,14 @@ recipe:
     scenario:
       - name: vm-libvirt-info
         pod: vm
-        steps:
+        step:
           - then: "the VM's libvirt domain info is queryable"
             libvirt: info
 
       - name: vm-libvirt-domain-xml
         pod: vm
         depends_on: [vm-libvirt-info]
-        steps:
+        step:
           - then: "the VM's domain definition contains the predetermined domain name"
             libvirt: domain-xml
             stdout: { contains: ["vm"] }
@@ -890,7 +890,7 @@ recipe:
       - name: vm-libvirt-screenshot-real
         pod: vm
         depends_on: [vm-libvirt-info]
-        steps:
+        step:
           - then: "a libvirt console screenshot has real, non-uniform content at the expected dimensions"
             libvirt: screenshot
             artifact: /tmp/lv.png
@@ -901,14 +901,14 @@ recipe:
       - name: vm-guest-ping
         pod: vm
         depends_on: [vm-libvirt-info]
-        steps:
+        step:
           - then: "the VM guest agent answers ping"
             libvirt: guest/ping
 
       - name: vm-guest-uname-linux
         pod: vm
         depends_on: [vm-guest-ping]
-        steps:
+        step:
           - then: "the VM guest reports a Linux kernel via guest/exec"
             libvirt: guest/exec
             command: "uname -s"
@@ -917,7 +917,7 @@ recipe:
       - name: vm-guest-curls-web
         pod: vm
         depends_on: [vm-guest-ping]
-        steps:
+        step:
           - then: "from inside the VM, fetching the upstream HTTP fixture URL returns the predetermined marker"
             libvirt: guest/exec
             command: "curl -fsS http://ov-web:8080/"
@@ -926,14 +926,14 @@ recipe:
       - name: vm-snapshot-list
         pod: vm
         depends_on: [vm-libvirt-info]
-        steps:
+        step:
           - then: "snapshot listing succeeds"
             libvirt: snapshot/list
 
       - name: vm-spice-status
         pod: vm
         depends_on: [vm-libvirt-info]
-        steps:
+        step:
           - then: "the VM's SPICE handshake completes"
             spice: status
             stdout: { contains: ["ok"] }
@@ -941,7 +941,7 @@ recipe:
       - name: vm-spice-screenshot-real
         pod: vm
         depends_on: [vm-spice-status]
-        steps:
+        step:
           - then: "a SPICE framebuffer screenshot has real, non-uniform content at the expected dimensions"
             spice: screenshot
             artifact: /tmp/spice.png
@@ -1001,7 +1001,7 @@ recipe:
       # ─── Layer 1: VM exists and is reachable ─────────────────────────
       - name: vm-running
         pod: nested-eval-vm
-        steps:
+        step:
           - then: "the VM has booted and is reachable from the bench pod"
             command: "uptime"
             exit_status: 0
@@ -1009,7 +1009,7 @@ recipe:
       - name: vm-has-kvm-acceleration
         pod: nested-eval-vm
         depends_on: [vm-running]
-        steps:
+        step:
           - then: "the guest has hardware-accelerated virtualization available"
             file: /dev/kvm
             exists: true
@@ -1018,7 +1018,7 @@ recipe:
       - name: inner-pod-running
         pod: nested-eval-vm.inner-app-pod
         depends_on: [vm-running]
-        steps:
+        step:
           - then: "the inner pod's primary process is running"
             process: nginx
             running: true
@@ -1026,7 +1026,7 @@ recipe:
       - name: inner-pod-listens-8080
         pod: nested-eval-vm.inner-app-pod
         depends_on: [inner-pod-running]
-        steps:
+        step:
           - then: "the inner pod's predetermined port is listening"
             port: 8080
             listening: true
@@ -1035,7 +1035,7 @@ recipe:
       - name: nested-pod-running
         pod: nested-eval-vm.inner-app-pod.nested-redis-pod
         depends_on: [inner-pod-running]
-        steps:
+        step:
           - then: "the nested data store's primary process is running"
             process: redis-server
             running: true
@@ -1043,7 +1043,7 @@ recipe:
       - name: nested-pod-listens-network
         pod: nested-eval-vm.inner-app-pod.nested-redis-pod
         depends_on: [nested-pod-running]
-        steps:
+        step:
           - then: "the nested data store is reachable on the network (not loopback only)"
             command: "ss -tln | grep ':6379' | grep -v '127.0.0.1'"
             exit_status: 0
@@ -1052,7 +1052,7 @@ recipe:
       - name: nested-set-from-inner
         pod: nested-eval-vm.inner-app-pod
         depends_on: [nested-pod-listens-network]
-        steps:
+        step:
           - then: "the inner pod successfully writes the nonce-protected key on the nested data store"
             command: "redis-cli -h ov-inner-app-pod_nested-redis-pod SET bench:${EVAL_NONCE_KEY} ${EVAL_NONCE_VALUE}"
             stdout: { contains: [OK] }
@@ -1060,7 +1060,7 @@ recipe:
       - name: nested-readback-on-deepest
         pod: nested-eval-vm.inner-app-pod.nested-redis-pod
         depends_on: [nested-set-from-inner]
-        steps:
+        step:
           - then: "the nonce-protected key is readable on the deepest pod with the correct value"
             command: "redis-cli get bench:${EVAL_NONCE_KEY}"
             stdout: { contains: ["${EVAL_NONCE_VALUE}"] }
@@ -1069,7 +1069,7 @@ recipe:
       - name: vm-can-reach-redis
         pod: nested-eval-vm
         depends_on: [vm-running]
-        steps:
+        step:
           - then: "the VM guest can reach the outermost data store from phase 3"
             command: "redis-cli -h ov-redis ping"
             stdout: { contains: [PONG] }
@@ -1148,7 +1148,7 @@ recipe:
       - name: composition-handwritten-probe
         pod: composition-app
         depends_on: [sshd-binary]
-        steps:
+        step:
           - then: "a marker file written during the composition self-test is present"
             file: /etc/ov-composition-selftest
             exists: true
@@ -1167,7 +1167,7 @@ score:
     progressive: true                 # curriculum-style: phase N adds recipe N
     target_image: "eval-target"      # informational prompt token (${TARGET_IMAGE})
     deployment: "eval-default"     # informational prompt token (${DEPLOYMENT})
-    notes: true
+    note: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
     # Validate the AI's iteration artifacts (instead of re-running the
@@ -1184,7 +1184,7 @@ score:
     # mcp queries) ALWAYS re-run independently regardless of this flag.
     # The harness remains AUTHORITATIVE for everything reproducible.
     validate_ai_artifacts: true
-    recipes:
+    recipe:
       - single-pod-system-state           # phase 1 — trivial smoke
       - network-and-http                  # phase 2 — web producer
       - cross-pod-nonce-traffic           # phase 3 — multi-pod redis with nonce
@@ -1336,10 +1336,10 @@ score:
     ai: [claude]
     plateau_iteration: 3
     progressive: false
-    notes: false
+    note: false
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
-    recipes:
+    recipe:
       - composition-import-selftest
     prompt: |
       == Where you are ==

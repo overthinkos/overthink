@@ -1,7 +1,7 @@
 layer:
   name: direnv
   description: direnv — automatic environment variable loading from .envrc files
-  packages:
+  package:
     - direnv
   # Shell hooks installed declaratively via the shell: schema (2026-05).
   # bash/zsh/sh use the POSIX-style hook (eval $(direnv hook X)) — handled

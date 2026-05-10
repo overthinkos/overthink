@@ -1,12 +1,12 @@
 layer:
   name: pre-commit
-  requires:
+  require:
     - nodejs
     - rust # cargo install taplo-cli below requires cargo on PATH.
     # (nodejs is retained for completeness; pre-commit itself needs node for some hooks.)
-  packages:
+  package:
     - pre-commit
-  tasks:
+  task:
     - cmd: cargo install taplo-cli --locked
       user: "${USER}"
   eval:

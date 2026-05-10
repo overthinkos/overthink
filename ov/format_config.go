@@ -17,7 +17,7 @@ type DistroDef struct {
 	Inherits    string                `yaml:"inherits,omitempty"`
 	Bootstrap   BootstrapDef          `yaml:"bootstrap"`
 	Workarounds []string              `yaml:"workarounds,omitempty"`
-	Formats     map[string]*FormatDef `yaml:"formats,omitempty"`
+	Format      map[string]*FormatDef `yaml:"format,omitempty"`
 	// BaseUser declares a pre-existing uid account that ships in the
 	// upstream base image — e.g. ubuntu:ubuntu uid 1000 on ubuntu:24.04.
 	// When present and the image's user_policy allows adoption, ov adopts
@@ -110,9 +110,9 @@ type BaseUserDef struct {
 
 // BootstrapDef defines how to bootstrap a base image.
 type BootstrapDef struct {
-	InstallCmd  string          `yaml:"install_cmd"`
-	Packages    []string        `yaml:"packages"`
-	CacheMounts []CacheMountDef `yaml:"cache_mounts"`
+	InstallCmd string          `yaml:"install_cmd"`
+	Package    []string        `yaml:"package"`
+	CacheMount []CacheMountDef `yaml:"cache_mount"`
 }
 
 // CacheMountDef defines a BuildKit cache mount.
@@ -137,7 +137,7 @@ type CacheMountDef struct {
 // Keeping both fields lets us migrate build.yml per-format one at a time
 // (Task 4 / 7 migrations) without breaking OCI output for the rest.
 type FormatDef struct {
-	CacheMounts     []CacheMountDef   `yaml:"cache_mounts"`
+	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
 	SectionFields   map[string]string `yaml:"section_fields"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phases,omitempty"`
@@ -281,15 +281,15 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	if def.Bootstrap.InstallCmd != "" {
 		// Child has its own bootstrap. Merge inherited optional sub-blocks
 		// onto it.
-		formats := def.Formats
+		formats := def.Format
 		if len(formats) == 0 {
-			formats = resolved.Formats
+			formats = resolved.Format
 		}
 		merged := &DistroDef{
 			Inherits:        def.Inherits,
 			Bootstrap:       def.Bootstrap,
 			Workarounds:     def.Workarounds,
-			Formats:         formats,
+			Format:         formats,
 			BaseUser:        baseUser,
 			Pacstrap:        pacstrap,
 			Debootstrap:     debootstrap,
@@ -300,15 +300,15 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	}
 	// Child has no bootstrap — inherit parent's bootstrap + workarounds,
 	// overlay child's formats / baseuser / new sub-blocks.
-	formats := resolved.Formats
-	if len(def.Formats) > 0 {
-		formats = def.Formats
+	formats := resolved.Format
+	if len(def.Format) > 0 {
+		formats = def.Format
 	}
 	merged := &DistroDef{
 		Inherits:        def.Inherits,
 		Bootstrap:       resolved.Bootstrap,
 		Workarounds:     resolved.Workarounds,
-		Formats:         formats,
+		Format:         formats,
 		BaseUser:        baseUser,
 		Pacstrap:        pacstrap,
 		Debootstrap:     debootstrap,
@@ -349,7 +349,7 @@ func (dc *DistroConfig) AllFormatNames() []string {
 	seen := make(map[string]bool)
 	for _, distro := range dc.Distro {
 		resolved := dc.resolveInherits(distro, 10)
-		for name := range resolved.Formats {
+		for name := range resolved.Format {
 			seen[name] = true
 		}
 	}
@@ -368,7 +368,7 @@ func (dc *DistroConfig) ValidFormat(name string) bool {
 	}
 	for _, distro := range dc.Distro {
 		resolved := dc.resolveInherits(distro, 10)
-		if _, ok := resolved.Formats[name]; ok {
+		if _, ok := resolved.Format[name]; ok {
 			return true
 		}
 	}
@@ -404,7 +404,7 @@ type BuilderDef struct {
 	DetectConfig    string            `yaml:"detect_config,omitempty"`
 	RequiresSrcDir  bool              `yaml:"requires_src_dir,omitempty"`
 	Inline          bool              `yaml:"inline,omitempty"`
-	CacheMounts     []CacheMountDef   `yaml:"cache_mounts"`
+	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
 	Env             map[string]string `yaml:"env,omitempty"`
 	StageTemplate   string            `yaml:"stage_template,omitempty"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`

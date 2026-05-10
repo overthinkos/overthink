@@ -1,12 +1,12 @@
 layer:
   name: xfce4-terminal
-  requires:
+  require:
     - sway
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - xfce4-terminal
-  tasks:
+  task:
     - mkdir: "${HOME}/.config/sway/config.d"
       user: "${USER}"
     - copy: xfce4-terminal.conf

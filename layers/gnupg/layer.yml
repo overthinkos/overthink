@@ -1,18 +1,18 @@
 layer:
   name: gnupg
   description: GnuPG encryption and signing tools for GPG agent forwarding
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - gnupg
     debian:
-      packages:
+      package:
         - gnupg
     fedora:
-      packages:
+      package:
         - gnupg2
     ubuntu:
-      packages:
+      package:
         - gnupg
   eval:
     - id: gpg-binary

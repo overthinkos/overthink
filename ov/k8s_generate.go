@@ -297,8 +297,8 @@ func generateWorkload(opts K8sGenerateOpts) (map[string]any, string) {
 }
 
 func effectiveReplicas(opts K8sGenerateOpts) int {
-	if opts.Deploy.Replicas > 0 {
-		return opts.Deploy.Replicas
+	if opts.Deploy.Replica > 0 {
+		return opts.Deploy.Replica
 	}
 	return 1
 }
@@ -353,8 +353,8 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 	}
 
 	// Image pull policy from cluster profile.
-	if opts.Cluster != nil && opts.Cluster.Images.PullPolicy != "" {
-		container["imagePullPolicy"] = opts.Cluster.Images.PullPolicy
+	if opts.Cluster != nil && opts.Cluster.ImageDefault.PullPolicy != "" {
+		container["imagePullPolicy"] = opts.Cluster.ImageDefault.PullPolicy
 	}
 
 	// Container ports from capabilities.Ports
@@ -402,9 +402,9 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 	}
 
 	// Image pull secrets
-	if opts.Cluster != nil && len(opts.Cluster.Images.PullSecrets) > 0 {
+	if opts.Cluster != nil && len(opts.Cluster.ImageDefault.PullSecrets) > 0 {
 		var refs []map[string]any
-		for _, s := range opts.Cluster.Images.PullSecrets {
+		for _, s := range opts.Cluster.ImageDefault.PullSecrets {
 			refs = append(refs, map[string]any{"name": s})
 		}
 		podSpec["imagePullSecrets"] = refs
@@ -417,13 +417,13 @@ func generatePodSpec(opts K8sGenerateOpts) map[string]any {
 
 	// Priority class / tolerations / node selector from cluster defaults.
 	if opts.Cluster != nil {
-		if pc := opts.Cluster.PodDefaults.PriorityClass; pc != "" {
+		if pc := opts.Cluster.PodDefault.PriorityClass; pc != "" {
 			podSpec["priorityClassName"] = pc
 		}
-		if tol := opts.Cluster.PodDefaults.Tolerations; len(tol) > 0 {
+		if tol := opts.Cluster.PodDefault.Tolerations; len(tol) > 0 {
 			podSpec["tolerations"] = tol
 		}
-		if ns := opts.Cluster.PodDefaults.NodeSelector; len(ns) > 0 {
+		if ns := opts.Cluster.PodDefault.NodeSelector; len(ns) > 0 {
 			podSpec["nodeSelector"] = ns
 		}
 	}

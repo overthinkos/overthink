@@ -88,15 +88,15 @@ func TestDetectStaleEncryptedQuadlets(t *testing.T) {
 deploy:
   immich:
     target: pod
-    volumes:
+    volume:
       - {name: data, type: encrypted}
   jupyter:
     target: pod
-    volumes:
+    volume:
       - {name: data, type: encrypted}
   webapp:
     target: pod
-    volumes:
+    volume:
       - {name: data, type: bind, host: /tmp}
 `
 	if err := os.WriteFile(filepath.Join(xdg, "ov", "deploy.yml"), []byte(deployYAML), 0o600); err != nil {

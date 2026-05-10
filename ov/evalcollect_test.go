@@ -29,10 +29,10 @@ func TestCollectTests_Sections(t *testing.T) {
 	}
 
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"redis-ml": {
 				Base:    "base",
-				Layers:  []string{"redis"},
+				Layer:  []string{"redis"},
 				Enabled: boolPtr(true),
 				Eval:  []Check{
 					{Command: "supervisord -v"},
@@ -44,7 +44,7 @@ func TestCollectTests_Sections(t *testing.T) {
 			},
 			"base": {
 				Enabled: boolPtr(true),
-				Layers:  []string{"base"},
+				Layer:  []string{"base"},
 			},
 		},
 	}
@@ -93,8 +93,8 @@ func TestCollectTests_Sections(t *testing.T) {
 // No tests anywhere → nil (so the label is omitted from the image entirely).
 func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 	layers := map[string]*Layer{"l": {Name: "l"}}
-	cfg := &Config{Images: map[string]ImageConfig{
-		"i": {Enabled: boolPtr(true), Layers: []string{"l"}},
+	cfg := &Config{Image: map[string]ImageConfig{
+		"i": {Enabled: boolPtr(true), Layer: []string{"l"}},
 	}}
 	if got := CollectEval(cfg, layers, "i"); got != nil {
 		t.Errorf("expected nil, got %+v", got)

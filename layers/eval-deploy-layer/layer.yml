@@ -9,12 +9,12 @@ layer:
       probe). No use_packaged form — fedora-minimal ships no systemd unit
       for sleep, so the layer is supervisord-only.
     tag: [working]
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - coreutils
         - supervisor
-  tasks:
+  task:
     - write: /etc/eval-deploy-marker
       user: root
       mode: "0644"

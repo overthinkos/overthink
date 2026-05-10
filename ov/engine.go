@@ -23,13 +23,13 @@ func EngineBinary(engine string) string {
 // come from DeploymentNode.Engine via ResolveImageEngineForDeploy /
 // ResolveImageEngineFromMeta.
 func ResolveImageEngine(cfg *Config, layers map[string]*Layer, imageName string, globalRunEngine string) string {
-	img, ok := cfg.Images[imageName]
+	img, ok := cfg.Image[imageName]
 	if !ok {
 		return globalRunEngine
 	}
 
 	// Layer-level engine requirements (transitive closure)
-	resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+	resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 	if err == nil {
 		for _, layerName := range resolved {
 			if layer, ok := layers[layerName]; ok && layer.Engine() != "" {
@@ -59,7 +59,7 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 	if err != nil {
 		return globalEngine
 	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return globalEngine
 	}

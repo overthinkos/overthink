@@ -35,7 +35,7 @@ type QuadletConfig struct {
 	EncryptedMounts bool                // true when any bind mount is encrypted
 	KeyringBackend  bool                // true when credential store is Secret Service (keyring)
 	PodName         string              // non-empty when this container belongs to a pod (sidecar mode)
-	Sidecars        []ResolvedSidecar   // sidecar definitions (used to detect tailscale sidecar for tunnel)
+	Sidecar         []ResolvedSidecar   // sidecar definitions (used to detect tailscale sidecar for tunnel)
 }
 
 // generateQuadlet produces the contents of a quadlet .container file.

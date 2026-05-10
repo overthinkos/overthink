@@ -8,7 +8,7 @@ layer:
       `ov eval kind layer` to prove that layer composition order survives
       the build pipeline.
     tag: [working]
-  tasks:
+  task:
     - write: /etc/eval-layer-marker
       user: root
       mode: "0644"

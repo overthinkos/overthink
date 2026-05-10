@@ -1,8 +1,8 @@
 layer:
   name: vr-streaming
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - avahi-devel
         - avahi-glib-devel
         - eigen3-devel

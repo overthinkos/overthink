@@ -2,7 +2,7 @@ layer:
   name: openclaw-full-ml
   description: OpenClaw full + ML tools (whisper, sherpa-onnx-tts, CUDA)
 
-  layers:
+  layer:
     - openclaw-full
     - whisper
     - sherpa-onnx

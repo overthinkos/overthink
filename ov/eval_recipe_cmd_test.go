@@ -60,7 +60,7 @@ func TestPrintRecipeTAP_PassFailSkip(t *testing.T) {
 				Name:   "f",
 				Origin: "pod:x",
 				Status: "fail",
-				Steps: []StepEvalResult{
+				Step: []StepEvalResult{
 					{Status: "pass", Verb: "command", Text: "earlier ok step"},
 					{
 						Status: "fail",

@@ -7,8 +7,8 @@ import (
 
 func TestCollectImageVolumesSimple(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {Layers: []string{"svc"}},
+		Image: map[string]ImageConfig{
+			"myapp": {Layer: []string{"svc"}},
 		},
 	}
 	layers := map[string]*Layer{
@@ -20,24 +20,24 @@ func TestCollectImageVolumesSimple(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "myapp", "/home/user", nil)
+	mounts, err := CollectImageVolume(cfg, layers, "myapp", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolumes() error = %v", err)
+		t.Fatalf("CollectImageVolume() error = %v", err)
 	}
 
 	want := []VolumeMount{
 		{VolumeName: "ov-myapp-data", ContainerPath: "/home/user/.myapp"},
 	}
 	if !reflect.DeepEqual(mounts, want) {
-		t.Errorf("CollectImageVolumes() =\n  %v\nwant\n  %v", mounts, want)
+		t.Errorf("CollectImageVolume() =\n  %v\nwant\n  %v", mounts, want)
 	}
 }
 
 func TestCollectImageVolumesChain(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"base":  {Layers: []string{"store"}},
-			"child": {Base: "base", Layers: []string{"app"}},
+		Image: map[string]ImageConfig{
+			"base":  {Layer: []string{"store"}},
+			"child": {Base: "base", Layer: []string{"app"}},
 		},
 	}
 	layers := map[string]*Layer{
@@ -55,9 +55,9 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user", nil)
+	mounts, err := CollectImageVolume(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolumes() error = %v", err)
+		t.Fatalf("CollectImageVolume() error = %v", err)
 	}
 
 	// Should have volumes from both child and base image layers
@@ -66,15 +66,15 @@ func TestCollectImageVolumesChain(t *testing.T) {
 		{VolumeName: "ov-child-models", ContainerPath: "/home/user/.models"},
 	}
 	if !reflect.DeepEqual(mounts, want) {
-		t.Errorf("CollectImageVolumes() =\n  %v\nwant\n  %v", mounts, want)
+		t.Errorf("CollectImageVolume() =\n  %v\nwant\n  %v", mounts, want)
 	}
 }
 
 func TestCollectImageVolumesDedup(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"base":  {Layers: []string{"store"}},
-			"child": {Base: "base", Layers: []string{"override"}},
+		Image: map[string]ImageConfig{
+			"base":  {Layer: []string{"store"}},
+			"child": {Base: "base", Layer: []string{"override"}},
 		},
 	}
 	layers := map[string]*Layer{
@@ -92,9 +92,9 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 		},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "child", "/home/user", nil)
+	mounts, err := CollectImageVolume(cfg, layers, "child", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolumes() error = %v", err)
+		t.Fatalf("CollectImageVolume() error = %v", err)
 	}
 
 	// First declaration wins (outermost image)
@@ -108,17 +108,17 @@ func TestCollectImageVolumesDedup(t *testing.T) {
 
 func TestCollectImageVolumesNoVolumes(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"base": {Layers: []string{"plain"}},
+		Image: map[string]ImageConfig{
+			"base": {Layer: []string{"plain"}},
 		},
 	}
 	layers := map[string]*Layer{
 		"plain": {Name: "plain", HasTasks: true},
 	}
 
-	mounts, err := CollectImageVolumes(cfg, layers, "base", "/home/user", nil)
+	mounts, err := CollectImageVolume(cfg, layers, "base", "/home/user", nil)
 	if err != nil {
-		t.Fatalf("CollectImageVolumes() error = %v", err)
+		t.Fatalf("CollectImageVolume() error = %v", err)
 	}
 	if len(mounts) != 0 {
 		t.Errorf("expected 0 mounts, got %v", mounts)

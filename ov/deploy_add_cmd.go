@@ -174,8 +174,8 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		if node.InstallOpts != nil {
 			opts = node.InstallOpts.ApplyTo(opts)
 		}
-		if len(addLayers) == 0 && len(node.AddLayers) > 0 {
-			addLayers = append([]string(nil), node.AddLayers...)
+		if len(addLayers) == 0 && len(node.AddLayer) > 0 {
+			addLayers = append([]string(nil), node.AddLayer...)
 		}
 	}
 	if refStr == "" {
@@ -216,7 +216,7 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 			return fmt.Errorf("deployment %q: unknown kind:local template %q", path, node.Local)
 		}
 		// Prepend template layers; deployment add_layers are appended.
-		merged := append([]string(nil), tmpl.Layers...)
+		merged := append([]string(nil), tmpl.Layer...)
 		merged = append(merged, addLayers...)
 		addLayers = merged
 		// Fill install_opts gaps from the template.
@@ -633,12 +633,12 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 	if err != nil {
 		return nil, "", nil, err
 	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return nil, "", nil, err
 	}
 	var parent map[string]bool
-	order, err := ResolveLayerOrder(img.Layers, layers, parent)
+	order, err := ResolveLayerOrder(img.Layer, layers, parent)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -664,7 +664,7 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 // context, not the operator host's).
 func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedImage) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -695,7 +695,7 @@ func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config,
 
 func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -836,11 +836,11 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 	// into each TaskStep's env BEFORE emission. Missing `secret_requires:`
 	// auto-generate a 32-byte hex token and persist to the credential
 	// store (see ensureLayerSecret in layer_secrets.go).
-	layerList, err := LayersForPlans(plans, dir, nil)
+	layerList, err := LayerForPlan(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv := ResolveSecretsForLayers(layerList)
+	secretEnv := ResolveSecretForLayer(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 
 	// Collect env for artifact substitution — merges resolved secrets +
@@ -958,11 +958,11 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// "K3S_CLUSTER_TOKEN: unbound variable". Missing `secret_requires:`
 	// auto-generate via ensureLayerSecret. Mirrors the runHost / runVM
 	// injection paths.
-	layerList, err := LayersForPlans(plans, dir, nil)
+	layerList, err := LayerForPlan(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv := ResolveSecretsForLayers(layerList)
+	secretEnv := ResolveSecretForLayer(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 	// Thread ParentExec: when this container is a child of another
 	// deployment, the overlay build (if any) must run in the parent's

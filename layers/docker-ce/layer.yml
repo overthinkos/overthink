@@ -1,49 +1,49 @@
 layer:
   name: docker-ce
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - containerd
         - docker
         - docker-buildx
         - docker-compose
     debian-13:
-      packages:
+      package:
         - containerd.io
         - docker-buildx-plugin
         - docker-ce
         - docker-ce-cli
         - docker-compose-plugin
-      repos:
+      repo:
         - name: docker-ce-debian
           url: "https://download.docker.com/linux/debian"
           key: "https://download.docker.com/linux/debian/gpg"
           suite: trixie
           components: stable
     fedora:
-      packages:
+      package:
         - containerd.io
         - docker-buildx-plugin
         - docker-ce
         - docker-ce-cli
         - docker-compose-plugin
-      repos:
+      repo:
         - name: docker-ce-stable
           url: "https://download.docker.com/linux/fedora/docker-ce.repo"
     ubuntu-24.04:
-      packages:
+      package:
         - containerd.io
         - docker-buildx-plugin
         - docker-ce
         - docker-ce-cli
         - docker-compose-plugin
-      repos:
+      repo:
         - name: docker-ce-ubuntu
           url: "https://download.docker.com/linux/ubuntu"
           key: "https://download.docker.com/linux/ubuntu/gpg"
           suite: noble
           components: stable
-  tasks:
+  task:
     # Load iptable_nat kernel module at boot (needed for docker networking)
     - cmd: mkdir -p /etc/modules-load.d && echo "iptable_nat" >> /etc/modules-load.d/ip_tables.conf
       user: root

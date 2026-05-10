@@ -1,6 +1,6 @@
 layer:
   name: sway-desktop
-  layers:
+  layer:
     - pipewire
     - xdg-portal
     - wl-tools

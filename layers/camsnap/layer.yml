@@ -1,13 +1,13 @@
 layer:
   name: camsnap
   description: RTSP/ONVIF camera snapshot and clip CLI
-  requires:
+  require:
     - golang
   env:
     GOPATH: "~/go"
   path_append:
     - "~/go/bin"
-  tasks:
+  task:
     - cmd: |
         go install github.com/steipete/camsnap/cmd/camsnap@latest
         go clean -cache

@@ -228,7 +228,7 @@ func TestGenerateRouteWithoutTraefik_NoTraefikRoutes(t *testing.T) {
 				Registry:       "ghcr.io/test",
 				Tag:            "latest",
 				FullTag:        "ghcr.io/test/test-image:latest",
-				Layers:         []string{"svc"},
+				Layer:          []string{"svc"},
 				Pkg:            "rpm",
 				BuildFormats:   []string{"rpm"},
 				Tags:           []string{"all", "rpm"},
@@ -439,9 +439,9 @@ func TestRenderRelayTemplate(t *testing.T) {
 
 func TestRpmTemplateWithModules(t *testing.T) {
 	fedora := testDistroDef("fedora")
-	rpm := fedora.Formats["rpm"]
+	rpm := fedora.Format["rpm"]
 	ctx := &InstallContext{
-		CacheMounts: rpm.CacheMounts,
+		CacheMounts: rpm.CacheMount,
 		Packages:    []string{"valkey"},
 		Modules:     []string{"valkey:remi-9.0"},
 	}
@@ -466,9 +466,9 @@ func TestRpmTemplateWithModules(t *testing.T) {
 
 func TestPacTemplateBasic(t *testing.T) {
 	arch := testDistroDef("archlinux")
-	pac := arch.Formats["pac"]
+	pac := arch.Format["pac"]
 	ctx := &InstallContext{
-		CacheMounts: pac.CacheMounts,
+		CacheMounts: pac.CacheMount,
 		Packages:    []string{"neovim", "ripgrep"},
 	}
 	out, err := RenderTemplate("pac-test", pac.InstallTemplate, ctx)
@@ -495,7 +495,7 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 		UID:         1000,
 		Home:        "/home/user",
 		User:        "user",
-		CacheMounts: aurBuilder.CacheMounts,
+		CacheMounts: aurBuilder.CacheMount,
 		Packages:    []string{"yay-bin", "neovim-nightly-bin"},
 	}
 	out, err := RenderTemplate("aur-stage-test", aurBuilder.StageTemplate, ctx)
@@ -515,9 +515,9 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 
 func TestAurInstallTemplate(t *testing.T) {
 	arch := testDistroDef("archlinux")
-	aur := arch.Formats["aur"]
+	aur := arch.Format["aur"]
 	ctx := &InstallContext{
-		CacheMounts: aur.CacheMounts,
+		CacheMounts: aur.CacheMount,
 		StageName:   "my-tool-aur-build",
 	}
 	out, err := RenderTemplate("aur-install-test", aur.InstallTemplate, ctx)

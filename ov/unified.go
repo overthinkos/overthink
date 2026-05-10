@@ -53,23 +53,23 @@ const MaxIncludeDepth = 8
 // `ov migrate merge-vms` for the one-shot migration from v1.
 type UnifiedFile struct {
 	Version  int                    `yaml:"version,omitempty"`
-	Includes []string               `yaml:"includes,omitempty"`
+	Include  []string               `yaml:"include,omitempty"`
 	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
-	Distros  map[string]*DistroDef  `yaml:"distros,omitempty"`
-	Builders map[string]*BuilderDef `yaml:"builders,omitempty"`
-	Inits    map[string]*InitDef    `yaml:"inits,omitempty"`
+	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
+	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
+	Init     map[string]*InitDef    `yaml:"init,omitempty"`
 	Defaults ImageConfig            `yaml:"defaults,omitempty"`
-	Images   map[string]ImageConfig `yaml:"images,omitempty"`
-	// Schema v4 singular alias. Populated by ImageSingular during YAML
-	// unmarshal; merged into Images post-load via normalizeAliases.
-	ImageSingular map[string]ImageConfig  `yaml:"image,omitempty"`
-	Layers        map[string]*InlineLayer `yaml:"layers,omitempty"`
-	VM            map[string]*VmSpec      `yaml:"vm,omitempty"`
-	Deploys   *DeploymentsSection     `yaml:"deployments,omitempty"`
-	// Schema v4 singular alias for Deploys. Populated via
-	// DeploySingular; merged post-load. YAML tag flipped from
-	// "deployment" → "deploy" in the 2026-05 kind-files cutover.
-	DeploySingular map[string]DeploymentNode `yaml:"deploy,omitempty"`
+	// Field-singular cutover (2026-05): legacy plural `Images yaml:"images"`
+	// deleted; the singular `Image yaml:"image"` is the canonical surface.
+	Image map[string]ImageConfig  `yaml:"image,omitempty"`
+	Layer map[string]*InlineLayer `yaml:"layer,omitempty"`
+	VM    map[string]*VmSpec      `yaml:"vm,omitempty"`
+	// Field-singular cutover: legacy `Deploys *DeploymentsSection
+	// yaml:"deployments"` deleted. The flat `Deploy yaml:"deploy"` map is
+	// the canonical singular surface; the wrapper's `Provides` migrates
+	// to UnifiedFile root (next field).
+	Deploy   map[string]DeploymentNode `yaml:"deploy,omitempty"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
 
 	// Schema v4: first-class target template maps (singular keys).
 	Pod   map[string]*PodSpec   `yaml:"pod,omitempty"`
@@ -96,20 +96,20 @@ type UnifiedFile struct {
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
-// sub-key is independent; a file with only `discover.layers:` is common.
+// sub-key is independent; a file with only `discover.layer:` is common.
 type DiscoverConfig struct {
-	Layers      []ScanSpec `yaml:"layers,omitempty"`
-	Images      []ScanSpec `yaml:"images,omitempty"`
-	Deploys     []ScanSpec `yaml:"deploys,omitempty"`
-	Builders    []ScanSpec `yaml:"builders,omitempty"`
-	Distros     []ScanSpec `yaml:"distros,omitempty"`
-	Inits       []ScanSpec `yaml:"inits,omitempty"`
-	VM          []ScanSpec `yaml:"vm,omitempty"`
-	Clusters    []ScanSpec `yaml:"clusters,omitempty"` // reserved for Part F
+	Layer    []ScanSpec `yaml:"layer,omitempty"`
+	Image    []ScanSpec `yaml:"image,omitempty"`
+	Deploy   []ScanSpec `yaml:"deploy,omitempty"`
+	Builder  []ScanSpec `yaml:"builder,omitempty"`
+	Distro   []ScanSpec `yaml:"distro,omitempty"`
+	Init     []ScanSpec `yaml:"init,omitempty"`
+	VM       []ScanSpec `yaml:"vm,omitempty"`
+	Cluster  []ScanSpec `yaml:"cluster,omitempty"` // reserved for Part F
 	// Calamares-aligned kinds.
-	Groups  []ScanSpec `yaml:"groups,omitempty"`
-	Targets []ScanSpec `yaml:"targets,omitempty"`
-	Modules []ScanSpec `yaml:"modules,omitempty"`
+	Group  []ScanSpec `yaml:"group,omitempty"`
+	Target []ScanSpec `yaml:"target,omitempty"`
+	Module []ScanSpec `yaml:"module,omitempty"`
 }
 
 // ScanSpec describes one discovery root. Accepts string shorthand
@@ -177,10 +177,14 @@ func (il *InlineLayer) UnmarshalYAML(node *yaml.Node) error {
 // DeploymentsSection carries repo-shipped deployment defaults plus per-image
 // deployment entries. Matches the two-tier deploy model: this block is the
 // authored/in-repo defaults; ~/.config/ov/deploy.yml is the per-machine overlay.
+// DeploymentsSection — RETIRED by the field-singular cutover (2026-05).
+// UnifiedFile.Deploy is now a flat map; UnifiedFile.Provides moved to
+// root level. The type definition is kept (not deleted) because
+// migrate_unified.go still references it for legacy migration history.
 type DeploymentsSection struct {
 	Defaults *DeploymentNode           `yaml:"defaults,omitempty"`
 	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
-	Images   map[string]DeploymentNode `yaml:"images,omitempty"`
+	Image    map[string]DeploymentNode `yaml:"image,omitempty"`
 }
 
 // -----------------------------------------------------------------------------
@@ -445,15 +449,15 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 		}
 		return nil
 	}
-	if merged.Deploys != nil {
-		for name, node := range merged.Deploys.Images {
+	if merged.Deploy != nil {
+		for name, node := range merged.Deploy {
 			n := node
 			if err := walk(name, &n); err != nil {
 				return err
 			}
 		}
 	}
-	for name, node := range merged.DeploySingular {
+	for name, node := range merged.Deploy {
 		n := node
 		if err := walk(name, &n); err != nil {
 			return err
@@ -474,6 +478,14 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyDeploymentRefs(dir); err != nil {
 		return nil, true, err
 	}
+	// Field-singular cutover (2026-05): hard-reject any residual plural
+	// top-level keys (images:/layers:/distros:/... ) in overthink.yml.
+	// `ov migrate field-singular` rewrites them in-place.
+	if rootData, err := os.ReadFile(root); err == nil {
+		if err := RejectLegacyPluralKeys(root, rootData); err != nil {
+			return nil, true, err
+		}
+	}
 	merged := &UnifiedFile{}
 	visited := map[string]bool{}
 	if err := loadUnifiedInto(root, merged, visited, 0); err != nil {
@@ -491,7 +503,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyLocalSurface(root, merged); err != nil {
 		return nil, true, err
 	}
-	if err := validateDeploymentTree(merged.Deploys); err != nil {
+	if err := validateDeploymentTree(merged.Deploy); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	// Hard load-time error for the retired `local.cachyos-dx` key.
@@ -570,7 +582,7 @@ func expandRecipeFromIfNeeded(merged *UnifiedFile, dir string) error {
 		if score == nil {
 			continue
 		}
-		for _, recipeName := range score.Recipes {
+		for _, recipeName := range score.Recipe {
 			vmSet := vmImportsByRecipe[recipeName]
 			if len(vmSet) == 0 {
 				continue
@@ -610,11 +622,11 @@ func joinStringSet(m map[string]bool) string {
 //
 // Errors include the offending path so the user sees exactly which
 // entry needs to be fixed.
-func validateDeploymentTree(section *DeploymentsSection) error {
-	if section == nil {
+func validateDeploymentTree(deploy map[string]DeploymentNode) error {
+	if deploy == nil {
 		return nil
 	}
-	for name, node := range section.Images {
+	for name, node := range deploy {
 		if err := validateDeploymentName(name, ""); err != nil {
 			return err
 		}
@@ -628,12 +640,12 @@ func validateDeploymentTree(section *DeploymentsSection) error {
 	// by the kind:local template and the kind:deployment entry that
 	// applies it. Any residual `qc:` or `cachyos-dx:` deployment key
 	// (or `cachyos-dx:` kind:local key) needs a one-shot migration.
-	if _, present := section.Images["qc"]; present {
+	if _, present := deploy["qc"]; present {
 		return fmt.Errorf(
 			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate ov-cachyos",
 		)
 	}
-	if _, present := section.Images["cachyos-dx"]; present {
+	if _, present := deploy["cachyos-dx"]; present {
 		return fmt.Errorf(
 			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
 		)
@@ -720,11 +732,11 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 				return fmt.Errorf("%s:doc%d: decoding root-shape document: %w", abs, docIdx, err)
 			}
 			// Queue includes for recursion after current-file merging.
-			for _, inc := range uf.Includes {
+			for _, inc := range uf.Include {
 				includesQueue = append(includesQueue, inc)
 			}
 			// Clear includes before merging so they don't leak into merged struct.
-			uf.Includes = nil
+			uf.Include = nil
 			// Queue discovery roots (resolved relative to this file).
 			// Discovery runs only AFTER all includes are fully merged, so
 			// collect them on merged.Discover directly and process at end.
@@ -797,21 +809,19 @@ const (
 // Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
 // with a migration hint.
 var rootShapeKeys = map[string]bool{
-	"version": true, "includes": true, "discover": true, "defaults": true,
-	"distros": true, "builders": true, "inits": true,
-	"layers": true,
-	// v4 singular kind maps (after 2026-05 kind-files cutover):
+	"version": true, "include": true, "discover": true, "defaults": true,
+	"provides": true,
+	// Field-singular cutover (2026-05): plurals collapsed.
+	"distro": true, "builder": true, "init": true,
+	"layer": true,
 	"image": true, "pod": true, "vm": true, "k8s": true, "local": true,
 	"deploy": true,
-	// legacy aliases accepted for transitional compatibility; migration
-	// rewrites them. `deployment:` was the pre-cutover v4 alias —
-	// `ov migrate kind-files` rewrites it to `deploy:`. `deployments:`
-	// is the v3 legacy plural — `ov migrate schema-v4` flattens it.
-	"images": true, "deployments": true, "deployment": true,
 	// 2026-04 harness cutover: `ai:` and `recipe:` are recognized as
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how image/pod/vm work.
 	"ai": true, "recipe": true, "score": true,
+	// Calamares-aligned kinds (also used as DiscoverConfig field names).
+	"group": true, "target": true, "module": true,
 }
 
 // kindKeysSet mirrors entityKinds for O(1) lookup.
@@ -1098,11 +1108,11 @@ func validateHarnessSemantics(u *UnifiedFile) error {
 		if score == nil {
 			continue
 		}
-		if len(score.Recipes) == 0 {
+		if len(score.Recipe) == 0 {
 			return fmt.Errorf("score %q: recipes: must reference at least one recipe (got empty list)", name)
 		}
-		seen := make(map[string]bool, len(score.Recipes))
-		for _, r := range score.Recipes {
+		seen := make(map[string]bool, len(score.Recipe))
+		for _, r := range score.Recipe {
 			if seen[r] {
 				return fmt.Errorf("score %q: recipes: duplicate recipe name %q", name, r)
 			}
@@ -1146,39 +1156,13 @@ func mapHasKey(node *yaml.Node, key string) bool {
 	return false
 }
 
-// normalizeV4Aliases folds the schema-v4 singular root-shape keys (image:,
-// deployment:) into the canonical plural fields used by the rest of the
-// codebase (Images, Deployments.Images). Makes the loader accept both
-// forms interchangeably during the v4 migration window.
+// normalizeV4Aliases — RETIRED by the field-singular cutover (2026-05).
+// Dual `Images`/`ImageSingular` and `Deploys`/`DeploySingular` fields
+// collapsed into single canonical singular fields with matching yaml
+// tags. Function kept as a no-op so external callers don't break;
+// remove on next refactor pass.
 func normalizeV4Aliases(u *UnifiedFile) {
-	if u == nil {
-		return
-	}
-	if len(u.ImageSingular) > 0 {
-		if u.Images == nil {
-			u.Images = make(map[string]ImageConfig)
-		}
-		for k, v := range u.ImageSingular {
-			if _, ok := u.Images[k]; !ok {
-				u.Images[k] = v
-			}
-		}
-		u.ImageSingular = nil
-	}
-	if len(u.DeploySingular) > 0 {
-		if u.Deploys == nil {
-			u.Deploys = &DeploymentsSection{}
-		}
-		if u.Deploys.Images == nil {
-			u.Deploys.Images = make(map[string]DeploymentNode)
-		}
-		for k, v := range u.DeploySingular {
-			if _, ok := u.Deploys.Images[k]; !ok {
-				u.Deploys.Images[k] = v
-			}
-		}
-		u.DeploySingular = nil
-	}
+	_ = u
 }
 
 // mergeUnified merges src into dst such that dst's existing values WIN on
@@ -1198,20 +1182,20 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 		if dst.Discover == nil {
 			dst.Discover = &DiscoverConfig{}
 		}
-		dst.Discover.Layers = append(dst.Discover.Layers, src.Discover.Layers...)
-		dst.Discover.Images = append(dst.Discover.Images, src.Discover.Images...)
-		dst.Discover.Deploys = append(dst.Discover.Deploys, src.Discover.Deploys...)
-		dst.Discover.Builders = append(dst.Discover.Builders, src.Discover.Builders...)
-		dst.Discover.Distros = append(dst.Discover.Distros, src.Discover.Distros...)
-		dst.Discover.Inits = append(dst.Discover.Inits, src.Discover.Inits...)
+		dst.Discover.Layer = append(dst.Discover.Layer, src.Discover.Layer...)
+		dst.Discover.Image = append(dst.Discover.Image, src.Discover.Image...)
+		dst.Discover.Deploy = append(dst.Discover.Deploy, src.Discover.Deploy...)
+		dst.Discover.Builder = append(dst.Discover.Builder, src.Discover.Builder...)
+		dst.Discover.Distro = append(dst.Discover.Distro, src.Discover.Distro...)
+		dst.Discover.Init = append(dst.Discover.Init, src.Discover.Init...)
 		dst.Discover.VM = append(dst.Discover.VM, src.Discover.VM...)
-		dst.Discover.Clusters = append(dst.Discover.Clusters, src.Discover.Clusters...)
+		dst.Discover.Cluster = append(dst.Discover.Cluster, src.Discover.Cluster...)
 	}
-	mergeDistroMap(&dst.Distros, src.Distros)
-	mergeBuilderMap(&dst.Builders, src.Builders)
-	mergeInitMap(&dst.Inits, src.Inits)
-	mergeImageMap(&dst.Images, src.Images)
-	mergeLayerMap(&dst.Layers, src.Layers)
+	mergeDistroMap(&dst.Distro, src.Distro)
+	mergeBuilderMap(&dst.Builder, src.Builder)
+	mergeInitMap(&dst.Init, src.Init)
+	mergeImageMap(&dst.Image, src.Image)
+	mergeLayerMap(&dst.Layer, src.Layer)
 	mergeVmMap(&dst.VM, src.VM)
 	mergePodMap(&dst.Pod, src.Pod)
 	mergeK8sMap(&dst.K8s, src.K8s)
@@ -1222,7 +1206,10 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeGroupMap(&dst.Group, src.Group)
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
-	mergeDeployments(&dst.Deploys, src.Deploys)
+	mergeDeployMaps(&dst.Deploy, src.Deploy)
+	if dst.Provides == nil && src.Provides != nil {
+		dst.Provides = src.Provides
+	}
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
 	_ = srcDir
@@ -1445,28 +1432,20 @@ func mergeModuleMap(dst *map[string]*ModuleSpec, src map[string]*ModuleSpec) {
 	}
 }
 
-func mergeDeployments(dst **DeploymentsSection, src *DeploymentsSection) {
-	if src == nil {
+// mergeDeployMaps merges src into dst, dst-wins on name collisions.
+// Field-singular cutover: replaces the legacy mergeDeployments which
+// took *DeploymentsSection wrappers. Provides now lives at UnifiedFile
+// root and is merged separately by mergeUnified.
+func mergeDeployMaps(dst *map[string]DeploymentNode, src map[string]DeploymentNode) {
+	if len(src) == 0 {
 		return
 	}
 	if *dst == nil {
-		*dst = &DeploymentsSection{}
+		*dst = make(map[string]DeploymentNode)
 	}
-	d := *dst
-	if d.Defaults == nil && src.Defaults != nil {
-		d.Defaults = src.Defaults
-	}
-	if d.Provides == nil && src.Provides != nil {
-		d.Provides = src.Provides
-	}
-	if len(src.Images) > 0 {
-		if d.Images == nil {
-			d.Images = make(map[string]DeploymentNode)
-		}
-		for k, v := range src.Images {
-			if _, exists := d.Images[k]; !exists {
-				d.Images[k] = v
-			}
+	for k, v := range src {
+		if _, exists := (*dst)[k]; !exists {
+			(*dst)[k] = v
 		}
 	}
 }
@@ -1495,8 +1474,8 @@ func mergeImageConfig(dst, src *ImageConfig) {
 	if len(dst.Build) == 0 {
 		dst.Build = src.Build
 	}
-	if len(dst.Layers) == 0 {
-		dst.Layers = src.Layers
+	if len(dst.Layer) == 0 {
+		dst.Layer = src.Layer
 	}
 	if dst.User == "" {
 		dst.User = src.User
@@ -1586,67 +1565,64 @@ func mergeKindDoc(merged *UnifiedFile, kd *kindKeyedDoc, srcDir string) error {
 		if kd.Layer.Name == "" {
 			return fmt.Errorf("layer: missing name")
 		}
-		if merged.Layers == nil {
-			merged.Layers = map[string]*InlineLayer{}
+		if merged.Layer == nil {
+			merged.Layer = map[string]*InlineLayer{}
 		}
-		if _, exists := merged.Layers[kd.Layer.Name]; !exists {
-			merged.Layers[kd.Layer.Name] = &InlineLayer{LayerYAML: kd.Layer.LayerYAML}
+		if _, exists := merged.Layer[kd.Layer.Name]; !exists {
+			merged.Layer[kd.Layer.Name] = &InlineLayer{LayerYAML: kd.Layer.LayerYAML}
 		}
 	case kd.Image != nil:
 		if kd.Image.Name == "" {
 			return fmt.Errorf("image: missing name")
 		}
-		if merged.Images == nil {
-			merged.Images = map[string]ImageConfig{}
+		if merged.Image == nil {
+			merged.Image = map[string]ImageConfig{}
 		}
-		if _, exists := merged.Images[kd.Image.Name]; !exists {
-			merged.Images[kd.Image.Name] = kd.Image.ImageConfig
+		if _, exists := merged.Image[kd.Image.Name]; !exists {
+			merged.Image[kd.Image.Name] = kd.Image.ImageConfig
 		}
 	case kd.Deploy != nil:
 		if kd.Deploy.Name == "" {
 			return fmt.Errorf("deployment: missing name")
 		}
-		if merged.Deploys == nil {
-			merged.Deploys = &DeploymentsSection{}
+		if merged.Deploy == nil {
+			merged.Deploy = map[string]DeploymentNode{}
 		}
-		if merged.Deploys.Images == nil {
-			merged.Deploys.Images = map[string]DeploymentNode{}
-		}
-		if _, exists := merged.Deploys.Images[kd.Deploy.Name]; !exists {
-			merged.Deploys.Images[kd.Deploy.Name] = kd.Deploy.DeploymentNode
+		if _, exists := merged.Deploy[kd.Deploy.Name]; !exists {
+			merged.Deploy[kd.Deploy.Name] = kd.Deploy.DeploymentNode
 		}
 	case kd.Builder != nil:
 		if kd.Builder.Name == "" {
 			return fmt.Errorf("builder: missing name")
 		}
-		if merged.Builders == nil {
-			merged.Builders = map[string]*BuilderDef{}
+		if merged.Builder == nil {
+			merged.Builder = map[string]*BuilderDef{}
 		}
-		if _, exists := merged.Builders[kd.Builder.Name]; !exists {
+		if _, exists := merged.Builder[kd.Builder.Name]; !exists {
 			builder := kd.Builder.BuilderDef
-			merged.Builders[kd.Builder.Name] = &builder
+			merged.Builder[kd.Builder.Name] = &builder
 		}
 	case kd.Distro != nil:
 		if kd.Distro.Name == "" {
 			return fmt.Errorf("distro: missing name")
 		}
-		if merged.Distros == nil {
-			merged.Distros = map[string]*DistroDef{}
+		if merged.Distro == nil {
+			merged.Distro = map[string]*DistroDef{}
 		}
-		if _, exists := merged.Distros[kd.Distro.Name]; !exists {
+		if _, exists := merged.Distro[kd.Distro.Name]; !exists {
 			distro := kd.Distro.DistroDef
-			merged.Distros[kd.Distro.Name] = &distro
+			merged.Distro[kd.Distro.Name] = &distro
 		}
 	case kd.Init != nil:
 		if kd.Init.Name == "" {
 			return fmt.Errorf("init: missing name")
 		}
-		if merged.Inits == nil {
-			merged.Inits = map[string]*InitDef{}
+		if merged.Init == nil {
+			merged.Init = map[string]*InitDef{}
 		}
-		if _, exists := merged.Inits[kd.Init.Name]; !exists {
+		if _, exists := merged.Init[kd.Init.Name]; !exists {
 			initDef := kd.Init.InitDef
-			merged.Inits[kd.Init.Name] = &initDef
+			merged.Init[kd.Init.Name] = &initDef
 		}
 	case kd.VM != nil:
 		if kd.VM.Name == "" {
@@ -1779,22 +1755,22 @@ func (uf *UnifiedFile) ApplyDiscover(rootDir string) error {
 	// Layers come first because downstream scans (images, deployments) don't
 	// interact with them here — this is purely deterministic order for error
 	// messages.
-	if err := applyScanSpecsLayers(cfg.Layers, rootDir, uf); err != nil {
+	if err := applyScanSpecsLayers(cfg.Layer, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsImages(cfg.Images, rootDir, uf); err != nil {
+	if err := applyScanSpecsImages(cfg.Image, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsDeploys(cfg.Deploys, rootDir, uf); err != nil {
+	if err := applyScanSpecsDeploys(cfg.Deploy, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsBuilders(cfg.Builders, rootDir, uf); err != nil {
+	if err := applyScanSpecsBuilders(cfg.Builder, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsDistros(cfg.Distros, rootDir, uf); err != nil {
+	if err := applyScanSpecsDistros(cfg.Distro, rootDir, uf); err != nil {
 		return err
 	}
-	if err := applyScanSpecsInits(cfg.Inits, rootDir, uf); err != nil {
+	if err := applyScanSpecsInits(cfg.Init, rootDir, uf); err != nil {
 		return err
 	}
 	return nil
@@ -1854,12 +1830,12 @@ func applyScanSpecsLayers(specs []ScanSpec, rootDir string, uf *UnifiedFile) err
 		if err != nil {
 			return fmt.Errorf("discover.layers %q: %w", s.Path, err)
 		}
-		if uf.Layers == nil {
-			uf.Layers = map[string]*InlineLayer{}
+		if uf.Layer == nil {
+			uf.Layer = map[string]*InlineLayer{}
 		}
 		for _, d := range dirs {
 			name := filepath.Base(d)
-			if _, exists := uf.Layers[name]; exists {
+			if _, exists := uf.Layer[name]; exists {
 				continue // explicit entry wins
 			}
 			// Represent as a `from:` entry pointing at the discovered dir.
@@ -1868,7 +1844,7 @@ func applyScanSpecsLayers(specs []ScanSpec, rootDir string, uf *UnifiedFile) err
 			if err != nil {
 				rel = d
 			}
-			uf.Layers[name] = &InlineLayer{From: rel}
+			uf.Layer[name] = &InlineLayer{From: rel}
 		}
 	}
 	return nil
@@ -1979,60 +1955,60 @@ func applyScanSpecsKindKeyed(specs []ScanSpec, rootDir, filename string, perDir 
 
 // ProjectConfig returns the *Config equivalent of uf (image.yml view).
 func (uf *UnifiedFile) ProjectConfig() *Config {
-	images := uf.Images
+	images := uf.Image
 	if images == nil {
 		images = map[string]ImageConfig{}
 	}
 	return &Config{
 		Defaults: uf.Defaults,
-		Images:   images,
+		Image:    images,
 	}
 }
 
 // ProjectDistroConfig returns the *DistroConfig equivalent (distros: section).
 func (uf *UnifiedFile) ProjectDistroConfig() *DistroConfig {
-	if len(uf.Distros) == 0 {
+	if len(uf.Distro) == 0 {
 		return nil
 	}
-	return &DistroConfig{Distro: uf.Distros}
+	return &DistroConfig{Distro: uf.Distro}
 }
 
 // ProjectBuilderConfig returns the *BuilderConfig equivalent (builders: section).
 func (uf *UnifiedFile) ProjectBuilderConfig() *BuilderConfig {
-	if len(uf.Builders) == 0 {
+	if len(uf.Builder) == 0 {
 		return nil
 	}
-	return &BuilderConfig{Builder: uf.Builders}
+	return &BuilderConfig{Builder: uf.Builder}
 }
 
 // ProjectInitConfig returns the *InitConfig equivalent (inits: section).
 func (uf *UnifiedFile) ProjectInitConfig() *InitConfig {
-	if len(uf.Inits) == 0 {
+	if len(uf.Init) == 0 {
 		return nil
 	}
-	return &InitConfig{Init: uf.Inits}
+	return &InitConfig{Init: uf.Init}
 }
 
 // ProjectDeployConfig returns the *DeployConfig equivalent (deployments: section
 // of the authored file, independent of any per-machine ~/.config/ov/deploy.yml
 // which remains loaded separately by LoadDeployConfig).
 func (uf *UnifiedFile) ProjectDeployConfig() *DeployConfig {
-	if uf.Deploys == nil {
+	if uf == nil || (len(uf.Deploy) == 0 && uf.Provides == nil) {
 		return nil
 	}
 	return &DeployConfig{
-		Provides:   uf.Deploys.Provides,
-		Deploy: uf.Deploys.Images,
+		Provides: uf.Provides,
+		Deploy:   uf.Deploy,
 	}
 }
 
-// ProjectLayers scans or synthesizes a *Layer per entry in uf.Layers. Entries
+// ProjectLayers scans or synthesizes a *Layer per entry in uf.Layer. Entries
 // with `from:` go through the existing scanLayer so directory-based layers
 // behave identically to today. Inline entries synthesize a *Layer from the
 // embedded LayerYAML (Part A's `directory:` field still applies).
 func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) {
 	out := map[string]*Layer{}
-	for name, il := range uf.Layers {
+	for name, il := range uf.Layer {
 		if il == nil {
 			continue
 		}
@@ -2098,19 +2074,19 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.Status = descriptionStatus(ly.Description)
 	layer.Info = descriptionInfo(ly.Description)
 
-	layer.RawRequires = ly.Requires
-	layer.Requires = make([]string, len(ly.Requires))
-	for i, dep := range ly.Requires {
-		layer.Requires[i] = BareRef(dep)
+	layer.RawRequire = ly.Require
+	layer.Require = make([]string, len(ly.Require))
+	for i, dep := range ly.Require {
+		layer.Require[i] = BareRef(dep)
 	}
-	layer.RawIncludedLayers = ly.Layers
-	layer.IncludedLayers = make([]string, len(ly.Layers))
-	for i, ref := range ly.Layers {
-		layer.IncludedLayers[i] = BareRef(ref)
+	layer.RawIncludedLayer = ly.Layer
+	layer.IncludedLayer = make([]string, len(ly.Layer))
+	for i, ref := range ly.Layer {
+		layer.IncludedLayer[i] = BareRef(ref)
 	}
 	layer.service = ly.Service
 	layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
-	layer.HasPorts = len(ly.Ports) > 0
+	layer.HasPorts = len(ly.Port) > 0
 	layer.HasRoute = ly.Route != nil
 	layer.formatSections = ly.FormatSections
 	if layer.formatSections == nil {
@@ -2118,13 +2094,13 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	}
 	layer.tagSections = ly.TagSections
 	// 2026-05 Calamares cutover: derive format/tag sections from packages: + distros:.
-	if len(ly.Packages) > 0 || len(ly.Distros) > 0 {
+	if len(ly.Package) > 0 || len(ly.Distro) > 0 {
 		derivePackageSectionsFromCalamares(layer, ly)
 	}
 	if layer.HasPorts {
-		layer.ports = make([]string, len(ly.Ports))
-		layer.portSpecs = make([]PortSpec, len(ly.Ports))
-		for i, p := range ly.Ports {
+		layer.ports = make([]string, len(ly.Port))
+		layer.portSpecs = make([]PortSpec, len(ly.Port))
+		for i, p := range ly.Port {
 			if p.Protocol == "udp" {
 				layer.ports[i] = fmt.Sprintf("%d/udp", p.Port)
 			} else {
@@ -2143,10 +2119,10 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	if ly.Route != nil {
 		layer.route = &RouteConfig{Host: ly.Route.Host, Port: fmt.Sprintf("%d", ly.Route.Port)}
 	}
-	layer.HasVolumes = len(ly.Volumes) > 0
-	layer.volumes = ly.Volumes
-	layer.HasAliases = len(ly.Aliases) > 0
-	layer.aliases = ly.Aliases
+	layer.HasVolumes = len(ly.Volume) > 0
+	layer.volumes = ly.Volume
+	layer.HasAliases = len(ly.Alias) > 0
+	layer.aliases = ly.Alias
 	layer.HasExtract = len(ly.Extract) > 0
 	layer.extract = ly.Extract
 	layer.HasData = len(ly.Data) > 0
@@ -2159,41 +2135,41 @@ func populateLayerFromYAML(layer *Layer, ly *LayerYAML) {
 	layer.hooks = ly.Hooks
 	layer.tests = ly.Eval
 	layer.PortRelayPorts = ly.PortRelay
-	layer.secrets = ly.SecretsYAML
+	layer.secrets = ly.SecretYAML
 	if len(ly.EnvProvides) > 0 {
 		layer.HasEnvProvides = true
 		layer.envProvides = ly.EnvProvides
 	}
-	if len(ly.EnvRequires) > 0 {
+	if len(ly.EnvRequire) > 0 {
 		layer.HasEnvRequires = true
-		layer.envRequires = ly.EnvRequires
+		layer.envRequires = ly.EnvRequire
 	}
-	if len(ly.EnvAccepts) > 0 {
+	if len(ly.EnvAccept) > 0 {
 		layer.HasEnvAccepts = true
-		layer.envAccepts = ly.EnvAccepts
+		layer.envAccepts = ly.EnvAccept
 	}
-	if len(ly.SecretAccepts) > 0 {
+	if len(ly.SecretAccept) > 0 {
 		layer.HasSecretAccepts = true
-		layer.secretAccepts = ly.SecretAccepts
+		layer.secretAccepts = ly.SecretAccept
 	}
-	if len(ly.SecretRequires) > 0 {
+	if len(ly.SecretRequire) > 0 {
 		layer.HasSecretRequires = true
-		layer.secretRequires = ly.SecretRequires
+		layer.secretRequires = ly.SecretRequire
 	}
-	if len(ly.MCPProvides) > 0 {
+	if len(ly.MCPProvide) > 0 {
 		layer.HasMCPProvides = true
-		layer.mcpProvides = ly.MCPProvides
+		layer.mcpProvides = ly.MCPProvide
 	}
-	if len(ly.MCPRequires) > 0 {
+	if len(ly.MCPRequire) > 0 {
 		layer.HasMCPRequires = true
-		layer.mcpRequires = ly.MCPRequires
+		layer.mcpRequires = ly.MCPRequire
 	}
-	if len(ly.MCPAccepts) > 0 {
+	if len(ly.MCPAccept) > 0 {
 		layer.HasMCPAccepts = true
-		layer.mcpAccepts = ly.MCPAccepts
+		layer.mcpAccepts = ly.MCPAccept
 	}
 	layer.engine = ly.Engine
 	layer.vars = ly.Vars
-	layer.tasks = ly.Tasks
-	layer.HasTasks = len(ly.Tasks) > 0
+	layer.tasks = ly.Task
+	layer.HasTasks = len(ly.Task) > 0
 }

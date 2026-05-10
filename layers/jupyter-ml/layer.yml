@@ -1,28 +1,28 @@
 layer:
   name: jupyter-ml
-  requires:
+  require:
     - cuda
     - supervisord
-  layers:
+  layer:
     - llama-cpp
     - unsloth
     - jupyter-mcp
   env:
     NVIDIA_PYTHON_PROJECT: "~/.pixi"
     LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - git
         - gcc
         - gcc-c++
-  ports:
+  port:
     - 8888
-  mcp_provides:
+  mcp_provide:
     - name: jupyter
       url: "http://{{.ContainerName}}:8888/mcp"
       transport: http
-  volumes:
+  volume:
     - name: workspace
       path: ~/workspace
   eval:

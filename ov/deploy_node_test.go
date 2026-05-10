@@ -106,12 +106,10 @@ func TestResolveNodePath_MalformedDots(t *testing.T) {
 }
 
 func TestValidateDeploymentTree_RejectsDotInName(t *testing.T) {
-	section := &DeploymentsSection{
-		Images: map[string]DeploymentNode{
-			"bad.name": {Target: "host"},
-		},
+	deploy := map[string]DeploymentNode{
+		"bad.name": {Target: "host"},
 	}
-	err := validateDeploymentTree(section)
+	err := validateDeploymentTree(deploy)
 	if err == nil {
 		t.Fatal("expected error for '.' in deployment name")
 	}

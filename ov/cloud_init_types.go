@@ -28,7 +28,7 @@ type VmCloudInit struct {
 	// Packages to install at first boot via the guest's native package
 	// manager. The renderer always prepends {openssh, curl, tar}
 	// (deduplicated). Distro-specific package names pass through.
-	Packages []string `yaml:"packages,omitempty"`
+	Package []string `yaml:"package,omitempty"`
 
 	// RunCmd are commands executed once at first boot. The renderer
 	// prepends {systemctl enable --now sshd} (so distro-specific setup

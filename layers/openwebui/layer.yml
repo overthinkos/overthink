@@ -1,7 +1,7 @@
 layer:
   name: openwebui
   description: Open WebUI with auto-configured LLM providers, MCP servers, and Jupyter
-  requires:
+  require:
     - python
     - supervisord
   env:
@@ -12,10 +12,10 @@ layer:
     ENABLE_CODE_EXECUTION: "true"
     ENABLE_PERSISTENT_CONFIG: "false"
     ENABLE_VERSION_UPDATE_CHECK: "false"
-  env_requires:
+  env_require:
     - name: WEBUI_ADMIN_EMAIL
       description: "Admin account email (identifier, not a credential) — pass via: ov config openwebui -e WEBUI_ADMIN_EMAIL=you@example.com"
-  env_accepts:
+  env_accept:
     - name: OLLAMA_HOST
       description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
     - name: OPENAI_API_BASE_URL
@@ -38,10 +38,10 @@ layer:
   #   ov secrets get ov/secret WEBUI_ADMIN_PASSWORD
   # To override with a specific value before deploying:
   #   ov secrets set ov/secret WEBUI_ADMIN_PASSWORD <password>
-  secret_requires:
+  secret_require:
     - name: WEBUI_ADMIN_PASSWORD
       description: "Initial admin account password for Open WebUI first-run setup. Auto-generated on first deploy; retrieve via `ov secrets get ov/secret WEBUI_ADMIN_PASSWORD`."
-  secret_accepts:
+  secret_accept:
     - name: OPENROUTER_API_KEY
       description: "API key for OpenRouter (maps to OPENAI_API_KEY with OpenRouter base URL)"
       key: ov/api-key/openrouter
@@ -54,23 +54,23 @@ layer:
     - name: IMMICH_API_KEY
       description: "Immich API key for programmatic access to the running immich instance"
       key: ov/api-key/immich
-  mcp_accepts:
+  mcp_accept:
     - name: jupyter
       description: "JupyterLab CRDT MCP server for notebook manipulation"
     - name: chrome-devtools
       description: "Chrome DevTools MCP server for browser automation"
-  ports:
+  port:
     - 8080
-  volumes:
+  volume:
     - name: data
       path: "/opt/data"
-  aliases:
+  alias:
     - name: open-webui
       command: open-webui
-  secrets:
+  secret:
     - name: webui-secret-key
       env: WEBUI_SECRET_KEY
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: openwebui-entrypoint

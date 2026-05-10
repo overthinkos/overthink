@@ -1,12 +1,12 @@
 layer:
   name: waybar-labwc
-  requires:
+  require:
     - labwc
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - waybar
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - mkdir: "${HOME}/.config/waybar"
@@ -45,6 +45,6 @@ layer:
         XDG_RUNTIME_DIR: /tmp
       restart: always
       priority: 15
-      start_secs: 0
+      start_sec: 0
       enable: true
       scope: system

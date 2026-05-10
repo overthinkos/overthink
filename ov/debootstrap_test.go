@@ -15,7 +15,7 @@ distro:
   debian:
     bootstrap:
       install_cmd: "apt-get install -y"
-      packages: []
+      package: []
     debootstrap:
       suite: trixie
       mirror: http://deb.debian.org/debian
@@ -81,7 +81,7 @@ distro:
   debian:
     bootstrap:
       install_cmd: "apt-get install -y"
-      packages: []
+      package: []
     debootstrap:
       suite: trixie
       mirror: http://deb.debian.org/debian
@@ -92,7 +92,7 @@ distro:
     inherits: debian
     bootstrap:
       install_cmd: ""
-      packages: []
+      package: []
     debootstrap:
       suite: noble
       mirror: http://archive.ubuntu.com/ubuntu

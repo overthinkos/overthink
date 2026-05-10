@@ -16,15 +16,15 @@ import (
 func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) SecurityConfig {
 	var merged SecurityConfig
 
-	img, ok := cfg.Images[imageName]
+	img, ok := cfg.Image[imageName]
 	if !ok {
 		return merged
 	}
 
 	// Resolve full layer tree (including composing layers' sub-layers)
-	allLayers, err := ResolveLayerOrder(img.Layers, layers, nil)
+	allLayers, err := ResolveLayerOrder(img.Layer, layers, nil)
 	if err != nil {
-		allLayers = img.Layers // fall back to direct layers on error
+		allLayers = img.Layer // fall back to direct layers on error
 	}
 
 	// Collect from all layers

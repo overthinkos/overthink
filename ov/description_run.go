@@ -290,7 +290,7 @@ func cyclicScenarioResult(origin string, sIdx int, sc Scenario) ScenarioResult {
 		Name:       sc.Name,
 		Tag:        append([]string(nil), sc.Tag...),
 		Status:     TestFail,
-		Steps: []StepResult{{
+		Step: []StepResult{{
 			Result: EvalResult{
 				Status:  TestFail,
 				Message: "scenario participates in a depends_on cycle — see validation output",
@@ -308,7 +308,7 @@ type ScenarioResult struct {
 	Name       string       `json:"name"`        // post-substitution scenario name
 	Tag        []string     `json:"tag,omitempty"`
 	Setup      []StepResult `json:"setup,omitempty"`    // setup steps (Ext 5)
-	Steps      []StepResult `json:"steps"`
+	Step       []StepResult `json:"step"`
 	Teardown   []StepResult `json:"teardown,omitempty"` // teardown steps (Ext 5; always run)
 	OnFail     []StepResult `json:"on_fail,omitempty"`
 	Status     EvalStatus   `json:"status"` // overall (fail if any step failed)
@@ -398,12 +398,12 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 	// scenarioCtx mutex serializes Capture/Results/Backgrounds writes.
 	// Count-expanded steps within a parallel group are also fanned out.
 	stepIdx := 0
-	for stepIdx < len(es.Steps) {
+	for stepIdx < len(es.Step) {
 		// Detect a parallel group at the current position.
-		groupID := es.Steps[stepIdx].Check.Parallel
+		groupID := es.Step[stepIdx].Check.Parallel
 		groupEnd := stepIdx + 1
 		if groupID != "" {
-			for groupEnd < len(es.Steps) && es.Steps[groupEnd].Check.Parallel == groupID {
+			for groupEnd < len(es.Step) && es.Step[groupEnd].Check.Parallel == groupID {
 				groupEnd++
 			}
 		}
@@ -412,13 +412,13 @@ func runOneScenario(ctx context.Context, r *Runner, origin string, scenarioIdx i
 		// (single-step groups still go through the same path so the
 		// failure-handling logic stays uniform).
 		isParallel := groupID != "" && groupEnd-stepIdx > 1
-		groupResults := runStepGroup(ctx, r, es.Steps[stepIdx:groupEnd], origin,
+		groupResults := runStepGroup(ctx, r, es.Step[stepIdx:groupEnd], origin,
 			scenarioIdx, stepIdx, es.RowIndex, scenarioCtx, failed, strict, isParallel)
 		for _, sr := range groupResults {
 			if sr.Pending > 0 {
 				res.Pending += sr.Pending
 			}
-			res.Steps = append(res.Steps, sr.Result)
+			res.Step = append(res.Step, sr.Result)
 			if sr.Result.Result.Status == TestFail {
 				failed = true
 				res.Status = TestFail

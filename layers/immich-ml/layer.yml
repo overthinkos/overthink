@@ -1,6 +1,6 @@
 layer:
   name: immich-ml
-  requires:
+  require:
     - immich
   env:
     IMMICH_MACHINE_LEARNING_ENABLED: "true"
@@ -10,14 +10,14 @@ layer:
     MACHINE_LEARNING_WORKERS: "1"
     MACHINE_LEARNING_WORKER_TIMEOUT: "120"
     TRANSFORMERS_CACHE: "~/.immich/models"
-  ports:
+  port:
     - 3003
-  volumes:
+  volume:
     - name: models
       path: "~/.immich/models"
   vars:
     IMMICH_VERSION: v2.7.5
-  tasks:
+  task:
     # uv (Python package manager) — piped sh installer; env vars redirect it to
     # system path instead of the user's home.
     - download: "https://astral.sh/uv/install.sh"

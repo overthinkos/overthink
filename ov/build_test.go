@@ -200,13 +200,13 @@ func TestFilterImages(t *testing.T) {
 	order := []string{"fedora", "ubuntu", "fedora-test"}
 
 	// Request only fedora-test — should pull in fedora as dependency
-	filtered, err := filterImages(order, []string{"fedora-test"}, images)
+	filtered, err := filterImage(order, []string{"fedora-test"}, images)
 	if err != nil {
-		t.Fatalf("filterImages() error: %v", err)
+		t.Fatalf("filterImage() error: %v", err)
 	}
 	want := []string{"fedora", "fedora-test"}
 	if !reflect.DeepEqual(filtered, want) {
-		t.Errorf("filterImages() = %v, want %v", filtered, want)
+		t.Errorf("filterImage() = %v, want %v", filtered, want)
 	}
 }
 
@@ -214,7 +214,7 @@ func TestFilterImagesUnknown(t *testing.T) {
 	images := map[string]*ResolvedImage{
 		"fedora": {Name: "fedora", IsExternalBase: true},
 	}
-	_, err := filterImages([]string{"fedora"}, []string{"nonexistent"}, images)
+	_, err := filterImage([]string{"fedora"}, []string{"nonexistent"}, images)
 	if err == nil {
 		t.Error("expected error for unknown image")
 	}
@@ -242,13 +242,13 @@ func TestFilterImagesIncludesBuilder(t *testing.T) {
 	order := []string{"builder", "fedora", "app"}
 
 	// Request only app — should pull in fedora (base) and builder
-	filtered, err := filterImages(order, []string{"app"}, images)
+	filtered, err := filterImage(order, []string{"app"}, images)
 	if err != nil {
-		t.Fatalf("filterImages() error: %v", err)
+		t.Fatalf("filterImage() error: %v", err)
 	}
 	want := []string{"builder", "fedora", "app"}
 	if !reflect.DeepEqual(filtered, want) {
-		t.Errorf("filterImages() = %v, want %v", filtered, want)
+		t.Errorf("filterImage() = %v, want %v", filtered, want)
 	}
 }
 

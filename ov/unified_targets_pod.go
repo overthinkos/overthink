@@ -63,7 +63,7 @@ func (t *PodUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		_ = runPodmanCommand(engine, "rmi", overlayRef)
 	}
 
-	for _, layer := range rec.Layers {
+	for _, layer := range rec.Layer {
 		_, shouldRemove, lerr := RemoveLayerDeployment(paths, layer, rec.DeployID)
 		if lerr != nil {
 			return lerr

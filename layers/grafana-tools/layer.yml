@@ -5,7 +5,7 @@ layer:
   vars:
     MCP_GRAFANA_VERSION: v0.7.8
 
-  tasks:
+  task:
     # mcp-grafana — pinned version
     - cmd: |
         curl -fsSL "https://github.com/grafana/mcp-grafana/releases/download/${MCP_GRAFANA_VERSION}/linux.x64.grafana.tar.gz" \

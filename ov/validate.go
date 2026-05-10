@@ -83,13 +83,13 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 	validateImageDAG(cfg, layers, dir, opts, errs)
 
 	// Validate ports
-	validatePorts(cfg, layers, errs)
+	validatePort(cfg, layers, errs)
 
 	// Validate routes
 	validateRoutes(cfg, layers, errs)
 
 	// Validate volumes
-	validateVolumes(layers, errs)
+	validateVolume(layers, errs)
 
 	// Validate merge config
 	validateMergeConfig(cfg, errs)
@@ -193,11 +193,11 @@ func validateLocalTemplates(dir string, layers map[string]*Layer, errs *Validati
 		if spec == nil {
 			continue
 		}
-		if spec.Layers == nil {
+		if spec.Layer == nil {
 			errs.Add("kind:local %q: missing required field `layers:` (use `layers: []` for an explicit placeholder)", name)
 			continue
 		}
-		for _, layerName := range spec.Layers {
+		for _, layerName := range spec.Layer {
 			if _, ok := layers[layerName]; !ok {
 				errs.Add("kind:local %q: layer %q not found", name, layerName)
 			}
@@ -277,13 +277,13 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 		return
 	}
 
-	for imgName, img := range cfg.Images {
+	for imgName, img := range cfg.Image {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}
 
 		// Resolve all layers for this image (own + transitive deps)
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			continue // other validators handle resolution errors
 		}
@@ -308,7 +308,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 			// For bootc-flavored compositions with dual-init layers
 			// (service: + system_services:), skip supervisord depends_layer
 			// check when systemd is also triggered.
-			if len(def.RequiresCapabilities) == 0 && isBootcFlavored {
+			if len(def.RequiresCapability) == 0 && isBootcFlavored {
 				hasSystemdLayer := false
 				for _, layerName := range resolved {
 					if layer, ok := layers[layerName]; ok && layer.HasInit("systemd") {
@@ -352,7 +352,7 @@ func validateInitDependencies(cfg *Config, initCfg *InitConfig, layers map[strin
 
 			// Also check base chain — dependency may be provided by a parent image
 			if !hasDepLayer {
-				images, resolveErr := cfg.ResolveAllImages("unused", ".", ResolveOpts{})
+				images, resolveErr := cfg.ResolveAllImage("unused", ".", ResolveOpts{})
 				if resolveErr == nil {
 					allLayers := collectAllImageLayers(imgName, images, layers)
 					for _, l := range allLayers {
@@ -419,7 +419,7 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 	validateBuild("defaults", cfg.Defaults.Build)
 
 	// Validate per-image
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -429,11 +429,11 @@ func validateBuildAndDistro(cfg *Config, distroCfg *DistroConfig, errs *Validati
 
 // validateLayerReferences ensures all layers referenced in images exist
 func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
-		for _, layerRef := range img.Layers {
+		for _, layerRef := range img.Layer {
 			layerName := BareRef(layerRef)
 			if _, ok := layers[layerName]; !ok {
 				if IsRemoteLayerRef(layerRef) {
@@ -456,7 +456,7 @@ func validateLayerReferences(cfg *Config, layers map[string]*Layer, errs *Valida
 func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		// Layer must have at least one install file, a layers: field (composition), or data declarations
-		if !layer.HasInstallFiles() && len(layer.IncludedLayers) == 0 && !layer.HasData {
+		if !layer.HasInstallFiles() && len(layer.IncludedLayer) == 0 && !layer.HasData {
 			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
 		}
 
@@ -472,7 +472,7 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 		}
 
 		// Validate depends references
-		for _, dep := range layer.Requires {
+		for _, dep := range layer.Require {
 			resolved := dep
 			// Within a remote repo, short-name depends resolve to siblings in the same repo
 			if layer.Remote && !IsRemoteLayerRef(dep) {
@@ -585,16 +585,16 @@ func validateShellPath(layerName, field, p string, errs *ValidationError) {
 // validateLayerIncludes validates layer composition (layers: field in layer.yml)
 func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
-		if len(layer.IncludedLayers) == 0 {
+		if len(layer.IncludedLayer) == 0 {
 			continue
 		}
 
 		depSet := make(map[string]bool)
-		for _, d := range layer.Requires {
+		for _, d := range layer.Require {
 			depSet[d] = true
 		}
 
-		for _, ref := range layer.IncludedLayers {
+		for _, ref := range layer.IncludedLayer {
 			// Self-inclusion
 			if ref == name {
 				errs.Add("layer %q layers: cannot include itself", name)
@@ -626,7 +626,7 @@ func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 
 	// Check for circular composition
 	for name, layer := range layers {
-		if len(layer.IncludedLayers) == 0 {
+		if len(layer.IncludedLayer) == 0 {
 			continue
 		}
 		if err := checkIncludeCycle(name, layers, nil); err != nil {
@@ -644,11 +644,11 @@ func checkIncludeCycle(name string, layers map[string]*Layer, visited map[string
 		return fmt.Errorf("circular layer composition involving %q", name)
 	}
 	layer, ok := layers[name]
-	if !ok || len(layer.IncludedLayers) == 0 {
+	if !ok || len(layer.IncludedLayer) == 0 {
 		return nil
 	}
 	visited[name] = true
-	for _, ref := range layer.IncludedLayers {
+	for _, ref := range layer.IncludedLayer {
 		if err := checkIncludeCycle(ref, layers, visited); err != nil {
 			return err
 		}
@@ -720,7 +720,7 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 	calverTag := "test"
 	// Try to resolve images — some fields may be missing during basic validation
 	images := make(map[string]*ResolvedImage)
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() && !opts.shouldIncludeDisabled(name) {
 			continue
 		}
@@ -748,13 +748,13 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 // validateLayerDAG checks for circular layer dependencies
 func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Check each image's layers for cycles
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
 		// Convert raw refs to bare refs for layer map lookup
-		bareLayers := make([]string, len(img.Layers))
-		for i, ref := range img.Layers {
+		bareLayers := make([]string, len(img.Layer))
+		for i, ref := range img.Layer {
 			bareLayers[i] = BareRef(ref)
 		}
 		_, err := ResolveLayerOrder(bareLayers, layers, nil)
@@ -768,14 +768,14 @@ func validateLayerDAG(cfg *Config, layers map[string]*Layer, errs *ValidationErr
 	}
 }
 
-// validatePorts validates port declarations in layers and images
-func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
+// validatePort validates port declarations in layers and images
+func validatePort(cfg *Config, layers map[string]*Layer, errs *ValidationError) {
 	// Validate layer ports from layer.yml
 	for name, layer := range layers {
 		if !layer.HasPorts {
 			continue
 		}
-		ports, _ := layer.Ports()
+		ports, _ := layer.Port()
 		for _, port := range ports {
 			if !isValidPort(port) {
 				errs.Add("layer %q layer.yml ports: %q is not a valid port number (1-65535)", name, port)
@@ -805,15 +805,15 @@ func validatePorts(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 		}
 	}
 
-	if len(cfg.Defaults.Ports) > 0 {
-		validatePortMappings("defaults", cfg.Defaults.Ports)
+	if len(cfg.Defaults.Port) > 0 {
+		validatePortMappings("defaults", cfg.Defaults.Port)
 	}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
-		if len(img.Ports) > 0 {
-			validatePortMappings(name, img.Ports)
+		if len(img.Port) > 0 {
+			validatePortMappings(name, img.Port)
 		}
 	}
 }
@@ -855,7 +855,7 @@ func validateMergeConfig(cfg *Config, errs *ValidationError) {
 	}
 
 	check("defaults", cfg.Defaults.Merge)
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -866,14 +866,14 @@ func validateMergeConfig(cfg *Config, errs *ValidationError) {
 // volumeNameRe matches valid volume names: lowercase alphanumeric + hyphens
 var volumeNameRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
-// validateVolumes validates volume declarations in layers
-func validateVolumes(layers map[string]*Layer, errs *ValidationError) {
+// validateVolume validates volume declarations in layers
+func validateVolume(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		if !layer.HasVolumes {
 			continue
 		}
 		seen := make(map[string]bool)
-		for _, vol := range layer.Volumes() {
+		for _, vol := range layer.Volume() {
 			if vol.Name == "" {
 				errs.Add("layer %q layer.yml volumes: missing required \"name\" field", name)
 			} else if !volumeNameRe.MatchString(vol.Name) {
@@ -898,7 +898,7 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 			continue
 		}
 		seen := make(map[string]bool)
-		for _, a := range layer.Aliases() {
+		for _, a := range layer.Alias() {
 			if a.Name == "" {
 				errs.Add("layer %q layer.yml aliases: missing required \"name\" field", name)
 			} else if !aliasNameRe.MatchString(a.Name) {
@@ -915,15 +915,15 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 	}
 
 	// Validate image-level aliases
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
-		if len(img.Aliases) == 0 {
+		if len(img.Alias) == 0 {
 			continue
 		}
 		seen := make(map[string]bool)
-		for _, a := range img.Aliases {
+		for _, a := range img.Alias {
 			if a.Name == "" {
 				errs.Add("image %q aliases: missing required \"name\" field", imageName)
 			} else if !aliasNameRe.MatchString(a.Name) {
@@ -945,7 +945,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			errs.Add("defaults.builder: build type %q is not valid (known builders: %s)", typ, strings.Join(builderCfg.BuilderNames(), ", "))
 		}
 		if builder != "" {
-			builderImg, exists := cfg.Images[builder]
+			builderImg, exists := cfg.Image[builder]
 			if !exists {
 				errs.Add("defaults.builder.%s: image %q not found in image.yml", typ, builder)
 			} else if !builderImg.IsEnabled() {
@@ -955,13 +955,13 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 	}
 
 	// Validate each enabled image
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
 
 		// Validate builds: entries (capability declarations on builder images)
-		for _, b := range img.Builds {
+		for _, b := range img.Produce {
 			if !builderCfg.ValidBuilderType(b) {
 				errs.Add("image %q: builds entry %q is not valid (known builders: %s)", imageName, b, strings.Join(builderCfg.BuilderNames(), ", "))
 			}
@@ -977,7 +977,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 				continue
 			}
 			if builder != "" {
-				builderImg, exists := cfg.Images[builder]
+				builderImg, exists := cfg.Image[builder]
 				if !exists {
 					errs.Add("image %q: builder.%s references %q which is not found in image.yml", imageName, typ, builder)
 					continue
@@ -988,13 +988,13 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 				}
 				// Check builder declares this capability
 				hasCapability := false
-				for _, b := range builderImg.Builds {
+				for _, b := range builderImg.Produce {
 					if b == typ {
 						hasCapability = true
 						break
 					}
 				}
-				if len(builderImg.Builds) > 0 && !hasCapability {
+				if len(builderImg.Produce) > 0 && !hasCapability {
 					errs.Add("image %q: builder.%s references %q which does not declare builds: [%s]", imageName, typ, builder, typ)
 				}
 			}
@@ -1005,7 +1005,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		for typ, builder := range cfg.Defaults.Builder {
 			resolved[typ] = builder
 		}
-		if baseImg, ok := cfg.Images[img.Base]; ok && baseImg.IsEnabled() {
+		if baseImg, ok := cfg.Image[img.Base]; ok && baseImg.IsEnabled() {
 			for typ, builder := range baseImg.Builder {
 				resolved[typ] = builder
 			}
@@ -1041,7 +1041,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 		// Detection is fully config-driven from build.yml builder: section:
 		//   detect_files: layer has any of these files
 		//   detect_config: layer has this format section with packages
-		layerOrder, err := ResolveLayerOrder(img.Layers, layers, nil)
+		layerOrder, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			continue
 		}
@@ -1363,20 +1363,20 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 	// the layer USER (i.e. non-bootc-flavored images). Only systemd-based
 	// compositions consume packaged units; supervisord, the container
 	// default init, can't.
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
 		// Resolve layer order to aggregate caps for this image.
 		var imgLayers []string
-		for _, ref := range img.Layers {
+		for _, ref := range img.Layer {
 			imgLayers = append(imgLayers, BareRef(ref))
 		}
 		caps, _ := AggregateLayerCapabilities(layers, imgLayers)
 		if caps != nil && caps.PreserveUser {
 			continue
 		}
-		for _, layerRef := range img.Layers {
+		for _, layerRef := range img.Layer {
 			bare := BareRef(layerRef)
 			layer, ok := layers[bare]
 			if !ok || !layerHasPackaged(layer) {
@@ -1483,13 +1483,13 @@ func validateEngineConfig(cfg *Config, layers map[string]*Layer, errs *Validatio
 	// Defaults.Engine + per-image Engine no longer exist. Layer-level
 	// conflict detection still applies below.
 
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
 
 		// Check for conflicting layer engine requirements within the image
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			continue
 		}
@@ -1552,11 +1552,11 @@ func validatePortRelay(cfg *Config, layers map[string]*Layer, errs *ValidationEr
 	}
 
 	// Validate that images with port_relay layers include the socat layer
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			continue
 		}
@@ -1596,11 +1596,11 @@ func min(a, b, c int) int {
 // validatePortOverlap warns when multiple enabled images share the same host port.
 func validatePortOverlap(cfg *Config, errs *ValidationError) {
 	portUsers := make(map[int][]string) // host port -> image names
-	for imageName, img := range cfg.Images {
+	for imageName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
-		for _, portMapping := range img.Ports {
+		for _, portMapping := range img.Port {
 			hostPort, err := ParseHostPort(portMapping)
 			if err != nil {
 				continue
@@ -1652,7 +1652,7 @@ func validateStatus(cfg *Config, layers map[string]*Layer, errs *ValidationError
 			}
 		}
 	}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() || img.Description == nil {
 			continue
 		}
@@ -1671,7 +1671,7 @@ func validateVersionFields(cfg *Config, layers map[string]*Layer, errs *Validati
 			errs.Add("layer %q: version must be CalVer format (YYYY.DDD.HHMM), got %q", name, layer.Version)
 		}
 	}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1722,13 +1722,13 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 	}
 
 	// Validate per-image constraints
-	for imgName, img := range cfg.Images {
+	for imgName, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
 
 		// Resolve layers for this image
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			continue // layer resolution errors are caught elsewhere
 		}
@@ -1740,7 +1740,7 @@ func validateDataLayers(cfg *Config, layers map[string]*Layer, errs *ValidationE
 			if !ok {
 				continue
 			}
-			for _, v := range layer.Volumes() {
+			for _, v := range layer.Volume() {
 				volumeNames[v.Name] = true
 			}
 		}
@@ -1822,10 +1822,10 @@ func validateEnvDeps(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		seen := make(map[string]string) // name -> originating section label
 
-		validateDepEntries(name, "env_requires", layer.EnvRequires(), seen, errs)
-		validateDepEntries(name, "env_accepts", layer.EnvAccepts(), seen, errs)
-		validateDepEntries(name, "secret_requires", layer.SecretRequires(), seen, errs)
-		validateDepEntries(name, "secret_accepts", layer.SecretAccepts(), seen, errs)
+		validateDepEntries(name, "env_requires", layer.EnvRequire(), seen, errs)
+		validateDepEntries(name, "env_accepts", layer.EnvAccept(), seen, errs)
+		validateDepEntries(name, "secret_requires", layer.SecretRequire(), seen, errs)
+		validateDepEntries(name, "secret_accepts", layer.SecretAccept(), seen, errs)
 	}
 }
 
@@ -1909,8 +1909,8 @@ func validateSecretDeps(layers map[string]*Layer, errs *ValidationError) {
 			}
 		}
 
-		checkOne("secret_requires", layer.SecretRequires())
-		checkOne("secret_accepts", layer.SecretAccepts())
+		checkOne("secret_requires", layer.SecretRequire())
+		checkOne("secret_accepts", layer.SecretAccept())
 	}
 }
 
@@ -1921,7 +1921,7 @@ func validateMCPProvides(layers map[string]*Layer, errs *ValidationError) {
 			continue
 		}
 		seen := make(map[string]bool)
-		for _, mcp := range layer.MCPProvides() {
+		for _, mcp := range layer.MCPProvide() {
 			if mcp.Name == "" {
 				errs.Add("layer %s: mcp_provides has entry with empty name", name)
 				continue
@@ -1954,7 +1954,7 @@ func validateMCPDeps(layers map[string]*Layer, errs *ValidationError) {
 	for name, layer := range layers {
 		seen := make(map[string]string) // name -> "requires" or "accepts"
 
-		for _, dep := range layer.MCPRequires() {
+		for _, dep := range layer.MCPRequire() {
 			if dep.Name == "" {
 				errs.Add("layer %s: mcp_requires has entry with empty name", name)
 				continue
@@ -1968,7 +1968,7 @@ func validateMCPDeps(layers map[string]*Layer, errs *ValidationError) {
 			seen[dep.Name] = "requires"
 		}
 
-		for _, dep := range layer.MCPAccepts() {
+		for _, dep := range layer.MCPAccept() {
 			if dep.Name == "" {
 				errs.Add("layer %s: mcp_accepts has entry with empty name", name)
 				continue

@@ -18,7 +18,7 @@ defaults:
   # tag is the CalVer tag baked into images
   tag: nightly
   registry: ghcr.io/old
-images:
+image:
   hello:
     base: fedora
 `
@@ -52,16 +52,16 @@ images:
 func TestSetByDotPath_ListValue(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "image.yml")
-	original := `images:
+	original := `image:
   hello:
     base: fedora
-    layers:
+    layer:
       - sshd
 `
 	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
 		t.Fatalf("setup: %v", err)
 	}
-	if err := SetByDotPath(path, "images.hello.layers", "[supervisord, traefik]"); err != nil {
+	if err := SetByDotPath(path, "image.hello.layer", "[supervisord, traefik]"); err != nil {
 		t.Fatalf("SetByDotPath: %v", err)
 	}
 	got, _ := os.ReadFile(path)

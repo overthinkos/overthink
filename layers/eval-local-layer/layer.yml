@@ -8,7 +8,7 @@ layer:
       a write: task; deploy-scope eval probe runs on the host (not in a
       container) to verify the file is present after `ov deploy add`.
     tag: [working]
-  tasks:
+  task:
     - write: /etc/eval-local-marker
       user: root
       mode: "0644"

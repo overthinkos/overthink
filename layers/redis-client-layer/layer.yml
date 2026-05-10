@@ -6,9 +6,9 @@ layer:
       Provides /usr/bin/redis-cli so the harness can run
       `redis-cli -h ov-redis SET ...` and verify cross-pod connectivity.
       No redis service is started in this image — it acts purely as a client.
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - redis
         - iproute
         - procps-ng

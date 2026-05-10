@@ -10,13 +10,13 @@ layer:
       Probes verify the marker file (build scope), the listening port,
       and the in-container ss output (deploy scope).
     tag: [working]
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - iproute
         - ncat
         - supervisor
-  tasks:
+  task:
     - write: /etc/eval-pod-marker
       user: root
       mode: "0644"

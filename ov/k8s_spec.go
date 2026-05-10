@@ -20,7 +20,7 @@ type K8sSpec struct {
 	// Replicas default for deployments using this template. Nil means
 	// "use generator default" (typically 1 for Deployment, N for
 	// StatefulSet). Deployment `replicas:` overrides.
-	Replicas *int `yaml:"replicas,omitempty"`
+	Replica *int `yaml:"replica,omitempty"`
 
 	// Resources declares per-container CPU / memory requests and limits.
 	// Deployment `resources:` deep-merges on top (see override semantics
@@ -59,16 +59,19 @@ type K8sSpec struct {
 	// enabled.
 	GatewayAPI K8sGatewayAPI `yaml:"gateway_api,omitempty"`
 
-	// Secrets picks a secret backend: external-secrets | sealed-secrets
+	// Secret picks a secret backend: external-secrets | sealed-secrets
 	// | raw.
-	Secrets K8sSecretsBackend `yaml:"secrets,omitempty"`
+	Secret K8sSecretsBackend `yaml:"secret,omitempty"`
 
-	// Images carries cluster-wide image pull defaults.
-	Images K8sImagesDefaults `yaml:"images,omitempty"`
+	// ImageDefault carries cluster-wide image pull defaults. Renamed
+	// from `images:` (plural) to `image_default:` (singular, semantic)
+	// to avoid yaml-tag collision with the workload's `image:` field
+	// above (field-singular cutover, 2026-05).
+	ImageDefault K8sImagesDefaults `yaml:"image_default,omitempty"`
 
-	// PodDefaults are cluster-wide tolerations / nodeSelector / priority
+	// PodDefault are cluster-wide tolerations / nodeSelector / priority
 	// class defaults applied to every generated pod spec.
-	PodDefaults K8sPodDefaults `yaml:"pod_defaults,omitempty"`
+	PodDefault K8sPodDefaults `yaml:"pod_default,omitempty"`
 
 	// Observability toggles ServiceMonitor emission for prometheus-
 	// tagged ports.

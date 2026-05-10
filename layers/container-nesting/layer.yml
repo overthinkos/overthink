@@ -1,69 +1,69 @@
 layer:
   name: container-nesting
   description: Container-in-container support (rootless nested podman, buildah, skopeo).
-  packages:
+  package:
     - buildah
     - fuse-overlayfs
     - skopeo
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - crun
         - libsecret
         - podman
         - shadow
         - tailscale
     debian:
-      packages:
+      package:
         - crun
         - libsecret-1-0
         - passwd
         - podman
         - uidmap
     debian-13:
-      packages:
+      package:
         - crun
         - libsecret-1-0
         - passwd
         - podman
         - tailscale
         - uidmap
-      repos:
+      repo:
         - name: tailscale
           url: "https://pkgs.tailscale.com/stable/debian"
           key: "https://pkgs.tailscale.com/stable/debian/trixie.noarmor.gpg"
           suite: trixie
           components: main
     fedora:
-      packages:
+      package:
         - shadow-utils
         - tailscale
         - libsecret
-      repos:
+      repo:
         - name: tailscale-stable
           url: "https://pkgs.tailscale.com/stable/fedora/tailscale.repo"
     ubuntu:
-      packages:
+      package:
         - crun
         - libsecret-1-0
         - passwd
         - podman
         - uidmap
     ubuntu-24.04:
-      packages:
+      package:
         - crun
         - libsecret-1-0
         - passwd
         - podman
         - tailscale
         - uidmap
-      repos:
+      repo:
         - name: tailscale
           url: "https://pkgs.tailscale.com/stable/ubuntu"
           key: "https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg"
           suite: noble
           components: main
-  volumes:
+  volume:
     - name: storage
       path: /var/lib/containers/storage
   security:
@@ -89,7 +89,7 @@ layer:
     # [...]}` at the image level; ov/security.go unions onto this layer.
     security_opt:
       - unmask=/proc/*
-    devices:
+    device:
       # /dev/fuse is needed by fuse-overlayfs (inner podman's storage driver
       # of choice when the kernel overlay isn't usable from a rootless outer).
       - /dev/fuse
@@ -115,7 +115,7 @@ layer:
     #   namespace and re-triggers the same kernel check during builds.
     _CONTAINERS_USERNS_CONFIGURED: ""
     BUILDAH_ISOLATION: "chroot"
-  tasks:
+  task:
     # Rootless podman: subuid/subgid mappings that fit inside the outer
     # rootless user namespace's visible subid window.
     #

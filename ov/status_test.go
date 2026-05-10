@@ -427,16 +427,16 @@ func TestCollector_LookupDeploy_KeyShapes(t *testing.T) {
 	c := &Collector{
 		deploy: &DeployConfig{
 			Deploy: map[string]DeploymentNode{
-				"selkies-desktop":      {Ports: []string{"3000:3000"}},
-				"selkies-desktop/work": {Ports: []string{"3001:3000"}, Tunnel: &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}},
-				"weird-joined-name":    {Ports: []string{"7777:7777"}},
+				"selkies-desktop":      {Port: []string{"3000:3000"}},
+				"selkies-desktop/work": {Port: []string{"3001:3000"}, Tunnel: &TunnelYAML{Provider: "tailscale", Private: PortScope{All: true}}},
+				"weird-joined-name":    {Port: []string{"7777:7777"}},
 			},
 		},
 	}
 	// Base image, no instance — direct hit.
 	dn, ok := c.lookupDeploy("selkies-desktop", "", "ov-selkies-desktop")
-	if !ok || len(dn.Ports) == 0 {
-		t.Errorf("base lookup failed: ok=%v ports=%v", ok, dn.Ports)
+	if !ok || len(dn.Port) == 0 {
+		t.Errorf("base lookup failed: ok=%v ports=%v", ok, dn.Port)
 	}
 	// Image + instance — deployKey form.
 	dn, ok = c.lookupDeploy("selkies-desktop", "work", "ov-selkies-desktop-work")
@@ -445,7 +445,7 @@ func TestCollector_LookupDeploy_KeyShapes(t *testing.T) {
 	}
 	// Joined-name fallback.
 	dn, ok = c.lookupDeploy("", "", "ov-weird-joined-name")
-	if !ok || len(dn.Ports) == 0 {
+	if !ok || len(dn.Port) == 0 {
 		t.Errorf("joined-name lookup failed: ok=%v", ok)
 	}
 }

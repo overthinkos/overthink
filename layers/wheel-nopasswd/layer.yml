@@ -6,9 +6,9 @@ layer:
     /etc/sudoers.d/20-nopasswd-wheel with `%wheel ALL=(ALL:ALL) NOPASSWD: ALL`
     at mode 0440. Mirrors the convention used inside AUR-builder containers
     by ov/deploy_target_local.go renderAurScript.
-  packages:
+  package:
     - sudo
-  tasks:
+  task:
     - write: /etc/sudoers.d/20-nopasswd-wheel
       content: |
         %wheel ALL=(ALL:ALL) NOPASSWD: ALL

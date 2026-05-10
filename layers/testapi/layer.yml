@@ -1,13 +1,13 @@
 layer:
   name: testapi
-  requires:
+  require:
     - supervisord
-  ports:
+  port:
     - 9090
   route:
     host: testapi.localhost
     port: 9090
-  tasks:
+  task:
     - mkdir: "${HOME}/testapi"
       user: "${USER}"
     - copy: app.py

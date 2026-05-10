@@ -6,7 +6,7 @@ layer:
       Writes /etc/ov-bench-marker containing the string "ov benchmark target",
       satisfying the tier1-easy harness recipe.
 
-  tasks:
+  task:
     - mkdir: /etc
       user: root
       mode: "0755"

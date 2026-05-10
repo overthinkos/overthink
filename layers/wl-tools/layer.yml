@@ -1,8 +1,8 @@
 layer:
   name: wl-tools
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - wtype
         - wlrctl
         - xdotool

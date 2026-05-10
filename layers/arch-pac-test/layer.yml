@@ -1,7 +1,7 @@
 layer:
   name: arch-pac-test
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - neovim
         - ripgrep

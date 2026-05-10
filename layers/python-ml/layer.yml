@@ -1,13 +1,13 @@
 layer:
   name: python-ml
-  requires:
+  require:
     - cuda
-  layers:
+  layer:
     - llama-cpp
   env:
     NVIDIA_PYTHON_PROJECT: "~/.pixi"
     LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
-  tasks:
+  task:
     # vLLM cu130 nightly wheel (--no-deps: runtime deps provided by pixi.toml).
     # Runs after the pixi builder stage has installed the Python env.
     - cmd: |

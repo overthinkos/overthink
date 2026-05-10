@@ -1,29 +1,29 @@
 layer:
   name: k3s
   description: k3s binary installer (common base for k3s-server and k3s-agent)
-  packages:
+  package:
     - ca-certificates
     - ethtool
     - fuse-overlayfs
     - socat
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - conntrack-tools
         - iptables-nft
     debian:
-      packages:
+      package:
         - conntrack
         - iptables
     fedora:
-      packages:
+      package:
         - conntrack-tools
         - iptables
     ubuntu:
-      packages:
+      package:
         - conntrack
         - iptables
-  tasks:
+  task:
     # Download the k3s binary. Version pinned in-line in the script below
     # — updating it is a deliberate authoring change, not an implicit
     # "latest". The k3s project publishes SHA256 sums next to each binary

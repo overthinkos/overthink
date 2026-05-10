@@ -1,8 +1,8 @@
 layer:
   name: github-actions
-  packages:
+  package:
     - guestfs-tools
-  tasks:
+  task:
     # act: version-pinned GitHub release install — unified across Fedora and
     # Arch. The COPR/act-cli Fedora path was dropped in favour of this
     # distro-agnostic tarball install so the layer composes into arch-coder

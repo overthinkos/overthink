@@ -20,7 +20,7 @@ func writeFakeDeploy(t *testing.T, paths *LedgerPaths, deployID, image string, l
 		DeployID: deployID,
 		Image:    image,
 		Target:   "host",
-		Layers:   layers,
+		Layer:   layers,
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
@@ -206,7 +206,7 @@ func TestHostUnifiedTarget_Del_SkipsNonHost(t *testing.T) {
 		DeployID: "p-1",
 		Image:    "sway-pod",
 		Target:   "pod:sway-pod",
-		Layers:   []string{"x"},
+		Layer:   []string{"x"},
 	}
 	data, _ := json.Marshal(podRec)
 	podFile := filepath.Join(paths.Deploys, "p-1.json")

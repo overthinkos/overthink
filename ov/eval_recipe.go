@@ -92,10 +92,10 @@ func SortedRecipeNames(catalog map[string]*HarnessRecipe) []string {
 // Listing
 // ---------------------------------------------------------------------------
 
-// PrintRecipes writes a human-readable table of configured recipes to w.
+// PrintRecipe writes a human-readable table of configured recipes to w.
 // Used by `ov eval list-recipe`. Recipes are pure spec, so the table
 // shows scenario count + description summary.
-func PrintRecipes(w io.Writer, catalog map[string]*HarnessRecipe) {
+func PrintRecipe(w io.Writer, catalog map[string]*HarnessRecipe) {
 	if len(catalog) == 0 {
 		fmt.Fprintln(w, "No recipes configured. Add a 'recipe:' map to eval.yml.")
 		return

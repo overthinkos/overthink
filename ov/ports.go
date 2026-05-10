@@ -291,7 +291,7 @@ func SavePortOverride(image, instance string, ports []string) error {
 
 	key := deployKey(image, instance)
 	overlay := dc.Deploy[key]
-	overlay.Ports = ports
+	overlay.Port = ports
 	dc.Deploy[key] = overlay
 
 	return SaveDeployConfig(dc)

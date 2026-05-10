@@ -1,22 +1,22 @@
 layer:
   name: filebrowser
-  requires:
+  require:
     - supervisord
   env:
     FILEBROWSER_CONFIG: "/etc/filebrowser/config.yaml"
-  ports:
+  port:
     - 8080
-  volumes:
+  volume:
     - name: data
       path: "~/.filebrowser/data"
     - name: files
       path: "~/.filebrowser/files"
-  aliases:
+  alias:
     - name: filebrowser
       command: filebrowser
   vars:
     FILEBROWSER_VERSION: v1.2.4-stable
-  tasks:
+  task:
     - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"
       extract: none
       to: /usr/local/bin/filebrowser

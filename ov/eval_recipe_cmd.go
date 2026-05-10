@@ -113,7 +113,7 @@ func printRecipeText(res *EvalRunResults) {
 		fmt.Printf("  %s %-40s origin=%s\n", marker, s.Name, s.Origin)
 		// Surface failed step text (StepEvalResult doesn't carry message).
 		if s.Status == "fail" {
-			for _, step := range s.Steps {
+			for _, step := range s.Step {
 				if step.Status == "fail" {
 					fmt.Printf("        FAIL: %s (%s)\n", step.Text, step.Verb)
 				}
@@ -147,9 +147,9 @@ func printRecipeTAP(res *EvalRunResults) {
 			// YAML diagnostic block — TAP v13 spec.
 			fmt.Println("  ---")
 			fmt.Printf("  origin: %q\n", s.Origin)
-			if len(s.Steps) > 0 {
+			if len(s.Step) > 0 {
 				fmt.Println("  failed_steps:")
-				for _, step := range s.Steps {
+				for _, step := range s.Step {
 					if step.Status == "fail" {
 						fmt.Printf("    - text: %q\n", step.Text)
 						fmt.Printf("      verb: %q\n", step.Verb)

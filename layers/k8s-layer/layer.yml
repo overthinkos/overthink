@@ -16,17 +16,17 @@ layer:
       0.0.0.0:6443 over plain HTTP — the matching kubeconfig sets
       `insecure-skip-tls-verify: true` and uses an `http://` server
       URL, which client-go honors.
-  requires:
+  require:
     - supervisord
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - python3
         - iproute
         - procps-ng
-  ports:
+  port:
     - 6443
-  tasks:
+  task:
     - mkdir: /opt/harness-k8s
       user: root
       mode: "0755"

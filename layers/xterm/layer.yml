@@ -1,8 +1,8 @@
 layer:
   name: xterm
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - xterm
   eval:
     - id: xterm-binary

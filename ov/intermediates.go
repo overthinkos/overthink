@@ -22,7 +22,7 @@ func pixiBoundLayers(layers map[string]*Layer) map[string]bool {
 			continue
 		}
 		// This layer owns a pixi env. Check its IncludedLayers.
-		for _, included := range layer.IncludedLayers {
+		for _, included := range layer.IncludedLayer {
 			child, ok := layers[included]
 			if !ok {
 				continue
@@ -58,7 +58,7 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 	// Count popularity: how many images need each layer (including transitive deps)
 	popularity := make(map[string]int)
 	for _, img := range images {
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			return nil, fmt.Errorf("resolving layers for image %q: %w", img.Name, err)
 		}
@@ -89,12 +89,12 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 			continue
 		}
 		var deps []string
-		for _, dep := range layer.Requires {
+		for _, dep := range layer.Require {
 			if _, inUse := popularity[dep]; inUse {
 				deps = append(deps, dep)
 			}
 		}
-		for _, included := range layer.IncludedLayers {
+		for _, included := range layer.IncludedLayer {
 			if _, inUse := popularity[included]; inUse {
 				deps = append(deps, included)
 			}
@@ -177,7 +177,7 @@ func collectAllImageLayers(imageName string, images map[string]*ResolvedImage, l
 		if !img.IsExternalBase {
 			walk(img.Base)
 		}
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			return
 		}
@@ -311,7 +311,7 @@ func processSiblingGroup(parentName string, uid, defaultUID int, children []stri
 	// Get layers provided by parent
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayersProvidedByImage(parentName, result, layers)
+		provided, err := LayerProvidedByImage(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
@@ -508,7 +508,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 		Name:           name,
 		Base:           parentName,
 		IsExternalBase: isExternalBase,
-		Layers:         ownLayers,
+		Layer:          ownLayers,
 		Tag:            tag,
 		Registry:       cfg.Defaults.Registry,
 		Distro:         inheritedDistro,
@@ -554,7 +554,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 func computeOwnLayers(parentName string, pathLayers []string, result map[string]*ResolvedImage, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) []string {
 	parentProvided := make(map[string]bool)
 	if _, ok := result[parentName]; ok {
-		provided, err := LayersProvidedByImage(parentName, result, layers)
+		provided, err := LayerProvidedByImage(parentName, result, layers)
 		if err == nil {
 			parentProvided = provided
 		}
@@ -593,14 +593,14 @@ func addTransitiveDeps(layerName string, layers map[string]*Layer, needed map[st
 	if !ok {
 		return
 	}
-	for _, dep := range layer.Requires {
+	for _, dep := range layer.Require {
 		if excluded[dep] || needed[dep] {
 			continue
 		}
 		needed[dep] = true
 		addTransitiveDeps(dep, layers, needed, excluded)
 	}
-	for _, included := range layer.IncludedLayers {
+	for _, included := range layer.IncludedLayer {
 		if excluded[included] || needed[included] {
 			continue
 		}

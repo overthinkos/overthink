@@ -13,7 +13,7 @@ layer:
     scenario:
       - name: marker file is present with expected content
         tag: ["@skeleton"]
-        steps:
+        step:
           # Single Then step (no narrative-only Given) so the scenario
           # has zero pending steps and Classify can return VerdictSolved
           # when the AI's edit makes it pass.
@@ -27,7 +27,7 @@ layer:
   # "layer must have at least one install artifact" rule. The AI's job
   # during `ov benchmark run` is to ADD a `write:` task here that
   # creates /etc/ov-bench-marker with the expected content.
-  tasks:
+  task:
     - mkdir: /etc/ov-bench
       user: root
       mode: "0755"

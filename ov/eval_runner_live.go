@@ -316,7 +316,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 				Status:       sr.Status.String(),
 				PendingSteps: sr.Pending,
 			}
-			for _, sp := range sr.Steps {
+			for _, sp := range sr.Step {
 				step := StepEvalResult{
 					Keyword: sp.Keyword,
 					Text:    sp.Text,
@@ -327,7 +327,7 @@ func RunEvalLive(ctx context.Context, deployment, scoreName string, scenarios []
 				if sp.Result.Verb == "" {
 					step.Pending = true
 				}
-				tr.Steps = append(tr.Steps, step)
+				tr.Step = append(tr.Step, step)
 			}
 			out.Scenario = append(out.Scenario, tr)
 			out.Summary.Total++
@@ -541,7 +541,7 @@ func synthesizeScoreBaseline(scoreName string, scenarios []Scenario) ([]Scenario
 		for _, es := range expanded {
 			id := ScenarioID(origin, sIdx, es.RowIndex)
 			pending := 0
-			for _, step := range es.Steps {
+			for _, step := range es.Step {
 				if step.IsPending() {
 					pending++
 				}

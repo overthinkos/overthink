@@ -97,7 +97,7 @@ func DetectStaleEncryptedQuadlets(quadletDir string) ([]string, error) {
 			continue
 		}
 		hasEncrypted := false
-		for _, v := range node.Volumes {
+		for _, v := range node.Volume {
 			if v.Type == "encrypted" {
 				hasEncrypted = true
 				break

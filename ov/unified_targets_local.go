@@ -92,7 +92,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 		}
 		if opts.DryRun {
 			fmt.Printf("[dry-run] would tear down host deploy %s (image=%s, %d layers)\n",
-				rec.DeployID, rec.Image, len(rec.Layers))
+				rec.DeployID, rec.Image, len(rec.Layer))
 			continue
 		}
 		if terr := teardownHostDeploy(paths, &rec, hostHome, re); terr != nil {
@@ -115,7 +115,7 @@ func (t *LocalUnifiedTarget) Del(ctx context.Context, opts DelOpts) error {
 // function so LocalUnifiedTarget.Del can call it without a DeployDelCmd
 // instance — the legacy DeployDelCmd.tearDownDeploy now delegates here.
 func teardownHostDeploy(paths *LedgerPaths, rec *DeployRecord, hostHome string, re ReverseExecutor) error {
-	for _, layer := range rec.Layers {
+	for _, layer := range rec.Layer {
 		layerRec, shouldRemove, err := RemoveLayerDeployment(paths, layer, rec.DeployID)
 		if err != nil {
 			return err
@@ -225,7 +225,7 @@ func (t *LocalUnifiedTarget) Status(ctx context.Context) (StatusInfo, error) {
 			continue
 		}
 		deploys++
-		totalLayers += len(rec.Layers)
+		totalLayers += len(rec.Layer)
 		images = append(images, rec.Image)
 	}
 	state := "stopped"

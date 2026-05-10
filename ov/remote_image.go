@@ -57,7 +57,7 @@ func ResolveRemoteImage(ref string, tag string) (*RemoteImageContext, error) {
 	}
 
 	// Scan layers from the cached repo
-	layers, err := ScanAllLayersWithConfig(cachePath, cfg)
+	layers, err := ScanAllLayerWithConfig(cachePath, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("scanning layers in %s: %w", parsed.RepoPath, err)
 	}
@@ -106,7 +106,7 @@ func (ctx *RemoteImageContext) ContainerName() string {
 
 // CollectVolumes collects volumes for the remote image.
 func (ctx *RemoteImageContext) CollectVolumes() ([]VolumeMount, error) {
-	return CollectImageVolumes(
+	return CollectImageVolume(
 		ctx.Config, ctx.Layers, ctx.ImageName,
 		ctx.Resolved.Home,
 		nil,

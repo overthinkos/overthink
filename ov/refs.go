@@ -232,11 +232,11 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 
 	// Scan image.yml layer references
 	if cfg != nil {
-		for imgName, img := range cfg.Images {
+		for imgName, img := range cfg.Image {
 			if !img.IsEnabled() {
 				continue
 			}
-			for _, layerRef := range img.Layers {
+			for _, layerRef := range img.Layer {
 				if err := addRef(layerRef, fmt.Sprintf("image.yml image %s", imgName)); err != nil {
 					return nil, err
 				}
@@ -246,12 +246,12 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 
 	// Scan layer.yml depends and layers: fields
 	for layerName, layer := range layers {
-		for _, dep := range layer.RawRequires {
+		for _, dep := range layer.RawRequire {
 			if err := addRef(dep, fmt.Sprintf("layer %s depends", layerName)); err != nil {
 				return nil, err
 			}
 		}
-		for _, ref := range layer.RawIncludedLayers {
+		for _, ref := range layer.RawIncludedLayer {
 			if err := addRef(ref, fmt.Sprintf("layer %s layers", layerName)); err != nil {
 				return nil, err
 			}

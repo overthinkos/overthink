@@ -60,28 +60,28 @@ func ensureLayerSecret(dep EnvDependency, required bool) (val, source string) {
 	return generateAndStoreSecret(service, key)
 }
 
-// ResolveLayerSecrets walks the layer's secret_requires + secret_accepts
+// ResolveLayerSecret walks the layer's secret_requires + secret_accepts
 // and resolves each via the credential store. Required entries that miss
 // everywhere auto-generate a 32-byte hex token (see ensureLayerSecret).
 // Optional `secret_accepts:` entries that miss fall back to dep.Default.
 //
 // Returns the env map; never returns an error. The auto-generate policy
 // guarantees every `secret_requires:` resolves to a non-empty value.
-func ResolveLayerSecrets(layer *Layer) map[string]string {
+func ResolveLayerSecret(layer *Layer) map[string]string {
 	env := map[string]string{}
 	if layer == nil {
 		return env
 	}
 
 	if layer.HasSecretRequires {
-		for _, dep := range layer.SecretRequires() {
+		for _, dep := range layer.SecretRequire() {
 			val, _ := ensureLayerSecret(dep, true)
 			env[dep.Name] = val
 		}
 	}
 
 	if layer.HasSecretAccepts {
-		for _, dep := range layer.SecretAccepts() {
+		for _, dep := range layer.SecretAccept() {
 			val, _ := ensureLayerSecret(dep, false)
 			if val == "" && dep.Default != "" {
 				env[dep.Name] = dep.Default
@@ -96,27 +96,27 @@ func ResolveLayerSecrets(layer *Layer) map[string]string {
 	return env
 }
 
-// ResolveSecretsForLayers is the batch variant used when multiple layers in
+// ResolveSecretForLayer is the batch variant used when multiple layers in
 // a single deploy share secret_requires — their resolution results merge
 // into one env map, with layer-order precedence (later layers win on
 // duplicate names, matching the existing generate.go `secretRequiresMap`
 // semantics in the label-emission path).
-func ResolveSecretsForLayers(layers []*Layer) map[string]string {
+func ResolveSecretForLayer(layers []*Layer) map[string]string {
 	env := map[string]string{}
 	for _, l := range layers {
-		for k, v := range ResolveLayerSecrets(l) {
+		for k, v := range ResolveLayerSecret(l) {
 			env[k] = v
 		}
 	}
 	return env
 }
 
-// LayersForPlans reloads the layer map and returns the ordered *Layer
+// LayerForPlan reloads the layer map and returns the ordered *Layer
 // slice covered by the given plans (both LayersIncluded for image-level
 // plans and per-plan Layer for layer-only plans). Used by deploy-add to
-// call ResolveSecretsForLayers + RetrieveLayerArtifacts.
-func LayersForPlans(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, error) {
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+// call ResolveSecretForLayer + RetrieveLayerArtifacts.
+func LayerForPlan(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, error) {
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +145,7 @@ func LayersForPlans(plans []*InstallPlan, dir string, cfg *Config) ([]*Layer, er
 // are preserved (layer-declared env takes precedence over a credential-
 // store collision — a deliberate choice so an author can explicitly pin
 // a value they control). Called from deploy_add_cmd after
-// ResolveLayerSecrets and before target.Emit so the heredoc renderer
+// ResolveLayerSecret and before target.Emit so the heredoc renderer
 // sees the values as regular env exports.
 func InjectSecretsIntoPlans(plans []*InstallPlan, env map[string]string) {
 	if len(env) == 0 {

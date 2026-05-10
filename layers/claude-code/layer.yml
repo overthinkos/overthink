@@ -1,6 +1,6 @@
 layer:
   name: claude-code
-  requires:
+  require:
     - nodejs
   path_append:
     - "~/.local/bin"

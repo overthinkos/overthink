@@ -86,7 +86,7 @@ func TestMigrateLocalDeploy_FullExample(t *testing.T) {
               encrypted: true
             - name: shared
               path: /opt/shared
-        ports:
+        port:
             - 2283:2283
         env_file: /home/user/project/.env
         security:
@@ -253,7 +253,7 @@ func TestMigrateLocalDeploy_Idempotent(t *testing.T) {
 deploy:
     immich:
         target: pod
-        volumes:
+        volume:
             - name: library
               type: encrypted
 `

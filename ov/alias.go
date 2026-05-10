@@ -129,17 +129,17 @@ type CollectedAlias struct {
 	Command string `json:"command"`
 }
 
-// CollectImageAliases gathers aliases from the image's own layers + image-level config.
+// CollectImageAlias gathers aliases from the image's own layers + image-level config.
 // No base chain traversal — aliases are leaf-image specific.
 // Layer aliases come first; image-level overrides by name.
-func CollectImageAliases(cfg *Config, layers map[string]*Layer, imageName string) ([]CollectedAlias, error) {
-	img, ok := cfg.Images[imageName]
+func CollectImageAlias(cfg *Config, layers map[string]*Layer, imageName string) ([]CollectedAlias, error) {
+	img, ok := cfg.Image[imageName]
 	if !ok {
 		return nil, fmt.Errorf("image %q not found in image.yml", imageName)
 	}
 
 	// Resolve layers for this image (includes transitive deps)
-	resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+	resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func CollectImageAliases(cfg *Config, layers map[string]*Layer, imageName string
 		if !ok || !layer.HasAliases {
 			continue
 		}
-		for _, a := range layer.Aliases() {
+		for _, a := range layer.Alias() {
 			if seen[a.Name] {
 				continue
 			}
@@ -163,7 +163,7 @@ func CollectImageAliases(cfg *Config, layers map[string]*Layer, imageName string
 	}
 
 	// Collect from image config (overrides layer aliases with same name)
-	for _, a := range img.Aliases {
+	for _, a := range img.Alias {
 		cmd := a.Command
 		if cmd == "" {
 			cmd = a.Name
@@ -384,12 +384,12 @@ func (c *ListAliasesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	result := AliasLayers(layers)
+	result := AliasLayer(layers)
 	names := make([]string, 0, len(result))
 	for _, layer := range result {
 		names = append(names, layer.Name)
@@ -398,7 +398,7 @@ func (c *ListAliasesCmd) Run() error {
 
 	for _, name := range names {
 		layer := layers[name]
-		for _, a := range layer.Aliases() {
+		for _, a := range layer.Alias() {
 			fmt.Printf("%s\t%s\t%s\n", name, a.Name, a.Command)
 		}
 	}

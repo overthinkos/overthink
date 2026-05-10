@@ -1,7 +1,7 @@
 layer:
   name: forgecode
   description: Forge AI coding agent CLI (forgecode.dev)
-  requires:
+  require:
     - nodejs
   eval:
     - id: forge-binary

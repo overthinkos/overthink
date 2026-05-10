@@ -34,16 +34,16 @@ func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *Label
 			break
 		}
 		visited[current] = true
-		img, ok := cfg.Images[current]
+		img, ok := cfg.Image[current]
 		if !ok {
 			break
 		}
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			break
 		}
 		allLayerNames = append(allLayerNames, resolved...)
-		if baseImg, isInternal := cfg.Images[img.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
 			current = img.Base
 		} else {
 			break
@@ -73,7 +73,7 @@ func CollectEval(cfg *Config, layers map[string]*Layer, imageName string) *Label
 	}
 
 	// Image-level Tests (defaults to build scope) and DeployTests.
-	if img, ok := cfg.Images[imageName]; ok {
+	if img, ok := cfg.Image[imageName]; ok {
 		for _, c := range img.Eval {
 			c.Origin = "image:" + imageName
 			switch c.Scope {

@@ -129,7 +129,7 @@ func (c *EvalRunLocalCmd) Run() error {
 	// Resolve the score's `recipes:` list against the recipe catalog —
 	// FULL scope (used in non-progressive mode and for the global
 	// nonce set in progressive mode).
-	fullMergedScenarios, fullResolvedRecipes, err := ResolveScoreRecipes(score, uf.Recipe)
+	fullMergedScenarios, fullResolvedRecipes, err := ResolveScoreRecipe(score, uf.Recipe)
 	if err != nil {
 		return fmt.Errorf("score %q: %w", c.Score, err)
 	}
@@ -289,7 +289,7 @@ func runSinglePhaseHarness(
 	}
 	preAIResults, preFingerprints, preTagFingerprints := synthesizeScoreBaseline(commonOpts.ScoreName, scoringScenarios)
 	opts := commonOpts
-	opts.Recipes = append([]string(nil), score.Recipes...)
+	opts.Recipe = append([]string(nil), score.Recipe...)
 	opts.ResolvedRecipes = resolvedRecipes
 	opts.MergedScenarios = mergedScenarios
 	opts.ScoringScenarios = scoringScenarios
@@ -300,7 +300,7 @@ func runSinglePhaseHarness(
 }
 
 // runProgressiveHarness implements curriculum-style phase execution.
-// Phases iterate over score.Recipes incrementally: phase 1 uses
+// Phases iterate over score.Recipe incrementally: phase 1 uses
 // recipes[0:1], phase 2 uses recipes[0:2], ... phase N uses all
 // recipes. Each phase runs its own iteration loop (RunHarness) with a
 // fresh per-phase baseline, exits on solved-all OR plateau, and the
@@ -325,7 +325,7 @@ func runProgressiveHarness(
 	fullResolvedRecipes []*HarnessRecipe,
 	nonces map[string]string,
 ) (*FinalReport, error) {
-	totalPhases := len(score.Recipes)
+	totalPhases := len(score.Recipe)
 	if totalPhases == 0 {
 		return nil, fmt.Errorf("score %q: progressive: true requires non-empty recipes:", commonOpts.ScoreName)
 	}
@@ -333,7 +333,7 @@ func runProgressiveHarness(
 	master := &FinalReport{
 		Schema:           1,
 		Score:            commonOpts.ScoreName,
-		Recipes:          append([]string(nil), score.Recipes...),
+		Recipe:          append([]string(nil), score.Recipe...),
 		Calver:           ComputeCalVer(),
 		RunID:            layout.RunID,
 		AI:               commonOpts.AIName,
@@ -350,7 +350,7 @@ func runProgressiveHarness(
 	overallExitReason := ""
 
 	for n := 1; n <= totalPhases; n++ {
-		phaseRecipes := append([]string(nil), score.Recipes[:n]...)
+		phaseRecipes := append([]string(nil), score.Recipe[:n]...)
 		phaseMerged, phaseResolved, err := resolvePhaseScenarios(score, recipeCatalog, n)
 		if err != nil {
 			return master, fmt.Errorf("phase %d: %w", n, err)
@@ -368,7 +368,7 @@ func runProgressiveHarness(
 		phaseLayout.Phase = n
 
 		phaseOpts := commonOpts
-		phaseOpts.Recipes = phaseRecipes
+		phaseOpts.Recipe = phaseRecipes
 		phaseOpts.ResolvedRecipes = phaseResolved
 		phaseOpts.MergedScenarios = phaseMerged
 		phaseOpts.ScoringScenarios = phaseScoring
@@ -393,7 +393,7 @@ func runProgressiveHarness(
 		master.Iterations = append(master.Iterations, phaseReport.Iterations...)
 		master.Phases = append(master.Phases, PhaseReport{
 			N:             n,
-			Recipes:       phaseRecipes,
+			Recipe:       phaseRecipes,
 			IterationsRun: phaseReport.IterationsRun,
 			ExitReason:    phaseReport.ExitReason,
 			Score:         phaseReport.BestScore,
@@ -465,17 +465,17 @@ func decideOverallExit(ctxErr error, phaseExitReason string) (overallExitReason 
 }
 
 // resolvePhaseScenarios returns the merged scenario list for the first
-// `phaseN` recipes of `score.Recipes` (1-indexed phaseN). Each appended
+// `phaseN` recipes of `score.Recipe` (1-indexed phaseN). Each appended
 // scenario is stamped with its source recipe name (matching
-// ResolveScoreRecipes behavior). Returns the resolved recipe pointers
+// ResolveScoreRecipe behavior). Returns the resolved recipe pointers
 // in the same order, for the ${RECIPES} renderer.
 func resolvePhaseScenarios(score *HarnessScore, recipeCatalog map[string]*HarnessRecipe, phaseN int) ([]Scenario, []*HarnessRecipe, error) {
-	if phaseN <= 0 || phaseN > len(score.Recipes) {
-		return nil, nil, fmt.Errorf("invalid phase %d (have %d recipes)", phaseN, len(score.Recipes))
+	if phaseN <= 0 || phaseN > len(score.Recipe) {
+		return nil, nil, fmt.Errorf("invalid phase %d (have %d recipes)", phaseN, len(score.Recipe))
 	}
 	subscore := *score
-	subscore.Recipes = append([]string(nil), score.Recipes[:phaseN]...)
-	return ResolveScoreRecipes(&subscore, recipeCatalog)
+	subscore.Recipe = append([]string(nil), score.Recipe[:phaseN]...)
+	return ResolveScoreRecipe(&subscore, recipeCatalog)
 }
 
 // finalizeMasterReport stamps the closing fields on a progressive
@@ -525,7 +525,7 @@ func loadDescriptionsFromDir(dir, image string) *LabelDescriptionSet {
 	if err != nil || cfg == nil {
 		return nil
 	}
-	layers, err := ScanLayers(dir)
+	layers, err := ScanLayer(dir)
 	if err != nil {
 		return nil
 	}

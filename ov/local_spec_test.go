@@ -14,7 +14,7 @@ func TestLoadUnified_LocalMap_Inline(t *testing.T) {
 	src := `version: 4
 local:
   dev-workstation:
-    layers: [ripgrep, direnv]
+    layer: [ripgrep, direnv]
     install_opts: {with_services: false, allow_repo_changes: true}
     env: [EDITOR=vim]
     description: {feature: Dev workstation, tag: [working]}
@@ -33,7 +33,7 @@ local:
 	if !exists {
 		t.Fatalf("expected dev-workstation in uf.Local; got %+v", uf.Local)
 	}
-	if got := spec.Layers; len(got) != 2 || got[0] != "ripgrep" || got[1] != "direnv" {
+	if got := spec.Layer; len(got) != 2 || got[0] != "ripgrep" || got[1] != "direnv" {
 		t.Errorf("unexpected layers: %v", got)
 	}
 	if spec.InstallOpts == nil || spec.InstallOpts.WithServices || !spec.InstallOpts.AllowRepoChanges {

@@ -1,6 +1,6 @@
 layer:
   name: ollama
-  requires:
+  require:
     - cuda
     - supervisord
   env:
@@ -8,15 +8,15 @@ layer:
     OLLAMA_MODELS: "~/.ollama/models"
   env_provides:
     OLLAMA_HOST: "http://{{.ContainerName}}:11434"
-  ports:
+  port:
     - 11434
-  volumes:
+  volume:
     - name: models
       path: "~/.ollama"
-  aliases:
+  alias:
     - name: ollama
       command: ollama
-  tasks:
+  task:
     # Ollama binary release tarball (no systemd)
     - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
       extract: tar.zst

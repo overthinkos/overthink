@@ -1,18 +1,18 @@
 layer:
   name: golang
   description: Go programming language compiler
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - go
     debian:
-      packages:
+      package:
         - golang-go
     fedora:
-      packages:
+      package:
         - golang-bin
     ubuntu:
-      packages:
+      package:
         - golang-go
   eval:
     - id: go-binary

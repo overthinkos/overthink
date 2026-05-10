@@ -1,10 +1,10 @@
 layer:
   name: pavucontrol
-  requires:
+  require:
     - pipewire
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - pavucontrol
   eval:
     - id: pavucontrol-binary

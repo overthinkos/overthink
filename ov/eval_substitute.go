@@ -61,12 +61,12 @@ type SubstContext struct {
 	Scenarios string
 
 	// Per-recipe-grouped block (drives ${RECIPES})
-	Recipes string
+	Recipe string
 
 	// Progressive-scoring phase state. Populated when score.progressive
 	// is true; zero-valued and ignored otherwise.
 	Phase         int    // 1-indexed current phase number
-	PhaseTotal    int    // total number of phases (== len(score.Recipes))
+	PhaseTotal    int    // total number of phases (== len(score.Recipe))
 	PhaseRecipes  string // comma-joined in-scope recipe names for this phase
 	PhaseIntro    string // pre-rendered "Phase N of M — Y new recipe(s) added: ..." preamble
 
@@ -173,7 +173,7 @@ func lookupHarnessToken(name string, ctx *SubstContext) string {
 	case "SCENARIOS":
 		return ctx.Scenarios
 	case "RECIPES":
-		return ctx.Recipes
+		return ctx.Recipe
 	case "PHASE":
 		return intTok(ctx.Phase)
 	case "PHASE_TOTAL":

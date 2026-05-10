@@ -78,9 +78,9 @@ func (c *DeployExportCmd) exportAll() error {
 	if err != nil {
 		return fmt.Errorf("loading image.yml: %w", err)
 	}
-	dc := ExportAllImages(cfg)
+	dc := ExportAllImage(cfg)
 	if len(c.Images) > 0 {
-		dc = filterDeployImages(dc, c.Images)
+		dc = filterDeployImage(dc, c.Images)
 	}
 	return c.output(dc)
 }
@@ -95,7 +95,7 @@ func (c *DeployExportCmd) exportOverrides() error {
 		return nil
 	}
 	if len(c.Images) > 0 {
-		dc = filterDeployImages(dc, c.Images)
+		dc = filterDeployImage(dc, c.Images)
 	}
 	return c.output(dc)
 }
@@ -318,7 +318,7 @@ func marshalToStdout(dc *DeployConfig) error {
 	return nil
 }
 
-func filterDeployImages(dc *DeployConfig, names []string) *DeployConfig {
+func filterDeployImage(dc *DeployConfig, names []string) *DeployConfig {
 	filtered := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	for _, name := range names {
 		if entry, ok := dc.Deploy[name]; ok {

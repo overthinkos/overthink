@@ -2,7 +2,7 @@ layer:
   name: jupyter-mcp
   description: "JupyterLab CRDT MCP server extension (pip-only, requires pixi env from parent layer)"
 
-  tasks:
+  task:
     # fastmcp via pip: pixi's cross-platform resolver conflicts with
     # opentelemetry-api on aarch64, so we bypass pixi for this one dep.
     - cmd: ~/.pixi/envs/default/bin/pip install "fastmcp>=3.2.0"

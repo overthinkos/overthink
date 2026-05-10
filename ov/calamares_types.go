@@ -58,8 +58,8 @@ func (p PackageItem) MarshalYAML() (interface{}, error) {
 // AUR sources need a separate manifest because they are built via yay in a
 // builder stage (not pacman directly).
 type AURPackages struct {
-	Packages []PackageItem `yaml:"packages,omitempty" json:"packages,omitempty"`
-	Options  []string      `yaml:"options,omitempty" json:"options,omitempty"`
+	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
+	Options []string      `yaml:"options,omitempty" json:"options,omitempty"`
 	// Replaces lists distro-repo packages whose file paths conflict
 	// with the AUR build artifact. Each entry is removed via
 	// `pacman -Rs --noconfirm <pkg>` BEFORE the AUR `pacman -U`
@@ -80,12 +80,12 @@ type AURPackages struct {
 // distro (e.g. `fedora`, `archlinux`, `debian`, `ubuntu`) or a versioned
 // variant (`debian-13`, `ubuntu-24.04`).
 type DistroPackages struct {
-	Packages []PackageItem    `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Package []PackageItem    `yaml:"package,omitempty" json:"package,omitempty"`
 	Copr     []string         `yaml:"copr,omitempty" json:"copr,omitempty"`       // fedora-only
-	Repos    []map[string]any `yaml:"repos,omitempty" json:"repos,omitempty"`     // free-form per-distro repo blocks
-	Exclude  []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
-	Options  []string         `yaml:"options,omitempty" json:"options,omitempty"` // extra installer flags (e.g. dnf options)
-	Modules  []string         `yaml:"modules,omitempty" json:"modules,omitempty"` // dnf module enable
+	Repo    []map[string]any `yaml:"repo,omitempty" json:"repo,omitempty"`       // free-form per-distro repo blocks
+	Exclude []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
+	Options []string         `yaml:"options,omitempty" json:"options,omitempty"` // extra installer flags
+	Module  []string         `yaml:"module,omitempty" json:"module,omitempty"`   // dnf module enable
 	AUR      *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // archlinux-only
 
 	// Raw captures the entire YAML map for template rendering. Populated by

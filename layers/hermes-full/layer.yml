@@ -2,7 +2,7 @@ layer:
   name: hermes-full
   description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
 
-  layers:
+  layer:
     - hermes
     - claude-code
     - codex

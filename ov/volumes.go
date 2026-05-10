@@ -11,29 +11,29 @@ type VolumeMount struct {
 	ContainerPath string // e.g. "/home/user/.openclaw" (~ expanded)
 }
 
-// CollectImageVolumes resolves all volumes for an image by traversing the
+// CollectImageVolume resolves all volumes for an image by traversing the
 // full image chain (image → base → base's base) and collecting volume
 // declarations from all layers. Volumes are deduplicated by name (first
 // declaration wins — outermost image takes priority).
-func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
+func CollectImageVolume(cfg *Config, layers map[string]*Layer, imageName string, home string, excludeNames map[string]bool) ([]VolumeMount, error) {
 	// Collect all layer names from the image chain (outermost first)
 	var allLayerNames []string
 	current := imageName
 	for {
-		img, ok := cfg.Images[current]
+		img, ok := cfg.Image[current]
 		if !ok {
 			break
 		}
 
 		// Resolve layers for this image (includes transitive deps)
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			return nil, err
 		}
 		allLayerNames = append(allLayerNames, resolved...)
 
 		// Walk to base if it's an internal image
-		if baseImg, isInternal := cfg.Images[img.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
 			current = img.Base
 		} else {
 			break
@@ -48,7 +48,7 @@ func CollectImageVolumes(cfg *Config, layers map[string]*Layer, imageName string
 		if !ok || !layer.HasVolumes {
 			continue
 		}
-		for _, vol := range layer.Volumes() {
+		for _, vol := range layer.Volume() {
 			if seen[vol.Name] || excludeNames[vol.Name] {
 				continue
 			}
@@ -77,9 +77,9 @@ func expandHome(path, home string) string {
 	return path
 }
 
-// InstanceVolumes renames volume mounts for a specific instance.
+// InstanceVolume renames volume mounts for a specific instance.
 // e.g. "ov-githubrunner-state" -> "ov-githubrunner-runner-1-state"
-func InstanceVolumes(mounts []VolumeMount, imageName, instance string) []VolumeMount {
+func InstanceVolume(mounts []VolumeMount, imageName, instance string) []VolumeMount {
 	if instance == "" {
 		return mounts
 	}

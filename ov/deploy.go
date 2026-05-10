@@ -55,17 +55,17 @@ type DeploymentNode struct {
 	Tunnel          *TunnelYAML           `yaml:"tunnel,omitempty"`
 	DNS             string                `yaml:"dns,omitempty"`
 	AcmeEmail       string                `yaml:"acme_email,omitempty"`
-	Volumes         []DeployVolumeConfig  `yaml:"volumes,omitempty"`
-	Ports           []string              `yaml:"ports,omitempty"`
+	Volume          []DeployVolumeConfig  `yaml:"volume,omitempty"`
+	Port            []string              `yaml:"port,omitempty"`
 	Env             []string              `yaml:"env,omitempty"`
 	EnvFile         string                `yaml:"env_file,omitempty"`
 	Security        *SecurityConfig       `yaml:"security,omitempty"`
 	Network         string                `yaml:"network,omitempty"`
 	Engine          string                `yaml:"engine,omitempty"`
-	Secrets         []DeploySecretConfig  `yaml:"secrets,omitempty"`
-	ForwardGpgAgent *bool                 `yaml:"forward_gpg_agent,omitempty"` // Override global forward_gpg_agent per image
-	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"` // Override global forward_ssh_agent per image
-	Sidecars        map[string]SidecarDef `yaml:"sidecars,omitempty"`          // Sidecar container overrides
+	Secret          []DeploySecretConfig  `yaml:"secret,omitempty"`
+	ForwardGpgAgent *bool                 `yaml:"forward_gpg_agent,omitempty"`
+	ForwardSshAgent *bool                 `yaml:"forward_ssh_agent,omitempty"`
+	Sidecar         map[string]SidecarDef `yaml:"sidecar,omitempty"` // Sidecar container overrides
 
 	// Tests are local deploy-level overlays. They merge onto the image's
 	// label-baked deploy section at runtime: entries with an id: that
@@ -109,9 +109,9 @@ type DeploymentNode struct {
 	// Empty → assumed "service" when target is kubernetes.
 	Kind string `yaml:"kind,omitempty"` // service | daemon | batch | scheduled | oneshot
 
-	// Replicas — number of instances. Ignored for single-instance workloads
+	// Replica — number of instances. Ignored for single-instance workloads
 	// (daemon/batch/oneshot) or non-K8s targets that don't support scaling.
-	Replicas int `yaml:"replicas,omitempty"`
+	Replica int `yaml:"replica,omitempty"`
 
 	// Restart policy — always | on-failure | never. K8s interprets this on
 	// Pod/Job/CronJob; Deployment/StatefulSet/DaemonSet always use "Always"
@@ -130,7 +130,7 @@ type DeploymentNode struct {
 	Expose *DeployExpose `yaml:"expose,omitempty"`
 
 	// Storage — declarative PVC/volume requests. Augments (does not replace)
-	// the existing Volumes list which covers container-target volume backing.
+	// the existing Volume list which covers container-target volume backing.
 	Storage []DeployStorage `yaml:"storage,omitempty"`
 
 	// Probes — target-agnostic liveness/readiness/startup specs.
@@ -140,7 +140,7 @@ type DeploymentNode struct {
 	// Each entry is a DeployRef (local name / local YAML path /
 	// remote github ref). Same syntax as the command-line --add-layer
 	// flag.
-	AddLayers []string `yaml:"add_layers,omitempty"`
+	AddLayer []string `yaml:"add_layer,omitempty"`
 
 	// InstallOpts carries host-target-specific flags that would
 	// otherwise have to be passed on every command invocation.
@@ -965,7 +965,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// "ov config status", quadlet generation) would all behave as if
 	// nothing was configured. Critically, encrypted-volume entries declared
 	// under the legacy `bind_mounts:` field would be invisible to
-	// loadEncryptedVolumes, so encryption guarantees would silently
+	// loadEncryptedVolume, so encryption guarantees would silently
 	// disappear. Fail loud at load time instead, with a remediation hint.
 	if hasLegacyImagesKey(data) {
 		return nil, fmt.Errorf(
@@ -1038,7 +1038,7 @@ func hasLegacyImagesKey(data []byte) bool {
 	return hasImages && !hasDeploy
 }
 
-// MergeDeployOverlay patches cfg.Images in-place with deployment overrides from deploy.yml.
+// MergeDeployOverlay patches cfg.Image in-place with deployment overrides from deploy.yml.
 // Field-level replace: deploy.yml value fully replaces image.yml value.
 // Unknown images in deploy.yml are silently ignored.
 func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
@@ -1047,7 +1047,7 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 	}
 
 	for name, overlay := range dc.Deploy {
-		img, ok := cfg.Images[name]
+		img, ok := cfg.Image[name]
 		if !ok {
 			continue // silently ignore unknown images
 		}
@@ -1061,8 +1061,8 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		// Schema v4: Tunnel / DNS / AcmeEmail / Engine removed from
 		// ImageConfig — overlay copies for those removed. Values flow
 		// through MergeDeployOntoMetadata → ImageMetadata instead.
-		if overlay.Ports != nil {
-			img.Ports = overlay.Ports
+		if overlay.Port != nil {
+			img.Port = overlay.Port
 		}
 		if overlay.Env != nil {
 			img.Env = overlay.Env
@@ -1076,7 +1076,7 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 		if overlay.Network != "" {
 			img.Network = overlay.Network
 		}
-		cfg.Images[name] = img
+		cfg.Image[name] = img
 	}
 }
 
@@ -1105,8 +1105,8 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 	if overlay.AcmeEmail != "" {
 		meta.AcmeEmail = overlay.AcmeEmail
 	}
-	if overlay.Ports != nil {
-		meta.Ports = overlay.Ports
+	if overlay.Port != nil {
+		meta.Ports = overlay.Port
 	}
 	if overlay.Env != nil {
 		meta.Env = overlay.Env
@@ -1163,9 +1163,9 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 		meta.Engine = overlay.Engine
 	}
 	// Merge deploy.yml secrets onto image label secrets
-	if overlay.Secrets != nil {
-		deployByName := make(map[string]DeploySecretConfig, len(overlay.Secrets))
-		for _, ds := range overlay.Secrets {
+	if overlay.Secret != nil {
+		deployByName := make(map[string]DeploySecretConfig, len(overlay.Secret))
+		for _, ds := range overlay.Secret {
 			deployByName[ds.Name] = ds
 		}
 		// Override matching secrets from image labels with deploy.yml source config
@@ -1177,7 +1177,7 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 			}
 		}
 		// Add deploy-only secrets that aren't in the image labels
-		for _, ds := range overlay.Secrets {
+		for _, ds := range overlay.Secret {
 			found := false
 			for _, ls := range meta.Secrets {
 				if ls.Name == ds.Name {
@@ -1337,11 +1337,11 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.AcmeEmail != "" {
 				existing.AcmeEmail = overlay.AcmeEmail
 			}
-			if overlay.Volumes != nil {
-				existing.Volumes = overlay.Volumes
+			if overlay.Volume != nil {
+				existing.Volume = overlay.Volume
 			}
-			if overlay.Ports != nil {
-				existing.Ports = overlay.Ports
+			if overlay.Port != nil {
+				existing.Port = overlay.Port
 			}
 			if overlay.Env != nil {
 				existing.Env = overlay.Env
@@ -1417,8 +1417,8 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 			if overlay.Lifecycle != "" {
 				existing.Lifecycle = overlay.Lifecycle
 			}
-			if overlay.AddLayers != nil {
-				existing.AddLayers = overlay.AddLayers
+			if overlay.AddLayer != nil {
+				existing.AddLayer = overlay.AddLayer
 			}
 			if overlay.Eval != nil {
 				existing.Eval = overlay.Eval
@@ -1577,15 +1577,15 @@ type SaveDeployStateInput struct {
 	EnvFile  string
 	Network  string
 	Security *SecurityConfig
-	Volumes  []DeployVolumeConfig
-	Sidecars map[string]SidecarDef
+	Volume   []DeployVolumeConfig
+	Sidecar  map[string]SidecarDef
 	Tunnel   *TunnelYAML
 
 	// SecretNames lists env var names declared as secret_accepts /
 	// secret_requires on the image. saveDeployState uses this list to
 	// defensively strip any matching KEY=VAL entries from both the input
 	// Env and the existing persisted entry.Env before writing. Defense in
-	// depth for the §6 / Run() pipeline (MigratePlaintextEnvSecrets and
+	// depth for the §6 / Run() pipeline (MigratePlaintextEnvSecret and
 	// scrubSecretCLIEnv are the primary gates). Populated by the Run()
 	// call site from meta.SecretAccepts/SecretRequires.
 	SecretNames []string
@@ -1606,7 +1606,7 @@ type SaveDeployStateInput struct {
 // Defense-in-depth: any env entry whose key matches a name in input.SecretNames
 // is stripped from both input.Env and the existing persisted entry.Env before
 // writing. The primary gates against plaintext-credential leakage are
-// MigratePlaintextEnvSecrets and scrubSecretCLIEnv in config_image.go:Run();
+// MigratePlaintextEnvSecret and scrubSecretCLIEnv in config_image.go:Run();
 // this scrub catches anything that slipped through (e.g., a future refactor
 // that adds a new code path writing into dc.Env). Matches plan §6.7.
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
@@ -1619,15 +1619,15 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	}
 	key := deployKey(imageName, instance)
 	entry := dc.Deploy[key] // preserve existing fields (tunnel, volumes, etc.)
-	if input.Volumes != nil {
-		entry.Volumes = input.Volumes
+	if input.Volume != nil {
+		entry.Volume = input.Volume
 	}
 	// Ports gated on SetPorts: explicit opt-in required so a recompute
 	// path that always-passes computed `meta.Ports` doesn't silently
 	// overwrite operator overrides. See SaveDeployStateInput.SetPorts
 	// docstring and the 2026-05-09 rebuild→update cutover.
 	if input.SetPorts && input.Ports != nil {
-		entry.Ports = input.Ports
+		entry.Port = input.Ports
 	}
 	// Defensive scrub: drop credential-backed env vars from both input and
 	// existing entry before they land in the persisted file.
@@ -1651,8 +1651,8 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	if input.Security != nil {
 		entry.Security = input.Security
 	}
-	if len(input.Sidecars) > 0 {
-		entry.Sidecars = input.Sidecars
+	if len(input.Sidecar) > 0 {
+		entry.Sidecar = input.Sidecar
 	}
 	if input.Tunnel != nil {
 		entry.Tunnel = input.Tunnel
@@ -1728,10 +1728,10 @@ func mergeEnvVars(existing, newVars []string) []string {
 	return result
 }
 
-// ExportAllImages exports all runtime-relevant fields for all enabled images in a Config.
-func ExportAllImages(cfg *Config) *DeployConfig {
+// ExportAllImage exports all runtime-relevant fields for all enabled images in a Config.
+func ExportAllImage(cfg *Config) *DeployConfig {
 	dc := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if !img.IsEnabled() {
 			continue
 		}
@@ -1740,7 +1740,7 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 		entry := DeploymentNode{
 			Version:     img.Version,
 			Description: img.Description,
-			Ports:       img.Ports,
+			Port:        img.Port,
 			Env:         img.Env,
 			EnvFile:     img.EnvFile,
 			Security:    img.Security,
@@ -1748,7 +1748,7 @@ func ExportAllImages(cfg *Config) *DeployConfig {
 		}
 		// Only include if at least one field is set
 		if entry.Version != "" || entry.Description != nil ||
-			entry.Ports != nil || entry.Env != nil ||
+			entry.Port != nil || entry.Env != nil ||
 			entry.EnvFile != "" || entry.Security != nil || entry.Network != "" {
 			dc.Deploy[name] = entry
 		}

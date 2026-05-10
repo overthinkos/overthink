@@ -29,11 +29,11 @@ func fxCheckLiveOnly(id string) Check {
 
 // fxUnified builds a minimal UnifiedFile populated with the given
 // images / pods / vms. Layers are passed separately because they go
-// through the projected-layers map, not uf.Layers.
+// through the projected-layers map, not uf.Layer.
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
 		Version: 4,
-		Images:  map[string]ImageConfig{},
+		Image:  map[string]ImageConfig{},
 		Pod:     map[string]*PodSpec{},
 		VM:      map[string]*VmSpec{},
 		Recipe:  map[string]*HarnessRecipe{},
@@ -66,8 +66,8 @@ func TestExpandFromLayer(t *testing.T) {
 		if sc.Pod != "selftest" {
 			t.Errorf("scenario %q: pod = %q, want %q", sc.Name, sc.Pod, "selftest")
 		}
-		if len(sc.Steps) != 1 {
-			t.Errorf("scenario %q: expected 1 step (Section-5 invariant), got %d", sc.Name, len(sc.Steps))
+		if len(sc.Step) != 1 {
+			t.Errorf("scenario %q: expected 1 step (Section-5 invariant), got %d", sc.Name, len(sc.Step))
 		}
 	}
 	if recipe.Scenario[0].Name != "sshd-binary" || recipe.Scenario[1].Name != "sshd-wrapper" {
@@ -80,7 +80,7 @@ func TestExpandFromLayer(t *testing.T) {
 
 func TestExpandFromImage(t *testing.T) {
 	uf := fxUnified()
-	uf.Images["arch-coder"] = ImageConfig{
+	uf.Image["arch-coder"] = ImageConfig{
 		Eval:  []Check{
 			fxCheckCommand("arch-coder-ov", "test -x /usr/local/bin/ov"),
 		},
@@ -146,7 +146,7 @@ func TestExpandFromVM(t *testing.T) {
 
 func TestMultiKindComposition(t *testing.T) {
 	uf := fxUnified()
-	uf.Images["img-a"] = ImageConfig{
+	uf.Image["img-a"] = ImageConfig{
 		Eval:  []Check{fxCheckCommand("img-a-test", "true")},
 	}
 	uf.Pod["pod-a"] = &PodSpec{
@@ -165,7 +165,7 @@ func TestMultiKindComposition(t *testing.T) {
 			{
 				Name: "handwritten",
 				Pod:  "container-x",
-				Steps: []Step{
+				Step: []Step{
 					{Then: "marker exists", Check: fxCheckFile("handwritten", "/etc/baz")},
 				},
 				DependsOn: []string{"layer-a-test"}, // cross-namespace dep
@@ -316,7 +316,7 @@ func TestNamingCollisionError(t *testing.T) {
 			{Kind: "layer", Name: "l", Pod: "p"},
 		},
 		Scenario: []Scenario{
-			{Name: "dup", Pod: "p", Steps: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
+			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
 		},
 	}
 	err := ExpandRecipeFrom(uf, layers, "test", recipe)
@@ -335,7 +335,7 @@ func TestPrefixDisambiguatesCollision(t *testing.T) {
 			{Kind: "layer", Name: "l", Pod: "p", Prefix: "lp"},
 		},
 		Scenario: []Scenario{
-			{Name: "dup", Pod: "p", Steps: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
+			{Name: "dup", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -367,8 +367,8 @@ func TestImportedScenarioCountEqualsCheckCount(t *testing.T) {
 			{Kind: "layer", Name: "l", Pod: "p"},
 		},
 		Scenario: []Scenario{
-			{Name: "extra1", Pod: "p", Steps: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
-			{Name: "extra2", Pod: "p", Steps: []Step{{Then: "y", Check: fxCheckFile("y", "/y")}}},
+			{Name: "extra1", Pod: "p", Step: []Step{{Then: "x", Check: fxCheckFile("x", "/x")}}},
+			{Name: "extra2", Pod: "p", Step: []Step{{Then: "y", Check: fxCheckFile("y", "/y")}}},
 		},
 	}
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
@@ -381,8 +381,8 @@ func TestImportedScenarioCountEqualsCheckCount(t *testing.T) {
 			wantImported, wantHandwritten, wantImported+wantHandwritten, len(recipe.Scenario))
 	}
 	for i, sc := range recipe.Scenario {
-		if len(sc.Steps) != 1 {
-			t.Errorf("Section-5 invariant broken: scenario[%d] %q has %d steps; want exactly 1", i, sc.Name, len(sc.Steps))
+		if len(sc.Step) != 1 {
+			t.Errorf("Section-5 invariant broken: scenario[%d] %q has %d steps; want exactly 1", i, sc.Name, len(sc.Step))
 		}
 	}
 }
@@ -404,7 +404,7 @@ func TestImportedScenarioStepShape(t *testing.T) {
 	if err := ExpandRecipeFrom(uf, layers, "test", recipe); err != nil {
 		t.Fatalf("expander error: %v", err)
 	}
-	step := recipe.Scenario[0].Steps[0]
+	step := recipe.Scenario[0].Step[0]
 	if step.Check.File != src.File {
 		t.Errorf("source Check.File not preserved in synthetic step: got %q want %q", step.Check.File, src.File)
 	}
@@ -440,7 +440,7 @@ func TestIdempotentExpansion(t *testing.T) {
 
 func TestScopeFilterDeployOnly(t *testing.T) {
 	uf := fxUnified()
-	uf.Images["i"] = ImageConfig{
+	uf.Image["i"] = ImageConfig{
 		Eval:        []Check{fxCheckCommand("img-build", "echo build")},
 		DeployEval:  []Check{fxCheckCommand("img-deploy", "echo deploy")},
 	}

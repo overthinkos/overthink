@@ -26,7 +26,7 @@ type InitDef struct {
 	// across any layer-contributed capability (preserve_user, data_only,
 	// gpu_required, ...). Empty means "no requirement, always eligible".
 	// Names match the keys used in AggregatedLayerCaps.Provided.
-	RequiresCapabilities []string `yaml:"requires_capabilities,omitempty"`
+	RequiresCapability []string `yaml:"requires_capability,omitempty"`
 
 	// Build model: "fragment_assembly" or "file_copy"
 	Model string `yaml:"model"`
@@ -112,9 +112,9 @@ type ServiceCommandContext struct {
 	Service string
 }
 
-// DetectLayerInits returns which init system names a layer triggers,
+// DetectLayerInit returns which init system names a layer triggers,
 // based on its layer.yml fields and file patterns.
-func (ic *InitConfig) DetectLayerInits(ly *LayerYAML, layerPath string) []string {
+func (ic *InitConfig) DetectLayerInit(ly *LayerYAML, layerPath string) []string {
 	if ic == nil {
 		return nil
 	}
@@ -242,10 +242,10 @@ func (ic *InitConfig) ResolveInitSystem(layers map[string]*Layer, layerOrder []s
 	return "", nil
 }
 
-// ActiveInits returns all init systems that are active for the given image.
+// ActiveInit returns all init systems that are active for the given image.
 // An image can have multiple active inits (e.g., supervisord + systemd on
 // bootc-flavored compositions).
-func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string) map[string]*InitDef {
+func (ic *InitConfig) ActiveInit(layers map[string]*Layer, layerOrder []string) map[string]*InitDef {
 	if ic == nil {
 		return nil
 	}
@@ -285,13 +285,13 @@ func (ic *InitConfig) ActiveInits(layers map[string]*Layer, layerOrder []string)
 // initDefRequirementsMet reports whether the init definition's
 // RequiresCapabilities are all present in the aggregated caps.
 func initDefRequirementsMet(def *InitDef, caps *AggregatedLayerCaps) bool {
-	if def == nil || len(def.RequiresCapabilities) == 0 {
+	if def == nil || len(def.RequiresCapability) == 0 {
 		return true
 	}
 	if caps == nil || caps.Provided == nil {
 		return false
 	}
-	for _, req := range def.RequiresCapabilities {
+	for _, req := range def.RequiresCapability {
 		if !caps.Provided[req] {
 			return false
 		}

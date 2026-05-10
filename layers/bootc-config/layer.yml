@@ -4,13 +4,13 @@ layer:
     preserve_user: true
     needs_root_after_init: true
     init_system_hint: systemd
-    oci_labels:
+    oci_label:
       dev.containers.bootc: "true"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - sway-systemd
-  tasks:
+  task:
     # Autologin on tty1 for desktop boot
     - mkdir: /etc/systemd/system/getty@tty1.service.d
       user: root

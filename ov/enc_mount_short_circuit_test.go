@@ -33,7 +33,7 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	deployPath := filepath.Join(dir, "deploy.yml")
 	deployYAML := `deploy:
   testimg:
-    volumes:
+    volume:
       - name: vol-a
         type: encrypted
         host: ` + dir + `/vol-a
@@ -99,7 +99,7 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	dir := t.TempDir()
 	deployYAML := `deploy:
   testimg:
-    volumes:
+    volume:
       - name: vol-a
         type: encrypted
         host: ` + dir + `/vol-a

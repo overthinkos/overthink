@@ -189,9 +189,9 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 		}
 	}
 	// Schema v4: kind:deployment name with target:vm (possibly dotted).
-	if uf.Deploys != nil && uf.Deploys.Images != nil {
+	if uf.Deploy != nil {
 		// Simple deployment-key lookup.
-		if entry, present := uf.Deploys.Images[c.Image]; present {
+		if entry, present := uf.Deploy[c.Image]; present {
 			if entry.Target == "vm" {
 				return true
 			}
@@ -202,7 +202,7 @@ func (c *EvalLiveCmd) isVmTarget() bool {
 		// parent's SSH substrate).
 		if idx := strings.Index(c.Image, "."); idx > 0 {
 			root := c.Image[:idx]
-			if entry, present := uf.Deploys.Images[root]; present && entry.Target == "vm" {
+			if entry, present := uf.Deploy[root]; present && entry.Target == "vm" {
 				return true
 			}
 		}
@@ -261,16 +261,16 @@ func (c *EvalLiveCmd) runVm() error {
 	//       the parent's SSH substrate.
 	vmName := c.Image
 	var nestedLeaf *DeploymentNode
-	if uf.Deploys != nil && uf.Deploys.Images != nil {
-		if entry, ok := uf.Deploys.Images[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
+	if uf.Deploy != nil {
+		if entry, ok := uf.Deploy[c.Image]; ok && entry.Target == "vm" && entry.Vm != "" {
 			vmName = entry.Vm
 		} else if idx := strings.Index(c.Image, "."); idx > 0 {
 			root := c.Image[:idx]
-			if parent, present := uf.Deploys.Images[root]; present && parent.Target == "vm" {
+			if parent, present := uf.Deploy[root]; present && parent.Target == "vm" {
 				if parent.Vm != "" {
 					vmName = parent.Vm
 				}
-				nestedLeaf = resolveNestedNode(uf.Deploys.Images, c.Image)
+				nestedLeaf = resolveNestedNode(uf.Deploy, c.Image)
 			}
 		}
 	}
@@ -490,7 +490,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 			Status:       sr.Status.String(),
 			PendingSteps: sr.Pending,
 		}
-		for _, sp := range sr.Steps {
+		for _, sp := range sr.Step {
 			stepRes := StepEvalResult{
 				Keyword: sp.Keyword,
 				Text:    sp.Text,
@@ -501,7 +501,7 @@ func emitImageTestYAML(w io.Writer, imageRef, liveContainer string, scenarios []
 			if sp.Result.Verb == "" {
 				stepRes.Pending = true
 			}
-			tr.Steps = append(tr.Steps, stepRes)
+			tr.Step = append(tr.Step, stepRes)
 		}
 		out.Scenario = append(out.Scenario, tr)
 		out.Summary.Total++

@@ -33,7 +33,7 @@ func ensureScoreImages(ctx context.Context, score *HarnessScore, uf *UnifiedFile
 	if score.TargetImage != "" {
 		want[score.TargetImage] = struct{}{}
 	}
-	if scenarios, _, err := ResolveScoreRecipes(score, uf.Recipe); err == nil {
+	if scenarios, _, err := ResolveScoreRecipe(score, uf.Recipe); err == nil {
 		for _, sc := range scenarios {
 			if sc.Pod != "" {
 				want[sc.Pod] = struct{}{}

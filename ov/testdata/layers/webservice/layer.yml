@@ -1,6 +1,6 @@
 layer:
   name: webservice
-  ports:
+  port:
     - 8080
     - 9090
 
@@ -11,15 +11,15 @@ layer:
     host: webservice.localhost
     port: 8080
 
-  volumes:
+  volume:
     - name: data
       path: "~/.webservice"
 
-  aliases:
+  alias:
     - name: websvc
       command: websvc-server
 
-  tasks:
+  task:
     - cmd: echo "setup webservice"
       user: "${USER}"
 

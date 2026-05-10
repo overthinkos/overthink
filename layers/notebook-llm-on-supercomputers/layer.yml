@@ -17,7 +17,7 @@ layer:
       services.
     scenario:
       - name: course notebooks land in the workspace volume
-        steps:
+        step:
           - then: the llms_on_supercomputers subdirectory is provisioned in the workspace
             scope: deploy
             file: ${VOLUME_CONTAINER_PATH:workspace}/llms_on_supercomputers

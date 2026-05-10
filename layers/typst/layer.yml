@@ -2,7 +2,7 @@ layer:
   name: typst
   description: Typst document processor binary (fetched from GitHub releases)
 
-  tasks:
+  task:
     # Typst release naming uses uname-style arch (x86_64/aarch64). Version
     # pinned via runtime GitHub API lookup so the layer tracks latest releases
     # without manual bumps.

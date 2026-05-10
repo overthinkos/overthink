@@ -1,6 +1,6 @@
 layer:
   name: immich
-  requires:
+  require:
     - supervisord
     - nodejs24
     - postgresql
@@ -22,9 +22,9 @@ layer:
     REDIS_HOSTNAME: "127.0.0.1"
     REDIS_PORT: "6379"
     NODE_ENV: "production"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - vips
         - vips-devel
         - perl-Image-ExifTool
@@ -33,7 +33,7 @@ layer:
         - gcc-c++
         - make
         - unzip
-  ports:
+  port:
     - 2283
   # Expose the Immich HTTP API URL to every other container that opts in via
   # env_accepts: [IMMICH_API_URL]. Plan §4.3. The templated value resolves to
@@ -43,7 +43,7 @@ layer:
   # openwebui and hermes already declare this env var in their env_accepts.
   env_provides:
     IMMICH_API_URL: "http://{{.ContainerName}}:2283/api"
-  env_accepts:
+  env_accept:
     - name: IMMICH_API_URL
       description: "Self-accept so the immich container itself sees its own API URL (used by entrypoint/health scripts)"
   # Immich API key for programmatic access. Generated in the Immich web UI
@@ -53,11 +53,11 @@ layer:
   #
   # openwebui and hermes declare the same secret_accepts entry with the same
   # key path, so one `ov secrets set` populates all three consumers.
-  secret_accepts:
+  secret_accept:
     - name: IMMICH_API_KEY
       description: "Immich API key for programmatic access (generated in the Immich admin UI after first-run)"
       key: ov/api-key/immich
-  volumes:
+  volume:
     - name: library
       path: "~/.immich/library"
     - name: cache
@@ -66,7 +66,7 @@ layer:
       path: "~/.immich/import"
     - name: external
       path: "~/.immich/external"
-  secrets:
+  secret:
     - name: db-password
       env: DB_PASSWORD
     - name: db-password
@@ -74,7 +74,7 @@ layer:
   route:
     host: "immich.localhost"
     port: 2283
-  tasks:
+  task:
     # Fetch + extract Immich source
     - cmd: |
         curl -L "https://github.com/immich-app/immich/archive/refs/tags/${IMMICH_VERSION}.tar.gz" | tar xz -C /tmp
@@ -234,8 +234,8 @@ layer:
       exec: /usr/local/bin/immich-db-migrate.sh
       restart: no
       priority: 15
-      start_secs: 0
-      exit_codes: "0"
+      start_sec: 0
+      exit_code: "0"
       enable: true
       scope: system
     - name: immich-server

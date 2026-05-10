@@ -10,9 +10,9 @@ layer:
     deploy time renders only the matching form. NEVER author a
     `virtualization-host` sibling — see CLAUDE.md "Init-system
     polymorphism via mixed `service:` entries".
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - qemu-full
         - qemu-img
         - virtiofsd
@@ -20,7 +20,7 @@ layer:
         - libguestfs
         - dnsmasq
     debian:
-      packages:
+      package:
         - bindfs
         - dnsmasq
         - genisoimage
@@ -40,7 +40,7 @@ layer:
         - virt-viewer
         - virtinst
     fedora:
-      packages:
+      package:
         - bindfs
         - dnsmasq
         - genisoimage
@@ -65,7 +65,7 @@ layer:
       options:
         - --allowerasing
     ubuntu:
-      packages:
+      package:
         - bindfs
         - dnsmasq
         - genisoimage
@@ -85,7 +85,7 @@ layer:
         - virt-viewer
         - virtinst
     ubuntu-24.04:
-      packages:
+      package:
         - bindfs
         - dnsmasq
         - genisoimage
@@ -109,7 +109,7 @@ layer:
   # postinst, the user gets added, and qemu:///session (the default
   # for in-container ov vm operations) doesn't consult the group at
   # all. Same task, both targets.
-  tasks:
+  task:
     - cmd: |
         if getent group libvirt >/dev/null && id -u "${USER:-user}" >/dev/null 2>&1; then
           usermod -aG libvirt "$(getent passwd 1000 | cut -d: -f1)"
@@ -158,7 +158,7 @@ layer:
       exec: "/usr/sbin/virtqemud --timeout 0"
       restart: always
       priority: 5
-      start_secs: 2
+      start_sec: 2
       enable: true
       scope: system
     # ----- virtnetworkd -----
@@ -170,6 +170,6 @@ layer:
       exec: "/usr/sbin/virtnetworkd --timeout 0"
       restart: always
       priority: 6
-      start_secs: 2
+      start_sec: 2
       enable: true
       scope: system

@@ -5,7 +5,7 @@ layer:
     feature: Test fixture layer — Cargo.toml + src/ trigger cargo builder detection
     narrative: |-
       Test fixture layer — Cargo.toml + src/ trigger cargo builder detection
-    scenarios:
+    scenario:
       - name: 'TODO: describe Test fixture layer — Cargo.toml + src/ trigger cargo builder detection'
         tags: [skeleton]
-        steps: []
+        step: []

@@ -1,25 +1,25 @@
 layer:
   name: devops-tools
-  requires:
+  require:
     - nodejs
-  packages:
+  package:
     - jq
     - rsync
     - unzip
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - bind-tools
     debian:
-      packages:
+      package:
         - dnsutils
     fedora:
-      packages:
+      package:
         - bind-utils
     ubuntu:
-      packages:
+      package:
         - dnsutils
-  tasks:
+  task:
     # AWS CLI v2 — x86_64 only upstream; the bundled install script handles
     # symlinks into /usr/local/bin.
     - cmd: |

@@ -1,4 +1,4 @@
 layer:
   name: python
-  requires:
+  require:
     - pixi

@@ -1,9 +1,9 @@
 layer:
   name: vscode
-  distros:
+  distro:
     archlinux:
       aur:
-        packages:
+        package:
           - visual-studio-code-bin
         # AUR `replaces:` entries — pre-removed via `pacman -Rs --noconfirm`
         # immediately before the `pacman -U` of the AUR build artifact.
@@ -11,12 +11,12 @@ layer:
         # repo `code` package both own /usr/bin/code etc.; pacman aborts
         # with "unresolvable package conflicts" otherwise. Idempotent —
         # entries are skipped silently when the package isn't installed.
-        replaces:
+        replace:
           - code
     fedora:
-      packages:
+      package:
         - code
-      repos:
+      repo:
         - name: code
           url: "https://packages.microsoft.com/yumrepos/vscode"
           gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"

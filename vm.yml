@@ -10,7 +10,7 @@ vm:
             builder: pacstrap
             builder_image: archlinux-pacstrap-builder
             distro: archlinux
-            packages:
+            package:
                 - sudo
                 - openssh
                 - qemu-guest-agent
@@ -21,7 +21,7 @@ vm:
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
         ram: 4G
-        cpus: 2
+        cpu: 2
         machine: q35
         firmware: uefi-insecure
         network:
@@ -31,7 +31,7 @@ vm:
             port: 12225
             key_source: generate
         cloud_init:
-            users:
+            user:
                 - name: arch
                   sudo: true
                   shell: /bin/bash
@@ -47,7 +47,7 @@ vm:
             builder: pacstrap
             builder_image: cachyos-pacstrap-builder
             distro: cachyos
-            packages:
+            package:
                 - sudo
                 - openssh
                 - qemu-guest-agent
@@ -58,7 +58,7 @@ vm:
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 25G
         ram: 4G
-        cpus: 2
+        cpu: 2
         machine: q35
         firmware: uefi-insecure
         network:
@@ -68,7 +68,7 @@ vm:
             port: 12226
             key_source: generate
         cloud_init:
-            users:
+            user:
                 - name: cachy
                   sudo: true
                   shell: /bin/bash
@@ -81,7 +81,7 @@ vm:
             builder: debootstrap
             builder_image: debian-debootstrap-builder
             distro: debian
-            packages:
+            package:
                 - sudo
                 - openssh-server
                 - qemu-guest-agent
@@ -90,7 +90,7 @@ vm:
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
         ram: 4G
-        cpus: 2
+        cpu: 2
         machine: q35
         firmware: uefi-insecure
         network:
@@ -100,7 +100,7 @@ vm:
             port: 12227
             key_source: generate
         cloud_init:
-            users:
+            user:
                 - name: debian
                   sudo: true
                   shell: /bin/bash
@@ -115,7 +115,7 @@ vm:
             builder: debootstrap
             builder_image: ubuntu-debootstrap-builder
             distro: ubuntu
-            packages:
+            package:
                 - sudo
                 - openssh-server
                 - qemu-guest-agent
@@ -124,7 +124,7 @@ vm:
             kernel_args: console=tty0 console=ttyS0,115200
         disk_size: 20G
         ram: 4G
-        cpus: 2
+        cpu: 2
         machine: q35
         firmware: uefi-insecure
         network:
@@ -134,7 +134,7 @@ vm:
             port: 12228
             key_source: generate
         cloud_init:
-            users:
+            user:
                 - name: ubuntu
                   sudo: true
                   shell: /bin/bash
@@ -152,7 +152,7 @@ vm:
             base_user: fedora
         disk_size: 6G
         ram: 2G
-        cpus: 2
+        cpu: 2
         firmware: bios
         network:
             mode: user
@@ -161,7 +161,7 @@ vm:
             port: 12222
             key_source: generate
         cloud_init:
-            packages:
+            package:
                 - qemu-guest-agent
                 - curl
             runcmd:
@@ -171,8 +171,8 @@ vm:
                 - "systemctl enable --now qemu-guest-agent"
                 - "for c in 21 33 46 82 124 196 208 220 1 5; do printf '\\033[48;5;%dm                    \\033[0m\\n' $c >> /dev/tty1; done || true"
         libvirt:
-            devices:
-                channels:
+            device:
+                channel:
                     - type: unix
                       name: org.qemu.guest_agent.0
                       path: '{{.VmStateDir}}/qga.sock'

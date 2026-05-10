@@ -86,7 +86,7 @@ func BuildBootstrapVM(
 		Variant         string
 	}{
 		Distro:   distro,
-		Packages: append(append([]string{}, baseBootstrapPackages(distro)...), spec.Source.Packages...),
+		Packages: append(append([]string{}, baseBootstrapPackages(distro)...), spec.Source.Package...),
 		Arch:     spec.Source.BootstrapArch,
 		Variant:  spec.Source.BootstrapVariant,
 	}

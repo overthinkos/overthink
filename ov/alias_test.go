@@ -125,8 +125,8 @@ func TestRemoveAliasScriptNotFound(t *testing.T) {
 
 func TestCollectImageAliases(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
-			"myapp": {Layers: []string{"svc"}},
+		Image: map[string]ImageConfig{
+			"myapp": {Layer: []string{"svc"}},
 		},
 	}
 	layers := map[string]*Layer{
@@ -138,23 +138,23 @@ func TestCollectImageAliases(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAliases(cfg, layers, "myapp")
+	aliases, err := CollectImageAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAliases() error = %v", err)
+		t.Fatalf("CollectImageAlias() error = %v", err)
 	}
 
 	want := []CollectedAlias{{Name: "svc-cli", Command: "svc-cli-bin"}}
 	if !reflect.DeepEqual(aliases, want) {
-		t.Errorf("CollectImageAliases() = %v, want %v", aliases, want)
+		t.Errorf("CollectImageAlias() = %v, want %v", aliases, want)
 	}
 }
 
 func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"myapp": {
-				Layers:  []string{"svc"},
-				Aliases: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
+				Layer:  []string{"svc"},
+				Alias: []AliasConfig{{Name: "svc-cli", Command: "custom-cmd"}},
 			},
 		},
 	}
@@ -167,9 +167,9 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAliases(cfg, layers, "myapp")
+	aliases, err := CollectImageAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAliases() error = %v", err)
+		t.Fatalf("CollectImageAlias() error = %v", err)
 	}
 
 	if len(aliases) != 1 {
@@ -182,10 +182,10 @@ func TestCollectImageAliasesImageOverridesLayer(t *testing.T) {
 
 func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"myapp": {
-				Layers:  []string{"svc"},
-				Aliases: []AliasConfig{{Name: "mycli"}}, // no command
+				Layer:  []string{"svc"},
+				Alias: []AliasConfig{{Name: "mycli"}}, // no command
 			},
 		},
 	}
@@ -196,9 +196,9 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 		},
 	}
 
-	aliases, err := CollectImageAliases(cfg, layers, "myapp")
+	aliases, err := CollectImageAlias(cfg, layers, "myapp")
 	if err != nil {
-		t.Fatalf("CollectImageAliases() error = %v", err)
+		t.Fatalf("CollectImageAlias() error = %v", err)
 	}
 
 	if len(aliases) != 1 {
@@ -210,9 +210,9 @@ func TestCollectImageAliasesDefaultCommand(t *testing.T) {
 }
 
 func TestLayerAliases(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -224,7 +224,7 @@ func TestLayerAliases(t *testing.T) {
 		t.Error("webservice should have aliases")
 	}
 
-	aliases := ws.Aliases()
+	aliases := ws.Alias()
 	if len(aliases) != 1 {
 		t.Fatalf("Aliases() returned %d aliases, want 1", len(aliases))
 	}
@@ -237,17 +237,17 @@ func TestLayerAliases(t *testing.T) {
 }
 
 func TestAliasLayers(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
-	result := AliasLayers(layers)
+	result := AliasLayer(layers)
 	if len(result) != 1 {
-		t.Errorf("AliasLayers() returned %d layers, want 1", len(result))
+		t.Errorf("AliasLayer() returned %d layers, want 1", len(result))
 	}
 	if len(result) > 0 && result[0].Name != "webservice" {
-		t.Errorf("AliasLayers()[0].Name = %q, want %q", result[0].Name, "webservice")
+		t.Errorf("AliasLayer()[0].Name = %q, want %q", result[0].Name, "webservice")
 	}
 }
 

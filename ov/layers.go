@@ -251,37 +251,34 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 type LayerYAML struct {
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Layers     []string          `yaml:"layers,omitempty"`
-	Requires    []string          `yaml:"requires,omitempty"`
+	Layer      []string          `yaml:"layer,omitempty"`
+	Require    []string          `yaml:"require,omitempty"`
 	Engine     string            `yaml:"engine,omitempty"` // required run engine: "docker" or "" (any)
 	Env        map[string]string `yaml:"env,omitempty"`
 	PathAppend []string          `yaml:"path_append,omitempty"`
-	Ports      []PortSpec        `yaml:"ports,omitempty"`
+	Port       []PortSpec        `yaml:"port,omitempty"`
 	Route      *RouteYAML        `yaml:"route,omitempty"`
 	// Service is the unified service schema: a list of ServiceEntry.
 	// Each entry either reuses a packaged unit (use_packaged:) or
-	// defines a custom service (exec: ...). Init system is selected by
-	// per-entry routing — see PopulateLayerInitSystems. No legacy
-	// raw-INI `service:` string form; external layers must run
-	// `ov migrate unified --rewrite-layers` to convert.
-	Service        []ServiceEntry    `yaml:"service,omitempty"`
-	Volumes        []VolumeYAML      `yaml:"volumes,omitempty"`
-	Aliases        []AliasYAML       `yaml:"aliases,omitempty"`
-	Extract        []ExtractYAML     `yaml:"extract,omitempty"`
-	Security       *SecurityConfig   `yaml:"security,omitempty"`
-	Libvirt        []string          `yaml:"libvirt,omitempty"`
-	Hooks          *HooksConfig      `yaml:"hooks,omitempty"`
-	PortRelay      []int             `yaml:"port_relay,omitempty"`
-	SecretsYAML    []SecretYAML      `yaml:"secrets,omitempty"`
-	Data           []DataYAML        `yaml:"data,omitempty"`
-	EnvProvides    map[string]string `yaml:"env_provides,omitempty"`    // env vars provided to OTHER containers when this service is deployed
-	EnvRequires    []EnvDependency   `yaml:"env_requires,omitempty"`    // env vars this layer MUST have from the environment
-	EnvAccepts     []EnvDependency   `yaml:"env_accepts,omitempty"`     // env vars this layer CAN optionally use
-	SecretAccepts  []EnvDependency   `yaml:"secret_accepts,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
-	SecretRequires []EnvDependency   `yaml:"secret_requires,omitempty"` // credential-store-backed env vars this layer MUST have
-	MCPProvides    []MCPServerYAML   `yaml:"mcp_provides,omitempty"`    // MCP servers provided to OTHER containers when this service is deployed
-	MCPRequires    []EnvDependency   `yaml:"mcp_requires,omitempty"`    // MCP servers this layer MUST have from the environment
-	MCPAccepts     []EnvDependency   `yaml:"mcp_accepts,omitempty"`     // MCP servers this layer CAN optionally use
+	// defines a custom service (exec: ...).
+	Service       []ServiceEntry    `yaml:"service,omitempty"`
+	Volume        []VolumeYAML      `yaml:"volume,omitempty"`
+	Alias         []AliasYAML       `yaml:"alias,omitempty"`
+	Extract       []ExtractYAML     `yaml:"extract,omitempty"`
+	Security      *SecurityConfig   `yaml:"security,omitempty"`
+	Libvirt       []string          `yaml:"libvirt,omitempty"`
+	Hooks         *HooksConfig      `yaml:"hooks,omitempty"`
+	PortRelay     []int             `yaml:"port_relay,omitempty"`
+	SecretYAML    []SecretYAML      `yaml:"secret,omitempty"`
+	Data          []DataYAML        `yaml:"data,omitempty"`
+	EnvProvides   map[string]string `yaml:"env_provides,omitempty"`   // env vars provided to OTHER containers when this service is deployed
+	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty"`    // env vars this layer MUST have from the environment
+	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty"`     // env vars this layer CAN optionally use
+	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
+	SecretRequire []EnvDependency   `yaml:"secret_require,omitempty"` // credential-store-backed env vars this layer MUST have
+	MCPProvide    []MCPServerYAML   `yaml:"mcp_provide,omitempty"`    // MCP servers provided to OTHER containers when this service is deployed
+	MCPRequire    []EnvDependency   `yaml:"mcp_require,omitempty"`    // MCP servers this layer MUST have from the environment
+	MCPAccept     []EnvDependency   `yaml:"mcp_accept,omitempty"`     // MCP servers this layer CAN optionally use
 
 	// Calamares-aligned package surface (2026-05 cutover). The unified
 	// flat top-level `packages:` is the Calamares group / module package
@@ -289,12 +286,12 @@ type LayerYAML struct {
 	// repos, options, exclude, modules, archlinux AUR sub-block) live
 	// under `distros:` keyed by distro name (or distro-version e.g.
 	// `debian-13`, `ubuntu-24.04`).
-	Packages []PackageItem              `yaml:"packages,omitempty"`
-	Distros  map[string]*DistroPackages `yaml:"distros,omitempty"`
+	Package []PackageItem              `yaml:"package,omitempty"`
+	Distro  map[string]*DistroPackages `yaml:"distro,omitempty"`
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
-	Vars  map[string]string `yaml:"vars,omitempty"`  // layer-local variables for ${VAR} substitution in tasks
-	Tasks []Task            `yaml:"tasks,omitempty"` // ordered install operations
+	Vars map[string]string `yaml:"vars,omitempty"` // layer-local variables for ${VAR} substitution in tasks
+	Task []Task            `yaml:"task,omitempty"` // ordered install operations
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
 	// priority) plus per-shell sub-blocks (bash/zsh/fish/sh). Travels in
@@ -319,7 +316,7 @@ type LayerYAML struct {
 	// publish `/etc/rancher/k3s/k3s.yaml` back to `~/.cache/ov/clusters/
 	// <deploy>/kubeconfig.yaml` so the operator can `kubectl` the new
 	// cluster without manual scp. Generic — not k3s-specific.
-	Artifacts []LayerArtifact `yaml:"artifacts,omitempty"`
+	Artifact []LayerArtifact `yaml:"artifact,omitempty"`
 
 	// Capabilities are layer-contributed image-level facts (preserve_user,
 	// needs_root_after_init, init_system_hint, data_only, oci_labels).
@@ -327,7 +324,7 @@ type LayerYAML struct {
 	// Replaces the magic image-level booleans (image.bootc, image.data_image)
 	// with a declarative layer-derived surface.
 	Capabilities         *LayerCapabilities `yaml:"capabilities,omitempty"`
-	RequiresCapabilities []string           `yaml:"requires_capabilities,omitempty"`
+	RequiresCapability []string             `yaml:"requires_capability,omitempty"`
 
 	// Populated by custom UnmarshalYAML:
 	FormatSections map[string]*PackageSection `yaml:"-"` // format sections (rpm, deb, pac, aur, etc.)
@@ -346,23 +343,19 @@ type LayerYAML struct {
 // via `ov migrate calamares`.
 var layerYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true,
-	// `name:` and `from:` are consumed by kind-keyed wrappers (LayerDoc,
-	// InlineLayer) — not by LayerYAML itself. Listed here so the custom
-	// UnmarshalYAML's unknown-key router doesn't mistake them for format
-	// sections or tag sections.
 	"name": true, "from": true,
-	"layers": true, "requires": true, "engine": true, "env": true,
-	"path_append": true, "ports": true, "route": true, "service": true,
-	"volumes": true, "aliases": true, "extract": true, "security": true,
+	"layer": true, "require": true, "engine": true, "env": true,
+	"path_append": true, "port": true, "route": true, "service": true,
+	"volume": true, "alias": true, "extract": true, "security": true,
 	"libvirt": true, "hooks": true,
-	"port_relay": true, "secrets": true, "data": true,
-	"env_provides": true, "env_requires": true, "env_accepts": true,
-	"secret_accepts": true, "secret_requires": true,
-	"mcp_provides": true, "mcp_requires": true, "mcp_accepts": true,
-	"vars": true, "tasks": true, "tests": true, "eval": true,
-	"artifacts":    true,
-	"capabilities": true, "requires_capabilities": true,
-	"packages":     true, "distros": true,
+	"port_relay": true, "secret": true, "data": true,
+	"env_provides": true, "env_require": true, "env_accept": true,
+	"secret_accept": true, "secret_require": true,
+	"mcp_provide": true, "mcp_require": true, "mcp_accept": true,
+	"vars": true, "task": true, "tests": true, "eval": true,
+	"artifact":     true,
+	"capabilities": true, "requires_capability": true,
+	"package":      true, "distro": true,
 	"shell":        true,
 }
 
@@ -372,7 +365,7 @@ var layerYAMLFormatNames map[string]bool
 
 // SetFormatNames registers format names from a DistroConfig for layer YAML parsing.
 // Collects all format names across all distros (including inherited ones).
-// Must be called before ScanAllLayersWithConfig to ensure format sections
+// Must be called before ScanAllLayerWithConfig to ensure format sections
 // (e.g., rpm:, deb:) are correctly distinguished from tag sections.
 func SetFormatNames(dc *DistroConfig) {
 	layerYAMLFormatNames = make(map[string]bool)
@@ -401,7 +394,7 @@ func SetFormatNames(dc *DistroConfig) {
 //   - `distros.archlinux.aur.*` → FormatSections["aur"]
 //   - `distros.<name>-<ver>.*` → TagSections["<name>:<ver>"] (dash → colon)
 func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
-	topPkgs := PackageNames(ly.Packages)
+	topPkgs := PackageNames(ly.Package)
 
 	distroToFormat := map[string]string{
 		"fedora":    "rpm",
@@ -438,7 +431,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 		}
 		// Reflect into Raw so install templates that read .Raw.packages
 		// (rather than .Packages directly) see the same list.
-		ps.Raw["packages"] = ps.Packages
+		ps.Raw["package"] = ps.Packages
 	}
 	mergeRaw := func(ps *PackageSection, key string, val interface{}) {
 		if val == nil {
@@ -451,7 +444,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 	}
 
 	// Walk distros. Versioned keys (debian-13 etc.) feed TagSections.
-	for distroKey, dp := range ly.Distros {
+	for distroKey, dp := range ly.Distro {
 		if dp == nil {
 			continue
 		}
@@ -469,15 +462,15 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 					cfg = &TagPkgConfig{Raw: map[string]interface{}{}}
 					layer.tagSections[tagKey] = cfg
 				}
-				cfg.Packages = append(cfg.Packages, PackageNames(dp.Packages)...)
+				cfg.Package = append(cfg.Package, PackageNames(dp.Package)...)
 				if cfg.Raw == nil {
 					cfg.Raw = map[string]interface{}{}
 				}
-				if cfg.Raw["packages"] == nil {
-					cfg.Raw["packages"] = cfg.Packages
+				if cfg.Raw["package"] == nil {
+					cfg.Raw["package"] = cfg.Package
 				}
-				if dp.Repos != nil {
-					cfg.Raw["repos"] = dp.Repos
+				if dp.Repo != nil {
+					cfg.Raw["repo"] = dp.Repo
 				}
 				if dp.Copr != nil {
 					cfg.Raw["copr"] = dp.Copr
@@ -488,8 +481,8 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 				if dp.Exclude != nil {
 					cfg.Raw["exclude"] = dp.Exclude
 				}
-				if dp.Modules != nil {
-					cfg.Raw["modules"] = dp.Modules
+				if dp.Module != nil {
+					cfg.Raw["module"] = dp.Module
 				}
 				continue
 			}
@@ -504,12 +497,12 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 		if len(topPkgs) > 0 {
 			addPackages(ps, topPkgs)
 		}
-		addPackages(ps, PackageNames(dp.Packages))
+		addPackages(ps, PackageNames(dp.Package))
 		if dp.Copr != nil {
 			mergeRaw(ps, "copr", dp.Copr)
 		}
-		if dp.Repos != nil {
-			mergeRaw(ps, "repos", dp.Repos)
+		if dp.Repo != nil {
+			mergeRaw(ps, "repo", dp.Repo)
 		}
 		if dp.Exclude != nil {
 			mergeRaw(ps, "exclude", dp.Exclude)
@@ -517,13 +510,13 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 		if dp.Options != nil {
 			mergeRaw(ps, "options", dp.Options)
 		}
-		if dp.Modules != nil {
-			mergeRaw(ps, "modules", dp.Modules)
+		if dp.Module != nil {
+			mergeRaw(ps, "module", dp.Module)
 		}
 		// AUR sub-block under archlinux.
 		if distroKey == "archlinux" && dp.AUR != nil {
 			aurPS := ensureFormat("aur")
-			addPackages(aurPS, PackageNames(dp.AUR.Packages))
+			addPackages(aurPS, PackageNames(dp.AUR.Package))
 			if dp.AUR.Options != nil {
 				mergeRaw(aurPS, "options", dp.AUR.Options)
 			}
@@ -536,7 +529,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 	// Top-level packages without any distros entries: feed all known formats
 	// so the install templates pick them up regardless of the resolved image's
 	// distro. Only fires when `distros:` is empty (single-format author intent).
-	if len(ly.Distros) == 0 && len(topPkgs) > 0 {
+	if len(ly.Distro) == 0 && len(topPkgs) > 0 {
 		for _, fmtName := range []string{"rpm", "deb", "pac"} {
 			ps := ensureFormat(fmtName)
 			addPackages(ps, topPkgs)
@@ -548,7 +541,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 // All fields from the YAML section are available in Raw for template rendering.
 type PackageSection struct {
 	FormatName string                 // "rpm", "deb", "pac", "aur", etc.
-	Packages   []string               // extracted from Raw["packages"] for quick access
+	Packages   []string               // extracted from Raw["package"] for quick access
 	Raw        map[string]interface{} // all fields from YAML, passed to templates
 }
 
@@ -558,8 +551,8 @@ type PackageSection struct {
 // sections can carry `repos:`, `options:`, `keys:` — the same schema as the
 // generic format section — for version-specific upstream repo configurations.
 type TagPkgConfig struct {
-	Packages []string               `yaml:"packages,omitempty"`
-	Raw      map[string]interface{} `yaml:"-"`
+	Package []string               `yaml:"package,omitempty"`
+	Raw     map[string]interface{} `yaml:"-"`
 }
 
 // Task is a single install operation in layer.yml `tasks:` list.
@@ -680,7 +673,7 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 					FormatName: key,
 					Raw:        raw,
 				}
-				if pkgs, ok := raw["packages"]; ok {
+				if pkgs, ok := raw["package"]; ok {
 					section.Packages = toStringSlice(pkgs)
 				}
 				if len(section.Packages) > 0 {
@@ -699,7 +692,7 @@ func (ly *LayerYAML) UnmarshalYAML(value *yaml.Node) error {
 					continue
 				}
 				cfg.Raw = raw
-				if len(cfg.Packages) == 0 {
+				if len(cfg.Package) == 0 {
 					continue
 				}
 				// Expand comma-separated keys (e.g., "debian,ubuntu")
@@ -761,14 +754,14 @@ type Layer struct {
 	HasLibvirt        bool
 	HasTasks          bool // layer.yml has a non-empty tasks: list
 
-	// Init system detection (populated by PopulateLayerInitSystems)
+	// Init system detection (populated by PopulateLayerInitSystem)
 	InitSystems    map[string]bool // set of init system names this layer triggers
 	PortRelayPorts []int           // port_relay: field (init-agnostic)
 
-	Requires           []string // bare refs (version stripped) for resolution
-	RawRequires        []string // original refs with :version for remote ref collection
-	IncludedLayers    []string // bare refs from layers: field (version stripped)
-	RawIncludedLayers []string // original layers: refs with :version
+	Require           []string // bare refs (version stripped) for resolution
+	RawRequire        []string // original refs with :version for remote ref collection
+	IncludedLayer     []string // bare refs from layer: field (version stripped)
+	RawIncludedLayer  []string // original layer: refs with :version
 
 	// Remote layer metadata
 	Remote        bool   // true if from a remote repo
@@ -814,11 +807,11 @@ type Layer struct {
 	requiresCapabilities []string
 }
 
-// ScanLayers returns all layers for the project at dir. Post-unified-cutover
+// ScanLayer returns all layers for the project at dir. Post-unified-cutover
 // this loads overthink.yml via LoadUnified, applies discover:, and projects
 // the layers map. Legacy `layers/` directory scan remains as a fallback when
 // overthink.yml is absent (e.g., transitional test fixtures).
-func ScanLayers(dir string) (map[string]*Layer, error) {
+func ScanLayer(dir string) (map[string]*Layer, error) {
 	uf, present, err := LoadUnified(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading overthink.yml: %w", err)
@@ -874,6 +867,14 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" {
 		return &LayerYAML{}, nil
+	}
+
+	// Field-singular cutover hard-rejection: any legacy plural top-level
+	// key (layers:/ports:/...) fires a clear remediation hint pointing
+	// at `ov migrate field-singular` rather than letting the YAML decoder
+	// silently drop the unknown field.
+	if err := RejectLegacyPluralKeys(path, data); err != nil {
+		return nil, err
 	}
 
 	// Parse as a multi-document stream — reject if more than one non-empty doc.
@@ -1020,7 +1021,7 @@ func scanLayer(path string, name string) (*Layer, error) {
 	layer.HasSrcDir = dirExists(filepath.Join(layer.SourceDir, "src"))
 	layer.HasPixiLock = fileExists(filepath.Join(layer.SourceDir, "pixi.lock"))
 
-	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystems)
+	// Scan for systemd service files (init system detection happens in PopulateLayerInitSystem)
 	svcFiles, _ := filepath.Glob(filepath.Join(layer.SourceDir, "*.service"))
 	if len(svcFiles) > 0 {
 		layer.serviceFiles = svcFiles
@@ -1037,22 +1038,22 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.Info = descriptionInfo(ly.Description)
 
 		// Keep raw depends for remote ref collection
-		layer.RawRequires = ly.Requires
+		layer.RawRequire = ly.Require
 		// Strip :version from remote refs for layer resolution (map keys use bare refs)
-		layer.Requires = make([]string, len(ly.Requires))
-		for i, dep := range ly.Requires {
-			layer.Requires[i] = BareRef(dep)
+		layer.Require = make([]string, len(ly.Require))
+		for i, dep := range ly.Require {
+			layer.Require[i] = BareRef(dep)
 		}
 
 		// Parse layers: field for layer composition
-		layer.RawIncludedLayers = ly.Layers
-		layer.IncludedLayers = make([]string, len(ly.Layers))
-		for i, ref := range ly.Layers {
-			layer.IncludedLayers[i] = BareRef(ref)
+		layer.RawIncludedLayer = ly.Layer
+		layer.IncludedLayer = make([]string, len(ly.Layer))
+		for i, ref := range ly.Layer {
+			layer.IncludedLayer[i] = BareRef(ref)
 		}
 		layer.service = ly.Service
 		layer.HasEnv = len(ly.Env) > 0 || len(ly.PathAppend) > 0
-		layer.HasPorts = len(ly.Ports) > 0
+		layer.HasPorts = len(ly.Port) > 0
 		layer.HasRoute = ly.Route != nil
 
 		// Package config: format sections and tag sections are populated by
@@ -1069,15 +1070,15 @@ func scanLayer(path string, name string) (*Layer, error) {
 		// the post-migration shape without changes. Transitional during the
 		// cutover; FormatSections/TagSections deletion happens after the
 		// renderer is ported in a follow-up pass.
-		if len(ly.Packages) > 0 || len(ly.Distros) > 0 {
+		if len(ly.Package) > 0 || len(ly.Distro) > 0 {
 			derivePackageSectionsFromCalamares(layer, ly)
 		}
 
 		// Pre-populate ports cache
 		if layer.HasPorts {
-			layer.ports = make([]string, len(ly.Ports))
-			layer.portSpecs = make([]PortSpec, len(ly.Ports))
-			for i, p := range ly.Ports {
+			layer.ports = make([]string, len(ly.Port))
+			layer.portSpecs = make([]PortSpec, len(ly.Port))
+			for i, p := range ly.Port {
 				if p.Protocol == "udp" {
 					layer.ports[i] = strconv.Itoa(p.Port) + "/udp"
 				} else {
@@ -1108,12 +1109,12 @@ func scanLayer(path string, name string) (*Layer, error) {
 		}
 
 		// Pre-populate volumes
-		layer.HasVolumes = len(ly.Volumes) > 0
-		layer.volumes = ly.Volumes
+		layer.HasVolumes = len(ly.Volume) > 0
+		layer.volumes = ly.Volume
 
 		// Pre-populate aliases
-		layer.HasAliases = len(ly.Aliases) > 0
-		layer.aliases = ly.Aliases
+		layer.HasAliases = len(ly.Alias) > 0
+		layer.aliases = ly.Alias
 
 		// Pre-populate extract
 		layer.HasExtract = len(ly.Extract) > 0
@@ -1142,17 +1143,17 @@ func scanLayer(path string, name string) (*Layer, error) {
 		layer.description = ly.Description
 
 		// Pre-populate artifacts (files to retrieve after setup)
-		layer.artifacts = ly.Artifacts
+		layer.artifacts = ly.Artifact
 
 		// Pre-populate layer-contributed capabilities + requirements
 		layer.capabilities = ly.Capabilities
-		layer.requiresCapabilities = ly.RequiresCapabilities
+		layer.requiresCapabilities = ly.RequiresCapability
 
 		// Pre-populate port relay
 		layer.PortRelayPorts = ly.PortRelay
 
 		// Pre-populate secrets
-		layer.secrets = ly.SecretsYAML
+		layer.secrets = ly.SecretYAML
 
 		// Pre-populate env_provides (env vars for other containers)
 		if len(ly.EnvProvides) > 0 {
@@ -1161,39 +1162,39 @@ func scanLayer(path string, name string) (*Layer, error) {
 		}
 
 		// Pre-populate env_requires and env_accepts
-		if len(ly.EnvRequires) > 0 {
+		if len(ly.EnvRequire) > 0 {
 			layer.HasEnvRequires = true
-			layer.envRequires = ly.EnvRequires
+			layer.envRequires = ly.EnvRequire
 		}
-		if len(ly.EnvAccepts) > 0 {
+		if len(ly.EnvAccept) > 0 {
 			layer.HasEnvAccepts = true
-			layer.envAccepts = ly.EnvAccepts
+			layer.envAccepts = ly.EnvAccept
 		}
 
 		// Pre-populate secret_accepts and secret_requires (credential-store-backed env vars)
-		if len(ly.SecretRequires) > 0 {
+		if len(ly.SecretRequire) > 0 {
 			layer.HasSecretRequires = true
-			layer.secretRequires = ly.SecretRequires
+			layer.secretRequires = ly.SecretRequire
 		}
-		if len(ly.SecretAccepts) > 0 {
+		if len(ly.SecretAccept) > 0 {
 			layer.HasSecretAccepts = true
-			layer.secretAccepts = ly.SecretAccepts
+			layer.secretAccepts = ly.SecretAccept
 		}
 
 		// Pre-populate mcp_provides (MCP servers for other containers)
-		if len(ly.MCPProvides) > 0 {
+		if len(ly.MCPProvide) > 0 {
 			layer.HasMCPProvides = true
-			layer.mcpProvides = ly.MCPProvides
+			layer.mcpProvides = ly.MCPProvide
 		}
 
 		// Pre-populate mcp_requires and mcp_accepts
-		if len(ly.MCPRequires) > 0 {
+		if len(ly.MCPRequire) > 0 {
 			layer.HasMCPRequires = true
-			layer.mcpRequires = ly.MCPRequires
+			layer.mcpRequires = ly.MCPRequire
 		}
-		if len(ly.MCPAccepts) > 0 {
+		if len(ly.MCPAccept) > 0 {
 			layer.HasMCPAccepts = true
-			layer.mcpAccepts = ly.MCPAccepts
+			layer.mcpAccepts = ly.MCPAccept
 		}
 
 		// Pre-populate engine requirement
@@ -1201,8 +1202,8 @@ func scanLayer(path string, name string) (*Layer, error) {
 
 		// Pre-populate vars + tasks (replacement for root.yml/user.yml)
 		layer.vars = ly.Vars
-		layer.tasks = ly.Tasks
-		layer.HasTasks = len(ly.Tasks) > 0
+		layer.tasks = ly.Task
+		layer.HasTasks = len(ly.Task) > 0
 		layer.shell = ly.Shell
 	}
 
@@ -1275,7 +1276,7 @@ func (l *Layer) EnvConfig() (*EnvConfig, error) {
 }
 
 // Ports returns the ports (pre-populated from layer.yml)
-func (l *Layer) Ports() ([]string, error) {
+func (l *Layer) Port() ([]string, error) {
 	if l.ports != nil {
 		return l.ports, nil
 	}
@@ -1316,9 +1317,9 @@ func (l *Layer) HasInit(initName string) bool {
 	return l.InitSystems[initName]
 }
 
-// PopulateLayerInitSystems sets InitSystems on all layers based on the init config.
+// PopulateLayerInitSystem sets InitSystems on all layers based on the init config.
 // Must be called after scanning layers and loading init config.
-func PopulateLayerInitSystems(layers map[string]*Layer, initCfg *InitConfig) {
+func PopulateLayerInitSystem(layers map[string]*Layer, initCfg *InitConfig) {
 	if initCfg == nil {
 		return
 	}
@@ -1380,8 +1381,8 @@ func (l *Layer) Route() (*RouteConfig, error) {
 	return nil, nil
 }
 
-// RouteLayers returns layers that have a route file
-func RouteLayers(layers map[string]*Layer) []*Layer {
+// RouteLayer returns layers that have a route file
+func RouteLayer(layers map[string]*Layer) []*Layer {
 	var routes []*Layer
 	for _, layer := range layers {
 		if layer.HasRoute {
@@ -1401,8 +1402,8 @@ func LayerNames(layers map[string]*Layer) []string {
 	return names
 }
 
-// Volumes returns the volume declarations (pre-populated from layer.yml)
-func (l *Layer) Volumes() []VolumeYAML {
+// Volume returns the volume declarations (pre-populated from layer.yml)
+func (l *Layer) Volume() []VolumeYAML {
 	return l.volumes
 }
 
@@ -1441,13 +1442,13 @@ func (l *Layer) Shell() *ShellConfig {
 }
 
 // Secrets returns the secret declarations (pre-populated from layer.yml)
-func (l *Layer) Secrets() []SecretYAML {
+func (l *Layer) Secret() []SecretYAML {
 	return l.secrets
 }
 
-// Artifacts returns the files this layer publishes back to the operator
-// after its setup completes (pre-populated from layer.yml artifacts:).
-func (l *Layer) Artifacts() []LayerArtifact {
+// Artifact returns the files this layer publishes back to the operator
+// after its setup completes (pre-populated from layer.yml artifact:).
+func (l *Layer) Artifact() []LayerArtifact {
 	return l.artifacts
 }
 
@@ -1457,12 +1458,12 @@ func (l *Layer) EnvProvides() map[string]string {
 }
 
 // EnvRequires returns env vars this layer must have from the environment (pre-populated from layer.yml)
-func (l *Layer) EnvRequires() []EnvDependency {
+func (l *Layer) EnvRequire() []EnvDependency {
 	return l.envRequires
 }
 
 // EnvAccepts returns env vars this layer can optionally use (pre-populated from layer.yml)
-func (l *Layer) EnvAccepts() []EnvDependency {
+func (l *Layer) EnvAccept() []EnvDependency {
 	return l.envAccepts
 }
 
@@ -1470,29 +1471,29 @@ func (l *Layer) EnvAccepts() []EnvDependency {
 // These entries flow through the credential store → podman secret → Secret=type=env quadlet
 // directive pipeline, never touching plaintext deploy.yml or quadlet Environment= lines.
 // Pre-populated from layer.yml.
-func (l *Layer) SecretAccepts() []EnvDependency {
+func (l *Layer) SecretAccept() []EnvDependency {
 	return l.secretAccepts
 }
 
 // SecretRequires returns credential-store-backed env vars this layer MUST have.
 // Missing entries cause ov config to hard-fail with actionable remediation.
 // Pre-populated from layer.yml.
-func (l *Layer) SecretRequires() []EnvDependency {
+func (l *Layer) SecretRequire() []EnvDependency {
 	return l.secretRequires
 }
 
 // MCPProvides returns MCP servers this layer provides to other containers (pre-populated from layer.yml)
-func (l *Layer) MCPProvides() []MCPServerYAML {
+func (l *Layer) MCPProvide() []MCPServerYAML {
 	return l.mcpProvides
 }
 
 // MCPRequires returns MCP servers this layer must have from the environment (pre-populated from layer.yml)
-func (l *Layer) MCPRequires() []EnvDependency {
+func (l *Layer) MCPRequire() []EnvDependency {
 	return l.mcpRequires
 }
 
 // MCPAccepts returns MCP servers this layer can optionally use (pre-populated from layer.yml)
-func (l *Layer) MCPAccepts() []EnvDependency {
+func (l *Layer) MCPAccept() []EnvDependency {
 	return l.mcpAccepts
 }
 
@@ -1501,8 +1502,8 @@ func (l *Layer) Engine() string {
 	return l.engine
 }
 
-// InitLayers returns layers that trigger any init system.
-func InitLayers(layers map[string]*Layer) []*Layer {
+// InitLayer returns layers that trigger any init system.
+func InitLayer(layers map[string]*Layer) []*Layer {
 	var result []*Layer
 	for _, layer := range layers {
 		if layer.HasAnyInit() || len(layer.PortRelayPorts) > 0 {
@@ -1512,8 +1513,8 @@ func InitLayers(layers map[string]*Layer) []*Layer {
 	return result
 }
 
-// VolumeLayers returns layers that have volume declarations
-func VolumeLayers(layers map[string]*Layer) []*Layer {
+// VolumeLayer returns layers that have volume declarations
+func VolumeLayer(layers map[string]*Layer) []*Layer {
 	var vols []*Layer
 	for _, layer := range layers {
 		if layer.HasVolumes {
@@ -1523,13 +1524,13 @@ func VolumeLayers(layers map[string]*Layer) []*Layer {
 	return vols
 }
 
-// Aliases returns the alias declarations (pre-populated from layer.yml)
-func (l *Layer) Aliases() []AliasYAML {
+// Alias returns the alias declarations (pre-populated from layer.yml)
+func (l *Layer) Alias() []AliasYAML {
 	return l.aliases
 }
 
-// AliasLayers returns layers that have alias declarations
-func AliasLayers(layers map[string]*Layer) []*Layer {
+// AliasLayer returns layers that have alias declarations
+func AliasLayer(layers map[string]*Layer) []*Layer {
 	var result []*Layer
 	for _, layer := range layers {
 		if layer.HasAliases {
@@ -1567,10 +1568,10 @@ func (l *Layer) HasPypiDeps() bool {
 	return strings.Contains(string(data), "[pypi-dependencies]")
 }
 
-// ScanRemoteLayers scans specific layers from a downloaded remote repository.
+// ScanRemoteLayer scans specific layers from a downloaded remote repository.
 // Only imports layers whose bare refs are in the wantRefs set.
 // Bare refs use the full path format: "github.com/org/repo/layers/name".
-func ScanRemoteLayers(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Layer, error) {
+func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Layer, error) {
 	layers := make(map[string]*Layer)
 
 	for bareRef := range wantRefs {
@@ -1605,18 +1606,18 @@ func ScanRemoteLayers(repoDir string, repoPath string, wantRefs map[string]bool)
 	return layers, nil
 }
 
-// ScanAllLayers scans local layers and all remote layers, returning a merged map.
+// ScanAllLayer scans local layers and all remote layers, returning a merged map.
 // Local layers are keyed by short name, remote layers by fully-qualified path.
 // Remote refs are collected from @-prefixed refs in layer.yml and image.yml.
-func ScanAllLayers(dir string) (map[string]*Layer, error) {
-	return ScanAllLayersWithConfig(dir, nil)
+func ScanAllLayer(dir string) (map[string]*Layer, error) {
+	return ScanAllLayerWithConfig(dir, nil)
 }
 
-// ScanAllLayersWithConfig scans local and remote layers.
+// ScanAllLayerWithConfig scans local and remote layers.
 // Collects remote refs from @-prefixed layer references and auto-downloads repos.
-func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
+func ScanAllLayerWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
 	// 1. Scan local layers
-	layers, err := ScanLayers(dir)
+	layers, err := ScanLayer(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -1645,7 +1646,7 @@ func ScanAllLayersWithConfig(dir string, cfg *Config) (map[string]*Layer, error)
 		}
 
 		// Scan only the specific layers referenced
-		remoteLayers, err := ScanRemoteLayers(cachePath, dl.RepoPath, wantRefs)
+		remoteLayers, err := ScanRemoteLayer(cachePath, dl.RepoPath, wantRefs)
 		if err != nil {
 			return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
 		}

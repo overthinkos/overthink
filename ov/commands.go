@@ -156,7 +156,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 		return
 	}
 
-	volumes, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volumes,
+	volumes, bindMounts := ResolveVolumeBacking(c.Image, newMeta.Volumes, imgDeploy.Volume,
 		newMeta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 	if len(bindMounts) == 0 && len(volumes) == 0 {
 		return
@@ -176,11 +176,11 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 
 	// Update deploy.yml with new data source
 	if seeded > 0 {
-		for i := range imgDeploy.Volumes {
+		for i := range imgDeploy.Volume {
 			for _, entry := range dataMeta.DataEntries {
-				if imgDeploy.Volumes[i].Name == entry.Volume {
-					imgDeploy.Volumes[i].DataSeeded = true
-					imgDeploy.Volumes[i].DataSource = dataRef
+				if imgDeploy.Volume[i].Name == entry.Volume {
+					imgDeploy.Volume[i].DataSeeded = true
+					imgDeploy.Volume[i].DataSource = dataRef
 				}
 			}
 		}

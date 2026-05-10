@@ -59,7 +59,7 @@ func keyOf(sc Scenario) scenarioKey {
 // scenarios appear in the input slice). Returns *CycleError on cycle.
 //
 // Scope: DependsOn is intra-recipe (validator-enforced). When the input
-// slice is the merged output of ResolveScoreRecipes, two recipes may
+// slice is the merged output of ResolveScoreRecipe, two recipes may
 // legitimately import a scenario with the same name from different
 // layers/images (e.g. both from-single-kind-selftest and
 // from-composition-selftest import "sshd-binary"). To handle this

@@ -27,7 +27,7 @@ layer:
       this layer to ship the templates.
     scenario:
       - name: starter notebook templates land in the workspace volume
-        steps:
+        step:
           - then: workspace volume is mounted as a directory at the canonical path
             scope: deploy
             file: ${VOLUME_CONTAINER_PATH:workspace}

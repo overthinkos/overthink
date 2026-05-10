@@ -249,7 +249,7 @@ func resolveLocalName(name, projectDir string, preferKind RefKind) (*DeployRef, 
 	// names through the unified loader (which pulls in includes like
 	// image.yml / images.yml transparently). No direct file reads here.
 	if uf, ok, err := LoadUnified(projectDir); err == nil && ok && uf != nil {
-		if _, present := uf.Images[name]; present {
+		if _, present := uf.Image[name]; present {
 			inImageYml = true
 			resolvedImgPath = imgYml
 		}

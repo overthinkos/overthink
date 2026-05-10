@@ -2,7 +2,7 @@ layer:
   name: os-system-files
   description: System files overlay + justfile imports for bazzite-ai bootc images
 
-  tasks:
+  task:
     # Stage the system_files/ subtree and bazzite-ai just fragments from the
     # layer directory into their canonical system paths.
     - cmd: |

@@ -97,7 +97,7 @@ func (c *ShellCmd) Run() error {
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployVolumes = overlay.Volumes
+			deployVolumes = overlay.Volume
 		}
 	}
 
@@ -135,7 +135,7 @@ func (c *ShellCmd) Run() error {
 	}
 
 	// Apply instance-specific volume naming
-	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 	shellCtrName := containerNameInstance(c.Image, c.Instance)
 	shellAccepted := AcceptedEnvSet(envAccepts, envRequires)
 	shellGlobalEnv := dc.GlobalEnvForImage(c.Image, shellCtrName, shellAccepted)

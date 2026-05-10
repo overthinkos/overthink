@@ -106,7 +106,7 @@ type ServiceEntry struct {
 
 	// ExitCodes — comma-separated "successful" exit codes. Supervisord
 	// default is "0,2". Relevant only when Restart == "no" or "on-failure".
-	ExitCodes string `yaml:"exit_codes,omitempty"`
+	ExitCode string `yaml:"exit_code,omitempty"`
 
 	// Priority — startup / shutdown order. Lower = earlier to start,
 	// later to stop. Supervisord default 999.
@@ -240,7 +240,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	ctx.StartRetries = entry.StartRetries
 	ctx.StartSecs = entry.StartSecs
 	ctx.StopSignal = entry.StopSignal
-	ctx.ExitCodes = entry.ExitCodes
+	ctx.ExitCodes = entry.ExitCode
 	ctx.Priority = entry.Priority
 
 	if entry.IsPackaged() {

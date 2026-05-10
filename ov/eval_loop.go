@@ -41,12 +41,12 @@ type HarnessOpts struct {
 	Score      *HarnessScore
 	// Recipes is the ordered list of recipe names this score evaluates
 	// against (mirror of Score.Recipes — kept for substitution wiring).
-	Recipes []string
+	Recipe  []string
 	// ResolvedRecipes is the recipe catalog projection in the same order
 	// as Recipes; consumed by the ${RECIPES} renderer.
 	ResolvedRecipes []*HarnessRecipe
 	// MergedScenarios is the concatenated scenario list across every
-	// referenced recipe (in score.Recipes order). Each scenario carries
+	// referenced recipe (in score.Recipe order). Each scenario carries
 	// its source recipe via Scenario.SourceRecipe. **Drives ${SCENARIOS}
 	// and ${RECIPES} prompt rendering** — the AI sees this slice with
 	// any ${EVAL_NONCE_*} placeholders un-substituted.
@@ -68,7 +68,7 @@ type HarnessOpts struct {
 	// score is non-progressive both are 0 and ${PHASE_*} tokens
 	// substitute to "0"/"" — the prompt template is expected to omit
 	// them in that case. When progressive, Phase is 1-indexed and
-	// PhaseTotal == len(score.Recipes).
+	// PhaseTotal == len(score.Recipe).
 	Phase      int
 	PhaseTotal int
 	AI               *AIConfig
@@ -193,7 +193,7 @@ type ScenarioVerdict struct {
 type FinalReport struct {
 	Schema           int               `yaml:"schema"`
 	Score            string            `yaml:"score"`
-	Recipes          []string          `yaml:"recipes,omitempty"`
+	Recipe   []string `yaml:"recipe,omitempty"`
 	Calver           string            `yaml:"calver"`
 	RunID            string            `yaml:"run_id"`
 	AI               string            `yaml:"ai"`
@@ -220,7 +220,7 @@ type FinalReport struct {
 // PhaseReport summarizes one phase of a progressive run.
 type PhaseReport struct {
 	N             int      `yaml:"n"`
-	Recipes       []string `yaml:"recipes,omitempty"`
+	Recipe   []string `yaml:"recipe,omitempty"`
 	IterationsRun int      `yaml:"iterations_run"`
 	ExitReason    string   `yaml:"exit_reason"` // solved-all | plateau | interrupted
 	Score         int      `yaml:"score"`
@@ -387,7 +387,7 @@ func RunHarness(ctx context.Context, opts HarnessOpts, layout RunLayout) (*Final
 	report := &FinalReport{
 		Schema:           1,
 		Score:            opts.ScoreName,
-		Recipes:          append([]string(nil), opts.Recipes...),
+		Recipe:          append([]string(nil), opts.Recipe...),
 		Calver:           ComputeCalVer(),
 		RunID:            layout.RunID,
 		AI:               opts.AIName,
@@ -583,16 +583,16 @@ func runOneIteration(
 	}
 	scenariosYAML := RenderRecipeScenariosYAML(opts.MergedScenarios)
 	recipesYAML := ""
-	if len(opts.Recipes) > 0 {
+	if len(opts.Recipe) > 0 {
 		// Build a recipe-name → *HarnessRecipe map from ResolvedRecipes
 		// for the renderer.
 		catalog := make(map[string]*HarnessRecipe, len(opts.ResolvedRecipes))
-		for i, name := range opts.Recipes {
+		for i, name := range opts.Recipe {
 			if i < len(opts.ResolvedRecipes) {
 				catalog[name] = opts.ResolvedRecipes[i]
 			}
 		}
-		recipesYAML = RenderScoreRecipesYAML(opts.Recipes, catalog)
+		recipesYAML = RenderScoreRecipesYAML(opts.Recipe, catalog)
 	}
 	deploymentName := ""
 	if opts.Score != nil {
@@ -616,7 +616,7 @@ func runOneIteration(
 	phaseRecipesJoined := ""
 	phaseIntro := ""
 	if opts.PhaseTotal > 0 {
-		phaseRecipesJoined = strings.Join(opts.Recipes, ", ")
+		phaseRecipesJoined = strings.Join(opts.Recipe, ", ")
 		if opts.Phase == 1 {
 			phaseIntro = fmt.Sprintf(
 				"Phase %d of %d — first phase, in-scope recipes: %s",
@@ -624,8 +624,8 @@ func runOneIteration(
 			)
 		} else {
 			added := ""
-			if n := len(opts.Recipes); n > 0 {
-				added = opts.Recipes[n-1]
+			if n := len(opts.Recipe); n > 0 {
+				added = opts.Recipe[n-1]
 			}
 			phaseIntro = fmt.Sprintf(
 				"Phase %d of %d — added recipe: %q. Total in-scope recipes: %s",
@@ -650,7 +650,7 @@ func runOneIteration(
 		MCPEndpoint:      mcp,
 		Notes:            notesSnap,
 		Scenarios:        scenariosYAML,
-		Recipes:          recipesYAML,
+		Recipe:          recipesYAML,
 		Phase:            opts.Phase,
 		PhaseTotal:       opts.PhaseTotal,
 		PhaseRecipes:     phaseRecipesJoined,
@@ -1260,7 +1260,7 @@ func computePlateauSoFar(r *FinalReport) int {
 type HarnessScope struct {
 	RunID            string              `yaml:"run_id"`
 	Score            string              `yaml:"score,omitempty"`
-	Recipes          []string            `yaml:"recipes,omitempty"`
+	Recipe   []string `yaml:"recipe,omitempty"`
 	AI               string              `yaml:"ai,omitempty"`
 	Iteration        int                 `yaml:"iteration"`
 	PlateauIteration int                 `yaml:"plateau_iteration"`
@@ -1316,7 +1316,7 @@ func renderScope(opts HarnessOpts, layout RunLayout, k int, reportSoFar *FinalRe
 	s := &HarnessScope{
 		RunID:            layout.RunID,
 		Score:            opts.ScoreName,
-		Recipes:          append([]string(nil), opts.Recipes...),
+		Recipe:          append([]string(nil), opts.Recipe...),
 		AI:               opts.AIName,
 		Iteration:        k,
 		PlateauIteration: opts.PlateauIteration,

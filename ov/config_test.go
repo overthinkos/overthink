@@ -23,7 +23,7 @@ func TestLoadConfig(t *testing.T) {
 	// Check images exist
 	expectedImages := []string{"base", "cuda", "ml-cuda", "inference", "ubuntu-dev", "bazzite"}
 	for _, name := range expectedImages {
-		if _, ok := cfg.Images[name]; !ok {
+		if _, ok := cfg.Image[name]; !ok {
 			t.Errorf("missing image %q", name)
 		}
 	}
@@ -192,11 +192,11 @@ func TestResolveImageBuilders(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "default-builder", "npm": "default-builder"},
 		},
-		Images: map[string]ImageConfig{
-			"default-builder": {Layers: []string{}},
-			"custom-builder":  {Layers: []string{}},
-			"uses-default":    {Layers: []string{}},
-			"uses-custom":     {Layers: []string{}, Builder: BuilderMap{"pixi": "custom-builder"}},
+		Image: map[string]ImageConfig{
+			"default-builder": {Layer: []string{}},
+			"custom-builder":  {Layer: []string{}},
+			"uses-default":    {Layer: []string{}},
+			"uses-custom":     {Layer: []string{}, Builder: BuilderMap{"pixi": "custom-builder"}},
 		},
 	}
 
@@ -225,8 +225,8 @@ func TestResolveImageBuilders(t *testing.T) {
 	// No defaults.builder → empty
 	cfg2 := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"rpm"}, Platforms: []string{"linux/amd64"}},
-		Images: map[string]ImageConfig{
-			"app": {Layers: []string{}},
+		Image: map[string]ImageConfig{
+			"app": {Layer: []string{}},
 		},
 	}
 	resolved, err = cfg2.ResolveImage("app", "test", testProjectDir(t), ResolveOpts{})
@@ -244,8 +244,8 @@ func TestResolveImageBuilders(t *testing.T) {
 			Platforms: []string{"linux/amd64"},
 			Builder:   BuilderMap{"pixi": "my-builder"},
 		},
-		Images: map[string]ImageConfig{
-			"my-builder": {Layers: []string{}},
+		Image: map[string]ImageConfig{
+			"my-builder": {Layer: []string{}},
 		},
 	}
 	resolved, err = cfg3.ResolveImage("my-builder", "test", testProjectDir(t), ResolveOpts{})
@@ -259,10 +259,10 @@ func TestResolveImageBuilders(t *testing.T) {
 	// Inheritance from base image
 	cfg4 := &Config{
 		Defaults: ImageConfig{Build: BuildFormats{"pac"}, Platforms: []string{"linux/amd64"}},
-		Images: map[string]ImageConfig{
-			"base-img":    {Build: BuildFormats{"pac"}, Layers: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
-			"aur-builder": {Layers: []string{}},
-			"child-img":   {Base: "base-img", Layers: []string{}},
+		Image: map[string]ImageConfig{
+			"base-img":    {Build: BuildFormats{"pac"}, Layer: []string{}, Builder: BuilderMap{"aur": "aur-builder"}},
+			"aur-builder": {Layer: []string{}},
+			"child-img":   {Base: "base-img", Layer: []string{}},
 		},
 	}
 	resolved, err = cfg4.ResolveImage("child-img", "test", testProjectDir(t), ResolveOpts{})
@@ -280,12 +280,12 @@ func TestResolveImagePorts(t *testing.T) {
 			Registry:  "ghcr.io/test",
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
-			Ports:     []string{"80:80"},
+			Port:     []string{"80:80"},
 		},
-		Images: map[string]ImageConfig{
-			"with-ports":    {Layers: []string{}, Ports: []string{"9090:9090"}},
-			"inherit-ports": {Layers: []string{}},
-			"no-ports":      {Layers: []string{}, Ports: []string{}},
+		Image: map[string]ImageConfig{
+			"with-ports":    {Layer: []string{}, Port: []string{"9090:9090"}},
+			"inherit-ports": {Layer: []string{}},
+			"no-ports":      {Layer: []string{}, Port: []string{}},
 		},
 	}
 
@@ -294,8 +294,8 @@ func TestResolveImagePorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if !reflect.DeepEqual(resolved.Ports, []string{"9090:9090"}) {
-		t.Errorf("Ports = %v, want [9090:9090]", resolved.Ports)
+	if !reflect.DeepEqual(resolved.Port, []string{"9090:9090"}) {
+		t.Errorf("Ports = %v, want [9090:9090]", resolved.Port)
 	}
 
 	// Image inheriting default ports
@@ -303,8 +303,8 @@ func TestResolveImagePorts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ResolveImage() error = %v", err)
 	}
-	if !reflect.DeepEqual(resolved.Ports, []string{"80:80"}) {
-		t.Errorf("Ports = %v, want [80:80]", resolved.Ports)
+	if !reflect.DeepEqual(resolved.Port, []string{"80:80"}) {
+		t.Errorf("Ports = %v, want [80:80]", resolved.Port)
 	}
 
 	// Image with empty ports (no inheritance since explicitly empty slice won't be set via JSON)
@@ -314,8 +314,8 @@ func TestResolveImagePorts(t *testing.T) {
 	}
 	// Empty slice in JSON becomes nil after unmarshal, but in Go struct it's []string{}
 	// When len == 0, we fall through to defaults
-	if !reflect.DeepEqual(resolved.Ports, []string{"80:80"}) {
-		t.Errorf("Ports = %v, want [80:80]", resolved.Ports)
+	if !reflect.DeepEqual(resolved.Port, []string{"80:80"}) {
+		t.Errorf("Ports = %v, want [80:80]", resolved.Port)
 	}
 }
 
@@ -343,7 +343,7 @@ func TestEnabledField(t *testing.T) {
 	}
 
 	// disabled-image exists in raw config
-	disabledImg, ok := cfg.Images["disabled-image"]
+	disabledImg, ok := cfg.Image["disabled-image"]
 	if !ok {
 		t.Fatal("disabled-image not found in raw config")
 	}
@@ -358,13 +358,13 @@ func TestEnabledField(t *testing.T) {
 		}
 	}
 
-	// disabled-image is excluded from ResolveAllImages()
-	all, err := cfg.ResolveAllImages("test", testProjectDir(t), ResolveOpts{})
+	// disabled-image is excluded from ResolveAllImage()
+	all, err := cfg.ResolveAllImage("test", testProjectDir(t), ResolveOpts{})
 	if err != nil {
-		t.Fatalf("ResolveAllImages() error = %v", err)
+		t.Fatalf("ResolveAllImage() error = %v", err)
 	}
 	if _, ok := all["disabled-image"]; ok {
-		t.Error("disabled-image should not appear in ResolveAllImages()")
+		t.Error("disabled-image should not appear in ResolveAllImage()")
 	}
 
 	// ResolveImage returns error for disabled image
@@ -408,7 +408,7 @@ func TestEnabledField(t *testing.T) {
 }
 
 // TestResolveOpts_ShouldIncludeDisabled covers the scoping helper used by
-// ResolveImage / ResolveAllImages / validateImageDAG. The scope semantics
+// ResolveImage / ResolveAllImage / validateImageDAG. The scope semantics
 // matter for `ov image build <name> --include-disabled` so widening the
 // working set doesn't surface unrelated disabled-image dep errors.
 func TestResolveOpts_ShouldIncludeDisabled(t *testing.T) {
@@ -463,27 +463,27 @@ func TestResolveImageDistroBaseChain(t *testing.T) {
 			Build:     BuildFormats{"rpm"},
 			Platforms: []string{"linux/amd64"},
 		},
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			// Level 0: defines distro
 			"fedora": {
 				Base:   "quay.io/fedora/fedora:43",
 				Distro: []string{"fedora:43", "fedora"},
-				Layers: []string{},
+				Layer: []string{},
 			},
 			// Level 1: no distro set, should inherit from fedora
 			"fedora-nonfree": {
 				Base:   "fedora",
-				Layers: []string{},
+				Layer: []string{},
 			},
 			// Level 2: no distro set, should inherit through fedora-nonfree -> fedora
 			"nvidia": {
 				Base:   "fedora-nonfree",
-				Layers: []string{},
+				Layer: []string{},
 			},
 			// Level 3: no distro set, should inherit through nvidia -> fedora-nonfree -> fedora
 			"ml-app": {
 				Base:   "nvidia",
-				Layers: []string{},
+				Layer: []string{},
 			},
 		},
 	}
@@ -519,22 +519,22 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 			Registry:  "ghcr.io/test",
 			Platforms: []string{"linux/amd64"},
 		},
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			// Level 0: defines build
 			"archlinux": {
 				Base:   "docker.io/library/archlinux:latest",
 				Build:  BuildFormats{"pac"},
-				Layers: []string{},
+				Layer: []string{},
 			},
 			// Level 1: no build set, should inherit from archlinux
 			"arch-extended": {
 				Base:   "archlinux",
-				Layers: []string{},
+				Layer: []string{},
 			},
 			// Level 2: no build set, should inherit through chain
 			"arch-app": {
 				Base:   "arch-extended",
-				Layers: []string{},
+				Layer: []string{},
 			},
 		},
 	}

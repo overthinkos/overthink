@@ -38,7 +38,7 @@ func TestResolveDeployRefLocalLayer(t *testing.T) {
 	}
 	if err := os.WriteFile(filepath.Join(lyrDir, "layer.yml"), []byte(`
 rpm:
-  packages: [ripgrep]
+  package: [ripgrep]
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ image:
 	}
 	if err := os.WriteFile(filepath.Join(dir, "layers", "dup", "layer.yml"), []byte(`
 rpm:
-  packages: [foo]
+  package: [foo]
 `), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestResolveDeployRefLocalPathImage(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 defaults:
   registry: ghcr.io/example
-images:
+image:
   foo:
     base: fedora
 `), 0644); err != nil {
@@ -141,7 +141,7 @@ func TestResolveDeployRefLocalPathLayer(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 description: A layer
 rpm:
-  packages: [bat]
+  package: [bat]
 `), 0644); err != nil {
 		t.Fatal(err)
 	}

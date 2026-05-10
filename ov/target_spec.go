@@ -26,8 +26,8 @@ type TargetSpec struct {
 	DisableCancel bool                 `yaml:"disable-cancel,omitempty" json:"disable-cancel,omitempty"`
 
 	// ov extensions: bind groups and images to the target.
-	Groups []string `yaml:"groups,omitempty" json:"groups,omitempty"` // group names from the unified file
-	Images []string `yaml:"images,omitempty" json:"images,omitempty"` // image names from the unified file
+	Group []string `yaml:"group,omitempty" json:"group,omitempty"` // group names from the unified file
+	Image []string `yaml:"image,omitempty" json:"image,omitempty"` // image names from the unified file
 }
 
 // TargetInstance mirrors Calamares' `instances:` entries — multiple

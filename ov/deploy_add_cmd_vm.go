@@ -137,11 +137,11 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	// Resolve layer secret_requires / secret_accepts and inject them
 	// into the TaskSteps BEFORE emission. Missing `secret_requires:`
 	// auto-generate a 32-byte hex token via ensureLayerSecret.
-	layerList, err := LayersForPlans(plans, dir, nil)
+	layerList, err := LayerForPlan(plans, dir, nil)
 	if err != nil {
 		return fmt.Errorf("loading layers for secret resolution: %w", err)
 	}
-	secretEnv := ResolveSecretsForLayers(layerList)
+	secretEnv := ResolveSecretForLayer(layerList)
 	InjectSecretsIntoPlans(plans, secretEnv)
 
 	// Collect env for artifact substitution — merges resolved secrets +

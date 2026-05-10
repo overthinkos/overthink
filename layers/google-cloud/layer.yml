@@ -2,7 +2,7 @@ layer:
   name: google-cloud
   description: Google Cloud SDK (gcloud, gsutil, bq)
 
-  tasks:
+  task:
     # Google Cloud SDK only ships x86_64 linux tarballs — no arch template
     # needed. The bundled install.sh wires up shell completion / PATH.
     - cmd: |

@@ -7,7 +7,7 @@ layer:
       `ov eval kind image`. Composes alone in the eval-image bed and as
       the first layer of the eval-layer composition test.
     tag: [working]
-  tasks:
+  task:
     - write: /etc/eval-image-marker
       user: root
       mode: "0644"

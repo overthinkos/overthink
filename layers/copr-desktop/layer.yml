@@ -2,7 +2,7 @@ layer:
   name: copr-desktop
   description: COPR and external desktop packages (CoolerControl, Ghostty, Nerd Fonts, WinBoat)
 
-  tasks:
+  task:
     # Each install block is independently guarded so a missing COPR for the
     # current Fedora release degrades gracefully rather than failing the build.
 

@@ -40,7 +40,7 @@ func validateTests(cfg *Config, layers map[string]*Layer, errs *ValidationError)
 	}
 
 	// Image-level
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		if img.Enabled != nil && !*img.Enabled {
 			continue
 		}

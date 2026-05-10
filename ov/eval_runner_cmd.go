@@ -63,7 +63,7 @@ func (c *EvalListRecipeCmd) Run() error {
 		fmt.Fprintln(os.Stdout, "No overthink.yml found in current directory.")
 		return nil
 	}
-	PrintRecipes(os.Stdout, uf.Recipe)
+	PrintRecipe(os.Stdout, uf.Recipe)
 	return nil
 }
 
@@ -497,7 +497,7 @@ func (c *EvalSelfEvalCmd) Run() error {
 	if resolvedScore.Progressive && phase > 0 {
 		scenarios, _, err = resolvePhaseScenarios(resolvedScore, uf.Recipe, phase)
 	} else {
-		scenarios, _, err = ResolveScoreRecipes(resolvedScore, uf.Recipe)
+		scenarios, _, err = ResolveScoreRecipe(resolvedScore, uf.Recipe)
 	}
 	if err != nil {
 		return fmt.Errorf("ov eval self-evaluate: resolve scenarios: %w", err)

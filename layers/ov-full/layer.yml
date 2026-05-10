@@ -10,7 +10,7 @@ layer:
     See CLAUDE.md "Init-system polymorphism via mixed `service:`
     entries" for the rule and `/ov-foundation:virtualization` for
     the worked example.
-  layers:
+  layer:
     - ov
     - virtualization
     - gocryptfs

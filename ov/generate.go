@@ -70,7 +70,7 @@ func (g *Generator) resolveUserContext(img *ResolvedImage) error {
 	if !img.IsExternalBase {
 		// Internal base - inherit from parent, but respect explicit overrides
 		parentImg := g.Images[img.Base]
-		origCfg := g.Config.Images[img.Name]
+		origCfg := g.Config.Image[img.Name]
 
 		if origCfg.User == "" {
 			img.User = parentImg.User
@@ -112,7 +112,7 @@ func (g *Generator) resolveUserContext(img *ResolvedImage) error {
 }
 
 // NewGenerator creates a new generator. opts is propagated through Validate
-// + ResolveAllImages so `ov image build --include-disabled` reaches images
+// + ResolveAllImage so `ov image build --include-disabled` reaches images
 // flagged enabled: false in image.yml (without modifying the file).
 func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) {
 	cfg, err := LoadConfig(dir)
@@ -128,13 +128,13 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	}
 	SetFormatNames(defaultDistroCfg)
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return nil, err
 	}
 
 	// Populate init systems on layers from build.yml config
-	PopulateLayerInitSystems(layers, defaultInitCfg)
+	PopulateLayerInitSystem(layers, defaultInitCfg)
 
 	if err := Validate(cfg, layers, dir, opts); err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		tag = ComputeCalVer()
 	}
 
-	images, err := cfg.ResolveAllImages(tag, dir, opts)
+	images, err := cfg.ResolveAllImage(tag, dir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -265,13 +265,13 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	var parentLayers map[string]bool
 	if !img.IsExternalBase {
 		var err error
-		parentLayers, err = LayersProvidedByImage(img.Base, g.Images, g.Layers)
+		parentLayers, err = LayerProvidedByImage(img.Base, g.Images, g.Layers)
 		if err != nil {
 			return err
 		}
 	}
 
-	layerOrder, err := g.globalOrderForImage(img.Layers, parentLayers)
+	layerOrder, err := g.globalOrderForImage(img.Layer, parentLayers)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (g *Generator) generateContainerfile(imageName string) error {
 	// Detect active init systems from layers (driven by build.yml init: section config)
 	activeInits := make(map[string]*InitDef)
 	if img.InitConfig != nil {
-		activeInits = img.InitConfig.ActiveInits(g.Layers, layerOrder)
+		activeInits = img.InitConfig.ActiveInit(g.Layers, layerOrder)
 	}
 	// Store init system on ResolvedImage for downstream use (labels, etc.)
 	if img.InitConfig != nil {
@@ -747,7 +747,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	}
 
 	// Volume labels (so ov config knows what volumes data targets)
-	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
+	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolume
 		for _, v := range volumes {
@@ -819,17 +819,17 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 	// Cache mounts from distro config (or fall back to primary format's mounts)
 	var cacheMounts []CacheMountDef
 	if distroDef != nil {
-		cacheMounts = distroDef.Bootstrap.CacheMounts
+		cacheMounts = distroDef.Bootstrap.CacheMount
 	} else if img.DistroDef != nil {
-		if formatDef, ok := img.DistroDef.Formats[img.Pkg]; ok {
-			cacheMounts = formatDef.CacheMounts
+		if formatDef, ok := img.DistroDef.Format[img.Pkg]; ok {
+			cacheMounts = formatDef.CacheMount
 		}
 	}
 	b.WriteString(RenderCacheMounts(cacheMounts, -1, 0, " \\\n    ", true))
 
 	// Install bootstrap packages using distro's install command
-	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Packages) > 0 {
-		b.WriteString(fmt.Sprintf("%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Packages, " ")))
+	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Package) > 0 {
+		b.WriteString(fmt.Sprintf("%s %s && \\\n    ", distroDef.Bootstrap.InstallCmd, strings.Join(distroDef.Bootstrap.Package, " ")))
 	}
 
 	// Apply distro-specific workarounds
@@ -959,7 +959,7 @@ func (g *Generator) writeExpose(b *strings.Builder, layerOrder []string) {
 		if !layer.HasPorts {
 			continue
 		}
-		layerPorts, err := layer.Ports()
+		layerPorts, err := layer.Port()
 		if err != nil {
 			continue
 		}
@@ -1233,7 +1233,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 	distroMatched := false
 	for _, tag := range img.Distro {
 		tagCfg := layer.TagSection(tag)
-		if tagCfg == nil || len(tagCfg.Packages) == 0 {
+		if tagCfg == nil || len(tagCfg.Package) == 0 {
 			continue
 		}
 		// Route through the primary format's full install_template so tag
@@ -1241,8 +1241,8 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 		// `rpm:` / `pac:`. Falls back to the packages-only path if no
 		// Raw map was populated (legacy tag sections).
 		if img.DistroDef != nil {
-			if formatDef := img.DistroDef.Formats[img.Pkg]; formatDef != nil && tagCfg.Raw != nil {
-				ctx := NewInstallContext(tagCfg.Raw, formatDef.CacheMounts)
+			if formatDef := img.DistroDef.Format[img.Pkg]; formatDef != nil && tagCfg.Raw != nil {
+				ctx := NewInstallContext(tagCfg.Raw, formatDef.CacheMount)
 				rendered, err := RenderTemplate(img.Pkg+"-tag-install", formatDef.InstallTemplate, ctx)
 				if err == nil {
 					b.WriteString(rendered)
@@ -1251,7 +1251,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 				}
 			}
 		}
-		g.renderFormatInstallFromPackages(b, tagCfg.Packages, img.Pkg, img)
+		g.renderFormatInstallFromPackages(b, tagCfg.Package, img.Pkg, img)
 		distroMatched = true
 		break
 	}
@@ -1262,10 +1262,10 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			if section == nil || len(section.Packages) == 0 {
 				continue
 			}
-			if img.DistroDef == nil || img.DistroDef.Formats == nil {
+			if img.DistroDef == nil || img.DistroDef.Format == nil {
 				continue
 			}
-			formatDef := img.DistroDef.Formats[format]
+			formatDef := img.DistroDef.Format[format]
 			if formatDef == nil {
 				continue
 			}
@@ -1273,7 +1273,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 			if builderDef, ok := img.BuilderConfig.Builder[format]; ok && !builderDef.Inline {
 				// Format with builder: use the format's install_template (e.g., aur COPY + pacman -U)
 				ctx := &InstallContext{
-					CacheMounts: formatDef.CacheMounts,
+					CacheMounts: formatDef.CacheMount,
 					Packages:    section.Packages,
 					StageName:   fmt.Sprintf("%s-%s-build", layer.Name, format),
 				}
@@ -1283,7 +1283,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 				}
 			} else {
 				// Regular format: render install template
-				ctx := NewInstallContext(section.Raw, formatDef.CacheMounts)
+				ctx := NewInstallContext(section.Raw, formatDef.CacheMount)
 				rendered, err := RenderTemplate(format+"-install", formatDef.InstallTemplate, ctx)
 				if err == nil {
 					b.WriteString(rendered)
@@ -1328,7 +1328,7 @@ func (g *Generator) writeLayerSteps(b *strings.Builder, layerName string, img *R
 				LayerStage:  stageName,
 				UID:         img.UID,
 				GID:         img.GID,
-				CacheMounts: bDef.CacheMounts,
+				CacheMounts: bDef.CacheMount,
 			}
 			rendered, err := RenderTemplate(bName+"-inline", bDef.InstallTemplate, ctx)
 			if err == nil {
@@ -1490,7 +1490,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 		GID:         img.GID,
 		Home:        img.Home,
 		User:        img.User,
-		CacheMounts: builderDef.CacheMounts,
+		CacheMounts: builderDef.CacheMount,
 	}
 
 	// Resolve manifest and install command for file-detected builders (pixi)
@@ -1551,12 +1551,12 @@ func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages
 	if img.DistroDef == nil {
 		return
 	}
-	formatDef := img.DistroDef.Formats[primaryFormat]
+	formatDef := img.DistroDef.Format[primaryFormat]
 	if formatDef == nil {
 		return
 	}
 	ctx := &InstallContext{
-		CacheMounts: formatDef.CacheMounts,
+		CacheMounts: formatDef.CacheMount,
 		Packages:    packages,
 	}
 	rendered, err := RenderTemplate(primaryFormat+"-tag-install", formatDef.InstallTemplate, ctx)
@@ -1620,7 +1620,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelBuilderProvides, img.BuilderCapabilities)
 
 	// JSON array labels (omitted when empty)
-	writeJSONLabel(b, LabelPorts, img.Ports)
+	writeJSONLabel(b, LabelPorts, img.Port)
 
 	// Port protocols: collect from layer PortSpec declarations
 	portProtos := make(map[string]string)
@@ -1635,7 +1635,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelPortProtos, portProtos)
 
 	// Volumes: short form names (without ov-<image>- prefix)
-	volumes, _ := CollectImageVolumes(g.Config, g.Layers, imageName, img.Home, nil)
+	volumes, _ := CollectImageVolume(g.Config, g.Layers, imageName, img.Home, nil)
 	if len(volumes) > 0 {
 		var labelVols []LabelVolume
 		for _, v := range volumes {
@@ -1646,7 +1646,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Aliases: collected from layers + image-level config
-	aliases, _ := CollectImageAliases(g.Config, g.Layers, imageName)
+	aliases, _ := CollectImageAlias(g.Config, g.Layers, imageName)
 	writeJSONLabel(b, LabelAliases, aliases)
 
 	// Security: collected from layers + image config
@@ -1659,7 +1659,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	// Managed via deploy.yml only (ov config setup).
 
 	// Image-level env vars
-	imgCfg := g.Config.Images[imageName]
+	imgCfg := g.Config.Image[imageName]
 	writeJSONLabel(b, LabelEnv, imgCfg.Env)
 
 	// Hooks: collected from layers
@@ -1743,9 +1743,9 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 						Events:           e.Events,
 						AutoStart:        e.AutoStart,
 						StartRetries:     e.StartRetries,
-						StartSecs:        e.StartSecs,
+						StartSec:        e.StartSecs,
 						StopSignal:       e.StopSignal,
-						ExitCodes:        e.ExitCodes,
+						ExitCode:        e.ExitCode,
 						Priority:         e.Priority,
 						Init:             labelInitSystem,
 						Layer:            layerName,
@@ -1772,7 +1772,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	secretSeen := make(map[string]bool)
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
-		for _, s := range layer.Secrets() {
+		for _, s := range layer.Secret() {
 			key := s.Name + ":" + s.Env
 			if secretSeen[key] {
 				continue
@@ -1812,7 +1812,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasEnvRequires {
-			for _, dep := range layer.EnvRequires() {
+			for _, dep := range layer.EnvRequire() {
 				envRequiresMap[dep.Name] = dep
 			}
 		}
@@ -1826,7 +1826,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasEnvAccepts {
-			for _, dep := range layer.EnvAccepts() {
+			for _, dep := range layer.EnvAccept() {
 				envAcceptsMap[dep.Name] = dep
 			}
 		}
@@ -1840,7 +1840,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasSecretRequires {
-			for _, dep := range layer.SecretRequires() {
+			for _, dep := range layer.SecretRequire() {
 				secretRequiresMap[dep.Name] = dep
 			}
 		}
@@ -1854,7 +1854,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasSecretAccepts {
-			for _, dep := range layer.SecretAccepts() {
+			for _, dep := range layer.SecretAccept() {
 				secretAcceptsMap[dep.Name] = dep
 			}
 		}
@@ -1868,7 +1868,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasMCPProvides {
-			for _, mcp := range layer.MCPProvides() {
+			for _, mcp := range layer.MCPProvide() {
 				mcpProvidesMap[mcp.Name] = mcp
 			}
 		}
@@ -1892,7 +1892,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasMCPRequires {
-			for _, dep := range layer.MCPRequires() {
+			for _, dep := range layer.MCPRequire() {
 				mcpRequiresMap[dep.Name] = dep
 			}
 		}
@@ -1906,7 +1906,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	for _, layerName := range layerOrder {
 		layer := g.Layers[layerName]
 		if layer.HasMCPAccepts {
-			for _, dep := range layer.MCPAccepts() {
+			for _, dep := range layer.MCPAccept() {
 				mcpAcceptsMap[dep.Name] = dep
 			}
 		}
@@ -1993,17 +1993,17 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	writeJSONLabel(b, LabelLayerVersions, layerVersions)
 
 	// Data entries: staging paths for deploy-time provisioning.
-	// Walk the full image chain (like CollectImageVolumes) to include data
+	// Walk the full image chain (like CollectImageVolume) to include data
 	// entries from layers in parent/intermediate images.
 	var dataEntries []LabelDataEntry
 	seenDataLayers := make(map[string]bool)
 	current := imageName
 	for {
-		imgDef, ok := g.Config.Images[current]
+		imgDef, ok := g.Config.Image[current]
 		if !ok {
 			break
 		}
-		resolved, _ := ResolveLayerOrder(imgDef.Layers, g.Layers, nil)
+		resolved, _ := ResolveLayerOrder(imgDef.Layer, g.Layers, nil)
 		for _, layerName := range resolved {
 			if seenDataLayers[layerName] {
 				continue
@@ -2029,7 +2029,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 				})
 			}
 		}
-		if baseImg, isInternal := g.Config.Images[imgDef.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := g.Config.Image[imgDef.Base]; isInternal && baseImg.IsEnabled() {
 			current = imgDef.Base
 		} else {
 			break
@@ -2040,7 +2040,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// Data image flag
-	imgConfig := g.Config.Images[imageName]
+	imgConfig := g.Config.Image[imageName]
 	if imgConfig.DataImage {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelDataImage, "true"))
 	}

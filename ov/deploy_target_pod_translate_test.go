@@ -9,7 +9,7 @@ import "testing"
 // reach the same files.
 func TestTranslateHostPathToVenue(t *testing.T) {
 	parent := &DeploymentNode{
-		Volumes: []DeployVolumeConfig{
+		Volume: []DeployVolumeConfig{
 			{Name: "project", Type: "bind", Host: "/home/user/repo", Path: "/workspace"},
 			{Name: "cache", Type: "bind", Host: "/home/user/.cache", Path: "/cache"},
 			// Non-bind volume: ignored.

@@ -1,18 +1,18 @@
 layer:
   name: kubernetes
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - kubectl
         - helm
     fedora:
-      packages:
+      package:
         - kubernetes-client
         - helm
   vars:
     K3D_VERSION: v5.8.3
     KUBECTL_VERSION: v1.30.5
-  tasks:
+  task:
     # k3d is a standalone binary — no extract, just save + chmod.
     - download: "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-${ARCH}"
       extract: none

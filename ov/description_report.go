@@ -32,7 +32,7 @@ func FormatScenarioResultsText(w io.Writer, results []ScenarioResult) {
 		if sr.Origin != "" {
 			fmt.Fprintf(w, "  origin: %s\n", sr.Origin)
 		}
-		for _, step := range sr.Steps {
+		for _, step := range sr.Step {
 			renderStep(w, &step)
 			if step.Result.Status == TestSkip {
 				skipped++
@@ -95,7 +95,7 @@ func FormatScenarioResultsTAP(w io.Writer, results []ScenarioResult) {
 			fmt.Fprintf(w, "  origin: %q\n", sr.Origin)
 			fmt.Fprintf(w, "  scenario_id: %q\n", sr.ScenarioID)
 			fmt.Fprintln(w, "  steps:")
-			for _, step := range sr.Steps {
+			for _, step := range sr.Step {
 				fmt.Fprintf(w, "    - %s %s: %s (%s)\n",
 					step.Keyword, step.Text,
 					strings.ToUpper(step.Result.Status.String()),
@@ -142,7 +142,7 @@ func FormatScenarioResultsJUnit(w io.Writer, results []ScenarioResult) error {
 	for _, sr := range results {
 		suite := junitTestSuite{Name: sr.Name}
 		var totalTime float64
-		for _, step := range sr.Steps {
+		for _, step := range sr.Step {
 			elapsed := step.Result.Elapsed.Seconds()
 			if step.Result.TotalElapsed > 0 {
 				elapsed = step.Result.TotalElapsed.Seconds()

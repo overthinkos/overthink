@@ -2,7 +2,7 @@ layer:
   name: uv
   description: uv Python package manager (astral-sh/uv, standalone Rust binary)
 
-  tasks:
+  task:
     # uv releases nest binaries under uv-${ARCH}-unknown-linux-gnu/ inside the
     # tarball, so --strip-components=1 is needed to land uv + uvx directly at
     # /usr/local/bin/*.

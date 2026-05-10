@@ -1,21 +1,21 @@
 layer:
   name: postgresql
-  requires: []
-  distros:
+  require: []
+  distro:
     fedora:
-      packages:
+      package:
         - postgresql-server
         - postgresql-contrib
         - pgvector
   env:
     PGDATA: "~/.postgresql/data"
     POSTGRES_HOST_AUTH_METHOD: "scram-sha-256"
-  ports:
+  port:
     - 5432
-  volumes:
+  volume:
     - name: pgdata
       path: "~/.postgresql/data"
-  tasks:
+  task:
     # Socket + postgres data dirs. chown must come after mkdir so the later
     # supervisord run-as-user doesn't trip on root-owned paths.
     - cmd: |

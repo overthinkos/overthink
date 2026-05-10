@@ -177,7 +177,7 @@ func readImageYaml(dir string) (*imageSections, error) {
 	}
 	return &imageSections{
 		Defaults: cfg.Defaults,
-		Images:   cfg.Images,
+		Images:   cfg.Image,
 	}, nil
 }
 
@@ -204,23 +204,21 @@ func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
 func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) (string, error) {
 	uf := &UnifiedFile{Version: schemaVersion}
 	if bs != nil {
-		uf.Distros = bs.Distros
-		uf.Builders = bs.Builders
-		uf.Inits = bs.Inits
+		uf.Distro = bs.Distros
+		uf.Builder = bs.Builders
+		uf.Init = bs.Inits
 	}
 	if is != nil {
 		uf.Defaults = is.Defaults
-		uf.Images = is.Images
+		uf.Image = is.Images
 	}
 	if ds != nil {
-		uf.Deploys = &DeploymentsSection{
-			Provides: ds.Provides,
-			Images:   ds.Deploy,
-		}
+		uf.Deploy = ds.Deploy
+		uf.Provides = ds.Provides
 	}
 	// Auto-discover layers/ if present.
 	if dirExists(filepath.Join(dir, "layers")) {
-		uf.Discover = &DiscoverConfig{Layers: []ScanSpec{{Path: "layers", Recursive: true}}}
+		uf.Discover = &DiscoverConfig{Layer: []ScanSpec{{Path: "layers", Recursive: true}}}
 	}
 	return writeUnifiedFile(filepath.Join(dir, UnifiedFileName), uf, dryRun)
 }
@@ -236,9 +234,9 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 	buildPath := filepath.Join(dir, "build.yml")
 	if bs != nil && (len(bs.Distros) > 0 || len(bs.Builders) > 0 || len(bs.Inits) > 0) {
 		buildOut := &UnifiedFile{
-			Distros:  bs.Distros,
-			Builders: bs.Builders,
-			Inits:    bs.Inits,
+			Distro:  bs.Distros,
+			Builder: bs.Builders,
+			Init:    bs.Inits,
 		}
 		p, err := writeUnifiedFile(buildPath, buildOut, dryRun)
 		if err != nil {
@@ -255,7 +253,7 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 	if is != nil && (len(is.Images) > 0 || !isZeroImageConfig(is.Defaults)) {
 		imgOut := &UnifiedFile{
 			Defaults: is.Defaults,
-			Images:   is.Images,
+			Image:    is.Images,
 		}
 		p, err := writeUnifiedFile(imagesPath, imgOut, dryRun)
 		if err != nil {
@@ -271,10 +269,8 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 	deployPath := filepath.Join(dir, "deploy.yml")
 	if ds != nil && (len(ds.Deploy) > 0 || ds.Provides != nil) {
 		depOut := &UnifiedFile{
-			Deploys: &DeploymentsSection{
-				Provides: ds.Provides,
-				Images:   ds.Deploy,
-			},
+			Deploy:   ds.Deploy,
+			Provides: ds.Provides,
 		}
 		p, err := writeUnifiedFile(deployPath, depOut, dryRun)
 		if err != nil {
@@ -287,9 +283,9 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 	}
 
 	// Root overthink.yml
-	root.Includes = includes
+	root.Include = includes
 	if dirExists(filepath.Join(dir, "layers")) {
-		root.Discover = &DiscoverConfig{Layers: []ScanSpec{{Path: "layers", Recursive: true}}}
+		root.Discover = &DiscoverConfig{Layer: []ScanSpec{{Path: "layers", Recursive: true}}}
 	}
 	p, err := writeUnifiedFile(filepath.Join(dir, UnifiedFileName), root, dryRun)
 	if err != nil {
@@ -419,7 +415,7 @@ func rewriteServiceKeys(data []byte) []byte {
 
 func isZeroImageConfig(ic ImageConfig) bool {
 	return ic.Base == "" && ic.Registry == "" && ic.Tag == "" && len(ic.Platforms) == 0 &&
-		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Layers) == 0
+		len(ic.Distro) == 0 && len(ic.Build) == 0 && len(ic.Layer) == 0
 }
 
 func writeUnifiedFile(path string, uf *UnifiedFile, dryRun bool) (string, error) {

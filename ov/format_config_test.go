@@ -23,22 +23,22 @@ func TestLoadDistroConfigFromFile(t *testing.T) {
 	if fedora.Bootstrap.InstallCmd == "" {
 		t.Error("fedora bootstrap.install_cmd is empty")
 	}
-	if len(fedora.Bootstrap.CacheMounts) == 0 {
+	if len(fedora.Bootstrap.CacheMount) == 0 {
 		t.Error("fedora bootstrap.cache_mounts is empty")
 	}
-	if fedora.Bootstrap.CacheMounts[0].Dst != "/var/cache/libdnf5" {
-		t.Errorf("fedora cache mount = %q, want /var/cache/libdnf5", fedora.Bootstrap.CacheMounts[0].Dst)
+	if fedora.Bootstrap.CacheMount[0].Dst != "/var/cache/libdnf5" {
+		t.Errorf("fedora cache mount = %q, want /var/cache/libdnf5", fedora.Bootstrap.CacheMount[0].Dst)
 	}
 
 	// Check fedora has rpm format
-	if fedora.Formats == nil || fedora.Formats["rpm"] == nil {
+	if fedora.Format == nil || fedora.Format["rpm"] == nil {
 		t.Fatal("expected fedora to have rpm format")
 	}
-	rpm := fedora.Formats["rpm"]
+	rpm := fedora.Format["rpm"]
 	if rpm.InstallTemplate == "" {
 		t.Error("rpm install_template is empty")
 	}
-	if len(rpm.CacheMounts) == 0 {
+	if len(rpm.CacheMount) == 0 {
 		t.Error("rpm cache_mounts is empty")
 	}
 	if len(rpm.SectionFields) == 0 {
@@ -71,7 +71,7 @@ func TestLoadDistroConfigFromFile(t *testing.T) {
 	if resolvedUbuntu.Bootstrap.InstallCmd == "" {
 		t.Error("ubuntu should inherit debian's bootstrap install_cmd")
 	}
-	if resolvedUbuntu.Formats == nil || resolvedUbuntu.Formats["deb"] == nil {
+	if resolvedUbuntu.Format == nil || resolvedUbuntu.Format["deb"] == nil {
 		t.Error("ubuntu should inherit debian's deb format")
 	}
 
@@ -80,10 +80,10 @@ func TestLoadDistroConfigFromFile(t *testing.T) {
 	if archResolved == nil {
 		t.Fatal("ResolveDistro returned nil for archlinux")
 	}
-	if archResolved.Formats["pac"] == nil {
+	if archResolved.Format["pac"] == nil {
 		t.Error("archlinux should have pac format")
 	}
-	if archResolved.Formats["aur"] == nil {
+	if archResolved.Format["aur"] == nil {
 		t.Error("archlinux should have aur format")
 	}
 }
@@ -162,7 +162,7 @@ func TestDynamicFormatSectionParsing(t *testing.T) {
 	// Test that YAML with format sections parses into FormatSections
 	yamlData := `
 rpm:
-  packages:
+  package:
     - vim
     - git
   copr:

@@ -1,6 +1,6 @@
 layer:
   name: pixi
-  tasks:
+  task:
     - cmd: echo "installing pixi"
       user: root
     - cmd: echo "init pixi project"

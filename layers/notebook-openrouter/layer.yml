@@ -1,6 +1,6 @@
 layer:
   name: notebook-openrouter
-  env_requires:
+  env_require:
     - name: OPENROUTER_API_KEY
       description: "API key for OpenRouter LLM inference"
   data:
@@ -19,7 +19,7 @@ layer:
       Data-only — no packages, no services.
     scenario:
       - name: openrouter notebooks land in the workspace volume
-        steps:
+        step:
           - then: the openrouter subdirectory is provisioned in the workspace
             scope: deploy
             file: ${VOLUME_CONTAINER_PATH:workspace}/openrouter

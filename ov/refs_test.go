@@ -120,17 +120,17 @@ func TestScanRemoteLayers(t *testing.T) {
 	os.MkdirAll(filepath.Join(layersDir, "cuda"), 0755)
 	os.MkdirAll(filepath.Join(layersDir, "python-ml"), 0755)
 
-	os.WriteFile(filepath.Join(layersDir, "cuda", "layer.yml"), []byte("layer:\n  name: cuda\n  packages:\n    - cuda-toolkit\n"), 0644)
-	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("layer:\n  name: python-ml\n  requires:\n    - cuda\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "cuda", "layer.yml"), []byte("layer:\n  name: cuda\n  package:\n    - cuda-toolkit\n"), 0644)
+	os.WriteFile(filepath.Join(layersDir, "python-ml", "layer.yml"), []byte("layer:\n  name: python-ml\n  require:\n    - cuda\n"), 0644)
 	os.WriteFile(filepath.Join(layersDir, "python-ml", "pixi.toml"), []byte("[project]\nname = \"python-ml\"\n"), 0644)
 
 	wantRefs := map[string]bool{
 		"github.com/overthinkos/ml-layers/layers/cuda":      true,
 		"github.com/overthinkos/ml-layers/layers/python-ml": true,
 	}
-	layers, err := ScanRemoteLayers(dir, "github.com/overthinkos/ml-layers", wantRefs)
+	layers, err := ScanRemoteLayer(dir, "github.com/overthinkos/ml-layers", wantRefs)
 	if err != nil {
-		t.Fatalf("ScanRemoteLayers() error = %v", err)
+		t.Fatalf("ScanRemoteLayer() error = %v", err)
 	}
 
 	if len(layers) != 2 {
@@ -158,20 +158,20 @@ func TestScanRemoteLayers(t *testing.T) {
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
-	if len(pyml.Requires) != 1 || pyml.Requires[0] != "cuda" {
-		t.Errorf("python-ml.Requires = %v", pyml.Requires)
+	if len(pyml.Require) != 1 || pyml.Require[0] != "cuda" {
+		t.Errorf("python-ml.Requires = %v", pyml.Require)
 	}
 }
 
 func TestScanAllLayersNoRemote(t *testing.T) {
-	layers, err := ScanAllLayers("testdata")
+	layers, err := ScanAllLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanAllLayers() error = %v", err)
+		t.Fatalf("ScanAllLayer() error = %v", err)
 	}
 
-	localLayers, err := ScanLayers("testdata")
+	localLayers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	if len(layers) != len(localLayers) {
@@ -181,9 +181,9 @@ func TestScanAllLayersNoRemote(t *testing.T) {
 
 func TestCollectRemoteRefs(t *testing.T) {
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"myapp": {
-				Layers: []string{
+				Layer: []string{
 					"pixi",
 					"@github.com/overthinkos/ml-layers/layers/cuda:v1.0.0",
 				},
@@ -191,8 +191,8 @@ func TestCollectRemoteRefs(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"pixi": {Name: "pixi", Requires: []string{}},
-		"my-layer": {Name: "my-layer", RawRequires: []string{
+		"pixi": {Name: "pixi", Require: []string{}},
+		"my-layer": {Name: "my-layer", RawRequire: []string{
 			"@github.com/myorg/service-layers/layers/svc:v2.0.0",
 		}},
 	}
@@ -220,16 +220,16 @@ func TestCollectRemoteRefs(t *testing.T) {
 func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
 	// Same bare ref at different versions should error
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"myapp": {
-				Layers: []string{
+				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v1.0.0",
 				},
 			},
 		},
 	}
 	layers := map[string]*Layer{
-		"local": {Name: "local", RawRequires: []string{
+		"local": {Name: "local", RawRequire: []string{
 			"@github.com/org/repo/layers/cuda:v2.0.0",
 		}},
 	}
@@ -243,9 +243,9 @@ func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
 func TestCollectRemoteRefsDifferentLayersSameRepo(t *testing.T) {
 	// Different layers from same repo at different versions should be OK
 	cfg := &Config{
-		Images: map[string]ImageConfig{
+		Image: map[string]ImageConfig{
 			"myapp": {
-				Layers: []string{
+				Layer: []string{
 					"@github.com/org/repo/layers/cuda:v1.0.0",
 					"@github.com/org/repo/layers/python:v2.0.0",
 				},
@@ -364,9 +364,9 @@ func TestDiscoverRemoteLayers(t *testing.T) {
 	os.MkdirAll(filepath.Join(layersDir, "alpha"), 0755)
 	os.WriteFile(filepath.Join(layersDir, "README.md"), []byte("test"), 0644)
 
-	names, err := DiscoverRemoteLayers(dir)
+	names, err := DiscoverRemoteLayer(dir)
 	if err != nil {
-		t.Fatalf("DiscoverRemoteLayers() error = %v", err)
+		t.Fatalf("DiscoverRemoteLayer() error = %v", err)
 	}
 	if len(names) != 2 {
 		t.Fatalf("len(names) = %d, want 2", len(names))

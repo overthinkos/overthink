@@ -15,7 +15,7 @@ func TestMigrateUnified_IncludesSplit(t *testing.T) {
   fedora:
     bootstrap:
       install_cmd: dnf install
-      packages: [dnf5]
+      package: [dnf5]
 builder:
   fedora-builder: {}
 init:
@@ -24,13 +24,13 @@ init:
 	writeFixture(t, root, "image.yml", `defaults:
   registry: quay.io/example
   build: [rpm]
-images:
+image:
   fedora:
     base: quay.io/fedora/fedora:43
-    layers: [base]
+    layer: [base]
 `)
 	writeFixture(t, root, "layers/chrome/layer.yml", `rpm:
-  packages: [chromium]
+  package: [chromium]
 `)
 
 	// Run migration.
@@ -51,8 +51,8 @@ images:
 		t.Fatalf("read root: %v", err)
 	}
 	s := string(rootData)
-	if !strings.Contains(s, "includes:") {
-		t.Error("root overthink.yml missing includes:")
+	if !strings.Contains(s, "include:") {
+		t.Error("root overthink.yml missing include:")
 	}
 	if !strings.Contains(s, "build.yml") {
 		t.Error("includes missing build.yml")
@@ -70,16 +70,16 @@ images:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if _, ok := uf.Images["fedora"]; !ok {
+	if _, ok := uf.Image["fedora"]; !ok {
 		t.Error("LoadUnified lost images.fedora after migration")
 	}
-	if _, ok := uf.Distros["fedora"]; !ok {
+	if _, ok := uf.Distro["fedora"]; !ok {
 		t.Error("LoadUnified lost distros.fedora after migration")
 	}
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	if _, ok := uf.Layers["chrome"]; !ok {
+	if _, ok := uf.Layer["chrome"]; !ok {
 		t.Error("ApplyDiscover didn't pick up layers/chrome")
 	}
 }
@@ -89,7 +89,7 @@ func TestMigrateUnified_Monolithic(t *testing.T) {
 	writeFixture(t, root, "build.yml", `distro:
   fedora: {}
 `)
-	writeFixture(t, root, "image.yml", `images:
+	writeFixture(t, root, "image.yml", `image:
   x:
     base: alpine
 `)
@@ -105,18 +105,18 @@ func TestMigrateUnified_Monolithic(t *testing.T) {
 	if strings.Contains(s, "includes:") {
 		t.Error("monolithic emission should not include `includes:`")
 	}
-	if !strings.Contains(s, "distros:") {
-		t.Error("monolithic output missing distros:")
+	if !strings.Contains(s, "distro:") {
+		t.Error("monolithic output missing distro:")
 	}
-	if !strings.Contains(s, "images:") {
-		t.Error("monolithic output missing images:")
+	if !strings.Contains(s, "image:") {
+		t.Error("monolithic output missing image:")
 	}
 }
 
 func TestMigrateUnified_LayerRewriteIdempotent(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "layers/chrome/layer.yml", `rpm:
-  packages: [chromium]
+  package: [chromium]
 `)
 	// First pass: rewrites flat → kind-keyed.
 	if _, err := MigrateUnified(MigrateUnifiedOpts{Dir: root, RewriteLayers: true}); err != nil {

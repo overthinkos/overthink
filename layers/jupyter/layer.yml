@@ -1,22 +1,22 @@
 layer:
   name: jupyter
-  requires:
+  require:
     - supervisord
-  layers:
+  layer:
     - jupyter-mcp
   env:
     MCP_SERVER_NAME: "jupyter"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - git
-  ports:
+  port:
     - 8888
-  mcp_provides:
+  mcp_provide:
     - name: jupyter
       url: "http://{{.ContainerName}}:8888/mcp"
       transport: http
-  volumes:
+  volume:
     - name: workspace
       path: ~/workspace
   eval:

@@ -10,7 +10,7 @@ import (
 // This file implements the two pre-resolution helpers for the credential-
 // backed secrets feature (plan §2.4 and §2.5):
 //
-//  1. MigratePlaintextEnvSecrets — scans an image's existing deploy.yml env:
+//  1. MigratePlaintextEnvSecret — scans an image's existing deploy.yml env:
 //     list for entries that are now declared as secret_accepts/secret_requires
 //     on the image, moves those values into the credential store, removes
 //     them from deploy.yml, and writes a deploy.yml.bak.<unix-timestamp>
@@ -82,7 +82,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 	return "ov/secret", dep.Name
 }
 
-// MigratePlaintextEnvSecrets scans dc.Deploy[deployKey(image, instance)].Env
+// MigratePlaintextEnvSecret scans dc.Deploy[deployKey(image, instance)].Env
 // for any KEY=VAL entries whose KEY is declared as secret_accepts or
 // secret_requires on the given image metadata. For each match, it:
 //
@@ -101,7 +101,7 @@ func secretKeyForDep(dep EnvDependency) (service, key string) {
 // This is idempotent: running it a second time on a now-clean deploy.yml is
 // a no-op. Running it on a host that never had plaintext credentials is a
 // no-op.
-func MigratePlaintextEnvSecrets(dc *DeployConfig, meta *ImageMetadata, image, instance string) (int, error) {
+func MigratePlaintextEnvSecret(dc *DeployConfig, meta *ImageMetadata, image, instance string) (int, error) {
 	if dc == nil || dc.Deploy == nil {
 		return 0, nil
 	}

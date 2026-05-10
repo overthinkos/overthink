@@ -19,8 +19,8 @@ type SidecarDef struct {
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Image       string            `yaml:"image,omitempty" json:"image,omitempty"`
 	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
-	Secrets     []SidecarSecret   `yaml:"secrets,omitempty" json:"secrets,omitempty"`
-	Volumes     []SidecarVolume   `yaml:"volumes,omitempty" json:"volumes,omitempty"`
+	Secret      []SidecarSecret   `yaml:"secret,omitempty" json:"secret,omitempty"`
+	Volume      []SidecarVolume   `yaml:"volume,omitempty" json:"volume,omitempty"`
 	Security    *SecurityConfig   `yaml:"security,omitempty" json:"security,omitempty"`
 }
 
@@ -39,7 +39,7 @@ type SidecarVolume struct {
 
 // SidecarConfig is the parsed sidecar.yml structure.
 type SidecarConfig struct {
-	Sidecars map[string]SidecarDef `yaml:"sidecars"`
+	Sidecar map[string]SidecarDef `yaml:"sidecar"`
 }
 
 // ResolvedSidecar is a fully resolved sidecar ready for quadlet generation.
@@ -47,8 +47,8 @@ type ResolvedSidecar struct {
 	Name     string            // sidecar key (e.g., "tailscale")
 	Image    string            // resolved OCI image ref
 	Env      map[string]string // merged env vars (sorted for deterministic output)
-	Secrets  []CollectedSecret // provisioned podman secrets
-	Volumes  []VolumeMount     // resolved named volumes
+	Secret   []CollectedSecret // provisioned podman secrets
+	Volume   []VolumeMount     // resolved named volumes
 	Security SecurityConfig    // merged security config
 }
 
@@ -61,7 +61,7 @@ func LoadEmbeddedSidecarConfig() (*SidecarConfig, error) {
 	return &cfg, nil
 }
 
-// MergeSidecars merges sidecar definitions from base into overlay.
+// MergeSidecar merges sidecar definitions from base into overlay.
 // For each sidecar name:
 //   - image: overlay replaces if non-empty
 //   - env: map merge (overlay keys win, base keys preserved)
@@ -72,7 +72,7 @@ func LoadEmbeddedSidecarConfig() (*SidecarConfig, error) {
 //
 // Sidecars in base but not overlay are inherited.
 // Sidecars in overlay but not base are added.
-func MergeSidecars(base, overlay map[string]SidecarDef) map[string]SidecarDef {
+func MergeSidecar(base, overlay map[string]SidecarDef) map[string]SidecarDef {
 	if len(base) == 0 && len(overlay) == 0 {
 		return nil
 	}
@@ -115,11 +115,11 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 	if overlay.Image != "" {
 		merged.Image = overlay.Image
 	}
-	if overlay.Secrets != nil {
-		merged.Secrets = overlay.Secrets
+	if overlay.Secret != nil {
+		merged.Secret = overlay.Secret
 	}
-	if overlay.Volumes != nil {
-		merged.Volumes = overlay.Volumes
+	if overlay.Volume != nil {
+		merged.Volume = overlay.Volume
 	}
 	if overlay.Security != nil {
 		merged.Security = overlay.Security
@@ -139,9 +139,9 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 	return merged
 }
 
-// ResolveSidecars resolves sidecar definitions into generation-ready configs.
+// ResolveSidecar resolves sidecar definitions into generation-ready configs.
 // Resolves volume names (ov-<image>-<sidecar>-<vol>) and collects secrets.
-func ResolveSidecars(defs map[string]SidecarDef, imageName, instance string) []ResolvedSidecar {
+func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) []ResolvedSidecar {
 	if len(defs) == 0 {
 		return nil
 	}
@@ -165,23 +165,23 @@ func ResolveSidecars(defs map[string]SidecarDef, imageName, instance string) []R
 			sc.Security = *def.Security
 		}
 
-		for _, v := range def.Volumes {
+		for _, v := range def.Volume {
 			volName := sidecarVolumeName(imageName, name, v.Name)
 			if instance != "" {
 				volName = sidecarVolumeName(imageName+"-"+instance, name, v.Name)
 			}
-			sc.Volumes = append(sc.Volumes, VolumeMount{
+			sc.Volume = append(sc.Volume, VolumeMount{
 				VolumeName:    volName,
 				ContainerPath: v.Path,
 			})
 		}
 
-		for _, s := range def.Secrets {
+		for _, s := range def.Secret {
 			secretName := sidecarSecretName(imageName, name, s.Name)
 			if instance != "" {
 				secretName = sidecarSecretName(imageName+"-"+instance, name, s.Name)
 			}
-			sc.Secrets = append(sc.Secrets, CollectedSecret{
+			sc.Secret = append(sc.Secret, CollectedSecret{
 				Name:       secretName,
 				Env:        s.Env,
 				SecretName: s.Name,
@@ -208,11 +208,11 @@ func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]
 
 	var templates map[string]SidecarDef
 	if embedded != nil {
-		templates = embedded.Sidecars
+		templates = embedded.Sidecar
 	}
 
 	// Merge: embedded templates + deploy.yml overrides
-	merged := MergeSidecars(templates, deploySidecars)
+	merged := MergeSidecar(templates, deploySidecars)
 
 	// Filter: only keep sidecars that are referenced in deploy.yml
 	filtered := make(map[string]SidecarDef, len(deploySidecars))
@@ -228,15 +228,15 @@ func ResolveSidecarsForConfig(deploySidecars map[string]SidecarDef) (map[string]
 	return filtered, nil
 }
 
-// SidecarEnvKeys returns all env var keys defined by attached sidecars.
+// SidecarEnvKey returns all env var keys defined by attached sidecars.
 // Used to route CLI -e flags to sidecars vs the app container.
-func SidecarEnvKeys(sidecars map[string]SidecarDef) map[string]string {
+func SidecarEnvKey(sidecars map[string]SidecarDef) map[string]string {
 	keys := make(map[string]string) // env key -> sidecar name
 	for scName, sc := range sidecars {
 		for k := range sc.Env {
 			keys[k] = scName
 		}
-		for _, s := range sc.Secrets {
+		for _, s := range sc.Secret {
 			if s.Env != "" {
 				keys[s.Env] = scName
 			}

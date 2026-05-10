@@ -243,9 +243,9 @@ type VmSource struct {
 	// "debian", "ubuntu", "alpine".
 	Distro string `yaml:"distro,omitempty"`
 
-	// Packages is the per-VM additional package list passed to the
+	// Package is the per-VM additional package list passed to the
 	// bootstrap command alongside the distro's base packages.
-	Packages []string `yaml:"packages,omitempty"`
+	Package []string `yaml:"package,omitempty"`
 
 	// BootstrapArch picks the target architecture for bootstrap (mostly
 	// relevant for debootstrap which needs `--arch=amd64`/`arm64`).

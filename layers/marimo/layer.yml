@@ -1,7 +1,7 @@
 layer:
   name: marimo
   description: "marimo reactive notebook server (also runs as MCP server via --mcp), GPU-accelerated OSM analytics deps (Polars-GPU/cuDF, geopandas, quackosm), Apache Airflow Python deps (the airflow layer ships no pixi env), and the marimo-team/learn curriculum + marimo-team/skills bundle for AI agents."
-  requires:
+  require:
     - cuda
     - supervisord
   env:
@@ -11,27 +11,27 @@ layer:
     # discover the marimo-team/skills bundle. Mirrors the Anthropic-style
     # SKILL.md discovery used by overthink's own plugins/<plugin>/skills/.
     MARIMO_SKILLS_DIR: "/opt/marimo-skills"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - git           # required by the marimo-team/skills tarball extract validation step
         - gcc
         - gcc-c++
-  ports:
+  port:
     - 2718
   # marimo runs `--mcp --mcp-allow-remote` (see service exec below), which
   # exposes its editor tools as an MCP HTTP server on the SAME port that
   # serves the notebook UI. Marimo's docs put the endpoint at /mcp/server
   # (NOT /mcp — that's the convention for ov-mcp / jupyter-mcp / chrome-
   # devtools-mcp). The mcp_provides URL must reflect the actual path.
-  mcp_provides:
+  mcp_provide:
     - name: marimo
       url: "http://{{.ContainerName}}:2718/mcp/server"
       transport: http
-  volumes:
+  volume:
     - name: workspace
       path: "~/workspace"
-  tasks:
+  task:
     # User-phase data dir for notebooks (bind-mount target for the workspace volume).
     - mkdir: "${HOME}/workspace"
       user: "${USER}"

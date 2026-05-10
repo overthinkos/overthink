@@ -27,16 +27,16 @@ func CollectShell(cfg *Config, layers map[string]*Layer, imageName string) *Labe
 			break
 		}
 		visited[current] = true
-		img, ok := cfg.Images[current]
+		img, ok := cfg.Image[current]
 		if !ok {
 			break
 		}
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			break
 		}
 		allLayerNames = append(allLayerNames, resolved...)
-		if baseImg, isInternal := cfg.Images[img.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
 			current = img.Base
 		} else {
 			break
@@ -61,7 +61,7 @@ func CollectShell(cfg *Config, layers map[string]*Layer, imageName string) *Labe
 		set.Layer = append(set.Layer, *entry)
 	}
 
-	if img, ok := cfg.Images[imageName]; ok {
+	if img, ok := cfg.Image[imageName]; ok {
 		if img.Shell != nil {
 			entry := shellConfigToEntry(img.Shell, "image:"+imageName)
 			if entry != nil {

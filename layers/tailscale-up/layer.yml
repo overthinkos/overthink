@@ -10,9 +10,9 @@ layer:
     on `systemctl is-active tailscaled` after the start attempt so it's
     a no-op in image-build / bootc-assembly contexts where systemctl
     can't manage live services.
-  requires:
+  require:
     - tailscale
-  tasks:
+  task:
     - cmd: |
         set -eu
         # Start the daemon. The /ov-foundation:tailscale layer's

@@ -1,17 +1,17 @@
 layer:
   name: traefik
-  requires:
+  require:
     - supervisord
   vars:
     TRAEFIK_VERSION: v3.4.0
-  ports:
+  port:
     - 8000
     - 8080
     - 443
-  volumes:
+  volume:
     - name: certs
       path: "~/.traefik/acme"
-  tasks:
+  task:
     # Download the traefik binary for the target platform. ${ARCH} is the
     # BuildKit TARGETARCH value (amd64/arm64) emitted via ENV at the top of
     # this layer's section; Docker substitutes it in the RUN that emitDownload

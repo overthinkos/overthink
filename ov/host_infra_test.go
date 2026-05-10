@@ -112,7 +112,7 @@ func withTempLedger(t *testing.T) *LedgerPaths {
 	return &LedgerPaths{
 		Root:     root,
 		Deploys:  filepath.Join(root, "deploys"),
-		Layers:   filepath.Join(root, "layers"),
+		Layers:  filepath.Join(root, "layers"),
 		LockFile: filepath.Join(root, ".lock"),
 	}
 }
@@ -123,7 +123,7 @@ func TestLedgerRoundTrip(t *testing.T) {
 		DeployID:   "abc123",
 		Image:      "fedora-coder",
 		Target:     "host",
-		Layers:     []string{"ripgrep", "uv"},
+		Layer:     []string{"ripgrep", "uv"},
 		DeployedAt: "2026-04-21T00:00:00Z",
 	}
 	if err := WriteDeployRecord(paths, rec); err != nil {
@@ -133,7 +133,7 @@ func TestLedgerRoundTrip(t *testing.T) {
 	if err != nil || got == nil {
 		t.Fatalf("read: %v / %+v", err, got)
 	}
-	if got.Image != "fedora-coder" || len(got.Layers) != 2 {
+	if got.Image != "fedora-coder" || len(got.Layer) != 2 {
 		t.Errorf("round-trip broken: %+v", got)
 	}
 }

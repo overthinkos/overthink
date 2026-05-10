@@ -33,16 +33,16 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string
 			break
 		}
 		visited[current] = true
-		img, ok := cfg.Images[current]
+		img, ok := cfg.Image[current]
 		if !ok {
 			break
 		}
-		resolved, err := ResolveLayerOrder(img.Layers, layers, nil)
+		resolved, err := ResolveLayerOrder(img.Layer, layers, nil)
 		if err != nil {
 			break
 		}
 		allLayerNames = append(allLayerNames, resolved...)
-		if baseImg, isInternal := cfg.Images[img.Base]; isInternal && baseImg.IsEnabled() {
+		if baseImg, isInternal := cfg.Image[img.Base]; isInternal && baseImg.IsEnabled() {
 			current = img.Base
 		} else {
 			break
@@ -66,7 +66,7 @@ func CollectDescriptions(cfg *Config, layers map[string]*Layer, imageName string
 	}
 
 	// Image-level description.
-	if img, ok := cfg.Images[imageName]; ok && img.Description != nil {
+	if img, ok := cfg.Image[imageName]; ok && img.Description != nil {
 		set.Image = append(set.Image, LabeledDescription{
 			Origin:      "image:" + imageName,
 			Description: *img.Description,

@@ -30,7 +30,7 @@ func (c *MigrateLocalImagesCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	changes, err := MigrateLocalImages(dir, c.DryRun)
+	changes, err := MigrateLocalImage(dir, c.DryRun)
 	if err != nil {
 		return err
 	}
@@ -48,10 +48,10 @@ func (c *MigrateLocalImagesCmd) Run() error {
 	return nil
 }
 
-// MigrateLocalImages walks every *.yml / *.yaml file under dir and
+// MigrateLocalImage walks every *.yml / *.yaml file under dir and
 // rewrites legacy kind:local `images:` blocks to a dated comment
 // fence. Returns the list of touched paths.
-func MigrateLocalImages(dir string, dryRun bool) ([]string, error) {
+func MigrateLocalImage(dir string, dryRun bool) ([]string, error) {
 	var changed []string
 	walkErr := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {

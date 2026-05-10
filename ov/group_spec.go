@@ -15,10 +15,10 @@ type GroupSpec struct {
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
 
 	// Calamares-shaped flat package list (the canonical surface).
-	Packages []PackageItem `yaml:"packages,omitempty" json:"packages,omitempty"`
+	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
 
 	// ov extension: per-distro overrides.
-	Distros map[string]*DistroPackages `yaml:"distros,omitempty" json:"distros,omitempty"`
+	Distro map[string]*DistroPackages `yaml:"distro,omitempty" json:"distro,omitempty"`
 
 	// Calamares selection-state metadata.
 	Hidden       bool   `yaml:"hidden,omitempty" json:"hidden,omitempty"`
@@ -34,12 +34,11 @@ type GroupSpec struct {
 	// Recursive: subgroups can be inline or named refs to other groups
 	// declared in the unified file. Polymorphic decoding TBD; for now
 	// inline-only is supported (mirrors Calamares' usual netinstall.yaml).
-	Subgroups []*GroupSpec `yaml:"subgroups,omitempty" json:"subgroups,omitempty"`
+	Subgroup []*GroupSpec `yaml:"subgroup,omitempty" json:"subgroup,omitempty"`
 
-	// ov extension: group dependencies (other groups that must be installed
-	// first). Calamares groups have no analogous field; modules use
-	// `requiredModules`. We use the shorter `requires:` for ov consistency.
-	Requires []string `yaml:"requires,omitempty" json:"requires,omitempty"`
+	// ov extension: group dependencies. Use the shorter `require:` for ov
+	// consistency.
+	Require []string `yaml:"require,omitempty" json:"require,omitempty"`
 }
 
 // GroupDoc wraps a single GroupSpec with an explicit Name — the standalone

@@ -190,13 +190,13 @@ func (c *Collector) collectOne(ctx context.Context, snap *ContainerSnapshot) Con
 			cs.Tunnel = formatTunnelSummary(dn.Tunnel)
 		}
 		if len(cs.Ports) == 0 {
-			cs.Ports = parsePortStrings(dn.Ports)
+			cs.Ports = parsePortStrings(dn.Port)
 		}
 		if cs.Network == "" {
 			cs.Network = dn.Network
 		}
 		if len(cs.Volumes) == 0 {
-			for _, v := range dn.Volumes {
+			for _, v := range dn.Volume {
 				cs.Volumes = append(cs.Volumes, v.Name)
 			}
 		}

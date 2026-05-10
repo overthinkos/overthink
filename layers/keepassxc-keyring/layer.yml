@@ -16,27 +16,27 @@ layer:
     Marking a specific .kdbx group as "Secret Service exposed" is per-database
     state INSIDE the kdbx file — that is a one-time GUI step when the user
     first opens their database; this layer cannot do it.
-  requires:
+  require:
     - keepassxc
     - gnupg
     - direnv
-  packages:
+  package:
     - keyutils
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - pinentry
         - libsecret
     debian:
-      packages:
+      package:
         - pinentry-qt
         - libsecret-tools
     fedora:
-      packages:
+      package:
         - pinentry-qt
         - libsecret
     ubuntu:
-      packages:
+      package:
         - pinentry-qt
         - libsecret-tools
   # Shell-init exports for KeePassXC-as-Secret-Service-provider. Mirrors
@@ -70,7 +70,7 @@ layer:
             end
         end
         set -gx GPG_TTY (tty 2>/dev/null; or echo /dev/tty)
-  tasks:
+  task:
     - mkdir: "${HOME}/.config/keepassxc"
       user: "${USER}"
     # Merge our [FdoSecrets] + auto-open settings into keepassxc.ini WITHOUT

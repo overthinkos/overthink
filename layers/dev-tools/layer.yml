@@ -1,6 +1,6 @@
 layer:
   name: dev-tools
-  packages:
+  package:
     - bat
     - bpftrace
     - fdupes
@@ -18,9 +18,9 @@ layer:
     - yamllint
     - yq
     - zoxide
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - android-tools
         - arch-install-scripts
         - asciinema
@@ -33,7 +33,7 @@ layer:
         - qemu-desktop
         - shellcheck
     debian:
-      packages:
+      package:
         - android-sdk-platform-tools
         - bridge-utils
         - debootstrap
@@ -46,7 +46,7 @@ layer:
         - qemu-utils
         - shellcheck
     fedora:
-      packages:
+      package:
         - android-tools
         - apptainer
         - apptainer-suid
@@ -76,7 +76,7 @@ layer:
       options:
         - "--setopt=tsflags=noscripts"
     ubuntu:
-      packages:
+      package:
         - android-sdk-platform-tools
         - bridge-utils
         - debootstrap
@@ -89,7 +89,7 @@ layer:
         - qemu-utils
         - shellcheck
     ubuntu-24.04:
-      packages:
+      package:
         - android-sdk-platform-tools
         - bridge-utils
         - debootstrap
@@ -106,7 +106,7 @@ layer:
   # and declarative tests that reference /usr/bin/bat work uniformly. On
   # Fedora/Arch this task is a no-op: /usr/bin/bat already exists from their
   # packages and the `[ ! -e ]` guard short-circuits.
-  tasks:
+  task:
     - cmd: |
         if [ -f /usr/bin/batcat ] && [ ! -e /usr/bin/bat ]; then
           ln -sf /usr/bin/batcat /usr/bin/bat

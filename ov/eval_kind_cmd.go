@@ -121,7 +121,7 @@ type kindResult struct {
 	Kind   string
 	Bed    string
 	CalVer string
-	Steps  []stepResult
+	Step   []stepResult
 	OK     bool
 }
 
@@ -147,7 +147,7 @@ func (c *EvalKindCmd) Run() error {
 		}
 		if res != nil {
 			fmt.Fprintf(os.Stderr, "ov eval kind %s: %s (steps=%d)\n",
-				k, summaryStatus(res.OK), len(res.Steps))
+				k, summaryStatus(res.OK), len(res.Step))
 		}
 	}
 	if len(failures) > 0 {
@@ -184,7 +184,7 @@ func (c *EvalKindCmd) runOne(exe, kind string, spec bedSpec) (*kindResult, error
 		out, runErr := runCapture(exe, args)
 		dur := time.Since(t0)
 		ok := runErr == nil
-		res.Steps = append(res.Steps, stepResult{Name: name, Duration: dur, OK: ok})
+		res.Step = append(res.Step, stepResult{Name: name, Duration: dur, OK: ok})
 		if !ok {
 			res.OK = false
 		}
@@ -431,7 +431,7 @@ func (c *EvalKindCmd) writeSummary(dir string, res *kindResult) {
 	fmt.Fprintf(&buf, "calver: %s\n", res.CalVer)
 	fmt.Fprintln(&buf, "steps:")
 	var total time.Duration
-	for _, s := range res.Steps {
+	for _, s := range res.Step {
 		fmt.Fprintf(&buf, "  - name: %s\n", s.Name)
 		fmt.Fprintf(&buf, "    duration_seconds: %d\n", int(s.Duration.Round(time.Second)/time.Second))
 		fmt.Fprintf(&buf, "    ok: %t\n", s.OK)

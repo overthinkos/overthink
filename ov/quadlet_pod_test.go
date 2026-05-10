@@ -89,10 +89,10 @@ func TestGenerateSidecarQuadlet(t *testing.T) {
 			"TS_USERSPACE":  "false",
 			"TS_ACCEPT_DNS": "true",
 		},
-		Volumes: []VolumeMount{
+		Volume: []VolumeMount{
 			{VolumeName: "ov-my-app-tailscale-state", ContainerPath: "/var/lib/tailscale"},
 		},
-		Secrets: []CollectedSecret{
+		Secret: []CollectedSecret{
 			{Name: "ov-my-app-tailscale-ts-authkey", Env: "TS_AUTHKEY"},
 		},
 		Security: SecurityConfig{
@@ -258,7 +258,7 @@ func TestGenerateQuadlet_HostTunnelWithSidecar(t *testing.T) {
 				{Port: 443, Protocol: "http", Public: false},
 			},
 		},
-		Sidecars: []ResolvedSidecar{
+		Sidecar: []ResolvedSidecar{
 			{Name: "tailscale", Image: "ts:latest"},
 		},
 	}

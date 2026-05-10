@@ -117,8 +117,8 @@ type DeployRecord struct {
 	Image      string   `json:"image"`
 	Tag        string   `json:"tag,omitempty"`
 	Target     string   `json:"target"` // "host" | "container:<name>"
-	Layers     []string `json:"layers"`
-	AddLayers  []string `json:"add_layers,omitempty"`
+	Layer      []string `json:"layer"`
+	AddLayer   []string `json:"add_layer,omitempty"`
 	DeployedAt string   `json:"deployed_at"`
 }
 

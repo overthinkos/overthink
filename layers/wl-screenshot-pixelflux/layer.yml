@@ -1,8 +1,8 @@
 layer:
   name: wl-screenshot-pixelflux
-  requires:
+  require:
     - selkies
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: pixelflux-screenshot

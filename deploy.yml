@@ -103,12 +103,12 @@ deploy:
         # Minimal in-guest tooling so arch-host (child) has something
         # to depend on, and so the command: probes have ripgrep/uv/
         # pre-commit versions to verify.
-        add_layers:
+        add_layer:
             - ripgrep
             - uv
             - pre-commit
         install_opts:
-            with_services: true
+            with_service: true
             allow_repo_changes: true # pacman-key + mirror tweaks
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
@@ -213,11 +213,11 @@ deploy:
                 target: local
                 disposable: true
                 lifecycle: dev
-                add_layers:
+                add_layer:
                     - tailscale
                     - tailscale-up
                 install_opts:
-                    with_services: true
+                    with_service: true
                     allow_root_tasks: true
                 description:
                     feature: R10 bed for tailscale + tailscale-up runtime wiring
@@ -233,7 +233,7 @@ deploy:
                 target: local
                 disposable: true
                 lifecycle: dev
-                add_layers:
+                add_layer:
                     - direnv
                 eval:
                     # Nested command runs: SSH into arch-vm → exec as arch user.
@@ -273,7 +273,7 @@ deploy:
         lifecycle: dev
         # Maps host ports so operator-side probes can reach them.
         # HOST_PORT:N substitution is available for `http:` tests.
-        ports:
+        port:
             - 18790:18789 # openclaw gateway
             - 5901:5900 # wayvnc
             - 9223:9222 # chrome devtools
@@ -346,7 +346,7 @@ deploy:
         vm: k3s-vm
         disposable: true
         lifecycle: dev
-        add_layers:
+        add_layer:
             - k3s-server
         env:
             - K3S_SERVER_HOSTNAME=127.0.0.1
@@ -355,7 +355,7 @@ deploy:
             # URL so operator-side kubectl talks to the forwarded port.
             - K3S_KUBECONFIG_SERVER=https://127.0.0.1:16443
         install_opts:
-            with_services: true
+            with_service: true
             allow_repo_changes: true # pacman sync / repo key import
             skip_incompatible: true # skip rpm:/deb:-only layer sections
             verify: true
@@ -417,7 +417,7 @@ deploy:
         host: local
         disposable: true
         install_opts:
-            with_services: true
+            with_service: true
             allow_repo_changes: true
             allow_root_tasks: true
         env:
@@ -451,7 +451,7 @@ deploy:
         image: eval-pod
         disposable: true
         lifecycle: dev
-        ports:
+        port:
             - 18794:18794
         description:
             feature: Fast pod bed exercising kind:pod runtime
@@ -478,7 +478,7 @@ deploy:
         image: jupyter
         disposable: true
         lifecycle: dev
-        ports:
+        port:
             - 28888:8888
         description:
             feature: R10 bed for jupyter-mcp regression coverage (auto-attach, canonicalization, idle-room sweep, cell_update id-preservation)
@@ -488,7 +488,7 @@ deploy:
         image: jupyter-ml
         disposable: true
         lifecycle: dev
-        ports:
+        port:
             - 28889:8888
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
@@ -498,7 +498,7 @@ deploy:
         image: marimo-ml
         disposable: true
         lifecycle: dev
-        ports:
+        port:
             - 22718:2718        # marimo edit + marimo MCP server (/mcp/server)
             - 28080:8080        # airflow api-server (/api/v2/)
             - 29999:19999       # airflow-mcp (mcp-server-apache-airflow on /mcp)
@@ -558,7 +558,7 @@ vm:
         backend: libvirt
         disk_size: 40G
         ram: 8G
-        cpus: 4
+        cpu: 4
         machine: q35
         firmware: bios
         network:
@@ -568,7 +568,7 @@ vm:
             key_source: generate
         cloud_init:
             timezone: UTC
-            packages:
+            package:
                 # The host's ov binary (PKGBUILD `depends=()`) is built
                 # with cgo for SPICE audio: `gordonklaus/portaudio`
                 # links against libportaudio.so.2; the SPICE protocol
@@ -622,8 +622,8 @@ vm:
                 # cloud-init runs before VmDeployTarget.Emit fires).
                 strategy: auto
         libvirt:
-            devices:
-                channels:
+            device:
+                channel:
                     - type: spicevmc
                       name: com.redhat.spice.0
                 graphics:
@@ -667,12 +667,12 @@ vm:
         backend: libvirt
         disk_size: 20G
         ram: 4G
-        cpus: 2
+        cpu: 2
         machine: q35
         firmware: bios
         network:
             mode: user
-            port_forwards:
+            port_forward:
                 # host 16443 → guest 6443. Host port 6443 is often
                 # already held by an operator-level service (passt on
                 # Tailscale exit nodes binds :6443 for quic-forward),
@@ -690,12 +690,12 @@ vm:
             # exclusively (no libvirt guest/* verbs), and the VM has no
             # virtio-serial channel for the agent anyway.
             timezone: UTC
-            packages:
+            package:
                 - sudo
             ov_install:
                 strategy: auto
         libvirt:
-            devices:
+            device:
                 rng:
                     - model: virtio
                       backend: /dev/urandom
@@ -707,7 +707,7 @@ vm:
             image: aurora
         disk_size: 80 GiB
         ram: 12G
-        cpus: 4
+        cpu: 4
     bazzite-ai-bootc:
         source:
             kind: bootc
@@ -718,7 +718,7 @@ vm:
             image: openclaw-browser-bootc
         disk_size: 20 GiB
         ram: 4G
-        cpus: 2
+        cpu: 2
         ssh:
             user: root
             port: 2222
@@ -728,7 +728,7 @@ vm:
             image: selkies-desktop-bootc
         disk_size: 40 GiB
         ram: 8G
-        cpus: 4
+        cpu: 4
         ssh:
             user: root
             port: 2250

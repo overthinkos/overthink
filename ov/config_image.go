@@ -58,13 +58,13 @@ func (c *ImageConfigSetupCmd) Run() error {
 		if err != nil {
 			return err
 		}
-		names := make([]string, 0, len(cfg.Sidecars))
-		for name := range cfg.Sidecars {
+		names := make([]string, 0, len(cfg.Sidecar))
+		for name := range cfg.Sidecar {
 			names = append(names, name)
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			sc := cfg.Sidecars[name]
+			sc := cfg.Sidecar[name]
 			fmt.Printf("%-20s %s\n", name, sc.Description)
 		}
 		return nil
@@ -128,7 +128,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// MergeDeployOntoMetadata so the cleaned deploy state is what gets
 	// merged into meta. Idempotent no-op after the first successful run.
 	// Plan §2.4.
-	if _, err := MigratePlaintextEnvSecrets(dc, meta, c.Image, c.Instance); err != nil {
+	if _, err := MigratePlaintextEnvSecret(dc, meta, c.Image, c.Instance); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not migrate plaintext env secrets: %v\n", err)
 	}
 
@@ -162,7 +162,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 	if len(deployVolumes) == 0 && dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployVolumes = overlay.Volumes
+			deployVolumes = overlay.Volume
 		}
 	}
 
@@ -180,7 +180,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Apply instance-specific volume naming
-	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 
 	// Inject provides BEFORE env resolution so this image's own provides
 	// (pod case) and other images' provides are available in the quadlet.
@@ -331,7 +331,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	var deploySidecars map[string]SidecarDef
 	if dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deploySidecars = overlay.Sidecars
+			deploySidecars = overlay.Sidecar
 		}
 	}
 	// Merge --sidecar flags into deploy sidecars
@@ -348,7 +348,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	var mergedSidecarDefs map[string]SidecarDef
 	if len(deploySidecars) > 0 {
 		// Route CLI -e flags: sidecar-related env vars go to the sidecar, not the app
-		sidecarEnvKeys := SidecarEnvKeys(deploySidecars)
+		sidecarEnvKeys := SidecarEnvKey(deploySidecars)
 		var appEnv, sidecarEnvOverrides []string
 		for _, e := range c.Env {
 			key := e
@@ -382,7 +382,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			return fmt.Errorf("resolving sidecars: %w", resolveErr)
 		}
 		if len(mergedSidecarDefs) > 0 {
-			resolvedSidecars = ResolveSidecars(mergedSidecarDefs, c.Image, c.Instance)
+			resolvedSidecars = ResolveSidecar(mergedSidecarDefs, c.Image, c.Instance)
 		}
 
 		// Log routed env vars
@@ -400,12 +400,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 
 	// Provision sidecar secrets as podman secrets
 	for i, sc := range resolvedSidecars {
-		if len(sc.Secrets) > 0 {
-			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, sc.Secrets, autoGen)
+		if len(sc.Secret) > 0 {
+			scProvisioned, scFallback, scErr := ProvisionPodmanSecrets(rt.RunEngine, c.Image, c.Instance, sc.Secret, autoGen)
 			if scErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: could not provision sidecar %s secrets: %v\n", sc.Name, scErr)
 			}
-			resolvedSidecars[i].Secrets = scProvisioned
+			resolvedSidecars[i].Secret = scProvisioned
 			for _, kv := range scFallback {
 				envVars = appendEnvUnique(envVars, kv)
 			}
@@ -443,7 +443,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 		KeyringBackend:  isKeyring,
 		PodName:         podName,
-		Sidecars:        resolvedSidecars,
+		Sidecar:        resolvedSidecars,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -474,8 +474,8 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		EnvFile:     quadletEnvFile,
 		Network:     resolvedNetwork,
 		Security:    &security,
-		Volumes:     deployVolumes,
-		Sidecars:    deploySidecars,
+		Volume:      deployVolumes,
+		Sidecar:    deploySidecars,
 		Tunnel:      meta.Tunnel,
 		SecretNames: secretDepNames(meta),
 	})
@@ -651,11 +651,11 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 					dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 				}
 				imgDeploy := dc.Deploy[deployKey(c.Image, c.Instance)]
-				for i := range imgDeploy.Volumes {
+				for i := range imgDeploy.Volume {
 					for _, entry := range dataMeta.DataEntries {
-						if imgDeploy.Volumes[i].Name == entry.Volume {
-							imgDeploy.Volumes[i].DataSeeded = true
-							imgDeploy.Volumes[i].DataSource = dataRef
+						if imgDeploy.Volume[i].Name == entry.Volume {
+							imgDeploy.Volume[i].DataSeeded = true
+							imgDeploy.Volume[i].DataSource = dataRef
 						}
 					}
 				}
@@ -1444,13 +1444,13 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		var deployVolumes []DeployVolumeConfig
 		var deploySidecars map[string]SidecarDef
 		if overlay, ok := dc.Deploy[key]; ok {
-			deployVolumes = overlay.Volumes
-			deploySidecars = overlay.Sidecars
+			deployVolumes = overlay.Volume
+			deploySidecars = overlay.Sidecar
 		}
 		volumes, bindMounts := ResolveVolumeBacking(imageName, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
 		// Apply instance-specific volume naming
-		volumes = InstanceVolumes(volumes, imageName, instance)
+		volumes = InstanceVolume(volumes, imageName, instance)
 
 		// Resolve env file
 		var quadletEnvFile string
@@ -1533,7 +1533,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		if len(deploySidecars) > 0 {
 			mergedDefs, resolveErr := ResolveSidecarsForConfig(deploySidecars)
 			if resolveErr == nil && len(mergedDefs) > 0 {
-				resolvedSidecars = ResolveSidecars(mergedDefs, imageName, instance)
+				resolvedSidecars = ResolveSidecar(mergedDefs, imageName, instance)
 				podName = PodNameInstance(imageName, instance)
 			}
 		}
@@ -1563,7 +1563,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 			KeyringBackend:  isKeyring,
 			PodName:         podName,
-			Sidecars:        resolvedSidecars,
+			Sidecar:        resolvedSidecars,
 		}
 
 		// Suppress file-sourced env vars if using EnvFile.

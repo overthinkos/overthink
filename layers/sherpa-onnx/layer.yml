@@ -9,7 +9,7 @@ layer:
   vars:
     SHERPA_VERSION: v1.12.23
 
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/share/sherpa-onnx/runtime"
       user: "${USER}"
     - mkdir: "${HOME}/.local/share/sherpa-onnx/models"

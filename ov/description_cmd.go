@@ -32,7 +32,7 @@ func (c *FeatureListCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayers(cwd)
+	layers, err := ScanLayer(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}
@@ -48,7 +48,7 @@ func (c *FeatureListCmd) Run() error {
 		}
 	}
 	if filter == "" || filter == "image" {
-		for name, img := range cfg.Images {
+		for name, img := range cfg.Image {
 			if img.Description != nil {
 				summarizeDesc("image", name, img.Description)
 			}
@@ -101,7 +101,7 @@ func (c *FeaturePendingCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayers(cwd)
+	layers, err := ScanLayer(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}
@@ -128,7 +128,7 @@ func (c *FeaturePendingCmd) Run() error {
 				continue
 			}
 			var pendingSteps []int
-			for i, step := range sc.Steps {
+			for i, step := range sc.Step {
 				if step.IsPending() {
 					pendingSteps = append(pendingSteps, i)
 				}
@@ -140,7 +140,7 @@ func (c *FeaturePendingCmd) Run() error {
 				}
 				fmt.Printf("%s — scenario %q%s\n", eid, sc.Name, tag)
 				for _, i := range pendingSteps {
-					step := sc.Steps[i]
+					step := sc.Step[i]
 					fmt.Printf("    step %d: %s %q — pending (no verb bound)\n", i, keywordOf(&step), step.KeywordText())
 				}
 			}
@@ -152,7 +152,7 @@ func (c *FeaturePendingCmd) Run() error {
 			scan("layer", name, layer.description)
 		}
 	}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		scan("image", name, img.Description)
 	}
 	return nil
@@ -175,7 +175,7 @@ func (c *FeatureValidateCmd) Run() error {
 	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
 	}
-	layers, err := ScanLayers(cwd)
+	layers, err := ScanLayer(cwd)
 	if err != nil {
 		return fmt.Errorf("scanning layers: %w", err)
 	}
@@ -200,7 +200,7 @@ func (c *FeatureValidateCmd) Run() error {
 			validate("layer", name, layer.description)
 		}
 	}
-	for name, img := range cfg.Images {
+	for name, img := range cfg.Image {
 		validate("image", name, img.Description)
 	}
 
@@ -235,7 +235,7 @@ func ValidateDescription(d *Description, eid string) []string {
 		if strings.TrimSpace(sc.Name) == "" {
 			errs = append(errs, fmt.Sprintf("%s: scenario %d has empty name", eid, sIdx))
 		}
-		for stepIdx, step := range sc.Steps {
+		for stepIdx, step := range sc.Step {
 			if _, err := step.StepKeyword(); err != nil {
 				errs = append(errs, fmt.Sprintf("%s: scenario %q step %d: %v", eid, sc.Name, stepIdx, err))
 			}
@@ -245,9 +245,9 @@ func ValidateDescription(d *Description, eid string) []string {
 				}
 			}
 		}
-		if len(sc.Examples) > 0 {
+		if len(sc.Example) > 0 {
 			placeholders := collectPlaceholders(sc)
-			for _, row := range sc.Examples {
+			for _, row := range sc.Example {
 				for ph := range placeholders {
 					if _, ok := row[ph]; !ok {
 						errs = append(errs, fmt.Sprintf("%s: scenario %q outline row missing placeholder <%s>", eid, sc.Name, ph))
@@ -280,7 +280,7 @@ func collectPlaceholders(sc Scenario) map[string]bool {
 			s = s[i+1+j+1:]
 		}
 	}
-	for _, step := range sc.Steps {
+	for _, step := range sc.Step {
 		scan(step.Given)
 		scan(step.When)
 		scan(step.Then)

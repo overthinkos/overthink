@@ -43,7 +43,7 @@ import (
 // `source: description` with kind=pod or kind=vm fails validation.
 type HarnessRecipeFrom struct {
 	Kind         string   `yaml:"kind"`                     // layer | image | pod | vm
-	Name         string   `yaml:"name"`                     // entity name (matches uf.Layers/Images/Pod/VM)
+	Name         string   `yaml:"name"`                     // entity name (matches uf.Layer/Images/Pod/VM)
 	Pod          string   `yaml:"pod"`                      // harness container name (becomes scenario.pod)
 	Source       string   `yaml:"source,omitempty"`         // tests (default) | description
 	Select       []string `yaml:"select,omitempty"`         // optional allow-list (Check.ID for tests, Scenario.Name for description)
@@ -142,7 +142,7 @@ func ExpandRecipeFrom(uf *UnifiedFile, layers map[string]*Layer, recipeName stri
 				imported = append(imported, Scenario{
 					Name: name,
 					Pod:  from.Pod,
-					Steps: []Step{
+					Step: []Step{
 						{
 							Then:  stepNarrative(c),
 							Check: c,
@@ -240,7 +240,7 @@ func collectScenariosForFromDescription(uf *UnifiedFile, layers map[string]*Laye
 		return append([]Scenario(nil), layer.description.Scenario...), nil
 
 	case "image":
-		_, ok := uf.Images[from.Name]
+		_, ok := uf.Image[from.Name]
 		if !ok {
 			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
 		}
@@ -334,7 +334,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		return out, nil
 
 	case "image":
-		_, ok := uf.Images[from.Name]
+		_, ok := uf.Image[from.Name]
 		if !ok {
 			return nil, fmt.Errorf("image %q not found (available: %s)", from.Name, sortedImageNames(uf))
 		}
@@ -359,7 +359,7 @@ func collectChecksForFrom(uf *UnifiedFile, layers map[string]*Layer, from Harnes
 		// If the pod wraps an image, walk the image's layer chain too.
 		var out []Check
 		if pod.Image != "" {
-			if _, hasImage := uf.Images[pod.Image]; hasImage {
+			if _, hasImage := uf.Image[pod.Image]; hasImage {
 				cfg := uf.ProjectConfig()
 				if set := CollectEval(cfg, layers, pod.Image); set != nil {
 					out = append(out, set.Layer...)
@@ -594,8 +594,8 @@ func sortedMapKeys(m map[string]*Layer) string {
 }
 
 func sortedImageNames(uf *UnifiedFile) string {
-	keys := make([]string, 0, len(uf.Images))
-	for k := range uf.Images {
+	keys := make([]string, 0, len(uf.Image))
+	for k := range uf.Image {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

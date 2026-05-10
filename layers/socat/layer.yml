@@ -1,22 +1,22 @@
 layer:
   name: socat
   description: Socket relay tool for VM console access and port relays
-  packages:
+  package:
     - socat
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - iproute2
     debian:
-      packages:
+      package:
         - iproute2
     fedora:
-      packages:
+      package:
         - iproute
     ubuntu:
-      packages:
+      package:
         - iproute2
-  tasks:
+  task:
     - copy: relay-wrapper
       to: /usr/local/bin/relay-wrapper
       mode: "0755"

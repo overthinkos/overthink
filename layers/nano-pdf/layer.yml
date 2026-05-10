@@ -1,5 +1,5 @@
 layer:
   name: nano-pdf
   description: nano-pdf CLI for PDF editing with natural language
-  requires:
+  require:
     - python

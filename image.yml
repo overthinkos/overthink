@@ -6,7 +6,7 @@ version: 4
 image:
     arch-coder:
         base: archlinux
-        layers:
+        layer:
             - agent-forwarding
             - sshd
             - ov-full
@@ -39,7 +39,7 @@ image:
             - google-cloud
             - google-cloud-npm
             - grafana-tools
-        ports:
+        port:
             - 2222:2222
             - 18765:18765
         eval:
@@ -73,7 +73,7 @@ image:
     arch-ov:
         enabled: false
         base: archlinux
-        layers:
+        layer:
             - agent-forwarding
             - ov-full
             - ov-mcp
@@ -82,7 +82,7 @@ image:
             - sshd
             - container-nesting
             - nvidia
-        ports:
+        port:
             - 2222:2222
             - 18765:18765
     arch-test:
@@ -91,7 +91,7 @@ image:
         build:
             - pac
             - aur
-        layers:
+        layer:
             - agent-forwarding
             - arch-pac-test
             - arch-aur-test
@@ -106,19 +106,19 @@ image:
             cargo: archlinux-builder
             npm: archlinux-builder
             pixi: archlinux-builder
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
             - aur
     archlinux-builder:
         base: archlinux
-        layers:
+        layer:
             - pixi
             - nodejs
             - build-toolchain
             - yay
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
@@ -129,7 +129,7 @@ image:
             - archlinux
         build:
             - pac
-        layers:
+        layer:
             - pacstrap-builder
     archlinux-pacstrap:
         from: builder:pacstrap
@@ -144,7 +144,7 @@ image:
             - archlinux
         build:
             - pac
-        layers:
+        layer:
             - pacstrap-builder
     cachyos:
         from: builder:pacstrap
@@ -161,7 +161,7 @@ image:
             - debian
         build:
             - deb
-        layers:
+        layer:
             - debootstrap-builder
     debian-debootstrap:
         from: builder:debootstrap
@@ -178,7 +178,7 @@ image:
             - debian
         build:
             - deb
-        layers:
+        layer:
             - debootstrap-builder
     ubuntu-debootstrap:
         from: builder:debootstrap
@@ -194,7 +194,7 @@ image:
         base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - bootc-base
             - sshd
@@ -205,7 +205,7 @@ image:
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - bootc-base
             - build-toolchain
@@ -232,12 +232,12 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - comfyui
             - dbus
             - ov
-        ports:
+        port:
             - 8188:8188
     debian:
         enabled: false
@@ -251,25 +251,25 @@ image:
             cargo: debian-builder
             npm: debian-builder
             pixi: debian-builder
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     debian-builder:
         enabled: false
         base: debian
-        layers:
+        layer:
             - pixi
             - nodejs
             - build-toolchain
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     debian-coder:
         enabled: false
         base: debian
-        layers:
+        layer:
             - agent-forwarding
             - sshd
             - ov-full
@@ -302,7 +302,7 @@ image:
             - google-cloud
             - google-cloud-npm
             - grafana-tools
-        ports:
+        port:
             - 2222:2222
             - 18765:18765
         eval:
@@ -338,24 +338,24 @@ image:
         distro:
             - fedora:43
             - fedora
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     fedora-builder:
         base: fedora
-        layers:
+        layer:
             - rpmfusion
             - pixi
             - nodejs
             - build-toolchain
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     fedora-coder:
         base: fedora-nonfree
-        layers:
+        layer:
             - agent-forwarding
             - sshd
             - ov-full
@@ -388,7 +388,7 @@ image:
             - google-cloud
             - google-cloud-npm
             - grafana-tools
-        ports:
+        port:
             - 2222:2222
             - 18765:18765
         eval:
@@ -421,12 +421,12 @@ image:
               reachable: true
     fedora-nonfree:
         base: fedora
-        layers:
+        layer:
             - rpmfusion
     fedora-ov:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - ov-full
             - golang
@@ -439,28 +439,28 @@ image:
         base: quay.io/fedora/fedora:43
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - '@github.com/overthinkos/overthink/layers/dev-tools:main'
             - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.64.1937'
             - '@github.com/overthinkos/overthink/layers/nodejs'
     fedora-test:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - traefik
             - testapi
-        ports:
+        port:
             - 8000:8000
             - 8080:8080
     filebrowser:
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - filebrowser
             - dbus
             - ov
-        ports:
+        port:
             - 8085:8080
         eval:
             - command: test -x /usr/local/bin/filebrowser && test -x /usr/local/bin/ov && test -x /usr/bin/dbus-daemon
@@ -475,7 +475,7 @@ image:
         base: fedora
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - github-runner
             - ov-full
@@ -483,7 +483,7 @@ image:
         network: host
     hermes:
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - hermes-full
             - dbus
@@ -498,7 +498,7 @@ image:
     hermes-playwright:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - hermes
             - hermes-playwright
@@ -509,7 +509,7 @@ image:
         base: fedora-nonfree
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - nodejs24
             - supervisord
@@ -519,13 +519,13 @@ image:
             - immich
             - dbus
             - ov
-        ports:
+        port:
             - 2283:2283
     immich-ml:
         base: fedora
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - nodejs24
             - cuda
@@ -538,7 +538,7 @@ image:
             - immich-ml
             - dbus
             - ov
-        ports:
+        port:
             - 2283:2283
         eval:
             - command: test -x /usr/bin/postgres && test -x /usr/bin/redis-server && test -x /opt/immich/machine-learning/.venv/bin/python && test -f /opt/immich/server/dist/main.js
@@ -558,13 +558,13 @@ image:
               exit_status: 0
     jupyter:
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - jupyter
             - notebook-templates
             - dbus
             - ov
-        ports:
+        port:
             - 8888:8888
         eval:
             - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n 1
@@ -582,20 +582,20 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - jupyter-ml
             - notebook-templates
             - dbus
             - ov
-        ports:
+        port:
             - 8888:8888
     jupyter-ml-notebook:
         enabled: false
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - jupyter-ml
             - notebook-templates
@@ -605,14 +605,14 @@ image:
             - notebook-openrouter
             - dbus
             - ov
-        ports:
+        port:
             - 8888:8888
     marimo-ml:
         enabled: true
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - marimo            # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
@@ -622,7 +622,7 @@ image:
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
             - ov
-        ports:
+        port:
             - 2718:2718         # marimo edit + marimo MCP server (/mcp/server)
             - 28080:8080        # airflow api-server (host 8080 taken by traefik)
             - 19999:19999       # airflow-mcp (deploy.yml overrides host port to 29999)
@@ -632,7 +632,7 @@ image:
         base: fedora-nonfree
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - nvidia
             - cuda
@@ -641,36 +641,36 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - ollama
             - dbus
             - ov
-        ports:
+        port:
             - 11434:11434
     openclaw:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - openclaw
             - dbus
             - ov
-        ports:
+        port:
             - 18789:18789
     openclaw-browser-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - bootc-base
             - openclaw
             - pipewire
             - wayvnc
             - chrome-sway
-        ports:
+        port:
             - 18789:18789
             - 5900:5900
             - 9222:9222
@@ -678,10 +678,10 @@ image:
     openclaw-full:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - openclaw-full
-        ports:
+        port:
             - 18789:18789
             - 9222:9222
             - 9224:9224
@@ -690,12 +690,12 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - openclaw-full-ml
             - sway-desktop-vnc
             - ollama
-        ports:
+        port:
             - 18789:18789
             - 5900:5900
             - 9222:9222
@@ -706,11 +706,11 @@ image:
         base: fedora
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - openclaw-full
             - sway-desktop-vnc
-        ports:
+        port:
             - 18789:18789
             - 5900:5900
             - 9222:9222
@@ -720,13 +720,13 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - openclaw
             - ollama
             - dbus
             - ov
-        ports:
+        port:
             - 18789:18789
             - 11434:11434
     openclaw-ollama-sway-browser:
@@ -734,14 +734,14 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - openclaw-full-ml
             - sway-desktop-vnc
             - ollama
             - dbus
             - ov
-        ports:
+        port:
             - 18789:18789
             - 5900:5900
             - 9222:9222
@@ -751,13 +751,13 @@ image:
         base: fedora
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - openclaw-full
             - sway-desktop-vnc
             - dbus
             - ov
-        ports:
+        port:
             - 18789:18789
             - 5900:5900
             - 9222:9222
@@ -765,12 +765,12 @@ image:
     openwebui:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - openwebui
             - dbus
             - ov
-        ports:
+        port:
             - 8080:8080
         eval:
             - command: test -x ${HOME}/.local/bin/openwebui-entrypoint && test -x ${HOME}/.pixi/envs/default/bin/python && test -x /usr/local/bin/ov
@@ -786,19 +786,19 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - python-ml
     selkies-desktop:
         base: fedora-nonfree
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - selkies-desktop
             - dbus
             - ov
-        ports:
+        port:
             - 3000:3000
             - 9222:9222
             - 9224:9224
@@ -820,7 +820,7 @@ image:
         distro:
             - fedora:43
             - fedora
-        layers:
+        layer:
             - agent-forwarding
             - bootc-base
             - rpmfusion
@@ -829,7 +829,7 @@ image:
             - keepassxc
             - dbus
             - ov
-        ports:
+        port:
             - 13000:3000
             - 19222:9222
             - 19224:9224
@@ -842,12 +842,12 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - selkies-desktop
             - dbus
             - ov
-        ports:
+        port:
             - 3000:3000
             - 9222:9222
             - 9224:9224
@@ -856,7 +856,7 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - selkies-desktop
             - ov-full
@@ -865,7 +865,7 @@ image:
             - gh
             - dbus
             - ov
-        ports:
+        port:
             - 3000:3000
             - 9222:9222
             - 9224:9224
@@ -928,12 +928,12 @@ image:
         base: fedora
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - sway-desktop-vnc
             - dbus
             - ov
-        ports:
+        port:
             - 5900:5900
             - 9222:9222
             - 9224:9224
@@ -984,25 +984,25 @@ image:
             cargo: ubuntu-builder
             npm: ubuntu-builder
             pixi: ubuntu-builder
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     ubuntu-builder:
         enabled: false
         base: ubuntu
-        layers:
+        layer:
             - pixi
             - nodejs
             - build-toolchain
-        builds:
+        produce:
             - pixi
             - npm
             - cargo
     ubuntu-coder:
         enabled: false
         base: ubuntu
-        layers:
+        layer:
             - agent-forwarding
             - sshd
             - ov-full
@@ -1035,7 +1035,7 @@ image:
             - google-cloud
             - google-cloud-npm
             - grafana-tools
-        ports:
+        port:
             - 2222:2222
             - 18765:18765
         eval:
@@ -1071,23 +1071,23 @@ image:
         base: nvidia
         platforms:
             - linux/amd64
-        layers:
+        layer:
             - agent-forwarding
             - unsloth-studio
             - notebook-finetuning
             - dbus
             - ov
-        ports:
+        port:
             - 8888:8888
             - 8000:8000
     valkey-test:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - supervisord
             - valkey
-        ports:
+        port:
             - 6379:6379
     # Throwaway benchmark target used by `ov eval run eval-target`.
     # The eval-target layer ships a deliberately-failing BDD scenario
@@ -1095,94 +1095,94 @@ image:
     # layer stack keeps per-iteration rebuild fast.
     eval-target:
         base: fedora
-        layers:
+        layer:
             - claude-code
             - ov-mcp
             - eval-target-layer
-        ports:
+        port:
             - 18765:18765
     # ov harness `default` score — per-pod target images.
     os:
         base: fedora
-        layers:
+        layer:
             - supervisord
             - os-layer
     web:
         base: fedora
-        layers:
+        layer:
             - supervisord
             - web-layer
-        ports:
+        port:
             - 8080:8080
     tier1:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - eval-tier1-layer
     tier23:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - supervisord
             - eval-tier23-layer
-        ports:
+        port:
             - 8080:8080
     redis:
         enabled: false
         base: fedora
-        layers:
+        layer:
             - supervisord
             - redis
             - eval-redis-init-layer
-        ports:
+        port:
             - 6379:6379
     # tier4-redis: server bound to 0.0.0.0 for cross-pod access (deploys as `redis`).
     redis-server:
         base: fedora
-        layers:
+        layer:
             - supervisord
             - redis-server-layer
-        ports:
+        port:
             - 6379:6379
     # tier4-redis: client pod with redis-cli only (deploys as `redis-client`).
     redis-client:
         base: fedora
-        layers:
+        layer:
             - supervisord
             - redis-client-layer
     # mcp-protocol-probe: full Jupyter image (deploys as `mcp`).
     mcp:
         base: fedora
-        layers:
+        layer:
             - agent-forwarding
             - jupyter
             - notebook-templates
             - dbus
             - ov
-        ports:
+        port:
             - 8888:8888
     # kubernetes-cluster: fake k8s API server (deploys as `k8s`).
     k8s:
         base: fedora
-        layers:
+        layer:
             - supervisord
             - k8s-layer
-        ports:
+        port:
             - 6443:6443
     # phase5 selftest: minimal sshd-only image for selftest-layer pod.
     selftest-layer:
         base: fedora
-        layers:
+        layer:
             - sshd
     # phase5 selftest: minimal ov-only image for selftest-image pod.
     selftest-image:
         base: fedora
-        layers:
+        layer:
             - ov
     # phase6 selftest: combines sshd + ov + composition marker for composition-app pod.
     composition-app:
         base: fedora
-        layers:
+        layer:
             - sshd
             - ov
             - eval-composition-layer
@@ -1198,26 +1198,26 @@ image:
         distro:
             - fedora:43
             - fedora
-        builds: []
+        produce: []
         description:
             feature: Fast eval bed for kind:image smoke
             narrative: Single-layer fedora-minimal image used as the kind:image bed for `ov eval kind image`.
             tag:
                 - working
-        layers:
+        layer:
             - eval-image-layer
     eval-layer:
         base: quay.io/fedora/fedora-minimal:43
         distro:
             - fedora:43
             - fedora
-        builds: []
+        produce: []
         description:
             feature: Fast eval bed for kind:layer composition smoke
             narrative: Two-layer fedora-minimal image asserting the composition order works.
             tag:
                 - working
-        layers:
+        layer:
             - eval-image-layer
             - eval-layer-layer
     eval-pod:
@@ -1225,28 +1225,28 @@ image:
         distro:
             - fedora:43
             - fedora
-        builds: []
+        produce: []
         description:
             feature: Fast eval bed for kind:pod runtime smoke
             narrative: Minimal pod target — listens on 18794 via nc, exercises supervisord render path.
             tag:
                 - working
-        layers:
+        layer:
             - eval-image-layer
             - eval-pod-layer
-        ports:
+        port:
             - 18794:18794
     eval-deploy:
         base: quay.io/fedora/fedora-minimal:43
         distro:
             - fedora:43
             - fedora
-        builds: []
+        produce: []
         description:
             feature: Fast eval bed for kind:deploy DeployTarget interface smoke
             narrative: Minimal pod target with a supervisord-managed sleep service — exercises ALL DeployTarget rendering paths.
             tag:
                 - working
-        layers:
+        layer:
             - eval-image-layer
             - eval-deploy-layer

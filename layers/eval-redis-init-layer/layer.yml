@@ -6,14 +6,14 @@ layer:
       Companion to the redis layer. Sets the key `bench:hello` to `world`
       after redis-server is up so the tier4-redis recipe's
       `redis-cli get bench:hello` probe returns the expected value.
-  requires:
+  require:
     - redis
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - iproute
         - procps-ng
-  tasks:
+  task:
     - write: /usr/local/bin/bench-redis-init.sh
       user: root
       mode: "0755"

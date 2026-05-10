@@ -1,17 +1,17 @@
 layer:
   name: pac-tool
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - neovim
         - ripgrep
       options:
         - --needed
-      repos:
+      repo:
         - name: custom-repo
           server: https://example.com/repo/$arch
           siglevel: Optional TrustAll
       aur:
-        packages:
+        package:
           - yay-bin
           - neovim-nightly-bin

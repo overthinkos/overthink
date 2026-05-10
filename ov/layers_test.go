@@ -6,9 +6,9 @@ import (
 )
 
 func TestScanLayers(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	expectedLayers := []string{"pixi", "python", "nodejs", "cargo-tool", "webservice", "pixi-locked"}
@@ -20,9 +20,9 @@ func TestScanLayers(t *testing.T) {
 }
 
 func TestLayerPixi(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -39,15 +39,15 @@ func TestLayerPixi(t *testing.T) {
 	if pixi.HasPixiToml {
 		t.Error("pixi should not have pixi.toml")
 	}
-	if len(pixi.Requires) != 0 {
-		t.Errorf("pixi should have no depends, got %v", pixi.Requires)
+	if len(pixi.Require) != 0 {
+		t.Errorf("pixi should have no depends, got %v", pixi.Require)
 	}
 }
 
 func TestLayerPython(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	python := layers["python"]
@@ -58,15 +58,15 @@ func TestLayerPython(t *testing.T) {
 	if !python.HasPixiToml {
 		t.Error("python should have pixi.toml")
 	}
-	if !reflect.DeepEqual(python.Requires, []string{"pixi"}) {
-		t.Errorf("python.Requires = %v, want [pixi]", python.Requires)
+	if !reflect.DeepEqual(python.Require, []string{"pixi"}) {
+		t.Errorf("python.Require = %v, want [pixi]", python.Require)
 	}
 }
 
 func TestLayerNodejs(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	nodejs := layers["nodejs"]
@@ -101,9 +101,9 @@ func TestLayerNodejs(t *testing.T) {
 }
 
 func TestLayerPacTool(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	pacTool := layers["pac-tool"]
@@ -120,7 +120,7 @@ func TestLayerPacTool(t *testing.T) {
 		t.Errorf("FormatSection(pac).Packages = %v, want [neovim ripgrep]", pac.Packages)
 	}
 	// Test raw fields accessible for templates
-	repos := toMapSlice(pac.Raw["repos"])
+	repos := toMapSlice(pac.Raw["repo"])
 	if len(repos) != 1 {
 		t.Errorf("pac repos count = %d, want 1", len(repos))
 	}
@@ -150,9 +150,9 @@ func TestLayerPacTool(t *testing.T) {
 }
 
 func TestLayerCargoTool(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	cargoTool := layers["cargo-tool"]
@@ -173,9 +173,9 @@ func TestHasInstallFiles(t *testing.T) {
 	// (so unknown top-level keys get routed to FormatSections, not discarded).
 	SetFormatNames(testDistroConfig())
 
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	for name, layer := range layers {
@@ -186,9 +186,9 @@ func TestHasInstallFiles(t *testing.T) {
 }
 
 func TestLayerNames(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	names := LayerNames(layers)
@@ -206,9 +206,9 @@ func TestLayerNames(t *testing.T) {
 }
 
 func TestLayerPorts(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -220,7 +220,7 @@ func TestLayerPorts(t *testing.T) {
 		t.Error("webservice should have ports")
 	}
 
-	ports, err := ws.Ports()
+	ports, err := ws.Port()
 	if err != nil {
 		t.Fatalf("Ports() error = %v", err)
 	}
@@ -229,7 +229,7 @@ func TestLayerPorts(t *testing.T) {
 	}
 
 	// Test caching
-	ports2, err := ws.Ports()
+	ports2, err := ws.Port()
 	if err != nil {
 		t.Fatalf("Ports() second call error = %v", err)
 	}
@@ -239,9 +239,9 @@ func TestLayerPorts(t *testing.T) {
 }
 
 func TestLayerPortsNone(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -249,7 +249,7 @@ func TestLayerPortsNone(t *testing.T) {
 		t.Error("pixi should not have ports")
 	}
 
-	ports, err := pixi.Ports()
+	ports, err := pixi.Port()
 	if err != nil {
 		t.Fatalf("Ports() error = %v", err)
 	}
@@ -259,9 +259,9 @@ func TestLayerPortsNone(t *testing.T) {
 }
 
 func TestLayerRoute(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -295,9 +295,9 @@ func TestLayerRoute(t *testing.T) {
 }
 
 func TestLayerRouteNone(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
@@ -315,9 +315,9 @@ func TestLayerRouteNone(t *testing.T) {
 }
 
 func TestLayerPixiLocked(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	locked := layers["pixi-locked"]
@@ -334,15 +334,15 @@ func TestLayerPixiLocked(t *testing.T) {
 	if locked.PixiManifest() != "pixi.toml" {
 		t.Errorf("pixi-locked.PixiManifest() = %q, want %q", locked.PixiManifest(), "pixi.toml")
 	}
-	if !reflect.DeepEqual(locked.Requires, []string{"pixi"}) {
-		t.Errorf("pixi-locked.Requires = %v, want [pixi]", locked.Requires)
+	if !reflect.DeepEqual(locked.Require, []string{"pixi"}) {
+		t.Errorf("pixi-locked.Require = %v, want [pixi]", locked.Require)
 	}
 }
 
 func TestLayerPixiNoLock(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	python := layers["python"]
@@ -359,9 +359,9 @@ func TestLayerPixiNoLock(t *testing.T) {
 }
 
 func TestLayerVolumes(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -373,7 +373,7 @@ func TestLayerVolumes(t *testing.T) {
 		t.Error("webservice should have volumes")
 	}
 
-	vols := ws.Volumes()
+	vols := ws.Volume()
 	if len(vols) != 1 {
 		t.Fatalf("Volumes() returned %d volumes, want 1", len(vols))
 	}
@@ -386,39 +386,39 @@ func TestLayerVolumes(t *testing.T) {
 }
 
 func TestLayerVolumesNone(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	pixi := layers["pixi"]
 	if pixi.HasVolumes {
 		t.Error("pixi should not have volumes")
 	}
-	if len(pixi.Volumes()) != 0 {
-		t.Errorf("Volumes() = %v, want nil/empty", pixi.Volumes())
+	if len(pixi.Volume()) != 0 {
+		t.Errorf("Volumes() = %v, want nil/empty", pixi.Volume())
 	}
 }
 
 func TestVolumeLayers(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
-	vols := VolumeLayers(layers)
+	vols := VolumeLayer(layers)
 	if len(vols) != 1 {
-		t.Errorf("VolumeLayers() returned %d layers, want 1", len(vols))
+		t.Errorf("VolumeLayer() returned %d layers, want 1", len(vols))
 	}
 	if len(vols) > 0 && vols[0].Name != "webservice" {
-		t.Errorf("VolumeLayers()[0].Name = %q, want %q", vols[0].Name, "webservice")
+		t.Errorf("VolumeLayer()[0].Name = %q, want %q", vols[0].Name, "webservice")
 	}
 }
 
 func TestLayerPortRelayFromYAML(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
 	ws := layers["webservice"]
@@ -487,16 +487,16 @@ func TestLayerPortRelayMultiple(t *testing.T) {
 }
 
 func TestRouteLayers(t *testing.T) {
-	layers, err := ScanLayers("testdata")
+	layers, err := ScanLayer("testdata")
 	if err != nil {
-		t.Fatalf("ScanLayers() error = %v", err)
+		t.Fatalf("ScanLayer() error = %v", err)
 	}
 
-	routes := RouteLayers(layers)
+	routes := RouteLayer(layers)
 	if len(routes) != 1 {
-		t.Errorf("RouteLayers() returned %d layers, want 1", len(routes))
+		t.Errorf("RouteLayer() returned %d layers, want 1", len(routes))
 	}
 	if len(routes) > 0 && routes[0].Name != "webservice" {
-		t.Errorf("RouteLayers()[0].Name = %q, want %q", routes[0].Name, "webservice")
+		t.Errorf("RouteLayer()[0].Name = %q, want %q", routes[0].Name, "webservice")
 	}
 }

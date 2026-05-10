@@ -9,7 +9,7 @@ import (
 
 // Integration-ish tests for BuildDeployPlan using the project's own
 // layer definitions. Not unit tests in the strict sense (they read
-// real YAML via LoadConfig + ScanAllLayersWithConfig) but they catch
+// real YAML via LoadConfig + ScanAllLayerWithConfig) but they catch
 // compile-time regressions that pure unit tests can't.
 
 // compilerTestProjectDir chdirs to the project root (the parent of ov/)
@@ -58,9 +58,9 @@ func loadCompilerFixtures(t *testing.T, imageName string) (*Config, *ResolvedIma
 		}
 		SetFormatNames(distroCfg)
 	}
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
-		t.Fatalf("ScanAllLayersWithConfig: %v", err)
+		t.Fatalf("ScanAllLayerWithConfig: %v", err)
 	}
 	img, err := cfg.ResolveImage(imageName, "testing", dir, ResolveOpts{})
 	if err != nil {
@@ -236,7 +236,7 @@ func TestMergePlansOrderingAndID(t *testing.T) {
 		&TaskStep{LayerName: "uv", Task: &Task{Download: "https://…"}},
 	}}
 
-	merged := MergePlans([]*InstallPlan{p1, p2}, "fedora-coder", nil)
+	merged := MergePlan([]*InstallPlan{p1, p2}, "fedora-coder", nil)
 	if merged.Image != "fedora-coder" {
 		t.Errorf("merged.Image = %q, want fedora-coder", merged.Image)
 	}

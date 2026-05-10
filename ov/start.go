@@ -58,7 +58,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var deployVolumes []DeployVolumeConfig
 	if dc != nil {
 		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployVolumes = overlay.Volumes
+			deployVolumes = overlay.Volume
 		}
 	}
 
@@ -79,7 +79,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
 	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecars) > 0 {
+		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecar) > 0 {
 			return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
 		}
 	}
@@ -102,7 +102,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	}
 
 	// Apply instance-specific volume naming
-	volumes = InstanceVolumes(volumes, c.Image, c.Instance)
+	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 
 	// Auto-initialize and mount encrypted volumes if needed
 	if err := ensureEncryptedMounts(c.Image, c.Instance, false); err != nil {

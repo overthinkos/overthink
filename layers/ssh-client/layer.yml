@@ -1,18 +1,18 @@
 layer:
   name: ssh-client
   description: OpenSSH client tools for SSH agent forwarding
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - openssh
     debian:
-      packages:
+      package:
         - openssh-client
     fedora:
-      packages:
+      package:
         - openssh-clients
     ubuntu:
-      packages:
+      package:
         - openssh-client
   eval:
     - id: ssh-binary

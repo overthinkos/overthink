@@ -1,17 +1,17 @@
 layer:
   name: pipewire
-  requires:
+  require:
     - supervisord
   env:
     XDG_RUNTIME_DIR: "/tmp"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - pipewire
         - pipewire-pulseaudio
         - pipewire-utils
         - wireplumber
-  tasks:
+  task:
     - mkdir: "${HOME}/.local/bin"
       user: "${USER}"
     - copy: pipewire-wrapper
@@ -39,6 +39,6 @@ layer:
         XDG_RUNTIME_DIR: /tmp
       restart: always
       priority: 5
-      start_secs: 2
+      start_sec: 2
       enable: true
       scope: system

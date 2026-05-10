@@ -1,6 +1,6 @@
 layer:
   name: sway-desktop-vnc
-  layers:
+  layer:
     - sway-desktop
     - wayvnc
 

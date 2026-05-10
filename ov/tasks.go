@@ -448,8 +448,8 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 	mounts = append(mounts, fmt.Sprintf("--mount=type=bind,from=%s,source=/,target=/ctx", layerStage))
 
 	if userIsRoot && img != nil && img.DistroDef != nil {
-		if formatDef, ok := img.DistroDef.Formats[img.Pkg]; ok {
-			if cm := RenderCacheMounts(formatDef.CacheMounts, -1, 0, " ", false); cm != "" {
+		if formatDef, ok := img.DistroDef.Format[img.Pkg]; ok {
+			if cm := RenderCacheMounts(formatDef.CacheMount, -1, 0, " ", false); cm != "" {
 				mounts = append(mounts, cm)
 			}
 		}

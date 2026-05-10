@@ -2,20 +2,20 @@ layer:
   name: rust
   path_append:
     - "~/.cargo/bin"
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - rust
     debian:
-      packages:
+      package:
         - rustc
         - cargo
     fedora:
-      packages:
+      package:
         - rust
         - cargo
     ubuntu:
-      packages:
+      package:
         - rustc
         - cargo
   eval:

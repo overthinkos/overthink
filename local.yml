@@ -2,7 +2,7 @@ version: 4
 
 local:
   ov-cachyos:
-    layers:
+    layer:
       # Establish passwordless wheel sudo before any other root task
       # runs. On a fresh CachyOS install this turns a one-time `sudo -v`
       # password prompt into durable passwordless sudo; on the existing
@@ -70,7 +70,7 @@ local:
     # keep `ov eval run --on-host ov-cachyos` working.
 
     install_opts:
-      with_services: true
+      with_service: true
       allow_repo_changes: true
       allow_root_tasks: true
       # Use the locally-cached archlinux-builder for cargo/npm/pixi steps.
@@ -128,7 +128,7 @@ local:
   # verifies on the host (not in a container).
   # =================================================================
   eval-local:
-    layers:
+    layer:
       - eval-local-layer
     description:
       feature: Fast eval bed for kind:local layer-application smoke

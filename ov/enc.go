@@ -412,7 +412,7 @@ func waitForKeyringUnlockLoop(
 // encInit initializes gocryptfs cipher directories for an image.
 // If volume is non-empty, only that volume is initialized.
 func encInit(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -469,7 +469,7 @@ func encInit(imageName, instance, volume string) error {
 // the most common operational case is "restart when everything is still
 // mounted", and it has no passphrase dependency.
 func encMount(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -552,7 +552,7 @@ func encMount(imageName, instance, volume string) error {
 // encUnmount unmounts encrypted volumes for an image.
 // If volume is non-empty, only that volume is unmounted.
 func encUnmount(imageName, instance, volume string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -586,7 +586,7 @@ func encUnmount(imageName, instance, volume string) error {
 
 // encStatus prints the status of encrypted bind mounts for an image.
 func encStatus(imageName, instance string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -617,7 +617,7 @@ func encStatus(imageName, instance string) error {
 
 // encPasswd changes the gocryptfs password for all encrypted volumes of an image.
 func encPasswd(imageName, instance string) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil {
 		return err
 	}
@@ -696,7 +696,7 @@ func encPasswd(imageName, instance string) error {
 // requiring the user to run ov config init/mount manually first.
 // Resolves the enc passphrase once (kdbx → keyring → interactive prompt).
 func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error {
-	mounts, storagePath, err := loadEncryptedVolumes(imageName, instance)
+	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil || len(mounts) == 0 {
 		return nil // no encrypted mounts configured
 	}
@@ -792,9 +792,9 @@ func defaultAskPassword(id, prompt string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
-// loadEncryptedVolumes loads encrypted volume configs from deploy.yml for an image.
+// loadEncryptedVolume loads encrypted volume configs from deploy.yml for an image.
 // Returns the deploy volume configs with type=encrypted and the encrypted storage path.
-func loadEncryptedVolumes(imageName, instance string) ([]DeployVolumeConfig, string, error) {
+func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, string, error) {
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return nil, "", err
@@ -811,7 +811,7 @@ func loadEncryptedVolumes(imageName, instance string) ([]DeployVolumeConfig, str
 	}
 
 	var encrypted []DeployVolumeConfig
-	for _, dv := range overlay.Volumes {
+	for _, dv := range overlay.Volume {
 		if dv.Type == "encrypted" {
 			encrypted = append(encrypted, dv)
 		}

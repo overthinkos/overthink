@@ -1,6 +1,6 @@
 layer:
   name: sway
-  requires:
+  require:
     - dbus
   env:
     WLR_BACKENDS: "headless"
@@ -10,14 +10,14 @@ layer:
     WAYLAND_DISPLAY: "wayland-0"
     EGL_LOG_LEVEL: "fatal"
     XKB_DEFAULT_LAYOUT: "us"
-  env_accepts:
+  env_accept:
     - name: XKB_DEFAULT_LAYOUT
       description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
     - name: XKB_DEFAULT_VARIANT
       description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - sway
         - xorg-x11-server-Xwayland
         - fuzzel
@@ -27,7 +27,7 @@ layer:
         - libglvnd-gles
         - egl-wayland
         - wlr-randr
-  tasks:
+  task:
     # sway ships with cap_sys_nice file capability which prevents execution
     # in rootless containers (kernel blocks exec of binaries with file caps
     # in user namespaces). Strip it — not needed for headless compositor.
@@ -75,6 +75,6 @@ layer:
         XDG_RUNTIME_DIR: /tmp
       restart: always
       priority: 10
-      start_secs: 3
+      start_sec: 3
       enable: true
       scope: system

@@ -357,7 +357,7 @@ func TestCryptoPasswdRequiresUnmount(t *testing.T) {
 	defer func() { isEncryptedMounted = origMounted }()
 
 	imageName := "myapp"
-	// We can't call encPasswd() directly because loadEncryptedVolumes needs deploy.yml,
+	// We can't call encPasswd() directly because loadEncryptedVolume needs deploy.yml,
 	// so test the logic by simulating what encPasswd() does.
 	mounts := []DeployVolumeConfig{
 		{Name: "secrets", Type: "encrypted"},

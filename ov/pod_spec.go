@@ -22,12 +22,12 @@ type PodSpec struct {
 	// Sidecars are additional containers that accompany the main pod
 	// container. Genuinely pod-specific: only meaningful at pod deployment
 	// time, not declared by the image itself.
-	Sidecars []SidecarConfig `yaml:"sidecars,omitempty"`
+	Sidecar []SidecarConfig `yaml:"sidecar,omitempty"`
 
-	// Secrets are secret requirements that apply to any deployment using
-	// this template. Same type as DeploymentNode.Secrets — deployment
+	// Secret entries are secret requirements that apply to any deployment
+	// using this template. Same type as DeploymentNode.Secret — deployment
 	// entries can add additional secrets on top.
-	Secrets []DeploySecretConfig `yaml:"secrets,omitempty"`
+	Secret []DeploySecretConfig `yaml:"secret,omitempty"`
 
 	// EnvDefaults supplies default VALUES for env vars the IMAGE already
 	// declares via LabelEnv. Use only when multiple deployments share the

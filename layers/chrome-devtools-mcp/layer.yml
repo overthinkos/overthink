@@ -1,12 +1,12 @@
 layer:
   name: chrome-devtools-mcp
   description: Chrome DevTools MCP server via mcp-proxy (Streamable HTTP on port 9224)
-  requires:
+  require:
     - nodejs
     - supervisord
-  ports:
+  port:
     - 9224
-  mcp_provides:
+  mcp_provide:
     - name: chrome-devtools
       url: "http://{{.ContainerName}}:9224/mcp"
       transport: http

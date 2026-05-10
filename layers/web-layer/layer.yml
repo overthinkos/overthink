@@ -8,18 +8,18 @@ layer:
       on 8080 and serves /srv/fixture/, plus curl for the self-curl
       probe. Combined with a fedora base + supervisord this satisfies
       every scenario in the network-and-http recipe.
-  requires:
+  require:
     - supervisord
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - nginx
         - curl
         - iproute
         - procps-ng
-  ports:
+  port:
     - 8080
-  tasks:
+  task:
     - mkdir: /srv/fixture
       user: root
       mode: "0755"

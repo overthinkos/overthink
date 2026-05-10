@@ -1,13 +1,13 @@
 layer:
   name: songsee
   description: Audio spectrogram and visualization CLI
-  requires:
+  require:
     - golang
   env:
     GOPATH: "~/go"
   path_append:
     - "~/go/bin"
-  tasks:
+  task:
     - cmd: |
         go install github.com/steipete/songsee/cmd/songsee@latest
         go clean -cache

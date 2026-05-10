@@ -39,11 +39,11 @@ func TestLoadUnified_BasicRoot(t *testing.T) {
 defaults:
   registry: quay.io/example
   build: [rpm]
-images:
+image:
   fedora:
     base: quay.io/fedora/fedora:43
     distro: [fedora:43, fedora]
-    layers: [base]
+    layer: [base]
 `)
 	uf, present, err := LoadUnified(root)
 	if err != nil {
@@ -58,7 +58,7 @@ images:
 	if uf.Defaults.Registry != "quay.io/example" {
 		t.Errorf("Defaults.Registry = %q, want quay.io/example", uf.Defaults.Registry)
 	}
-	fedora, ok := uf.Images["fedora"]
+	fedora, ok := uf.Image["fedora"]
 	if !ok {
 		t.Fatal("images.fedora missing")
 	}
@@ -70,22 +70,22 @@ images:
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
-includes:
+include:
   - build.yml
   - images.yml
 defaults:
   registry: override.example.com
 `)
-	writeFixture(t, root, "build.yml", `distros:
+	writeFixture(t, root, "build.yml", `distro:
   fedora:
     bootstrap:
       install_cmd: "dnf install"
-      packages: [dnf5]
+      package: [dnf5]
 `)
 	writeFixture(t, root, "images.yml", `defaults:
   registry: included.example.com
   build: [rpm]
-images:
+image:
   fedora:
     base: quay.io/fedora/fedora:43
 `)
@@ -101,10 +101,10 @@ images:
 	if len(uf.Defaults.Build) != 1 || uf.Defaults.Build[0] != "rpm" {
 		t.Errorf("Defaults.Build = %v, want [rpm]", uf.Defaults.Build)
 	}
-	if uf.Distros["fedora"] == nil {
+	if uf.Distro["fedora"] == nil {
 		t.Error("Distros.fedora missing")
 	}
-	if _, ok := uf.Images["fedora"]; !ok {
+	if _, ok := uf.Image["fedora"]; !ok {
 		t.Error("Images.fedora missing")
 	}
 }
@@ -112,11 +112,11 @@ images:
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
-includes: [a.yml]
+include: [a.yml]
 `)
-	writeFixture(t, root, "a.yml", `includes: [b.yml]
+	writeFixture(t, root, "a.yml", `include: [b.yml]
 `)
-	writeFixture(t, root, "b.yml", `includes: [a.yml]
+	writeFixture(t, root, "b.yml", `include: [a.yml]
 `)
 	_, _, err := LoadUnified(root)
 	if err == nil {
@@ -130,35 +130,35 @@ includes: [a.yml]
 func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
-includes: [bundle.yml]
+include: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `---
 layer:
   name: chrome
   rpm:
-    packages: [chromium]
+    package: [chromium]
 ---
 layer:
   name: firefox
   rpm:
-    packages: [firefox]
+    package: [firefox]
 ---
 image:
   name: browsers
   base: quay.io/fedora/fedora:43
-  layers: [chrome, firefox]
+  layer: [chrome, firefox]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if _, ok := uf.Layers["chrome"]; !ok {
+	if _, ok := uf.Layer["chrome"]; !ok {
 		t.Error("layers.chrome missing")
 	}
-	if _, ok := uf.Layers["firefox"]; !ok {
+	if _, ok := uf.Layer["firefox"]; !ok {
 		t.Error("layers.firefox missing")
 	}
-	if _, ok := uf.Images["browsers"]; !ok {
+	if _, ok := uf.Image["browsers"]; !ok {
 		t.Error("images.browsers missing")
 	}
 }
@@ -168,7 +168,7 @@ func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
 	writeFixture(t, root, "overthink.yml", `version: 4
 `)
 	writeFixture(t, root, "overthink.yml", `version: 4
-includes: [bundle.yml]
+include: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `layer:
   name: broken
@@ -190,15 +190,15 @@ func TestLoadUnified_DiscoverLayers(t *testing.T) {
 	// that's what scanLayer currently parses).
 	writeFixture(t, root, "layers/chrome/layer.yml", `version: "1"
 rpm:
-  packages: [chromium]
+  package: [chromium]
 `)
 	writeFixture(t, root, "layers/firefox/layer.yml", `version: "1"
 rpm:
-  packages: [firefox]
+  package: [firefox]
 `)
 	writeFixture(t, root, "overthink.yml", `version: 4
 discover:
-  layers: [layers]
+  layer: [layers]
 `)
 	uf, _, err := LoadUnified(root)
 	if err != nil {
@@ -207,10 +207,10 @@ discover:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	if _, ok := uf.Layers["chrome"]; !ok {
+	if _, ok := uf.Layer["chrome"]; !ok {
 		t.Error("discovered layers.chrome missing")
 	}
-	if _, ok := uf.Layers["firefox"]; !ok {
+	if _, ok := uf.Layer["firefox"]; !ok {
 		t.Error("discovered layers.firefox missing")
 	}
 }
@@ -222,8 +222,8 @@ rpm: { packages: [chromium] }
 `)
 	writeFixture(t, root, "overthink.yml", `version: 4
 discover:
-  layers: [layers]
-layers:
+  layer: [layers]
+layer:
   chrome: { from: custom/chrome }
 `)
 	uf, _, err := LoadUnified(root)
@@ -233,7 +233,7 @@ layers:
 	if err := uf.ApplyDiscover(root); err != nil {
 		t.Fatalf("ApplyDiscover: %v", err)
 	}
-	il := uf.Layers["chrome"]
+	il := uf.Layer["chrome"]
 	if il == nil {
 		t.Fatal("layers.chrome missing")
 	}
@@ -246,7 +246,7 @@ func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
 discover:
-  layers:
+  layer:
     - layers
     - { path: vendor, recursive: false }
 `)
@@ -254,14 +254,14 @@ discover:
 	if err != nil {
 		t.Fatalf("LoadUnified: %v", err)
 	}
-	if uf.Discover == nil || len(uf.Discover.Layers) != 2 {
+	if uf.Discover == nil || len(uf.Discover.Layer) != 2 {
 		t.Fatalf("Discover.Layers = %#v, want 2 entries", uf.Discover)
 	}
-	if uf.Discover.Layers[0].Path != "layers" || !uf.Discover.Layers[0].Recursive {
-		t.Errorf("[0] = %+v, want {Path:layers Recursive:true}", uf.Discover.Layers[0])
+	if uf.Discover.Layer[0].Path != "layers" || !uf.Discover.Layer[0].Recursive {
+		t.Errorf("[0] = %+v, want {Path:layers Recursive:true}", uf.Discover.Layer[0])
 	}
-	if uf.Discover.Layers[1].Path != "vendor" || uf.Discover.Layers[1].Recursive {
-		t.Errorf("[1] = %+v, want {Path:vendor Recursive:false}", uf.Discover.Layers[1])
+	if uf.Discover.Layer[1].Path != "vendor" || uf.Discover.Layer[1].Recursive {
+		t.Errorf("[1] = %+v, want {Path:vendor Recursive:false}", uf.Discover.Layer[1])
 	}
 }
 
@@ -274,19 +274,18 @@ func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
 deployments:
-  images:
-    openclaw:
-      ports: ["8080:80"]
-      target: container
+  openclaw:
+    port: ["8080:80"]
+    target: container
 `)
 	_, _, err := LoadUnified(root)
 	if err == nil {
 		t.Fatal("expected hard-error for legacy v3 plural deployments:, got nil")
 	}
-	if !strings.Contains(err.Error(), "ov migrate kind-files") {
-		t.Errorf("error must point at `ov migrate kind-files`, got: %v", err)
+	if !strings.Contains(err.Error(), "ov migrate") {
+		t.Errorf("error must point at an `ov migrate` command, got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "deployments:") {
+	if !strings.Contains(err.Error(), "deployments") {
 		t.Errorf("error must mention the offending root-key, got: %v", err)
 	}
 }
@@ -295,7 +294,7 @@ func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
 	writeFixture(t, root, "overthink.yml", `version: 4
 defaults: { registry: r.example.com }
-images:
+image:
   foo: { base: alpine }
 `)
 	uf, _, err := LoadUnified(root)
@@ -306,7 +305,7 @@ images:
 	if cfg.Defaults.Registry != "r.example.com" {
 		t.Errorf("Defaults.Registry = %q", cfg.Defaults.Registry)
 	}
-	if cfg.Images["foo"].Base != "alpine" {
-		t.Errorf("Images.foo.Base = %q", cfg.Images["foo"].Base)
+	if cfg.Image["foo"].Base != "alpine" {
+		t.Errorf("Images.foo.Base = %q", cfg.Image["foo"].Base)
 	}
 }

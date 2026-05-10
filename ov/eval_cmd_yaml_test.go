@@ -20,7 +20,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 			Tag:        []string{"smoke"},
 			Status:     TestPass,
 			Pending:    0,
-			Steps: []StepResult{
+			Step: []StepResult{
 				{
 					Keyword: "given",
 					Text:    "sshd is installed",
@@ -41,7 +41,7 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 			Name:       "Foo service runs",
 			Status:     TestFail,
 			Pending:    1,
-			Steps: []StepResult{
+			Step: []StepResult{
 				{
 					Keyword: "then",
 					Text:    "pending step",
@@ -97,11 +97,11 @@ func TestEmitImageTestYAML_RoundTripsThroughParseOvTestOutput(t *testing.T) {
 	}
 	// Pending step flag propagates.
 	foo := parsed.Scenario[1]
-	if len(foo.Steps) != 1 {
-		t.Fatalf("foo.Steps: %d", len(foo.Steps))
+	if len(foo.Step) != 1 {
+		t.Fatalf("foo.Step: %d", len(foo.Step))
 	}
-	if !foo.Steps[0].Pending {
-		t.Errorf("step with no verb should have Pending=true; got %+v", foo.Steps[0])
+	if !foo.Step[0].Pending {
+		t.Errorf("step with no verb should have Pending=true; got %+v", foo.Step[0])
 	}
 }
 

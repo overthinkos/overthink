@@ -1,10 +1,10 @@
 layer:
   name: github-runner
-  requires:
+  require:
     - supervisord
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - skopeo
         - jq
         - libcap
@@ -18,7 +18,7 @@ layer:
         - golang
         - git
         - qemu-user-static-aarch64
-  volumes:
+  volume:
     - name: state
       path: /opt/actions-runner
     - name: storage
@@ -44,7 +44,7 @@ layer:
     pre_remove: |
       /opt/actions-runner/config.sh remove \
         --token "${RUNNER_TOKEN}"
-  tasks:
+  task:
     # GitHub Actions runner binary — pinned to the latest stable tag at build time
     - cmd: |
         ARCH=$(uname -m)

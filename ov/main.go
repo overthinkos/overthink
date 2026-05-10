@@ -117,13 +117,13 @@ func (c *ValidateCmd) Run() error {
 		defaultInitCfg = initCfg
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
 	// Populate init systems on layers from build.yml config
-	PopulateLayerInitSystems(layers, defaultInitCfg)
+	PopulateLayerInitSystem(layers, defaultInitCfg)
 
 	return Validate(cfg, layers, dir, ResolveOpts{IncludeDisabled: c.IncludeDisabled})
 }
@@ -187,19 +187,19 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Println(p)
 			}
 		case "layers":
-			for _, l := range resolved.Layers {
+			for _, l := range resolved.Layer {
 				fmt.Println(l)
 			}
 		case "ports":
-			for _, p := range resolved.Ports {
+			for _, p := range resolved.Port {
 				fmt.Println(p)
 			}
 		case "volumes":
-			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			layers, err := ScanAllLayerWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
-			volumes, err := CollectImageVolumes(cfg, layers, c.Image, resolved.Home, nil)
+			volumes, err := CollectImageVolume(cfg, layers, c.Image, resolved.Home, nil)
 			if err != nil {
 				return err
 			}
@@ -207,11 +207,11 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 				fmt.Printf("%s\t%s\n", vol.VolumeName, vol.ContainerPath)
 			}
 		case "aliases":
-			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			layers, err := ScanAllLayerWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
-			aliases, err := CollectImageAliases(cfg, layers, c.Image)
+			aliases, err := CollectImageAlias(cfg, layers, c.Image)
 			if err != nil {
 				return err
 			}
@@ -224,10 +224,10 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
 				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
-					layers, err := ScanAllLayersWithConfig(dir, cfg)
+					layers, err := ScanAllLayerWithConfig(dir, cfg)
 					if err == nil {
 						portProtos := make(map[int]string)
-						tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layers, portProtos, resolved.Ports)
+						tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layer, portProtos, resolved.Port)
 						if tc != nil && len(tc.Ports) > 0 {
 							fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
 							for _, tp := range tc.Ports {
@@ -248,7 +248,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "network":
 			fmt.Println(resolved.Network)
 		case "engine":
-			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			layers, err := ScanAllLayerWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -262,7 +262,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			dc, _ := LoadDeployConfig()
 			if dc != nil {
 				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-					for _, dv := range overlay.Volumes {
+					for _, dv := range overlay.Volume {
 						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 					}
 				}
@@ -276,7 +276,7 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "tests":
 			// Emit the effective three-section test manifest as JSON.
 			// Mirrors what will land in the org.overthinkos.tests OCI label.
-			layers, err := ScanAllLayersWithConfig(dir, cfg)
+			layers, err := ScanAllLayerWithConfig(dir, cfg)
 			if err != nil {
 				return err
 			}
@@ -330,7 +330,7 @@ func (c *ListImagesCmd) Run() error {
 	}
 
 	for _, name := range cfg.ImageNames() {
-		img := cfg.Images[name]
+		img := cfg.Image[name]
 		status := descriptionStatus(img.Description)
 		if status != "working" {
 			fmt.Printf("%s [%s]\n", name, status)
@@ -355,7 +355,7 @@ func (c *ListLayersCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -394,12 +394,12 @@ func (c *ListTargetsCmd) Run() error {
 	}
 
 	calverTag := ComputeCalVer()
-	images, err := cfg.ResolveAllImages(calverTag, dir, ResolveOpts{})
+	images, err := cfg.ResolveAllImage(calverTag, dir, ResolveOpts{})
 	if err != nil {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
@@ -440,12 +440,12 @@ func (c *ListServicesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	services := InitLayers(layers)
+	services := InitLayer(layers)
 	for _, layer := range services {
 		fmt.Println(layer.Name)
 	}
@@ -466,12 +466,12 @@ func (c *ListRoutesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	routes := RouteLayers(layers)
+	routes := RouteLayer(layers)
 	// Sort by name for deterministic output
 	names := make([]string, 0, len(routes))
 	for _, layer := range routes {
@@ -504,12 +504,12 @@ func (c *ListVolumesCmd) Run() error {
 		return err
 	}
 
-	layers, err := ScanAllLayersWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfig(dir, cfg)
 	if err != nil {
 		return err
 	}
 
-	vols := VolumeLayers(layers)
+	vols := VolumeLayer(layers)
 	// Sort by name for deterministic output
 	names := make([]string, 0, len(vols))
 	for _, layer := range vols {
@@ -519,7 +519,7 @@ func (c *ListVolumesCmd) Run() error {
 
 	for _, name := range names {
 		layer := layers[name]
-		for _, vol := range layer.Volumes() {
+		for _, vol := range layer.Volume() {
 			fmt.Printf("%s\t%s\t%s\n", name, vol.Name, vol.Path)
 		}
 	}

@@ -1,6 +1,6 @@
 layer:
   name: google-cloud-npm
-  requires:
+  require:
     - google-cloud
     - nodejs
   eval:

@@ -185,7 +185,7 @@ func TestStopCmd_UnmountFlagDefaults(t *testing.T) {
 // line of the function — a regression here would invert the opt-in.
 func TestStopUnmountIfRequested_NoOpWhenWantFalse(t *testing.T) {
 	// A bogus image+instance that has no deploy entry would normally
-	// cause encUnmount → loadEncryptedVolumes to error. Because want=
+	// cause encUnmount → loadEncryptedVolume to error. Because want=
 	// false, the helper short-circuits and the call never happens, so
 	// no warning is emitted to stderr (we don't capture stderr here;
 	// the assertion is structural — the function must return without

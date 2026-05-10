@@ -2,7 +2,7 @@ layer:
   name: build-toolchain
   env:
     CCACHE_DISABLE: "1"
-  packages:
+  package:
     - autoconf
     - automake
     - binutils
@@ -15,9 +15,9 @@ layer:
     - libtool
     - nasm
     - patch
-  distros:
+  distro:
     archlinux:
-      packages:
+      package:
         - clang
         - ffmpeg
         - gcc
@@ -40,7 +40,7 @@ layer:
         - wayland
         - x264
     debian:
-      packages:
+      package:
         - build-essential
         - cargo
         - clang
@@ -67,7 +67,7 @@ layer:
         - portaudio19-dev
         - rustc
     fedora:
-      packages:
+      package:
         - cargo
         - clang-devel
         - cli11-devel
@@ -99,7 +99,7 @@ layer:
         - wayland-devel
         - x264-devel
     ubuntu:
-      packages:
+      package:
         - build-essential
         - cargo
         - clang

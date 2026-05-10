@@ -1,6 +1,6 @@
 layer:
   name: selkies-desktop
-  layers:
+  layer:
     - pipewire
     - chrome
     - chrome-cdp

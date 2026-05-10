@@ -1,13 +1,13 @@
 layer:
   name: cuda
-  requires:
+  require:
     - nvidia
     - ffmpeg
   env:
     CUDA_HOME: "/usr"
-  distros:
+  distro:
     fedora:
-      packages:
+      package:
         - onnxruntime
         - libaio-devel
         - cpio
@@ -22,11 +22,11 @@ layer:
         - libcufile-devel
       exclude:
         - "nvidia-driver*"
-      repos:
+      repo:
         - name: fedora-multimedia
           url: "https://negativo17.org/repos/fedora-multimedia.repo"
           gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-  tasks:
+  task:
     # cuDNN headers are shipped in a -devel package that has a hard dependency
     # on the NVIDIA driver. Extract headers + lib symlinks manually via rpm2cpio
     # to bypass the driver pull-in.

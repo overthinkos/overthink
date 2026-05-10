@@ -1,11 +1,11 @@
 kind: local
 name: dev-workstation
 spec:
-  layers:
+  layer:
     - ripgrep
     - direnv
   install_opts:
-    with_services: false
+    with_service: false
     allow_repo_changes: true
   env:
     - EDITOR=vim

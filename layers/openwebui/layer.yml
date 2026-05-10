@@ -23,13 +23,13 @@ layer:
     - name: WEBUI_AUTH
       description: "Enable authentication (default: true)"
     - name: OV_MCP_SERVERS
-      description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+      description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
     - name: IMMICH_API_URL
       description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
   # Credential-store-backed env vars. Values live in the user's credential
   # backend (keyring/kdbx/config) and are injected at runtime via podman
   # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
-  # or the quadlet file as plaintext. See /ov:secrets and /ov:layer.
+  # or the quadlet file as plaintext. See /ov-build:secrets and /ov-image:layer.
   #
   # WEBUI_ADMIN_PASSWORD: auto-generated on first deploy as a 32-byte hex
   # random value via DefaultCredentialStore.Set (see ov/layer_secrets.go

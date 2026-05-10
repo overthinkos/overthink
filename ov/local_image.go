@@ -75,7 +75,7 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 // `org.overthinkos.image=<short>` label or by the tag-suffix short-name
 // match) and pick the one whose tag has the highest CalVer (or the
 // highest `org.overthinkos.version` label). ov is CalVer-only — no
-// `:latest` fallback. See `/ov:build` "CalVer-only" for the contract.
+// `:latest` fallback. See `/ov-build:build` "CalVer-only" for the contract.
 //
 // Returns `ErrImageNotLocal` when nothing matches. An ambiguous result
 // across multiple repos with the same highest CalVer tag surfaces as an

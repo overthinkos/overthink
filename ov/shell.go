@@ -209,7 +209,7 @@ func (c *ShellCmd) Run() error {
 // resolveShellImageRef builds the full image reference from registry,
 // name, and tag. When `tag` is empty, it resolves to the newest local
 // CalVer for the given short name via `ResolveNewestLocalCalVer` —
-// this is the CalVer-only contract (`/ov:build` "Cache Efficiency").
+// this is the CalVer-only contract (`/ov-build:build` "Cache Efficiency").
 // Callers that explicitly want a specific tag pass it; callers whose
 // `--tag` flag is empty get the newest CalVer without extra work.
 //

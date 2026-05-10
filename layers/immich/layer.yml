@@ -36,11 +36,11 @@ layer:
   port:
     - 2283
   # Expose the Immich HTTP API URL to every other container that opts in via
-  # env_accepts: [IMMICH_API_URL]. Plan §4.3. The templated value resolves to
+  # env_accept: [IMMICH_API_URL]. Plan §4.3. The templated value resolves to
   # e.g. "http://ov-immich-ml:2283/api" at ov config time for the base instance,
   # and to the instance-scoped container name for instances (e.g.
   # "http://ov-immich-ml-test:2283/api" for immich-ml -i test). Consumers like
-  # openwebui and hermes already declare this env var in their env_accepts.
+  # openwebui and hermes already declare this env var in their env_accept.
   env_provides:
     IMMICH_API_URL: "http://{{.ContainerName}}:2283/api"
   env_accept:
@@ -51,7 +51,7 @@ layer:
   #
   #   ov secrets set ov/api-key/immich <key>
   #
-  # openwebui and hermes declare the same secret_accepts entry with the same
+  # openwebui and hermes declare the same secret_accept entry with the same
   # key path, so one `ov secrets set` populates all three consumers.
   secret_accept:
     - name: IMMICH_API_KEY

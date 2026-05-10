@@ -8,7 +8,7 @@ import (
 
 // Note: schema-v3 removed VmSpec.Disposable / VmSpec.Lifecycle and
 // the IsDisposableFields helper — disposability is now a DEPLOY
-// property only (see /ov-dev:disposable). The former
+// property only (see /ov-internals:disposable). The former
 // TestVmSpec_DisposableRoundTrip / TestVmSpec_LifecycleAloneDoesNotAuthorize
 // tests moved to the DeploymentNode-level equivalents below.
 

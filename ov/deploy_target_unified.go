@@ -106,7 +106,7 @@ type LifecycleTarget interface {
 
 	// Rebuild is destroy + create + start. Gated on the target's
 	// Disposable flag — each implementation must verify it before
-	// any destructive action. See /ov-dev:disposable for the
+	// any destructive action. See /ov-internals:disposable for the
 	// authorization contract.
 	Rebuild(ctx context.Context, opts RebuildOpts) error
 }
@@ -182,7 +182,7 @@ type LogsOpts struct {
 	Tail int
 }
 
-// RebuildOpts parameterizes `ov rebuild`. Per /ov-dev:disposable, the
+// RebuildOpts parameterizes `ov rebuild`. Per /ov-internals:disposable, the
 // target MUST be marked `disposable: true` in deploy.yml — every
 // implementation asserts this before any destructive action.
 type RebuildOpts struct {

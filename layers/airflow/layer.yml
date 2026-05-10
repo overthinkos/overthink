@@ -18,10 +18,10 @@ layer:
     # Override the default ${AIRFLOW_HOME}/dags location so DAGs live
     # under the user-owned workspace volume. Notebooks (e.g. the
     # marimo-ml osm-monaco-viz notebook) self-author their DAGs into
-    # ${AIRFLOW_DAGS_DIR} (= ~/workspace/dags) at runtime — no static
+    # ${AIRFLOW_DAGS_DIR} (= /workspace/dags) at runtime — no static
     # data layer baking DAGs into the image, no /opt/airflow-defaults
     # staging, no airflow-init.sh copy step.
-    AIRFLOW__CORE__DAGS_FOLDER: "~/workspace/dags"
+    AIRFLOW__CORE__DAGS_FOLDER: "/workspace/dags"
     # Default is 300s (5 min) — far too slow for the runtime-DAG-write
     # pattern (notebook drops a .py and triggers it within seconds).
     # 10s makes the scan effectively interactive at negligible CPU cost
@@ -88,7 +88,7 @@ layer:
         # NB: prior versions copied bundled DAGs from /opt/airflow-defaults/
         # to ${HOME}/airflow/dags/ as a volume-shadow workaround. Then a
         # short-lived dag-osm-monaco data layer seeded a static DAG into
-        # ${HOME}/workspace/dags/ at deploy time. Both are gone: notebooks
+        # /workspace/dags/ at deploy time. Both are gone: notebooks
         # now self-author DAGs at runtime via the Airflow REST API + a
         # write to AIRFLOW__CORE__DAGS_FOLDER. No init-time copy required.
     # ---- airflow-webserver.sh / -scheduler.sh ----
@@ -184,7 +184,7 @@ layer:
     # NB: sample OSM pipeline DAG used to be inlined here via `write:`
     # to /opt/airflow-defaults/dags/ + airflow-init.sh copy. Then it
     # was extracted to a dag-osm-monaco data layer that seeded
-    # ${HOME}/workspace/dags/ at deploy time. Both are gone: notebooks
+    # /workspace/dags/ at deploy time. Both are gone: notebooks
     # now self-author DAGs at runtime via the Airflow REST API. The
     # canonical example is layers/notebook-osm/data/notebooks/osm-monaco-viz.py
     # which writes notebook_osm_pipeline.py into AIRFLOW__CORE__DAGS_FOLDER

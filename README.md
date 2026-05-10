@@ -4,7 +4,7 @@
 
 Building containers sounds simple — until you need CUDA drivers, a Wayland desktop inside a container, fine-grained device access for KVM without giving away root, or half a dozen services wired together with the right permissions. Overthink takes care of all of that. Describe what you need in a simple layer list, and `ov` composes it into optimized multi-stage container images — from an interactive dev shell to a running service to a systemd unit to a bootable VM. Works the same way whether you're at the keyboard or your AI agent is driving.
 
-164 layers. 49 image definitions (41 enabled by default, as of 2026-04-20). 5 VM definitions (1 cloud_image + 4 bootc, in `vms.yml`). Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu, and Arch Linux. One CLI: `ov`. Every layer, image, VM, and command has a dedicated skill — 275+ skills across 6 plugins (`ov`, `ov-dev`, `ov-layers`, `ov-images`, `ov-vms`, `ov-jupyter`).
+164 layers. 49 image definitions (41 enabled by default, as of 2026-04-20). 5 VM definitions (1 cloud_image + 4 bootc, in `vms.yml`). Docker and Podman. `linux/amd64`. Fedora, Debian, Ubuntu, and Arch Linux. One CLI: `ov`. Every layer, image, VM, and command has a dedicated skill — 275+ skills across 25 plugins organized into four use-case buckets (commands, kind, development, images). See `plugins/README.md` for the full skill index.
 
 *The name comes from the German "überdenken" — to think something through carefully. Not quite the same as the English "overthink," but let's be honest: `ov` really is trying its best to overthink absolutely everything.*
 
@@ -372,7 +372,7 @@ Some layers provide **data** instead of packages or services via the `data:` fie
 # layers/notebook-templates/layer.yml
 volumes:
   - name: workspace
-    path: ~/workspace
+    path: /workspace
 data:
   - src: data/notebooks
     volume: workspace
@@ -520,12 +520,15 @@ Overthink is designed to work hand-in-hand with [Claude Code](https://claude.com
 ```json
 {
   "enabledPlugins": {
-    "ov@ov-plugins": true,
-    "ov-dev@ov-plugins": true,
+    "ov-core@ov-plugins": true,
+    "ov-build@ov-plugins": true,
+    "ov-eval@ov-plugins": true,
+    "ov-image@ov-plugins": true,
+    "ov-internals@ov-plugins": true,
+    "ov-distros@ov-plugins": true,
+    "ov-infrastructure@ov-plugins": true,
     "ov-jupyter@ov-plugins": true,
-    "ov-layers@ov-plugins": true,
-    "ov-images@ov-plugins": true,
-    "ov-vms@ov-plugins": true
+    "ov-coder@ov-plugins": true
   },
   "extraKnownMarketplaces": {
     "ov-plugins": {
@@ -534,6 +537,8 @@ Overthink is designed to work hand-in-hand with [Claude Code](https://claude.com
   }
 }
 ```
+
+This is a representative subset; see `plugins/.claude-plugin/marketplace.json` for the full 25-plugin catalog (commands, kind, development, images).
 
 Then clone with the plugins submodule:
 

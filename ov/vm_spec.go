@@ -75,7 +75,7 @@ type VmSnapshotDecl struct {
 
 	// Mode is "external" (default; clone-friendly, separate qcow2 file)
 	// or "internal" (embedded in the qcow2 via qemu-img snapshot). See
-	// /ov:vm "snapshot modes" for the tradeoff matrix.
+	// /ov-vm:vm "snapshot modes" for the tradeoff matrix.
 	Mode string `yaml:"mode,omitempty"`
 
 	// Quiesce, when true, instructs the snapshot creation path to flush
@@ -89,7 +89,7 @@ type VmSnapshotDecl struct {
 	From string `yaml:"from,omitempty"`
 }
 
-// Note: per /ov-dev:disposable, disposability is a DEPLOY property and
+// Note: per /ov-internals:disposable, disposability is a DEPLOY property and
 // lives exclusively on DeploymentNode. The former `VmSpec.Disposable`
 // / `VmSpec.Lifecycle` fields were removed in the schema-v3 cutover —
 // the `ov rebuild <vm-name>` authorization reads from the

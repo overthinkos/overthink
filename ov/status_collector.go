@@ -464,7 +464,7 @@ func formatLiveMounts(mounts []MountInfo) []string {
 // `.../encrypted/<anything>/plain`. Used to flag live mounts as encryption
 // FUSE mountpoints in the status display. Path-only — does NOT verify the
 // FUSE mount is actually live (that's handled by the verifyBindMounts
-// check in /ov-advanced:enc).
+// check in /ov-automation:enc).
 func isEncryptedPlainPath(p string) bool {
 	if !strings.HasSuffix(p, "/plain") {
 		return false

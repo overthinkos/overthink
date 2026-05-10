@@ -97,26 +97,26 @@ Your training is STALE. Your memory is PARTIAL. The skill is CURRENT.
 
 TRIGGER → SKILL MAPPING. Consult BEFORE the first tool call:
 
-  ov rebuild / ov vm / vms.yml         →  /ov:vm + /ov-dev:vm-deploy-target
-  ov deploy add/del                    →  /ov:deploy
-  host-target / nested host deploy     →  /ov:host-deploy + /ov-dev:host-infra
-  ov eval run / cdp / wl / dbus / vnc  →  /ov-build:eval
-  ov eval k8s                          →  /ov-advanced:eval-k8s
-  Editing layer.yml                    →  /ov:layer
-  Editing image.yml                    →  /ov:image
-  ov image build / generate            →  /ov:build + /ov:generate
-  ov image validate                    →  /ov:validate
-  ov secrets / kdbx                    →  /ov:secrets
-  Schema migration                     →  /ov:migrate
-  Go source / code work                →  /ov-dev:go
-  IR / DeployTarget / OCITarget        →  /ov-dev:install-plan
-  OCI labels / capabilities            →  /ov-dev:capabilities
-  Unexpected failure / anomaly         →  /ov-dev:root-cause-analyzer
-  Hard cutover semantics               →  /ov-dev:cutover-policy
-  Disposable-flag semantics            →  /ov-dev:disposable
-  Skill authoring                      →  /ov-dev:skills
-  "What does layer X do?"              →  /ov-layers:<name>
-  "What's in image X?"                 →  /ov-images:<name>
+  ov update / ov vm / vms.yml          →  /ov-vm:vm + /ov-internals:vm-deploy-target
+  ov deploy add/del                    →  /ov-core:deploy
+  local-target / SSH-host deploy       →  /ov-local:local-deploy + /ov-internals:local-infra
+  ov eval run / cdp / wl / dbus / vnc  →  /ov-eval:eval
+  ov eval k8s                          →  /ov-kubernetes:eval-k8s
+  Editing layer.yml                    →  /ov-image:layer
+  Editing image.yml                    →  /ov-image:image
+  ov image build / generate            →  /ov-build:build + /ov-build:generate
+  ov image validate                    →  /ov-build:validate
+  ov secrets / kdbx                    →  /ov-build:secrets
+  Schema migration                     →  /ov-build:migrate
+  Go source / code work                →  /ov-internals:go
+  IR / DeployTarget / OCITarget        →  /ov-internals:install-plan
+  OCI labels / capabilities            →  /ov-internals:capabilities
+  Unexpected failure / anomaly         →  root-cause-analyzer agent
+  Hard cutover semantics               →  /ov-internals:cutover-policy
+  Disposable-flag semantics            →  /ov-internals:disposable
+  Skill authoring                      →  /ov-internals:skills
+  "What does pod-image X do?"          →  /ov-jupyter|ov-coder|ov-selkies|ov-marimo|...:<name>
+  "What's in a base/foundation layer?" →  /ov-distros|ov-languages|ov-infrastructure|ov-tools:<name>
 
 When MULTIPLE triggers apply, load ALL matching skills in ONE message
 with parallel `Skill` calls. Loading one skill for a multi-surface task
@@ -171,7 +171,7 @@ THE ONLY FOUR VALID REASONS TO PAUSE MID-EXECUTION:
 
   (d) R10 VERIFICATION HAS FAILED and a genuine design change is
       needed. Do root-cause analysis first via
-      /ov-dev:root-cause-analyzer BEFORE asking the user anything.
+      root-cause-analyzer agent BEFORE asking the user anything.
 
 IF NONE OF (a)-(d) APPLIES, YOU CONTINUE. SILENTLY. WITHOUT ASKING.
 
@@ -752,7 +752,7 @@ IF R10 FAILS — RETURN TO IMPLEMENTATION, NOT TO ASKING:
   R10 failure is a RETURN-TO-IMPLEMENTATION signal, not a stopping
   point. The plan is NOT done.
 
-    a. Run /ov-dev:root-cause-analyzer BEFORE attempting any fix.
+    a. Run root-cause-analyzer agent BEFORE attempting any fix.
        Blind retry is FORBIDDEN.
     b. Fix in the SAME working tree. No "follow-up PR" deferral.
     c. Re-run R10 from scratch — full sequence, fresh rebuild.
@@ -777,7 +777,7 @@ WHAT IS EXPLICITLY *NOT* POST-EXECUTION:
 HARD CUTOVER BY DEFAULT — ONE COMMIT, ALL TASKS, R10 AT THE END
 =============================================================================
 
-See /ov-dev:cutover-policy for the full policy.
+See /ov-internals:cutover-policy for the full policy.
 
 Every schema change, API rename, deprecation, or refactor ships as ONE
 atomic commit. No intermediate coexistence. No "Phase 2". No dual paths
@@ -810,7 +810,7 @@ Before every claim, verify on the live system. Before every fix, do a
 full root-cause analysis. Treat every assumption as untrusted until
 tested live.
 
-  * On unexpected failures, STOP and run /ov-dev:root-cause-analyzer
+  * On unexpected failures, STOP and run root-cause-analyzer agent
     BEFORE attempting a fix. Blind fix-guessing breaks code.
   * Only progress on facts you can PASTE into this conversation.
   * If a claim in a skill or CLAUDE.md is wrong, FIX THE DOCUMENT

@@ -16,7 +16,7 @@ layer:
     - name: HERMES_MODEL
       description: "Override default Hermes model (default depends on detected provider)"
     - name: OV_MCP_SERVERS
-      description: "JSON array of MCP servers (auto-injected by mcp_provides layers)"
+      description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
     - name: BROWSER_CDP_URL
       description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
     - name: IMMICH_API_URL
@@ -26,7 +26,7 @@ layer:
   # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
   # or the quadlet file as plaintext. The ov/api-key/* keys are shared with
   # openwebui so one `ov secrets set` populates both consumers. See
-  # /ov:secrets and /ov:layer.
+  # /ov-build:secrets and /ov-image:layer.
   secret_accept:
     - name: OPENROUTER_API_KEY
       description: "API key for OpenRouter LLM inference"

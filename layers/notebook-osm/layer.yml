@@ -8,7 +8,7 @@ layer:
     feature: "Standalone marimo notebook for the OSM analytics + vector tile pipeline"
     narrative: |
       Provisions a self-contained marimo notebook into
-      ${HOME}/workspace/notebooks/ at deploy time. The notebook
+      /workspace/notebooks/ at deploy time. The notebook
       self-authors its own Airflow DAG (writing to AIRFLOW_DAGS_DIR
       and triggering via the Airflow REST API), runs Polars GPU + CPU
       analysis against the resulting GeoParquet, and renders a folium

@@ -48,7 +48,7 @@ type DeployConfig struct {
 //
 // Disposability is per-node and does NOT cascade. A parent with
 // disposable: true does not authorize destroying its children unattended —
-// each child's flag stands on its own (see /ov-dev:disposable).
+// each child's flag stands on its own (see /ov-internals:disposable).
 type DeploymentNode struct {
 	Version         string                `yaml:"version,omitempty"`
 	Description     *Description          `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
@@ -223,7 +223,7 @@ type DeploymentNode struct {
 	// disk path points at the same qcow2, etc.).
 	VmState *VmDeployState `yaml:"vm_state,omitempty"`
 
-	// --- Disposable / lifecycle / ephemeral classification (see /ov-dev:disposable) ---
+	// --- Disposable / lifecycle / ephemeral classification (see /ov-internals:disposable) ---
 
 	// Disposable, when true, authorizes `ov rebuild <name>` to
 	// destroy + rebuild + restart this deploy unattended. Default
@@ -382,7 +382,7 @@ func (o *DeployShellOverlay) ToShellEntry() ShellEntry {
 
 // IsDisposable returns true when the node is explicitly disposable OR
 // is marked ephemeral (the load-bearing implication: ephemeral deploys
-// MUST be auto-destroyed and therefore MAY be — see /ov-dev:disposable
+// MUST be auto-destroyed and therefore MAY be — see /ov-internals:disposable
 // "the ephemeral exception"). Implements the Classified interface.
 func (c DeploymentNode) IsDisposable() bool {
 	return c.Disposable || c.IsEphemeral()
@@ -980,7 +980,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	}
 
 	// Auto-promote disposable: true on ephemeral entries (the one
-	// load-bearing exception to /ov-dev:disposable's anti-derivation
+	// load-bearing exception to /ov-internals:disposable's anti-derivation
 	// rule — ephemeral STRENGTHENS the disposability contract; see
 	// classification.go for the rationale).
 	for name, node := range dc.Deploy {
@@ -1591,7 +1591,7 @@ type SaveDeployStateInput struct {
 	SecretNames []string
 
 	// Disposable + Lifecycle — the classification fields
-	// (see /ov-dev:disposable). SetDisposable toggles whether the
+	// (see /ov-internals:disposable). SetDisposable toggles whether the
 	// Disposable field is written at all: when false, saveDeployState
 	// leaves any pre-existing value untouched. Same idiom for lifecycle.
 	SetDisposable bool

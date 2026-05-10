@@ -420,7 +420,7 @@ func validateLibvirtChannelPath(name string, idx int, path string, errs *Validat
 		errs.Add(
 			"vm %q: libvirt.devices.channels[%d].path %q hardcodes a /home/<user> "+
 				"path; use '{{.VmStateDir}}/<file>' or a relative path that the "+
-				"libvirt renderer expands at create time (see /ov-dev:libvirt-renderer)",
+				"libvirt renderer expands at create time (see /ov-internals:libvirt-renderer)",
 			name, idx, path,
 		)
 	}

@@ -98,7 +98,7 @@ class RTCAdapter:
         self.contents_manager = server_app.contents_manager
 
         self.notebook_dir = os.path.realpath(
-            getattr(server_app, "root_dir", os.path.expanduser("~/workspace"))
+            getattr(server_app, "root_dir", os.path.expanduser("/workspace"))
         )
 
         # Lazy-init state for idle sweeper + file_id cleanup.

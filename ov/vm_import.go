@@ -357,7 +357,7 @@ func WriteVmImportDeclaration(name string, spec *VmSpec) error {
 // cloud_init:, ssh:, libvirt: by default — pass --replace-libvirt to
 // overwrite). Returns the updated spec for caller-side reporting.
 //
-// Field-merge semantics (see /ov-dev:libvirt-renderer "VM adoption"):
+// Field-merge semantics (see /ov-internals:libvirt-renderer "VM adoption"):
 //   - source.{libvirt_name,disk_path,disk_format} → replaced from XML
 //   - source.adopted_at → preserved (first-import timestamp)
 //   - source.last_synced_at → set to NOW

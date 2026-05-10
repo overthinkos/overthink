@@ -14,7 +14,7 @@ layer:
     - 8000
   volume:
     - name: workspace
-      path: "~/workspace"
+      path: "/workspace"
   service:
     - name: unsloth-studio
       exec: "pixi run start-studio"

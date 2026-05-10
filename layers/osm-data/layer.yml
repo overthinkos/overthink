@@ -1,6 +1,6 @@
 layer:
   name: osm-data
-  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), osmium-tool (PBF inspection/filtering), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from ${HOME}/workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
+  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), osmium-tool (PBF inspection/filtering), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
   require:
     - supervisord
   distro:
@@ -86,7 +86,7 @@ layer:
       content: |
         #!/usr/bin/env bash
         set -euo pipefail
-        DIR="${HOME}/workspace/tiles/pmtiles"
+        DIR="/workspace/tiles/pmtiles"
         mkdir -p "$DIR"
         exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
   eval:
@@ -132,7 +132,7 @@ layer:
       timeout: 10s
     - id: martin-tiles-dir-runtime
       scope: deploy
-      command: test -d ${HOME}/workspace/tiles/pmtiles
+      command: test -d /workspace/tiles/pmtiles
       exit_status: 0
       in_container: true
   service:

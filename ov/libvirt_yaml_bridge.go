@@ -123,7 +123,7 @@ func BuildLibvirtDomainXML(spec *VmSpec, rt VmRuntimeParams) (*libvirtxml.Domain
 		}
 	}
 
-	// Classification metadata (see /ov-dev:disposable). Per schema v3,
+	// Classification metadata (see /ov-internals:disposable). Per schema v3,
 	// disposability is a deploy property, not a spec property. libvirt
 	// domain XML no longer encodes a disposable flag sourced from the
 	// VM spec — callers that want the flag visible in `virsh dumpxml`
@@ -943,7 +943,7 @@ func mapChannel(ch LibvirtChannel, rt VmRuntimeParams) libvirtxml.DomainChannel 
 // fast path stays free.
 //
 // Authored as a defensive measure against literal `/home/<user>/...`
-// paths in libvirt snippets — see /ov-dev:libvirt-renderer for the
+// paths in libvirt snippets — see /ov-internals:libvirt-renderer for the
 // design rationale and the prior R10 incident where a hardcoded
 // `/home/user/...` qga.sock path blocked libvirt-backend boot for
 // every user not literally named "user".

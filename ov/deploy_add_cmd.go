@@ -47,7 +47,7 @@ type DeployAddCmd struct {
 	BuilderImage     string `long:"builder-image" help:"Override the compile builder image"`
 	AssumeYes        bool   `long:"yes" short:"y" help:"Assume yes; implies all allow-* gates plus skip sudo preflight"`
 
-	// Disposable + lifecycle classification (see /ov-dev:disposable).
+	// Disposable + lifecycle classification (see /ov-internals:disposable).
 	// --disposable writes `disposable: true` into the deploy.yml
 	// entry and authorizes autonomous `ov rebuild`. --lifecycle writes
 	// the informational tier tag; it has NO effect on disposability

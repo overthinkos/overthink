@@ -451,7 +451,7 @@ func runProgressiveHarness(
 //
 // Pre-2026-04-27 plateau also continued to the next phase. That
 // silently let the AI "skip past" any phase it stalled on and rack up
-// easier wins later. The /ov-dev:cutover-policy hard-cutover that
+// easier wins later. The /ov-internals:cutover-policy hard-cutover that
 // landed today changed plateau to end-the-run; this helper exists so
 // that decision is unit-testable without a full RunHarness fixture.
 func decideOverallExit(ctxErr error, phaseExitReason string) (overallExitReason string, shouldBreak bool) {

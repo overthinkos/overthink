@@ -185,7 +185,7 @@ func TestRenderFallbackPkgCmd(t *testing.T) {
 		// 404 fetches when packages have been version-bumped upstream
 		// (live war-story 2026-05: nspr-4.38.2 fetched per stale db,
 		// upstream had moved to 4.39, fastly mirror returned 404; fix
-		// landed in the same cutover that added /ov-foundation:tailscale-up).
+		// landed in the same cutover that added /ov-infrastructure:tailscale-up).
 		{"deb", []string{"bat"}, "DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y bat"},
 		{"pac", []string{"rg"}, "pacman -Sy --noconfirm --needed rg"},
 	}

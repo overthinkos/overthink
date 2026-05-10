@@ -23,18 +23,24 @@ layer:
   # exposes its editor tools as an MCP HTTP server on the SAME port that
   # serves the notebook UI. Marimo's docs put the endpoint at /mcp/server
   # (NOT /mcp — that's the convention for ov-mcp / jupyter-mcp / chrome-
-  # devtools-mcp). The mcp_provides URL must reflect the actual path.
+  # devtools-mcp). The mcp_provide URL must reflect the actual path.
   mcp_provide:
     - name: marimo
       url: "http://{{.ContainerName}}:2718/mcp/server"
       transport: http
   volume:
     - name: workspace
-      path: "~/workspace"
+      path: "/workspace"
   task:
-    # User-phase data dir for notebooks (bind-mount target for the workspace volume).
-    - mkdir: "${HOME}/workspace"
-      user: "${USER}"
+    # Workspace mount-point at filesystem root. Same pattern as the
+    # /ov-coder:ov-mcp layer's /workspace bind-mount target: created as
+    # root with mode 0777 so the unprivileged ${USER} process (and any
+    # nested supervisord-spawned processes) can write into it without
+    # baking in a uid assumption. Bind-mount target for the workspace
+    # volume; named-volume case is also fine.
+    - mkdir: "/workspace"
+      mode: "0777"
+      user: root
 
     # ---- marimo-team/skills bundle ----
     # Anthropic-style "skills folder" of instructions/scripts/resources that
@@ -78,7 +84,7 @@ layer:
     # anti-pattern (in-image content shadowed by the workspace volume
     # at runtime, plus root-owned files when DAGs need user write).
     # Replaced 2026-05-09 with the notebook-osm data layer which seeds
-    # ${HOME}/workspace/notebooks/ via ov's data-layer machinery
+    # /workspace/notebooks/ via ov's data-layer machinery
     # (--userns=keep-id ensures user-owned files). See
     # /ov-build:layer "Data layer" pattern + layers/notebook-templates/
     # for the canonical reference.
@@ -136,7 +142,7 @@ layer:
       status: 200
       timeout: 10s
     # Deploy-scope: marimo's --mcp server responds. The endpoint lives at
-    # /mcp/server (per marimo docs) which is what mcp_provides above declares,
+    # /mcp/server (per marimo docs) which is what mcp_provide above declares,
     # so `ov eval mcp ping marimo-ml --name marimo` resolves the URL correctly
     # via the host-port rewriter.
     - id: mcp-marimo-ping
@@ -161,7 +167,7 @@ layer:
       # non-localhost requests, which means our host-port rewriter can't
       # reach it from 127.0.0.1:HOST_PORT). `--no-token` keeps the editor
       # itself token-free for the dev posture.
-      exec: "%(ENV_HOME)s/.pixi/envs/default/bin/marimo edit --host 0.0.0.0 --port 2718 --no-token --headless --mcp --mcp-allow-remote %(ENV_HOME)s/workspace"
+      exec: "%(ENV_HOME)s/.pixi/envs/default/bin/marimo edit --host 0.0.0.0 --port 2718 --no-token --headless --mcp --mcp-allow-remote /workspace"
       restart: always
       working_directory: "%(ENV_HOME)s"
       priority: 30

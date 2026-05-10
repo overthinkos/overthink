@@ -24,7 +24,7 @@ layer:
       transport: http
   volume:
     - name: workspace
-      path: ~/workspace
+      path: /workspace
   eval:
     # Build-scope smoke for the NLP packages added to pixi.toml — mirrors the
     # jupyter layer's spacy-import check. Catches model rename / API drift at

@@ -567,7 +567,7 @@ image:
         port:
             - 8888:8888
         eval:
-            - command: find ${HOME}/workspace -maxdepth 3 -name "*.ipynb" | head -n 1
+            - command: find /workspace -maxdepth 3 -name "*.ipynb" | head -n 1
               id: jupyter-notebook-templates-provisioned
               scope: deploy
               in_container: true
@@ -618,7 +618,7 @@ image:
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
             - osm-data          # tippecanoe + osmium + gdal + martin (PMTiles tile server) + pmtiles CLI
             - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
-            - notebook-osm      # data layer: seeds ~/workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
+            - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
             - ov

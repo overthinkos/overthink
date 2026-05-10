@@ -58,7 +58,7 @@ func (c *MigrateQuadletsCmd) Run() error {
 		// concomitant change (secrets idempotence, encrypted-volume
 		// init, daemon-reload, env_provides injection). Self-exec via
 		// os.Args[0] follows the ov-binary self-exec pattern documented
-		// in /ov-dev:go "Self-exec coordination".
+		// in /ov-internals:go "Self-exec coordination".
 		cmd := exec.Command(os.Args[0], "config", name)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout

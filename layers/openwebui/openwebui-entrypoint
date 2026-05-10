@@ -131,8 +131,8 @@ if [ -n "$MISSING" ]; then
     echo "" >&2
     echo "Open WebUI needs admin credentials to create the first user account." >&2
     echo "" >&2
-    echo "WEBUI_ADMIN_EMAIL is plaintext config (declared in env_requires)." >&2
-    echo "WEBUI_ADMIN_PASSWORD is a credential-backed secret (declared in secret_requires);" >&2
+    echo "WEBUI_ADMIN_EMAIL is plaintext config (declared in env_require)." >&2
+    echo "WEBUI_ADMIN_PASSWORD is a credential-backed secret (declared in secret_require);" >&2
     echo "store it once in the credential backend and it flows in via a podman secret:" >&2
     echo "" >&2
     echo "  ov secrets set ov/secret WEBUI_ADMIN_PASSWORD your-password" >&2

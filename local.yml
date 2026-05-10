@@ -28,7 +28,7 @@ local:
       # and keeps the tailnet device name in sync with `hostname -s`.
       # Self-gates on `systemctl is-active tailscaled` so it's a
       # no-op in any context where the daemon isn't up. See
-      # /ov-foundation:tailscale-up.
+      # /ov-infrastructure:tailscale-up.
       - tailscale-up
       - build-toolchain
       - golang

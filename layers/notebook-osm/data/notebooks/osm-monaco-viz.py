@@ -64,7 +64,7 @@ def __(Path, os, textwrap):
     # workspace volume) topologies.
     dags_dir = Path(os.environ.get(
         "AIRFLOW_DAGS_DIR",
-        os.path.expanduser("~/workspace/dags"),
+        os.path.expanduser("/workspace/dags"),
     ))
     dags_dir.mkdir(parents=True, exist_ok=True)
 
@@ -87,8 +87,8 @@ def __(Path, os, textwrap):
 
         from airflow.decorators import dag, task
 
-        WORK = Path(os.path.expanduser("~/workspace/tiles/work"))
-        TILES = Path(os.path.expanduser("~/workspace/tiles/pmtiles"))
+        WORK = Path(os.path.expanduser("/workspace/tiles/work"))
+        TILES = Path(os.path.expanduser("/workspace/tiles/pmtiles"))
 
 
         @dag(
@@ -177,7 +177,7 @@ def __(Path, os, textwrap):
         Downloads the Monaco bus-network GTFS feed from transitous.org,
         parses it into Parquet via gtfs-parquet (one .parquet per GTFS
         table — stops, routes, trips, stop_times, etc.). Output lands
-        under the workspace volume at ~/workspace/gtfs/.
+        under the workspace volume at /workspace/gtfs/.
         """
         import os
         import urllib.request
@@ -186,8 +186,8 @@ def __(Path, os, textwrap):
 
         from airflow.decorators import dag, task
 
-        RAW = Path(os.path.expanduser("~/workspace/gtfs/raw"))
-        PARQUET = Path(os.path.expanduser("~/workspace/gtfs/parquet"))
+        RAW = Path(os.path.expanduser("/workspace/gtfs/raw"))
+        PARQUET = Path(os.path.expanduser("/workspace/gtfs/parquet"))
 
 
         @dag(
@@ -332,7 +332,7 @@ def __(dag_run_states, os, pl):
     # Class A — server-side compute, server-rendered table. No URL concern.
     # Gate on the OSM DAG having finished successfully.
     assert dag_run_states["notebook_osm_pipeline"] == "success"
-    parquet_path = os.path.expanduser("~/workspace/tiles/work/monaco.parquet")
+    parquet_path = os.path.expanduser("/workspace/tiles/work/monaco.parquet")
 
     # cudf-polars-cu13 panics on group_by over Arrow Map<String,String>
     # (the dtype quackosm writes for `tags`). The panic is a Rust unwrap
@@ -466,7 +466,7 @@ def __(dag_run_states, os, pl):
     # plus the top routes by stop count (a useful "where does each
     # bus go?" summary for Monaco's compact transit network).
     assert dag_run_states["notebook_gtfs_pipeline"] == "success"
-    gtfs_dir = os.path.expanduser("~/workspace/gtfs/parquet")
+    gtfs_dir = os.path.expanduser("/workspace/gtfs/parquet")
 
     df_stops = pl.read_parquet(f"{gtfs_dir}/stops.parquet")
     df_routes = pl.read_parquet(f"{gtfs_dir}/routes.parquet")

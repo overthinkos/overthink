@@ -29,7 +29,7 @@ package main
 //   `ephemeral: true` together with `disposable: false` is a
 //   contradiction; the loader rejects it with a clear error.
 //
-// See /ov-dev:disposable for the schema + rationale, and CLAUDE.md
+// See /ov-internals:disposable for the schema + rationale, and CLAUDE.md
 // R10 for the verification-loop implications.
 
 // Classified is the small contract a config struct implements so the
@@ -60,4 +60,4 @@ var CanonicalLifecycleTags = []string{
 // was removed in the schema-v3 cutover. There was no derivation to
 // encode — the result was always the `disposable` argument verbatim,
 // and the helper's existence obscured that. Callers now read
-// `node.Disposable` directly. See /ov-dev:disposable.
+// `node.Disposable` directly. See /ov-internals:disposable.

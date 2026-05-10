@@ -4,7 +4,7 @@ layer:
   require:
     - k3s
   # Same pre-shared token as k3s-server consumes. Both layers declare
-  # secret_requires with the same name, so whichever resolves first
+  # secret_require with the same name, so whichever resolves first
   # auto-generates a 32-byte hex token via the credential store
   # (DefaultCredentialStore.Set) and the other reads the persisted
   # value — server and every agent automatically share the token with

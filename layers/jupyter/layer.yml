@@ -18,12 +18,12 @@ layer:
       transport: http
   volume:
     - name: workspace
-      path: ~/workspace
+      path: /workspace
   eval:
     # Workspace mount is created by the deploy volume — only present at runtime.
     - id: workspace-dir
       scope: deploy
-      file: ${HOME}/workspace
+      file: /workspace
       filetype: directory
     - id: jupyter-lab-binary
       file: ${HOME}/.pixi/envs/default/bin/jupyter-lab
@@ -185,7 +185,7 @@ layer:
                 # Three different path forms — all must converge on ONE room.
                 await call("cell_insert", {"path": p, "index": 0, "source": "x"})
                 await call("cell_insert", {"path": f"./{p}", "index": 1, "source": "y"})
-                await call("cell_insert", {"path": f"/home/user/workspace/{p}",
+                await call("cell_insert", {"path": f"/workspace/{p}",
                                             "index": 2, "source": "z"})
                 rl = await call("room_list")
                 matching = [r for r in rl if stem in r.get("path","")]
@@ -210,7 +210,7 @@ layer:
         from fastmcp import Client
         async def main():
             async with Client("http://localhost:8888/mcp") as c:
-                # Host path (outside container's /home/user/workspace) MUST be rejected.
+                # Host path (outside container's /workspace) MUST be rejected.
                 try:
                     r = await c.call_tool("cell_get", {
                         "path": "/home/atrawog/Atrapub/workspace/anything.ipynb",

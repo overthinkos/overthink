@@ -23,6 +23,15 @@ layer:
       exclude:
         - "nvidia-driver*"
       repo:
+        # NVIDIA's official CUDA repo for Fedora 43 — CDN-backed, fast.
+        # This is the primary source for the cuda-* RPMs below; negativo17
+        # mirrors the same upstream artifacts but at glacial speed
+        # (single-server, ~24 KB/s on big files like cuda-nvcc 32 MiB).
+        # negativo17 is kept below ONLY for onnxruntime, which is the one
+        # package not available on NVIDIA's repo.
+        - name: cuda-fedora43-x86_64
+          url: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/cuda-fedora43.repo"
+          gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/D42D0685.pub"
         - name: fedora-multimedia
           url: "https://negativo17.org/repos/fedora-multimedia.repo"
           gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"

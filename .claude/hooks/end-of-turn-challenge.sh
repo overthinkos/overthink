@@ -74,7 +74,7 @@ You are about to stop. Before you do, confirm EACH of these:
   [ ] "I already know this area" / "the task was simple" / "the hook
       told me enough" are NOT defences. R0 has no exceptions.
 
-  ONE-PHASE HARD CUTOVER (CLAUDE.md / /ov-dev:cutover-policy)
+  ONE-PHASE HARD CUTOVER (CLAUDE.md / /ov-internals:cutover-policy)
   -----------------------------------------------------------
   [ ] Every task in the current cutover is in `completed` status —
       OR the cutover is a genuinely separate, plan-file-documented
@@ -230,7 +230,7 @@ You are about to stop. Before you do, confirm EACH of these:
 If YES to all: stop is fine.
 
 If NO — KEEP WORKING. On resources explicitly marked `disposable:
-true` (see /ov-dev:disposable), no user permission is needed for
+true` (see /ov-internals:disposable), no user permission is needed for
 `ov rebuild <name>`. On anything else, confirm before destroying.
 The fresh-rebuild step in particular is not optional — without it,
 you haven't proven the fix survives a clean rebuild, which means

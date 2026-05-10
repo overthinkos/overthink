@@ -44,7 +44,7 @@ type HarnessScore struct {
 	Host bool   `yaml:"host,omitempty"`
 
 	// Disposable opt-in — REQUIRED when Host==true. Mirrors the
-	// explicit-only rule from /ov-dev:disposable.
+	// explicit-only rule from /ov-internals:disposable.
 	Disposable bool `yaml:"disposable,omitempty"`
 
 	// Eligible AI names (must reference entries in the `ai:` map).

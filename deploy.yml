@@ -520,7 +520,7 @@ deploy:
             # DAG drop directory — the notebook writes its self-authored
             # DAG here. Same-pod uses the workspace volume; for cross-pod
             # mount the same workspace volume in both pods at this path.
-            - "AIRFLOW_DAGS_DIR=/home/user/workspace/dags"
+            - "AIRFLOW_DAGS_DIR=/workspace/dags"
         description:
             feature: R10 bed for marimo-ml — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface
             tag: [testing]
@@ -528,7 +528,7 @@ deploy:
 # Top-level vm: section — kind:vm entity definitions.
 # Each entity is a build-time spec; deploy-time properties (disposable,
 # lifecycle, layers, env, ports, tests) live on the matching deployments:
-# entry. Disposability FIELDS ARE A DEPLOY PROPERTY (see /ov-dev:disposable);
+# entry. Disposability FIELDS ARE A DEPLOY PROPERTY (see /ov-internals:disposable);
 # the `vm.arch.disposable` entry below is retained for backward compatibility
 # during the Phase 6 migration — the load-bearing copy is in
 # deployments.images.arch-vm.disposable.
@@ -554,7 +554,7 @@ vm:
         # "no such file or directory". Explicit `backend: libvirt`
         # makes resolveVmBackend fail loudly with a `systemctl --user
         # enable --now virtqemud.service` hint instead. See
-        # /ov-advanced:vm "Backend matrix" for the prereq.
+        # /ov-vm:vm "Backend matrix" for the prereq.
         backend: libvirt
         disk_size: 40G
         ram: 8G

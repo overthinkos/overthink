@@ -401,10 +401,17 @@ def __(mo, os):
     # Martin reflects the marimo Origin in its CORS headers, so the
     # cross-port (22718 → 23000) XHR works without proxy tricks.
     martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
+    # Terrain + hillshade DEM source: tiles.mapterhorn.com is the
+    # canonical free terrarium-encoded raster-dem provider used by
+    # MapLibre's own examples. CORS-permissive (Access-Control-
+    # Allow-Origin: *) so works from any browser. The terrain config
+    # elevates the entire scene; the hills layer renders relief
+    # shading; the sky{} block adds atmospheric horizon for the
+    # tilted pitch view.
     streets_html = f"""<!DOCTYPE html>
 <html><head>
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"/>
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <style>html,body{{margin:0;padding:0;}}#map{{height:500px;width:100%;}}</style>
 </head><body>
 <div id="map"></div>
@@ -413,14 +420,21 @@ const map = new maplibregl.Map({{
   container: 'map',
   style: {{
     version: 8,
-    sources: {{ monaco: {{ type: 'vector', url: '{martin}/monaco' }} }},
+    sources: {{
+      monaco: {{ type: 'vector', url: '{martin}/monaco' }},
+      terrainSource: {{ type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json' }},
+      hillshadeSource: {{ type: 'raster-dem', url: 'https://tiles.mapterhorn.com/tilejson.json' }}
+    }},
     layers: [
       {{ id: 'bg', type: 'background',
          paint: {{ 'background-color': '#f0ece4' }} }},
+      {{ id: 'hills', type: 'hillshade', source: 'hillshadeSource',
+         layout: {{ visibility: 'visible' }},
+         paint: {{ 'hillshade-shadow-color': '#473B24' }} }},
       {{ id: 'fill', type: 'fill', source: 'monaco', 'source-layer': 'monaco',
          filter: ['==', ['geometry-type'], 'Polygon'],
          paint: {{ 'fill-color': '#cfd5c0', 'fill-outline-color': '#7a7a7a',
-                   'fill-opacity': 0.6 }} }},
+                   'fill-opacity': 0.55 }} }},
       {{ id: 'line', type: 'line', source: 'monaco', 'source-layer': 'monaco',
          filter: ['==', ['geometry-type'], 'LineString'],
          paint: {{ 'line-color': '#444', 'line-width': 0.8 }} }},
@@ -428,13 +442,18 @@ const map = new maplibregl.Map({{
          filter: ['==', ['geometry-type'], 'Point'],
          paint: {{ 'circle-color': '#c44', 'circle-radius': 1.5,
                    'circle-stroke-color': '#fff', 'circle-stroke-width': 0.5 }} }}
-    ]
+    ],
+    terrain: {{ source: 'terrainSource', exaggeration: 1.5 }},
+    sky: {{}}
   }},
   center: [7.4246, 43.7384],
-  zoom: 13,
+  zoom: 14,
+  pitch: 60,
+  maxPitch: 85,
   attributionControl: false
 }});
-map.addControl(new maplibregl.NavigationControl(), 'top-right');
+map.addControl(new maplibregl.NavigationControl({{ visualizePitch: true, showZoom: true, showCompass: true }}), 'top-right');
+map.addControl(new maplibregl.TerrainControl({{ source: 'terrainSource', exaggeration: 1.5 }}), 'top-right');
 </script>
 </body></html>"""
     mo.iframe(streets_html, height="500px")

@@ -29,6 +29,11 @@ ruff = "*"
 [pypi-dependencies]
 # === marimo notebook server ===
 marimo = "*"
+# Required by `marimo export ipynb --include-outputs` (verifies cell
+# outputs end-to-end via headless run + jupyter-format export). Without
+# it, the export errors with "nbformat is required to convert marimo
+# notebooks to ipynb" and falls back to the no-outputs path.
+nbformat = "*"
 
 # === Core data stack (marimo-team/learn: python, polars, sql, queueing, duckdb) ===
 numpy = "*"
@@ -123,6 +128,7 @@ mercantile = "*"        # tile/zoom math
 folium = "*"            # Leaflet-style mapping for marimo notebooks
 contextily = "*"        # basemap fetching
 mapclassify = "*"       # choropleth classification
+gtfs-parquet = "*"      # GaspardMerten/gtfs-parquet — GTFS zip → polars Parquet
 
 [environments]
 default = { features = [], solve-group = "default" }

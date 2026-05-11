@@ -1,6 +1,6 @@
 layer:
-  name: osm-data
-  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), osmium-tool (PBF inspection/filtering), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
+  name: osm-tools
+  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
   require:
     - supervisord
   distro:
@@ -27,17 +27,8 @@ layer:
         # NOTE: no explicit zlib — CachyOS ships zlib-ng-compat which
         # provides the same library/ABI and would conflict with `zlib`.
         # tippecanoe links against -lz which resolves through zlib-ng-compat.
-      aur:
-        package:
-          # osmium-tool is AUR-only on Arch (libosmium ships in extra,
-          # but the CLI binary is AUR). Fedora's `osmium-tool` RPM
-          # provides the same binary; rendered as a single user-facing
-          # package across both distros via per-distro selection here.
-          - osmium-tool
     fedora:
       package:
-        # osmium-tool — OSM PBF inspection, filtering, transformation
-        - osmium-tool
         # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
         # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
         - gdal
@@ -123,9 +114,6 @@ layer:
     # Build-scope: every CLI binary present + responds to --version.
     - id: tippecanoe-installed
       command: tippecanoe --version
-      exit_status: 0
-    - id: osmium-installed
-      command: osmium --version
       exit_status: 0
     - id: gdal-installed
       command: ogr2ogr --version

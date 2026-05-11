@@ -644,16 +644,11 @@ image:
         # no builder: of its own, so without this override pixi/npm/cargo
         # builders would resolve to fedora-builder on an Arch-based image.
         builder:
-            aur: archlinux-builder
             cargo: archlinux-builder
             npm: archlinux-builder
             pixi: archlinux-builder
-        # Add aur to the format list — the osm-data layer needs
-        # osmium-tool from AUR (it's not in Arch's extra repo). cachyos
-        # itself declares only [pac], so we override here.
         build:
             - pac
-            - aur
         platforms:
             - linux/amd64
         layer:
@@ -662,7 +657,7 @@ image:
             - cuda              # CUDA toolkit (cuda + cudnn from Arch extra repo) — formerly via base: nvidia
             - marimo            # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
-            - osm-data          # tippecanoe + osmium + gdal + martin (PMTiles tile server) + pmtiles CLI
+            - osm-tools         # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
             - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
             - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image

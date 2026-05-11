@@ -1,6 +1,6 @@
 layer:
   name: maputnik
-  description: "Maputnik — visual editor for MapLibre GL vector-tile styles. Pure-JS SPA built from upstream source via npm at image build time, served as a static dist by python -m http.server. Pairs with the osm-data layer's martin tile server: the editor at :8000 points at the tile catalog at :3000."
+  description: "Maputnik — visual editor for MapLibre GL vector-tile styles. Pure-JS SPA built from upstream source via npm at image build time, served as a static dist by python -m http.server. Pairs with the osm-tools layer's martin tile server: the editor at :8000 points at the tile catalog at :3000."
   require:
     - supervisord
   distro:

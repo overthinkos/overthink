@@ -105,7 +105,7 @@ layer:
     # Build-scope smoke for the lean ML + curriculum + airflow union.
     # One import line per topic group catches resolver drift at image build,
     # not at first notebook open.
-    - id: marimo-ml-curriculum-imports
+    - id: marimo-curriculum-imports
       command: ${HOME}/.pixi/envs/default/bin/python -c "import marimo, torch, transformers, polars, scipy, altair, plotly, statsmodels, duckdb, sqlalchemy, sqlglot, cvxpy, clarabel, daft, wigglystuff, drawdata, marimo_learn, simpy"
       exit_status: 0
     - id: marimo-binary
@@ -119,8 +119,8 @@ layer:
     # mcp-server-apache-airflow is intentionally CLI-only (no clean Python
     # import); its presence is verified by the airflow-mcp-binary check in
     # the airflow layer instead.
-    - id: marimo-ml-osm-mcp-imports
-      command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars"
+    - id: marimo-osm-mcp-imports
+      command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard"
       exit_status: 0
     # Build-scope: marimo-team/skills bundle landed and is non-empty.
     - id: marimo-skills-installed
@@ -147,7 +147,7 @@ layer:
       timeout: 10s
     # Deploy-scope: marimo's --mcp server responds. The endpoint lives at
     # /mcp/server (per marimo docs) which is what mcp_provide above declares,
-    # so `ov eval mcp ping marimo-ml --name marimo` resolves the URL correctly
+    # so `ov eval mcp ping marimo --name marimo` resolves the URL correctly
     # via the host-port rewriter.
     - id: mcp-marimo-ping
       scope: deploy

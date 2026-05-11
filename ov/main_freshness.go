@@ -16,7 +16,7 @@ import (
 //
 // Why this exists — the 2026-05-09 cuda-cudnn incident:
 //
-//	A user ran `ov image build marimo-ml` against the system /usr/bin/ov
+//	A user ran `ov image build marimo` against the system /usr/bin/ov
 //	binary that was 2 days old. The source tree at the same project root
 //	had a freshly-committed cache-mount fix (commit 230c5d4) emitting
 //	`--mount=type=cache,id=ov-var-cache-libdnf5,...`. The stale binary

@@ -32,7 +32,7 @@ layer:
     # ---- Build maputnik from upstream source ----
     # The upstream Docker image (ghcr.io/maplibre/maputnik) ships a built
     # static dist + a tiny static server, but composing it as a sidecar
-    # would change the marimo-ml-pod from single-container to multi-container
+    # would change the marimo pod from single-container to multi-container
     # (a structural shape change). Instead we build it in-image in one cmd:
     # task and serve via python -m http.server (system python3 from the
     # supervisor RPM dep — no marimo-pixi-env coupling).

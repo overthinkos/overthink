@@ -30,7 +30,7 @@ def __(mo):
         datasets and renders two folium maps:
 
         - **Streets map** — martin-served PMTiles produced by the OSM DAG
-          (PBF → quackosm → ogr2ogr → tippecanoe → martin).
+          (PBF → quackosm → duckdb-spatial → tippecanoe → martin).
         - **Transit map** — Monaco bus-stop CircleMarkers on default
           OpenStreetMap raster tiles, produced by the GTFS DAG
           (transitous.org GTFS zip → gtfs-parquet → polars).
@@ -75,7 +75,7 @@ def __(Path, os, textwrap):
         """OSM pipeline self-authored by osm-monaco-viz.py.
 
         Downloads Monaco PBF, converts to GeoParquet via quackosm,
-        exports GeoJSON via ogr2ogr, builds PMTiles via tippecanoe.
+        exports GeoJSON via duckdb-spatial (ST_AsGeoJSON), builds PMTiles via tippecanoe.
         Output lands under the workspace volume at the paths martin
         already serves.
         """
@@ -130,11 +130,42 @@ def __(Path, os, textwrap):
 
             @task
             def geoparquet_to_geojson(parquet_path: str) -> str:
+                # CachyOS rolling-release drift broke ogr2ogr's parquet
+                # driver — libarrow_dataset.so soname (2300 vs current)
+                # makes the GDAL Parquet plugin fail to load, taking the
+                # entire ogr2ogr datasource-open path with it. DuckDB
+                # ships its own arrow + a parquet reader built in, plus
+                # the spatial extension provides ST_AsGeoJSON for the
+                # geometry → GeoJSON-string conversion.
+                #
+                # Subtle: DuckDB's spatial extension parses GeoParquet
+                # metadata when `INSTALL spatial; LOAD spatial;` is
+                # active and exposes the geometry column as
+                # GEOMETRY('OGC:CRS84') directly. So we pass the column
+                # straight to ST_AsGeoJSON — no ST_GeomFromWKB lift
+                # needed (and adding one would error with
+                # "No function matches st_geomfromwkb(GEOMETRY(...))").
+                import duckdb
+                import json as _json
                 out = WORK / "monaco.geojson"
-                subprocess.run(
-                    ["ogr2ogr", "-f", "GeoJSON", str(out), parquet_path],
-                    check=True,
-                )
+                con = duckdb.connect()
+                con.execute("INSTALL spatial; LOAD spatial;")
+                rows = con.execute(f"""
+                    SELECT ST_AsGeoJSON(geometry) AS geom_json
+                    FROM read_parquet('{parquet_path}')
+                """).fetchall()
+                features = [
+                    {"type": "Feature",
+                     "properties": {},
+                     "geometry": _json.loads(geom)}
+                    for (geom,) in rows
+                    if geom
+                ]
+                with open(out, "w") as f:
+                    _json.dump(
+                        {"type": "FeatureCollection", "features": features},
+                        f,
+                    )
                 return str(out)
 
             @task
@@ -378,6 +409,83 @@ def __(parquet_path, pl):
     )
     df_tags  # last-expression render — marimo displays this DataFrame
     return (df_tags,)
+
+
+@app.cell
+def __(dag_run_states, parquet_path, pl):
+    # Class A — server-side DuckDB Spatial query over the same OSM
+    # parquet. DuckDB's `spatial` extension reads GeoParquet's
+    # geometry-column metadata and exposes the column as
+    # GEOMETRY('OGC:CRS84') directly — so ST_GeometryType can classify
+    # rows without an intermediate ST_GeomFromWKB lift (which would
+    # error with "No function matches st_geometrytype(GEOMETRY(...))"
+    # because the geometry is no longer a raw BLOB at this point).
+    # This cell answers the basic sanity question: per-geometry-type
+    # counts.
+    assert dag_run_states["notebook_osm_pipeline"] == "success"
+    import duckdb
+    _con = duckdb.connect()
+    _con.execute("INSTALL spatial; LOAD spatial;")
+    df_duckdb_spatial = _con.execute(f"""
+        SELECT
+            ST_GeometryType(geometry) AS geom_type,
+            COUNT(*) AS n
+        FROM read_parquet('{parquet_path}')
+        GROUP BY 1
+        ORDER BY n DESC
+    """).pl()
+    df_duckdb_spatial  # marimo renders the Polars DataFrame
+    return (df_duckdb_spatial,)
+
+
+@app.cell
+def __(dag_run_states, parquet_path, pl):
+    # Class A — polars-st adds GEOS-backed spatial operations as a
+    # Polars expression namespace (`.st.*`). This cell decodes the
+    # WKB geometry column, computes per-feature bounding-box area,
+    # and reports the 10 largest polygons. Pure CPU — cudf-polars-cu13
+    # falls back to the CPU executor for the .st.* namespace, which is
+    # exactly what we want here (the spatial ops aren't GPU-accelerated).
+    assert dag_run_states["notebook_osm_pipeline"] == "success"
+    import polars_st as st
+    df_polars_st = (
+        pl.scan_parquet(parquet_path)
+        .with_columns(st.from_wkb("geometry").alias("geom"))
+        .with_columns(
+            pl.col("geom").st.geometry_type().alias("gtype"),
+            pl.col("geom").st.area().alias("area"),
+        )
+        .filter(pl.col("area") > 0)
+        .sort("area", descending=True)
+        .select(["gtype", "area"])
+        .head(10)
+        .collect()
+    )
+    df_polars_st  # marimo renders the DataFrame
+    return (df_polars_st,)
+
+
+@app.cell
+def __(pl):
+    # Class A — geopolars is the early-alpha Rust-native polars-geo
+    # crate (v0.1.0aN as of 2026-05; API still stabilizing). The cell
+    # is intentionally minimal: it imports the package, captures the
+    # version + public-attribute surface, and renders the inventory as
+    # a DataFrame. Useful as a tripwire: when the alpha grows new
+    # public functions, this cell's row count goes up and the user
+    # can adopt them in subsequent notebooks. No load-bearing geometry
+    # math — that's polars-st's lane until geopolars stabilizes.
+    import geopolars as gpl
+    _attrs = sorted(n for n in dir(gpl) if not n.startswith("_"))
+    df_geopolars = pl.DataFrame({
+        "field": ["version", "module"] + [f"api[{i}]" for i in range(len(_attrs))],
+        "value": [
+            str(getattr(gpl, "__version__", "unknown")),
+            getattr(gpl, "__name__", "geopolars"),
+        ] + _attrs,
+    })
+    df_geopolars  # marimo renders the info table
+    return (df_geopolars,)
 
 
 @app.cell

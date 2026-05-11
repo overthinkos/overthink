@@ -99,7 +99,7 @@ simpy = "*"
 # === Apache Airflow with LocalExecutor + SQLite (no provider extras) ===
 # Latest airflow without celery/postgres/redis providers — the airflow
 # layer drops to SQLite metadata + in-process LocalExecutor for the
-# default marimo-ml deployment. Add provider extras back if composing
+# default marimo deployment. Add provider extras back if composing
 # with layers/postgresql + layers/valkey for multi-node.
 apache-airflow = "*"
 
@@ -129,6 +129,30 @@ folium = "*"            # Leaflet-style mapping for marimo notebooks
 contextily = "*"        # basemap fetching
 mapclassify = "*"       # choropleth classification
 gtfs-parquet = "*"      # GaspardMerten/gtfs-parquet — GTFS zip → polars Parquet
+
+# === Polars geospatial extensions ===
+# polars-st adds GEOS-backed spatial operations (st_intersects, st_buffer,
+# st_union, …) directly on Polars LazyFrames. PyPI-only — no conda-forge
+# package. Bundled GEOS in the wheel, so no new system dep on top of the
+# shapely already in this env.
+polars-st = "*"
+# geopolars is the early-alpha Rust-native polars-geo (v0.1.0a4 as of
+# 2026-05). Carries its own polars-version constraints; uv's resolver
+# negotiates against the cudf-polars-cu13 >=1.30,<1.39 pin. If the alpha
+# fails to resolve at build time, drop this line and re-run; the rest of
+# the stack is independent.
+geopolars = "*"
+
+# === GeoArrow + deck.gl rendering ===
+# geoarrow-python ships as two PyPI distributions: the pyarrow extension
+# types + the pandas accessor. Both are needed to round-trip geometry
+# columns between Polars, pandas, and Arrow IPC.
+geoarrow-pyarrow = "*"
+geoarrow-pandas = "*"
+# lonboard is developmentseed's deck.gl widget for GPU-rendered maps
+# directly from geoarrow-backed columns. Replaces the folium fallback
+# for >100k-row geospatial layers where Leaflet would choke.
+lonboard = "*"
 
 [environments]
 default = { features = [], solve-group = "default" }

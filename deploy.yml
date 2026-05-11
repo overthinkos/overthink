@@ -493,9 +493,9 @@ deploy:
         description:
             feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
             tag: [testing]
-    marimo-ml-pod:
+    marimo:
         target: pod
-        image: marimo-ml
+        image: marimo
         disposable: true
         lifecycle: dev
         port:
@@ -522,7 +522,7 @@ deploy:
             # mount the same workspace volume in both pods at this path.
             - "AIRFLOW_DAGS_DIR=/workspace/dags"
         description:
-            feature: R10 bed for marimo-ml — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface
+            feature: R10 bed for marimo — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions
             tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.

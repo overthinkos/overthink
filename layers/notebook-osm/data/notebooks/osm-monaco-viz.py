@@ -424,9 +424,22 @@ def __(Path, os, textwrap):
         def notebook_osm_gpqtiles_pipeline():
             @task
             def gpqtiles_convert() -> str:
+                import time
                 parquet_path = WORK / "monaco.parquet"
                 TILES.mkdir(parents=True, exist_ok=True)
                 out = TILES / "monaco-gpqtiles.pmtiles"
+                # Wait for the OSM DAG's pbf_to_geoparquet task to
+                # finish writing monaco.parquet. The 4 derived DAGs
+                # trigger in parallel with the OSM DAG and race the
+                # producer — without this guard we read a non-
+                # existent / partial file. Per R4 this is principled
+                # cross-DAG synchronization on a known producer-
+                # consumer dep, not a magic sleep.
+                _deadline = time.monotonic() + 600
+                while not (parquet_path.exists() and parquet_path.stat().st_size > 0):
+                    if time.monotonic() > _deadline:
+                        raise TimeoutError(f"{parquet_path} not produced within 600s")
+                    time.sleep(2)
                 # gpq-tiles is a system binary in this image (the
                 # osm-tools layer cargo-installs it because PyPI wheels
                 # don't cover our Python 3.13 / linux x86_64 combo and
@@ -557,6 +570,7 @@ def __(Path, os, textwrap):
         def notebook_osm_duckdb_mvt_pipeline():
             @task
             def encode_to_pmtiles() -> str:
+                import time
                 import duckdb
                 from pmtiles.writer import Writer
                 from pmtiles.tile import TileType, Compression, zxy_to_tileid
@@ -564,6 +578,14 @@ def __(Path, os, textwrap):
                 parquet_path = WORK / "monaco.parquet"
                 TILES.mkdir(parents=True, exist_ok=True)
                 out = TILES / "monaco-duckdb-mvt.pmtiles"
+
+                # Wait for the OSM DAG's pbf_to_geoparquet task to finish
+                # (see gpqtiles_convert for full rationale).
+                _deadline = time.monotonic() + 600
+                while not (parquet_path.exists() and parquet_path.stat().st_size > 0):
+                    if time.monotonic() > _deadline:
+                        raise TimeoutError(f"{parquet_path} not produced within 600s")
+                    time.sleep(2)
 
                 # Monaco bbox (approx): lon 7.40-7.45, lat 43.71-43.77
                 MIN_LON, MAX_LON = 7.40, 7.45
@@ -732,11 +754,20 @@ def __(Path, os, textwrap):
         def notebook_osm_duckdb_freestiler_pipeline():
             @task
             def freestiler_convert() -> str:
+                import time
                 import freestiler
 
                 parquet_path = WORK / "monaco.parquet"
                 TILES.mkdir(parents=True, exist_ok=True)
                 out = TILES / "monaco-duckdb-freestiler.pmtiles"
+
+                # Wait for the OSM DAG's pbf_to_geoparquet task to finish
+                # (see gpqtiles_convert for full rationale).
+                _deadline = time.monotonic() + 600
+                while not (parquet_path.exists() and parquet_path.stat().st_size > 0):
+                    if time.monotonic() > _deadline:
+                        raise TimeoutError(f"{parquet_path} not produced within 600s")
+                    time.sleep(2)
 
                 # freestiler accepts either a file path (sf/spatial-file
                 # input) OR a DuckDB SQL query. Use the SQL form to
@@ -876,9 +907,22 @@ def __(Path, os, textwrap):
         def notebook_osm_shortbread_pipeline():
             @task
             def tilemaker_convert() -> str:
+                import time
                 pbf = WORK / "monaco.osm.pbf"
                 SHORTBREAD.mkdir(parents=True, exist_ok=True)
                 out = SHORTBREAD / "monaco-shortbread.pmtiles"
+
+                # Wait for the OSM DAG's download_pbf task to finish
+                # writing monaco.osm.pbf. Shortbread reads the PBF
+                # directly (it doesn't depend on monaco.parquet) but it
+                # still races the OSM DAG's download_pbf task — same
+                # cross-DAG producer-consumer dep as the parquet
+                # consumers (see gpqtiles_convert for full rationale).
+                _deadline = time.monotonic() + 600
+                while not (pbf.exists() and pbf.stat().st_size > 0):
+                    if time.monotonic() > _deadline:
+                        raise TimeoutError(f"{pbf} not produced within 600s")
+                    time.sleep(2)
                 # tilemaker's CLI shape: --input + --output + --config +
                 # --process. The shortbread-tilemaker repo ships
                 # config.json (layer/zoom schema) and process.lua (per-

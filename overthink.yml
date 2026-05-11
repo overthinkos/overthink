@@ -255,6 +255,22 @@ distro:
                         pacman-key --recv-keys {{.key}} && pacman-key --lsign-key {{.key}} && \
                     {{- end}}
                     {{- end}}
+                        # Reseed pacman keyring from the locally-installed
+                        # keyring packages (cachyos-keyring, archlinux-keyring).
+                        # Surfaced 2026-05 when a freshly-published cachyos-
+                        # extra-v3 package metadata signature failed to verify
+                        # against a stale keyring inside the docker.io/cachyos-
+                        # v3:latest base image. `--populate` is local-only and
+                        # FAST (sub-second per repo); does NOT do keyserver
+                        # roundtrips. Made non-fatal with `|| true` so
+                        # air-gapped / restricted-network builds still succeed
+                        # when the keyring was already current. If `--populate`
+                        # alone isn't enough (i.e. cachyos rotates its master
+                        # signing key without updating the bundled keyring
+                        # package), the fix is to force-pull the cachyos base
+                        # image (`podman pull docker.io/cachyos/cachyos-v3:latest`)
+                        # which gets the updated keyring package from upstream.
+                        (pacman-key --populate 2>/dev/null || true) && \
                         pacman -Syu --noconfirm
                     {{- range .Options}} {{.}}{{end}}
                     {{- range .Packages}} \

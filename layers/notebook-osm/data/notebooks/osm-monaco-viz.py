@@ -595,13 +595,31 @@ def __(Path, os, textwrap):
                 con = duckdb.connect()
                 con.execute("INSTALL spatial; LOAD spatial;")
 
-                # Build the source table once (in-memory view over the
-                # parquet) so each per-tile query can run the same
-                # ST_AsMVT_Geom-then-aggregate without re-reading from
-                # disk N times.
+                # Project source geometries from EPSG:4326 (lon/lat,
+                # what quackosm writes) to EPSG:3857 (Web Mercator,
+                # what ST_TileEnvelope returns). Without this transform,
+                # ST_Intersects(geom_4326, ST_TileEnvelope_3857) compares
+                # numerically incompatible coordinate ranges and never
+                # finds matches — the original silent-bug root cause
+                # behind the 270-byte output.
+                #
+                # IMPORTANT: `always_xy := true` is REQUIRED. DuckDB
+                # Spatial's PROJ backend follows the OGC authority-
+                # compliant axis-order convention by default, which
+                # means EPSG:4326 is treated as (lat, lon). OSM data
+                # (and quackosm output) uses (lon, lat). Without
+                # always_xy=true the transform swaps axes and produces
+                # numerically wrong Web Mercator output (verified
+                # empirically: extent (4820427, 804536) instead of
+                # the correct (802411, 5358150) for Monaco).
+                #
+                # NOTE on ST_TileEnvelope bounds: ST_AsMVTGeom wants
+                # the `bounds` argument as BOX_2D. DuckDB Spatial has
+                # no direct GEOMETRY→BOX_2D cast, so we wrap in
+                # ST_Extent which projects to BOX_2D correctly.
                 con.execute(f"""
                     CREATE TEMP TABLE src AS
-                    SELECT geometry, ST_AsText(geometry) AS wkt
+                    SELECT ST_Transform(geometry, 'EPSG:4326', 'EPSG:3857', always_xy := true) AS geom
                     FROM read_parquet('{parquet_path}')
                     WHERE geometry IS NOT NULL
                 """)
@@ -612,25 +630,40 @@ def __(Path, os, textwrap):
                     for z, x, y in _tile_coords_for_bbox(
                         MIN_LON, MIN_LAT, MAX_LON, MAX_LAT, MIN_Z, MAX_Z,
                     ):
-                        # ST_AsMVTGeom transforms geometry from lon/lat
-                        # to tile-local coords; ST_AsMVT aggregates the
-                        # resulting rows into a single MVT-PBF blob.
-                        # DuckDB Spatial uses the PostGIS naming
-                        # convention: ST_AsMVTGeom is one word.
-                        #
-                        # Subtle: ST_AsMVTGeom wants the `bounds`
-                        # argument as a BOX_2D, not a GEOMETRY. The
-                        # ST_TileEnvelope built-in returns GEOMETRY,
-                        # so wrap it in ST_Extent to project to a
-                        # BOX_2D. ST_Intersects in the WHERE clause is
-                        # happy with the GEOMETRY form, so we keep
-                        # that one un-wrapped.
+                        # Two-CTE pipeline (the actual bug fix):
+                        #   1. proj — project source geom into tile-
+                        #      local coords via ST_AsMVTGeom (returns
+                        #      NULL for geoms that don't intersect the
+                        #      tile envelope after clipping).
+                        #   2. nonnull — strip the NULLs that proj
+                        #      leaves behind; without this filter, an
+                        #      ST_AsMVT aggregate over an all-NULL set
+                        #      emits a syntactically-valid but
+                        #      semantically-empty MVT-PBF blob
+                        #      (~10 bytes of protobuf framing). The
+                        #      original code did this collapse +
+                        #      relied on `if row and row[0]:` which
+                        #      can't tell empty-blob from real-tile
+                        #      (non-empty bytes are always truthy).
+                        # The outer SELECT returns both the MVT bytes
+                        # AND a feature count so the Python guard
+                        # below can skip the tile when no features
+                        # actually project into it. The original code
+                        # passed all 23 empty blobs to pmtiles.Writer,
+                        # whose hash-dedup collapsed them into one
+                        # storage offset → 270-byte output file.
                         row = con.execute(f"""
-                            SELECT ST_AsMVT({{geom: ST_AsMVTGeom(geometry, ST_Extent(ST_TileEnvelope({z}, {x}, {y})))}}) AS tile
-                            FROM src
-                            WHERE ST_Intersects(geometry, ST_TileEnvelope({z}, {x}, {y}))
+                            WITH proj AS (
+                                SELECT ST_AsMVTGeom(geom, ST_Extent(ST_TileEnvelope({z}, {x}, {y}))) AS g
+                                FROM src
+                                WHERE ST_Intersects(geom, ST_TileEnvelope({z}, {x}, {y}))
+                            ),
+                            nonnull AS (
+                                SELECT g FROM proj WHERE g IS NOT NULL
+                            )
+                            SELECT ST_AsMVT({{geom: g}}) AS tile, COUNT(*) AS n FROM nonnull
                         """).fetchone()
-                        if row and row[0]:
+                        if row and row[1] and row[1] > 0:
                             # pmtiles.Writer.write_tile takes a single
                             # encoded tile-id (Hilbert curve over z/x/y),
                             # not the three coords separately.

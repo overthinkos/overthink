@@ -154,5 +154,22 @@ geoarrow-pandas = "*"
 # for >100k-row geospatial layers where Leaflet would choke.
 lonboard = "*"
 
+# === GeoParquet → PMTiles direct converter (Python-wheel half) ===
+# freestiler: in-process Rust tiling engine (walkerke/freestiler);
+# `freestile_query()` accepts a DuckDB SQL string directly and produces
+# a PMTiles archive without a Python per-tile loop. Ships manylinux
+# wheels for Python 3.9-3.14, including our 3.13 / linux x86_64 combo.
+#
+# gpq-tiles INTENTIONALLY NOT HERE: its PyPI wheels cover only
+# Python 3.8 on Linux x86_64 (v0.6.0; verified 2026-05). Our pixi env
+# is `python<3.14`, and `[pypi-options] no-build = true` (load-bearing
+# for the apache-airflow pin — without it uv downgrades airflow to
+# v1.10.2 which fails on the removed `imp` module) prevents the
+# resolver from building gpq-tiles from sdist. Instead, gpq-tiles
+# ships as a system-level CLI in the osm-tools layer (built from
+# crates.io via `cargo install --root /usr/local`). See
+# /ov-marimo:osm-tools-layer.
+freestiler = "*"
+
 [environments]
 default = { features = [], solve-group = "default" }

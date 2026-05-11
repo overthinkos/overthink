@@ -659,6 +659,7 @@ image:
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
             - osm-tools         # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
             - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
+            - pmtiles-viewer    # protomaps/PMTiles /app SPA — visual inspector for PMTiles archives (port 8001)
             - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
@@ -669,6 +670,7 @@ image:
             - 19999:19999       # airflow-mcp (deploy.yml overrides host port to 29999)
             - 3000:3000         # martin tile server (deploy.yml overrides host port to 23000)
             - 8000:8000         # maputnik static editor (deploy.yml overrides host port to 28000)
+            - 8001:8001         # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
     nvidia:
         base: fedora-nonfree
         platforms:

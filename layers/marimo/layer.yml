@@ -120,7 +120,7 @@ layer:
     # import); its presence is verified by the airflow-mcp-binary check in
     # the airflow layer instead.
     - id: marimo-osm-mcp-imports
-      command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard"
+      command: ${HOME}/.pixi/envs/default/bin/python -c "import geopandas, shapely, fiona, pyproj, quackosm, geoparquet_io, pmtiles, h3, mercantile, folium, contextily, mapclassify, fastmcp, cudf_polars, polars_st, geopolars, geoarrow.pyarrow, geoarrow.pandas, lonboard, freestiler"
       exit_status: 0
     # Build-scope: marimo-team/skills bundle landed and is non-empty.
     - id: marimo-skills-installed

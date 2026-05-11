@@ -504,6 +504,7 @@ deploy:
             - 29999:19999       # airflow-mcp (mcp-server-apache-airflow on /mcp)
             - 23000:3000        # martin tile server
             - 28000:8000        # maputnik static editor
+            - 28001:8001        # pmtiles-viewer SPA — open browser at http://127.0.0.1:28001/ to inspect PMTiles archives
         env:
             # Browser-visible URLs — embedded in folium HTML so the
             # user's BROWSER (on the host) can reach martin and airflow

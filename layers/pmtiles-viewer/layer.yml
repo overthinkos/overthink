@@ -1,0 +1,126 @@
+layer:
+  name: pmtiles-viewer
+  description: "PMTiles Viewer — visual inspector for PMTiles archives. TypeScript SPA from protomaps/PMTiles/app/ built via npm at image build time, served as a static dist by python -m http.server on port 8001 (host 28001). Pairs with the osm-tools layer's martin tile server: load any of the marimo image's /workspace/tiles/pmtiles/*.pmtiles archives into the viewer over HTTP to inspect their bbox, zoom range, metadata, and tile contents."
+  require:
+    - supervisord
+  distro:
+    archlinux:
+      package:
+        # nodejs + npm in the cachyos extra repo (same as the maputnik
+        # layer); git pulls the PMTiles source at image-build time. The
+        # supervisor PAC pulls python in as a runtime dep so the
+        # http.server service exec below resolves /usr/bin/python3.
+        - nodejs
+        - npm
+        - git
+    fedora:
+      package:
+        # Fedora 43 ships nodejs 22 + npm 10, sufficient for the
+        # PMTiles app's Vite + TypeScript toolchain. If a node-version
+        # build break surfaces, switch to a `nodejs:20` module stream
+        # (the codebase already has prior art).
+        - nodejs
+        - npm
+        - git
+  port:
+    - 8001      # pmtiles-viewer static-dist HTTP server (host 28001)
+  task:
+    - mkdir: /opt/pmtiles-viewer
+      user: root
+
+    # ---- Build the PMTiles Viewer SPA from upstream source ----
+    # The protomaps/PMTiles repository ships a TypeScript SPA at
+    # /app/ that's deployed publicly at https://pmtiles.io. We build
+    # it in-image (same pattern as the maputnik layer — single-container
+    # supervisord service, no sidecar) and serve via python -m http.server
+    # (system python3 from the supervisor's own dep — no pixi-env coupling).
+    #
+    # Build duration: ~30-90 sec warm npm cache, ~2-3 min cold. Vite output
+    # under app/dist/ lands at /opt/pmtiles-viewer/build/ so the
+    # http.server --directory pointer below resolves correctly.
+    - cmd: |
+        set -euo pipefail
+        # Clone shallow + the current tip of main. PMTiles has no
+        # separately-released "viewer" tarball — source build of the
+        # /app/ subdir is the canonical install.
+        git clone --depth 1 https://github.com/protomaps/PMTiles /tmp/PMTiles
+        cd /tmp/PMTiles/app
+        # `npm ci` over `npm install` for deterministic resolution.
+        # --no-audit + --no-fund trim ~5 sec of stderr chatter.
+        npm ci --no-audit --no-fund
+        # Vite (the build tool the PMTiles app uses) defaults to
+        # --base=/ when the package.json `build` script doesn't pin
+        # it, but pass --base=/ explicitly to match the maputnik
+        # layer's lockdown — the asset-base-not-prefixed eval below
+        # locks the served HTML to root-relative asset URLs. Forward
+        # the flag through npm via `--`.
+        npm run build -- --base=/
+        # Vite outputs to `dist/` by default. Copy the SPA artifact
+        # and error loudly if the upstream layout changes.
+        if [ -d dist ]; then
+          mkdir -p /opt/pmtiles-viewer
+          cp -r dist /opt/pmtiles-viewer/build
+        else
+          echo "pmtiles-viewer build did not produce ./dist directory" >&2
+          ls -la
+          exit 1
+        fi
+        cd /
+        rm -rf /tmp/PMTiles
+        # Drop npm cache to shrink image.
+        rm -rf /root/.npm
+      user: root
+  eval:
+    # Build-scope: SPA built and is non-empty.
+    - id: pmtiles-viewer-build-dir-exists
+      file: /opt/pmtiles-viewer/build
+      filetype: directory
+      exists: true
+    - id: pmtiles-viewer-index-html
+      file: /opt/pmtiles-viewer/build/index.html
+      exists: true
+    # Build-scope: nodejs binary present (paired with the maputnik
+    # check — declaring it here means dropping maputnik leaves this
+    # eval in place; declaring it on both layers documents the
+    # cross-layer requirement clearly).
+    - id: nodejs-installed-pmtiles-viewer
+      command: node --version
+      exit_status: 0
+    # Deploy-scope: the http.server is up and serving the SPA.
+    - id: pmtiles-viewer-running
+      scope: deploy
+      service: pmtiles-viewer
+      running: true
+    - id: pmtiles-viewer-port-reachable
+      scope: deploy
+      addr: "127.0.0.1:${HOST_PORT:8001}"
+      reachable: true
+      timeout: 10s
+    - id: pmtiles-viewer-http-up
+      scope: deploy
+      http: "http://127.0.0.1:${HOST_PORT:8001}/"
+      status: 200
+      timeout: 10s
+    # Lock-in for the `npm run build -- --base=/` Vite override. If
+    # the upstream PMTiles app's build script switches to a baked
+    # subpath, this assertion catches the regression at deploy-time
+    # (asset URLs in the served HTML must NOT have a /pmtiles/ or
+    # similar prefix). Defensive: scope-grep is loose enough to
+    # catch any non-root prefix.
+    - id: pmtiles-viewer-asset-base-not-prefixed
+      scope: deploy
+      command: |
+        ! curl -fsS http://localhost:8001/ | grep -qE '"/(pmtiles|app)/'
+      in_container: true
+      exit_status: 0
+  service:
+    - name: pmtiles-viewer
+      # System python3 (from the supervisor's own dep) — same pattern
+      # as the maputnik service, keeps this layer pixi-env-free. The
+      # --directory flag pins the served root to the build artifact.
+      exec: /usr/bin/python3 -m http.server 8001 --directory /opt/pmtiles-viewer/build
+      restart: always
+      working_directory: /opt/pmtiles-viewer
+      priority: 35
+      enable: true
+      scope: system

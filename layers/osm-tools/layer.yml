@@ -27,6 +27,15 @@ layer:
         # NOTE: no explicit zlib — CachyOS ships zlib-ng-compat which
         # provides the same library/ABI and would conflict with `zlib`.
         # tippecanoe links against -lz which resolves through zlib-ng-compat.
+        #
+        # rust: needed for the `cargo install gpq-tiles` task below.
+        # gpq-tiles ships no usable PyPI wheels for Python 3.13/Linux
+        # x86_64 (v0.6.0 has only a cp38 manylinux wheel), and the
+        # marimo pixi env has [pypi-options] no-build = true (load-
+        # bearing for apache-airflow's resolution). So we install the
+        # crates.io binary system-wide via cargo. The rust package
+        # pulls cargo + rustc; ~350 MB image-size delta.
+        - rust
     fedora:
       package:
         # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
@@ -44,6 +53,10 @@ layer:
         - gcc-c++
         - sqlite-devel
         - zlib-devel
+        # rust: same rationale as the archlinux section — used by the
+        # cargo install gpq-tiles task below.
+        - rust
+        - cargo
   port:
     - 3000      # martin tile server HTTP
   task:
@@ -94,6 +107,23 @@ layer:
         cd / && rm -rf "$TMPDIR"
       user: root
 
+    # ---- gpq-tiles (GeoParquet → PMTiles direct converter) ----
+    # geoparquet-io/gpq-tiles v0.6.0 publishes wheels only for Python 3.8
+    # on Linux x86_64; our marimo pixi env is Python <3.14 and has
+    # [pypi-options] no-build = true (load-bearing — without it, uv
+    # downgrades apache-airflow to v1.10.2 which fails on the removed
+    # `imp` module). So we build the binary from crates.io via cargo
+    # and install system-wide at /usr/local/bin/gpq-tiles. The
+    # ~/.cargo/registry + .cargo/git build caches are dropped after
+    # install to keep the image lean. Build duration: ~5-10 min on a
+    # warm rust toolchain (cargo compiles 80+ transitive crates).
+    - cmd: |
+        set -euo pipefail
+        cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
+        rm -rf /root/.cargo/registry /root/.cargo/git \
+               /root/.cargo/.crates.toml /root/.cargo/.crates2.json
+      user: root
+
     # ---- martin wrapper ----
     # Tiny shell wrapper that pre-creates the tile source directory under
     # the user-owned workspace volume before exec'ing martin. The directory
@@ -126,6 +156,9 @@ layer:
       exit_status: 0
     - id: pmtiles-installed
       command: pmtiles version
+      exit_status: 0
+    - id: gpq-tiles-installed
+      command: /usr/local/bin/gpq-tiles --version
       exit_status: 0
     - id: martin-wrapper-installed
       file: /usr/local/bin/martin-wrapper.sh

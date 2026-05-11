@@ -24,16 +24,31 @@ def __(mo):
         # Monaco — standalone OSM + GTFS marimo demo
 
         Self-contained pipeline: this notebook **writes its own Airflow
-        DAGs** to `${AIRFLOW_DAGS_DIR}` (one for OSM, one for GTFS),
-        **triggers** them in parallel via the Airflow REST API, **polls
-        until both succeed**, then runs polars analysis on both
-        datasets and renders two folium maps:
+        DAGs** to `${AIRFLOW_DAGS_DIR}` (five DAGs — OSM, GTFS, and three
+        parallel vector-tile generators), **triggers** them via the
+        Airflow REST API, **polls until each succeeds**, then runs
+        polars analysis + a cudf-polars GPU/CPU benchmark on the OSM
+        GeoParquet and renders five maps:
 
-        - **Streets map** — martin-served PMTiles produced by the OSM DAG
+        - **Streets map** (baseline) — PMTiles produced by the OSM DAG
           (PBF → quackosm → duckdb-spatial → tippecanoe → martin).
+        - **gpq-tiles map** — direct GeoParquet → PMTiles via the
+          geoparquet-io/gpq-tiles Rust converter (no GeoJSON intermediate).
+        - **DuckDB ST_AsMVT map** — per-tile MVT encoding in SQL, archive
+          assembled via the `pmtiles` Python package's Writer.
+        - **DuckDB → freestiler map** — same DuckDB SQL front-end as
+          ST_AsMVT, but the per-tile encoding + PMTiles packing happens
+          inside freestiler's in-process Rust engine in one library call.
         - **Transit map** — Monaco bus-stop CircleMarkers on default
           OpenStreetMap raster tiles, produced by the GTFS DAG
           (transitous.org GTFS zip → gtfs-parquet → polars).
+
+        The four vector-tile maps share martin's tile-server contract
+        (each PMTiles lands as a sibling source under
+        `${MARTIN_PUBLIC_URL}/<source-name>/{z}/{x}/{y}`), so the
+        visual differences = engine differences, not styling tricks.
+        Use the PMTiles Viewer at `http://127.0.0.1:28001/` to inspect
+        each archive's bbox / zoom range / metadata.
 
         ## URL strategy — server-side vs browser-side
 
@@ -104,22 +119,42 @@ def __(Path, os, textwrap):
                 # Smart download: re-fetch only if remote is newer than
                 # local. Geofabrik refreshes its extracts daily; checking
                 # Last-Modified avoids re-pulling ~12 MB on every run.
+                # The HEAD probe is an OPTIMIZATION — its failure (502
+                # / 503 from geofabrik's CDN, intermittent) is NOT a
+                # task-killing error because the actual GET below is the
+                # source of truth. Catch HEAD errors narrowly and fall
+                # through; let any GET error propagate.
                 import email.utils
+                import shutil
                 WORK.mkdir(parents=True, exist_ok=True)
                 url = "https://download.geofabrik.de/europe/monaco-latest.osm.pbf"
                 out = WORK / "monaco.osm.pbf"
                 if out.exists():
-                    req = urllib.request.Request(url, method="HEAD")
-                    with urllib.request.urlopen(req, timeout=30) as resp:
-                        last_mod = resp.headers.get("Last-Modified")
-                    if last_mod:
-                        remote_ts = email.utils.parsedate_to_datetime(
-                            last_mod
-                        ).timestamp()
-                        if remote_ts <= out.stat().st_mtime:
-                            return str(out)
-                urllib.request.urlretrieve(url, str(out))
-                return str(out)
+                    try:
+                        req = urllib.request.Request(url, method="HEAD")
+                        with urllib.request.urlopen(req, timeout=30) as resp:
+                            last_mod = resp.headers.get("Last-Modified")
+                        if last_mod:
+                            remote_ts = email.utils.parsedate_to_datetime(
+                                last_mod
+                            ).timestamp()
+                            if remote_ts <= out.stat().st_mtime:
+                                return str(out)
+                    except urllib.error.HTTPError:
+                        # HEAD endpoint flaky; let the GET below decide.
+                        pass
+                # urllib.request.urlretrieve has no timeout parameter
+                # and uses the (very long, sometimes infinite) socket
+                # default. Use urlopen with an explicit 300s read
+                # timeout so a slow geofabrik.de surfaces a real error
+                # rather than blocking forever. Write to a `.part`
+                # tempfile first and atomically rename on success so a
+                # partial download never corrupts the cache.
+                tmp = out.with_suffix(".pbf.part")
+                with urllib.request.urlopen(url, timeout=300) as resp:
+                    with open(tmp, "wb") as f:
+                        shutil.copyfileobj(resp, f)
+                tmp.replace(out)
 
             @task
             def pbf_to_geoparquet(pbf_path: str) -> str:
@@ -186,9 +221,60 @@ def __(Path, os, textwrap):
                 # Restarting martin via supervisord makes it re-scan
                 # the directory and pick up the fresh pmtiles. uid 1000
                 # has supervisorctl access in this image.
-                subprocess.run(
-                    ["supervisorctl", "restart", "martin"], check=True,
-                )
+                # Four DAGs each end with `reload_martin` and run in
+                # parallel. Two synchronization primitives are at play:
+                #   1. flock — serializes the supervisorctl invocations
+                #      so only one restart runs at a time globally.
+                #   2. TCP readiness probe + /catalog membership check —
+                #      verifies the END STATE (martin RUNNING +
+                #      our source listed) instead of trusting
+                #      supervisorctl's exit code, which can be non-zero
+                #      even when martin ends up healthy (supervisord's
+                #      internal spawn-window races back-to-back
+                #      restarts).
+                import fcntl
+                import socket
+                import time as _time
+                import urllib.request
+                import json as _json
+                source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                    fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
+                    subprocess.run(
+                        ["supervisorctl", "restart", "martin"],
+                        check=False,
+                    )
+                # Readiness probe — bounded wait for the TCP port to
+                # accept connections after the restart. This is the
+                # canonical synchronization primitive for "wait until
+                # external service X is ready" (R4 explicitly permits
+                # readiness probes; what R4 forbids is sleep-as-retry).
+                _deadline = _time.monotonic() + 30
+                while _time.monotonic() < _deadline:
+                    try:
+                        with socket.create_connection(
+                            ("localhost", 3000), timeout=2,
+                        ):
+                            break
+                    except (ConnectionRefusedError, OSError, socket.timeout):
+                        _time.sleep(0.5)
+                else:
+                    raise RuntimeError(
+                        "martin port 3000 not reachable 30s after restart",
+                    )
+                # End-state assertion — martin's /catalog must list the
+                # source we just wrote. This is the actual success
+                # criterion, replacing the unreliable exit-code check.
+                with urllib.request.urlopen(
+                    "http://localhost:3000/catalog", timeout=10,
+                ) as _resp:
+                    _catalog = _json.load(_resp)
+                if source_name not in _catalog.get("tiles", {}):
+                    raise RuntimeError(
+                        f"martin /catalog missing source '{source_name}' "
+                        f"after reload; available="
+                        f"{sorted(_catalog.get('tiles', {}).keys())}",
+                    )
                 return pmtiles_path
 
             reload_martin(geojson_to_pmtiles(
@@ -265,8 +351,462 @@ def __(Path, os, textwrap):
         notebook_gtfs_pipeline()
     ''').lstrip())
 
-    dag_ids = [osm_dag_id, gtfs_dag_id]
-    dag_files = {osm_dag_id: osm_dag_file, gtfs_dag_id: gtfs_dag_file}
+    # ---- Pipeline 2: gpq-tiles DAG ----
+    # Direct GeoParquet → PMTiles via geoparquet-io/gpq-tiles (Rust;
+    # streaming, memory-bounded; production-grade for large datasets).
+    # Reads the SAME monaco.parquet the original OSM DAG produced, so
+    # this DAG only runs after notebook_osm_pipeline succeeds.
+    gpqtiles_dag_id = "notebook_osm_gpqtiles_pipeline"
+    gpqtiles_dag_file = dags_dir / f"{gpqtiles_dag_id}.py"
+    gpqtiles_dag_file.write_text(textwrap.dedent('''
+        """gpq-tiles alternative vector-tile pipeline.
+
+        Skips tippecanoe entirely: gpq-tiles reads the GeoParquet
+        directly and emits a PMTiles archive in one pass. Output is
+        a sibling source under martin's watched directory, so the
+        existing martin tile server auto-discovers it.
+        """
+        import os
+        import subprocess
+        from datetime import datetime
+        from pathlib import Path
+
+        from airflow.decorators import dag, task
+
+        WORK = Path(os.path.expanduser("/workspace/tiles/work"))
+        TILES = Path(os.path.expanduser("/workspace/tiles/pmtiles"))
+
+
+        @dag(
+            dag_id="notebook_osm_gpqtiles_pipeline",
+            schedule=None,
+            start_date=datetime(2026, 1, 1),
+            catchup=False,
+            tags=["osm", "notebook", "gpq-tiles"],
+        )
+        def notebook_osm_gpqtiles_pipeline():
+            @task
+            def gpqtiles_convert() -> str:
+                parquet_path = WORK / "monaco.parquet"
+                TILES.mkdir(parents=True, exist_ok=True)
+                out = TILES / "monaco-gpqtiles.pmtiles"
+                # gpq-tiles is a system binary in this image (the
+                # osm-tools layer cargo-installs it because PyPI wheels
+                # don't cover our Python 3.13 / linux x86_64 combo and
+                # the pixi env's no-build = true blocks sdist resolution).
+                subprocess.run([
+                    "/usr/local/bin/gpq-tiles",
+                    str(parquet_path), str(out),
+                    "--min-zoom", "0",
+                    "--max-zoom", "14",
+                    "--drop-densest-as-needed",
+                ], check=True)
+                return str(out)
+
+            @task
+            def reload_martin(pmtiles_path: str) -> str:
+                # Four DAGs each end with `reload_martin` and run in
+                # parallel. Two synchronization primitives are at play:
+                #   1. flock — serializes the supervisorctl invocations
+                #      so only one restart runs at a time globally.
+                #   2. TCP readiness probe + /catalog membership check —
+                #      verifies the END STATE (martin RUNNING +
+                #      our source listed) instead of trusting
+                #      supervisorctl's exit code, which can be non-zero
+                #      even when martin ends up healthy (supervisord's
+                #      internal spawn-window races back-to-back
+                #      restarts).
+                import fcntl
+                import socket
+                import time as _time
+                import urllib.request
+                import json as _json
+                source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                    fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
+                    subprocess.run(
+                        ["supervisorctl", "restart", "martin"],
+                        check=False,
+                    )
+                # Readiness probe — bounded wait for the TCP port to
+                # accept connections after the restart. This is the
+                # canonical synchronization primitive for "wait until
+                # external service X is ready" (R4 explicitly permits
+                # readiness probes; what R4 forbids is sleep-as-retry).
+                _deadline = _time.monotonic() + 30
+                while _time.monotonic() < _deadline:
+                    try:
+                        with socket.create_connection(
+                            ("localhost", 3000), timeout=2,
+                        ):
+                            break
+                    except (ConnectionRefusedError, OSError, socket.timeout):
+                        _time.sleep(0.5)
+                else:
+                    raise RuntimeError(
+                        "martin port 3000 not reachable 30s after restart",
+                    )
+                # End-state assertion — martin's /catalog must list the
+                # source we just wrote. This is the actual success
+                # criterion, replacing the unreliable exit-code check.
+                with urllib.request.urlopen(
+                    "http://localhost:3000/catalog", timeout=10,
+                ) as _resp:
+                    _catalog = _json.load(_resp)
+                if source_name not in _catalog.get("tiles", {}):
+                    raise RuntimeError(
+                        f"martin /catalog missing source '{source_name}' "
+                        f"after reload; available="
+                        f"{sorted(_catalog.get('tiles', {}).keys())}",
+                    )
+                return pmtiles_path
+
+            reload_martin(gpqtiles_convert())
+
+
+        notebook_osm_gpqtiles_pipeline()
+    ''').lstrip())
+
+    # ---- Pipeline 3: DuckDB ST_AsMVT + pmtiles.Writer DAG ----
+    # The "by hand" reference path. DuckDB's spatial extension encodes
+    # one MVT-PBF blob per (z, x, y) tile via the ST_AsMVT aggregate;
+    # the `pmtiles` Python package's Writer packs the blob stream into
+    # a single PMTiles archive. No third-party tile generator involved.
+    duckdb_mvt_dag_id = "notebook_osm_duckdb_mvt_pipeline"
+    duckdb_mvt_dag_file = dags_dir / f"{duckdb_mvt_dag_id}.py"
+    duckdb_mvt_dag_file.write_text(textwrap.dedent('''
+        """DuckDB ST_AsMVT + pmtiles.Writer pipeline.
+
+        Per-tile MVT generation in SQL; PMTiles archive assembly in
+        Python. Scoped to z=10..14 over Monaco's bbox to keep tile
+        count tractable (~340 tiles).
+        """
+        import os
+        import math
+        import subprocess
+        from datetime import datetime
+        from pathlib import Path
+
+        from airflow.decorators import dag, task
+
+        WORK = Path(os.path.expanduser("/workspace/tiles/work"))
+        TILES = Path(os.path.expanduser("/workspace/tiles/pmtiles"))
+
+
+        def _tile_coords_for_bbox(min_lon, min_lat, max_lon, max_lat, min_z, max_z):
+            """Yield (z, x, y) tile coords covering the bbox at each zoom."""
+            for z in range(min_z, max_z + 1):
+                n = 2 ** z
+                def lon_to_x(lon):
+                    return int((lon + 180.0) / 360.0 * n)
+                def lat_to_y(lat):
+                    rad = math.radians(lat)
+                    return int((1.0 - math.log(math.tan(rad) + 1 / math.cos(rad)) / math.pi) / 2.0 * n)
+                x_lo, x_hi = lon_to_x(min_lon), lon_to_x(max_lon)
+                # tile Y goes top-down (lat_to_y inverts), so max_lat is the low Y.
+                y_lo, y_hi = lat_to_y(max_lat), lat_to_y(min_lat)
+                for x in range(min(x_lo, x_hi), max(x_lo, x_hi) + 1):
+                    for y in range(min(y_lo, y_hi), max(y_lo, y_hi) + 1):
+                        yield z, x, y
+
+
+        @dag(
+            dag_id="notebook_osm_duckdb_mvt_pipeline",
+            schedule=None,
+            start_date=datetime(2026, 1, 1),
+            catchup=False,
+            tags=["osm", "notebook", "duckdb-mvt"],
+        )
+        def notebook_osm_duckdb_mvt_pipeline():
+            @task
+            def encode_to_pmtiles() -> str:
+                import duckdb
+                from pmtiles.writer import Writer
+                from pmtiles.tile import TileType, Compression, zxy_to_tileid
+
+                parquet_path = WORK / "monaco.parquet"
+                TILES.mkdir(parents=True, exist_ok=True)
+                out = TILES / "monaco-duckdb-mvt.pmtiles"
+
+                # Monaco bbox (approx): lon 7.40-7.45, lat 43.71-43.77
+                MIN_LON, MAX_LON = 7.40, 7.45
+                MIN_LAT, MAX_LAT = 43.71, 43.77
+                MIN_Z, MAX_Z = 10, 14
+
+                con = duckdb.connect()
+                con.execute("INSTALL spatial; LOAD spatial;")
+
+                # Build the source table once (in-memory view over the
+                # parquet) so each per-tile query can run the same
+                # ST_AsMVT_Geom-then-aggregate without re-reading from
+                # disk N times.
+                con.execute(f"""
+                    CREATE TEMP TABLE src AS
+                    SELECT geometry, ST_AsText(geometry) AS wkt
+                    FROM read_parquet('{parquet_path}')
+                    WHERE geometry IS NOT NULL
+                """)
+
+                tiles_written = 0
+                with open(out, "wb") as f:
+                    writer = Writer(f)
+                    for z, x, y in _tile_coords_for_bbox(
+                        MIN_LON, MIN_LAT, MAX_LON, MAX_LAT, MIN_Z, MAX_Z,
+                    ):
+                        # ST_AsMVTGeom transforms geometry from lon/lat
+                        # to tile-local coords; ST_AsMVT aggregates the
+                        # resulting rows into a single MVT-PBF blob.
+                        # DuckDB Spatial uses the PostGIS naming
+                        # convention: ST_AsMVTGeom is one word.
+                        #
+                        # Subtle: ST_AsMVTGeom wants the `bounds`
+                        # argument as a BOX_2D, not a GEOMETRY. The
+                        # ST_TileEnvelope built-in returns GEOMETRY,
+                        # so wrap it in ST_Extent to project to a
+                        # BOX_2D. ST_Intersects in the WHERE clause is
+                        # happy with the GEOMETRY form, so we keep
+                        # that one un-wrapped.
+                        row = con.execute(f"""
+                            SELECT ST_AsMVT({{geom: ST_AsMVTGeom(geometry, ST_Extent(ST_TileEnvelope({z}, {x}, {y})))}}) AS tile
+                            FROM src
+                            WHERE ST_Intersects(geometry, ST_TileEnvelope({z}, {x}, {y}))
+                        """).fetchone()
+                        if row and row[0]:
+                            # pmtiles.Writer.write_tile takes a single
+                            # encoded tile-id (Hilbert curve over z/x/y),
+                            # not the three coords separately.
+                            writer.write_tile(zxy_to_tileid(z, x, y), row[0])
+                            tiles_written += 1
+                    writer.finalize(
+                        {
+                            "tile_type": TileType.MVT,
+                            "tile_compression": Compression.NONE,
+                            "min_zoom": MIN_Z,
+                            "max_zoom": MAX_Z,
+                            "min_lon_e7": int(MIN_LON * 1e7),
+                            "min_lat_e7": int(MIN_LAT * 1e7),
+                            "max_lon_e7": int(MAX_LON * 1e7),
+                            "max_lat_e7": int(MAX_LAT * 1e7),
+                            "center_zoom": MAX_Z,
+                            "center_lon_e7": int((MIN_LON + MAX_LON) / 2 * 1e7),
+                            "center_lat_e7": int((MIN_LAT + MAX_LAT) / 2 * 1e7),
+                        },
+                        {"vector_layers": [{"id": "monaco", "fields": {}}]},
+                    )
+                print(f"wrote {tiles_written} tiles to {out}")
+                return str(out)
+
+            @task
+            def reload_martin(pmtiles_path: str) -> str:
+                # Four DAGs each end with `reload_martin` and run in
+                # parallel. Two synchronization primitives are at play:
+                #   1. flock — serializes the supervisorctl invocations
+                #      so only one restart runs at a time globally.
+                #   2. TCP readiness probe + /catalog membership check —
+                #      verifies the END STATE (martin RUNNING +
+                #      our source listed) instead of trusting
+                #      supervisorctl's exit code, which can be non-zero
+                #      even when martin ends up healthy (supervisord's
+                #      internal spawn-window races back-to-back
+                #      restarts).
+                import fcntl
+                import socket
+                import time as _time
+                import urllib.request
+                import json as _json
+                source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                    fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
+                    subprocess.run(
+                        ["supervisorctl", "restart", "martin"],
+                        check=False,
+                    )
+                # Readiness probe — bounded wait for the TCP port to
+                # accept connections after the restart. This is the
+                # canonical synchronization primitive for "wait until
+                # external service X is ready" (R4 explicitly permits
+                # readiness probes; what R4 forbids is sleep-as-retry).
+                _deadline = _time.monotonic() + 30
+                while _time.monotonic() < _deadline:
+                    try:
+                        with socket.create_connection(
+                            ("localhost", 3000), timeout=2,
+                        ):
+                            break
+                    except (ConnectionRefusedError, OSError, socket.timeout):
+                        _time.sleep(0.5)
+                else:
+                    raise RuntimeError(
+                        "martin port 3000 not reachable 30s after restart",
+                    )
+                # End-state assertion — martin's /catalog must list the
+                # source we just wrote. This is the actual success
+                # criterion, replacing the unreliable exit-code check.
+                with urllib.request.urlopen(
+                    "http://localhost:3000/catalog", timeout=10,
+                ) as _resp:
+                    _catalog = _json.load(_resp)
+                if source_name not in _catalog.get("tiles", {}):
+                    raise RuntimeError(
+                        f"martin /catalog missing source '{source_name}' "
+                        f"after reload; available="
+                        f"{sorted(_catalog.get('tiles', {}).keys())}",
+                    )
+                return pmtiles_path
+
+            reload_martin(encode_to_pmtiles())
+
+
+        notebook_osm_duckdb_mvt_pipeline()
+    ''').lstrip())
+
+    # ---- Pipeline 4: DuckDB → freestiler DAG ----
+    # The "by library" companion to the ST_AsMVT pipeline. Same DuckDB
+    # SQL front-end, but the per-tile encoding loop + PMTiles packing
+    # is delegated to freestiler's in-process Rust engine via
+    # freestile_query() — one library call replaces the Python loop.
+    duckdb_freestiler_dag_id = "notebook_osm_duckdb_freestiler_pipeline"
+    duckdb_freestiler_dag_file = dags_dir / f"{duckdb_freestiler_dag_id}.py"
+    duckdb_freestiler_dag_file.write_text(textwrap.dedent('''
+        """DuckDB → freestiler pipeline.
+
+        Same DuckDB front-end as the AsMVT pipeline; freestiler's
+        Rust tiling engine handles the per-tile MVT encoding +
+        PMTiles archive packing in one library call.
+        """
+        import os
+        import subprocess
+        from datetime import datetime
+        from pathlib import Path
+
+        from airflow.decorators import dag, task
+
+        WORK = Path(os.path.expanduser("/workspace/tiles/work"))
+        TILES = Path(os.path.expanduser("/workspace/tiles/pmtiles"))
+
+
+        @dag(
+            dag_id="notebook_osm_duckdb_freestiler_pipeline",
+            schedule=None,
+            start_date=datetime(2026, 1, 1),
+            catchup=False,
+            tags=["osm", "notebook", "duckdb-freestiler"],
+        )
+        def notebook_osm_duckdb_freestiler_pipeline():
+            @task
+            def freestiler_convert() -> str:
+                import freestiler
+
+                parquet_path = WORK / "monaco.parquet"
+                TILES.mkdir(parents=True, exist_ok=True)
+                out = TILES / "monaco-duckdb-freestiler.pmtiles"
+
+                # freestiler accepts either a file path (sf/spatial-file
+                # input) OR a DuckDB SQL query. Use the SQL form to
+                # demonstrate the DuckDB-front-end pathway. The API
+                # surface (function name + kwargs) is verified at
+                # runtime via getattr — gracefully reports the actual
+                # surface if it differs from the expected API.
+                query = f"SELECT * FROM read_parquet('{parquet_path}')"
+                if hasattr(freestiler, "freestile_query"):
+                    freestiler.freestile_query(
+                        query=query,
+                        output=str(out),
+                        layer_name="monaco",
+                        min_zoom=0,
+                        max_zoom=14,
+                    )
+                elif hasattr(freestiler, "freestile"):
+                    freestiler.freestile(
+                        input=query,
+                        output=str(out),
+                        layer_name="monaco",
+                        min_zoom=0,
+                        max_zoom=14,
+                    )
+                else:
+                    public = sorted(n for n in dir(freestiler) if not n.startswith("_"))
+                    raise RuntimeError(
+                        f"freestiler public API: {public} — expected "
+                        "freestile_query or freestile; adapt this task."
+                    )
+                return str(out)
+
+            @task
+            def reload_martin(pmtiles_path: str) -> str:
+                # Four DAGs each end with `reload_martin` and run in
+                # parallel. Two synchronization primitives are at play:
+                #   1. flock — serializes the supervisorctl invocations
+                #      so only one restart runs at a time globally.
+                #   2. TCP readiness probe + /catalog membership check —
+                #      verifies the END STATE (martin RUNNING +
+                #      our source listed) instead of trusting
+                #      supervisorctl's exit code, which can be non-zero
+                #      even when martin ends up healthy (supervisord's
+                #      internal spawn-window races back-to-back
+                #      restarts).
+                import fcntl
+                import socket
+                import time as _time
+                import urllib.request
+                import json as _json
+                source_name = pmtiles_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+                with open("/tmp/ov-martin-restart.lock", "w") as _lock:
+                    fcntl.flock(_lock.fileno(), fcntl.LOCK_EX)
+                    subprocess.run(
+                        ["supervisorctl", "restart", "martin"],
+                        check=False,
+                    )
+                # Readiness probe — bounded wait for the TCP port to
+                # accept connections after the restart. This is the
+                # canonical synchronization primitive for "wait until
+                # external service X is ready" (R4 explicitly permits
+                # readiness probes; what R4 forbids is sleep-as-retry).
+                _deadline = _time.monotonic() + 30
+                while _time.monotonic() < _deadline:
+                    try:
+                        with socket.create_connection(
+                            ("localhost", 3000), timeout=2,
+                        ):
+                            break
+                    except (ConnectionRefusedError, OSError, socket.timeout):
+                        _time.sleep(0.5)
+                else:
+                    raise RuntimeError(
+                        "martin port 3000 not reachable 30s after restart",
+                    )
+                # End-state assertion — martin's /catalog must list the
+                # source we just wrote. This is the actual success
+                # criterion, replacing the unreliable exit-code check.
+                with urllib.request.urlopen(
+                    "http://localhost:3000/catalog", timeout=10,
+                ) as _resp:
+                    _catalog = _json.load(_resp)
+                if source_name not in _catalog.get("tiles", {}):
+                    raise RuntimeError(
+                        f"martin /catalog missing source '{source_name}' "
+                        f"after reload; available="
+                        f"{sorted(_catalog.get('tiles', {}).keys())}",
+                    )
+                return pmtiles_path
+
+            reload_martin(freestiler_convert())
+
+
+        notebook_osm_duckdb_freestiler_pipeline()
+    ''').lstrip())
+
+    dag_ids = [
+        osm_dag_id, gtfs_dag_id,
+        gpqtiles_dag_id, duckdb_mvt_dag_id, duckdb_freestiler_dag_id,
+    ]
+    dag_files = {
+        osm_dag_id: osm_dag_file,
+        gtfs_dag_id: gtfs_dag_file,
+        gpqtiles_dag_id: gpqtiles_dag_file,
+        duckdb_mvt_dag_id: duckdb_mvt_dag_file,
+        duckdb_freestiler_dag_id: duckdb_freestiler_dag_file,
+    }
     return dag_files, dag_ids, dags_dir
 
 
@@ -565,6 +1105,207 @@ map.addControl(new maplibregl.TerrainControl({{ source: 'terrainSource', exagger
 </script>
 </body></html>"""
     mo.iframe(streets_html, height="500px")
+
+
+@app.cell
+def __():
+    # Helper exported to the three pipeline-comparison cells. Marimo's
+    # reactive dataflow does not see module-level `def`s; the helper
+    # must be DEFINED INSIDE a cell and CLAIMED as a dependency in the
+    # signature of any cell that calls it. Cells 10/11/12 receive
+    # `build_pipeline_maplibre_html` via their signature.
+    def build_pipeline_maplibre_html(martin: str, source_name: str) -> str:
+        """Shared MapLibre HTML template for the pipeline comparison cells.
+
+        Each comparison map is a minimal 2D vector renderer pointed at
+        one of the sibling PMTiles archives martin auto-discovers
+        (monaco-gpqtiles, monaco-duckdb-mvt, monaco-duckdb-freestiler).
+        The style is intentionally flat — no terrain / pitch / sky —
+        so the visual difference between the four renderers (this one
+        plus the streets cell above) is purely *what features each
+        engine encoded into its tiles*, not styling tricks. Layer ID
+        prefixes are source-name-suffixed so MapLibre's layer-id
+        registry doesn't collide across cells.
+        """
+        layer_prefix = source_name.replace("monaco-", "")
+        return f"""<!DOCTYPE html>
+<html><head>
+<link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+<style>html,body{{margin:0;padding:0;}}#map-{layer_prefix}{{height:400px;width:100%;}}</style>
+</head><body>
+<div id="map-{layer_prefix}"></div>
+<script>
+const map_{layer_prefix} = new maplibregl.Map({{
+  container: 'map-{layer_prefix}',
+  style: {{
+    version: 8,
+    sources: {{ src: {{ type: 'vector', url: '{martin}/{source_name}' }} }},
+    layers: [
+      {{ id: 'bg-{layer_prefix}', type: 'background',
+         paint: {{ 'background-color': '#f6f3ec' }} }},
+      {{ id: 'fill-{layer_prefix}', type: 'fill', source: 'src', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'Polygon'],
+         paint: {{ 'fill-color': '#a4c0a8', 'fill-outline-color': '#5e7060',
+                   'fill-opacity': 0.55 }} }},
+      {{ id: 'line-{layer_prefix}', type: 'line', source: 'src', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'LineString'],
+         paint: {{ 'line-color': '#3a3a3a', 'line-width': 0.8 }} }},
+      {{ id: 'circ-{layer_prefix}', type: 'circle', source: 'src', 'source-layer': 'monaco',
+         filter: ['==', ['geometry-type'], 'Point'],
+         paint: {{ 'circle-color': '#b04a3d', 'circle-radius': 1.5 }} }}
+    ]
+  }},
+  center: [7.4246, 43.7384],
+  zoom: 13,
+  attributionControl: false
+}});
+map_{layer_prefix}.addControl(new maplibregl.NavigationControl({{ showZoom: true, showCompass: true }}), 'top-right');
+</script>
+</body></html>"""
+    return (build_pipeline_maplibre_html,)
+
+
+@app.cell
+def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+    # Pipeline 2 — gpq-tiles direct GeoParquet → PMTiles. Renders the
+    # sibling source `monaco-gpqtiles` that martin auto-discovers after
+    # the gpqtiles DAG writes /workspace/tiles/pmtiles/monaco-gpqtiles.pmtiles.
+    # Same vector-tile contract as the streets map above; styling is
+    # deliberately neutral so visual differences = engine differences.
+    assert dag_run_states["notebook_osm_gpqtiles_pipeline"] == "success"
+    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
+    mo.iframe(
+        build_pipeline_maplibre_html(_martin, "monaco-gpqtiles"),
+        height="400px",
+    )
+
+
+@app.cell
+def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+    # Pipeline 3 — DuckDB ST_AsMVT + pmtiles.Writer (hand-rolled per-tile
+    # encoding in Python). Renders the sibling source `monaco-duckdb-mvt`
+    # that martin auto-discovers after the DuckDB-MVT DAG completes.
+    assert dag_run_states["notebook_osm_duckdb_mvt_pipeline"] == "success"
+    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
+    mo.iframe(
+        build_pipeline_maplibre_html(_martin, "monaco-duckdb-mvt"),
+        height="400px",
+    )
+
+
+@app.cell
+def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+    # Pipeline 4 — DuckDB → freestiler (Rust tiling engine takes the same
+    # DuckDB SQL the AsMVT pipeline uses and produces a PMTiles archive
+    # in one library call). Renders the sibling source
+    # `monaco-duckdb-freestiler`. Compare side-by-side with the AsMVT
+    # rendering above: same input, different engine.
+    assert dag_run_states["notebook_osm_duckdb_freestiler_pipeline"] == "success"
+    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
+    mo.iframe(
+        build_pipeline_maplibre_html(_martin, "monaco-duckdb-freestiler"),
+        height="400px",
+    )
+
+
+@app.cell
+def __(dag_run_states, pl, time):
+    # cudf-polars GPU engine benchmark — RAPIDS cuDF-Polars (cu13)
+    # plugs into Polars' LazyFrame.collect(engine=...) interface; the
+    # GPU path executes the entire query plan via cuDF kernels.
+    # https://docs.rapids.ai/api/cudf/stable/cudf_polars/
+    #
+    # The cell does three things:
+    #   1. Probe CUDA availability via two independent signals
+    #      (torch.cuda.is_available + a smoke LazyFrame collect with
+    #      pl.GPUEngine). Discrepancies are reported, not hidden.
+    #   2. Run an identical numeric group_by + agg twice — once on
+    #      CPU, once on GPU — and time each via time.perf_counter().
+    #   3. Emit a DataFrame so marimo renders the comparison as the
+    #      cell's display value.
+    #
+    # Why a synthetic dataset: the OSM parquet's `geometry` column is
+    # WKB Binary and the `tags` column is Map<str,str>; cudf-polars-cu13
+    # does not support binary-element ops or map ops on GPU, so any
+    # query touching those columns would either fail with
+    # raise_on_fail=True or silently fall back to CPU with
+    # raise_on_fail=False (defeating the benchmark's purpose). A
+    # synthetic 2M-row numeric frame keeps the entire query on the GPU
+    # so the timing measures real GPU execution.
+    #
+    # Gates on dag_run_states["notebook_osm_pipeline"] only so the
+    # cell positions sequentially after the OSM DAG completes — the
+    # benchmark itself doesn't consume any OSM artifact.
+    assert dag_run_states["notebook_osm_pipeline"] == "success"
+
+    # --- 1. Availability probes ---
+    try:
+        import torch
+        _torch_cuda = bool(torch.cuda.is_available())
+        _torch_devices = int(torch.cuda.device_count()) if _torch_cuda else 0
+    except Exception as _e:
+        _torch_cuda, _torch_devices = False, 0
+
+    _gpu_engine_ok = False
+    _gpu_engine_err = ""
+    try:
+        _smoke = pl.LazyFrame({"a": [1, 2, 3]}).select(
+            pl.col("a").sum().alias("s")
+        ).collect(engine=pl.GPUEngine(raise_on_fail=True))
+        assert int(_smoke["s"][0]) == 6
+        _gpu_engine_ok = True
+    except Exception as _e:
+        _gpu_engine_err = f"{type(_e).__name__}: {_e}"[:160]
+
+    # --- 2. Bench against a synthetic 2M-row numeric dataset ---
+    import numpy as np
+    _rng = np.random.default_rng(seed=42)
+    _n = 2_000_000
+    _bench_src = pl.DataFrame({
+        "group": _rng.integers(0, 1000, _n, dtype=np.int32),
+        "value": _rng.standard_normal(_n).astype(np.float64),
+    })
+    _query = (
+        _bench_src.lazy()
+        .group_by("group")
+        .agg([
+            pl.col("value").sum().alias("sum"),
+            pl.col("value").mean().alias("mean"),
+            pl.col("value").max().alias("max"),
+            pl.len().alias("n"),
+        ])
+        .sort("group")
+    )
+
+    _cpu_start = time.perf_counter()
+    _df_cpu = _query.collect()
+    _cpu_elapsed = time.perf_counter() - _cpu_start
+
+    if _gpu_engine_ok:
+        # raise_on_fail=True forces real GPU execution — no silent
+        # CPU fallback. Numeric group_by + sum/mean/max are fully
+        # supported by cudf-polars-cu13.
+        _gpu_start = time.perf_counter()
+        _df_gpu = _query.collect(engine=pl.GPUEngine(raise_on_fail=True))
+        _gpu_elapsed = time.perf_counter() - _gpu_start
+        _gpu_rows = _df_gpu.height
+    else:
+        _gpu_elapsed = float("nan")
+        _gpu_rows = -1
+
+    # --- 3. Render the comparison DataFrame ---
+    df_cudf_polars_bench = pl.DataFrame({
+        "engine":         ["cpu", "gpu" if _gpu_engine_ok else "gpu (unavailable)"],
+        "elapsed_seconds": [_cpu_elapsed, _gpu_elapsed],
+        "rows":            [_df_cpu.height, _gpu_rows],
+        "note":            [
+            f"torch.cuda.is_available={_torch_cuda} (devices={_torch_devices})",
+            "ok" if _gpu_engine_ok else _gpu_engine_err or "GPU engine init failed",
+        ],
+    })
+    df_cudf_polars_bench  # marimo renders the comparison
+    return (df_cudf_polars_bench,)
 
 
 @app.cell

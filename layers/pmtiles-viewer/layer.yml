@@ -1,6 +1,6 @@
 layer:
   name: pmtiles-viewer
-  description: "PMTiles Viewer — visual inspector for PMTiles archives. TypeScript SPA from protomaps/PMTiles/app/ built via npm at image build time, served as a static dist by python -m http.server on port 8001 (host 28001). Pairs with the osm-tools layer's martin tile server: load any of the marimo image's /workspace/tiles/pmtiles/*.pmtiles archives into the viewer over HTTP to inspect their bbox, zoom range, metadata, and tile contents."
+  description: "PMTiles Viewer — visual inspector for PMTiles archives. TypeScript SPA from protomaps/PMTiles/app/ built via npm at image build time, served as a static dist by python -m http.server on port 8001 (host 28001). Pairs with the osm-tools layer's martin tile server: load any of the versa image's /workspace/tiles/pmtiles/*.pmtiles archives into the viewer over HTTP to inspect their bbox, zoom range, metadata, and tile contents."
   require:
     - supervisord
   distro:

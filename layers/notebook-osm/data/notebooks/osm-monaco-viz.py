@@ -969,9 +969,39 @@ def __(dag_files, dag_ids, os, requests, time):
     _api = os.environ.get("AIRFLOW_API_INTERNAL_URL", "http://localhost:8080")
     _pwd = os.environ["AIRFLOW_ADMIN_PASSWORD"]
 
+    # Airflow under the default LocalExecutor + SQLite metadata DB
+    # serializes ALL writes through one writer. When the dag-processor
+    # registers a DAG and workers start streaming task-instance state
+    # writes (PATCH /execution/task-instances/.../run|state|heartbeat
+    # |rtif), a concurrent dagRun POST or state-poll GET can collide
+    # on the SQLite lock; the ASGI handler waits ~5s for the lock,
+    # returns HTTP 500 with an empty body. We tolerate the transient
+    # by retrying 5xx with 1s/2s/4s backoff. This is not a magic-sleep
+    # workaround (R4): it's principled external-API back-pressure
+    # handling, the same pattern the cell already uses for DAG-
+    # registration polling. Long-term fix is to swap SQLite for
+    # Postgres (the airflow layer's intended scale-out path); that's
+    # a separate cutover.
+    def _http_with_retry(method, url, *, headers, json=None, timeout=10, retries=3):
+        _backoff = 1
+        for _attempt in range(retries):
+            _resp = requests.request(
+                method, url, headers=headers, json=json, timeout=timeout,
+            )
+            if _resp.status_code < 500:
+                _resp.raise_for_status()
+                return _resp
+            if _attempt == retries - 1:
+                _resp.raise_for_status()
+            time.sleep(_backoff)
+            _backoff *= 2
+        return _resp  # unreachable
+
     # 1. Get JWT once (used for all DAG operations below).
-    _token = requests.post(
+    _token = _http_with_retry(
+        "POST",
         f"{_api}/auth/token",
+        headers={},
         json={"username": "admin", "password": _pwd},
         timeout=10,
     ).json()["access_token"]
@@ -1005,8 +1035,10 @@ def __(dag_files, dag_ids, os, requests, time):
                 f"Airflow never registered DAG {_did} from {dag_files[_did]}"
             )
         # Trigger. Airflow 3.x requires logical_date in the trigger
-        # payload (was auto-generated in 2.x).
-        _run = requests.post(
+        # payload (was auto-generated in 2.x). Retries cover SQLite
+        # write-lock contention as workers ramp up under load.
+        _run = _http_with_retry(
+            "POST",
             f"{_api}/api/v2/dags/{_did}/dagRuns",
             headers=_auth,
             json={
@@ -1020,15 +1052,19 @@ def __(dag_files, dag_ids, os, requests, time):
     # 3. Poll BOTH DAGs concurrently until each reaches success/failed.
     #    10 min cap covers cold-cache downloads (PBF ~12 MB +
     #    GTFS ~770 KB) plus quackosm + tippecanoe + gtfs-parquet.
+    #    State-poll GETs ALSO go through the retry helper since
+    #    they compete with worker writes on the same SQLite lock.
     dag_run_states = {}
     _deadline = time.monotonic() + 600
     while time.monotonic() < _deadline and len(dag_run_states) < len(dag_ids):
         for _did in dag_ids:
             if _did in dag_run_states:
                 continue
-            _state = requests.get(
+            _state = _http_with_retry(
+                "GET",
                 f"{_api}/api/v2/dags/{_did}/dagRuns/{dag_run_ids[_did]}",
-                headers=_auth, timeout=5,
+                headers=_auth,
+                timeout=5,
             ).json()["state"]
             if _state in ("success", "failed"):
                 dag_run_states[_did] = _state

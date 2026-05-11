@@ -41,7 +41,7 @@ layer:
     # systemed/tilemaker has no Arch package and no GitHub release
     # binaries — build from source. The C++ + Lua build is ~2-3 min
     # on a warm package cache. Pattern mirrors the existing tippecanoe
-    # build in /ov-marimo:osm-tools-layer: shallow clone → make -j →
+    # build in /ov-versa:osm-tools-layer: shallow clone → make -j →
     # `make install PREFIX=/usr/local` → cleanup.
     - cmd: |
         set -euo pipefail
@@ -76,7 +76,7 @@ layer:
       user: root
 
     # ---- output directory (versatiles serve watches it) ----
-    # versatiles serve (in /ov-marimo:versatiles) is configured to
+    # versatiles serve (in /ov-versa:versatiles) is configured to
     # watch /workspace/tiles/shortbread/. Pre-creating the directory
     # at build time means versatiles starts cleanly on a fresh deploy
     # even before any DAG runs (otherwise versatiles errors on the

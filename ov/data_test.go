@@ -139,7 +139,7 @@ func TestProvisionDataBindOnly_InitialEmpty(t *testing.T) {
 	hostDir := t.TempDir()
 	meta := makeJupyterMeta(false)
 	bindMounts := []ResolvedBindMount{
-		{Name: "workspace", HostPath: hostDir, ContPath: "/home/user/workspace"},
+		{Name: "workspace", HostPath: hostDir, ContPath: "/workspace"},
 	}
 
 	n, err := provisionData("podman", "jupyter-img", meta, bindMounts, nil, DataProvisionInitial)
@@ -226,7 +226,7 @@ func TestProvisionDataNamedOnly_InitialEmpty(t *testing.T) {
 
 	meta := makeJupyterMeta(false)
 	namedVolumes := []VolumeMount{
-		{VolumeName: "ov-jupyter-workspace", ContainerPath: "/home/user/workspace"},
+		{VolumeName: "ov-jupyter-workspace", ContainerPath: "/workspace"},
 	}
 
 	n, err := provisionData("podman", "jupyter-img", meta, nil, namedVolumes, DataProvisionInitial)

@@ -257,7 +257,7 @@ func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
 	// the downstream `app` (base: cachyos) must pull cachyos-pacstrap-builder
 	// into the filtered set even though it's referenced via the dedicated
 	// BootstrapBuilderImage field, not via Builder map. Without this, the
-	// `ov update --build marimo` path silently skipped scheduling
+	// `ov update --build versa` path silently skipped scheduling
 	// cachyos-pacstrap-builder, and runPrivilegedBootstrap then hard-failed
 	// at resolveLocalImageRef with "build the bootstrap_builder_image first".
 	images := map[string]*ResolvedImage{

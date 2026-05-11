@@ -637,7 +637,7 @@ image:
             - ov
         port:
             - 8888:8888
-    marimo:
+    versa:
         enabled: true
         base: cachyos
         # Override defaults (which point at fedora-builder); cachyos has

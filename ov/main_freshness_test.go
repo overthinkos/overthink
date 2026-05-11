@@ -33,7 +33,7 @@ func TestIsFreshnessSafeVerb(t *testing.T) {
 		{"image build foo", false},
 		{"image generate", false},
 		{"deploy add foo bar", false},
-		{"rebuild marimo", false},
+		{"rebuild versa", false},
 		{"start", false},
 		{"update", false},
 		{"eval image foo", false},

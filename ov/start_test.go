@@ -6,11 +6,11 @@ import (
 )
 
 func TestBuildStartArgs(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ghcr.io/overthinkos/fedora-test:latest",
 		"supervisord", "-n", "-c", "/etc/supervisord.conf",
 	}
@@ -20,11 +20,11 @@ func TestBuildStartArgs(t *testing.T) {
 }
 
 func TestBuildStartArgsPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, nil, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ghcr.io/overthinkos/fedora-test:latest",
 		"supervisord", "-n", "-c", "/etc/supervisord.conf",
 	}
@@ -34,11 +34,11 @@ func TestBuildStartArgsPodman(t *testing.T) {
 }
 
 func TestBuildStartArgsWithPorts(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora-test:latest", 1000, 1000, []string{"9090:9090", "8080:8080"}, "ov-fedora-test", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora-test",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"-p", "127.0.0.1:9090:9090",
 		"-p", "127.0.0.1:8080:8080",
 		"ghcr.io/overthinkos/fedora-test:latest",
@@ -53,11 +53,11 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-ollama-models", ContainerPath: "/home/user/.ollama/models"},
 	}
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", volumes, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", volumes, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"-v", "ov-ollama-models:/home/user/.ollama/models",
 		"ghcr.io/overthinkos/ollama:latest",
 		"supervisord", "-n", "-c", "/etc/supervisord.conf",
@@ -68,11 +68,11 @@ func TestBuildStartArgsWithVolumes(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPU(t *testing.T) {
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-ollama",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--gpus", "all",
 		"ghcr.io/overthinkos/ollama:latest",
 		"supervisord", "-n", "-c", "/etc/supervisord.conf",
@@ -83,11 +83,11 @@ func TestBuildStartArgsWithGPU(t *testing.T) {
 }
 
 func TestBuildStartArgsWithGPUPodman(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, "ov-ollama", nil, nil, true, "127.0.0.1", nil, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-ollama",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--device", "nvidia.com/gpu=all",
 		"ghcr.io/overthinkos/ollama:latest",
 		"supervisord", "-n", "-c", "/etc/supervisord.conf",
@@ -134,11 +134,11 @@ func TestContainerNameInstance(t *testing.T) {
 
 func TestBuildStartArgsWithEnvVars(t *testing.T) {
 	envVars := []string{"FOO=bar", "TOKEN=secret"}
-	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, "ov-fedora", nil, nil, false, "127.0.0.1", envVars, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, "ov-fedora", nil, nil, false, "127.0.0.1", envVars, SecurityConfig{}, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	want := []string{
 		"docker", "run", "-d", "--rm",
 		"--name", "ov-fedora",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"-e", "FOO=bar",
 		"-e", "TOKEN=secret",
 		"ghcr.io/overthinkos/fedora:latest",
@@ -150,11 +150,11 @@ func TestBuildStartArgsWithEnvVars(t *testing.T) {
 }
 
 func TestBuildStartArgsNoSupervisord(t *testing.T) {
-	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-ov:latest", 0, 0, nil, "ov-fedora-ov", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"sleep", "infinity"}, "/home/user/workspace")
+	args := buildStartArgs("podman", "ghcr.io/overthinkos/fedora-ov:latest", 0, 0, nil, "ov-fedora-ov", nil, nil, false, "127.0.0.1", nil, SecurityConfig{}, []string{"sleep", "infinity"}, "/workspace")
 	want := []string{
 		"podman", "run", "-d", "--rm",
 		"--name", "ov-fedora-ov",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ghcr.io/overthinkos/fedora-ov:latest",
 		"sleep", "infinity",
 	}

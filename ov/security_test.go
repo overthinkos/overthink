@@ -374,7 +374,7 @@ func TestFormatCPUQuota(t *testing.T) {
 
 func TestBuildStartArgsWithPrivileged(t *testing.T) {
 	sec := SecurityConfig{Privileged: true}
-	args := buildStartArgs("docker", "myimage:latest", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/home/user/workspace")
+	args := buildStartArgs("docker", "myimage:latest", 0, 0, nil, "ov-myimage", nil, nil, false, "127.0.0.1", nil, sec, []string{"supervisord", "-n", "-c", "/etc/supervisord.conf"}, "/workspace")
 	found := false
 	for _, arg := range args {
 		if arg == "--privileged" {
@@ -393,7 +393,7 @@ func TestBuildShellArgsWithCapAdd(t *testing.T) {
 		CapAdd:  []string{"SYS_ADMIN"},
 		Devices: []string{"/dev/fuse"},
 	}
-	args := buildShellArgs("docker", "myimage:latest", 0, 0, nil, nil, nil, false, "", "127.0.0.1", nil, sec, "/home/user/workspace")
+	args := buildShellArgs("docker", "myimage:latest", 0, 0, nil, nil, nil, false, "", "127.0.0.1", nil, sec, "/workspace")
 	foundCap := false
 	foundDev := false
 	for i, arg := range args {

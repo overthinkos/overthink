@@ -251,7 +251,7 @@ func (c *UpdateCmd) updatePodDeployDirect(engine, deployName, newImageRef string
 // content. The alias mechanism (deploy_target_pod.go:tagDeployAlias)
 // is what allows `ov config <deployName>` and the quadlet `Image=`
 // line to resolve the right image when deploy-name differs from
-// image-name (e.g. `marimo` deploy → `marimo` image; cross-kind name reuse).
+// image-name (e.g. `versa` deploy → `versa` image; cross-kind name reuse).
 //
 // Returns the resolved alias ref (or baseRef itself when no aliasing
 // is needed because deploy-name equals image-name). The CalVer tag is

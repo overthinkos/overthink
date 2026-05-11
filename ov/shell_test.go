@@ -19,10 +19,10 @@ func withForceTTY(t *testing.T, force bool) {
 
 func TestBuildShellArgs(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--entrypoint", "bash",
 		"ghcr.io/overthinkos/fedora:latest",
@@ -34,10 +34,10 @@ func TestBuildShellArgs(t *testing.T) {
 
 func TestBuildShellArgsCustomUIDGID(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "fedora:latest", 1001, 1002, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "fedora:latest", 1001, 1002, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1001:1002",
 		"--entrypoint", "bash",
 		"fedora:latest",
@@ -49,10 +49,10 @@ func TestBuildShellArgsCustomUIDGID(t *testing.T) {
 
 func TestBuildShellArgsWithPorts(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, []string{"9090:9090", "8080:8080"}, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, []string{"9090:9090", "8080:8080"}, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"-p", "127.0.0.1:9090:9090",
 		"-p", "127.0.0.1:8080:8080",
@@ -66,10 +66,10 @@ func TestBuildShellArgsWithPorts(t *testing.T) {
 
 func TestBuildShellArgsWithSinglePort(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, []string{"8080"}, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, []string{"8080"}, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"-p", "127.0.0.1:8080:8080",
 		"--entrypoint", "bash",
@@ -85,10 +85,10 @@ func TestBuildShellArgsWithVolumes(t *testing.T) {
 	volumes := []VolumeMount{
 		{VolumeName: "ov-openclaw-data", ContainerPath: "/home/user/.openclaw"},
 	}
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/openclaw:latest", 1000, 1000, nil, volumes, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/openclaw:latest", 1000, 1000, nil, volumes, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"-v", "ov-openclaw-data:/home/user/.openclaw",
 		"--entrypoint", "bash",
@@ -101,10 +101,10 @@ func TestBuildShellArgsWithVolumes(t *testing.T) {
 
 func TestBuildShellArgsWithGPU(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--gpus", "all",
 		"--entrypoint", "bash",
@@ -117,10 +117,10 @@ func TestBuildShellArgsWithGPU(t *testing.T) {
 
 func TestBuildShellArgsWithGPUPodman(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("podman", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("podman", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"podman", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--device", "nvidia.com/gpu=all",
 		"--entrypoint", "bash",
@@ -132,7 +132,7 @@ func TestBuildShellArgsWithGPUPodman(t *testing.T) {
 }
 
 func TestBuildShellArgsWithoutGPU(t *testing.T) {
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	for _, arg := range args {
 		if arg == "--gpus" {
 			t.Error("buildShellArgs(gpu=false) should not contain --gpus")
@@ -168,10 +168,10 @@ func TestLocalizePort(t *testing.T) {
 
 func TestBuildShellArgsWithCommand(t *testing.T) {
 	withTerminal(t, false)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "echo hello", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "echo hello", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-i",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--entrypoint", "bash",
 		"ghcr.io/overthinkos/fedora:latest",
@@ -184,10 +184,10 @@ func TestBuildShellArgsWithCommand(t *testing.T) {
 
 func TestBuildShellArgsWithCommandAndGPU(t *testing.T) {
 	withTerminal(t, false)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "nvidia-smi", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/ollama:latest", 1000, 1000, nil, nil, nil, true, "nvidia-smi", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-i",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--gpus", "all",
 		"--entrypoint", "bash",
@@ -201,11 +201,11 @@ func TestBuildShellArgsWithCommandAndGPU(t *testing.T) {
 
 func TestBuildExecArgs(t *testing.T) {
 	withTerminal(t, true)
-	args := buildExecArgs("docker", "ov-fedora", 1000, 1000, "", nil, "/home/user/workspace")
+	args := buildExecArgs("docker", "ov-fedora", 1000, 1000, "", nil, "/workspace")
 	want := []string{
 		"docker", "exec", "-it",
 		"--user", "1000:1000",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ov-fedora",
 		"bash",
 	}
@@ -216,11 +216,11 @@ func TestBuildExecArgs(t *testing.T) {
 
 func TestBuildExecArgsWithCommand(t *testing.T) {
 	withTerminal(t, false)
-	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "echo hello", nil, "/home/user/workspace")
+	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "echo hello", nil, "/workspace")
 	want := []string{
 		"docker", "exec", "-i",
 		"--user", "1000:1000",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ov-openclaw",
 		"bash",
 		"-c", "echo hello",
@@ -232,10 +232,10 @@ func TestBuildExecArgsWithCommand(t *testing.T) {
 
 func TestBuildShellArgsWithCommandTTY(t *testing.T) {
 	withTerminal(t, true)
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "openclaw tui", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "openclaw tui", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--entrypoint", "bash",
 		"ghcr.io/overthinkos/fedora:latest",
@@ -248,11 +248,11 @@ func TestBuildShellArgsWithCommandTTY(t *testing.T) {
 
 func TestBuildExecArgsWithCommandTTY(t *testing.T) {
 	withTerminal(t, true)
-	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "openclaw tui", nil, "/home/user/workspace")
+	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "openclaw tui", nil, "/workspace")
 	want := []string{
 		"docker", "exec", "-it",
 		"--user", "1000:1000",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ov-openclaw",
 		"bash",
 		"-c", "openclaw tui",
@@ -265,10 +265,10 @@ func TestBuildExecArgsWithCommandTTY(t *testing.T) {
 func TestBuildShellArgsForceTTY(t *testing.T) {
 	withTerminal(t, false) // no real terminal
 	withForceTTY(t, true)  // but --tty flag set
-	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "openclaw models auth login", "127.0.0.1", nil, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "ghcr.io/overthinkos/fedora:latest", 1000, 1000, nil, nil, nil, false, "openclaw models auth login", "127.0.0.1", nil, SecurityConfig{}, "/workspace")
 	want := []string{
 		"docker", "run", "--rm", "-it",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"--user", "1000:1000",
 		"--entrypoint", "bash", "ghcr.io/overthinkos/fedora:latest",
 		"-c", "openclaw models auth login",
@@ -281,11 +281,11 @@ func TestBuildShellArgsForceTTY(t *testing.T) {
 func TestBuildExecArgsForceTTY(t *testing.T) {
 	withTerminal(t, false) // no real terminal
 	withForceTTY(t, true)  // but --tty flag set
-	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "openclaw models auth login", nil, "/home/user/workspace")
+	args := buildExecArgs("docker", "ov-openclaw", 1000, 1000, "openclaw models auth login", nil, "/workspace")
 	want := []string{
 		"docker", "exec", "-it",
 		"--user", "1000:1000",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ov-openclaw",
 		"bash",
 		"-c", "openclaw models auth login",
@@ -297,11 +297,11 @@ func TestBuildExecArgsForceTTY(t *testing.T) {
 
 func TestBuildExecArgsCustomUIDGID(t *testing.T) {
 	withTerminal(t, true)
-	args := buildExecArgs("podman", "ov-ubuntu", 1001, 1002, "", nil, "/home/user/workspace")
+	args := buildExecArgs("podman", "ov-ubuntu", 1001, 1002, "", nil, "/workspace")
 	want := []string{
 		"podman", "exec", "-it",
 		"--user", "1001:1002",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"ov-ubuntu",
 		"bash",
 	}
@@ -354,7 +354,7 @@ func TestResolveShellImageRef(t *testing.T) {
 func TestBuildShellArgsWithEnvVars(t *testing.T) {
 	withTerminal(t, true)
 	envVars := []string{"DB_HOST=localhost", "SECRET=abc"}
-	args := buildShellArgs("docker", "myapp:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", envVars, SecurityConfig{}, "/home/user/workspace")
+	args := buildShellArgs("docker", "myapp:latest", 1000, 1000, nil, nil, nil, false, "", "127.0.0.1", envVars, SecurityConfig{}, "/workspace")
 
 	// Check env vars appear before --entrypoint
 	entryIdx := -1
@@ -391,11 +391,11 @@ func TestBuildShellArgsWithEnvVars(t *testing.T) {
 func TestBuildExecArgsWithEnvVars(t *testing.T) {
 	withTerminal(t, true)
 	envVars := []string{"FOO=bar"}
-	args := buildExecArgs("docker", "ov-myapp", 1000, 1000, "", envVars, "/home/user/workspace")
+	args := buildExecArgs("docker", "ov-myapp", 1000, 1000, "", envVars, "/workspace")
 	want := []string{
 		"docker", "exec", "-it",
 		"--user", "1000:1000",
-		"-w", "/home/user/workspace",
+		"-w", "/workspace",
 		"-e", "FOO=bar",
 		"ov-myapp",
 		"bash",

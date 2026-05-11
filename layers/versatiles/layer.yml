@@ -9,7 +9,7 @@ layer:
         # curl + jq pull the GitHub-API release listing dynamically so
         # the install step picks up whatever versatiles-rs version is
         # current at build time (mirrors the pmtiles install in
-        # /ov-marimo:osm-tools-layer). jq is already pulled by
+        # /ov-versa:osm-tools-layer). jq is already pulled by
         # osm-tools so this is a soft dep; declared here for layer
         # composability if osm-tools is ever removed.
         - curl
@@ -34,7 +34,7 @@ layer:
         # The release asset name follows the pattern
         # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
         # verified against v4.0.0). musl variants also ship; we
-        # pick gnu since the marimo image's other Rust binaries
+        # pick gnu since the versa image's other Rust binaries
         # (martin) also use the gnu glibc variant.
         ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-rs/releases/latest" \
           | jq -r '.assets[].browser_download_url' \

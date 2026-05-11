@@ -19,7 +19,7 @@
     "ov-coder@ov-plugins": true,
     "ov-selkies@ov-plugins": true,
     "ov-openclaw@ov-plugins": true,
-    "ov-marimo@ov-plugins": true,
+    "ov-versa@ov-plugins": true,
     "ov-ollama@ov-plugins": true,
     "ov-openwebui@ov-plugins": true,
     "ov-comfyui@ov-plugins": true,

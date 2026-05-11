@@ -91,7 +91,7 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 				{
 					Type:        "bind",
 					Source:      "/tmp/ws-test",
-					Destination: "/home/user/workspace",
+					Destination: "/workspace",
 				},
 			},
 		}, nil
@@ -103,7 +103,7 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 		Home:  "/home/user",
 		Volumes: []VolumeMount{
 			{VolumeName: "ov-redis-ml-data", ContainerPath: "/data"},
-			{VolumeName: "ov-redis-ml-workspace", ContainerPath: "/home/user/workspace"},
+			{VolumeName: "ov-redis-ml-workspace", ContainerPath: "/workspace"},
 		},
 	}
 
@@ -125,7 +125,7 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 		{"VOLUME_PATH:data", "/var/lib/containers/storage/volumes/ov-redis-ml-data/_data"},
 		{"VOLUME_CONTAINER_PATH:data", "/data"},
 		{"VOLUME_PATH:workspace", "/tmp/ws-test"},
-		{"VOLUME_CONTAINER_PATH:workspace", "/home/user/workspace"},
+		{"VOLUME_CONTAINER_PATH:workspace", "/workspace"},
 		{"ENV_REDIS_URL", "redis://127.0.0.1:6379"},
 		{"ENV_TOKEN", "secret"},
 		{"ENV_EMPTY", ""},

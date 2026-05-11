@@ -168,7 +168,7 @@ lonboard = "*"
 # resolver from building gpq-tiles from sdist. Instead, gpq-tiles
 # ships as a system-level CLI in the osm-tools layer (built from
 # crates.io via `cargo install --root /usr/local`). See
-# /ov-marimo:osm-tools-layer.
+# /ov-versa:osm-tools-layer.
 freestiler = "*"
 
 [environments]

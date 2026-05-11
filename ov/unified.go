@@ -468,17 +468,19 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 
 // rejectLegacyMarimoMl errors out on any residual `marimo-ml` /
 // `marimo-ml-pod` reference (image key, deployment key, or `image:`
-// cross-ref). The 2026-05 cutover renamed the image + deploy entry to
-// the cross-kind-reused canonical name `marimo`; this guard ensures
-// users on an outdated personal deploy.yml see a remediation hint
-// instead of silently picking up the wrong image at `ov update` time.
+// cross-ref). The 2026-04 cutover renamed the image + deploy entry to
+// `marimo`; the 2026-05 cutover then renamed `marimo` → `versa`. This
+// guard ensures users on an outdated personal deploy.yml STILL on
+// marimo-ml see a remediation hint pointing at the current canonical
+// (`versa`) rather than silently picking up the wrong image at
+// `ov update` time.
 func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 	if merged == nil {
 		return nil
 	}
 	if _, ok := merged.Image["marimo-ml"]; ok {
 		return fmt.Errorf(
-			"%s: image entry %q is retired (2026-05 marimo-rename cutover).\n  Renamed to `marimo` (cross-kind name reuse). Run: ov migrate marimo-rename",
+			"%s: image entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate marimo-rename",
 			root, "marimo-ml")
 	}
 	var walk func(name string, node *DeploymentNode) error
@@ -488,12 +490,12 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 		}
 		if name == "marimo-ml-pod" {
 			return fmt.Errorf(
-				"%s: deployment %q is retired (2026-05 marimo-rename cutover).\n  Renamed to `marimo` (cross-kind name reuse). Run: ov migrate marimo-rename",
+				"%s: deployment %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate marimo-rename",
 				root, name)
 		}
 		if node.Image == "marimo-ml" {
 			return fmt.Errorf(
-				"%s: deployment %q references retired image %q (2026-05 marimo-rename cutover).\n  Renamed to `marimo`. Run: ov migrate marimo-rename",
+				"%s: deployment %q references retired image %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: ov migrate marimo-rename",
 				root, name, "marimo-ml")
 		}
 		for childName, child := range node.Nested {

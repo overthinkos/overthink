@@ -38,11 +38,11 @@ deploy:
 		}
 	}
 	for _, needle := range []string{
-		"    marimo:\n        base: cachyos",
-		"    marimo:\n        target: pod",
-		"        image: marimo\n",
-		"R10 bed for marimo — exercises the full stack",
-		"# The marimo deploy is the canonical dev bed for marimo.",
+		"    versa:\n        base: cachyos",
+		"    versa:\n        target: pod",
+		"        image: versa\n",
+		"R10 bed for versa — exercises the full stack",
+		"# The versa deploy is the canonical dev bed for versa.",
 	} {
 		if !strings.Contains(got, needle) {
 			t.Errorf("rewrite missing expected %q in output:\n%s", needle, got)
@@ -57,12 +57,12 @@ deploy:
 func TestApplyMarimoRenameRewrites_Idempotent(t *testing.T) {
 	post := `version: 4
 image:
-    marimo:
+    versa:
         base: cachyos
 deploy:
-    marimo:
+    versa:
         target: pod
-        image: marimo
+        image: versa
 `
 	first := applyMarimoRenameRewrites(post)
 	if first != post {

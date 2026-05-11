@@ -115,7 +115,7 @@ TRIGGER → SKILL MAPPING. Consult BEFORE the first tool call:
   Hard cutover semantics               →  /ov-internals:cutover-policy
   Disposable-flag semantics            →  /ov-internals:disposable
   Skill authoring                      →  /ov-internals:skills
-  "What does pod-image X do?"          →  /ov-jupyter|ov-coder|ov-selkies|ov-marimo|...:<name>
+  "What does pod-image X do?"          →  /ov-jupyter|ov-coder|ov-selkies|ov-versa|...:<name>
   "What's in a base/foundation layer?" →  /ov-distros|ov-languages|ov-infrastructure|ov-tools:<name>
 
 When MULTIPLE triggers apply, load ALL matching skills in ONE message

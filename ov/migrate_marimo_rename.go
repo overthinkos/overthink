@@ -2,10 +2,12 @@ package main
 
 // migrate_marimo_rename.go — `ov migrate marimo-rename`.
 //
-// One-shot migration that renames the `marimo-ml` image and the
-// `marimo-ml-pod` deployment to the post-cutover `marimo` (cross-kind
-// name reuse — see CLAUDE.md "Cross-kind name reuse is permitted and
-// encouraged"). Walks both:
+// One-shot migration that renames the legacy `marimo-ml` image and the
+// `marimo-ml-pod` deployment straight to the post-2026-05 canonical
+// `versa` (cross-kind name reuse — see CLAUDE.md "Cross-kind name
+// reuse is permitted and encouraged"). Skips the intermediate `marimo`
+// state that briefly existed between the 2026-04 marimo-ml → marimo
+// cutover and the 2026-05 marimo → versa cutover. Walks both:
 //
 //   - the in-repo overthink.yml + deploy.yml + image.yml (project)
 //   - the per-machine ~/.config/ov/deploy.yml (user overlay)
@@ -53,7 +55,7 @@ func (c *MigrateMarimoRenameCmd) Run() error {
 
 // MigrateMarimoRename walks both the in-repo project files and the
 // per-machine ~/.config/ov/deploy.yml, applying the marimo-ml(-pod) →
-// marimo rename. Also cleans up stale systemd quadlets + running
+// versa rename. Also cleans up stale systemd quadlets + running
 // containers under the OLD deploy names so a follow-up `ov update`
 // generates the new quadlet cleanly. Returns the list of touched
 // files (quadlet deletions and unit stops are reported separately
@@ -187,7 +189,7 @@ func rewriteMarimoRenameFile(path string, dryRun bool) (bool, error) {
 // must rewrite first so that the residual `marimo-ml` rewrite never
 // re-touches an already-canonical name.
 func applyMarimoRenameRewrites(src string) string {
-	out := strings.ReplaceAll(src, "marimo-ml-pod", "marimo")
-	out = strings.ReplaceAll(out, "marimo-ml", "marimo")
+	out := strings.ReplaceAll(src, "marimo-ml-pod", "versa")
+	out = strings.ReplaceAll(out, "marimo-ml", "versa")
 	return out
 }

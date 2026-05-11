@@ -1,6 +1,6 @@
 layer:
   name: versatiles-frontend
-  description: "VersaTiles Frontend — pre-built TypeScript SPA from versatiles-org/versatiles-frontend GitHub releases. Same family as the upstream pmtiles.io viewer but for the .versatiles / VersaTiles tile-server ecosystem. Served as static dist by python -m http.server on port 8002 (host-mapped 28002). Pattern mirrors /ov-marimo:maputnik-layer and /ov-marimo:pmtiles-viewer (third static-SPA-via-http.server service in the image). The same http.server also re-exports /opt/versatiles-style/ at /style/ so the notebook's MapLibre HTML can import the locally-bundled @versatiles/style without a CDN dependency."
+  description: "VersaTiles Frontend — pre-built TypeScript SPA from versatiles-org/versatiles-frontend GitHub releases. Same family as the upstream pmtiles.io viewer but for the .versatiles / VersaTiles tile-server ecosystem. Served as static dist by python -m http.server on port 8002 (host-mapped 28002). Pattern mirrors /ov-versa:maputnik-layer and /ov-versa:pmtiles-viewer (third static-SPA-via-http.server service in the image). The same http.server also re-exports /opt/versatiles-style/ at /style/ so the notebook's MapLibre HTML can import the locally-bundled @versatiles/style without a CDN dependency."
   require:
     - supervisord
     - versatiles-style              # the http.server re-exports its bundle at /style/
@@ -24,7 +24,7 @@ layer:
     # ---- Pre-built frontend.tar.gz ----
     # versatiles-org/versatiles-frontend ships four release variants:
     # frontend (full), frontend-dev, frontend-min, frontend-tiny.
-    # We pick `frontend` (full feature set) since the marimo image
+    # We pick `frontend` (full feature set) since the versa image
     # serves it for interactive exploration, not minimal embedding.
     # The asset URL is resolved via the GitHub release API rather
     # than the static `releases/latest/download/` endpoint because

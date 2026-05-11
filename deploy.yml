@@ -505,6 +505,8 @@ deploy:
             - 23000:3000        # martin tile server
             - 28000:8000        # maputnik static editor
             - 28001:8001        # pmtiles-viewer SPA — open browser at http://127.0.0.1:28001/ to inspect PMTiles archives
+            - 28002:8002        # versatiles-frontend SPA — open browser at http://127.0.0.1:28002/ to explore .versatiles + PMTiles tile contents
+            - 28090:8090        # versatiles serve HTTP — second tile server (alongside martin); serves /workspace/tiles/shortbread/*.pmtiles
         env:
             # Browser-visible URLs — embedded in folium HTML so the
             # user's BROWSER (on the host) can reach martin and airflow

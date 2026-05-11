@@ -1,0 +1,88 @@
+layer:
+  name: versatiles-style
+  description: "@versatiles/style — TypeScript MapLibre style generator. Generates colorful() / eclipse() / graybeard() / neutrino() / shadow() / satellite() style JSON for MapLibre maps backed by the Shortbread vector-tile schema. Installed locally so the notebook's MapLibre HTML can import the browser bundle WITHOUT a runtime CDN dependency (unpkg.com). The bundle is served as static JS by the versatiles-frontend layer's http.server at /style/versatiles-style.js."
+  require:
+    - supervisord
+  distro:
+    archlinux:
+      package:
+        - nodejs
+        - npm
+    fedora:
+      package:
+        - nodejs
+        - npm
+  task:
+    - mkdir: /opt/versatiles-style
+      user: root
+
+    # ---- @versatiles/style browser bundle ----
+    # The package's README documents both an npm-install path and a
+    # standalone `versatiles-style.tar.gz` release tarball on GitHub.
+    # We prefer the GitHub release tarball because it ships the
+    # browser-ready bundle directly (the npm-installed package's
+    # `release/` subdirectory has historically been a build artifact
+    # that may or may not be included in the published tarball
+    # depending on the publish script).
+    #
+    # Two-tier fallback so the install is resilient to either
+    # distribution path: try the GitHub release tarball first; if
+    # the asset is missing or download fails, npm-install and copy
+    # the package's release/ directory.
+    - cmd: |
+        set -euo pipefail
+        TMPDIR=$(mktemp -d)
+        cd "$TMPDIR"
+
+        # Tier 1: GitHub release tarball. The release ships THREE
+        # tarballs — `versatiles-style.tar.gz`, `sprites.tar.gz`,
+        # `styles.tar.gz`. We need the `versatiles-style.tar.gz` one
+        # specifically (the JS bundle), so anchor the regex to the
+        # exact filename rather than a prefix match (which would
+        # alphabetically pick sprites.tar.gz first).
+        if curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-style/releases/latest" \
+             | jq -r '.assets[].browser_download_url' \
+             | grep -E '/versatiles-style\.tar\.gz$' \
+             | head -1 > tarball_url \
+           && [ -s tarball_url ]; then
+          ASSET=$(cat tarball_url)
+          echo "Installing versatiles-style from GitHub release: $ASSET"
+          curl -fsSL "$ASSET" -o style.tar.gz
+          tar -xzf style.tar.gz -C /opt/versatiles-style --strip-components=0 || \
+            tar -xzf style.tar.gz -C /opt/versatiles-style
+        else
+          # Tier 2: npm install
+          echo "Falling back to npm install @versatiles/style"
+          npm install --prefix "$TMPDIR" @versatiles/style --no-audit --no-fund
+          # Look for the prebuilt browser bundle the package ships in
+          # release/. If the package layout changed and release/
+          # doesn't exist, copy the whole package so versatiles-style.js
+          # is still findable via subsequent path-resolution.
+          PKG="$TMPDIR/node_modules/@versatiles/style"
+          if [ -d "$PKG/release" ]; then
+            cp -r "$PKG/release/." /opt/versatiles-style/
+          else
+            cp -r "$PKG/." /opt/versatiles-style/
+          fi
+        fi
+
+        # Sanity: the bundle must end up findable. The eval probe
+        # below asserts this, but fail loudly here too so the build
+        # log surfaces the issue.
+        if ! find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .; then
+          echo "ERROR: no versatiles-style*.js found under /opt/versatiles-style after install" >&2
+          ls -la /opt/versatiles-style/
+          exit 1
+        fi
+
+        cd /
+        rm -rf "$TMPDIR" /root/.npm
+      user: root
+  eval:
+    # Build-scope: the browser bundle is present at any path under
+    # /opt/versatiles-style/ (the package layout has shifted across
+    # versions; we just verify a non-empty bundle exists).
+    - id: versatiles-style-bundle-present
+      command: |
+        find /opt/versatiles-style -maxdepth 3 -name 'versatiles-style*.js' -size +1c | head -1 | grep -q .
+      exit_status: 0

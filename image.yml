@@ -660,6 +660,12 @@ image:
             - osm-tools         # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
             - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
             - pmtiles-viewer    # protomaps/PMTiles /app SPA — visual inspector for PMTiles archives (port 8001)
+            - shortbread        # systemed/tilemaker + shortbread-tilemaker Lua config — generates shortbread-schema vector tiles from OSM PBF
+            - versatiles-style          # @versatiles/style MapLibre style generator (bundled to /opt/versatiles-style/, re-exported via versatiles-frontend's http.server at /style/)
+            - versatiles-fonts          # SDF font glyphs (Noto Sans + 9 others) bundled to /opt/versatiles-fonts/, re-exported at /fonts/
+            - maplibre-versatiles-styler  # interactive MapLibre control widget bundled to /opt/maplibre-versatiles-styler/, re-exported at /styler/
+            - versatiles                # versatiles-rs CLI + `versatiles serve` supervisord service on port 8090 (host-mapped 28090) — convert/serve for .versatiles/.pmtiles/.mbtiles
+            - versatiles-frontend       # versatiles-org/versatiles-frontend SPA (port 8002) — visual tile-content explorer; also re-exports versatiles-style/fonts/styler at /style/, /fonts/, /styler/
             - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
@@ -671,6 +677,8 @@ image:
             - 3000:3000         # martin tile server (deploy.yml overrides host port to 23000)
             - 8000:8000         # maputnik static editor (deploy.yml overrides host port to 28000)
             - 8001:8001         # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
+            - 8002:8002         # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
+            - 8090:8090         # versatiles serve HTTP (deploy.yml overrides host port to 28090)
     nvidia:
         base: fedora-nonfree
         platforms:

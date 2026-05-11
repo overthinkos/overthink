@@ -161,7 +161,7 @@ func (t *OCITarget) emitShellHook(s *ShellHookStep) error {
 }
 
 // emitSystemPackages renders a format-specific package install. Uses
-// PhaseTemplate lookup so the new phases: path preempts the legacy
+// PhaseTemplate lookup so the new phase: path preempts the legacy
 // install_template when present. Falls back to legacy InstallTemplate
 // for the (install, container) cell.
 func (t *OCITarget) emitSystemPackages(s *SystemPackagesStep) error {

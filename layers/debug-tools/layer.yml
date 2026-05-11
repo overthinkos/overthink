@@ -51,7 +51,7 @@ layer:
         - net-tools
         - bind-tools             # dig, nslookup, host
         - iputils
-        - gnu-netcat             # nc
+        - openbsd-netcat         # nc (Arch extra ships openbsd-netcat; gnu-netcat is AUR-only)
         - socat
         - tcpdump
         - traceroute

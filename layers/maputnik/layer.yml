@@ -4,6 +4,15 @@ layer:
   require:
     - supervisord
   distro:
+    archlinux:
+      package:
+        # Arch ships nodejs (currently 24+) and npm in extra; package names
+        # match Fedora exactly. The supervisor RPM/PAC pulls python3 in as
+        # a runtime dep on both distros, so /usr/bin/python3 is present
+        # for the http.server service exec below.
+        - nodejs
+        - npm
+        - git
     fedora:
       package:
         # nodejs ships nodejs 22 + npm 10 on Fedora 43 — sufficient for current

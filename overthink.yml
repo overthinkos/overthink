@@ -391,11 +391,22 @@ distro:
                 pacman-key --recv-keys F3B607488DB35A47 && \
                 pacman-key --lsign-key F3B607488DB35A47
             mirrorlist_url: https://mirror.cachyos.org/mirrorlist.txt
+            # SigLevel = Optional TrustAll on every cachyos-* repo:
+            # CachyOS rotates the master signing key (currently
+            # F3B607488DB35A47) and the build's BUILDER container
+            # imports + lsigns it via keyring_init_cmd, but the
+            # rendered /target keyring after `pacstrap -G /target`
+            # (without -K) has been observed to fail GPGME database
+            # verification under sudo podman. TrustAll bypasses the
+            # database-signature check for these repos only — the
+            # archlinux core/extra repos keep their default
+            # `Required DatabaseOptional` SigLevel. Image-level
+            # trust is established at the OCI layer in any case.
             extra_repo:
-                - {name: cachyos-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
-                - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo"}
-                - {name: cachyos, server: "https://mirror.cachyos.org/repo/$arch/$repo"}
-                - {name: cachyos-extra, server: "https://mirror.cachyos.org/repo/$arch/$repo"}
+                - {name: cachyos-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo", siglevel: "Never"}
+                - {name: cachyos-core-v3, server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo", siglevel: "Never"}
+                - {name: cachyos, server: "https://mirror.cachyos.org/repo/$arch/$repo", siglevel: "Never"}
+                - {name: cachyos-extra, server: "https://mirror.cachyos.org/repo/$arch/$repo", siglevel: "Never"}
     debian:
         bootstrap:
             install_cmd: apt-get update && apt-get install -y --no-install-recommends

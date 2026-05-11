@@ -101,6 +101,25 @@ func RunPrivileged(p PrivilegedRun) error {
 			useSudo = true
 		}
 	}
+	// When running via sudo, the rootful podman storage is independent of
+	// the user's rootless storage. Locally-built images (the typical case
+	// for builder:pacstrap / builder:debootstrap) won't be visible to
+	// `sudo podman run`, which would then fall back to a registry pull
+	// that 403s for unpublished builder images. Stage the image into
+	// rootful storage first via podman save | sudo podman load.
+	// Idempotent — TransferToRootful skips when the image already exists
+	// in rootful storage. Covers BOTH image-build (this runner) and
+	// VM-build (vm_bootstrap.go uses the same RunPrivileged surface) per
+	// R3, so the next bootstrap-builder consumer doesn't trip the same
+	// gap. Surfaced by the 2026-05 cachyos cutover.
+	if useSudo {
+		if err := TransferToRootful(p.Image); err != nil {
+			if hostStaging != "" {
+				os.RemoveAll(hostStaging)
+			}
+			return fmt.Errorf("staging %s into rootful storage: %w", p.Image, err)
+		}
+	}
 	var cmd *exec.Cmd
 	if useSudo {
 		cmd = exec.Command("sudo", append([]string{bin}, args...)...)
@@ -166,7 +185,7 @@ func readEngineRootful() (string, error) {
 func renderBootstrapScript(builder *BuilderDef, ctx interface{}) (string, error) {
 	tmpl := builder.PhaseTemplate(PhaseInstall, VenueContainerBuilder)
 	if tmpl == "" {
-		return "", fmt.Errorf("builder has no phases.install.container template")
+		return "", fmt.Errorf("builder has no phase.install.container template")
 	}
 	var buf bytes.Buffer
 	t, err := template.New("bootstrap-script").Funcs(templateFuncs).Parse(tmpl)

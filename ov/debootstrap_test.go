@@ -28,7 +28,7 @@ distro:
         - linux-image-amd64
         - grub-efi-amd64
         - openssh-server
-      extra_repos:
+      extra_repo:
         - name: debian-security
           url: http://security.debian.org/debian-security
           suite: trixie-security

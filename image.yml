@@ -147,6 +147,36 @@ image:
         layer:
             - pacstrap-builder
     cachyos:
+        # Canonical CachyOS base: pulls the upstream-published OCI image
+        # from Docker Hub (cachyos-v3 — optimized for modern x86_64_v3
+        # CPUs, matching the operator's host CPU family). Replaces the
+        # `from: builder:pacstrap` path because (a) the upstream project
+        # itself uses this exact approach — see https://github.com/CachyOS/docker
+        # for the reference Dockerfile — and (b) the pacstrap path was
+        # observed to fail end-to-end under sudo podman + pacman 7.x
+        # (GPGME context init returns "No data" before any repo download).
+        # The pacstrap-from-scratch variant is preserved as
+        # `cachyos-pacstrap` below for environments where pulling from
+        # Docker Hub isn't possible.
+        base: docker.io/cachyos/cachyos-v3:latest
+        distro:
+            - cachyos
+            - archlinux
+        build:
+            - pac
+    cachyos-pacstrap:
+        # Bootstrap-from-scratch CachyOS rootfs via pacstrap inside a
+        # privileged builder container. Renamed from `cachyos` 2026-05;
+        # the canonical `cachyos` entry above now pulls the upstream
+        # published OCI image from Docker Hub which is the path the
+        # CachyOS project itself recommends. This pacstrap variant is
+        # retained for offline / air-gapped builds and as a worked
+        # example of the `from: builder:pacstrap` +
+        # `bootstrap_builder_image:` pattern. NOTE: known to fail end-
+        # to-end under sudo podman + pacman 7.x because of a GPGME
+        # context initialization issue inside the privileged container;
+        # the install template's keyring init may need
+        # environment-specific debugging before this variant is usable.
         from: builder:pacstrap
         bootstrap_builder_image: cachyos-pacstrap-builder
         distro:
@@ -609,11 +639,27 @@ image:
             - 8888:8888
     marimo-ml:
         enabled: true
-        base: nvidia
+        base: cachyos
+        # Override defaults (which point at fedora-builder); cachyos has
+        # no builder: of its own, so without this override pixi/npm/cargo
+        # builders would resolve to fedora-builder on an Arch-based image.
+        builder:
+            aur: archlinux-builder
+            cargo: archlinux-builder
+            npm: archlinux-builder
+            pixi: archlinux-builder
+        # Add aur to the format list — the osm-data layer needs
+        # osmium-tool from AUR (it's not in Arch's extra repo). cachyos
+        # itself declares only [pac], so we override here.
+        build:
+            - pac
+            - aur
         platforms:
             - linux/amd64
         layer:
             - agent-forwarding
+            - nvidia            # GPU runtime (nvidia-utils + nvidia-container-toolkit) — formerly via base: nvidia
+            - cuda              # CUDA toolkit (cuda + cudnn from Arch extra repo) — formerly via base: nvidia
             - marimo            # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
             - airflow           # Airflow LocalExecutor + airflow-mcp (mcp-server-apache-airflow on :19999)
             - osm-data          # tippecanoe + osmium + gdal + martin (PMTiles tile server) + pmtiles CLI

@@ -4,6 +4,36 @@ layer:
   require:
     - supervisord
   distro:
+    archlinux:
+      # gdal pulls in ocl-icd which collides with opencl-nvidia's
+      # /usr/lib/libOpenCL.so (NVIDIA ships its own ICD loader rather
+      # than the generic one). The two are both legitimate OpenCL ICDs,
+      # but their file lists overlap. Force overwrite so the ocl-icd
+      # install replaces opencl-nvidia's libOpenCL.so files. NVIDIA
+      # OpenCL still works at runtime via /etc/OpenCL/vendors/nvidia.icd.
+      options:
+        - --overwrite=*
+      package:
+        # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
+        # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
+        - gdal
+        - jq
+        # Build deps for tippecanoe (no Arch package; built from source).
+        # Arch's gcc package contains the C++ frontend (no -devel split).
+        - git
+        - make
+        - gcc
+        - sqlite
+        # NOTE: no explicit zlib — CachyOS ships zlib-ng-compat which
+        # provides the same library/ABI and would conflict with `zlib`.
+        # tippecanoe links against -lz which resolves through zlib-ng-compat.
+      aur:
+        package:
+          # osmium-tool is AUR-only on Arch (libosmium ships in extra,
+          # but the CLI binary is AUR). Fedora's `osmium-tool` RPM
+          # provides the same binary; rendered as a single user-facing
+          # package across both distros via per-distro selection here.
+          - osmium-tool
     fedora:
       package:
         # osmium-tool — OSM PBF inspection, filtering, transformation

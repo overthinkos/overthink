@@ -222,6 +222,47 @@ func ImageNeedsBuilder(img *ResolvedImage, images map[string]*ResolvedImage, lay
 	return false
 }
 
+// imageDirectDeps returns the direct image-build dependencies of img:
+//   - Base (when not an external OCI ref)
+//   - Builder.AllBuilder() format-builder images (only when includeFormatBuilders)
+//   - BootstrapBuilderImage (the `from: builder:pacstrap` / debootstrap source —
+//     the runPrivilegedBootstrap step in build.go reads the rootfs tarball from
+//     this builder's local-storage tag and hard-fails on miss, so it MUST be
+//     scheduled first by every dep traversal)
+//
+// Self-refs and refs to images not in the map (for builder + bootstrap builder)
+// are filtered out. Base is appended unconditionally when not external — the
+// existing invariant is that !IsExternalBase implies Base is in the map; if it
+// isn't, downstream code (filterImage's addDeps + topoSort) surfaces the bad
+// state via a different error path, not silent skipping.
+//
+// One helper, three callers (ResolveImageOrder, ResolveImageLevels, filterImage
+// in build.go) so adding a future edge kind (e.g. RuntimeBuilder, LayerBuilder)
+// lands in one place. The 2026-05 cachyos / cachyos-pacstrap-builder regression
+// surfaced the bug exactly because three parallel dep walks had drifted out of
+// sync — the topo-sort knew the right order, the build runner did not.
+func imageDirectDeps(name string, img *ResolvedImage, images map[string]*ResolvedImage, includeFormatBuilders bool) []string {
+	var deps []string
+	if !img.IsExternalBase {
+		deps = append(deps, img.Base)
+	}
+	if includeFormatBuilders {
+		for _, builder := range img.Builder.AllBuilder() {
+			if builder != name {
+				if _, ok := images[builder]; ok {
+					deps = append(deps, builder)
+				}
+			}
+		}
+	}
+	if img.BootstrapBuilderImage != "" && img.BootstrapBuilderImage != name {
+		if _, ok := images[img.BootstrapBuilderImage]; ok {
+			deps = append(deps, img.BootstrapBuilderImage)
+		}
+	}
+	return deps
+}
+
 // ResolveImageOrder resolves image dependencies and returns them in build order.
 // Images that reference other images via `base` create dependencies.
 // Each image's Builder field determines its builder dependency.
@@ -231,22 +272,7 @@ func ResolveImageOrder(images map[string]*ResolvedImage, layers map[string]*Laye
 	// Edge from A to B means A depends on B (B must be built before A)
 	graph := make(map[string][]string)
 	for name, img := range images {
-		var deps []string
-		if !img.IsExternalBase {
-			// base is another image in image.yml
-			deps = append(deps, img.Base)
-		}
-		// Collect all builder images this image may depend on
-		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builder.AllBuilder() {
-				if builder != name {
-					if _, ok := images[builder]; ok {
-						deps = append(deps, builder)
-					}
-				}
-			}
-		}
-		graph[name] = deps
+		graph[name] = imageDirectDeps(name, img, images, ImageNeedsBuilder(img, images, layers))
 	}
 
 	return topoSort(graph)
@@ -383,20 +409,7 @@ func topoLevels(graph map[string][]string) ([][]string, error) {
 func ResolveImageLevels(images map[string]*ResolvedImage, layers map[string]*Layer) ([][]string, error) {
 	graph := make(map[string][]string)
 	for name, img := range images {
-		var deps []string
-		if !img.IsExternalBase {
-			deps = append(deps, img.Base)
-		}
-		if ImageNeedsBuilder(img, images, layers) {
-			for _, builder := range img.Builder.AllBuilder() {
-				if builder != name {
-					if _, ok := images[builder]; ok {
-						deps = append(deps, builder)
-					}
-				}
-			}
-		}
-		graph[name] = deps
+		graph[name] = imageDirectDeps(name, img, images, ImageNeedsBuilder(img, images, layers))
 	}
 
 	return topoLevels(graph)

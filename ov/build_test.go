@@ -252,6 +252,48 @@ func TestFilterImagesIncludesBuilder(t *testing.T) {
 	}
 }
 
+func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
+	// Regression: 2026-05 cachyos / cachyos-pacstrap-builder bug. Requesting
+	// the downstream `app` (base: cachyos) must pull cachyos-pacstrap-builder
+	// into the filtered set even though it's referenced via the dedicated
+	// BootstrapBuilderImage field, not via Builder map. Without this, the
+	// `ov update --build marimo-ml-pod` path silently skipped scheduling
+	// cachyos-pacstrap-builder, and runPrivilegedBootstrap then hard-failed
+	// at resolveLocalImageRef with "build the bootstrap_builder_image first".
+	images := map[string]*ResolvedImage{
+		"archlinux": {
+			Name:           "archlinux",
+			IsExternalBase: true,
+		},
+		"cachyos-pacstrap-builder": {
+			Name:           "cachyos-pacstrap-builder",
+			Base:           "archlinux",
+			IsExternalBase: false,
+		},
+		"cachyos": {
+			Name:                  "cachyos",
+			IsExternalBase:        true,
+			BootstrapBuilderImage: "cachyos-pacstrap-builder",
+		},
+		"app": {
+			Name:           "app",
+			Base:           "cachyos",
+			IsExternalBase: false,
+		},
+	}
+
+	order := []string{"archlinux", "cachyos-pacstrap-builder", "cachyos", "app"}
+
+	filtered, err := filterImage(order, []string{"app"}, images)
+	if err != nil {
+		t.Fatalf("filterImage() error: %v", err)
+	}
+	want := []string{"archlinux", "cachyos-pacstrap-builder", "cachyos", "app"}
+	if !reflect.DeepEqual(filtered, want) {
+		t.Errorf("filterImage() = %v, want %v", filtered, want)
+	}
+}
+
 func TestBuildLocalArgsWithImageCache(t *testing.T) {
 	cmd := &BuildCmd{Cache: "image"}
 	args := cmd.buildLocalArgs("podman",

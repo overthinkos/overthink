@@ -46,15 +46,16 @@ type PacstrapDef struct {
 	BasePackages    []string         `yaml:"base_packages,omitempty"`
 	KeyringInitCmd  string           `yaml:"keyring_init_cmd,omitempty"`
 	MirrorlistURL   string           `yaml:"mirrorlist_url,omitempty"`
-	ExtraRepos      []PacstrapRepo   `yaml:"extra_repos,omitempty"`
+	ExtraRepos      []PacstrapRepo   `yaml:"extra_repo,omitempty"`
 }
 
 // PacstrapRepo describes an additional pacman repo (e.g. CachyOS repos)
 // to inject into /etc/pacman.conf inside the bootstrap target before
 // running pacstrap.
 type PacstrapRepo struct {
-	Name   string `yaml:"name"`
-	Server string `yaml:"server"`
+	Name     string `yaml:"name"`
+	Server   string `yaml:"server"`
+	SigLevel string `yaml:"siglevel,omitempty"` // optional pacman SigLevel (e.g. "Optional TrustAll" for repos without trust chain)
 }
 
 // DebootstrapDef configures debootstrap-flavored bootstrap (Debian, Ubuntu).
@@ -73,7 +74,7 @@ type DebootstrapDef struct {
 	Components      string            `yaml:"components,omitempty"`        // "main" (Debian) | "main universe" (Ubuntu)
 	IncludePackages []string          `yaml:"include_packages,omitempty"`  // debootstrap --include=<csv>
 	BasePackages    []string          `yaml:"base_packages,omitempty"`     // chroot apt-get install <list>
-	ExtraRepos      []DebootstrapRepo `yaml:"extra_repos,omitempty"`       // optional security/backports
+	ExtraRepos      []DebootstrapRepo `yaml:"extra_repo,omitempty"`        // optional security/backports
 }
 
 // DebootstrapRepo describes an additional apt repo to inject into
@@ -127,11 +128,11 @@ type CacheMountDef struct {
 //
 //   - Legacy path: `install_template:` holds a monolithic Containerfile-
 //     shaped template used by the OCI target.
-//   - New path: `phases:` holds three-phase × two-venue templates where
+//   - New path: `phase:` holds three-phase × two-venue templates where
 //     each entry carries both a container: (Containerfile directives with
 //     BuildKit cache mounts) and a host: (plain shell) rendering of the
 //     same operation. The host target requires the new path; the OCI
-//     target prefers phases.install.container when set and falls back to
+//     target prefers phase.install.container when set and falls back to
 //     install_template otherwise.
 //
 // Keeping both fields lets us migrate build.yml per-format one at a time
@@ -140,7 +141,7 @@ type FormatDef struct {
 	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
 	SectionFields   map[string]string `yaml:"section_fields"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
-	Phases          *PhaseSet         `yaml:"phases,omitempty"`
+	Phases          *PhaseSet         `yaml:"phase,omitempty"`
 	Validate        []FormatRule      `yaml:"validate,omitempty"`
 }
 
@@ -166,7 +167,7 @@ type PhaseTemplates struct {
 }
 
 // PhaseTemplate looks up the template string for a (phase, venue)
-// lookup, with documented fallback behavior: if the new phases: block
+// lookup, with documented fallback behavior: if the new phase: block
 // lacks the requested cell, fall back to the legacy InstallTemplate for
 // (PhaseInstall, container) only — the combination covered by the
 // legacy field. All other lookups return "" when the new path is absent.
@@ -394,7 +395,7 @@ type BuilderConfig struct {
 // BuilderDef defines a multi-stage builder (pixi, npm, cargo, etc.).
 //
 // The legacy `stage_template:` / `install_template:` fields emit a
-// single Containerfile chunk. The new `phases:` field matches FormatDef
+// single Containerfile chunk. The new `phase:` field matches FormatDef
 // and lets a builder specify separate container + host renderings for
 // each of prepare/install/cleanup — required for LocalDeployTarget to
 // invoke the builder via `podman run` with HOME-remapped bind-mounts
@@ -408,7 +409,7 @@ type BuilderDef struct {
 	Env             map[string]string `yaml:"env,omitempty"`
 	StageTemplate   string            `yaml:"stage_template,omitempty"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
-	Phases          *PhaseSet         `yaml:"phases,omitempty"`
+	Phases          *PhaseSet         `yaml:"phase,omitempty"`
 	InstallCommands map[string]string `yaml:"install_commands,omitempty"`
 	ManylinuxFix    string            `yaml:"manylinux_fix,omitempty"`
 	BuildScript     string            `yaml:"build_script,omitempty"`

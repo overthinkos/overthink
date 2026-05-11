@@ -205,6 +205,82 @@ func TestResolveImageOrderWithBuilder(t *testing.T) {
 	}
 }
 
+func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
+	// Mirrors the cachyos / cachyos-pacstrap-builder pair in image.yml.
+	// `cachyos` is built `from: builder:pacstrap` with
+	// `bootstrap_builder_image: cachyos-pacstrap-builder`. A downstream
+	// image `app` consumes cachyos via `base: cachyos`. Without the
+	// bootstrap-builder edge, the topo-sort would schedule cachyos before
+	// cachyos-pacstrap-builder and runPrivilegedBootstrap would fail at
+	// resolveLocalImageRef (build.go:294).
+	images := map[string]*ResolvedImage{
+		"archlinux": {
+			Name:           "archlinux",
+			Base:           "docker.io/library/archlinux:latest",
+			IsExternalBase: true,
+		},
+		"cachyos-pacstrap-builder": {
+			Name:           "cachyos-pacstrap-builder",
+			Base:           "archlinux",
+			IsExternalBase: false,
+		},
+		"cachyos": {
+			Name:                  "cachyos",
+			Base:                  "",
+			IsExternalBase:        true,
+			BootstrapBuilderImage: "cachyos-pacstrap-builder",
+		},
+		"app": {
+			Name:           "app",
+			Base:           "cachyos",
+			IsExternalBase: false,
+		},
+	}
+
+	order, err := ResolveImageOrder(images, nil)
+	if err != nil {
+		t.Fatalf("ResolveImageOrder() error = %v", err)
+	}
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+
+	if indexOf("cachyos-pacstrap-builder") > indexOf("cachyos") {
+		t.Errorf("cachyos-pacstrap-builder must come before cachyos (bootstrap_builder_image dep), got order %v", order)
+	}
+	if indexOf("cachyos") > indexOf("app") {
+		t.Errorf("cachyos must come before app (base dep), got order %v", order)
+	}
+	if indexOf("archlinux") > indexOf("cachyos-pacstrap-builder") {
+		t.Errorf("archlinux must come before cachyos-pacstrap-builder (base dep), got order %v", order)
+	}
+
+	// Same property must hold for ResolveImageLevels (concurrent-build mode).
+	levels, err := ResolveImageLevels(images, nil)
+	if err != nil {
+		t.Fatalf("ResolveImageLevels() error = %v", err)
+	}
+	levelOf := func(name string) int {
+		for i, level := range levels {
+			for _, n := range level {
+				if n == name {
+					return i
+				}
+			}
+		}
+		return -1
+	}
+	if levelOf("cachyos-pacstrap-builder") >= levelOf("cachyos") {
+		t.Errorf("cachyos-pacstrap-builder must be in an earlier level than cachyos, got levels %v", levels)
+	}
+}
+
 func TestResolveImageOrderCycle(t *testing.T) {
 	// Create images with a cycle
 	images := map[string]*ResolvedImage{

@@ -313,6 +313,9 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 		var b strings.Builder
 		for _, r := range img.DistroDef.Pacstrap.ExtraRepos {
 			fmt.Fprintf(&b, "[%s]\nServer = %s\n", r.Name, r.Server)
+			if r.SigLevel != "" {
+				fmt.Fprintf(&b, "SigLevel = %s\n", r.SigLevel)
+			}
 		}
 		ctx.ExtraPacmanConf = b.String()
 	}
@@ -608,7 +611,13 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 		}
 	}
 
-	// Collect requested images and their transitive base + builder dependencies
+	// Collect requested images and their transitive deps (Base + format builders +
+	// BootstrapBuilderImage). Routed through imageDirectDeps in graph.go so this
+	// walker stays in lockstep with ResolveImageOrder + ResolveImageLevels — see
+	// the helper's docstring for the rationale (2026-05 cachyos-pacstrap-builder
+	// regression). includeFormatBuilders=true here unconditionally because filtered
+	// build sets must always include format-builder images that the requested
+	// targets need at build time, regardless of ImageNeedsBuilder.
 	needed := make(map[string]bool)
 	var addDeps func(name string)
 	addDeps = func(name string) {
@@ -617,15 +626,8 @@ func filterImage(order []string, requested []string, images map[string]*Resolved
 		}
 		needed[name] = true
 		img := images[name]
-		if !img.IsExternalBase {
-			addDeps(img.Base)
-		}
-		for _, builder := range img.Builder.AllBuilder() {
-			if builder != name {
-				if _, ok := images[builder]; ok {
-					addDeps(builder)
-				}
-			}
+		for _, dep := range imageDirectDeps(name, img, images, true) {
+			addDeps(dep)
 		}
 	}
 	for _, name := range requested {

@@ -702,6 +702,42 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
 		)
 	}
+	if err := validateDeployRequiresImage(deploy); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateDeployRequiresImage enforces the 2026-05-12 schema rule:
+// every `target: pod` deploy entry MUST declare its `image:` field.
+// Pre-cutover the eval runner silently fell back to inspecting the
+// running container's image ref via `containerImageRef`, which read
+// stale OCI labels off volume-pinned containers and dropped any
+// probes added after the seed image. The hard-required field forces
+// operator intent to be explicit; the eval runner now resolves the
+// ref ONLY from this field.
+//
+// Scope: target: pod (or empty — pod is the default). target: vm
+// uses `vm:`, target: local is layer-driven, target: k8s
+// CLUSTER definitions live in the `k8s:` section (not deploy:).
+//
+// Remediation: `ov migrate require-image` (idempotent) walks every
+// affected deploy and injects the field, inferring the value from
+// the deploy key (`<base>` for `<base>/<instance>` keys; the key
+// itself otherwise).
+func validateDeployRequiresImage(deploy map[string]DeploymentNode) error {
+	for name, node := range deploy {
+		target := node.Target
+		if target != "" && target != "pod" {
+			continue
+		}
+		if node.Image == "" {
+			return fmt.Errorf(
+				"deploy entry %q lacks required `image:` field (2026-05-12 schema cutover — pod-target deploys must declare `image:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `ov migrate require-image` (one-shot, idempotent).",
+				name,
+			)
+		}
+	}
 	return nil
 }
 

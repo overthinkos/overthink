@@ -143,8 +143,16 @@ func MigrateLocalDeploy(path string, dryRun bool) (bool, []string, error) {
 			return false, nil, fmt.Errorf("%s: images.%s is not a mapping", path, name)
 		}
 		newEntry, entrySummary := migrateLocalDeployEntry(entry)
+		// Inject image:<name> (2026-05-12 schema cutover requires it
+		// on every target:pod entry). In the legacy schema the
+		// images:<name>: map was the image-name-keyed deploy by
+		// construction, so name IS the image — exactly the value
+		// validateDeployRequiresImage expects.
+		if _, has := newEntry["image"]; !has {
+			newEntry["image"] = name
+		}
 		deploy[name] = newEntry
-		summary = append(summary, fmt.Sprintf("images.%s → deploy.%s (target: pod)", name, name))
+		summary = append(summary, fmt.Sprintf("images.%s → deploy.%s (target: pod, image: %s)", name, name, name))
 		for _, line := range entrySummary {
 			summary = append(summary, "    "+line)
 		}

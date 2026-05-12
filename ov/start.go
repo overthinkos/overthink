@@ -476,15 +476,20 @@ func resolveEntrypointFromMeta(meta *ImageMetadata) []string {
 	return []string{"sleep", "infinity"}
 }
 
-// containerName returns the deterministic container name for an image.
+// containerName returns the deterministic container name for an image
+// (or for a `<base>/<instance>` deploy key — the `/` is canonicalized
+// to `-` per the documented convention "container name is always
+// `ov-<key-with-slash-replaced-by-dash>`"; see /ov-core:deploy "Two
+// supported deploy patterns").
 func containerName(imageName string) string {
-	return "ov-" + imageName
+	return "ov-" + strings.ReplaceAll(imageName, "/", "-")
 }
 
 // containerNameInstance returns the container name with optional instance suffix.
+// Slashes in imageName are canonicalized to dashes — see containerName.
 func containerNameInstance(imageName, instance string) string {
 	if instance == "" {
 		return containerName(imageName)
 	}
-	return "ov-" + imageName + "-" + instance
+	return "ov-" + strings.ReplaceAll(imageName, "/", "-") + "-" + instance
 }

@@ -320,7 +320,7 @@ func containerPortsFromMappings(mappings []string) ([]int, error) {
 }
 
 // IsAutoPort reports whether a port-list entry is the literal "auto" sentinel.
-// Authors write `port: [auto]` (or `port: [auto, "29999:19999"]` to mix
+// Authors write `port: [auto]` (or `port: [auto, "8443:443"]` to mix
 // auto-allocation with explicit pins) in deploy.yml.
 func IsAutoPort(mapping string) bool {
 	return strings.TrimSpace(mapping) == "auto"

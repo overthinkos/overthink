@@ -1008,6 +1008,13 @@ func LoadDeployConfig() (*DeployConfig, error) {
 		return nil, fmt.Errorf("deploy.yml validation:\n  %s", verrs.Error())
 	}
 
+	// Hard-required image: field on every target: pod deploy entry
+	// (2026-05-12 schema cutover). See validateDeployRequiresImage
+	// for the rationale + remediation hint.
+	if err := validateDeployRequiresImage(dc.Deploy); err != nil {
+		return nil, fmt.Errorf("deploy.yml at %s: %w", path, err)
+	}
+
 	return &dc, nil
 }
 

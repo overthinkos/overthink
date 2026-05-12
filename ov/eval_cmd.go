@@ -100,34 +100,28 @@ func (c *EvalLiveCmd) Run() error {
 		return err
 	}
 
-	// Image ref is needed to pull labels (they live on the image, not the container).
-	imageRef, err := containerImageRef(engine, containerName)
-	if err != nil {
-		return err
-	}
-	meta, err := ExtractMetadata(engine, imageRef)
-	if err != nil {
-		return err
-	}
-	if meta == nil || meta.Eval == nil {
-		fmt.Fprintln(os.Stderr, "No tests defined for this image.")
-		return nil
-	}
-
-	// Load deploy overlay (local tests) AND project-level tests. Schema
-	// v3 allows deployment names that don't match image names (e.g.
-	// `openclaw-sway-browser-pod` → `openclaw-sway-browser`), so tests
-	// keyed under the deployment name in the project deploy.yml would
-	// otherwise be invisible here. Merge by id: project baseline,
-	// personal overlay wins.
+	// Load deploy overlay (local tests) AND project-level tests up front
+	// so the deploy entry's `image:` field can drive metadata extraction.
+	// Pre-2026-05-12 the code read the running container's image ref via
+	// `containerImageRef`, which silently returned a stale ref on
+	// volume-pinned deploys and dropped any probes added after the seed
+	// image. The cutover deletes that fallback: the eval runner now
+	// inspects what the operator declared, not what the container
+	// happens to be running. The hard-required `image:` field
+	// (validateDeployRequiresImage in unified.go / deploy.go) guarantees
+	// this lookup always finds a non-empty value.
 	dir, _ := os.Getwd()
 	var localTests []Check
 	var projectTests []Check
 	var deployOverlay *DeploymentNode
+	var projectImage string
+	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+		projectCfg = uf.ProjectConfig()
 		if pc := uf.ProjectDeployConfig(); pc != nil {
 			if entry, ok := pc.Deploy[c.Image]; ok {
 				projectTests = entry.Eval
+				projectImage = entry.Image
 			}
 		}
 	}
@@ -140,6 +134,42 @@ func (c *EvalLiveCmd) Run() error {
 			localTests = entry.Eval
 			deployOverlay = &entry
 		}
+	}
+
+	// Resolve the image ref from the deploy entry. User-side deploy.yml
+	// wins over the project-level fallback (operator's local pin is
+	// always more specific than the repo default). If neither source
+	// declares the entry the user is running an undeclared deploy — a
+	// pre-existing condition that container-running invariants already
+	// prevent in practice (you can't `ov eval live` a name that has no
+	// container), but we surface a clear error here for completeness.
+	var imageRef string
+	if deployOverlay != nil && deployOverlay.Image != "" {
+		imageRef = deployOverlay.Image
+	} else if projectImage != "" {
+		imageRef = projectImage
+	} else {
+		return fmt.Errorf(
+			"no deploy entry found for %q (instance=%q); declare it in deploy.yml with the `image:` field, or run `ov migrate require-image` if you have a legacy entry without it",
+			c.Image, c.Instance,
+		)
+	}
+	// Short names (e.g. `versa`) need to be resolved to a fully-
+	// qualified registry ref before ExtractMetadata can read OCI
+	// labels. Full refs and remote refs pass through unchanged. The
+	// canonical helper (also used by deploy preflight) lives in
+	// ensure_image.go.
+	resolvedRef, err := resolveImageRefForEnsure(imageRef, projectCfg, dir)
+	if err != nil {
+		return fmt.Errorf("resolving deploy image %q: %w", imageRef, err)
+	}
+	meta, err := ExtractMetadata(engine, resolvedRef)
+	if err != nil {
+		return err
+	}
+	if meta == nil || meta.Eval == nil {
+		fmt.Fprintln(os.Stderr, "No tests defined for this image.")
+		return nil
 	}
 	localTests = MergeDeployEval(projectTests, localTests)
 	resolver, _ := ResolveEvalVarsRuntime(meta, deployOverlay, engine, containerName)

@@ -103,13 +103,13 @@ simpy = "*"
 # with layers/postgresql + layers/valkey for multi-node.
 apache-airflow = "*"
 
-# === MCP server for Apache Airflow + general MCP framework ===
-# Plan A: mcp-server-apache-airflow wraps the Airflow REST API as MCP tools.
-# It documents only /api/v1/; Airflow 3.x serves /api/v2/, so R10 step 13
-# may reveal incompatibility. Plan B (planned in same atomic commit) is a
-# small fastmcp wrapper around /api/v2/ — that's why fastmcp is also
-# explicit here even though it's typically a transitive dep.
-mcp-server-apache-airflow = "*"
+# === MCP framework for marimo's own server ===
+# fastmcp is the runtime backing `marimo edit --mcp` (marimo's MCP
+# server exposes 10 notebook-inspection tools). pixi's resolver
+# doesn't pick it up transitively from marimo, so it MUST be
+# explicit. NB: the upstream mcp-server-apache-airflow package
+# (which previously co-resided here) was removed in the 2026-05-12
+# cutover because no Airflow-3 / /api/v2 release of it exists.
 fastmcp = "*"
 
 # === Geospatial stack — OSM ingestion, vector-tile pipeline, mapping ===

@@ -105,8 +105,20 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		LogDetectedDevices(detected)
 	}
 
-	// Always resolve from image labels (no image.yml dependency for deployment)
+	// Pattern B (arbitrary deploy-key + version-pin) lookup —
+	// /ov-core:deploy "Two supported deploy patterns". If `c.Image`
+	// (the positional arg) names a deploy.yml entry with an
+	// explicit `image:` field, use that as the ref the rest of the
+	// pipeline pulls/inspects. Critically c.Image is NOT mutated:
+	// it remains the deploy-key for container-name / quadlet-name
+	// / secret-name / deploy.yml-key composition. Pre-2026-05-12
+	// the arg was always treated as a kind:image short-name; this
+	// split lets the deploy-key and the image-ref diverge.
 	imageRef := resolveShellImageRef("", c.Image, c.Tag)
+	if rewritten := resolveDeployKeyToImage(c.Image, c.Instance); rewritten != "" && rewritten != c.Image {
+		fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, rewritten)
+		imageRef = rewritten
+	}
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {
 		return err
@@ -202,7 +214,15 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Resolve volume backing from labels + deploy config
 	volumes, bindMounts := ResolveVolumeBacking(c.Image, meta.Volumes, deployVolumes, meta.Home, rt.EncryptedStoragePath, rt.VolumesPath)
 
-	if meta.Registry != "" {
+	// Re-resolve the canonical registry ref UNLESS the operator
+	// supplied an explicit ref via the deploy entry's `image:`
+	// field (Pattern B — arbitrary deploy-key + version-pin from
+	// /ov-core:deploy "Two supported deploy patterns"). In Pattern
+	// B the imageRef is already a fully-qualified registry ref
+	// (e.g. `ghcr.io/overthinkos/versa:2026.131.2134`) — pinning
+	// to that exact tag is the whole point, so don't substitute
+	// the deploy-key into a freshly-composed ref.
+	if meta.Registry != "" && !looksLikeFullRef(imageRef) {
 		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
 	}
 
@@ -1677,4 +1697,40 @@ func sortedStringMapKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// resolveDeployKeyToImage maps an arbitrary deploy-key name to the
+// `image:` field of its deploy.yml entry. Returns "" if no entry
+// declares this key (caller falls back to treating `key` as an
+// image short-name). User deploy.yml wins over project deploy.yml
+// (matches the same priority used by the eval runner in
+// EvalLiveCmd.Run).
+//
+// Implements the Pattern B (arbitrary deploy-key + version-pin)
+// lookup at the lifecycle command level. See /ov-core:deploy
+// "Two supported deploy patterns".
+func resolveDeployKeyToImage(key, instance string) string {
+	if key == "" {
+		return ""
+	}
+	// User-side first.
+	if dc, _ := LoadDeployConfig(); dc != nil {
+		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Image != "" {
+			return entry.Image
+		}
+		if entry, ok := dc.Deploy[key]; ok && entry.Image != "" {
+			return entry.Image
+		}
+	}
+	// Project-level fallback.
+	if dir, err := os.Getwd(); err == nil {
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+			if pc := uf.ProjectDeployConfig(); pc != nil {
+				if entry, ok := pc.Deploy[key]; ok && entry.Image != "" {
+					return entry.Image
+				}
+			}
+		}
+	}
+	return ""
 }

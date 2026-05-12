@@ -1,6 +1,6 @@
 layer:
   name: airflow
-  description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly), plus an MCP server (mcp-server-apache-airflow on port 19999) that exposes Airflow REST API operations as MCP tools, plus a sample OSM → PMTiles DAG. Python deps live in the marimo layer's pixi.toml."
+  description: "Apache Airflow with LocalExecutor + SQLite (single-node, dev-friendly). Python deps live in the marimo layer's pixi.toml. NB: the upstream MCP wrapper (mcp-server-apache-airflow) targets the removed /api/v1 in Airflow 3 and was removed from this layer in 2026-05; consumers drive Airflow via direct REST /api/v2 calls."
   require:
     - marimo
     - supervisord
@@ -31,14 +31,6 @@ layer:
     AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "10"
   port:
     - 8080
-    - 19999     # airflow-mcp HTTP transport endpoint (/mcp)
-  # Cross-container MCP discovery. Pod-aware rewriting collapses this to
-  # localhost:19999 for any same-pod consumer (the marimo notebook server's
-  # chat panel reads OV_MCP_SERVERS at config time and finds airflow there).
-  mcp_provide:
-    - name: airflow
-      url: "http://{{.ContainerName}}:19999/mcp"
-      transport: http
   # Cross-container env discovery. The marimo notebook reads three vars:
   #   AIRFLOW_PUBLIC_URL  — browser-side (UI links + OAuth callbacks);
   #                          host port for container 8080 (resolves to
@@ -139,65 +131,6 @@ layer:
         set -euo pipefail
         exec "${HOME}/.pixi/envs/default/bin/airflow" dag-processor
 
-    # ---- airflow-mcp.sh ----
-    # Plan A: mcp-server-apache-airflow from PyPI. Wraps the Airflow REST API
-    # as MCP tools (list_dags, trigger_dag, get_task_instance, list_variables,
-    # …). Speaks Streamable HTTP on port 19999 (ov's project default). The
-    # third-party server's docs reference /api/v1/ — Airflow 3.x serves
-    # /api/v2/, so R10 step 13 may reveal incompatibility, in which case
-    # Plan B (a fastmcp wrapper around /api/v2/) takes over.
-    #
-    # Authentication: basic auth via AIRFLOW_USERNAME + AIRFLOW_PASSWORD
-    # against the same admin account airflow-init.sh provisioned. Airflow
-    # 3.x's api-server defaults to JWT for external clients but accepts
-    # basic for internal callers; if the server rejects basic auth, R10
-    # step 13 fails cleanly and Plan B's per-tool httpx client takes over.
-    - write: /usr/local/bin/airflow-mcp.sh
-      mode: "0755"
-      user: root
-      content: |
-        #!/usr/bin/env bash
-        set -euo pipefail
-        # Wait for airflow api-server to be reachable before starting the MCP
-        # bridge — without this the first MCP call after a fresh boot races
-        # with the api-server's startup and returns connection-refused.
-        for i in $(seq 1 60); do
-          if curl -sf -o /dev/null "http://127.0.0.1:8080/api/v2/version"; then
-            break
-          fi
-          sleep 1
-        done
-        export AIRFLOW_HOST="http://127.0.0.1:8080"
-        # Airflow 3.x rejects basic auth on /api/v2/ endpoints by default
-        # (the api-server uses JWT issued by SimpleAuthManager). Fetch
-        # a JWT once at startup and pass it to mcp-server-apache-airflow
-        # via AIRFLOW_JWT_TOKEN — which takes precedence over USERNAME/
-        # PASSWORD per the package's docs.
-        # The /auth/token endpoint is provided by SimpleAuthManager;
-        # if the call fails (e.g., a different auth manager is configured),
-        # we fall back to USERNAME+PASSWORD which mcp-server-apache-airflow
-        # will retry as basic auth (at least the failure mode is visible).
-        TOKEN=$(curl -sf -X POST -H 'Content-Type: application/json' \
-          -d "{\"username\":\"admin\",\"password\":\"${AIRFLOW_ADMIN_PASSWORD}\"}" \
-          "${AIRFLOW_HOST}/auth/token" 2>/dev/null \
-          | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || true)
-        if [ -n "${TOKEN}" ]; then
-          export AIRFLOW_JWT_TOKEN="${TOKEN}"
-          echo "airflow-mcp: obtained JWT (length ${#TOKEN})"
-        else
-          export AIRFLOW_USERNAME="admin"
-          export AIRFLOW_PASSWORD="${AIRFLOW_ADMIN_PASSWORD}"
-          echo "airflow-mcp: JWT fetch failed; falling back to basic auth (Airflow 3.x will likely reject this)" >&2
-        fi
-        # mcp-server-apache-airflow uses --mcp-port + --mcp-host (NOT --port);
-        # confirmed via `--help` on package version 0.2.10. Default --mcp-host
-        # is 127.0.0.1; we bind 0.0.0.0 so the host-port mapping in the pod
-        # deploy reaches the in-pod MCP service.
-        exec "${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow" \
-          --transport http \
-          --mcp-host 0.0.0.0 \
-          --mcp-port 19999
-
     # NB: sample OSM pipeline DAG used to be inlined here via `write:`
     # to /opt/airflow-defaults/dags/ + airflow-init.sh copy. Then it
     # was extracted to a dag-osm-monaco data layer that seeded
@@ -224,17 +157,9 @@ layer:
       file: /usr/local/bin/airflow-dag-processor.sh
       exists: true
       mode: "0755"
-    - id: airflow-mcp-script
-      file: /usr/local/bin/airflow-mcp.sh
-      exists: true
-      mode: "0755"
     # NB: no static DAG file is baked or seeded by ov anymore. Notebooks
     # self-author DAGs at runtime; the JWT-issuance probe below is what
     # proves the path the notebook depends on actually works.
-    # Build-scope: the mcp-server-apache-airflow CLI installed cleanly into the pixi env.
-    - id: airflow-mcp-binary
-      file: ${HOME}/.pixi/envs/default/bin/mcp-server-apache-airflow
-      exists: true
     # Deploy-scope: each daemon must reach RUNNING; init must EXIT 0; webserver UI 200.
     # airflow-init is a one-shot (restart: no) — checking its side effect
     # (the SQLite metadata DB exists) is the right invariant. The
@@ -256,10 +181,6 @@ layer:
     - id: airflow-webserver-running
       scope: deploy
       service: airflow-webserver
-      running: true
-    - id: airflow-mcp-running
-      scope: deploy
-      service: airflow-mcp
       running: true
     - id: airflow-port-reachable
       scope: deploy
@@ -288,36 +209,6 @@ layer:
       in_container: true
       exit_status: 0
       timeout: 15s
-    - id: airflow-mcp-port-reachable
-      scope: deploy
-      addr: "127.0.0.1:${HOST_PORT:19999}"
-      reachable: true
-      timeout: 30s        # mcp wrapper waits for api-server before binding; allow generous slack
-    # Deploy-scope MCP probes — the host-port rewriter resolves the URL
-    # template + maps to 127.0.0.1:HOST_PORT automatically.
-    - id: mcp-airflow-ping
-      scope: deploy
-      mcp: ping
-      mcp_name: airflow
-      timeout: 30s
-    - id: mcp-airflow-list-tools
-      scope: deploy
-      mcp: list-tools
-      mcp_name: airflow
-      stdout:
-        # mcp-server-apache-airflow 0.2.10 actual tool names per the
-        # `--help` output verification: fetch_dags (NOT list_dags),
-        # post_dag_run (NOT trigger_dag), get_dag, get_dag_run.
-        - contains: fetch_dags
-        - contains: post_dag_run
-        - contains: get_dag_run
-    # NB: mcp call probes are NOT enforced for the airflow MCP because
-    # Airflow 3.x's JWT auth has uneven coverage in mcp-server-apache-airflow
-    # 0.2.10 (basic auth rejected; JWT fetch endpoint depends on the active
-    # auth manager). The list-tools probe verifies the MCP server is alive
-    # and exposes the right tools. End-to-end DAG triggering is covered by
-    # the R10 sample-DAG run (R10 step 12) which uses the airflow CLI
-    # directly inside the container — bypassing the MCP layer entirely.
   service:
     # One-shot init: db migrate + admin user, exits 0. Priority 25 so it
     # runs before the long-running daemons (priority 30+).
@@ -348,15 +239,5 @@ layer:
       exec: /usr/local/bin/airflow-webserver.sh
       restart: always
       priority: 31
-      enable: true
-      scope: system
-    - name: airflow-mcp
-      # The wrapper script self-blocks on api-server reachability before
-      # exec'ing the MCP bridge, so priority ordering relative to the
-      # api-server is a hint, not a hard ordering constraint. priority 32
-      # keeps it visually adjacent to the airflow stack in `supervisorctl status`.
-      exec: /usr/local/bin/airflow-mcp.sh
-      restart: always
-      priority: 32
       enable: true
       scope: system

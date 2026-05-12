@@ -498,25 +498,26 @@ deploy:
         image: versa
         disposable: true
         lifecycle: dev
-        # 2026-05 cutover: was an 8-element explicit `port:` list (host
-        # port = container port + 20000 mostly, with 22718/29999 for
-        # the two ports that needed offsets). With `port: [auto]` the
-        # ov config step allocates free host ports at deploy time and
+        # 2026-05 cutover: was a 7-element explicit `port:` list (host
+        # port = container port + 20000 mostly, with 22718 as the one
+        # port that needed an offset). With `port: [auto]` the ov
+        # config step allocates free host ports at deploy time and
         # writes the expansion to `resolved_port:` below this entry on
         # save. The env_provides templates ({{.HostPort N}}) on the
         # producer layers (osm-tools/airflow/versatiles/versatiles-
-        # frontend) substitute against the resolved expansion so the
-        # browser-bound *_PUBLIC_URL env vars track whatever ports
-        # actually got allocated.
+        # frontend/pmtiles-viewer) substitute against the resolved
+        # expansion so the browser-bound *_PUBLIC_URL env vars track
+        # whatever ports actually got allocated.
         port: [auto]
-        # env: block deleted — the seven URL env vars (MARTIN_PUBLIC_URL,
+        # env: block deleted — the eight URL env vars (MARTIN_PUBLIC_URL,
         # AIRFLOW_PUBLIC_URL, AIRFLOW_API_INTERNAL_URL, AIRFLOW_DAGS_DIR,
         # VERSATILES_PUBLIC_URL, VERSATILES_STYLE_PUBLIC_URL,
-        # VERSATILES_ASSETS_PUBLIC_URL) flow from the producer layers'
-        # env_provides blocks. To verify the resolved values, run the
-        # notebook — its diagnostic cell #2 renders a table.
+        # VERSATILES_ASSETS_PUBLIC_URL, PMTILES_VIEWER_PUBLIC_URL) flow
+        # from the producer layers' env_provides blocks. To verify the
+        # resolved values, run the notebook — its diagnostic cell #2
+        # renders a table.
         description:
-            feature: "R10 bed for versa — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus dual MCP (marimo as both server and client, airflow-mcp wrapping the REST API) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions. The 2026-05 cutover replaced an 8-element explicit port list + 4-entry env block with `port: [auto]` and per-producing-layer env_provides templates."
+            feature: "R10 bed for versa — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus the marimo MCP server (10 read-only notebook-inspection tools) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions. The 2026-05 cutover replaced an 8-element explicit port list + 4-entry env block with `port: [auto]` and per-producing-layer env_provides templates. Followup 2026-05-12: removed the airflow MCP wrapper (no Airflow-3 v2 release of mcp-server-apache-airflow exists); consumers drive Airflow via direct REST /api/v2 calls."
             tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.

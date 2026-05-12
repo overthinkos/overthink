@@ -33,6 +33,7 @@ func (c *StatusCmd) Run() error {
 	}
 	ctx := context.Background()
 
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	if c.Image == "" {
 		statuses, err := col.All(ctx, c.All)
 		if err != nil {

@@ -134,8 +134,34 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 	// component numerically. Entries with no CalVer sort to the
 	// bottom so a tagged CalVer beats a label-only match of equal
 	// rank.
+	// Tiebreak rationale: when two refs share the same CalVer, prefer the
+	// one whose repo's trailing segment exactly matches `input` (the
+	// requested short name). Without this, a per-deploy alias like
+	// `<registry>/<base>/<instance>:<cv>` sorts BEFORE the base
+	// `<registry>/<base>:<cv>` because ASCII `/` (47) < `:` (58) in raw
+	// lexical compare — silently picking the instance alias when the
+	// caller asked for the base short name. Pattern A deploys create
+	// these aliases via `bumpDeployAlias` (update_deploy_dispatch.go)
+	// inheriting the base image's `org.overthinkos.image` label, so
+	// both refs land in `labelCands` with identical CalVers.
+	matchesShortName := func(ref, name string) bool {
+		// Strip tag/digest, take repo's trailing segment, compare.
+		repo := ref
+		if i := strings.IndexAny(ref, ":@"); i >= 0 {
+			repo = ref[:i]
+		}
+		if i := strings.LastIndex(repo, "/"); i >= 0 {
+			repo = repo[i+1:]
+		}
+		return repo == name
+	}
 	sort.SliceStable(cands, func(i, j int) bool {
 		if cands[i].calver == cands[j].calver {
+			iMatch := matchesShortName(cands[i].ref, input)
+			jMatch := matchesShortName(cands[j].ref, input)
+			if iMatch != jMatch {
+				return iMatch
+			}
 			return cands[i].ref < cands[j].ref
 		}
 		if cands[i].calver == "" {

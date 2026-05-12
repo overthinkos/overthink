@@ -902,6 +902,40 @@ func deployKey(imageName, instance string) string {
 	return imageName + "/" + instance
 }
 
+// canonicalizeDeployArg splits Pattern A "<base>/<instance>" CLI positional
+// args into their component (image, instance) pair. Idempotent: if the input
+// is already split (instance != "") or contains no slash, returns as-is.
+// Pattern B (FQ ref containing "/") is identified by presence of "@" or ":"
+// suffix on the leftmost segment OR a registry-host pattern (contains "."
+// before the first "/") and passed through untouched.
+//
+// MUST be called at the top of every CLI verb that takes a positional
+// deploy-arg (`ov config`, `ov start`, `ov stop`, `ov shell`, `ov logs`,
+// `ov update`, `ov status`, `ov remove`) — before any downstream code reads
+// c.Image or c.Instance. Without this, Pattern A instance deploys leak
+// past the canonicalization boundary and downstream code conflates the
+// deploy key with the image short-name (see Bug 2/3 RCA notes —
+// MergeDeployOntoMetadata composes wrong key, port/env overlays drop).
+func canonicalizeDeployArg(arg, instance string) (image, inst string) {
+	if instance != "" || arg == "" {
+		return arg, instance
+	}
+	if !strings.Contains(arg, "/") {
+		return arg, ""
+	}
+	// Registry-qualified ref (Pattern B): contains "." in the first segment
+	// (registry host like ghcr.io) or "@" anywhere (digest pin) or the
+	// trailing segment carries ":tag". Pass through.
+	first := arg
+	if i := strings.Index(arg, "/"); i >= 0 {
+		first = arg[:i]
+	}
+	if strings.Contains(first, ".") || strings.Contains(arg, "@") || strings.Contains(arg[strings.LastIndex(arg, "/"):], ":") {
+		return arg, ""
+	}
+	return parseDeployKey(arg)
+}
+
 // parseDeployKey splits a deploy.yml map key back into image name and instance.
 // "selkies-desktop" → ("selkies-desktop", "")
 // "selkies-desktop/foo" → ("selkies-desktop", "foo")

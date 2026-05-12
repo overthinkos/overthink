@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	_ "embed"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"text/template"
 
 	"gopkg.in/yaml.v3"
 )
@@ -15,20 +17,160 @@ import (
 var embeddedSidecarYAML []byte
 
 // SidecarDef is a sidecar container template (embedded in the ov binary or per-image override in deploy.yml).
+//
+// The `Parameter` field carries BOTH the template's parameter
+// declarations (sidecar.yml: each key maps to empty-string sentinel
+// for "required, must be supplied by deploy") AND the deploy.yml
+// override values (each key maps to the operator-chosen string).
+// After MergeSidecar, every required parameter must have a non-empty
+// value or ResolveSidecar errors out with a remediation hint.
+//
+// Example template (sidecar.yml):
+//
+//	sidecar:
+//	  tailscale:
+//	    parameter:
+//	      tailnet: ""   # empty = required, deploy must supply
+//
+// Example deploy.yml override:
+//
+//	sidecars:
+//	  tailscale:
+//	    parameter:
+//	      tailnet: armadillo-quail.ts.net
 type SidecarDef struct {
 	Description string            `yaml:"description,omitempty" json:"description,omitempty"`
 	Image       string            `yaml:"image,omitempty" json:"image,omitempty"`
 	Env         map[string]string `yaml:"env,omitempty" json:"env,omitempty"`
+	Parameter   map[string]string `yaml:"parameter,omitempty" json:"parameter,omitempty"`
 	Secret      []SidecarSecret   `yaml:"secret,omitempty" json:"secret,omitempty"`
 	Volume      []SidecarVolume   `yaml:"volume,omitempty" json:"volume,omitempty"`
 	Security    *SecurityConfig   `yaml:"security,omitempty" json:"security,omitempty"`
 }
 
 // SidecarSecret is a credential store secret injected as an env var into the sidecar.
+//
+// `Env` is the target env var name INSIDE the container (e.g. TS_AUTHKEY —
+// the name tailscale's binary expects).
+//
+// `EnvFrom` is an optional text/template expression that resolves to the
+// HOST-side env var name to read the value from. When empty, the host
+// env var name = Env (legacy single-tailnet behavior).
+//
+// Multi-tailnet usage: template against the resolved Parameter map of
+// the SidecarDef. The `tailnetEnvSuffix` template func normalizes a
+// MagicDNS suffix into a valid env-var-name fragment:
+//
+//	env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
+//
+// With `Parameter.tailnet=armadillo-quail.ts.net`, EnvFrom renders to
+// `TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET`. The operator stores per-tailnet
+// keys under that env name in `.secrets`:
+//
+//	ov secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
+//
+// direnv loads `.secrets` into the shell env; `ov config` reads the
+// resolved host env var via the standard credential-store chain
+// (env-var-first), and injects the value into the container as
+// `TS_AUTHKEY=<value>`.
 type SidecarSecret struct {
 	Name        string `yaml:"name" json:"name"`                                   // credential store key / podman secret name suffix
-	Env         string `yaml:"env" json:"env"`                                     // target env var in container
+	Env         string `yaml:"env" json:"env"`                                     // target env var in container (the name the app expects)
+	EnvFrom     string `yaml:"env_from,omitempty" json:"env_from,omitempty"`       // host-side env var name to read; text/template (empty = same as Env)
 	Description string `yaml:"description,omitempty" json:"description,omitempty"` // human-readable description
+}
+
+// SidecarKeyContext is the template input for SidecarSecret.EnvFrom rendering.
+// Exposes the resolved Parameter map as `.Parameter` (so templates can
+// reference {{.Parameter.tailnet}} etc.).
+type SidecarKeyContext struct {
+	Parameter map[string]string
+}
+
+// sidecarTemplateFuncs are the text/template funcs available inside
+// SidecarSecret.EnvFrom expressions. Centralized so both `renderSidecarEnvFrom`
+// and tests use the same set.
+var sidecarTemplateFuncs = template.FuncMap{
+	// tailnetEnvSuffix normalizes a MagicDNS suffix like "armadillo-quail.ts.net"
+	// into a valid env-var-name fragment "ARMADILLO_QUAIL_TS_NET" by uppercasing
+	// and replacing every non-alphanumeric character with '_'. Empty input → "".
+	"tailnetEnvSuffix": func(s string) string {
+		var b strings.Builder
+		b.Grow(len(s))
+		for _, r := range s {
+			switch {
+			case r >= 'a' && r <= 'z':
+				b.WriteRune(r - 32) // to upper
+			case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+				b.WriteRune(r)
+			default:
+				b.WriteRune('_')
+			}
+		}
+		return b.String()
+	},
+}
+
+// renderSidecarEnvFrom resolves the SidecarSecret.EnvFrom text/template against
+// the SidecarDef's Parameter map. Returns the resolved HOST-side env var name,
+// OR an error naming the missing required parameter.
+//
+// When SidecarSecret.EnvFrom is empty, falls back to the SidecarSecret.Env
+// value (legacy single-tailnet behavior: host env var name == container env
+// var name).
+func renderSidecarEnvFrom(s SidecarSecret, params map[string]string) (string, error) {
+	if s.EnvFrom == "" {
+		return s.Env, nil
+	}
+	// Pre-check: every {{.Parameter.X}} reference must resolve to a
+	// non-empty value. text/template's `missingkey=zero` only catches
+	// direct map misses, not values that pipe through a func to empty
+	// (e.g. `{{.Parameter.tailnet | tailnetEnvSuffix}}` with tailnet=""
+	// happily renders to "" — silently masking the missing parameter).
+	// Doing the check up-front gives a precise remediation hint.
+	for paramName := range extractParameterRefs(s.EnvFrom) {
+		v, ok := params[paramName]
+		if !ok || v == "" {
+			return "", fmt.Errorf("sidecar secret %q references parameter %q which is unset. "+
+				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in deploy.yml or run `ov migrate tailscale-secrets`",
+				s.Name, paramName, paramName)
+		}
+	}
+	tmpl, err := template.New("sidecar-env-from").Funcs(sidecarTemplateFuncs).Parse(s.EnvFrom)
+	if err != nil {
+		return "", fmt.Errorf("sidecar secret %q: parsing env_from template: %w", s.Name, err)
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, SidecarKeyContext{Parameter: params}); err != nil {
+		return "", fmt.Errorf("sidecar secret %q: rendering env_from template: %w", s.Name, err)
+	}
+	return buf.String(), nil
+}
+
+// extractParameterRefs scans the text/template string for {{.Parameter.<name>}}
+// references and returns the set of parameter names. Used by renderSidecarEnvFrom
+// to produce a useful error when a referenced parameter is unset.
+func extractParameterRefs(tmplStr string) map[string]struct{} {
+	out := map[string]struct{}{}
+	const marker = "{{.Parameter."
+	idx := 0
+	for {
+		i := strings.Index(tmplStr[idx:], marker)
+		if i < 0 {
+			break
+		}
+		start := idx + i + len(marker)
+		end := strings.IndexAny(tmplStr[start:], "}.| ")
+		if end < 0 {
+			break
+		}
+		name := tmplStr[start : start+end]
+		if name != "" {
+			out[name] = struct{}{}
+		}
+		idx = start + end
+	}
+	return out
 }
 
 // SidecarVolume is a named volume for a sidecar container.
@@ -125,6 +267,21 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 		merged.Security = overlay.Security
 	}
 
+	// Parameter — map merge: deploy keys win, template defaults preserved.
+	// The template uses empty-string sentinels ("") for required parameters;
+	// after merge, an empty value means the deploy didn't supply it, and
+	// renderSidecarEnvFrom raises a clear error at ov-config time.
+	if len(base.Parameter) > 0 || len(overlay.Parameter) > 0 {
+		mergedParam := make(map[string]string, len(base.Parameter)+len(overlay.Parameter))
+		for k, v := range base.Parameter {
+			mergedParam[k] = v
+		}
+		for k, v := range overlay.Parameter {
+			mergedParam[k] = v
+		}
+		merged.Parameter = mergedParam
+	}
+
 	if len(overlay.Env) > 0 {
 		mergedEnv := make(map[string]string, len(base.Env)+len(overlay.Env))
 		for k, v := range base.Env {
@@ -140,10 +297,13 @@ func mergeSingleSidecar(base, overlay SidecarDef) SidecarDef {
 }
 
 // ResolveSidecar resolves sidecar definitions into generation-ready configs.
-// Resolves volume names (ov-<image>-<sidecar>-<vol>) and collects secrets.
-func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) []ResolvedSidecar {
+// Resolves volume names (ov-<image>-<sidecar>-<vol>), collects secrets,
+// and renders each SidecarSecret.EnvFrom template against the merged
+// Parameter map. Missing required parameters surface as fmt.Errorf
+// returned via the error channel; callers must check it before proceeding.
+func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) ([]ResolvedSidecar, error) {
 	if len(defs) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	names := make([]string, 0, len(defs))
@@ -181,9 +341,14 @@ func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) []Re
 			if instance != "" {
 				secretName = sidecarSecretName(imageName+"-"+instance, name, s.Name)
 			}
+			hostEnv, err := renderSidecarEnvFrom(s, def.Parameter)
+			if err != nil {
+				return nil, fmt.Errorf("sidecar %q: %w", name, err)
+			}
 			sc.Secret = append(sc.Secret, CollectedSecret{
 				Name:       secretName,
 				Env:        s.Env,
+				HostEnv:    hostEnv,
 				SecretName: s.Name,
 			})
 		}
@@ -191,7 +356,7 @@ func ResolveSidecar(defs map[string]SidecarDef, imageName, instance string) []Re
 		resolved = append(resolved, sc)
 	}
 
-	return resolved
+	return resolved, nil
 }
 
 // ResolveSidecarsForConfig merges embedded templates with deploy.yml overrides.

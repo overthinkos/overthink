@@ -53,7 +53,6 @@ def _resolved_urls(os, pl):
         "side":      [e[3] for e in _entries],
         "is_default":[os.environ.get(e[1]) is None for e in _entries],
     })
-    urls
     # Export each resolved value so downstream map cells can consume them
     # as parameters instead of re-reading os.environ.get() per cell. This
     # is the marimo-idiomatic "single source of truth" pattern (R3).
@@ -65,6 +64,12 @@ def _resolved_urls(os, pl):
     versatiles_style      = _resolved["VERSATILES_STYLE_PUBLIC_URL"]
     versatiles_assets     = _resolved["VERSATILES_ASSETS_PUBLIC_URL"]
     pmtiles_viewer        = _resolved["PMTILES_VIEWER_PUBLIC_URL"]
+    # Bare `urls` as the LAST expression-statement before `return` —
+    # marimo's cell-display semantics pick the last expression for
+    # the cell's output area (see /ov-versa:marimo-layer
+    # "Cell-display gotcha"). Placing it AFTER all assignments
+    # avoids any ambiguity in marimo's AST-walk pass.
+    urls
     return (urls, martin, airflow_api_internal, airflow_public,
             airflow_dags_dir, versatiles_public, versatiles_style,
             versatiles_assets, pmtiles_viewer)
@@ -1022,19 +1027,27 @@ def __(Path, os, textwrap):
             def tilemaker_convert() -> str:
                 import time
                 pbf = WORK / "monaco.osm.pbf"
+                parquet = WORK / "monaco.parquet"
                 SHORTBREAD.mkdir(parents=True, exist_ok=True)
                 out = SHORTBREAD / "monaco-shortbread.pmtiles"
 
-                # Wait for the OSM DAG's download_pbf task to finish
-                # writing monaco.osm.pbf. Shortbread reads the PBF
-                # directly (it doesn't depend on monaco.parquet) but it
-                # still races the OSM DAG's download_pbf task — same
-                # cross-DAG producer-consumer dep as the parquet
-                # consumers (see gpqtiles_convert for full rationale).
+                # Wait for the OSM DAG's pbf_to_geoparquet task to
+                # finish — its output monaco.parquet only exists AFTER
+                # download_pbf has atomically completed via
+                # tmp.replace(out). Waiting on the PBF directly raced
+                # download_pbf's rename: tilemaker would open the PBF
+                # mid-replace and fail to derive a bbox, exiting with
+                # "Can't read shapefiles unless a bounding box is
+                # provided". Waiting on the second-stage artifact is
+                # the canonical cross-DAG sync primitive used by
+                # gpqtiles_convert / encode_to_pmtiles /
+                # freestiler_convert — one shared pattern across all
+                # four PBF consumers (R3: no ad-hoc per-DAG variants
+                # of the same producer-consumer dep).
                 _deadline = time.monotonic() + 600
-                while not (pbf.exists() and pbf.stat().st_size > 0):
+                while not (parquet.exists() and parquet.stat().st_size > 0):
                     if time.monotonic() > _deadline:
-                        raise TimeoutError(f"{pbf} not produced within 600s")
+                        raise TimeoutError(f"{parquet} not produced within 600s")
                     time.sleep(2)
                 # tilemaker's CLI shape: --input + --output + --config +
                 # --process. The shortbread-tilemaker repo ships
@@ -1467,7 +1480,19 @@ def __():
         prefixes are source-name-suffixed so MapLibre's layer-id
         registry doesn't collide across cells.
         """
+        # `layer_prefix` carries hyphens (valid in HTML id attributes,
+        # invalid in JavaScript identifiers). `js_var` is the
+        # underscore-only twin used for `const map_<var> = …` and any
+        # other JS-identifier position; HTML ids keep the hyphenated
+        # form for stable DOM-side selectors. Without this split, the
+        # duckdb-mvt + duckdb-freestiler maps generated
+        # `const map_duckdb-mvt = …` which the JS parser silently
+        # treated as `map_duckdb − mvt` and threw a ReferenceError —
+        # the script tag ran, no canvas attached, the iframe stayed
+        # the bare `<div id="map-…">`. R3: one canonical "JS id from
+        # source name" derivation used everywhere in this template.
         layer_prefix = source_name.replace("monaco-", "")
+        js_var = layer_prefix.replace("-", "_")
         return f"""<!DOCTYPE html>
 <html><head>
 <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet"/>
@@ -1476,7 +1501,7 @@ def __():
 </head><body>
 <div id="map-{layer_prefix}"></div>
 <script>
-const map_{layer_prefix} = new maplibregl.Map({{
+const map_{js_var} = new maplibregl.Map({{
   container: 'map-{layer_prefix}',
   style: {{
     version: 8,
@@ -1500,7 +1525,7 @@ const map_{layer_prefix} = new maplibregl.Map({{
   zoom: 13,
   attributionControl: false
 }});
-map_{layer_prefix}.addControl(new maplibregl.NavigationControl({{ showZoom: true, showCompass: true }}), 'top-right');
+map_{js_var}.addControl(new maplibregl.NavigationControl({{ showZoom: true, showCompass: true }}), 'top-right');
 </script>
 </body></html>"""
     return (build_pipeline_maplibre_html,)

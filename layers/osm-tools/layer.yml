@@ -87,10 +87,15 @@ layer:
     # ---- martin (tile server) ----
     # Static-musl Rust binary (the gnu build hard-depends on libicuuc.so.74
     # / libicui18n.so.74 which aren't on Fedora 43 — it ships libicu 77;
-    # musl is self-contained). releases/latest/download/ redirect resolves
-    # to the newest tag; ${BUILD_ARCH} is auto-injected at the start of the
-    # download RUN.
-    - download: "https://github.com/maplibre/martin/releases/latest/download/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
+    # musl is self-contained). Pinned to martin-v1.9.0 rather than tracking
+    # `releases/latest/download/` because maplibre/martin's release pipeline
+    # has, on multiple occasions, published a tag (e.g. martin-v1.9.1) with
+    # zero attached assets while CI was mid-upload — `latest/download/...`
+    # returned 404 for every asset until the assets caught up. A principled
+    # version pin avoids the "upstream half-published a release" failure
+    # class entirely (R4: no transient-flake workarounds; the fix is the
+    # pin, not a retry loop). Bump the version explicitly when needed.
+    - download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
       extract: tar.gz
       to: /usr/local/bin
       include: [martin]

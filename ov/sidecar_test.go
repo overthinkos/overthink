@@ -108,7 +108,10 @@ func TestResolveSidecars(t *testing.T) {
 		},
 	}
 
-	resolved := ResolveSidecar(defs, "my-app", "")
+	resolved, err := ResolveSidecar(defs, "my-app", "")
+	if err != nil {
+		t.Fatalf("ResolveSidecar: %v", err)
+	}
 	if len(resolved) != 1 {
 		t.Fatalf("expected 1 sidecar, got %d", len(resolved))
 	}

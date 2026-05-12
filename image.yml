@@ -766,6 +766,23 @@ image:
               in_container: true
               stdout:
                   - matches: "[1-9][0-9]{5,}"   # >=100KB
+            # Catches the silent-versatiles-fallback masking: the
+            # existing versa-versatiles-shortbread-tile probe HEAD-checks
+            # /tiles/monaco-shortbread/0/0/0.pbf and returns a non-empty
+            # body even when the local monaco-shortbread.pmtiles is
+            # missing — versatiles' multi-source serve falls through to
+            # the always-on remote osm.versatiles container. Asserting
+            # on file size catches the file-missing state directly. The
+            # shortbread DAG (in cell 4 of osm-monaco-viz.py) used to
+            # race the OSM DAG's atomic PBF rename and produced no
+            # output; the wait-on-parquet fix landed alongside this
+            # probe so a regression of the race surfaces here.
+            - id: versa-artifact-shortbread
+              scope: deploy
+              command: wc -c < /workspace/tiles/shortbread/monaco-shortbread.pmtiles
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{5,}"   # >=100KB
     nvidia:
         base: fedora-nonfree
         platforms:

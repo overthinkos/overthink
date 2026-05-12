@@ -95,6 +95,11 @@ func (c *ImageConfigSetupCmd) Run() error {
 		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov config <image-name>'", c.Image)
 	}
 
+	// Canonicalize Pattern A "<base>/<instance>" so downstream code uses
+	// the (image, instance) split — without this, MergeDeployOntoMetadata
+	// looks up the wrong deploy.yml key and drops port/env overlays.
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
+
 	return c.runConfig(rt)
 }
 
@@ -287,10 +292,13 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 
-	// Resolve env vars from global provides + labels + deploy.yml + CLI
+	// Resolve env vars from global provides + labels + deploy.yml + CLI.
+	// Pass deployKey (image-with-instance) — NOT bare c.Image — so an
+	// instance consumer like `versa/ecovoyage` doesn't pick up the base
+	// `versa` deploy's provides, and vice versa.
 	ctrName := containerNameInstance(c.Image, c.Instance)
 	acceptedEnv := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
-	globalEnv := dc.GlobalEnvForImage(c.Image, ctrName, acceptedEnv)
+	globalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), ctrName, acceptedEnv)
 	envVars, envErr := ResolveEnvVars(globalEnv, meta.Env, "", workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if envErr != nil {
 		return envErr
@@ -451,7 +459,11 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			return fmt.Errorf("resolving sidecars: %w", resolveErr)
 		}
 		if len(mergedSidecarDefs) > 0 {
-			resolvedSidecars = ResolveSidecar(mergedSidecarDefs, c.Image, c.Instance)
+			var rsErr error
+			resolvedSidecars, rsErr = ResolveSidecar(mergedSidecarDefs, c.Image, c.Instance)
+			if rsErr != nil {
+				return fmt.Errorf("resolving sidecars: %w", rsErr)
+			}
 		}
 
 		// Log routed env vars
@@ -772,7 +784,7 @@ skipDataProvision:
 		dc, _ := LoadDeployConfig()
 		var mcpServers []MCPProvidesEntry
 		if dc != nil && dc.Provides != nil {
-			mcpServers = podAwareMCPProvides(dc.Provides.MCP, c.Image, containerNameInstance(c.Image, c.Instance))
+			mcpServers = podAwareMCPProvides(dc.Provides.MCP, deployKey(c.Image, c.Instance), containerNameInstance(c.Image, c.Instance))
 		}
 		warnMissingMCPRequires(c.Image, meta.MCPRequires, mcpServers)
 	}
@@ -1501,10 +1513,11 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		// Apply deploy.yml overrides (instance-aware)
 		MergeDeployOntoMetadata(meta, dc, instance)
 
-		// Resolve env vars with updated global env
+		// Resolve env vars with updated global env. Pass deployKey so an
+		// instance's quadlet doesn't pick up another instance's provides.
 		updateCtrName := containerNameInstance(imageName, instance)
 		updateAccepted := AcceptedEnvSet(meta.EnvAccepts, meta.EnvRequires)
-		globalEnv := dc.GlobalEnvForImage(imageName, updateCtrName, updateAccepted)
+		globalEnv := dc.GlobalEnvForImage(deployKey(imageName, instance), updateCtrName, updateAccepted)
 		envVars, err := ResolveEnvVars(globalEnv, meta.Env, "", "", "", nil)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not resolve env for %s: %v\n", key, err)
@@ -1611,7 +1624,12 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 		if len(deploySidecars) > 0 {
 			mergedDefs, resolveErr := ResolveSidecarsForConfig(deploySidecars)
 			if resolveErr == nil && len(mergedDefs) > 0 {
-				resolvedSidecars = ResolveSidecar(mergedDefs, imageName, instance)
+				var rsErr error
+				resolvedSidecars, rsErr = ResolveSidecar(mergedDefs, imageName, instance)
+				if rsErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: resolving sidecars for %s: %v\n", key, rsErr)
+					continue
+				}
 				podName = PodNameInstance(imageName, instance)
 			}
 		}

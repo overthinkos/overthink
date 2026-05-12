@@ -100,7 +100,8 @@ type LabelSecret struct {
 type CollectedSecret struct {
 	Name           string // podman secret name: "ov-<image>-<name>"
 	Target         string // container mount path
-	Env            string // fallback env var name
+	Env            string // env var name INSIDE the container (the name the app expects, e.g. TS_AUTHKEY)
+	HostEnv        string // env var name on the HOST to read the value from (templated for multi-tailnet; empty = same as Env)
 	SecretName     string // original secret name from layer.yml
 	Service        string // credential store service override (empty = use default lookup)
 	Key            string // credential store key override (empty = use default lookup)
@@ -272,8 +273,19 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 
 	// Default chain for layer-owned secrets (pre-existing behavior).
 	// If the secret has an associated env var, check it first.
-	if s.Env != "" {
-		val, src := ResolveCredential(s.Env, credServiceForSecret(s.Env), credKeyForSecret(imageName, instance), "")
+	//
+	// Multi-tailnet path: when the sidecar resolution set HostEnv to a
+	// templated host-side env var name (e.g. TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET),
+	// the env-var lookup uses THAT name — the container-side Env (TS_AUTHKEY)
+	// is only the QUADLET TARGET, not the host-side source. Without this
+	// split, multi-tailnet operators couldn't store per-tailnet keys in
+	// `.secrets` (a single TS_AUTHKEY var means a single tailnet).
+	envLookup := s.Env
+	if s.HostEnv != "" {
+		envLookup = s.HostEnv
+	}
+	if envLookup != "" {
+		val, src := ResolveCredential(envLookup, credServiceForSecret(s.Env), credKeyForSecret(imageName, instance), "")
 		if val != "" {
 			return val, src
 		}

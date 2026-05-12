@@ -54,25 +54,34 @@ func filterOwnProvides[T Named](entries []T, imageName string) []T {
 	return result
 }
 
-// podAwareEnvProvides resolves env entries for a specific consumer image.
-// Same-image entries get container hostname rewritten to localhost (pod: co-located services).
-// Cross-image entries keep their container hostname URLs.
-// If both local and remote share a name, local wins.
-func podAwareEnvProvides(entries []EnvProvidesEntry, imageName, ctrName string) []EnvProvidesEntry {
+// podAwareEnvProvides resolves env entries for a specific consumer deploy.
+// Same-deploy entries (source == consumerKey EXACTLY) get container hostname
+// rewritten to localhost (pod: co-located services). Different-deploy entries
+// keep their container hostname URLs. If both local and remote share a name,
+// local wins.
+//
+// `consumerKey` is the deploy.yml map key — base image name (e.g. "versa") or
+// image-with-instance (e.g. "versa/ecovoyage"). Using prefix-match here is a
+// bug: `isSameBaseImage("versa/ecovoyage", "versa")` returns true (deletion
+// semantics), which would let another instance's env_provides leak into the
+// base consumer's runtime env and trigger a second-order failure when
+// strings.ReplaceAll("ov-versa-ecovoyage", "ov-versa", "localhost") produces
+// the malformed hostname "localhost-ecovoyage". Exact match is correct.
+func podAwareEnvProvides(entries []EnvProvidesEntry, consumerKey, ctrName string) []EnvProvidesEntry {
 	var result []EnvProvidesEntry
 	seen := map[string]bool{} // name → true if local entry added
-	// First pass: add same-image entries with localhost
+	// First pass: same-deploy entries with localhost rewrite
 	for _, e := range entries {
-		if isSameBaseImage(e.Source, imageName) {
+		if e.Source == consumerKey {
 			local := e
 			local.Value = strings.ReplaceAll(e.Value, ctrName, "localhost")
 			result = append(result, local)
 			seen[e.Name] = true
 		}
 	}
-	// Second pass: add cross-image entries (skip if local exists with same name)
+	// Second pass: cross-deploy entries (skip if local exists with same name)
 	for _, e := range entries {
-		if e.Source != imageName && !seen[e.Name] {
+		if e.Source != consumerKey && !seen[e.Name] {
 			result = append(result, e)
 		}
 	}
@@ -109,25 +118,26 @@ func removeByExactSource[T Named](entries []T, source string) ([]T, bool) {
 	return result, removed
 }
 
-// podAwareMCPProvides resolves MCP entries for a specific consumer image.
-// Same-image entries get localhost URLs (pod: co-located services).
-// Cross-image entries keep their container hostname URLs.
-// If both local and remote share a name, local wins.
-func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) []MCPProvidesEntry {
+// podAwareMCPProvides resolves MCP entries for a specific consumer deploy.
+// Same-deploy entries (source == consumerKey EXACTLY) get localhost URLs.
+// Different-deploy entries keep their container hostname URLs. If both
+// local and remote share a name, local wins. See podAwareEnvProvides for
+// the rationale on exact-match vs prefix-match.
+func podAwareMCPProvides(entries []MCPProvidesEntry, consumerKey, ctrName string) []MCPProvidesEntry {
 	var result []MCPProvidesEntry
 	seen := map[string]bool{} // name → true if local entry added
-	// First pass: add same-image entries with localhost
+	// First pass: same-deploy entries with localhost rewrite
 	for _, e := range entries {
-		if isSameBaseImage(e.Source, imageName) {
+		if e.Source == consumerKey {
 			local := e
 			local.URL = strings.ReplaceAll(e.URL, ctrName, "localhost")
 			result = append(result, local)
 			seen[e.Name] = true
 		}
 	}
-	// Second pass: add cross-image entries (skip if local exists with same name)
+	// Second pass: cross-deploy entries (skip if local exists with same name)
 	for _, e := range entries {
-		if e.Source != imageName && !seen[e.Name] {
+		if e.Source != consumerKey && !seen[e.Name] {
 			result = append(result, e)
 		}
 	}
@@ -148,16 +158,22 @@ func podAwareMCPProvides(entries []MCPProvidesEntry, imageName, ctrName string) 
 //   - Entries are only injected if acceptedEnv[name] is true.
 //   - nil acceptedEnv = no filtering (backward compat for remote images without labels).
 //   - MCP provides (OV_MCP_SERVERS) are always injected (standard discovery mechanism).
-func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string, acceptedEnv map[string]bool) []string {
+//
+// `consumerKey` is the consumer's deploy.yml key — base image name (e.g.
+// "versa") for the default deploy, or image-with-instance (e.g.
+// "versa/ecovoyage") for a named instance. Callers must construct this
+// via `deployKey(image, instance)` so cross-instance provides (e.g. another
+// instance's AIRFLOW_API_INTERNAL_URL) don't leak into THIS consumer's env.
+func (dc *DeployConfig) GlobalEnvForImage(consumerKey, ctrName string, acceptedEnv map[string]bool) []string {
 	if dc == nil || dc.Provides == nil {
 		return nil
 	}
 	var result []string
 
 	// Env provides: pod-aware values, filtered uniformly by consumer env_accepts/env_requires.
-	// No self-injection bypass — same-image entries must be explicitly accepted just like
-	// cross-image entries.
-	for _, entry := range podAwareEnvProvides(dc.Provides.Env, imageName, ctrName) {
+	// No self-injection bypass — same-deploy entries must be explicitly accepted just like
+	// cross-deploy entries.
+	for _, entry := range podAwareEnvProvides(dc.Provides.Env, consumerKey, ctrName) {
 		if acceptedEnv == nil || acceptedEnv[entry.Name] {
 			result = appendOrReplaceEnv(result, entry.Name+"="+entry.Value)
 		}
@@ -165,7 +181,7 @@ func (dc *DeployConfig) GlobalEnvForImage(imageName, ctrName string, acceptedEnv
 
 	// MCP provides: pod-aware (always injected — standard discovery mechanism)
 	if len(dc.Provides.MCP) > 0 {
-		mcpEntries := podAwareMCPProvides(dc.Provides.MCP, imageName, ctrName)
+		mcpEntries := podAwareMCPProvides(dc.Provides.MCP, consumerKey, ctrName)
 		if len(mcpEntries) > 0 {
 			mcpJSON, _ := json.Marshal(mcpEntries)
 			result = append(result, "OV_MCP_SERVERS="+string(mcpJSON))

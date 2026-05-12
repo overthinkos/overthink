@@ -74,6 +74,7 @@ func (c *ShellCmd) Run() error {
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
 		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov shell <image-name>'", c.Image)
 	}
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 
 	var detected DetectedDevices
 	if !c.NoAutoDetect {
@@ -138,7 +139,7 @@ func (c *ShellCmd) Run() error {
 	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 	shellCtrName := containerNameInstance(c.Image, c.Instance)
 	shellAccepted := AcceptedEnvSet(envAccepts, envRequires)
-	shellGlobalEnv := dc.GlobalEnvForImage(c.Image, shellCtrName, shellAccepted)
+	shellGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), shellCtrName, shellAccepted)
 	envVars, err := ResolveEnvVars(shellGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err

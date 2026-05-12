@@ -167,16 +167,27 @@ func (c *UpdateCmd) updatePodDeploy(deployName, imageName string) error {
 
 	// Mode dispatch: quadlet (systemd-user host) vs direct (no systemd).
 	if rt.RunMode == "quadlet" {
-		return c.updatePodDeployQuadlet(deployName, aliasRef)
+		return c.updatePodDeployQuadlet(rt, deployName, aliasRef)
 	}
 	return c.updatePodDeployDirect(runEngine, deployName, aliasRef)
 }
 
 // updatePodDeployQuadlet handles the quadlet (systemd-user) restart
-// path. Surgically rewrites ONLY the quadlet's `Image=` line; no
-// `ov config`, no `ov deploy add` — those would re-run saveDeployState
-// and rewrite user-overlay fields.
-func (c *UpdateCmd) updatePodDeployQuadlet(deployName, newImageRef string) error {
+// path. Rewrites the quadlet's `Image=` line surgically, then refreshes
+// every deployed quadlet's `Environment=` block so env_provides /
+// env_accepts changes baked into the new image's OCI labels (e.g. a
+// newly-declared producer URL or a newly-accepted consumer var) land in
+// the runtime container env on restart.
+//
+// `Environment=` is a DERIVED value — it's the resolved cross-pod
+// service-discovery view at deploy time, NOT operator-authored state.
+// User-overlay state (operator port overrides, env additions, volume
+// bindings, security overrides) lives in `~/.config/ov/deploy.yml` and
+// is read by the quadlet regeneration step, so it is preserved by the
+// refresh. The only thing the refresh loses are CLI `-e` flags passed
+// once at the original `ov config` call — those were never persisted
+// anywhere and would also be lost by a manual `ov config --update-all`.
+func (c *UpdateCmd) updatePodDeployQuadlet(rt *ResolvedRuntime, deployName, newImageRef string) error {
 	qpath, err := quadletPathForDeploy(deployName, c.Instance)
 	if err != nil {
 		return fmt.Errorf("locating quadlet for %s: %w", deployName, err)
@@ -186,10 +197,18 @@ func (c *UpdateCmd) updatePodDeployQuadlet(deployName, newImageRef string) error
 	}
 	fmt.Fprintf(os.Stderr, "Updated %s Image=%s\n", qpath, newImageRef)
 
-	// systemd needs to re-read the unit before restart picks up the
-	// new Image= line.
-	if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
-		return fmt.Errorf("systemctl --user daemon-reload: %w", err)
+	// Refresh every quadlet's Environment= block from current image
+	// labels + deploy.yml provides registry. Picks up env_provides /
+	// env_accepts changes baked into the just-built image. Also runs
+	// systemctl --user daemon-reload internally, so the explicit reload
+	// below is skipped on the success path.
+	if err := updateAllDeployedQuadlets(rt, ""); err != nil {
+		// Non-fatal — fall back to a plain daemon-reload + restart.
+		// updateAllDeployedQuadlets logs the per-deploy failure itself.
+		fmt.Fprintf(os.Stderr, "Warning: env refresh failed: %v\n", err)
+		if reloadErr := exec.Command("systemctl", "--user", "daemon-reload").Run(); reloadErr != nil {
+			return fmt.Errorf("systemctl --user daemon-reload: %w", reloadErr)
+		}
 	}
 
 	svc := serviceNameInstance(deployName, c.Instance)

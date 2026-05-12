@@ -26,6 +26,7 @@ func (c *StartCmd) Run() error {
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
 		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first, then 'ov start <image-name>'", c.Image)
 	}
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 
 	rt, err := ResolveRuntime()
 	if err != nil {
@@ -119,7 +120,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	var deployEnvFile string
 	startCtrName := containerNameInstance(c.Image, c.Instance)
 	startAccepted := AcceptedEnvSet(envAccepts, envRequires)
-	startGlobalEnv := dc.GlobalEnvForImage(c.Image, startCtrName, startAccepted)
+	startGlobalEnv := dc.GlobalEnvForImage(deployKey(c.Image, c.Instance), startCtrName, startAccepted)
 	envVars, err := ResolveEnvVars(startGlobalEnv, deployEnv, deployEnvFile, workspaceBindHost(bindMounts), c.EnvFile, c.Env)
 	if err != nil {
 		return err
@@ -257,6 +258,7 @@ type StopCmd struct {
 }
 
 func (c *StopCmd) Run() error {
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	// Resolve the image name (handle remote refs)
 	imageName := c.Image
 	ref := StripURLScheme(c.Image)

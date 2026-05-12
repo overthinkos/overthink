@@ -16,6 +16,7 @@ type CmdCmd struct {
 }
 
 func (c *CmdCmd) Run() error {
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	engine, name, err := resolveContainer(c.Image, c.Instance)
 	if err != nil {
 		return err

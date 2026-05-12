@@ -46,6 +46,8 @@ layer:
       description: "Public URL for the @versatiles/style style JSON (browser-side)"
     - name: VERSATILES_ASSETS_PUBLIC_URL
       description: "Public URL for the versatiles-frontend asset root (fonts + sprites)"
+    - name: PMTILES_VIEWER_PUBLIC_URL
+      description: "Public URL for the protomaps PMTiles Viewer SPA (browser-side)"
   # marimo runs `--mcp --mcp-allow-remote` (see service exec below), which
   # exposes its editor tools as an MCP HTTP server on the SAME port that
   # serves the notebook UI. Marimo's docs put the endpoint at /mcp/server

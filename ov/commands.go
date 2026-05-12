@@ -18,6 +18,7 @@ type LogsCmd struct {
 }
 
 func (c *LogsCmd) Run() error {
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	rt, err := ResolveRuntime()
 	if err != nil {
 		return err
@@ -109,6 +110,7 @@ func (c *UpdateCmd) Run() error {
 	if IsRemoteImageRef(StripURLScheme(c.Image)) {
 		return fmt.Errorf("remote refs are not accepted here; run 'ov image pull %s' first", c.Image)
 	}
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	return c.dispatchByDeployTarget()
 }
 
@@ -202,6 +204,7 @@ type RemoveCmd struct {
 }
 
 func (c *RemoveCmd) Run() error {
+	c.Image, c.Instance = canonicalizeDeployArg(c.Image, c.Instance)
 	imageName := resolveImageName(c.Image)
 
 	// Stop tunnel before removing container (best-effort)

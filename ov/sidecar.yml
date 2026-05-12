@@ -20,6 +20,20 @@ sidecar:
   tailscale:
     description: Tailscale VPN sidecar for exit node routing with dual networking
     image: ghcr.io/tailscale/tailscale:latest
+    # Multi-tailnet selection (2026-05): every deploy that attaches this
+    # sidecar MUST set `parameter.tailnet` to the target tailnet's
+    # MagicDNS suffix (e.g. "armadillo-quail.ts.net"). The empty-string
+    # sentinel below means "required, must be supplied by deploy" —
+    # ResolveSidecar errors out at `ov config` time with a remediation
+    # hint pointing at `ov migrate tailscale-secrets` if it's missing.
+    #
+    # Each tailnet's auth-key lives in `.secrets` (GPG-encrypted env
+    # file, loaded by direnv) at the env var name resolved by the
+    # `env_from:` template below. Operators store keys via:
+    #   ov secrets gpg set TS_AUTHKEY_<TAILNET-NORMALIZED> tskey-auth-XXXX
+    # See /ov-automation:sidecar "Multi-tailnet auth-key store".
+    parameter:
+      tailnet: ""
     env:
       # State persistence — survives restarts, avoids re-authentication
       TS_STATE_DIR: /var/lib/tailscale
@@ -51,5 +65,17 @@ sidecar:
       devices: ["/dev/net/tun:/dev/net/tun"]
     secret:
       - name: ts-authkey
+        # Container env var — what tailscale's binary reads from its
+        # process env. ALWAYS TS_AUTHKEY (the canonical name the daemon
+        # expects); never templated.
         env: TS_AUTHKEY
-        description: Tailscale auth key or OAuth client secret
+        # HOST-side env var the operator stores the value under in
+        # `.secrets`. Templated against the resolved parameter.tailnet
+        # via the `tailnetEnvSuffix` helper, which uppercases + replaces
+        # every non-alphanumeric char with '_'. Example resolution:
+        #   parameter.tailnet=armadillo-quail.ts.net
+        #   env_from -> TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET
+        # The operator then stores:
+        #   ov secrets gpg set TS_AUTHKEY_ARMADILLO_QUAIL_TS_NET tskey-auth-XXXX
+        env_from: "TS_AUTHKEY_{{.Parameter.tailnet | tailnetEnvSuffix}}"
+        description: Tailscale auth key for the selected tailnet (per-tailnet env var)

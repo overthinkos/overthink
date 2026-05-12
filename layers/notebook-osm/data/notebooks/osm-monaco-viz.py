@@ -18,6 +18,57 @@ def __():
 
 
 @app.cell
+def _resolved_urls(os, pl):
+    # Diagnostic cell — displays the URLs this notebook is ACTUALLY using
+    # for each external service. Two URL spaces are bridged here:
+    #
+    #   - kernel-side (Python `requests` calls from inside the pod) →
+    #     uses `localhost` or the container hostname depending on
+    #     topology. AIRFLOW_API_INTERNAL_URL falls in this category.
+    #
+    #   - browser-side (URLs embedded in folium / MapLibre HTML the user
+    #     loads in their browser on the host) → uses 127.0.0.1:<host-
+    #     port> because the browser can't reach pod-internal hostnames.
+    #     MARTIN_PUBLIC_URL, AIRFLOW_PUBLIC_URL, VERSATILES_* are all
+    #     browser-side.
+    #
+    # When `port: [auto]` is set in deploy.yml, the host ports below
+    # rotate on each `ov update` — this cell is the easiest way to
+    # discover the current allocations without inspecting deploy.yml.
+    _entries = [
+        ("Airflow DAGs folder",                  "AIRFLOW_DAGS_DIR",            "/workspace/dags",                  "kernel"),
+        ("Airflow REST API (kernel-side)",       "AIRFLOW_API_INTERNAL_URL",    "http://localhost:8080",            "kernel"),
+        ("Airflow UI (browser-side)",            "AIRFLOW_PUBLIC_URL",          "http://127.0.0.1:28080",           "browser"),
+        ("Martin tile server (browser-side)",    "MARTIN_PUBLIC_URL",           "http://127.0.0.1:23000",           "browser"),
+        ("Versatiles serve (browser-side)",      "VERSATILES_PUBLIC_URL",       "http://127.0.0.1:28090",           "browser"),
+        ("Versatiles style bundle (browser)",    "VERSATILES_STYLE_PUBLIC_URL", "http://127.0.0.1:28002/style",     "browser"),
+        ("Versatiles assets root (browser)",     "VERSATILES_ASSETS_PUBLIC_URL","http://127.0.0.1:28002",           "browser"),
+    ]
+    _resolved = {e[1]: os.environ.get(e[1], e[2]) for e in _entries}
+    urls = pl.DataFrame({
+        "purpose":   [e[0] for e in _entries],
+        "env_var":   [e[1] for e in _entries],
+        "value":     [_resolved[e[1]] for e in _entries],
+        "side":      [e[3] for e in _entries],
+        "is_default":[os.environ.get(e[1]) is None for e in _entries],
+    })
+    urls
+    # Export each resolved value so downstream map cells can consume them
+    # as parameters instead of re-reading os.environ.get() per cell. This
+    # is the marimo-idiomatic "single source of truth" pattern (R3).
+    martin                = _resolved["MARTIN_PUBLIC_URL"]
+    airflow_api_internal  = _resolved["AIRFLOW_API_INTERNAL_URL"]
+    airflow_public        = _resolved["AIRFLOW_PUBLIC_URL"]
+    airflow_dags_dir      = _resolved["AIRFLOW_DAGS_DIR"]
+    versatiles_public     = _resolved["VERSATILES_PUBLIC_URL"]
+    versatiles_style      = _resolved["VERSATILES_STYLE_PUBLIC_URL"]
+    versatiles_assets     = _resolved["VERSATILES_ASSETS_PUBLIC_URL"]
+    return (urls, martin, airflow_api_internal, airflow_public,
+            airflow_dags_dir, versatiles_public, versatiles_style,
+            versatiles_assets)
+
+
+@app.cell
 def __(mo):
     mo.md(
         r"""
@@ -1292,7 +1343,7 @@ def __(pl):
 
 
 @app.cell
-def __(mo, os):
+def __(martin, mo):
     # Class C — lazy client-side fetch via MapLibre GL JS pointed at
     # martin's vector tiles. Why MapLibre, not folium?
     #   - tippecanoe → pmtiles → martin produces VECTOR tiles
@@ -1305,13 +1356,10 @@ def __(mo, os):
     #     it parses the TileJSON at /monaco, fetches tiles, and
     #     renders them client-side per the style spec below.
     #
-    # The MARTIN_PUBLIC_URL env var must be set to the host-visible
-    # martin URL (e.g. http://127.0.0.1:23000). MapLibre runs in the
-    # USER'S browser, so all URLs in the embedded HTML must be
-    # browser-reachable (NOT container-internal localhost:3000).
-    # Martin reflects the marimo Origin in its CORS headers, so the
-    # cross-port (22718 → 23000) XHR works without proxy tricks.
-    martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
+    # MARTIN_PUBLIC_URL is consumed via the `martin` cell parameter
+    # — the diagnostic cell at the top of the notebook reads
+    # os.environ.get("MARTIN_PUBLIC_URL", default) once and exports
+    # the resolved value. Single source of truth (R3).
     # Terrain + hillshade DEM source: tiles.mapterhorn.com is the
     # canonical free terrarium-encoded raster-dem provider used by
     # MapLibre's own examples. CORS-permissive (Access-Control-
@@ -1430,44 +1478,41 @@ map_{layer_prefix}.addControl(new maplibregl.NavigationControl({{ showZoom: true
 
 
 @app.cell
-def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+def __(build_pipeline_maplibre_html, dag_run_states, martin, mo):
     # Pipeline 2 — gpq-tiles direct GeoParquet → PMTiles. Renders the
     # sibling source `monaco-gpqtiles` that martin auto-discovers after
     # the gpqtiles DAG writes /workspace/tiles/pmtiles/monaco-gpqtiles.pmtiles.
     # Same vector-tile contract as the streets map above; styling is
     # deliberately neutral so visual differences = engine differences.
     assert dag_run_states["notebook_osm_gpqtiles_pipeline"] == "success"
-    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
     mo.iframe(
-        build_pipeline_maplibre_html(_martin, "monaco-gpqtiles"),
+        build_pipeline_maplibre_html(martin, "monaco-gpqtiles"),
         height="400px",
     )
 
 
 @app.cell
-def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+def __(build_pipeline_maplibre_html, dag_run_states, martin, mo):
     # Pipeline 3 — DuckDB ST_AsMVT + pmtiles.Writer (hand-rolled per-tile
     # encoding in Python). Renders the sibling source `monaco-duckdb-mvt`
     # that martin auto-discovers after the DuckDB-MVT DAG completes.
     assert dag_run_states["notebook_osm_duckdb_mvt_pipeline"] == "success"
-    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
     mo.iframe(
-        build_pipeline_maplibre_html(_martin, "monaco-duckdb-mvt"),
+        build_pipeline_maplibre_html(martin, "monaco-duckdb-mvt"),
         height="400px",
     )
 
 
 @app.cell
-def __(build_pipeline_maplibre_html, dag_run_states, mo, os):
+def __(build_pipeline_maplibre_html, dag_run_states, martin, mo):
     # Pipeline 4 — DuckDB → freestiler (Rust tiling engine takes the same
     # DuckDB SQL the AsMVT pipeline uses and produces a PMTiles archive
     # in one library call). Renders the sibling source
     # `monaco-duckdb-freestiler`. Compare side-by-side with the AsMVT
     # rendering above: same input, different engine.
     assert dag_run_states["notebook_osm_duckdb_freestiler_pipeline"] == "success"
-    _martin = os.environ.get("MARTIN_PUBLIC_URL", "http://127.0.0.1:23000")
     mo.iframe(
-        build_pipeline_maplibre_html(_martin, "monaco-duckdb-freestiler"),
+        build_pipeline_maplibre_html(martin, "monaco-duckdb-freestiler"),
         height="400px",
     )
 

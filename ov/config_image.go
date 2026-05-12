@@ -148,6 +148,39 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	if err := c.persistResourceCaps(&dc); err != nil {
 		return fmt.Errorf("persisting resource caps: %w", err)
 	}
+
+	// Pre-expand "auto" port sentinels BEFORE MergeDeployOntoMetadata so
+	// that the merge sees a concrete list. ExpandAutoPorts walks the
+	// deploy entry's Port list; for each "auto" entry, it allocates one
+	// free host TCP port per image-declared container port (from meta.Ports
+	// AS LOADED FROM LABELS — before overlay merge). The expansion is
+	// persisted as ResolvedPort so subsequent ov start / ov logs / ov
+	// status see the same allocation. Re-allocation happens on the next
+	// ov config / ov update where Port still contains "auto".
+	if dc != nil {
+		key := deployKey(c.Image, c.Instance)
+		overlay, hasOverlay := dc.Deploy[key]
+		if hasOverlay && HasAutoPort(overlay.Port) {
+			containerPorts, cpErr := containerPortsFromMappings(meta.Ports)
+			if cpErr != nil {
+				return fmt.Errorf("resolving container ports for auto expansion: %w", cpErr)
+			}
+			expanded, did, expErr := ExpandAutoPorts(overlay.Port, containerPorts, dc.OccupiedHostPorts(key))
+			if expErr != nil {
+				return fmt.Errorf("expanding auto port sentinels: %w", expErr)
+			}
+			if did {
+				overlay.ResolvedPort = expanded
+				dc.Deploy[key] = overlay
+				if saveErr := SaveDeployConfig(dc); saveErr != nil {
+					return fmt.Errorf("saving resolved_port: %w", saveErr)
+				}
+				fmt.Fprintf(os.Stderr, "Resolved ports for %s: %s\n",
+					key, strings.Join(expanded, ", "))
+			}
+		}
+	}
+
 	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 	uid, gid := meta.UID, meta.GID
@@ -182,15 +215,36 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// Apply instance-specific volume naming
 	volumes = InstanceVolume(volumes, c.Image, c.Instance)
 
+	// Apply CLI --port overrides FIRST so env_provides templates that
+	// reference {{.HostPort N}} see the final host-port mapping, not
+	// the pre-override values. The post-2026-05 reorder put this block
+	// BEFORE injectEnvProvides — previously these overrides applied
+	// AFTER env injection, so {{.HostPort N}} substitutions would
+	// resolve against pre-override ports (silent staleness when an
+	// operator used `ov config -p NEW:CONT`).
+	if len(c.Port) > 0 {
+		var portErr error
+		ports, portErr = ApplyPortOverrides(ports, c.Port)
+		if portErr != nil {
+			return portErr
+		}
+	}
+
+	// Build the {containerPort -> hostPort} lookup table that the
+	// inject functions pass into resolveTemplate for {{.HostPort N}}
+	// substitution. nil-safe — if ports is empty the map is nil and
+	// HostPort templates degrade to the literal container port.
+	portMap := PortMapFromMappings(ports)
+
 	// Inject provides BEFORE env resolution so this image's own provides
 	// (pod case) and other images' provides are available in the quadlet.
 	if meta != nil && len(meta.EnvProvides) > 0 {
-		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides); injErr != nil {
+		if _, injErr := injectEnvProvides(c.Image, c.Instance, meta.EnvProvides, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject env_provides: %v\n", injErr)
 		}
 	}
 	if meta != nil && len(meta.MCPProvides) > 0 {
-		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvides); injErr != nil {
+		if _, injErr := injectMCPProvides(c.Image, c.Instance, meta.MCPProvides, portMap); injErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: could not inject mcp_provides: %v\n", injErr)
 		}
 	}
@@ -266,13 +320,8 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		return netErr
 	}
 
-	// Apply port overrides from --port flags
-	if len(c.Port) > 0 {
-		ports, err = ApplyPortOverrides(ports, c.Port)
-		if err != nil {
-			return err
-		}
-	}
+	// Port overrides already applied above (before env injection so
+	// {{.HostPort N}} templates see the final mapping).
 
 	// Pre-flight port conflict check (warning for config, not hard error)
 	if conflicts := CheckPortAvailability(ports, rt.BindAddress, rt.RunEngine); len(conflicts) > 0 {
@@ -1141,7 +1190,13 @@ func parseVolumeEnv(imageName string) []DeployVolumeConfig {
 
 // injectEnvProvides resolves env_provides templates and stores them in deploy.yml provides.env.
 // Returns true if any env vars were added or changed.
-func injectEnvProvides(imageName, instance string, envProvides map[string]string) (bool, error) {
+//
+// portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
+// to substitute {{.HostPort N}} placeholders against the resolved port
+// mapping list. nil is accepted (HostPort substitutions degrade to the
+// literal container port — only safe for layers that don't actually use
+// the placeholder).
+func injectEnvProvides(imageName, instance string, envProvides map[string]string, portMap map[int]int) (bool, error) {
 	if len(envProvides) == 0 {
 		return false, nil
 	}
@@ -1161,7 +1216,7 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 	keys := sortedStringMapKeys(envProvides)
 	for _, key := range keys {
 		tmpl := envProvides[key]
-		value := resolveTemplate(tmpl, ctrName)
+		value := resolveTemplate(tmpl, ctrName, portMap)
 		source := deployKey(imageName, instance)
 		resolved := EnvProvidesEntry{
 			Name:   key,
@@ -1202,7 +1257,10 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 
 // injectMCPProvides resolves mcp_provides templates and adds them to deploy.yml.
 // Returns true if any servers were added or changed.
-func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) (bool, error) {
+//
+// portMap is a {containerPort -> hostPort} lookup used by resolveTemplate
+// to substitute {{.HostPort N}} placeholders. nil is accepted.
+func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, portMap map[int]int) (bool, error) {
 	if len(mcpProvides) == 0 {
 		return false, nil
 	}
@@ -1231,7 +1289,7 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML) 
 	}
 
 	for _, mcp := range mcpProvides {
-		url := resolveTemplate(mcp.URL, ctrName)
+		url := resolveTemplate(mcp.URL, ctrName, portMap)
 		transport := mcp.Transport
 		if transport == "" {
 			transport = "http"

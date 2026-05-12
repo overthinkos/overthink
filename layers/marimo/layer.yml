@@ -23,6 +23,29 @@ layer:
         - gcc-c++
   port:
     - 2718
+  # The marimo notebook (osm-monaco-viz.py) reads these vars at cell
+  # evaluation time. Same-container provides (martin / airflow / versatiles
+  # / versatiles-frontend live in the same pod as marimo) flow through
+  # the podAwareEnvProvides rewriting in ov/provides.go — host-side URLs
+  # (PUBLIC_URL family) keep their 127.0.0.1:{{.HostPort N}} form because
+  # they're consumed BY THE BROWSER, which lives outside the pod and
+  # only sees the host-port mapping. The INTERNAL_URL (kernel-side Python
+  # requests) resolves to localhost:8080 in the same-pod case.
+  env_accept:
+    - name: MARTIN_PUBLIC_URL
+      description: "Public URL for the martin vector-tile server (browser-side)"
+    - name: AIRFLOW_PUBLIC_URL
+      description: "Public URL for the Airflow webserver UI (browser-side)"
+    - name: AIRFLOW_API_INTERNAL_URL
+      description: "Kernel-side Airflow REST API URL (Python requests from the marimo kernel)"
+    - name: AIRFLOW_DAGS_DIR
+      description: "Filesystem path the notebook drops self-authored DAG files into"
+    - name: VERSATILES_PUBLIC_URL
+      description: "Public URL for versatiles serve (browser-side; shortbread tile fetches)"
+    - name: VERSATILES_STYLE_PUBLIC_URL
+      description: "Public URL for the @versatiles/style style JSON (browser-side)"
+    - name: VERSATILES_ASSETS_PUBLIC_URL
+      description: "Public URL for the versatiles-frontend asset root (fonts + sprites)"
   # marimo runs `--mcp --mcp-allow-remote` (see service exec below), which
   # exposes its editor tools as an MCP HTTP server on the SAME port that
   # serves the notebook UI. Marimo's docs put the endpoint at /mcp/server

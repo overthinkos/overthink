@@ -1800,10 +1800,12 @@ func validateEnvProvides(layers map[string]*Layer, errs *ValidationError) {
 				continue
 			}
 
-			// Check for valid template variables (only {{.ContainerName}} is allowed)
-			stripped := strings.ReplaceAll(tmpl, "{{.ContainerName}}", "")
-			if strings.Contains(stripped, "{{") || strings.Contains(stripped, "}}") {
-				errs.Add("layer %s: env_provides[%s] contains unknown template variable (only {{.ContainerName}} is supported): %s", name, key, tmpl)
+			// Check for valid template variables. Allowed: {{.ContainerName}},
+			// {{.HostPort <N>}}, {{.ContainerPort <N>}} (where N is a numeric
+			// container port). Routes through validateProvidesTemplate so this
+			// validator and the runtime resolver agree on the allowlist.
+			if !validateProvidesTemplate(tmpl) {
+				errs.Add("layer %s: env_provides[%s] contains unknown or malformed template variable (allowed: {{.ContainerName}}, {{.HostPort N}}, {{.ContainerPort N}}): %s", name, key, tmpl)
 			}
 
 			// Note: env_provides key may intentionally overlap with env key in the same layer.
@@ -1936,9 +1938,10 @@ func validateMCPProvides(layers map[string]*Layer, errs *ValidationError) {
 				continue
 			}
 
-			// Check for valid template variables (only {{.ContainerName}} is allowed)
+			// Check for valid template variables. Allowed: {{.ContainerName}},
+			// {{.HostPort <N>}}, {{.ContainerPort <N>}}.
 			if !validateProvidesTemplate(mcp.URL) {
-				errs.Add("layer %s: mcp_provides[%s] url contains unknown template variable (only {{.ContainerName}} is supported): %s", name, mcp.Name, mcp.URL)
+				errs.Add("layer %s: mcp_provides[%s] url contains unknown or malformed template variable (allowed: {{.ContainerName}}, {{.HostPort N}}, {{.ContainerPort N}}): %s", name, mcp.Name, mcp.URL)
 			}
 
 			// Validate transport if specified

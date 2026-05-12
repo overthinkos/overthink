@@ -296,3 +296,139 @@ func SavePortOverride(image, instance string, ports []string) error {
 
 	return SaveDeployConfig(dc)
 }
+
+// containerPortsFromMappings extracts the container-side port number from
+// each mapping. "auto" sentinels are skipped (they have no container port
+// to extract — they ARE the request to allocate one). Unparseable entries
+// are silently dropped (the loud-skip warning lives in CheckPortAvailability).
+func containerPortsFromMappings(mappings []string) ([]int, error) {
+	if len(mappings) == 0 {
+		return nil, nil
+	}
+	result := make([]int, 0, len(mappings))
+	for _, m := range mappings {
+		if IsAutoPort(m) {
+			continue
+		}
+		cp, err := ParseContainerPort(m)
+		if err != nil {
+			continue
+		}
+		result = append(result, cp)
+	}
+	return result, nil
+}
+
+// IsAutoPort reports whether a port-list entry is the literal "auto" sentinel.
+// Authors write `port: [auto]` (or `port: [auto, "29999:19999"]` to mix
+// auto-allocation with explicit pins) in deploy.yml.
+func IsAutoPort(mapping string) bool {
+	return strings.TrimSpace(mapping) == "auto"
+}
+
+// HasAutoPort reports whether any entry in the list is the auto sentinel.
+func HasAutoPort(ports []string) bool {
+	for _, p := range ports {
+		if IsAutoPort(p) {
+			return true
+		}
+	}
+	return false
+}
+
+// AllocateAutoPorts probes free TCP host ports — one per container port,
+// in declaration order. The `occupied` set names host ports already in
+// use by other deployments (so two `port: [auto]` deploys on the same
+// host don't collide). Returned mappings have BindAddr="" (default host
+// bind) and Protocol="tcp". Each successful allocation is recorded back
+// into `occupied` so subsequent calls in the same DeployConfig pass see
+// the reservation.
+//
+// Free-port discovery uses the same net.Listen("tcp","127.0.0.1:0") +
+// immediate-close pattern already used by ssh_tunnel.go:78 and
+// vnc_vm.go:163 — the OS picks an ephemeral port, we close, and the
+// caller binds in the (small) window before the OS reassigns.
+func AllocateAutoPorts(containerPorts []int, occupied map[int]bool) ([]ParsedPortMapping, error) {
+	if len(containerPorts) == 0 {
+		return nil, nil
+	}
+	if occupied == nil {
+		occupied = map[int]bool{}
+	}
+	result := make([]ParsedPortMapping, 0, len(containerPorts))
+	for _, cp := range containerPorts {
+		if cp <= 0 || cp > 65535 {
+			return nil, fmt.Errorf("AllocateAutoPorts: invalid container port %d", cp)
+		}
+		var host int
+		for attempt := 0; attempt < 32; attempt++ {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				return nil, fmt.Errorf("AllocateAutoPorts: probe failed for container port %d: %w", cp, err)
+			}
+			candidate := ln.Addr().(*net.TCPAddr).Port
+			_ = ln.Close()
+			if !occupied[candidate] {
+				host = candidate
+				break
+			}
+		}
+		if host == 0 {
+			return nil, fmt.Errorf("AllocateAutoPorts: exhausted 32 attempts for container port %d", cp)
+		}
+		occupied[host] = true
+		result = append(result, ParsedPortMapping{Host: host, Container: cp})
+	}
+	return result, nil
+}
+
+// ExpandAutoPorts replaces every "auto" sentinel in the list with concrete
+// `host:container` pairs allocated from containerPorts (one allocation per
+// container port, in declaration order). Explicit mappings pass through
+// unchanged AND their host ports are added to the occupied set so the
+// allocator avoids collisions.
+//
+// Multiple "auto" sentinels in one list collapse to a single expansion at
+// the first sentinel's position (so `port: [auto, auto]` is treated the
+// same as `port: [auto]`).
+//
+// Returns the expanded list and a flag indicating whether expansion
+// happened (caller can persist the result back to deploy.yml as
+// `resolved_port:`).
+func ExpandAutoPorts(ports []string, containerPorts []int, occupied map[int]bool) ([]string, bool, error) {
+	if !HasAutoPort(ports) {
+		return ports, false, nil
+	}
+	if occupied == nil {
+		occupied = map[int]bool{}
+	}
+	// Reserve explicit host ports first so auto-allocation can't collide.
+	for _, p := range ports {
+		if IsAutoPort(p) {
+			continue
+		}
+		if h, err := ParseHostPort(p); err == nil {
+			occupied[h] = true
+		}
+	}
+	allocs, err := AllocateAutoPorts(containerPorts, occupied)
+	if err != nil {
+		return nil, false, err
+	}
+	result := make([]string, 0, len(ports)+len(allocs))
+	consumed := false
+	for _, p := range ports {
+		if IsAutoPort(p) {
+			if consumed {
+				continue
+			}
+			for _, a := range allocs {
+				result = append(result, FormatPortMapping(a))
+			}
+			consumed = true
+			continue
+		}
+		result = append(result, p)
+	}
+	return result, true, nil
+}

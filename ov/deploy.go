@@ -57,6 +57,13 @@ type DeploymentNode struct {
 	AcmeEmail       string                `yaml:"acme_email,omitempty"`
 	Volume          []DeployVolumeConfig  `yaml:"volume,omitempty"`
 	Port            []string              `yaml:"port,omitempty"`
+	// ResolvedPort is the concrete host:container expansion of an "auto"
+	// sentinel in Port. Persisted by ov config / ov update — read by
+	// MergeDeployOntoMetadata in preference to Port when present, so
+	// ov start / ov logs / ov status see the same allocations between
+	// rebuilds. Re-allocation happens on the next ov config / ov update
+	// where Port still contains "auto" (operator-acknowledged churn).
+	ResolvedPort    []string              `yaml:"resolved_port,omitempty"`
 	Env             []string              `yaml:"env,omitempty"`
 	EnvFile         string                `yaml:"env_file,omitempty"`
 	Security        *SecurityConfig       `yaml:"security,omitempty"`
@@ -1082,6 +1089,38 @@ func MergeDeployOverlay(cfg *Config, dc *DeployConfig) {
 
 // MergeDeployOntoMetadata applies deploy.yml overrides onto label-derived metadata.
 // Same field-level replace semantics as MergeDeployOverlay.
+// OccupiedHostPorts returns the set of host ports already published by
+// any deployment in dc except the named one (`excludeKey` is typically
+// the deploy key for the entry currently being expanded — we want to
+// allow it to keep its old allocations, not avoid them). Used by
+// ExpandAutoPorts to keep auto-allocations from colliding across deploys.
+func (dc *DeployConfig) OccupiedHostPorts(excludeKey string) map[int]bool {
+	out := map[int]bool{}
+	if dc == nil {
+		return out
+	}
+	for key, entry := range dc.Deploy {
+		if key == excludeKey {
+			continue
+		}
+		// Prefer ResolvedPort over Port (Port may still contain "auto"
+		// in another entry that hasn't been expanded yet).
+		mappings := entry.ResolvedPort
+		if mappings == nil {
+			mappings = entry.Port
+		}
+		for _, m := range mappings {
+			if IsAutoPort(m) {
+				continue
+			}
+			if h, err := ParseHostPort(m); err == nil {
+				out[h] = true
+			}
+		}
+	}
+	return out
+}
+
 func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance string) {
 	if dc == nil || dc.Deploy == nil || meta == nil {
 		return
@@ -1105,7 +1144,16 @@ func MergeDeployOntoMetadata(meta *ImageMetadata, dc *DeployConfig, instance str
 	if overlay.AcmeEmail != "" {
 		meta.AcmeEmail = overlay.AcmeEmail
 	}
-	if overlay.Port != nil {
+	// Port override semantics: prefer ResolvedPort (the persisted
+	// expansion of an "auto" sentinel) over Port. If neither is set,
+	// meta.Ports keeps its image-label value. If Port is set but still
+	// contains "auto", the expansion didn't happen yet — ov config /
+	// ov update is responsible for running ExpandAutoPorts and writing
+	// ResolvedPort BEFORE this merge runs.
+	switch {
+	case overlay.ResolvedPort != nil:
+		meta.Ports = overlay.ResolvedPort
+	case overlay.Port != nil && !HasAutoPort(overlay.Port):
 		meta.Ports = overlay.Port
 	}
 	if overlay.Env != nil {

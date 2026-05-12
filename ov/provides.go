@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 )
 
@@ -187,13 +188,128 @@ func AcceptedEnvSet(accepts, requires []EnvDependency) map[string]bool {
 	return m
 }
 
-// resolveTemplate replaces {{.ContainerName}} in a string.
-func resolveTemplate(tmpl, containerName string) string {
-	return strings.ReplaceAll(tmpl, "{{.ContainerName}}", containerName)
+// resolveTemplate replaces template placeholders in a string:
+//
+//	{{.ContainerName}}        -> containerName
+//	{{.ContainerPort <N>}}    -> <N> (literal — kept for symmetry/readability)
+//	{{.HostPort <N>}}         -> host port mapped to container port <N>
+//	                             (looked up in portMap; falls back to <N>
+//	                             if not found — caller should validate the
+//	                             port is actually published before relying
+//	                             on the substitution)
+//
+// portMap is a {containerPort -> hostPort} table built from the resolved
+// port mapping list at env-injection time. nil portMap is accepted (every
+// {{.HostPort N}} degrades to the literal container port — useful for
+// validation-time substitution before runtime data is available).
+func resolveTemplate(tmpl, containerName string, portMap map[int]int) string {
+	out := strings.ReplaceAll(tmpl, "{{.ContainerName}}", containerName)
+	out = substPortTemplate(out, "{{.ContainerPort ", "}}", func(n int) string {
+		return strconv.Itoa(n)
+	})
+	out = substPortTemplate(out, "{{.HostPort ", "}}", func(n int) string {
+		if portMap != nil {
+			if h, ok := portMap[n]; ok {
+				return strconv.Itoa(h)
+			}
+		}
+		return strconv.Itoa(n)
+	})
+	return out
 }
 
-// validateProvidesTemplate checks that only {{.ContainerName}} is used.
+// substPortTemplate walks the input, finds every `<prefix><N><suffix>`
+// occurrence where N is a numeric argument, and replaces with mapFn(N).
+// Unterminated or non-numeric placeholders pass through verbatim — the
+// validator (validateProvidesTemplate) rejects them at config time.
+func substPortTemplate(s, prefix, suffix string, mapFn func(int) string) string {
+	var out strings.Builder
+	for {
+		i := strings.Index(s, prefix)
+		if i < 0 {
+			out.WriteString(s)
+			return out.String()
+		}
+		out.WriteString(s[:i])
+		rest := s[i+len(prefix):]
+		j := strings.Index(rest, suffix)
+		if j < 0 {
+			// unterminated — pass through verbatim
+			out.WriteString(prefix)
+			s = rest
+			continue
+		}
+		arg := strings.TrimSpace(rest[:j])
+		if n, err := strconv.Atoi(arg); err == nil {
+			out.WriteString(mapFn(n))
+		} else {
+			out.WriteString(prefix)
+			out.WriteString(rest[:j])
+			out.WriteString(suffix)
+		}
+		s = rest[j+len(suffix):]
+	}
+}
+
+// validateProvidesTemplate checks that only known placeholders are present.
+// Allowed:
+//
+//	{{.ContainerName}}
+//	{{.ContainerPort <N>}}   N must parse as a positive integer
+//	{{.HostPort <N>}}        N must parse as a positive integer
 func validateProvidesTemplate(tmpl string) bool {
 	stripped := strings.ReplaceAll(tmpl, "{{.ContainerName}}", "")
+	stripped = stripPortTemplate(stripped, "{{.ContainerPort ", "}}")
+	stripped = stripPortTemplate(stripped, "{{.HostPort ", "}}")
 	return !strings.Contains(stripped, "{{") && !strings.Contains(stripped, "}}")
+}
+
+// stripPortTemplate removes every well-formed `<prefix><N><suffix>`
+// occurrence where N is a numeric argument. Unterminated or non-numeric
+// placeholders are LEFT IN — the outer validator's `{{`/`}}` substring
+// check then catches them as invalid.
+func stripPortTemplate(s, prefix, suffix string) string {
+	var out strings.Builder
+	for {
+		i := strings.Index(s, prefix)
+		if i < 0 {
+			out.WriteString(s)
+			return out.String()
+		}
+		out.WriteString(s[:i])
+		rest := s[i+len(prefix):]
+		j := strings.Index(rest, suffix)
+		if j < 0 {
+			out.WriteString(prefix)
+			s = rest
+			continue
+		}
+		arg := strings.TrimSpace(rest[:j])
+		if _, err := strconv.Atoi(arg); err != nil {
+			// non-numeric — leave verbatim so the outer check catches it
+			out.WriteString(prefix)
+			out.WriteString(rest[:j])
+			out.WriteString(suffix)
+		}
+		// numeric N — drop the whole placeholder
+		s = rest[j+len(suffix):]
+	}
+}
+
+// PortMapFromMappings builds a {containerPort -> hostPort} lookup table
+// from the resolved port mapping list. Mappings that don't parse are
+// silently skipped (the loud-skip warning lives in CheckPortAvailability).
+func PortMapFromMappings(mappings []string) map[int]int {
+	if len(mappings) == 0 {
+		return nil
+	}
+	m := make(map[int]int, len(mappings))
+	for _, mapping := range mappings {
+		p, ok := ParsePortMapping(mapping)
+		if !ok {
+			continue
+		}
+		m[p.Container] = p.Host
+	}
+	return m
 }

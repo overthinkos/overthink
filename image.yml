@@ -679,6 +679,94 @@ image:
             - 8001:8001         # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
             - 8002:8002         # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
             - 8090:8090         # versatiles serve HTTP (deploy.yml overrides host port to 28090)
+        # Image-level deploy-scope eval probes — run AFTER every layer's
+        # eval block on `ov eval live versa`. The first probe is the
+        # end-to-end driver: it triggers all 6 self-authored DAGs via
+        # `marimo export ipynb`, waits for each to reach success, and
+        # renders all cells server-side. Every subsequent probe verifies
+        # a post-DAG artifact or per-tile-source endpoint.
+        deploy_eval:
+            # End-to-end: render the notebook (triggers all 6 DAGs).
+            - id: versa-notebook-export
+              scope: deploy
+              command: |
+                  ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+                    /workspace/notebooks/osm-monaco-viz.py \
+                    --include-outputs --sort topological \
+                    -o /tmp/notebook-run.ipynb -f
+              in_container: true
+              exit_status: 0
+              timeout: 600s
+            - id: versa-notebook-size
+              scope: deploy
+              command: wc -c < /tmp/notebook-run.ipynb
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{5,}"   # >=100KB rendered ipynb (no anchors per /ov-eval:eval gotcha #6)
+            # Per-tile-source martin TileJSON reachability (4 sources).
+            - id: versa-martin-monaco
+              scope: deploy
+              http: "http://127.0.0.1:${HOST_PORT:3000}/monaco"
+              status: 200
+              body:
+                  - contains: "tilejson"
+                  - contains: "vector_layers"
+            - id: versa-martin-monaco-gpqtiles
+              scope: deploy
+              http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-gpqtiles"
+              status: 200
+              body:
+                  - contains: "tilejson"
+            - id: versa-martin-monaco-duckdb-mvt
+              scope: deploy
+              http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-mvt"
+              status: 200
+              body:
+                  - contains: "tilejson"
+            - id: versa-martin-monaco-duckdb-freestiler
+              scope: deploy
+              http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-freestiler"
+              status: 200
+              body:
+                  - contains: "tilejson"
+            # Versatiles serve shortbread tile — zoom 0/0/0 exists in every
+            # tilemaker output, including Monaco at low zoom. Probe at zoom 0
+            # rather than 14 (zoom-14 tiles only exist where data actually
+            # falls; Monaco's bounds may not cover a specific 14/8521/5963
+            # cell after a fresh tilemaker run).
+            - id: versa-versatiles-shortbread-tile
+              scope: deploy
+              command: |
+                  curl -fsSI "http://127.0.0.1:${HOST_PORT:8090}/tiles/monaco-shortbread/0/0/0.pbf" \
+                    | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); print $2}'
+              in_container: false
+              stdout:
+                  - matches: "[1-9][0-9]+"   # any positive byte count (PBF non-empty)
+            # DAG output artifact size probes (post-DAG existence + size).
+            # No regex anchors — `wc -c` output ends with \n and Go's `$`
+            # doesn't match before newline (see /ov-eval:eval gotcha #6).
+            # Thresholds match the actual post-DAG sizes the skill records
+            # (~824 KB parquet, ~616 KB pmtiles after the post-2026-05
+            # tippecanoe-config change, ~770 KB gtfs.zip) — all comfortably
+            # above 100 KB which the [1-9][0-9]{5,} substring asserts.
+            - id: versa-artifact-parquet
+              scope: deploy
+              command: wc -c < /workspace/tiles/work/monaco.parquet
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+            - id: versa-artifact-pmtiles
+              scope: deploy
+              command: wc -c < /workspace/tiles/pmtiles/monaco.pmtiles
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+            - id: versa-artifact-gtfs
+              scope: deploy
+              command: wc -c < /workspace/gtfs/raw/monaco.gtfs.zip
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{5,}"   # >=100KB
     nvidia:
         base: fedora-nonfree
         platforms:

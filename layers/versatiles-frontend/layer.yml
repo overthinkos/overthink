@@ -17,6 +17,15 @@ layer:
         - jq
   port:
     - 8002      # versatiles-frontend SPA (host-mapped 28002)
+  # Two browser-side URLs derived from the same container port — the
+  # versatiles-frontend layer re-exports /style/ (the versatiles-style
+  # bundle) and / (raw asset root). The notebook's shortbread map cell
+  # reads both: STYLE_PUBLIC_URL for the MapLibre style JSON, and
+  # ASSETS_PUBLIC_URL as the asset-root prefix for font glyphs and
+  # sprites referenced from the style.
+  env_provides:
+    VERSATILES_STYLE_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8002}}/style"
+    VERSATILES_ASSETS_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8002}}"
   task:
     - mkdir: /opt/versatiles-frontend
       user: root

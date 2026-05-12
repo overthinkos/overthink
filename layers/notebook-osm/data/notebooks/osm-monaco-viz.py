@@ -746,7 +746,7 @@ def __(Path, os, textwrap):
                             nonnull AS (
                                 SELECT g FROM proj WHERE g IS NOT NULL
                             )
-                            SELECT ST_AsMVT({{geom: g}}) AS tile, COUNT(*) AS n FROM nonnull
+                            SELECT ST_AsMVT({{geom: g}}, 'monaco') AS tile, COUNT(*) AS n FROM nonnull
                         """).fetchone()
                         if row and row[1] and row[1] > 0:
                             # pmtiles.Writer.write_tile takes a single
@@ -1668,68 +1668,90 @@ def __(dag_run_states, mo, versatiles_public, versatiles_assets):
 <link href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css" rel="stylesheet"/>
 <script src="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
 <script src="{_assets}/style/versatiles-style.js"></script>
-<script src="{_assets}/styler/maplibre-versatiles-styler.umd.js" defer></script>
+<script src="{_assets}/styler/maplibre-versatiles-styler.umd.cjs" defer></script>
 <style>html,body{{margin:0;padding:0;}}#shortbread-map{{height:500px;width:100%;}}</style>
 </head><body>
 <div id="shortbread-map"></div>
 <script>
-// versatilesStyle is the UMD global exposed by versatiles-style.js.
-// `colorful()` returns a MapLibre style object whose `sources`,
-// `glyphs`, and `sprite` URLs all point at tiles.versatiles.org by
-// default. We re-target each one at our local image-bundled assets
-// so the map renders fully offline-capable.
-const style = window.versatilesStyle.colorful({{ language: 'en' }});
+// Defer map creation via setTimeout(0). Diagnosis trail: MapLibre
+// creates the WebGL canvas but never paints when constructed during
+// HTML parsing — the canvas's toDataURL returns RGBA (0,0,0,0)
+// across every sampled pixel. Trying 'load' + rAF still produced
+// the wrong outcome (the 'load' handler reached `document.readyState
+// === complete` but the URL overrides never appeared on the wire —
+// MapLibre had already started loading defaults). setTimeout(0)
+// schedules into the next macrotask, AFTER the synchronous script
+// finishes but BEFORE any user-perceivable render — and reliably
+// makes the override mutations stick to the colorful() style object
+// before MapLibre reads it.
+setTimeout(() => {{
+  // VersaTilesStyle is the UMD global exposed by versatiles-style.js
+  // (PascalCase, not camelCase, despite the URL path).
+  // `colorful()` returns a MapLibre style object whose `sources`,
+  // `glyphs`, and `sprite` URLs all point at tiles.versatiles.org by
+  // default. We re-target each one at our local image-bundled assets
+  // so the map renders fully offline-capable.
+  const style = window.VersaTilesStyle.colorful({{ language: 'en' }});
 
-// Tile source → local versatiles serve (port 28090).
-if (style.sources && style.sources.versatiles) {{
-  style.sources.versatiles.tiles = [
-    '{_versatiles_url}/tiles/monaco-shortbread/{{z}}/{{x}}/{{y}}',
-  ];
-}}
-// Font glyphs → local versatiles-fonts bundle.
-// MapLibre's standard glyphs URL template uses {{fontstack}}/{{range}}.pbf.
-style.glyphs = '{_assets}/fonts/{{fontstack}}/{{range}}.pbf';
-// Sprites are CDN-hosted by default; drop them rather than 404 the
-// map. The shortbread style has no built-in sprite usage that
-// breaks rendering without sprites — labels + lines render fine.
-delete style.sprite;
+  // Tile source → local versatiles serve.
+  // The colorful() style uses the source key "versatiles-shortbread"
+  // (NOT "versatiles" — the previous check fell through silently and
+  // left the default `/tiles/osm/…` URL, which resolves against the
+  // marimo origin where /tiles/osm doesn't exist, so the map painted
+  // only the background color). Iterate every vector source defensively
+  // in case future colorful() builds rename it again.
+  for (const [key, src] of Object.entries(style.sources)) {{
+    if (src && src.type === 'vector') {{
+      src.tiles = [
+        '{_versatiles_url}/tiles/monaco-shortbread/{{z}}/{{x}}/{{y}}',
+      ];
+      // Drop `url` so MapLibre uses tiles[] directly, not a re-fetch
+      // of the (now-stale) source URL.
+      delete src.url;
+    }}
+  }}
+  // Font glyphs → local versatiles-fonts bundle.
+  // MapLibre's standard glyphs URL template uses {{fontstack}}/{{range}}.pbf.
+  style.glyphs = '{_assets}/fonts/{{fontstack}}/{{range}}.pbf';
+  // Sprites are CDN-hosted by default; drop them rather than 404 the
+  // map. The shortbread style has no built-in sprite usage that
+  // breaks rendering without sprites — labels + lines render fine.
+  delete style.sprite;
 
-const map = new maplibregl.Map({{
-  container: 'shortbread-map',
-  style: style,
-  center: [7.4246, 43.7384],
-  zoom: 14,
-  attributionControl: false,
   // versatiles-fonts ships PascalCase font names (e.g. "Noto Sans
   // Regular") as lowercase+underscore directory names (e.g.
-  // `noto_sans_regular`). MapLibre's default Glyphs request uses the
-  // style's layer-level font names verbatim, which would 404 against
-  // our local /fonts/ tree. Intercept the Glyphs URL and lower-snake
-  // the fontstack segment so the lookup hits the on-disk path.
-  transformRequest: (url, resourceType) => {{
-    if (resourceType === 'Glyphs') {{
-      return {{ url: url.replace(
-        /\\/fonts\\/([^/]+)\\/(\\d+-\\d+\\.pbf)$/,
-        (_, fs, rng) => '/fonts/' + fs.toLowerCase().replace(/ /g, '_') + '/' + rng,
-      ) }};
+  // `noto_sans_regular`). Pre-rewrite every layer's `text-font` to
+  // the on-disk casing instead of using a transformRequest hook —
+  // hooks have shown intermittent failure to fire on initial inline
+  // load. The rewrite walks `style.layers` once before passing to
+  // MapLibre, so the layers reference the directory name directly.
+  for (const layer of style.layers) {{
+    if (layer.layout && layer.layout['text-font']) {{
+      layer.layout['text-font'] = layer.layout['text-font'].map(
+        (f) => f.toLowerCase().replace(/ /g, '_'),
+      );
     }}
-    return {{ url }};
-  }},
-}});
-map.addControl(new maplibregl.NavigationControl({{ showZoom: true, showCompass: true }}), 'top-right');
+  }}
 
-// Add the maplibre-versatiles-styler sidebar control (loaded
-// `defer`'d, so attach after window load completes). The control
-// exposes interactive style switching + recoloring; on the iframe
-// it appears as a collapsible sidebar.
-window.addEventListener('load', () => {{
+  const map = new maplibregl.Map({{
+    container: 'shortbread-map',
+    style: style,
+    center: [7.4246, 43.7384],
+    zoom: 14,
+    attributionControl: false,
+  }});
+  map.addControl(new maplibregl.NavigationControl({{ showZoom: true, showCompass: true }}), 'top-right');
+
+  // Add the maplibre-versatiles-styler sidebar control. The styler
+  // script is loaded with `defer`, so by the time 'load' fires it's
+  // already evaluated and `VersaTilesStylerControl` is on `window`.
   if (window.VersaTilesStylerControl) {{
     map.addControl(new window.VersaTilesStylerControl({{ open: false }}));
   }} else if (window.maplibreVersatilesStyler && window.maplibreVersatilesStyler.default) {{
     // Some bundle layouts attach as `maplibreVersatilesStyler.default`.
     map.addControl(new window.maplibreVersatilesStyler.default({{ open: false }}));
   }}
-}});
+}}, 0);
 </script>
 </body></html>"""
     mo.iframe(_html, height="500px")

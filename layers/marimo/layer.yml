@@ -102,6 +102,29 @@ layer:
     # The full notebook body now lives at
     # layers/notebook-osm/data/notebooks/osm-monaco-viz.py and is seeded
     # via the notebook-osm data-only layer.
+
+    # ---- marimo user config (auto-instantiate on notebook open) ----
+    # Marimo's default `runtime.auto_instantiate` is FALSE — opening a
+    # notebook in edit mode mounts the UI but cells stay STALE until
+    # the user clicks the per-cell run buttons. The 2026-05-12 map
+    # test on sway-browser-vnc/ecovoyage confirmed this: cells = 21,
+    # canvases = 0 indefinitely. Setting it TRUE makes opening the
+    # marimo URL kick off the reactive cascade immediately, which is
+    # what every consumer of this image (notebook authors AND headless
+    # AI agents driving the page) actually expects. Marimo creates an
+    # EMPTY ~/.config/marimo/marimo.toml on first start if the file is
+    # absent — baking a non-empty file here pre-empts that path.
+    - mkdir: "${HOME}/.config/marimo"
+      user: "${USER}"
+    - write: "${HOME}/.config/marimo/marimo.toml"
+      mode: "0644"
+      user: "${USER}"
+      content: |
+        # ov-managed — set by layers/marimo/layer.yml at image-build time.
+        # `auto_instantiate = true` makes the reactive cascade fire on
+        # page open. Don't hand-edit; rebuild the image to change.
+        [runtime]
+        auto_instantiate = true
   eval:
     # Build-scope smoke for the lean ML + curriculum + airflow union.
     # One import line per topic group catches resolver drift at image build,
@@ -128,10 +151,14 @@ layer:
       file: /opt/marimo-skills/skills
       exists: true
       filetype: directory
-    # Build-scope: client-side MCP config landed.
+    # Build-scope: marimo user config landed with auto-instantiate ON.
+    # `contains:` asserts the line that drives the reactive-cascade
+    # behavior (see the write: task above for the rationale).
     - id: marimo-toml-installed
       file: ${HOME}/.config/marimo/marimo.toml
       exists: true
+      contains:
+        - "auto_instantiate = true"
     # NB: sample notebook check moved to layers/notebook-osm/ (data
     # layer pattern). Deploy-scope check there asserts the seeded
     # file at ${VOLUME_CONTAINER_PATH:workspace}/notebooks/osm-monaco-viz.py.

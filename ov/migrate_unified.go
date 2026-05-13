@@ -37,6 +37,18 @@ func MigrateUnified(opts MigrateUnifiedOpts) ([]string, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("project dir is required")
 	}
+
+	// Early-exit: trees that already carry overthink.yml are by definition
+	// in the unified schema (v3 or later). The legacy migration would
+	// otherwise re-read the canonical singular image.yml / deploy.yml as
+	// LEGACY inputs and re-emit them into the deprecated plural form
+	// (image.yml -> images.yml), producing a Frankenstein tree where both
+	// names coexist. This bit downstream tooling that cloned via
+	// EnsureRepoDownloaded.
+	if fileExists(filepath.Join(dir, UnifiedFileName)) {
+		return nil, nil
+	}
+
 	var written []string
 
 	// 1. Read legacy inputs.

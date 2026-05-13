@@ -1265,19 +1265,24 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	if src.Version != 0 && dst.Version == 0 {
 		dst.Version = src.Version
 	}
-	// Discover entries concatenate (not overwrite).
+	// Discover entries concatenate (not overwrite). Resolve relative
+	// paths to absolute against srcDir so an included file's discover
+	// roots remain anchored to the included file's directory rather
+	// than to the eventual root file's directory. Without this, a
+	// downstream workspace that `include:`-s an upstream overthink.yml
+	// would look for upstream's `layers/` inside the workspace tree.
 	if src.Discover != nil {
 		if dst.Discover == nil {
 			dst.Discover = &DiscoverConfig{}
 		}
-		dst.Discover.Layer = append(dst.Discover.Layer, src.Discover.Layer...)
-		dst.Discover.Image = append(dst.Discover.Image, src.Discover.Image...)
-		dst.Discover.Deploy = append(dst.Discover.Deploy, src.Discover.Deploy...)
-		dst.Discover.Builder = append(dst.Discover.Builder, src.Discover.Builder...)
-		dst.Discover.Distro = append(dst.Discover.Distro, src.Discover.Distro...)
-		dst.Discover.Init = append(dst.Discover.Init, src.Discover.Init...)
-		dst.Discover.VM = append(dst.Discover.VM, src.Discover.VM...)
-		dst.Discover.Cluster = append(dst.Discover.Cluster, src.Discover.Cluster...)
+		dst.Discover.Layer = append(dst.Discover.Layer, anchorScanSpecs(src.Discover.Layer, srcDir)...)
+		dst.Discover.Image = append(dst.Discover.Image, anchorScanSpecs(src.Discover.Image, srcDir)...)
+		dst.Discover.Deploy = append(dst.Discover.Deploy, anchorScanSpecs(src.Discover.Deploy, srcDir)...)
+		dst.Discover.Builder = append(dst.Discover.Builder, anchorScanSpecs(src.Discover.Builder, srcDir)...)
+		dst.Discover.Distro = append(dst.Discover.Distro, anchorScanSpecs(src.Discover.Distro, srcDir)...)
+		dst.Discover.Init = append(dst.Discover.Init, anchorScanSpecs(src.Discover.Init, srcDir)...)
+		dst.Discover.VM = append(dst.Discover.VM, anchorScanSpecs(src.Discover.VM, srcDir)...)
+		dst.Discover.Cluster = append(dst.Discover.Cluster, anchorScanSpecs(src.Discover.Cluster, srcDir)...)
 	}
 	mergeDistroMap(&dst.Distro, src.Distro)
 	mergeBuilderMap(&dst.Builder, src.Builder)
@@ -1300,7 +1305,24 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	}
 	// Defaults: dst wins per-field if set.
 	mergeImageConfig(&dst.Defaults, &src.Defaults)
-	_ = srcDir
+}
+
+// anchorScanSpecs returns a copy of `specs` with every relative Path
+// resolved to an absolute path against `srcDir`. Absolute paths are
+// kept verbatim. Empty srcDir leaves specs unchanged so the
+// root-file merge (called with rootDir == workspace) is a no-op.
+func anchorScanSpecs(specs []ScanSpec, srcDir string) []ScanSpec {
+	if srcDir == "" || len(specs) == 0 {
+		return specs
+	}
+	out := make([]ScanSpec, len(specs))
+	for i, s := range specs {
+		out[i] = s
+		if s.Path != "" && !filepath.IsAbs(s.Path) {
+			out[i].Path = filepath.Join(srcDir, s.Path)
+		}
+	}
+	return out
 }
 
 func mergeDistroMap(dst *map[string]*DistroDef, src map[string]*DistroDef) {
@@ -2109,6 +2131,19 @@ func (uf *UnifiedFile) ProjectLayers(rootDir string) (map[string]*Layer, error) 
 			layer, err := scanLayer(p, name)
 			if err != nil {
 				return nil, fmt.Errorf("layer %q from %q: %w", name, il.From, err)
+			}
+			// Layers discovered via `include:` of a remote overthink.yml
+			// live OUTSIDE the workspace's project tree (typically in
+			// the github cache under ~/.cache/ov/repos/). Mark them as
+			// Remote so the generator's createRemoteLayerCopies stages
+			// them into .build/_layers/ and the emitted Containerfile
+			// COPY paths resolve correctly.
+			if absRoot, err := filepath.Abs(rootDir); err == nil {
+				if absLayer, err := filepath.Abs(p); err == nil {
+					if rel, err := filepath.Rel(absRoot, absLayer); err == nil && strings.HasPrefix(rel, "..") {
+						layer.Remote = true
+					}
+				}
 			}
 			out[name] = layer
 			continue

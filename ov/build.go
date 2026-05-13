@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"golang.org/x/sync/errgroup"
+	"gopkg.in/yaml.v3"
 )
 
 // BuildCmd builds container images
@@ -41,6 +43,18 @@ func (c *BuildCmd) Run() error {
 	dir, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+
+	// Auto-pivot: when cwd's overthink.yml has a single remote include
+	// (`include: ['@github.com/owner/repo/overthink.yml:ref']`) and the
+	// requested image isn't declared locally, delegate to buildRemote
+	// against `@github.com/owner/repo/<image>:ref`. This lets a
+	// downstream workspace `cd ~/Atrapub/ecovoyage && ov image build versa`
+	// transparently rebuild from upstream source without any flags. The
+	// workspace's deploy/eval overlays are picked up later by deploy-mode
+	// commands; image build doesn't need them.
+	if remoteRef, ok := detectRemoteIncludePassthrough(dir, c.Images); ok {
+		return c.buildRemote(remoteRef)
 	}
 
 	// Generate Containerfiles. --include-disabled flows through Generator
@@ -583,6 +597,69 @@ func hostPlatform() string {
 	return "linux/" + arch
 }
 
+// detectRemoteIncludePassthrough inspects cwd's overthink.yml for a
+// single `@github.com/owner/repo/...overthink.yml:ref` include. If
+// found AND the requested image isn't declared locally in the
+// workspace (i.e. the image lives upstream), returns the synthesized
+// remote-image-ref `@github.com/owner/repo/<image>:ref` plus true.
+// Otherwise returns ("", false) and the normal local build flow runs.
+//
+// Designed to be conservative: only fires when (a) there's exactly
+// one include, (b) it's a remote @github.com/...overthink.yml ref,
+// (c) the user asked for a single image, and (d) the workspace
+// overthink.yml has no local `image:` entry of that name.
+func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) {
+	if len(images) != 1 {
+		return "", false
+	}
+	imageName := images[0]
+	overthinkPath := filepath.Join(dir, UnifiedFileName)
+	data, err := os.ReadFile(overthinkPath)
+	if err != nil {
+		return "", false
+	}
+	var peek struct {
+		Include []string                   `yaml:"include"`
+		Image   map[string]json.RawMessage `yaml:"image"`
+	}
+	if err := yaml.Unmarshal(data, &peek); err != nil {
+		return "", false
+	}
+	if len(peek.Include) != 1 {
+		return "", false
+	}
+	// If the image is declared locally, keep the normal local path.
+	if _, hasLocal := peek.Image[imageName]; hasLocal {
+		return "", false
+	}
+	inc := peek.Include[0]
+	if !strings.HasPrefix(inc, "@") {
+		return "", false
+	}
+	// Parse `@github.com/owner/repo/...:ref` and substitute the image name.
+	bare := strings.TrimPrefix(inc, "@")
+	versionIdx := strings.LastIndex(bare, ":")
+	var version string
+	pathPart := bare
+	if versionIdx > 0 {
+		pathPart = bare[:versionIdx]
+		version = bare[versionIdx+1:]
+	}
+	// pathPart is e.g. github.com/overthinkos/overthink/overthink.yml.
+	// Strip the trailing filename to get the repo root.
+	slashIdx := strings.LastIndex(pathPart, "/")
+	if slashIdx < 0 {
+		return "", false
+	}
+	repoRoot := pathPart[:slashIdx]
+	// Synthesize @github.com/owner/repo/<image>[:ref].
+	ref := "@" + repoRoot + "/" + imageName
+	if version != "" {
+		ref += ":" + version
+	}
+	return ref, true
+}
+
 // buildRemote builds a remote image ref locally from its cached source.
 func (c *BuildCmd) buildRemote(ref string) error {
 	tag := c.Tag
@@ -681,6 +758,17 @@ func ensureOvBinaryFresh(dir string, images map[string]*ResolvedImage, requested
 
 	binPath := filepath.Join(dir, "layers", "ov", "bin", "ov")
 	srcDir := filepath.Join(dir, "ov")
+
+	// Downstream workspaces (project trees that `include:` upstream
+	// overthink via `@github.com/...`) don't ship the ov Go source.
+	// Without ./ov to rebuild from, there's nothing to refresh — the
+	// embedded layer chain will use the cached upstream binary at
+	// <upstream-cache>/layers/ov/bin/ov which is already up-to-date
+	// relative to upstream's ov source.
+	if _, err := os.Stat(srcDir); os.IsNotExist(err) {
+		return nil
+	}
+
 	upToDate, err := ovBinaryUpToDate(binPath, srcDir)
 	if err == nil && upToDate {
 		return nil

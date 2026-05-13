@@ -29,6 +29,20 @@ layer:
     # [scheduler] dag_dir_list_interval was moved to
     # [dag_processor] refresh_interval in Airflow 3.x.
     AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: "10"
+    # Airflow 3's LocalExecutor pre-spawns `parallelism` idle Python
+    # worker processes at scheduler boot — each carries every imported
+    # DAG module and its native deps (cudf, pyarrow, …), so the default
+    # of 32 burns ~33 cgroup PIDs forever even on a quiet pod. The
+    # single-user dev workload here never has more than ~6 concurrent
+    # task instances (one DAG with 8 tasks, fan-out limited by the
+    # serialise-DuckDB-writes chain in the GTFS DAG). 4 leaves clear
+    # headroom and reclaims ~28 PIDs against the disposable pod's
+    # default pids.max=2048 cgroup cap (cap headroom matters because
+    # marimo cells using cudf-polars / dask leak ~4 PIDs per re-execute
+    # — see CLAUDE.md R1 RCA notes 2026-05-13 — and a tight Airflow
+    # baseline buys more cells before the cap pinches DuckDB's
+    # LOAD spatial thread-pool spawn).
+    AIRFLOW__CORE__PARALLELISM: "4"
   port:
     - 8080
   # Cross-container env discovery. The marimo notebook reads three vars:

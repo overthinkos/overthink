@@ -79,6 +79,61 @@ layer:
         cp -r /opt/versatiles-fonts/.              /opt/versatiles-frontend/fonts/
         cp -r /opt/maplibre-versatiles-styler/.    /opt/versatiles-frontend/styler/
       user: root
+
+    # ---- CORS-enabled static server ----
+    # The /style/, /fonts/ and /styler/ re-exports above are fetched
+    # CROSS-ORIGIN by browser map clients (e.g. a marimo notebook's
+    # MapLibre iframe served from a different port/origin loads SDF
+    # glyph .pbf files from /fonts/). The stdlib `python -m http.server`
+    # sends no Access-Control-Allow-Origin header, so the browser
+    # blocks those fetches — silently breaking glyph loading and any
+    # other cross-origin asset use. This drop-in subclass adds
+    # permissive CORS headers (the assets are public + uncredentialed).
+    - write: /opt/versatiles-frontend-cors-server.py
+      user: root
+      mode: "0755"
+      content: |
+        #!/usr/bin/env python3
+        """Static file server with permissive CORS headers.
+
+        Drop-in for `python3 -m http.server` for the versatiles-frontend
+        layer. Browser map clients fetch this server's /style/, /fonts/
+        and /styler/ re-exports cross-origin, so responses MUST carry
+        Access-Control-Allow-Origin or the browser blocks the fetch.
+
+        Usage: versatiles-frontend-cors-server.py <port> <directory>
+        """
+        from __future__ import annotations
+
+        import sys
+        from functools import partial
+        from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+
+
+        class CORSRequestHandler(SimpleHTTPRequestHandler):
+            def end_headers(self) -> None:
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header(
+                    "Access-Control-Allow-Methods", "GET, HEAD, OPTIONS"
+                )
+                self.send_header("Access-Control-Allow-Headers", "*")
+                super().end_headers()
+
+            def do_OPTIONS(self) -> None:  # CORS preflight
+                self.send_response(204)
+                self.end_headers()
+
+
+        def main() -> None:
+            port = int(sys.argv[1])
+            directory = sys.argv[2]
+            handler = partial(CORSRequestHandler, directory=directory)
+            with ThreadingHTTPServer(("", port), handler) as httpd:
+                httpd.serve_forever()
+
+
+        if __name__ == "__main__":
+            main()
   eval:
     # Build-scope: the frontend SPA's index.html landed at the
     # expected path.
@@ -126,11 +181,14 @@ layer:
       exit_status: 0
   service:
     - name: versatiles-frontend
-      # Same python http.server pattern as pmtiles-viewer / maputnik
-      # (no marimo-pixi-env coupling). priority 38 places versatiles-
-      # frontend AFTER pmtiles-viewer (35) and maputnik (34); the
-      # ordering is cosmetic (no inter-service deps).
-      exec: /usr/bin/python3 -m http.server 8002 --directory /opt/versatiles-frontend
+      # CORS-enabled static server (see the write: task above) — same
+      # python-stdlib pattern as pmtiles-viewer / maputnik but with
+      # Access-Control-Allow-Origin so the /style/, /fonts/, /styler/
+      # re-exports work when fetched cross-origin by a browser map
+      # client. priority 38 places versatiles-frontend AFTER
+      # pmtiles-viewer (35) and maputnik (34); the ordering is
+      # cosmetic (no inter-service deps).
+      exec: /usr/bin/python3 /opt/versatiles-frontend-cors-server.py 8002 /opt/versatiles-frontend
       restart: always
       working_directory: /opt/versatiles-frontend
       priority: 38

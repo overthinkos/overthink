@@ -667,6 +667,7 @@ image:
             - versatiles                # versatiles-rs CLI + `versatiles serve` supervisord service on port 8090 (host-mapped 28090) — convert/serve for .versatiles/.pmtiles/.mbtiles
             - versatiles-frontend       # versatiles-org/versatiles-frontend SPA (port 8002) — visual tile-content explorer; also re-exports versatiles-style/fonts/styler at /style/, /fonts/, /styler/
             - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
+            - notebook-graph    # data layer: seeds /workspace/notebooks/gpu-libraries-demo.py — cuGraph/cuML/PyG/graphistry demo
             - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
             - ov
@@ -783,6 +784,67 @@ image:
               in_container: true
               stdout:
                   - matches: "[1-9][0-9]{5,}"   # >=100KB
+            # GPU libraries demo (cuGraph / cuML / PyG / graphistry).
+            # versa-graph-imports asserts that all four library
+            # families load + GPU is visible. versa-graph-cugraph-pagerank
+            # exercises the nx-cugraph backend on the karate graph
+            # (cuGraph 26.4 removed cugraph.datasets; nx_cugraph is the
+            # idiomatic accelerator path). versa-graph-notebook-export +
+            # versa-graph-notebook-size run the whole demo notebook
+            # end-to-end via marimo's headless ipynb-export, matching
+            # the versa-notebook-export pattern.
+            - id: versa-graph-imports
+              scope: deploy
+              command: |
+                  ${HOME}/.pixi/envs/default/bin/python -c '
+                  import cugraph, cuml, nx_cugraph, pylibcugraph
+                  import torch_geometric, torch_scatter, torch_sparse, torch_cluster
+                  import graphistry, torch
+                  print(f"cugraph={cugraph.__version__}")
+                  print(f"cuml={cuml.__version__}")
+                  print(f"pyg={torch_geometric.__version__}")
+                  print(f"torch_scatter={torch_scatter.__version__}")
+                  print(f"graphistry={graphistry.__version__}")
+                  print(f"cuda_devices={torch.cuda.device_count()}")
+                  '
+              in_container: true
+              stdout:
+                  - matches: "cugraph=[0-9]+"
+                  - matches: "cuml=[0-9]+"
+                  - matches: "pyg=[0-9]+"
+                  - matches: "torch_scatter=[0-9]+"
+                  - matches: "graphistry=[0-9]+"
+                  - matches: "cuda_devices=[1-9]"
+            - id: versa-graph-cugraph-pagerank
+              scope: deploy
+              command: |
+                  ${HOME}/.pixi/envs/default/bin/python -c '
+                  import networkx as nx
+                  G = nx.karate_club_graph()
+                  pr = nx.pagerank(G, backend="cugraph")
+                  print(f"pr_rows={len(pr)}")
+                  print(f"pr_top_node={max(pr, key=pr.get)}")
+                  '
+              in_container: true
+              stdout:
+                  - matches: "pr_rows=[1-9][0-9]+"
+                  - matches: "pr_top_node=[0-9]+"
+            - id: versa-graph-notebook-export
+              scope: deploy
+              command: |
+                  ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+                    /workspace/notebooks/gpu-libraries-demo.py \
+                    --include-outputs --sort topological \
+                    -o /tmp/gpu-demo.ipynb -f
+              in_container: true
+              exit_status: 0
+              timeout: 600s
+            - id: versa-graph-notebook-size
+              scope: deploy
+              command: wc -c < /tmp/gpu-demo.ipynb
+              in_container: true
+              stdout:
+                  - matches: "[1-9][0-9]{4,}"   # >=10KB rendered ipynb (matches the 18KB observed live)
     nvidia:
         base: fedora-nonfree
         platforms:

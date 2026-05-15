@@ -5,6 +5,18 @@ description = "marimo + Airflow + GPU-accelerated OSM analytics (Polars-GPU/cuDF
 channels = ["conda-forge"]
 platforms = ["linux-64"]
 
+# RAPIDS cu13 wheels (libcugraph-cu13, libcuml-cu13, …) ship as
+# manylinux_2_27_x86_64.manylinux_2_28_x86_64. pixi's default
+# manylinux floor on linux-64 is older — without an explicit glibc
+# system-requirement, uv rejects these wheels with "no usable wheels"
+# even though pip in the same container installs them happily. The
+# CachyOS / Arch base ships glibc 2.43; declaring 2.28 here unblocks
+# the resolver for every manylinux_2_28 wheel without overconstraining.
+# pixi's toml key is `libc` (CLI name `glibc` is the same thing; the
+# toml table omits the family because glibc is the default).
+[system-requirements]
+libc = "2.28"
+
 # Pixi resolves conda first, then PyPI against the conda-pinned versions
 # (https://pixi.prefix.dev/latest/concepts/conda_pypi/). Conda's resolver
 # picks the very-latest version of every transitive dep (e.g. starlette
@@ -14,8 +26,24 @@ platforms = ["linux-64"]
 # moving every Python package to [pypi-dependencies] gives pip/uv ONE
 # resolver with full visibility — airflow's pins downgrade their own
 # transitive deps cleanly. Validated 2026-05 with 269 packages installing.
+#
+# extra-index-urls + index-strategy support the RAPIDS cu13 packages
+# (cugraph-cu13 / cuml-cu13 / cudf-polars-cu13 / nx-cugraph-cu13) and
+# their transitive deps (libcugraph-cu13, libcuml-cu13, treelite,
+# ucxx-cu13, …). The global `extra-index-urls` is mandatory — per-package
+# `index = "..."` covers only the named package, not its transitives,
+# so uv falls back to PyPI for transitives and finds stale or missing
+# versions (libcugraph-cu13's RAPIDS 26.4 releases live only at
+# pypi.nvidia.com). `unsafe-best-match` allows uv to consider versions
+# across all indexes (defaults to first-index-wins for dependency-
+# confusion-attack protection); we accept the wider lookup explicitly
+# because every URL we use is a known-good vendor distribution endpoint.
+# Without these two together, `pixi lock` fails with "libcugraph-cu13
+# has no usable wheels" + the "subsequent index" hint.
 [pypi-options]
 no-build = true
+extra-index-urls = ["https://pypi.nvidia.com"]
+index-strategy = "unsafe-best-match"
 
 [dependencies]
 # Conda owns ONLY the Python interpreter + non-Python tooling. Every
@@ -72,13 +100,55 @@ sqlglot = "*"
 # compose layers/postgresql or layers/valkey alongside.
 
 # === PyTorch CUDA 13 stack (general GPU ML beyond the curriculum) ===
-torch = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
+# Pinned to ==2.11.* so the PyG native-extension wheels below (built at
+# https://data.pyg.org/whl/torch-2.11.0+cu130.html) stay ABI-compatible.
+# Drift to torch 2.12+ would silently break torch_scatter / torch_sparse /
+# torch_cluster (the build-tag in their wheels is `pt211cu130`). When
+# bumping this pin, also update the URL in layers/marimo/build.sh.
+torch = { version = "==2.11.*", index = "https://download.pytorch.org/whl/cu130" }
 torchvision = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 torchaudio = { version = "*", index = "https://download.pytorch.org/whl/cu130" }
 transformers = "*"
 accelerate = "*"
 safetensors = "*"
 huggingface_hub = "*"
+
+# === RAPIDS GPU graph + ML stack ===
+# All cu13 to match the cudf-polars-cu13 26.4 already above. The global
+# extra-index-urls in [pypi-options] supplies the pypi.nvidia.com
+# endpoint (per-package `index = "..."` doesn't cover transitives like
+# libcugraph-cu13 / libcuml-cu13 / treelite / ucxx-cu13 — see the long
+# comment by the [pypi-options] block above).
+#
+# cuGraph 26.4 dropped the `cugraph.datasets` namespace — the demo
+# notebook uses the `nx-cugraph` backend pattern instead:
+# `nx.pagerank(G, backend="cugraph")` runs the cuGraph-accelerated
+# path on any NetworkX graph object. pylibcugraph is cuGraph's
+# low-level binding; RAPIDS' own resolver expects it as a separate
+# top-level dep.
+cugraph-cu13      = "*"
+nx-cugraph-cu13   = "*"
+pylibcugraph-cu13 = "*"
+cuml-cu13         = "*"
+
+# === PyTorch Geometric (GNN library; native extensions in build.sh) ===
+# torch-geometric core is pure Python and lives here. The native
+# extensions (torch_scatter, torch_sparse, torch_cluster) ship as
+# Linux-cp313 wheels at a PyG-hosted HTML directory listing (NOT a
+# PEP 503 index), so pixi's `index =` syntax can't pull them — they
+# install via `pip --find-links` from layers/marimo/build.sh after
+# the pixi env settles. pyg-lib has only a Windows cp313 wheel
+# upstream, and torch-spline-conv has no cp313 wheel at all
+# (verified 2026-05). PyG works without them — they're optional
+# accelerators. Revisit when Linux cp313 wheels ship upstream.
+torch-geometric = "*"
+
+# === Graph visualization (NVIDIA-RAPIDS-accelerated end-to-end) ===
+# graphistry exposes a pandas/cuDF-friendly API for shipping graphs
+# to a Graphistry server (or rendering locally) with GPU acceleration
+# across extract / transform / display. Pure-Python wheel; deps are
+# all already in this env.
+graphistry = "*"
 
 # === marimo-team/learn helpers ===
 marimo-learn = "*"     # learn/sql/05_join.py

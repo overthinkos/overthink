@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -1407,8 +1408,19 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	return nil
 }
 
-// MergeDeployConfigs merges multiple DeployConfigs left-to-right.
-// Later configs take precedence (field-level replace per image).
+// MergeDeployConfigs merges multiple DeployConfigs left-to-right. Later
+// configs take precedence (field-level replace per image). The merge walks
+// every yaml-tagged field of DeploymentNode via reflect: a field copies
+// from src → dst when src's value is non-zero (string != "", slice/map/ptr
+// not nil, bool != false, numeric != 0). This makes adding a new field to
+// DeploymentNode automatically merge-correct — the pre-2026-05 hand-rolled
+// per-field merge silently dropped 19+ fields (ResolvedPort, Description,
+// Secret, Sidecar, Shell, Kubernetes, ForwardGpgAgent, ForwardSshAgent,
+// Kind, Replica, Restart, Schedule, Resources, Expose, Storage, Probes,
+// Cpus, Ram, DiskSize) whenever any merge → save cycle ran.
+//
+// The yaml tag `-` (currently only DeploymentNode.Inside, a derived
+// runtime field) skips the merge. Untagged fields are also skipped.
 func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 	result := &DeployConfig{Deploy: make(map[string]DeploymentNode)}
 	for _, dc := range configs {
@@ -1417,118 +1429,38 @@ func MergeDeployConfigs(configs ...*DeployConfig) *DeployConfig {
 		}
 		for name, overlay := range dc.Deploy {
 			existing := result.Deploy[name]
-			if overlay.Tunnel != nil {
-				existing.Tunnel = overlay.Tunnel
-			}
-			if overlay.DNS != "" {
-				existing.DNS = overlay.DNS
-			}
-			if overlay.AcmeEmail != "" {
-				existing.AcmeEmail = overlay.AcmeEmail
-			}
-			if overlay.Volume != nil {
-				existing.Volume = overlay.Volume
-			}
-			if overlay.Port != nil {
-				existing.Port = overlay.Port
-			}
-			if overlay.Env != nil {
-				existing.Env = overlay.Env
-			}
-			if overlay.EnvFile != "" {
-				existing.EnvFile = overlay.EnvFile
-			}
-			if overlay.Security != nil {
-				existing.Security = overlay.Security
-			}
-			if overlay.Network != "" {
-				existing.Network = overlay.Network
-			}
-			if overlay.Engine != "" {
-				existing.Engine = overlay.Engine
-			}
-			if overlay.Version != "" {
-				existing.Version = overlay.Version
-			}
-			// Declarative fields authored in the project deploy.yml:
-			// target, vm_source, add_layers, tests, install_opts. The
-			// local deploy.yml overlays via field-level replace — so a
-			// per-machine add_layers list fully replaces the project list,
-			// and per-machine tests replace project tests. For tests the
-			// caller (ov eval live) can run MergeDeployEval to merge by id.
-			if overlay.Target != "" {
-				existing.Target = overlay.Target
-			}
-			if overlay.Vm != "" {
-				existing.Vm = overlay.Vm
-			}
-			// Schema-v3 cross-ref fields. Each is a string cross-reference
-			// (to the top-level vm:/cluster: or another deployment) and
-			// replaces the existing value when set.
-			if overlay.Image != "" {
-				existing.Image = overlay.Image
-			}
-			// Schema v4: Cluster renamed to K8s (per-deployment template
-			// ref to kind:k8s, absorbing former ClusterProfile).
-			if overlay.K8s != "" {
-				existing.K8s = overlay.K8s
-			}
-			if overlay.Pod != "" {
-				existing.Pod = overlay.Pod
-			}
-			if overlay.Host != "" {
-				existing.Host = overlay.Host
-			}
-			// Schema v4 local cutover (kind:host → kind:local): the
-			// kind:local template ref + Ansible-style SSH overrides. Without
-			// these the per-machine overlay or include-file load silently
-			// drops the template ref, leaving target:local deployments with
-			// an empty layer list (and a no-op runLocal).
-			if overlay.Local != "" {
-				existing.Local = overlay.Local
-			}
-			if overlay.User != "" {
-				existing.User = overlay.User
-			}
-			if overlay.SSHArgs != nil {
-				existing.SSHArgs = overlay.SSHArgs
-			}
-			// Inside is derived from the Nested tree at load time and not
-			// authored — skip overlay merge.
-			// Disposable / Lifecycle (R10-load-bearing). The overlay is
-			// authoritative when set; the baseline value from the project
-			// config only applies when the overlay doesn't mention it.
-			// Without this merge, per-machine overlays would silently
-			// lose the disposable flag — a security-relevant bug.
-			if overlay.Disposable {
-				existing.Disposable = true
-			}
-			if overlay.Lifecycle != "" {
-				existing.Lifecycle = overlay.Lifecycle
-			}
-			if overlay.AddLayer != nil {
-				existing.AddLayer = overlay.AddLayer
-			}
-			if overlay.Eval != nil {
-				existing.Eval = overlay.Eval
-			}
-			if overlay.InstallOpts != nil {
-				existing.InstallOpts = overlay.InstallOpts
-			}
-			if overlay.Nested != nil {
-				existing.Nested = overlay.Nested
-			}
-			// VmState is per-machine state written by VmDeployTarget; it
-			// only ever lives in the local deploy.yml, never in the
-			// project file — so this simple "later wins" propagation is
-			// the correct behavior.
-			if overlay.VmState != nil {
-				existing.VmState = overlay.VmState
-			}
-			result.Deploy[name] = existing
+			result.Deploy[name] = MergeDeploymentNode(existing, overlay)
 		}
 	}
 	return result
+}
+
+// MergeDeploymentNode applies non-zero fields from `src` onto `dst` and
+// returns the merged copy. Walks every yaml-tagged field via reflect; the
+// yaml `-` tag (derived/runtime-only fields) is skipped. Same precedence
+// rule as the underlying merge: src non-zero wins, otherwise dst passes
+// through. Per R3 the single helper replaces the hand-rolled per-field
+// merges that previously lived in MergeDeployConfigs (drift-prone — every
+// new struct field needed a remembered append, and 19+ were missed).
+func MergeDeploymentNode(dst, src DeploymentNode) DeploymentNode {
+	dstV := reflect.ValueOf(&dst).Elem()
+	srcV := reflect.ValueOf(src)
+	t := dstV.Type()
+	for i := 0; i < t.NumField(); i++ {
+		ft := t.Field(i)
+		tag := ft.Tag.Get("yaml")
+		// Skip derived fields (yaml:"-") and untagged fields (rare; not
+		// part of the persisted schema, so not merge-relevant).
+		if tag == "-" || tag == "" {
+			continue
+		}
+		sv := srcV.Field(i)
+		if sv.IsZero() {
+			continue
+		}
+		dstV.Field(i).Set(sv)
+	}
+	return dst
 }
 
 // RemoveImageDeploy removes an image's entry from a deploy config.
@@ -1755,6 +1687,19 @@ func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
 	}
 	if input.SetLifecycle {
 		entry.Lifecycle = input.Lifecycle
+	}
+	// Defensive zero-write guard: refuse to persist a fully-zero
+	// DeploymentNode (every field at its Go zero value). A future caller
+	// that invokes saveDeployState with an empty SaveDeployStateInput on
+	// a key that doesn't yet exist in the user overlay would otherwise
+	// write `<key>: {}`, materializing an empty entry that masks any
+	// matching entry from the project overthink.yml deploy block (see
+	// 2026-05 RCA: ov update did NOT directly do this, but the latent
+	// shape was real and the user's deploy.yml ended up empty by some
+	// path we couldn't fully reconstruct — this guard makes the entire
+	// regression class structurally impossible).
+	if reflect.DeepEqual(entry, DeploymentNode{}) {
+		return
 	}
 	dc.Deploy[key] = entry
 	if err := SaveDeployConfig(dc); err != nil {

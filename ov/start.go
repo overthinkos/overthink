@@ -176,7 +176,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	envVars = append(envVars, agentFwd.Env...)
 
 	name := containerNameInstance(c.Image, c.Instance)
-	workDir := resolveWorkingDir(volumes, bindMounts, home)
+	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
 	args := buildStartArgs(engine, imageRef, uid, gid, ports, name, volumes, bindMounts, detected.GPU, rt.BindAddress, envVars, security, entrypoint, workDir, resolvedNetwork)
 
 	cmd := exec.Command(args[0], args[1:]...)

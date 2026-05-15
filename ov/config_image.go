@@ -721,7 +721,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 			}
 
 			fmt.Fprintln(os.Stderr, "Provisioning data into volumes...")
-			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, mode)
+			seeded, err := provisionData(dataEngine, dataRef, dataMeta, bindMounts, volumes, c.Instance, mode)
 			if err != nil {
 				return fmt.Errorf("data provisioning: %w", err)
 			}

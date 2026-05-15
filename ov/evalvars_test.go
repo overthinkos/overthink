@@ -107,7 +107,7 @@ func TestResolveTestVarsRuntime(t *testing.T) {
 		},
 	}
 
-	r, err := ResolveEvalVarsRuntime(meta, nil, "podman", "ov-redis-ml")
+	r, err := ResolveEvalVarsRuntime(meta, nil, "podman", "ov-redis-ml", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestResolveTestVarsRuntime_InspectFails(t *testing.T) {
 	}
 
 	meta := &ImageMetadata{Image: "jupyter", User: "user", Home: "/home/user"}
-	r, err := ResolveEvalVarsRuntime(meta, nil, "podman", "ov-jupyter")
+	r, err := ResolveEvalVarsRuntime(meta, nil, "podman", "ov-jupyter", "")
 	if err == nil {
 		t.Fatal("expected error from failed inspect")
 	}
@@ -193,7 +193,7 @@ func TestRuntimeVars_DockerBridgeIP(t *testing.T) {
 			},
 		}, nil
 	}
-	r, _ := ResolveEvalVarsRuntime(&ImageMetadata{Image: "foo"}, nil, "docker", "foo")
+	r, _ := ResolveEvalVarsRuntime(&ImageMetadata{Image: "foo"}, nil, "docker", "foo", "")
 	if r.Env["CONTAINER_IP"] != "172.17.0.2" {
 		t.Errorf("docker-style top-level IP not picked up: %v", r.Env)
 	}
@@ -215,7 +215,7 @@ func TestResolver_EndToEndExpansion(t *testing.T) {
 			},
 		}, nil
 	}
-	r, err := ResolveEvalVarsRuntime(&ImageMetadata{Image: "redis", User: "u", Home: "/home/u"}, nil, "podman", "ov-redis")
+	r, err := ResolveEvalVarsRuntime(&ImageMetadata{Image: "redis", User: "u", Home: "/home/u"}, nil, "podman", "ov-redis", "")
 	if err != nil {
 		t.Fatalf("unexpected: %v", err)
 	}

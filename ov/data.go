@@ -99,7 +99,7 @@ var (
 // create + podman cp path.
 func provisionData(engine string, imageRef string, meta *ImageMetadata,
 	bindMounts []ResolvedBindMount, namedVolumes []VolumeMount,
-	mode DataProvisionMode) (int, error) {
+	instance string, mode DataProvisionMode) (int, error) {
 
 	if len(meta.DataEntries) == 0 {
 		return 0, nil
@@ -111,10 +111,18 @@ func provisionData(engine string, imageRef string, meta *ImageMetadata,
 	// Build a unified targets map keyed by bare volume name. A volume
 	// declared as bind wins over a named entry with the same bare name
 	// (this should not happen in practice since ResolveVolumeBacking routes
-	// each labelVolume to exactly one of the two slices).
+	// each labelVolume to exactly one of the two slices). Instance-aware:
+	// for instance deploys the volume name carries an extra <instance>
+	// segment that must be stripped along with the image prefix —
+	// BareVolumeName does both. Pre-fix this site used a bare TrimPrefix
+	// that only stripped the image segment, so instance-rewritten volumes
+	// (e.g. ov-versa-ecovoyage-workspace) reduced to `ecovoyage-workspace`
+	// and never matched data entries whose `volume:` field is `workspace`,
+	// causing the seeder to silently skip every data entry on every
+	// instance deploy.
 	targets := make(map[string]seedTarget, len(bindMounts)+len(namedVolumes))
 	for _, nv := range namedVolumes {
-		bare := strings.TrimPrefix(nv.VolumeName, "ov-"+meta.Image+"-")
+		bare := BareVolumeName(nv.VolumeName, meta.Image, instance)
 		targets[bare] = seedTarget{
 			bareName:    bare,
 			kind:        seedKindNamed,

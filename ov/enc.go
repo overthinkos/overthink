@@ -800,7 +800,18 @@ func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, stri
 		return nil, "", err
 	}
 
-	dc, _ := LoadDeployConfig()
+	// Propagate LoadDeployConfig errors instead of swallowing them. A
+	// schema error (e.g. the 2026-05-12 require-image cutover rejecting
+	// pre-cutover deploy.yml entries) used to silently degrade to "no
+	// encrypted volumes", which broke the encMount short-circuit and
+	// drove the call into resolveEncPassphraseForMount → systemd-ask-
+	// password → indefinite hang waiting for stdin. Surfacing the error
+	// turns that hang into a clean error message with a remediation
+	// hint pointing at `ov migrate require-image`.
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		return nil, "", fmt.Errorf("loading deploy config for encrypted volumes: %w", err)
+	}
 	if dc == nil {
 		return nil, rt.EncryptedStoragePath, nil
 	}

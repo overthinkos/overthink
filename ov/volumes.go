@@ -95,20 +95,33 @@ func InstanceVolume(mounts []VolumeMount, imageName, instance string) []VolumeMo
 	return result
 }
 
+// BareVolumeName recovers the short volume name (e.g. "workspace") from a
+// fully-qualified podman volume name. Inverse of the prefix CollectImageVolume
+// adds at line 57 ("ov-"+image+"-"+name) and the per-instance rewrite
+// InstanceVolume performs ("ov-"+image+"-"+instance+"-"+name). Strips the
+// instance segment first when present, then the image-name segment, so
+// instance-rewritten volumes (`ov-versa-ecovoyage-workspace`) and base
+// volumes (`ov-versa-workspace`) BOTH collapse to "workspace".
+//
+// Returns the input unchanged when no prefix matches — callers can detect
+// "not a managed volume name" by checking equality with the input.
+func BareVolumeName(volumeName, imageName, instance string) string {
+	if instance != "" {
+		if p := "ov-" + imageName + "-" + instance + "-"; strings.HasPrefix(volumeName, p) {
+			return volumeName[len(p):]
+		}
+	}
+	if p := "ov-" + imageName + "-"; strings.HasPrefix(volumeName, p) {
+		return volumeName[len(p):]
+	}
+	return volumeName
+}
+
 // resolveWorkingDir returns the container working directory.
 // Prefers the "workspace" volume's container path if declared, else home.
-func resolveWorkingDir(volumes []VolumeMount, bindMounts []ResolvedBindMount, home string) string {
+func resolveWorkingDir(volumes []VolumeMount, bindMounts []ResolvedBindMount, home, imageName, instance string) string {
 	for _, v := range volumes {
-		// Extract bare volume name from "ov-<image>-<name>"
-		bare := v.VolumeName
-		if strings.HasPrefix(bare, "ov-") {
-			// ov-<image>-<name>: find the last hyphen-separated segment
-			parts := strings.SplitN(bare, "-", 3)
-			if len(parts) == 3 {
-				bare = parts[2]
-			}
-		}
-		if bare == "workspace" {
+		if BareVolumeName(v.VolumeName, imageName, instance) == "workspace" {
 			return v.ContainerPath
 		}
 	}

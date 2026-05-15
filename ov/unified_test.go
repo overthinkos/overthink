@@ -257,11 +257,20 @@ discover:
 	if uf.Discover == nil || len(uf.Discover.Layer) != 2 {
 		t.Fatalf("Discover.Layers = %#v, want 2 entries", uf.Discover)
 	}
-	if uf.Discover.Layer[0].Path != "layers" || !uf.Discover.Layer[0].Recursive {
-		t.Errorf("[0] = %+v, want {Path:layers Recursive:true}", uf.Discover.Layer[0])
+	// Post-2026-05 "discover anchoring" cutover (commit 460fabb): scan
+	// specs are anchored to the including file's directory at merge time
+	// so a relative `- layers` entry inside an included overthink.yml
+	// resolves against THAT file's location, not the consumer's cwd. The
+	// test fixture lives at <tempdir>/overthink.yml, so the anchored path
+	// is filepath.Join(<tempdir>, "layers"). Asserting against the suffix
+	// keeps the test portable across tempdir layouts.
+	wantLayers := filepath.Join(root, "layers")
+	wantVendor := filepath.Join(root, "vendor")
+	if uf.Discover.Layer[0].Path != wantLayers || !uf.Discover.Layer[0].Recursive {
+		t.Errorf("[0] = %+v, want {Path:%s Recursive:true}", uf.Discover.Layer[0], wantLayers)
 	}
-	if uf.Discover.Layer[1].Path != "vendor" || uf.Discover.Layer[1].Recursive {
-		t.Errorf("[1] = %+v, want {Path:vendor Recursive:false}", uf.Discover.Layer[1])
+	if uf.Discover.Layer[1].Path != wantVendor || uf.Discover.Layer[1].Recursive {
+		t.Errorf("[1] = %+v, want {Path:%s Recursive:false}", uf.Discover.Layer[1], wantVendor)
 	}
 }
 

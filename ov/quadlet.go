@@ -72,7 +72,7 @@ func generateQuadlet(cfg QuadletConfig) string {
 	}
 	b.WriteString(fmt.Sprintf("Image=%s\n", cfg.ImageRef))
 	b.WriteString(fmt.Sprintf("ContainerName=%s\n", name))
-	workDir := resolveWorkingDir(cfg.Volumes, cfg.BindMounts, cfg.Home)
+	workDir := resolveWorkingDir(cfg.Volumes, cfg.BindMounts, cfg.Home, cfg.ImageName, cfg.Instance)
 	b.WriteString(fmt.Sprintf("WorkingDir=%s\n", workDir))
 	// When in a pod, network and ports are owned by the pod (shared namespace)
 	if cfg.PodName == "" {

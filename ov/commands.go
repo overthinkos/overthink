@@ -170,7 +170,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	}
 
 	fmt.Fprintln(os.Stderr, "Syncing data from new image...")
-	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, mode)
+	seeded, err := provisionData(engine, dataRef, dataMeta, bindMounts, volumes, c.Instance, mode)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: data sync failed: %v\n", err)
 		return

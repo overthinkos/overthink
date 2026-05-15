@@ -159,7 +159,7 @@ func (c *ShellCmd) Run() error {
 	if containerRunning(engine, name) {
 		// Exec path: inject env vars only (can't add volumes to running container)
 		execEnv := append(envVars, agentFwd.Env...)
-		workDir := resolveWorkingDir(volumes, bindMounts, home)
+		workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
 		args := buildExecArgs(engine, name, uid, gid, c.Command, execEnv, workDir)
 		enginePath, err := findExecutable(EngineBinary(engine))
 		if err != nil {
@@ -194,7 +194,7 @@ func (c *ShellCmd) Run() error {
 		return err
 	}
 
-	workDir := resolveWorkingDir(volumes, bindMounts, home)
+	workDir := resolveWorkingDir(volumes, bindMounts, home, c.Image, c.Instance)
 	args := buildShellArgs(engine, imageRef, uid, gid, ports, volumes, bindMounts, detected.GPU, c.Command, rt.BindAddress, envVars, security, workDir, resolvedNetwork)
 
 	// Find engine binary

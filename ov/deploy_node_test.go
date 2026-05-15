@@ -198,3 +198,87 @@ func equalSlices(a, b []string) bool {
 	}
 	return true
 }
+
+// TestMergeDeployConfigsPreservesAllFields locks in the 2026-05 regression
+// fix: pre-fix MergeDeployConfigs hand-rolled per-field copies and silently
+// dropped 19+ DeploymentNode fields (ResolvedPort, Description, Secret,
+// Sidecar, Shell, Kubernetes, ForwardGpgAgent, ForwardSshAgent, Kind,
+// Replica, Restart, Schedule, Resources, Expose, Storage, Probes, Cpus,
+// Ram, DiskSize). Any future addition of a struct field would silently
+// regress in the same way. The post-fix reflect-based merger walks every
+// yaml-tagged field, so adding a new field is automatically merge-correct.
+//
+// This test pre-populates ALL persistable fields with non-zero values
+// and asserts every one survives the merge.
+func TestMergeDeployConfigsPreservesAllFields(t *testing.T) {
+	tr := true
+	rp := []string{"32718:2718"}
+	desc := &Description{Tag: []string{"testing"}}
+	sec := []DeploySecretConfig{{Name: "test"}}
+	sd := map[string]SidecarDef{"side": {Image: "img"}}
+	shl := []DeployShellOverlay{{ID: "x"}}
+	k8s := &K8sDeployConfig{Namespace: "test-ns"}
+	res := &DeployResources{}
+	exp := &DeployExpose{Host: "example.com", TLS: true}
+	storage := []DeployStorage{{Name: "s"}}
+	probes := &DeployProbes{}
+
+	src := DeploymentNode{
+		ResolvedPort:    rp,
+		Description:     desc,
+		Secret:          sec,
+		ForwardGpgAgent: &tr,
+		ForwardSshAgent: &tr,
+		Sidecar:         sd,
+		Shell:           shl,
+		Kubernetes:      k8s,
+		Kind:            "service",
+		Replica:         3,
+		Restart:         "always",
+		Schedule:        "* * * * *",
+		Resources:       res,
+		Expose:          exp,
+		Storage:         storage,
+		Probes:          probes,
+		Cpus:            4,
+		Ram:             "16G",
+		DiskSize:        "40G",
+	}
+	cfg := &DeployConfig{Deploy: map[string]DeploymentNode{"x": src}}
+	merged := MergeDeployConfigs(cfg, nil)
+	got := merged.Deploy["x"]
+
+	checks := []struct {
+		name string
+		fail bool
+	}{
+		{"ResolvedPort", !equalSlices(got.ResolvedPort, rp)},
+		{"Description", got.Description == nil},
+		{"Secret", len(got.Secret) != 1},
+		{"ForwardGpgAgent", got.ForwardGpgAgent == nil || !*got.ForwardGpgAgent},
+		{"ForwardSshAgent", got.ForwardSshAgent == nil || !*got.ForwardSshAgent},
+		{"Sidecar", len(got.Sidecar) != 1},
+		{"Shell", len(got.Shell) != 1},
+		{"Kubernetes", got.Kubernetes == nil},
+		{"Kind", got.Kind != "service"},
+		{"Replica", got.Replica != 3},
+		{"Restart", got.Restart != "always"},
+		{"Schedule", got.Schedule != "* * * * *"},
+		{"Resources", got.Resources == nil},
+		{"Expose", got.Expose == nil},
+		{"Storage", len(got.Storage) != 1},
+		{"Probes", got.Probes == nil},
+		{"Cpus", got.Cpus != 4},
+		{"Ram", got.Ram != "16G"},
+		{"DiskSize", got.DiskSize != "40G"},
+	}
+	dropped := []string{}
+	for _, c := range checks {
+		if c.fail {
+			dropped = append(dropped, c.name)
+		}
+	}
+	if len(dropped) > 0 {
+		t.Errorf("MergeDeployConfigs dropped %d fields: %v", len(dropped), dropped)
+	}
+}

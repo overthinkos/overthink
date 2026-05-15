@@ -126,16 +126,8 @@ func ResolveEvalVarsBuild(meta *ImageMetadata) *EvalVarResolver {
 // On inspect failure the function still returns a resolver with the
 // build-time portion populated; HasRuntime is false and runtime-only vars
 // will be unresolved downstream.
-func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, containerName string) (*EvalVarResolver, error) {
-	instance := ""
-	if deploy != nil {
-		// DeploymentNode is per-map-key; the instance lives in the map key
-		// (see parseDeployKey) so pass it in via containerName context if the
-		// caller has already resolved it. For now leave the value empty —
-		// callers that want INSTANCE populated should set it via the
-		// resolver's Env map after this returns.
-		_ = deploy
-	}
+func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine, containerName, instance string) (*EvalVarResolver, error) {
+	_ = deploy // reserved for future per-deploy overrides; instance now arrives explicitly
 	env := buildTimeVars(meta, instance)
 
 	inspection, err := InspectContainer(engine, containerName)
@@ -143,7 +135,7 @@ func ResolveEvalVarsRuntime(meta *ImageMetadata, deploy *DeploymentNode, engine,
 		return &EvalVarResolver{Env: env, HasRuntime: false}, err
 	}
 
-	mergeRuntimeVars(env, meta, inspection)
+	mergeRuntimeVars(env, meta, inspection, instance)
 	return &EvalVarResolver{Env: env, HasRuntime: true}, nil
 }
 
@@ -189,7 +181,7 @@ func buildTimeVars(meta *ImageMetadata, instance string) map[string]string {
 // stripping the "ov-<image>-" prefix from the engine's full volume name.
 // Bind mounts without a named volume are cross-referenced by destination
 // path against meta.Volumes to recover the short name.
-func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection) {
+func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerInspection, instance string) {
 	if c == nil {
 		return
 	}
@@ -251,26 +243,21 @@ func mergeRuntimeVars(env map[string]string, meta *ImageMetadata, c *ContainerIn
 	}
 
 	// VOLUME_PATH / VOLUME_CONTAINER_PATH — short name comes from either the
-	// volume's ov-<image>- prefix or the image metadata's Volumes list.
+	// volume's ov-<image>- (or ov-<image>-<instance>-) prefix or the image
+	// metadata's Volumes list. BareVolumeName handles both prefix forms
+	// uniformly — same helper that data.go and volumes.go use.
 	destToShort := map[string]string{}
-	if meta != nil {
-		prefix := ""
-		if meta.Image != "" {
-			prefix = "ov-" + meta.Image + "-"
-		}
+	if meta != nil && meta.Image != "" {
 		for _, v := range meta.Volumes {
-			short := strings.TrimPrefix(v.VolumeName, prefix)
-			destToShort[v.ContainerPath] = short
+			destToShort[v.ContainerPath] = BareVolumeName(v.VolumeName, meta.Image, instance)
 		}
 	}
 	for _, m := range c.Mounts {
 		short := ""
 		if m.Name != "" && meta != nil && meta.Image != "" {
-			short = strings.TrimPrefix(m.Name, "ov-"+meta.Image+"-")
-			// Instance-qualified volumes: ov-<image>-<instance>-<short>
-			// Fall back to destination lookup if the strip didn't find a short name.
+			short = BareVolumeName(m.Name, meta.Image, instance)
 			if short == m.Name {
-				short = ""
+				short = "" // not one of ours — fall through to dest lookup
 			}
 		}
 		if short == "" {

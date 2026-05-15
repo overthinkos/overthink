@@ -27,12 +27,18 @@ func TestEncMount_ShortCircuit_AllMounted(t *testing.T) {
 	}
 
 	// Deploy.yml fixture: one image with two encrypted volumes.
-	// Post schema-v4 the deployment map key is `deployment:` singular,
-	// not legacy `images:` plural.
+	// Post schema-v4 the deployment map key is `deploy:` singular,
+	// not legacy `images:` plural. Per the 2026-05-12 require-image
+	// cutover, every pod-target deploy must declare `image:` — without
+	// it LoadDeployConfig returns an error and loadEncryptedVolume
+	// swallowing-the-error path returns 0 mounts, defeating the
+	// short-circuit and triggering a hang in resolveEncPassphraseForMount.
 	dir := t.TempDir()
 	deployPath := filepath.Join(dir, "deploy.yml")
 	deployYAML := `deploy:
   testimg:
+    target: pod
+    image: testimg
     volume:
       - name: vol-a
         type: encrypted
@@ -99,6 +105,8 @@ func TestEncMount_NoShortCircuit_WhenOneUnmounted(t *testing.T) {
 	dir := t.TempDir()
 	deployYAML := `deploy:
   testimg:
+    target: pod
+    image: testimg
     volume:
       - name: vol-a
         type: encrypted

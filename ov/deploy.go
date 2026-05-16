@@ -19,8 +19,8 @@ import (
 // legacy `images:` / `deployments.images.*` nesting is gone — all target
 // kinds (host / vm / pod / k8s) live under the single `deployment:` map.
 type DeployConfig struct {
-	Provides   *ProvidesConfig           `yaml:"provides,omitempty"`
-	Deploy map[string]DeploymentNode `yaml:"deploy"`
+	Provides *ProvidesConfig           `yaml:"provides,omitempty"`
+	Deploy   map[string]DeploymentNode `yaml:"deploy"`
 }
 
 // DeploymentNode is one node in the deployments tree declared in
@@ -51,13 +51,13 @@ type DeployConfig struct {
 // disposable: true does not authorize destroying its children unattended —
 // each child's flag stands on its own (see /ov-internals:disposable).
 type DeploymentNode struct {
-	Version         string                `yaml:"version,omitempty"`
-	Description     *Description          `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
-	Tunnel          *TunnelYAML           `yaml:"tunnel,omitempty"`
-	DNS             string                `yaml:"dns,omitempty"`
-	AcmeEmail       string                `yaml:"acme_email,omitempty"`
-	Volume          []DeployVolumeConfig  `yaml:"volume,omitempty"`
-	Port            []string              `yaml:"port,omitempty"`
+	Version     string               `yaml:"version,omitempty"`
+	Description *Description         `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
+	Tunnel      *TunnelYAML          `yaml:"tunnel,omitempty"`
+	DNS         string               `yaml:"dns,omitempty"`
+	AcmeEmail   string               `yaml:"acme_email,omitempty"`
+	Volume      []DeployVolumeConfig `yaml:"volume,omitempty"`
+	Port        []string             `yaml:"port,omitempty"`
 	// ResolvedPort is the concrete host:container expansion of an "auto"
 	// sentinel in Port. Persisted by ov config / ov update — read by
 	// MergeDeployOntoMetadata in preference to Port when present, so
@@ -302,14 +302,14 @@ type DeploymentNode struct {
 // ByShell) mirror ShellSpec — when populated, they replace the baked
 // entry's body wholesale.
 type DeployShellOverlay struct {
-	ID       string                `yaml:"id,omitempty"`
-	Origin   string                `yaml:"origin,omitempty"`
-	Skip     bool                  `yaml:"skip,omitempty"`
-	Init     string                `yaml:"init,omitempty"`
-	PathAppend []string            `yaml:"path_append,omitempty"`
-	Path     string                `yaml:"path,omitempty"`
-	Priority int                   `yaml:"priority,omitempty"`
-	ByShell  map[string]*ShellSpec `yaml:"-"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
+	ID         string                `yaml:"id,omitempty"`
+	Origin     string                `yaml:"origin,omitempty"`
+	Skip       bool                  `yaml:"skip,omitempty"`
+	Init       string                `yaml:"init,omitempty"`
+	PathAppend []string              `yaml:"path_append,omitempty"`
+	Path       string                `yaml:"path,omitempty"`
+	Priority   int                   `yaml:"priority,omitempty"`
+	ByShell    map[string]*ShellSpec `yaml:"-"` // populated by UnmarshalYAML for bash/zsh/fish/sh keys
 }
 
 // UnmarshalYAML two-pass parses a deploy.yml shell-overlay entry,
@@ -1432,6 +1432,53 @@ func SaveDeployConfig(dc *DeployConfig) error {
 		return fmt.Errorf("renaming %s -> %s: %w", tmpPath, path, err)
 	}
 	return nil
+}
+
+// Lookup returns the DeploymentNode for (image, instance), or
+// (zero, false) when the entry is absent. Safe to call on a nil
+// *DeployConfig — lets callers chain
+// `loadDeployConfigForRead(...).Lookup(image, instance)` without a
+// separate nil check.
+func (dc *DeployConfig) Lookup(image, instance string) (DeploymentNode, bool) {
+	if dc == nil {
+		return DeploymentNode{}, false
+	}
+	entry, ok := dc.Deploy[deployKey(image, instance)]
+	return entry, ok
+}
+
+// LookupKey looks up a deploy entry by its full deploy.yml key (e.g.
+// "foo", "foo/instance", "vm:name"). Safe on nil receiver.
+func (dc *DeployConfig) LookupKey(key string) (DeploymentNode, bool) {
+	if dc == nil {
+		return DeploymentNode{}, false
+	}
+	entry, ok := dc.Deploy[key]
+	return entry, ok
+}
+
+// loadDeployConfigForRead loads deploy.yml for read-only consumption.
+// Unlike the historical `dc, _ := LoadDeployConfig()` pattern (silently
+// discards validation errors → caller proceeds with nil → feature
+// degrades invisibly), this helper SURFACES the load error as a stderr
+// warning while still returning nil — preserving the existing caller
+// nil-check contract but giving the operator visibility into why a
+// command behaved as if deploy.yml were absent.
+//
+// Sibling of loadDeployConfigForWrite — the write variant returns an
+// error and callers MUST abort; the read variant returns nil and
+// callers MAY continue with degraded behavior.
+//
+// context is a short human-readable label included in the warning
+// message so the operator can trace which code path noticed the
+// problem (e.g. "ov status", "config injectEnvProvides").
+func loadDeployConfigForRead(context string) *DeployConfig {
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %s: deploy.yml unavailable for read: %v\n", context, err)
+		return nil
+	}
+	return dc
 }
 
 // loadDeployConfigForWrite loads deploy.yml for mutation. Unlike the

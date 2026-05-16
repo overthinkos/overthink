@@ -26,12 +26,9 @@ func (c *CmdCmd) Run() error {
 	rt, rtErr := ResolveRuntime()
 	var agentEnv []string
 	if rtErr == nil {
-		dc, _ := LoadDeployConfig()
 		var deployImage *DeploymentNode
-		if dc != nil {
-			if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-				deployImage = &overlay
-			}
+		if overlay, ok := loadDeployConfigForRead("ov cmd").Lookup(c.Image, c.Instance); ok {
+			deployImage = &overlay
 		}
 		// Use host user's home as a reasonable default for GPG socket path.
 		// For exec, sockets are already mounted — this only affects env vars.

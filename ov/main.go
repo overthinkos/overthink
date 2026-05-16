@@ -221,26 +221,23 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 		case "tunnel":
 			// Schema v4: Tunnel moved off ImageConfig/ResolvedImage —
 			// deploy-only. Resolve from DeploymentNode.Tunnel via deploy.yml.
-			dc, _ := LoadDeployConfig()
-			if dc != nil {
-				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && overlay.Tunnel != nil {
-					layers, err := ScanAllLayerWithConfig(dir, cfg)
-					if err == nil {
-						portProtos := make(map[int]string)
-						tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layer, portProtos, resolved.Port)
-						if tc != nil && len(tc.Ports) > 0 {
-							fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
-							for _, tp := range tc.Ports {
-								access := "private"
-								if tp.Public {
-									access = "public"
-								}
-								hostname := tp.Hostname
-								if hostname == "" {
-									hostname = "-"
-								}
-								fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
+			if overlay, ok := loadDeployConfigForRead("ov image inspect tunnel").Lookup(c.Image, c.Instance); ok && overlay.Tunnel != nil {
+				layers, err := ScanAllLayerWithConfig(dir, cfg)
+				if err == nil {
+					portProtos := make(map[int]string)
+					tc := ResolveTunnelConfig(overlay.Tunnel, c.Image, "", layers, resolved.Layer, portProtos, resolved.Port)
+					if tc != nil && len(tc.Ports) > 0 {
+						fmt.Println("PORT\tACCESS\tPROTOCOL\tHOSTNAME")
+						for _, tp := range tc.Ports {
+							access := "private"
+							if tp.Public {
+								access = "public"
 							}
+							hostname := tp.Hostname
+							if hostname == "" {
+								hostname = "-"
+							}
+							fmt.Printf("%d\t%s\t%s\t%s\n", tp.Port, access, tp.Protocol, hostname)
 						}
 					}
 				}
@@ -259,12 +256,9 @@ func (c *InspectCmd) runFromConfig(cfg *Config, dir string) error {
 			fmt.Println(engine)
 		case "bind_mounts":
 			// bind_mounts are now deploy-time only; show deploy.yml volume config
-			dc, _ := LoadDeployConfig()
-			if dc != nil {
-				if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-					for _, dv := range overlay.Volume {
-						fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
-					}
+			if overlay, ok := loadDeployConfigForRead("ov image inspect bind_mounts").Lookup(c.Image, c.Instance); ok {
+				for _, dv := range overlay.Volume {
+					fmt.Printf("%s\t%s\t%s\t%s\n", dv.Name, dv.Host, dv.Path, dv.Type)
 				}
 			}
 		case "version":

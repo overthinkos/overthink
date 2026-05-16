@@ -51,10 +51,8 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 	// disk is left alone — only the seed ISO is cheap to rebuild.
 	if spec.Source.Kind == "cloud_image" && seedISOAbs != "" {
 		var existingState *VmDeployState
-		if dc, _ := LoadDeployConfig(); dc != nil {
-			if entry, ok := dc.Deploy["vm:"+vmName]; ok {
-				existingState = entry.VmState
-			}
+		if entry, ok := loadDeployConfigForRead("ov vm create seed-iso").LookupKey("vm:" + vmName); ok {
+			existingState = entry.VmState
 		}
 		if err := RegenerateSeedISO(spec, seedISOAbs, vmStateDir, existingState); err != nil {
 			return fmt.Errorf("regenerating seed ISO: %w", err)

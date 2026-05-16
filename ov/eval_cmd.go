@@ -125,7 +125,7 @@ func (c *EvalLiveCmd) Run() error {
 			}
 		}
 	}
-	dc, _ := LoadDeployConfig()
+	dc := loadDeployConfigForRead("ov eval live")
 	if dc != nil {
 		if entry, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
 			localTests = entry.Eval
@@ -353,7 +353,7 @@ func (c *EvalLiveCmd) runVm() error {
 			projectTests = entry.Eval
 		}
 	}
-	if dc, _ := LoadDeployConfig(); dc != nil {
+	if dc := loadDeployConfigForRead("ov eval vm"); dc != nil {
 		if entry := findVmEntry(dc.Deploy); entry != nil {
 			localTests = entry.Eval
 			if entry.VmState != nil {

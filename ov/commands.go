@@ -150,7 +150,7 @@ func (c *UpdateCmd) syncData(engine string, imageRef string, meta *ImageMetadata
 	}
 
 	// Load deploy config to find bind-backed volumes
-	dc, _ := LoadDeployConfig()
+	dc := loadDeployConfigForRead("ov remove volumes-lookup")
 	if dc == nil {
 		return
 	}

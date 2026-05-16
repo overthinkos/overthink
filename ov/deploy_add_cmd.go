@@ -849,12 +849,10 @@ func (c *DeployAddCmd) runLocal(node *DeploymentNode, plans []*InstallPlan, dir 
 	for k, v := range secretEnv {
 		artifactEnv[k] = v
 	}
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if entry, exists := dc.Deploy[c.Name]; exists {
-			for _, line := range entry.Env {
-				if idx := strings.Index(line, "="); idx > 0 {
-					artifactEnv[line[:idx]] = line[idx+1:]
-				}
+	if entry, ok := loadDeployConfigForRead("ov deploy add artifact-env").LookupKey(c.Name); ok {
+		for _, line := range entry.Env {
+			if idx := strings.Index(line, "="); idx > 0 {
+				artifactEnv[line[:idx]] = line[idx+1:]
 			}
 		}
 	}
@@ -889,11 +887,9 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// build / quadlet emission. Pod-target ephemerals don't have a
 	// snapshot refcount (containers don't have backing chains), so
 	// the helper handles only timer + parent linkage in this path.
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if node, ok := dc.Deploy[c.Name]; ok && node.IsEphemeral() {
-			if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
-				fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
-			}
+	if node, ok := loadDeployConfigForRead("ov deploy add ephemeral-register").LookupKey(c.Name); ok && node.IsEphemeral() {
+		if _, regErr := RegisterEphemeralLifecycle(&node, c.Name); regErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: ephemeral lifecycle registration: %v\n", regErr)
 		}
 	}
 

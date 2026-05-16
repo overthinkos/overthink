@@ -40,7 +40,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	}
 
 	// Load existing VmDeployState from deploy.yml if any.
-	dc, _ := LoadDeployConfig()
+	dc := loadDeployConfigForRead("ov deploy add vm")
 
 	// Ephemeral lifecycle hook (FIRST action — panic-safe TTL ordering).
 	// When this deploy is marked ephemeral, register the systemd

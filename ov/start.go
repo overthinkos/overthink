@@ -54,13 +54,12 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		EnsureCDI()
 	}
 
-	// Load deploy.yml for volume backing config
-	dc, _ := LoadDeployConfig()
+	// Load deploy.yml for volume backing config + later use (env merge,
+	// sidecar check, agent forwarding, metadata overlay).
+	dc := loadDeployConfigForRead("ov start")
 	var deployVolumes []DeployVolumeConfig
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployVolumes = overlay.Volume
-		}
+	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+		deployVolumes = overlay.Volume
 	}
 
 	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
@@ -79,10 +78,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	MergeDeployOntoMetadata(meta, dc, c.Instance)
 
 	// Sidecars require quadlet mode (pod networking is only available via quadlet)
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok && len(overlay.Sidecar) > 0 {
-			return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
-		}
+	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok && len(overlay.Sidecar) > 0 {
+		return fmt.Errorf("image %s has sidecars configured in deploy.yml; use 'ov config %s && ov start %s' (sidecars require quadlet mode)", c.Image, c.Image, c.Image)
 	}
 
 	uid := meta.UID
@@ -164,10 +161,8 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 
 	// Inject agent forwarding mounts and env (direct mode only)
 	var deployImage *DeploymentNode
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployImage = &overlay
-		}
+	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+		deployImage = &overlay
 	}
 	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
 	for _, v := range agentFwd.Volumes {
@@ -393,7 +388,7 @@ func stopTunnelForImage(imageName, instance string) {
 	if imageRef != "" {
 		meta, metaErr := ExtractMetadata("podman", imageRef)
 		if metaErr == nil && meta != nil {
-			dc, _ := LoadDeployConfig()
+			dc := loadDeployConfigForRead("ov start tunnel merge")
 			MergeDeployOntoMetadata(meta, dc, instance)
 			if meta.Tunnel != nil {
 				tc = TunnelConfigFromMetadata(meta)

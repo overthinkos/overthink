@@ -169,10 +169,8 @@ func (c *VmBuildCmd) runVmSpecBuild(vmName string, spec *VmSpec, rt *ResolvedRun
 		return err
 	}
 	var existingState *VmDeployState
-	if dc, _ := LoadDeployConfig(); dc != nil {
-		if e, ok := dc.Deploy["vm:"+vmName]; ok {
-			existingState = e.VmState
-		}
+	if e, ok := loadDeployConfigForRead("ov vm build").LookupKey("vm:" + vmName); ok {
+		existingState = e.VmState
 	}
 
 	switch spec.Source.Kind {

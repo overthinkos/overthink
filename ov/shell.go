@@ -93,13 +93,12 @@ func (c *ShellCmd) Run() error {
 		EnsureCDI()
 	}
 
-	// Load deploy.yml for volume backing config
-	dc, _ := LoadDeployConfig()
+	// Load deploy.yml for volume backing config + later use (env merge,
+	// agent forwarding, metadata overlay).
+	dc := loadDeployConfigForRead("ov shell")
 	var deployVolumes []DeployVolumeConfig
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployVolumes = overlay.Volume
-		}
+	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+		deployVolumes = overlay.Volume
 	}
 
 	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
@@ -147,10 +146,8 @@ func (c *ShellCmd) Run() error {
 
 	// Resolve agent forwarding (SSH/GPG socket mounts)
 	var deployImage *DeploymentNode
-	if dc != nil {
-		if overlay, ok := dc.Deploy[deployKey(c.Image, c.Instance)]; ok {
-			deployImage = &overlay
-		}
+	if overlay, ok := dc.Lookup(c.Image, c.Instance); ok {
+		deployImage = &overlay
 	}
 	agentFwd := ResolveAgentForwarding(rt, deployImage, home)
 

@@ -137,7 +137,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Apply deploy.yml overrides onto label metadata
-	dc, _ := LoadDeployConfig()
+	dc := loadDeployConfigForRead("ov config")
 
 	// One-time migration: move any plaintext credentials that live in
 	// deploy.yml's env: list from the legacy -e flow into the credential
@@ -274,7 +274,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		}
 	}
 	// Reload deploy config after injection to pick up newly injected provides
-	dc, _ = LoadDeployConfig()
+	dc = loadDeployConfigForRead("ov config reload-after-inject")
 
 	// Resolve SSH key if --ssh-key was provided
 	if c.SshKey != "" {
@@ -524,7 +524,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 		KeyringBackend:  isKeyring,
 		PodName:         podName,
-		Sidecar:        resolvedSidecars,
+		Sidecar:         resolvedSidecars,
 	}
 
 	// Suppress file-sourced env vars if using EnvFile (avoid duplication).
@@ -556,7 +556,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Network:     resolvedNetwork,
 		Security:    &security,
 		Volume:      deployVolumes,
-		Sidecar:    deploySidecars,
+		Sidecar:     deploySidecars,
 		Tunnel:      meta.Tunnel,
 		SecretNames: secretDepNames(meta),
 	})
@@ -669,7 +669,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	}
 
 	// Reload deploy config after saveDeployState wrote the volumes
-	dc, _ = LoadDeployConfig()
+	dc = loadDeployConfigForRead("ov config reload-after-volumes")
 
 	// Provision data from image staging (/data/) into the image's volumes
 	// (both bind mounts and named volumes — provisionData dispatches on kind).
@@ -781,7 +781,7 @@ skipDataProvision:
 
 	// Warn about missing mcp_requires servers
 	if meta != nil && len(meta.MCPRequires) > 0 {
-		dc, _ := LoadDeployConfig()
+		dc := loadDeployConfigForRead("ov config mcp_requires check")
 		var mcpServers []MCPProvidesEntry
 		if dc != nil && dc.Provides != nil {
 			mcpServers = podAwareMCPProvides(dc.Provides.MCP, deployKey(c.Image, c.Instance), containerNameInstance(c.Image, c.Instance))
@@ -1233,9 +1233,9 @@ func injectEnvProvides(imageName, instance string, envProvides map[string]string
 		return false, nil
 	}
 
-	dc, _ := LoadDeployConfig()
-	if dc == nil {
-		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+	dc, err := loadDeployConfigForWrite("injectEnvProvides")
+	if err != nil {
+		return false, err
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -1297,9 +1297,9 @@ func injectMCPProvides(imageName, instance string, mcpProvides []MCPServerYAML, 
 		return false, nil
 	}
 
-	dc, _ := LoadDeployConfig()
-	if dc == nil {
-		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+	dc, err := loadDeployConfigForWrite("injectMCPProvides")
+	if err != nil {
+		return false, err
 	}
 	if dc.Provides == nil {
 		dc.Provides = &ProvidesConfig{}
@@ -1659,7 +1659,7 @@ func updateAllDeployedQuadlets(rt *ResolvedRuntime, skipImage string) error {
 			EncryptedMounts: hasEncryptedBindMounts(bindMounts),
 			KeyringBackend:  isKeyring,
 			PodName:         podName,
-			Sidecar:        resolvedSidecars,
+			Sidecar:         resolvedSidecars,
 		}
 
 		// Suppress file-sourced env vars if using EnvFile.
@@ -1732,7 +1732,7 @@ func resolveDeployKeyToImage(key, instance string) string {
 		return ""
 	}
 	// User-side first.
-	if dc, _ := LoadDeployConfig(); dc != nil {
+	if dc := loadDeployConfigForRead("resolveImageNameForDeploy"); dc != nil {
 		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Image != "" {
 			return entry.Image
 		}

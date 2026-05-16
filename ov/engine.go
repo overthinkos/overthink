@@ -69,11 +69,8 @@ func ResolveImageEngineFromDir(dir, imageName, globalEngine string) string {
 // ResolveImageEngineForDeploy resolves the run engine from deploy.yml,
 // falling back to globalEngine. No image.yml dependency.
 func ResolveImageEngineForDeploy(imageName, instance, globalEngine string) string {
-	dc, _ := LoadDeployConfig()
-	if dc != nil {
-		if entry, ok := dc.Deploy[deployKey(imageName, instance)]; ok && entry.Engine != "" {
-			return entry.Engine
-		}
+	if entry, ok := loadDeployConfigForRead("ResolveImageEngineForDeploy").Lookup(imageName, instance); ok && entry.Engine != "" {
+		return entry.Engine
 	}
 	return globalEngine
 }

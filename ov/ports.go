@@ -281,12 +281,9 @@ func ApplyPortOverrides(ports []string, overrides []string) ([]string, error) {
 
 // SavePortOverride writes port overrides to deploy.yml for persistence.
 func SavePortOverride(image, instance string, ports []string) error {
-	dc, _ := LoadDeployConfig()
-	if dc == nil {
-		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
-	}
-	if dc.Deploy == nil {
-		dc.Deploy = make(map[string]DeploymentNode)
+	dc, err := loadDeployConfigForWrite("SavePortOverride")
+	if err != nil {
+		return err
 	}
 
 	key := deployKey(image, instance)

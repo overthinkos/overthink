@@ -208,7 +208,7 @@ func RenderService(entry *ServiceEntry, initDef *InitDef, ctx ServiceRenderConte
 	schema := initDef.ServiceSchema
 	out := &RenderedService{}
 	ctx.Name = entry.Name
-	ctx.Layer = ctx.Layer // preserved from caller
+	// ctx.Layer is preserved from the caller (not overwritten here).
 	ctx.Scope = entry.EffectiveScope()
 	ctx.PackagedUnit = entry.UsePackaged
 	ctx.Env = flattenedEnvMap(entry.Env, entry.Overrides)

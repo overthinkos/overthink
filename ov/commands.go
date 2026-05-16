@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -245,29 +246,34 @@ func (c *RemoveCmd) Run() error {
 			fmt.Fprintf(os.Stderr, "Removed %s\n", podPath)
 		}
 
-		// Remove sidecar .container files (glob for ov-<image>-*.container in quadlet dir)
-		podPrefix := PodNameInstance(imageName, c.Instance) + "-"
-		if entries, err := os.ReadDir(qdir); err == nil {
-			for _, entry := range entries {
-				name := entry.Name()
-				if strings.HasPrefix(name, podPrefix) && strings.HasSuffix(name, ".container") {
-					scPath := filepath.Join(qdir, name)
-					if err := os.Remove(scPath); err == nil {
-						fmt.Fprintf(os.Stderr, "Removed %s\n", scPath)
-					}
-				}
+		// Remove sidecar .container files (exact-name match, no prefix
+		// glob). Sources sidecar names from deploy.yml — see
+		// resolveSidecarNames for why deploy.yml is authoritative.
+		sidecarNames := resolveSidecarNames(imageName, c.Instance)
+		podBase := PodNameInstance(imageName, c.Instance)
+		for _, sc := range sidecarNames {
+			scPath := filepath.Join(qdir, podBase+"-"+sc+".container")
+			if err := os.Remove(scPath); err == nil {
+				fmt.Fprintf(os.Stderr, "Removed %s\n", scPath)
 			}
 		}
 
-		// Remove sidecar config files (e.g., tailscale serve config)
+		// Remove sidecar config files. Naming convention is
+		// `<podBase>-<sidecar>-<purpose>.<ext>` (e.g.
+		// ov-foo-tailscale-serve.json from
+		// quadlet_pod.go:tailscaleServeConfigPath). The prefix is
+		// anchored to the sidecar NAME so unrelated sidecars / bases
+		// can't match.
 		if scDir, scErr := sidecarConfigDir(); scErr == nil {
-			scPrefix := PodNameInstance(imageName, c.Instance) + "-"
 			if entries, err := os.ReadDir(scDir); err == nil {
-				for _, entry := range entries {
-					if strings.HasPrefix(entry.Name(), scPrefix) {
-						scfPath := filepath.Join(scDir, entry.Name())
-						if err := os.Remove(scfPath); err == nil {
-							fmt.Fprintf(os.Stderr, "Removed %s\n", scfPath)
+				for _, sc := range sidecarNames {
+					scfPrefix := podBase + "-" + sc + "-"
+					for _, entry := range entries {
+						if strings.HasPrefix(entry.Name(), scfPrefix) {
+							scfPath := filepath.Join(scDir, entry.Name())
+							if err := os.Remove(scfPath); err == nil {
+								fmt.Fprintf(os.Stderr, "Removed %s\n", scfPath)
+							}
 						}
 					}
 				}
@@ -373,4 +379,28 @@ func resolveImageName(image string) string {
 		return ParseRemoteRef(ref).Name
 	}
 	return image
+}
+
+// resolveSidecarNames returns the sorted set of sidecar key names
+// attached to this deploy via deploy.yml. deploy.yml is the
+// authoritative source because sidecars only become attached via
+// `ov config --sidecar <name>` which writes them into the deploy
+// entry's `sidecar:` map. Image OCI labels carry sidecar TEMPLATES
+// but not "which sidecars are attached to THIS deploy on THIS host".
+// Returns nil when nothing is attached.
+func resolveSidecarNames(imageName, instance string) []string {
+	dc, err := LoadDeployConfig()
+	if err != nil || dc == nil {
+		return nil
+	}
+	entry, ok := dc.Deploy[deployKey(imageName, instance)]
+	if !ok || len(entry.Sidecar) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(entry.Sidecar))
+	for name := range entry.Sidecar {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

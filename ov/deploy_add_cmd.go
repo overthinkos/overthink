@@ -980,11 +980,20 @@ func (c *DeployAddCmd) runContainer(plans []*InstallPlan, base string, distroCfg
 	// we actually write each field (so an unrelated code path can't
 	// silently clear a prior explicit opt-in).
 	if c.Disposable || c.Lifecycle != "" {
+		// Image + Target are required by the 2026-05-12 require-image
+		// schema validator. Without them the next LoadDeployConfig
+		// would hard-fail on this entry, breaking every subsequent
+		// `ov` invocation. saveDeployState only writes these when the
+		// existing entry doesn't already declare them, so this is safe
+		// to populate unconditionally for the container/pod path
+		// reached here (runContainer dispatches to this code).
 		saveDeployState(c.Name, "", SaveDeployStateInput{
 			SetDisposable: c.Disposable,
 			Disposable:    c.Disposable,
 			SetLifecycle:  c.Lifecycle != "",
 			Lifecycle:     c.Lifecycle,
+			Image:         c.Ref,
+			Target:        "pod",
 		})
 		if c.Disposable {
 			fmt.Fprintln(os.Stderr, "Marked deploy disposable — `ov rebuild` will act unattended on this deploy.")

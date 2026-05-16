@@ -1389,7 +1389,12 @@ func LoadDeployFile(path string) (*DeployConfig, error) {
 	return &dc, nil
 }
 
-// SaveDeployConfig writes a DeployConfig to the standard deploy.yml path.
+// SaveDeployConfig writes a DeployConfig to the standard deploy.yml
+// path. Uses tempfile + os.Rename for atomic write — defense in depth
+// against partial writes truncating the prior file (primary guard is
+// loadDeployConfigForWrite's error propagation; this catches any
+// remaining IO/marshal failure mid-write). The tempfile lives in the
+// same directory as the target so rename stays on the same filesystem.
 func SaveDeployConfig(dc *DeployConfig) error {
 	path, err := DeployConfigPath()
 	if err != nil {
@@ -1402,10 +1407,64 @@ func SaveDeployConfig(dc *DeployConfig) error {
 	if err != nil {
 		return fmt.Errorf("marshaling deploy config: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".deploy.yml.tmp.*")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Chmod(0600); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("renaming %s -> %s: %w", tmpPath, path, err)
 	}
 	return nil
+}
+
+// loadDeployConfigForWrite loads deploy.yml for mutation. Unlike the
+// historical `dc, _ := LoadDeployConfig()` pattern (silently discards
+// validation errors → writer constructs an empty config → SaveDeployConfig
+// truncates the file), this helper PROPAGATES the load error so writers
+// can ABORT instead of destroying data.
+//
+// Cautionary tale: pre-2026-05-16 the `ov deploy add --disposable` write
+// path discarded the load error. The 2026-05-12 require-image schema
+// cutover widened the set of conditions under which LoadDeployConfig
+// returns an error; once any pre-existing deploy.yml entry failed
+// validation, the next `ov deploy add` constructed a fresh empty
+// DeployConfig containing only the new entry and truncated the on-disk
+// file. The user's `provides:` block and unrelated deploy entries
+// vanished silently. New write sites MUST use this helper.
+//
+// context is a short human-readable label included in the error message
+// (e.g. "saveDeployState"). Returns (nil, error) when the file exists
+// but failed parse/validation; (fresh empty config, nil) when the file
+// doesn't exist; (parsed config, nil) on clean load.
+func loadDeployConfigForWrite(context string) (*DeployConfig, error) {
+	dc, err := LoadDeployConfig()
+	if err != nil {
+		return nil, fmt.Errorf("%s: refusing to write — deploy.yml load failed: %w", context, err)
+	}
+	if dc == nil {
+		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
+	}
+	if dc.Deploy == nil {
+		dc.Deploy = make(map[string]DeploymentNode)
+	}
+	return dc, nil
 }
 
 // MergeDeployConfigs merges multiple DeployConfigs left-to-right. Later
@@ -1619,6 +1678,16 @@ type SaveDeployStateInput struct {
 	Disposable    bool
 	SetLifecycle  bool
 	Lifecycle     string
+
+	// Image + Target — the schema-required fields per the 2026-05-12
+	// require-image cutover (validateDeployRequiresImage). Written
+	// when non-empty AND when the existing entry doesn't already have
+	// a value (don't clobber operator-authored refs on re-config).
+	// Without these, `ov deploy add foo bar --disposable` would write
+	// an entry that the validator then rejects on the next load —
+	// hard-failing every subsequent `ov` invocation.
+	Image  string
+	Target string
 }
 
 // saveDeployState persists deployment parameters to deploy.yml (best-effort).
@@ -1631,15 +1700,19 @@ type SaveDeployStateInput struct {
 // this scrub catches anything that slipped through (e.g., a future refactor
 // that adds a new code path writing into dc.Env). Matches plan §6.7.
 func saveDeployState(imageName, instance string, input SaveDeployStateInput) {
-	dc, _ := LoadDeployConfig()
-	if dc == nil {
-		dc = &DeployConfig{Deploy: make(map[string]DeploymentNode)}
-	}
-	if dc.Deploy == nil {
-		dc.Deploy = make(map[string]DeploymentNode)
+	dc, err := loadDeployConfigForWrite("saveDeployState")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not save to deploy.yml: %v\n", err)
+		return
 	}
 	key := deployKey(imageName, instance)
 	entry := dc.Deploy[key] // preserve existing fields (tunnel, volumes, etc.)
+	if input.Image != "" && entry.Image == "" {
+		entry.Image = input.Image
+	}
+	if input.Target != "" && entry.Target == "" {
+		entry.Target = input.Target
+	}
 	if input.Volume != nil {
 		entry.Volume = input.Volume
 	}

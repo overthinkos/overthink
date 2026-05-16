@@ -128,21 +128,118 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:5037}
       reachable: true
       timeout: 5s
+    # Pre-2026-05-16 these checks used `command: /opt/.../adb ... in_container: true`
+    # — that worked but required the runner to shell into the container.
+    # The new `adb:` verb (host-side goadb client) replaces them: same
+    # assertions, host-side execution, structured output. R5 mandates
+    # deletion of the deprecated path in the same commit.
     - id: adb-detects-emulator
       scope: deploy
-      # Runs in-container because the host doesn't ship adb; the
-      # in-container adb (from android-sdk's platform-tools) talks
-      # to the in-container adb server on 127.0.0.1:5037.
-      command: /opt/android-sdk/platform-tools/adb devices
-      in_container: true
-      exit_status: 0
+      adb: devices
       stdout:
         - contains: "emulator-5554"
     - id: android-boot-completed
       scope: deploy
-      command: /opt/android-sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
-      in_container: true
-      exit_status: 0
+      adb: getprop
+      property: sys.boot_completed
       stdout:
         - contains: "1"
       timeout: 300s
+
+    # Extended adb verb coverage — proves each method end-to-end on a
+    # fresh disposable rebuild (R10 acceptance).
+    - id: adb-shell-android-version
+      scope: deploy
+      adb: shell
+      # Args[0..] becomes argv for the shell. Result asserted on stdout.
+      args: [getprop, ro.build.version.release]
+      stdout:
+        - contains: "14"
+    - id: adb-wait-for-device-ready
+      scope: deploy
+      adb: wait-for-device
+      timeout: 240s
+      stdout:
+        - contains: ready
+    # Disable Play Protect ADB-install verification before the install
+    # check — on freshly-booted emulators Google's online verifier times
+    # out (the AVD has no internet) and pm install fails with
+    # INSTALL_FAILED_VERIFICATION_FAILURE. Both global settings together
+    # cover the legacy + modern code paths. Idempotent — running twice
+    # is a no-op.
+    - id: adb-disable-verifier
+      scope: deploy
+      adb: shell
+      args: [settings, put, global, package_verifier_enable, "0"]
+    - id: adb-disable-adb-install-verifier
+      scope: deploy
+      adb: shell
+      args: [settings, put, global, verifier_verify_adb_installs, "0"]
+    - id: adb-install-apidemos
+      scope: deploy
+      adb: install
+      # adb: install reads `apk:` from the HOST filesystem (the host
+      # ov binary pushes via the ADB sync protocol). Path resolves
+      # against the project root.
+      apk: ./tests/data/ApiDemos-debug.apk
+      stdout:
+        - contains: Success
+      timeout: 60s
+    - id: adb-shell-confirms-apidemos-installed
+      scope: deploy
+      adb: shell
+      args: [pm, list, packages, io.appium.android.apis]
+      stdout:
+        - contains: "io.appium.android.apis"
+    - id: adb-screencap-png-min-size
+      scope: deploy
+      adb: screencap
+      artifact: /tmp/ov-eval-adb-screencap.png
+      artifact_min_bytes: 5000
+    - id: adb-uninstall-apidemos
+      scope: deploy
+      adb: uninstall
+      # args[0] = package id (posPackageArg builder convention).
+      args: [io.appium.android.apis]
+      stdout:
+        - contains: Success
+
+    # Appium verb coverage — full session lifecycle on a single check
+    # chain. Order matters: session-create must precede the operations,
+    # session-delete must come last. (The `appium: status` smoke check
+    # lives in the appium-server layer's own eval block — R3, no
+    # duplication — and gates this entire block via the layer chain.)
+    - id: appium-session-create
+      scope: deploy
+      appium: session-create
+      # UiAutomator2 needs to install its instrumentation server APK and
+      # wait for the test runner to come up on first invocation; on a
+      # freshly-booted emulator this exceeds the 30s default. Bump the
+      # two relevant timeouts to 120s so first-run R10 succeeds.
+      # `noReset` keeps state between session-create cycles for the same
+      # pod (faster re-runs during exploration).
+      caps: |
+        {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"14","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000}
+      timeout: 600s
+    - id: appium-install-apidemos
+      scope: deploy
+      appium: install-app
+      # Appium runs in-container and reads `apk:` from ITS view of the
+      # filesystem. The R10 harness `podman cp`s the test APK to
+      # /tmp/ApiDemos-debug.apk before running `ov eval live`. The path
+      # is a stable agreement, not a bind mount, because the canonical
+      # workspace volume in this image is the AVD store — adding a
+      # tests bind would require an image-side volume declaration that
+      # only benefits R10. See README.md "R10 harness — APK staging".
+      apk: /tmp/ApiDemos-debug.apk
+      timeout: 60s
+    - id: appium-screenshot-default-canvas
+      scope: deploy
+      appium: screenshot
+      artifact: /tmp/ov-eval-appium-screenshot.png
+      artifact_min_bytes: 5000
+    - id: appium-session-delete
+      scope: deploy
+      appium: session-delete
+      stdout:
+        - contains: deleted

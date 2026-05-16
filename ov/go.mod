@@ -10,7 +10,9 @@ require (
 	github.com/google/go-containerregistry v0.20.7
 	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/modelcontextprotocol/go-sdk v1.5.0
+	github.com/tebeka/selenium v0.9.9
 	github.com/tobischo/gokeepasslib/v3 v3.6.2
+	github.com/zach-klippenstein/goadb v0.0.0-20201208042340-620e0e950ed7
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
@@ -24,6 +26,7 @@ require (
 )
 
 require (
+	github.com/blang/semver v3.5.1+incompatible // indirect
 	github.com/containerd/stargz-snapshotter/estargz v0.18.1 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect

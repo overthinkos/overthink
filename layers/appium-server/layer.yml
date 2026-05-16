@@ -68,8 +68,10 @@ layer:
       timeout: 10s
     - id: appium-status-ready
       scope: deploy
-      command: curl -fsS http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
-      in_container: false
-      exit_status: 0
+      # Replaces the pre-2026-05-16 `command: curl …/status` form.
+      # The new `appium: status` verb uses the host-side selenium-SDK /
+      # raw-HTTP client and the same HOST_PORT resolution as ${HOST_PORT:4723},
+      # but without requiring `curl` to be available on the host.
+      appium: status
       stdout:
-        - contains: "ready"
+        - contains: '"ready":true'

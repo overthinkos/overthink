@@ -151,6 +151,10 @@ func validateOvVerb(c *Check, verb, loc, effectiveScope string, errs *Validation
 		method, allowlist = c.Spice, spiceMethods
 	case "libvirt":
 		method, allowlist = c.Libvirt, libvirtMethods
+	case "adb":
+		method, allowlist = c.Adb, adbMethods
+	case "appium":
+		method, allowlist = c.Appium, appiumMethods
 	default:
 		return
 	}

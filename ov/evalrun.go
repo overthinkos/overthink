@@ -336,6 +336,10 @@ func (r *Runner) runOne(ctx context.Context, c *Check) EvalResult {
 			dr = r.runLibvirt(ctx, &expanded)
 		case "k8s":
 			dr = r.runK8s(ctx, &expanded)
+		case "adb":
+			dr = r.runAdb(ctx, &expanded)
+		case "appium":
+			dr = r.runAppium(ctx, &expanded)
 		case "summarize":
 			dr = r.runSummarize(ctx, &expanded)
 		case "kill":

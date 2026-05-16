@@ -315,6 +315,43 @@ var libvirtMethods = map[string]methodSpec{
 // a k3s-server layer).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// adb methods — `ov eval adb <method>` speaks the ADB wire protocol to the
+// container's host-mapped adb-server port (5037 → host's HOST_PORT:5037).
+// Deploy-scope only; the runner shells out to `ov eval adb <method> <image>
+// [args]` via runOvVerb. Implementation lives in ov/adb.go.
+// ---------------------------------------------------------------------------
+
+var adbMethods = map[string]methodSpec{
+	"devices":         {path: []string{"adb", "devices"}},
+	"shell":           {path: []string{"adb", "shell"}, required: []string{"Args"}, posArgs: posShellArgs},
+	"install":         {path: []string{"adb", "install"}, required: []string{"Apk"}, posArgs: posApkFlag},
+	"uninstall":       {path: []string{"adb", "uninstall"}, required: []string{"Args"}, posArgs: posPackageArg},
+	"getprop":         {path: []string{"adb", "getprop"}, required: []string{"Property"}, posArgs: posPropertyArg},
+	"screencap":       {path: []string{"adb", "screencap"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
+	"logcat-tail":     {path: []string{"adb", "logcat-tail"}, posArgs: posLogcatTail},
+	"wait-for-device": {path: []string{"adb", "wait-for-device"}, posArgs: posWaitForDevice},
+}
+
+// ---------------------------------------------------------------------------
+// appium methods — `ov eval appium <method>` drives Appium WebDriver via the
+// tebeka/selenium SDK against the container's host-mapped 4723 port. Session
+// lifecycle (create / delete) persists to ~/.cache/ov/appium/sessions/
+// <image>[_<instance>].json so multi-step tests share a session efficiently.
+// Implementation in ov/appium.go + ov/appium_session.go.
+// ---------------------------------------------------------------------------
+
+var appiumMethods = map[string]methodSpec{
+	"status":         {path: []string{"appium", "status"}},
+	"session-create": {path: []string{"appium", "session-create"}, required: []string{"Caps"}, posArgs: posCapsFlag},
+	"session-delete": {path: []string{"appium", "session-delete"}},
+	"install-app":    {path: []string{"appium", "install-app"}, required: []string{"Apk"}, posArgs: posApkFlag},
+	"find":           {path: []string{"appium", "find"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
+	"click":          {path: []string{"appium", "click"}, required: []string{"Selector"}, posArgs: posSelectorStrategy},
+	"send-keys":      {path: []string{"appium", "send-keys"}, required: []string{"Selector", "Text"}, posArgs: posSelectorTextStrategy},
+	"screenshot":     {path: []string{"appium", "screenshot"}, required: []string{"Artifact"}, posArgs: posArtifactFlag, artifact: true},
+}
+
 // k8s methods all run against a cluster, not an image/container, so
 // skipImage=true across the board.
 var k8sMethods = map[string]methodSpec{
@@ -670,6 +707,73 @@ func posLibvirtQmp(c *Check) []string {
 	return args
 }
 
+// adb / appium positional builders. All flag-form (--apk, --caps, --selector,
+// --strategy, --text) so the CLI subcommand structs in adb.go / appium.go
+// can use Kong's flag parser directly without positional ordering surprises.
+
+// posShellArgs prefixes "--" so kong doesn't interpret `-l` / `-p` / etc.
+// shell args as flags of the outer `ov eval adb shell` invocation.
+func posShellArgs(c *Check) []string {
+	return append([]string{"--"}, c.Args...)
+}
+
+// posPackageArg takes the package id from Args[0] for `adb uninstall`. The
+// Args:[0] convention (vs. a dedicated Package modifier) keeps the modifier
+// surface flat and avoids overloading c.Property.
+func posPackageArg(c *Check) []string {
+	if len(c.Args) == 0 {
+		return nil
+	}
+	return []string{c.Args[0]}
+}
+
+func posPropertyArg(c *Check) []string { return []string{c.Property} }
+func posApkFlag(c *Check) []string     { return []string{"--apk", c.Apk} }
+func posArtifactFlag(c *Check) []string { return []string{"--artifact", c.Artifact} }
+func posCapsFlag(c *Check) []string    { return []string{"--caps", c.Caps} }
+
+// posSelectorStrategy emits --selector + optional --strategy. Used by appium
+// find / click. Default strategy (xpath) is applied subprocess-side when
+// --strategy is omitted.
+func posSelectorStrategy(c *Check) []string {
+	args := []string{"--selector", c.Selector}
+	if c.Strategy != "" {
+		args = append(args, "--strategy", c.Strategy)
+	}
+	if c.Session != "" {
+		args = append(args, "--session", c.Session)
+	}
+	return args
+}
+
+// posSelectorTextStrategy adds --text for send-keys.
+func posSelectorTextStrategy(c *Check) []string {
+	args := posSelectorStrategy(c)
+	args = append(args, "--text", c.Text)
+	return args
+}
+
+// posLogcatTail emits --lines / --filter optionals only when set; the CLI
+// defaults handle the unset case.
+func posLogcatTail(c *Check) []string {
+	var args []string
+	if c.Amount > 0 {
+		args = append(args, "--lines", strconv.Itoa(c.Amount))
+	}
+	if c.Query != "" {
+		args = append(args, "--filter", c.Query)
+	}
+	return args
+}
+
+// posWaitForDevice emits --timeout when set; default lives subprocess-side.
+func posWaitForDevice(c *Check) []string {
+	if c.Timeout == "" {
+		return nil
+	}
+	return []string{"--timeout", c.Timeout}
+}
+
 // ---------------------------------------------------------------------------
 // Verb dispatchers
 // ---------------------------------------------------------------------------
@@ -708,6 +812,14 @@ func (r *Runner) runLibvirt(ctx context.Context, c *Check) EvalResult {
 
 func (r *Runner) runK8s(ctx context.Context, c *Check) EvalResult {
 	return r.runOvVerb(ctx, c, "k8s", c.K8s, k8sMethods)
+}
+
+func (r *Runner) runAdb(ctx context.Context, c *Check) EvalResult {
+	return r.runOvVerb(ctx, c, "adb", c.Adb, adbMethods)
+}
+
+func (r *Runner) runAppium(ctx context.Context, c *Check) EvalResult {
+	return r.runOvVerb(ctx, c, "appium", c.Appium, appiumMethods)
 }
 
 // runOvVerb is the shared dispatch path: skip checks, method lookup,
@@ -1122,6 +1234,22 @@ func isZeroField(c *Check, name string) bool {
 		return c.K8sVersion == ""
 	case "File":
 		return c.File == ""
+	case "Args":
+		return len(c.Args) == 0
+	case "Apk":
+		return c.Apk == ""
+	case "Property":
+		return c.Property == ""
+	case "Caps":
+		return c.Caps == ""
+	case "Strategy":
+		return c.Strategy == ""
+	case "Session":
+		return c.Session == ""
+	case "Adb":
+		return c.Adb == ""
+	case "Appium":
+		return c.Appium == ""
 	}
 	// Unknown field name is a programming error: treat as "not zero" so
 	// authoring errors surface elsewhere instead of spurious skips.

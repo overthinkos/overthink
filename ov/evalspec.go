@@ -61,6 +61,8 @@ type Check struct {
 	Spice   string `yaml:"spice,omitempty"   json:"spice,omitempty"`
 	Libvirt string `yaml:"libvirt,omitempty" json:"libvirt,omitempty"`
 	K8s     string `yaml:"k8s,omitempty"     json:"k8s,omitempty"`
+	Adb     string `yaml:"adb,omitempty"     json:"adb,omitempty"`
+	Appium  string `yaml:"appium,omitempty"  json:"appium,omitempty"`
 	// Kill is a verb discriminator. The value is a PID string (typically
 	// produced via ${CAPTURED:<name>} from a prior `command:` step that
 	// ran with `background: true` and captured its "backgrounded pid=N"
@@ -299,6 +301,13 @@ type Check struct {
 	URI     string `yaml:"uri,omitempty"      json:"uri,omitempty"`      // mcp: resource URI for the `read` method
 	Input   string `yaml:"input,omitempty"    json:"input,omitempty"`    // mcp: JSON argument blob for the `call` method (e.g. '{"path":"x.ipynb"}')
 
+	// adb / appium-specific modifiers. See /ov-eval:adb and /ov-eval:appium.
+	Apk      string `yaml:"apk,omitempty"      json:"apk,omitempty"`      // adb: install / appium: install-app — APK path on host filesystem
+	Property string `yaml:"property,omitempty" json:"property,omitempty"` // adb: getprop — system property key (e.g. sys.boot_completed)
+	Caps     string `yaml:"caps,omitempty"     json:"caps,omitempty"`     // appium: session-create — W3C alwaysMatch capabilities JSON
+	Strategy string `yaml:"strategy,omitempty" json:"strategy,omitempty"` // appium: find/click/send-keys — locator strategy (xpath|id|accessibility-id|class-name|android-uiautomator)
+	Session  string `yaml:"session,omitempty"  json:"session,omitempty"`  // appium: explicit session id override (default: read from ~/.cache/ov/appium/sessions/<image>[_<instance>].json)
+
 	// record-specific modifiers — record: verb wraps `ov eval record <method>`.
 	// The Artifact + ArtifactMinBytes modifiers are reused: for `record: stop`
 	// Artifact is the host-side file path (-o flag) and ArtifactMinBytes
@@ -318,6 +327,7 @@ var CheckVerbs = []string{
 	"mount", "addr", "matching",
 	"cdp", "wl", "dbus", "vnc", "mcp",
 	"record", "spice", "libvirt", "k8s",
+	"adb", "appium",
 	"summarize",
 	"kill",
 }
@@ -367,7 +377,7 @@ func (c *Check) verbsSet() []string {
 	// a modifier (e.g. argv for libvirt:guest/exec).
 	hasOvVerb := c.Cdp != "" || c.Wl != "" || c.Dbus != "" || c.Vnc != "" ||
 		c.Mcp != "" || c.Record != "" || c.Spice != "" || c.Libvirt != "" ||
-		c.K8s != ""
+		c.K8s != "" || c.Adb != "" || c.Appium != ""
 	if c.Command != "" && !hasOvVerb {
 		set = append(set, "command")
 	}
@@ -424,6 +434,12 @@ func (c *Check) verbsSet() []string {
 	}
 	if c.K8s != "" {
 		set = append(set, "k8s")
+	}
+	if c.Adb != "" {
+		set = append(set, "adb")
+	}
+	if c.Appium != "" {
+		set = append(set, "appium")
 	}
 	if c.Summarize != "" {
 		set = append(set, "summarize")
@@ -776,6 +792,7 @@ func (c *Check) StringFields() []*string {
 		// Test-mode live-container verb discriminators + modifiers.
 		&c.Cdp, &c.Wl, &c.Dbus, &c.Vnc, &c.Mcp,
 		&c.Record, &c.Spice, &c.Libvirt, &c.K8s,
+		&c.Adb, &c.Appium,
 		// k8s + shared resource-identity modifiers
 		&c.Name, &c.Namespace, &c.Label, &c.Cluster, &c.Manifest,
 		&c.K8sKind, &c.K8sContext, &c.Kubeconfig,
@@ -786,6 +803,8 @@ func (c *Check) StringFields() []*string {
 		&c.Direction, &c.Target, &c.Action, &c.Query,
 		// mcp-specific modifiers
 		&c.McpName, &c.Tool, &c.URI, &c.Input,
+		// adb / appium-specific modifiers
+		&c.Apk, &c.Property, &c.Caps, &c.Strategy, &c.Session,
 		// record-specific modifiers
 		&c.RecordName, &c.RecordMode,
 		// BDD-era modifiers — On may contain ${VAR}; Capture/Eventually/RetryInterval

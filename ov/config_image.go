@@ -122,7 +122,15 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	imageRef := resolveShellImageRef("", c.Image, c.Tag)
 	if rewritten := resolveDeployKeyToImage(c.Image, c.Instance); rewritten != "" && rewritten != c.Image {
 		fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, rewritten)
-		imageRef = rewritten
+		// Route Pattern B's image short-name through the same local-CalVer
+		// resolver Pattern A uses on line above. Without this, ExtractMetadata
+		// gets a bare short name that podman storage doesn't know (storage
+		// is keyed by full registry refs like ghcr.io/overthinkos/archlinux:TAG).
+		// Pre-2026-05-16 bug: ensure-image succeeded (internal short-name
+		// resolution) but the very next ExtractMetadata call errored with
+		// "image X is not available locally" — contradictory output from
+		// one command. Fixed by symmetric resolution.
+		imageRef = resolveShellImageRef("", rewritten, c.Tag)
 	}
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {

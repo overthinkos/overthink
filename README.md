@@ -409,7 +409,7 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 | **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov-eval:eval` (parent router), `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-build:mcp` |
 | **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov-build:mcp` + `/ov-tools:ov-mcp` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov-build:secrets`, `/ov-build:settings`, `/ov-automation:alias` |
-| **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov-core:doctor`, `/ov-automation:udev`, `/ov-vm:vm`, `/ov-vm:vms-catalog` |
+| **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov-core:ov-doctor`, `/ov-automation:udev`, `/ov-vm:vm`, `/ov-vm:vms-catalog` |
 | **Misc** | `version` | `/ov-core:version` |
 
 **Global flags** (apply to every command):

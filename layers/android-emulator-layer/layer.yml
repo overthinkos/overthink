@@ -1,0 +1,148 @@
+layer:
+  name: android-emulator-layer
+  description: |
+    Composite glue layer that turns the underlying selkies-desktop +
+    android-sdk + appium-server stack into a running Android 14 emulator.
+    Ships two helper scripts (start-emulator, wait-for-display), two
+    supervisord services (emulator + adb-server), the AVD volume, and the
+    /dev/kvm device-passthrough declaration that round-trips through the
+    OCI label into the quadlet.
+  require:
+    - android-sdk
+    - appium-server
+    - supervisord
+  env:
+    EMULATOR_NAME: "ov_avd_14"
+    EMULATOR_API_LEVEL: "34"
+    EMULATOR_DEVICE: "pixel_6"
+    ANDROID_AVD_HOME: "/home/user/.android/avd"
+  security:
+    devices:
+      - /dev/kvm
+    group_add:
+      # keep-groups is a crun annotation that maps the host user's supplementary
+      # groups (including kvm on rootless hosts) into the container without
+      # requiring a matching group to exist inside. Same pattern as immich-ml
+      # uses for /dev/kvm + /dev/dri passthrough on this project's hosts.
+      - keep-groups
+  task:
+    # Add the runtime user to the container's kvm group. KVM access via
+    # /dev/kvm actually works through crun's keep-groups + userns mapping
+    # without this (verified: `python3 -c "import os, fcntl; fd=os.open('/dev/kvm', os.O_RDWR); fcntl.ioctl(fd, 0xae00)"` returns the KVM API version), BUT the Android emulator's preflight check naively reads /etc/group, sees the user is not in the kvm
+    # group, and refuses to launch with "ERROR | x86_64 emulation
+    # currently requires hardware acceleration!". Satisfying the naive
+    # group membership check bypasses this entirely.
+    - cmd: |
+        set -e
+        USERNAME="$(getent passwd 1000 | cut -d: -f1)"
+        # Add user to BOTH the container's kvm group (satisfies the emulator's
+        # naive /etc/group preflight check that prints "The KVM line in
+        # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
+        # /dev/kvm inside a rootless container is owned by nobody:nobody
+        # because the host's kvm group (gid 990) maps through subgid to the
+        # overflow gid 65534. supervisord's setuid+initgroups drops the
+        # supplementary groups crun-keep-groups provided at container start,
+        # so user must be listed in /etc/group for both groups to retain
+        # access across the setuid boundary.
+        if getent group kvm >/dev/null 2>&1; then
+          usermod -aG kvm "${USERNAME}"
+        fi
+        if getent group nobody >/dev/null 2>&1; then
+          usermod -aG nobody "${USERNAME}"
+        fi
+      user: root
+    - copy: start-emulator
+      to: /usr/local/bin/start-emulator
+      mode: "0755"
+      user: root
+    - copy: wait-for-display
+      to: /usr/local/bin/wait-for-display
+      mode: "0755"
+      user: root
+    - mkdir: "${HOME}/.android"
+      user: "${USER}"
+      mode: "0755"
+    - mkdir: "${HOME}/.android/avd"
+      user: "${USER}"
+      mode: "0755"
+  service:
+    - name: emulator
+      exec: "/bin/bash -c '/usr/local/bin/wait-for-display && exec /usr/local/bin/start-emulator'"
+      env:
+        DISPLAY: ":0"
+        HOME: /home/user
+        ANDROID_HOME: /opt/android-sdk
+        ANDROID_SDK_ROOT: /opt/android-sdk
+        ANDROID_AVD_HOME: /home/user/.android/avd
+        EMULATOR_NAME: ov_avd_14
+        EMULATOR_API_LEVEL: "34"
+        EMULATOR_DEVICE: pixel_6
+        JAVA_HOME: /usr/lib/jvm/jre-21-openjdk
+      restart: always
+      priority: 30
+      start_sec: 5
+      stop_signal: TERM
+      # supervisord's stopwaitsecs is a bare integer (seconds);
+      # the systemd-style "20s" form fails parse with
+      # "invalid literal for int(): '20s'". The init-system render
+      # for systemd-targeted images converts integers to TimeoutStopSec=.
+      stop_timeout: 20
+      user: user
+      scope: system
+      enable: true
+    - name: adb-server
+      exec: "/opt/android-sdk/platform-tools/adb -a -P 5037 server nodaemon"
+      env:
+        HOME: /home/user
+        ANDROID_HOME: /opt/android-sdk
+      restart: always
+      priority: 35
+      start_sec: 2
+      user: user
+      scope: system
+      enable: true
+  volume:
+    - name: android-avd
+      path: "/home/user/.android"
+  port:
+    - 5037
+  eval:
+    - id: start-emulator-script
+      file: /usr/local/bin/start-emulator
+      exists: true
+      mode: "0755"
+    - id: wait-for-display-script
+      file: /usr/local/bin/wait-for-display
+      exists: true
+      mode: "0755"
+    - id: avd-home-dir
+      file: ${HOME}/.android/avd
+      exists: true
+      filetype: directory
+    - id: emulator-service-running
+      scope: deploy
+      service: emulator
+      running: true
+    - id: adb-server-port
+      scope: deploy
+      addr: 127.0.0.1:${HOST_PORT:5037}
+      reachable: true
+      timeout: 5s
+    - id: adb-detects-emulator
+      scope: deploy
+      # Runs in-container because the host doesn't ship adb; the
+      # in-container adb (from android-sdk's platform-tools) talks
+      # to the in-container adb server on 127.0.0.1:5037.
+      command: /opt/android-sdk/platform-tools/adb devices
+      in_container: true
+      exit_status: 0
+      stdout:
+        - contains: "emulator-5554"
+    - id: android-boot-completed
+      scope: deploy
+      command: /opt/android-sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+      in_container: true
+      exit_status: 0
+      stdout:
+        - contains: "1"
+      timeout: 300s

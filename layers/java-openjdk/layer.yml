@@ -1,0 +1,41 @@
+layer:
+  name: java-openjdk
+  description: |
+    OpenJDK 21 headless runtime + JDK tools. Cross-distro: Fedora ships
+    java-21-openjdk(-headless/-devel); Arch ships jdk21-openjdk; Debian/
+    Ubuntu ship openjdk-21-jdk-headless. Sets JAVA_HOME to the resolved
+    runtime root so consumers (Android SDK, Appium, Gradle, sbt, etc.) can
+    discover it without hardcoding a distro-specific path.
+  env:
+    JAVA_HOME: "/usr/lib/jvm/jre-21-openjdk"
+  path_append:
+    - "/usr/lib/jvm/jre-21-openjdk/bin"
+  distro:
+    fedora:
+      package:
+        - java-21-openjdk-headless
+        - java-21-openjdk-devel
+    archlinux:
+      package:
+        - jdk21-openjdk
+    debian:
+      package:
+        - openjdk-21-jdk-headless
+    ubuntu:
+      package:
+        - openjdk-21-jdk-headless
+  eval:
+    - id: java-binary
+      file: /usr/bin/java
+      exists: true
+    - id: javac-binary
+      file: /usr/bin/javac
+      exists: true
+    - id: java-runs
+      command: /usr/bin/java -version
+      exit_status: 0
+    - id: java-version-21
+      command: /usr/bin/java -version 2>&1
+      exit_status: 0
+      stdout:
+        - contains: "21."

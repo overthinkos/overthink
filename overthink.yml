@@ -931,3 +931,56 @@ init:
                 {{- else}}
                 WantedBy=multi-user.target
                 {{- end}}
+image:
+    android-emulator:
+        base: selkies-desktop
+        platforms:
+            - linux/amd64
+        layer:
+            - nodejs
+            - java-openjdk
+            - android-sdk
+            - appium-server
+            - android-emulator-layer
+        port:
+            - "3000:3000"
+            - "4723:4723"
+            - "5037:5037"
+            - "2222:2222"
+            # Inherited from the selkies-desktop layer chain — chrome-cdp
+            # publishes 9222 (Chrome DevTools Protocol) and chrome-devtools-mcp
+            # publishes 9224 (Streamable HTTP MCP). The mcp-provides OCI label
+            # baked into selkies-desktop expects these ports published; declare
+            # them here so inherited eval probes resolve correctly.
+            - "9222:9222"
+            - "9224:9224"
+        env:
+            - EMULATOR_NAME=ov_avd_14
+            - EMULATOR_API_LEVEL=34
+            - EMULATOR_DEVICE=pixel_6
+        status: testing
+        info: |
+            Android 14 (API 34, Google APIs x86_64) emulator on top of the
+            selkies-desktop streaming chain. Browser UI on https://localhost:3000
+            (Selkies WebRTC), Appium WebDriver on :4723, ADB server on :5037
+            (set ANDROID_ADB_SERVER_SOCKET=tcp:localhost:5037 to drive from
+            host). Requires /dev/kvm + kvm-group passthrough for hardware
+            acceleration; the layer declares this via security.devices so the
+            quadlet auto-emits AddDevice=/dev/kvm.
+        eval:
+            - id: image-emulator-binary
+              file: /opt/android-sdk/emulator/emulator
+              exists: true
+            - id: image-adb-binary
+              file: /opt/android-sdk/platform-tools/adb
+              exists: true
+            - id: image-appium-binary
+              file: /usr/local/bin/appium
+              exists: true
+            - id: image-java-binary
+              file: /usr/bin/java
+              exists: true
+            - id: image-start-emulator-script
+              file: /usr/local/bin/start-emulator
+              exists: true
+              mode: "0755"

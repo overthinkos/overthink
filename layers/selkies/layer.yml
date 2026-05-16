@@ -33,6 +33,12 @@ layer:
         - htop
         - file
         - lsof
+        # openssl required by the self-signed-cert task at line ~59.
+        # Previously assumed to be pulled in transitively from Fedora 43's
+        # base packages; a recent base-image refresh dropped it, breaking
+        # the selkies-desktop build chain. Declared explicitly to insulate
+        # against future base-image trimming.
+        - openssl
   vars:
     TRAEFIK_VERSION: v3.4.0
   task:

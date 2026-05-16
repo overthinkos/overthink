@@ -44,4 +44,9 @@ fi
 # compositor). Standalone scripts can't do this — they create their own
 # empty compositor. See selkies-capture-server for protocol details.
 CAPTURE_SERVER="$HOME/.local/bin/selkies-capture-server"
-exec python3 "$CAPTURE_SERVER" --addr="0.0.0.0" --mode="websockets"
+# Direct exec so selkies-capture-server's own shebang resolves the
+# interpreter (pinned to the pixi env's python). `python3 "$SCRIPT"`
+# would override the shebang and route through whatever /usr/bin/python3
+# happens to point at — Fedora 43 made that python3.14, but the pixi
+# env (with websockets, pixelflux, pcmflux) is on 3.13.
+exec "$CAPTURE_SERVER" --addr="0.0.0.0" --mode="websockets"

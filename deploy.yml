@@ -519,6 +519,30 @@ deploy:
         description:
             feature: "R10 bed for versa — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus the marimo MCP server (10 read-only notebook-inspection tools) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions. The 2026-05 cutover replaced an 8-element explicit port list + 4-entry env block with `port: [auto]` and per-producing-layer env_provides templates. Followup 2026-05-12: removed the airflow MCP wrapper (no Airflow-3 v2 release of mcp-server-apache-airflow exists); consumers drive Airflow via direct REST /api/v2 calls."
             tag: [testing]
+    # =================================================================
+    # R10 bed for android-emulator (target: pod, requires /dev/kvm).
+    # ---------------------------------------------------------------
+    # Disposable rootless podman container running Android 14 (API 34)
+    # under the selkies-desktop streaming chain. /dev/kvm passthrough
+    # is declared on the android-emulator-layer's security block and
+    # round-trips through the OCI label into the quadlet (this image
+    # is the first in the repo to exercise that code path). Host ports
+    # 35000-35003 picked to avoid the heavy selkies-desktop sidecar
+    # port pressure on this host.
+    # =================================================================
+    android-emulator-pod:
+        target: pod
+        image: android-emulator
+        disposable: true
+        lifecycle: dev
+        port:
+            - 35000:3000  # Selkies HTTPS web UI
+            - 35001:4723  # Appium WebDriver
+            - 35002:5037  # ADB server
+            - 35003:2222  # SSH
+        description:
+            feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices."
+            tag: [testing]
 # =============================================================================
 # Top-level vm: section — kind:vm entity definitions.
 # Each entity is a build-time spec; deploy-time properties (disposable,

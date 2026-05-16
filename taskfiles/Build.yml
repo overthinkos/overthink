@@ -45,6 +45,26 @@ tasks:
               cd pkg/arch
               mkdir -p src/overthink-git
               cp "{{.ROOT_DIR}}/LICENSE" src/overthink-git/LICENSE
+              # Auto-remove legacy ov-git / ov-git-debug packages if
+              # present. The PKGBUILD declares replaces=('ov-git'), but
+              # pacman -U (which makepkg -i invokes for local-file
+              # installs) does NOT honor `replaces=` — that field only
+              # fires during sync-database upgrades (pacman -Syu).
+              # Without this pre-step the install hits an interactive
+              # conflict prompt that --noconfirm answers "no" to, and
+              # the install fails with `unresolvable package conflicts`
+              # (for the main package) or `conflicting files` (for the
+              # debug sibling). Both must be removed together.
+              LEGACY_PKGS=""
+              for pkg in ov-git ov-git-debug; do
+                if pacman -Q "$pkg" >/dev/null 2>&1; then
+                  LEGACY_PKGS="$LEGACY_PKGS $pkg"
+                fi
+              done
+              if [ -n "$LEGACY_PKGS" ]; then
+                echo "Removing legacy package(s):$LEGACY_PKGS (renamed to overthink-git)..."
+                sudo pacman -Rdd --noconfirm $LEGACY_PKGS
+              fi
               makepkg -sefi --noconfirm
               echo "Installed system-wide via pacman (makepkg in pkg/arch)"
               exit 0

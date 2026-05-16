@@ -187,7 +187,7 @@ Images and deployments come with inline checks. A `eval:` block on any `layer:`,
 
 Checks can be filtered per-distro via `exclude_distros: [<tag>, ...]` for probes that only apply on some distros (canonical example: the dev-tools layer's `fastfetch-binary` test sets `exclude_distros: [ubuntu:24.04]` because fastfetch is dropped from Ubuntu noble's package list). Cross-distro package naming is handled via `package:` + `package_map:` (see `/ov-eval:eval`).
 
-`ov eval` is also the parent router for live-container drive verbs: `ov eval cdp` (Chrome DevTools), `ov eval wl` (Wayland), `ov eval dbus` (D-Bus / notifications), `ov eval vnc` (VNC), `ov eval mcp` (Model Context Protocol clients) — see `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-build:mcp`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `eval:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
+`ov eval` is also the parent router for live-container drive verbs: `ov eval cdp` (Chrome DevTools), `ov eval wl` (Wayland), `ov eval dbus` (D-Bus / notifications), `ov eval vnc` (VNC), `ov eval mcp` (Model Context Protocol clients) — see `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-build:ov-mcp-cmd`. **All five are also authorable as declarative check verbs** (`cdp: eval`, `wl: screenshot`, `dbus: call`, `vnc: status`, `mcp: list-tools`, etc.) inside any `eval:` block, wiring Chrome/Wayland/D-Bus/VNC/MCP assertions into the same three-section OCI-label pipeline as the built-in verbs. The `mcp:` verb uses [github.com/modelcontextprotocol/go-sdk](https://pkg.go.dev/github.com/modelcontextprotocol/go-sdk) to speak Streamable HTTP (default) or SSE; URLs from `mcp_provides` metadata are auto-rewritten from container-network hostnames to the host's published port.
 
 Running images ship comprehensive coverage: `filebrowser` (24), `jupyter` (32), `openwebui` (24), `hermes` (50), `immich-ml` (63), `selkies-desktop` (91), `sway-browser-vnc` (92), `selkies-desktop-ov` (91 image-scope · 118 live-service). The jupyter and sway-browser-vnc counts include the `mcp:` declarative checks (3 and 2 respectively) introduced with the `ov eval mcp` verb. `selkies-desktop-ov` adds extra gates for the nested-podman recipe: its live-service run (`ov eval live selkies-desktop-ov`) verifies nested `podman run quay.io/libpod/alpine:latest`, `virsh -c qemu:///session` domcapabilities, KVM hardware acceleration, and in-container `ov version` / `ov doctor`. LABEL directives emit at the end of each Containerfile so test edits rebuild in ~2 seconds.
 
@@ -378,7 +378,7 @@ data:
     volume: workspace
 ```
 
-At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories; `ov update` merges new data non-destructively. **Data images** (`data_image: true`) take this further: scratch-based images containing only data + OCI labels, consumed via `ov config --data-from <data-image>`. See `/ov-core:config` and `/ov-jupyter:notebook-templates` for examples.
+At build time, data files are staged at `/data/<volume>/` inside the image. At deploy time, `ov config --bind <volume>` provisions the data into bind-backed volume directories; `ov update` merges new data non-destructively. **Data images** (`data_image: true`) take this further: scratch-based images containing only data + OCI labels, consumed via `ov config --data-from <data-image>`. See `/ov-core:ov-config` and `/ov-jupyter:notebook-templates` for examples.
 
 ## The Lifecycle
 
@@ -402,15 +402,15 @@ The `ov` CLI has 24 top-level command families split across three modes with dis
 |---|---|---|
 | **Image family (build mode)** | `ov image {build, generate, validate, merge, new, inspect, list, pull, test}` | `/ov-image:image` (umbrella) + `/ov-build:build`, `/ov-build:generate`, `/ov-build:validate`, `/ov-build:merge`, `/ov-build:new`, `/ov-build:inspect`, `/ov-build:list`, `/ov-build:pull` |
 | **Image authoring (MCP-first surface)** | `ov image {new project, new image, set, add-layer, rm-layer, fetch, refresh, write, cat}` and `ov layer {set, add-rpm, add-deb, add-pac, add-aur}` — comment-preserving YAML edits + escape-hatch file writes, all auto-exposed as MCP tools so an agent can author a project from scratch over RPC | `/ov-image:image` "Authoring" table + `/ov-build:new`, `/ov-image:layer` |
-| **Deployment** | `deploy add`/`del` (unified verb; four targets: `host` → local filesystem, `vm:<name>` → VM via SSH, `kubernetes` → Kustomize tree, any other name → container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov-core:deploy`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-core:config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:update`, `/ov-core:remove`, `/ov-internals:vm-deploy-target` |
+| **Deployment** | `deploy add`/`del` (unified verb; four targets: `host` → local filesystem, `vm:<name>` → VM via SSH, `kubernetes` → Kustomize tree, any other name → container deploy); `deploy from-image` (source-less deploy from OCI labels); `deploy sync <name>` (apply K8s changes live); `config`, `start`, `stop`, `update`, `remove` | `/ov-core:deploy`, `/ov-local:local-deploy`, `/ov-kubernetes:kubernetes`, `/ov-core:ov-config`, `/ov-core:start`, `/ov-core:stop`, `/ov-core:ov-update`, `/ov-core:remove`, `/ov-internals:vm-deploy-target` |
 | **Schema migration** | `migrate unified` (legacy `image.yml`/`build.yml`/flat-form `layer.yml` → unified `overthink.yml`); `migrate vm-spec` (legacy `image.bootc`/`image.vm:`/`image.libvirt:` → `vms.yml` `kind: vm` entities). Both idempotent; auto-invoked on remote-cache downloads | `/ov-build:migrate` |
-| **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:status`, `/ov-core:logs`, `/ov-automation:tmux` |
+| **Runtime** | `shell`, `cmd`, `service`, `status`, `logs`, `tmux` | `/ov-core:shell`, `/ov-core:cmd`, `/ov-core:service`, `/ov-core:ov-status`, `/ov-core:logs`, `/ov-automation:tmux` |
 | **Desktop recording** | `record` | `/ov-eval:record` |
-| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov-eval:eval` (parent router), `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-build:mcp` |
-| **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov-build:mcp` + `/ov-tools:ov-mcp` |
+| **Testing + live-container drive** | `test` (runs declarative tests AND hosts nested verbs: `test cdp`, `test wl`, `test dbus`, `test vnc`, `test mcp`), `image test` | `/ov-eval:eval` (parent router), `/ov-eval:cdp`, `/ov-eval:wl`, `/ov-eval:dbus`, `/ov-eval:vnc`, `/ov-build:ov-mcp-cmd` |
+| **MCP gateway (cross-mode)** | `mcp serve` — 190 tools from Kong reflection (every CLI leaf becomes one MCP tool); Streamable HTTP / stdio; `--read-only` filter; auto-fallback to `overthinkos/overthink` when no project is wired (disable with `--no-default-repo`); new in 2026: includes project-scaffolding + YAML-editing + free-form file-write verbs so agents can build projects from scratch over RPC | `/ov-build:ov-mcp-cmd` + `/ov-tools:ov-mcp` |
 | **Secrets & config** | `secrets`, `settings`, `alias` | `/ov-build:secrets`, `/ov-build:settings`, `/ov-automation:alias` |
 | **Host & VM** | `doctor`, `udev`, `vm` (reads `kind: vm` entities from `vms.yml` — not `image.yml`; `<name>` on `ov vm build <name>` is a VM entity key) | `/ov-core:ov-doctor`, `/ov-automation:udev`, `/ov-vm:vm`, `/ov-vm:vms-catalog` |
-| **Misc** | `version` | `/ov-core:version` |
+| **Misc** | `version` | `/ov-core:ov-version` |
 
 **Global flags** (apply to every command):
 
@@ -425,13 +425,13 @@ A few sample invocations:
 ```bash
 ov image build jupyter                 # Build an image (see /ov-build:build for --push, --no-cache, --jobs)
 ov image pull jupyter                  # Fetch into local storage (see /ov-build:pull for short/full/remote refs)
-ov config jupyter                      # Unified deploy setup (see /ov-core:config for --bind, --encrypt, --sidecar, -i, --update-all)
+ov config jupyter                      # Unified deploy setup (see /ov-core:ov-config for --bind, --encrypt, --sidecar, -i, --update-all)
 ov start jupyter                       # Launch as a systemd service
 ov shell jupyter                       # Interactive dev shell with volumes + GPU
 ov eval cdp open selkies-desktop "https://example.com"   # Browser automation (see /ov-eval:cdp)
 ov eval wl screenshot selkies-desktop       # Compositor-agnostic screenshot (see /ov-eval:wl)
 ov vm build selkies-desktop-bootc --type qcow2     # Build a bootable VM disk (see /ov-vm:vm)
-ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov-build:mcp Part 2)
+ov mcp serve --listen :18765                 # Run ov itself as an MCP server (see /ov-build:ov-mcp-cmd Part 2)
 ```
 
 ### Pulling images from registries
@@ -455,7 +455,7 @@ ov config selkies-desktop -i personal -p 3002:3000
 ov start selkies-desktop -i work
 ```
 
-**Tunnel inheritance caveat:** tunnel config is **not** auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's `deploy.yml` entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands. Tunnel config is deploy.yml-only (read-skipped from OCI labels at `labels.go:238`). The `-e` flag merges env vars (upsert by key); `-c` replaces. See `/ov-core:deploy` for full inheritance semantics and `/ov-core:config` for the `--update-all` propagation model.
+**Tunnel inheritance caveat:** tunnel config is **not** auto-inherited by instances — you must add `tunnel: {provider: tailscale, private: all}` to each instance's `deploy.yml` entry manually, then re-run `ov config` to regenerate the quadlet with Tailscale serve commands. Tunnel config is deploy.yml-only (read-skipped from OCI labels at `labels.go:238`). The `-e` flag merges env vars (upsert by key); `-c` replaces. See `/ov-core:deploy` for full inheritance semantics and `/ov-core:ov-config` for the `--update-all` propagation model.
 
 ### Sidecar Containers
 
@@ -480,12 +480,12 @@ Each entry points to the canonical skill — details belong there, not here.
 
 | Symptom | First step |
 |---------|-----------|
-| Service won't start | `ov status <image>` then `ov logs <image>` (`/ov-core:status`, `/ov-core:logs`) |
-| Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov-core:config`) |
+| Service won't start | `ov status <image>` then `ov logs <image>` (`/ov-core:ov-status`, `/ov-core:logs`) |
+| Quadlet out of sync with deploy.yml | `ov config <image> --update-all` (`/ov-core:ov-config`) |
 | Chrome stuck or crash-looping | `/ov-selkies:chrome` Resource Caps & Circuit Breaker section |
 | Encrypted volume locked at boot | `ov config mount` waits for keyring unlock automatically — zero CPU, event-driven (`/ov-automation:enc`) |
 | GPU not detected | `ov doctor` then `/ov-automation:udev` |
-| Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov-core:config`) |
+| Resource caps not applying | `ov config <image> --update-all` to regenerate the quadlet (`/ov-core:ov-config`) |
 | Build cache stale | `ov image build --no-cache <image>` (`/ov-build:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov-core:deploy`) |
 | Service built fine but broken in production | `ov eval live <image>` runs the baked layer + image + deploy checks against the live container; `ov eval image <image>` checks the disposable build (`/ov-eval:eval`) |
@@ -548,9 +548,9 @@ git clone --recurse-submodules https://github.com/overthinkos/overthink.git
 
 This gives Claude Code access to 250+ skills covering every layer, image, and operation — so it can build images, debug services, author new layers, and manage deployments just like you would from the command line. The skill graph is densely cross-linked: invoking one skill surfaces its neighbors, and every layer skill references `/ov-image:layer` (authoring) and `/ov-eval:eval` (declarative testing).
 
-The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov eval mcp` (see `/ov-build:mcp`).
+The `chrome` layer auto-includes a **Chrome DevTools MCP server** at `http://localhost:9224/mcp` (via `chrome-devtools-mcp` sub-layer), providing 29 browser automation and inspection tools. This is auto-discovered by Hermes and other MCP consumers alongside the Jupyter MCP server, and can be probed end-to-end with `ov eval mcp` (see `/ov-build:ov-mcp-cmd`).
 
-The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-jupyter:jupyter`, `/ov-jupyter:jupyter-mcp`, and `/ov-selkies:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-jupyter:jupyter`, `/ov-jupyter:jupyter-ml`, and their image counterparts for details. Use `ov eval mcp` (see `/ov-build:mcp`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
+The `ov-jupyter` plugin is **manifest-only** — it contains a `.mcp.json` that registers a **Jupyter MCP server** (named `jupyter`) at `http://localhost:8888/mcp` with Claude Code, automatically connecting when the `jupyter` or `jupyter-ml` container is running. It ships no SKILL.md files itself; Jupyter's operational docs live in `/ov-jupyter:jupyter`, `/ov-jupyter:jupyter-mcp`, and `/ov-selkies:jupyter*`. Once connected, Claude Code can use 13 MCP tools to create, read, edit, execute, and watch notebooks — with real-time collaboration alongside human users via CRDT. `jupyter` is the lightweight multi-arch variant (no GPU); `jupyter-ml` adds the full CUDA ML stack (PyTorch, vLLM, Unsloth, LangChain); `jupyter-ml-notebook` adds 37 Unsloth fine-tuning notebooks, 6 Ollama integration notebooks, and 15 LLM course notebooks. See `/ov-jupyter:jupyter`, `/ov-jupyter:jupyter-ml`, and their image counterparts for details. Use `ov eval mcp` (see `/ov-build:ov-mcp-cmd`) to verify any `mcp_provides` endpoint is alive and exposes the expected tool catalog.
 
 See [CLAUDE.md](CLAUDE.md) for the complete system specification and [plugins/README.md](plugins/README.md) for the full skill reference.
 

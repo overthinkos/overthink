@@ -4,3 +4,7 @@
 [submodule "pkg/arch"]
 	path = pkg/arch
 	url = https://github.com/overthinkos/overthink-arch.git
+[submodule "image/arch"]
+	path = image/arch
+	url = https://github.com/overthinkos/arch.git
+	branch = main

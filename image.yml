@@ -54,126 +54,6 @@ image:
             - ov
         port:
             - 8188:8188
-    fedora:
-        base: quay.io/fedora/fedora:43
-        distro:
-            - fedora:43
-            - fedora
-        produce:
-            - pixi
-            - npm
-            - cargo
-    fedora-builder:
-        base: fedora
-        layer:
-            - rpmfusion
-            - pixi
-            - nodejs
-            - build-toolchain
-        produce:
-            - pixi
-            - npm
-            - cargo
-    fedora-coder:
-        base: fedora-nonfree
-        layer:
-            - agent-forwarding
-            - sshd
-            - ov-full
-            - ov-mcp
-            - container-nesting
-            - dbus
-            - tmux
-            - language-runtimes
-            - golang
-            - nodejs24
-            - rust
-            - pixi
-            - uv
-            - build-toolchain
-            - dev-tools
-            - pre-commit
-            - direnv
-            - gh
-            - typst
-            - asciinema
-            - claude-code
-            - codex
-            - gemini
-            - forgecode
-            - oracle
-            - devops-tools
-            - kubernetes
-            - docker-ce
-            - github-actions
-            - google-cloud
-            - google-cloud-npm
-            - grafana-tools
-        port:
-            - 2222:2222
-            - 18765:18765
-        eval:
-            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-              id: fedora-coder-ai-clis
-              exit_status: 0
-            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
-              id: fedora-coder-languages
-              exit_status: 0
-            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-              id: fedora-coder-devops
-              exit_status: 0
-            - command: test -x /usr/local/bin/ov
-              id: fedora-coder-ov
-              exit_status: 0
-            - addr: 127.0.0.1:${HOST_PORT:2222}
-              id: fedora-coder-sshd-port
-              timeout: 5s
-              scope: deploy
-              reachable: true
-            - command: ov version
-              id: fedora-coder-ov-version
-              scope: deploy
-              in_container: true
-              exit_status: 0
-            - addr: 127.0.0.1:${HOST_PORT:18765}
-              id: fedora-coder-mcp-port
-              timeout: 5s
-              scope: deploy
-              reachable: true
-    fedora-nonfree:
-        base: fedora
-        layer:
-            - rpmfusion
-    fedora-ov:
-        enabled: false
-        base: fedora
-        layer:
-            - agent-forwarding
-            - ov-full
-            - golang
-            - gh
-            - sshd
-            - container-nesting
-            - nvidia
-    fedora-remote:
-        enabled: false
-        base: quay.io/fedora/fedora:43
-        platform:
-            - linux/amd64
-        layer:
-            - '@github.com/overthinkos/overthink/layers/dev-tools:main'
-            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.64.1937'
-            - '@github.com/overthinkos/overthink/layers/nodejs'
-    fedora-test:
-        enabled: false
-        base: fedora
-        layer:
-            - agent-forwarding
-            - traefik
-            - testapi
-        port:
-            - 8000:8000
-            - 8080:8080
     filebrowser:
         base: fedora
         layer:
@@ -997,6 +877,25 @@ image:
             - sshd
             - ov
             - eval-composition-layer
+    # composition self-test SOURCE — a stable in-main image whose two
+    # image-scope eval probes are consumed (read, filtered, re-run on the
+    # selftest target pods) by the eval.yml `composition-import-selftest`
+    # recipe's `from:` expander. Replaces the relocated `fedora-coder`. The
+    # keep probe (`composition-source-ov`) tests `ov` presence, which passes on
+    # both the `selftest-image` and `composition-app` target pods (both ship the
+    # `ov` layer) AND on this image itself; `composition-source-marker` exists
+    # only to exercise the `exclude:` filter (it is never imported/run).
+    composition-source:
+        base: fedora
+        layer:
+            - ov
+        eval:
+            - command: test -x /usr/local/bin/ov
+              id: composition-source-ov
+              exit_status: 0
+            - command: test -d /etc
+              id: composition-source-marker
+              exit_status: 0
     # =================================================================
     # Per-kind R10 smoke beds (eval-image / eval-layer / eval-pod /
     # eval-deploy). All four use fedora-minimal:43 for fast rebuild

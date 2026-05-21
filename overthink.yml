@@ -9,6 +9,12 @@ include:
     - k8s.yml
     - build.yml
     - arch-base.yml
+    # fedora base stack (fedora + fedora-builder + fedora-nonfree) — the
+    # ecosystem default base. Lives here (single source of truth) and is
+    # remote-included by the overthinkos/fedora submodule; the Fedora consumer
+    # showcase images (fedora-coder/ov/test) were split out 2026-05. No
+    # main → fedora coupling (main remote-includes nothing from that repo).
+    - fedora-base.yml
     # cachyos base image — owned by the overthinkos/cachyos submodule (the
     # CachyOS family was split out 2026-05); pulled back by github reference
     # because main's `versa` image is `base: cachyos`. This is the deliberate

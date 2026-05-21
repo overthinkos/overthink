@@ -327,6 +327,14 @@ ov -C image/cachyos image build cachyos
 ov -C image/debian image build debian
 ov -C image/ubuntu image build ubuntu
 
+# Build a Fedora showcase image. The Fedora consumer showcase images
+# (fedora-coder, fedora-ov, fedora-test) live in the overthinkos/fedora submodule
+# at image/fedora and pull their layers from this repo by git ref. Unlike the
+# deb-family, the fedora base stack (fedora + fedora-builder + fedora-nonfree)
+# STAYS here — fedora is the ecosystem default base (in fedora-base.yml, also
+# remote-included by the submodule), exactly like Arch. No main → fedora coupling.
+ov -C image/fedora image build fedora-coder
+
 # Drop into an interactive shell
 ov shell fedora
 

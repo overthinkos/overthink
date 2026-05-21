@@ -244,7 +244,7 @@ func ResolveTarget(node *DeploymentNode, name string) (UnifiedDeployTarget, erro
 	// cutover commit, missing target: is a hard error at load.
 	if node.Target == "" {
 		return nil, fmt.Errorf("deployment %q missing required `target:` field "+
-			"(local|vm|pod|k8s); run `ov migrate target-local`", name)
+			"(local|vm|pod|k8s); run `ov migrate`", name)
 	}
 
 	switch node.Target {

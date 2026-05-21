@@ -1,6 +1,6 @@
 package main
 
-// migrate_quadlets.go — `ov migrate quadlets`.
+// migrate_quadlets.go — `ov migrate`.
 //
 // Walks ~/.config/containers/systemd/ov-*.container, identifies units
 // whose deploy declares encrypted volumes but whose quadlet on disk
@@ -27,47 +27,42 @@ import (
 	"strings"
 )
 
-// MigrateQuadletsCmd is `ov migrate quadlets`.
-type MigrateQuadletsCmd struct {
-	DryRun bool `long:"dry-run" help:"List stale quadlets without regenerating"`
-}
-
-func (c *MigrateQuadletsCmd) Run() error {
-	configDir, err := os.UserConfigDir()
-	if err != nil {
-		return fmt.Errorf("locating user config dir: %w", err)
-	}
-	quadletDir := filepath.Join(configDir, "containers", "systemd")
-
+// MigrateQuadlets regenerates every stale encrypted-volume quadlet under
+// quadletDir (those missing the ExecStartPre=ov config mount <name> hook) by
+// re-invoking `ov config <name>`. Returns the list of regenerated deploy
+// names (or, under dryRun, the names that would be regenerated). This is the
+// chain-callable form used by the unified `ov migrate` runner; it is
+// non-interactive (the self-exec'd `ov config` resolves secrets from the
+// active credential store with no prompt).
+func MigrateQuadlets(quadletDir string, dryRun bool) ([]string, error) {
 	stale, err := DetectStaleEncryptedQuadlets(quadletDir)
 	if err != nil {
-		return err
+		// A deploy.yml that itself still needs migration (e.g. the later
+		// require-image step hasn't normalized a legacy pod entry yet) makes
+		// the strict loader fail. Quadlet regen is best-effort host repair,
+		// not a schema migration — warn and skip rather than aborting the
+		// whole chain. The later steps still run (and loudly report the real
+		// deploy.yml issue); a subsequent `ov migrate`, once deploy.yml is
+		// clean, picks up any stale quadlets.
+		fmt.Fprintf(os.Stderr, "migrate: skipping quadlet regen — deploy.yml not loadable yet (%v)\n", err)
+		return nil, nil
 	}
-	if len(stale) == 0 {
-		fmt.Println("ov migrate quadlets: nothing to migrate (all encrypted-volume quadlets carry ExecStartPre=ov config mount …)")
-		return nil
-	}
-
+	var done []string
 	for _, name := range stale {
-		if c.DryRun {
-			fmt.Printf("[dry-run] would regenerate ov-%s.container (missing ExecStartPre=ov config mount %s)\n", name, name)
+		if dryRun {
+			done = append(done, name)
 			continue
 		}
-		fmt.Printf("regenerating ov-%s.container via 'ov config %s'\n", name, name)
-		// Re-invoke ourselves so the regenerated quadlet ships every
-		// concomitant change (secrets idempotence, encrypted-volume
-		// init, daemon-reload, env_provides injection). Self-exec via
-		// os.Args[0] follows the ov-binary self-exec pattern documented
-		// in /ov-internals:go "Self-exec coordination".
 		cmd := exec.Command(os.Args[0], "config", name)
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("regenerating ov-%s.container: %w", name, err)
+			return done, fmt.Errorf("regenerating ov-%s.container: %w", name, err)
 		}
+		done = append(done, name)
 	}
-	return nil
+	return done, nil
 }
 
 // DetectStaleEncryptedQuadlets returns the sorted list of deploy names

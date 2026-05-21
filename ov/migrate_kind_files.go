@@ -1,6 +1,6 @@
 package main
 
-// migrate_kind_files.go — `ov migrate kind-files`.
+// migrate_kind_files.go — `ov migrate`.
 //
 // Combined idempotent migration for the 2026-05 cutover that lands:
 //
@@ -27,45 +27,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-// MigrateKindFilesCmd is `ov migrate kind-files`.
-type MigrateKindFilesCmd struct {
-	Dir    string `arg:"" optional:"" help:"Project directory containing overthink.yml (default: cwd)"`
-	DryRun bool   `long:"dry-run" help:"Print transformations that would be applied; don't touch files"`
-}
-
-func (c *MigrateKindFilesCmd) Run() error {
-	dir := c.Dir
-	if dir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		dir = cwd
-	}
-	root := filepath.Join(dir, "overthink.yml")
-	if _, err := os.Stat(root); err != nil {
-		return fmt.Errorf("no overthink.yml in %s: %w", dir, err)
-	}
-
-	res, err := MigrateKindFiles(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	if res.NoChanges {
-		fmt.Fprintf(os.Stderr, "%s: already migrated (no changes)\n", dir)
-		return nil
-	}
-	for _, t := range res.Transforms {
-		fmt.Fprintln(os.Stderr, t)
-	}
-	if c.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] %d transform(s) would apply\n", len(res.Transforms))
-	} else {
-		fmt.Fprintf(os.Stderr, "wrote %d file(s)\n", len(res.WrittenFiles))
-	}
-	return nil
-}
 
 // MigrateKindFilesResult reports the outcome.
 type MigrateKindFilesResult struct {
@@ -129,8 +90,21 @@ func MigrateKindFiles(dir string, dryRun bool) (MigrateKindFilesResult, error) {
 		}
 	}
 
-	// Transform 4: append new files to overthink.yml's includes:.
-	desiredIncludes := []string{"image.yml", "vm.yml", "pod.yml", "k8s.yml"}
+	// Transform 4: append per-kind files to overthink.yml's include: list, but
+	// ONLY those that actually exist (or were created/extracted this run). A
+	// project with no VMs has no vm.yml — adding it to include: would make the
+	// loader fail on a missing file. (vm.yml/image.yml come from extraction;
+	// pod.yml/k8s.yml from the stub transform above.)
+	createdThisRun := map[string]bool{}
+	for _, w := range res.WrittenFiles {
+		createdThisRun[filepath.Base(w)] = true
+	}
+	var desiredIncludes []string
+	for _, f := range []string{"image.yml", "vm.yml", "pod.yml", "k8s.yml"} {
+		if _, err := os.Stat(filepath.Join(dir, f)); err == nil || createdThisRun[f] {
+			desiredIncludes = append(desiredIncludes, f)
+		}
+	}
 	if added := ensureIncludes(rootMap, desiredIncludes); added > 0 {
 		res.Transforms = append(res.Transforms, fmt.Sprintf("added %d entry/entries to includes:", added))
 		rootChanged = true
@@ -302,17 +276,26 @@ func writeYAMLDoc(path string, doc *yaml.Node) error {
 	return nil
 }
 
-// ensureIncludes appends each desired entry to rootMap's includes: list if
-// absent. Returns the count appended.
+// ensureIncludes appends each desired entry to rootMap's include: list if
+// absent. Returns the count appended. Accepts either the canonical singular
+// `include:` (post-2026-05 field-singular cutover, which is what the loader
+// reads) or the legacy plural `includes:` (kind-files predates field-singular,
+// so an ancient config replayed through the chain still has the plural key at
+// this point). Only creates a new list when NEITHER is present, using the
+// canonical singular key — without this dual lookup the migrator never finds
+// the existing `include:` and spuriously injects a redundant `includes:` block.
 func ensureIncludes(rootMap *yaml.Node, desired []string) int {
-	includes := findMappingValue(rootMap, "includes")
+	includes := findMappingValue(rootMap, "include")
 	if includes == nil {
-		// Create includes: as a SequenceNode and prepend to the mapping.
+		includes = findMappingValue(rootMap, "includes")
+	}
+	if includes == nil {
+		// Create include: as a SequenceNode and prepend to the mapping.
 		seq := &yaml.Node{Kind: yaml.SequenceNode}
 		for _, e := range desired {
 			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: e})
 		}
-		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "includes"}
+		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "include"}
 		// Insert after `version:` if present, else at the start.
 		insertAt := 0
 		for i := 0; i < len(rootMap.Content)-1; i += 2 {

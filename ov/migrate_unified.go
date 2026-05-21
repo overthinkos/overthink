@@ -10,7 +10,7 @@ import (
 )
 
 // -----------------------------------------------------------------------------
-// `ov migrate unified` — one-shot migration from the legacy four-file layout
+// `ov migrate` — one-shot migration from the legacy four-file layout
 // (build.yml + image.yml + deploy.yml + layers/<name>/layer.yml) to the
 // unified format (overthink.yml + includes + kind-keyed standalone files).
 //
@@ -214,7 +214,7 @@ func readRepoRootDeployYaml(dir string) (*DeployConfig, error) {
 // -----------------------------------------------------------------------------
 
 func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) (string, error) {
-	uf := &UnifiedFile{Version: schemaVersion}
+	uf := &UnifiedFile{Version: LatestSchemaVersion().String()}
 	if bs != nil {
 		uf.Distro = bs.Distros
 		uf.Builder = bs.Builders
@@ -238,7 +238,7 @@ func emitMonolithic(dir string, bs *buildSections, is *imageSections, ds *Deploy
 func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *DeployConfig, dryRun bool) ([]string, error) {
 	var written []string
 
-	root := &UnifiedFile{Version: schemaVersion}
+	root := &UnifiedFile{Version: LatestSchemaVersion().String()}
 	includes := []string{}
 
 	// build.yml → unified plural keys. Write when we have data to migrate; on

@@ -1,6 +1,6 @@
 package main
 
-// migrate_local_deploy.go — `ov migrate local-deploy`.
+// migrate_local_deploy.go — `ov migrate`.
 //
 // Converts the per-host deploy file (~/.config/ov/deploy.yml) from the
 // legacy pre-2026-04 schema to the current schema-v4 shape used by
@@ -56,41 +56,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-// MigrateLocalDeployCmd is `ov migrate local-deploy`.
-type MigrateLocalDeployCmd struct {
-	DryRun bool   `long:"dry-run" help:"Print what would change, don't touch the filesystem"`
-	Path   string `long:"path" help:"Override the deploy.yml path (default: ~/.config/ov/deploy.yml)"`
-}
-
-func (c *MigrateLocalDeployCmd) Run() error {
-	path := c.Path
-	if path == "" {
-		p, err := DeployConfigPath()
-		if err != nil {
-			return fmt.Errorf("resolving deploy.yml path: %w", err)
-		}
-		path = p
-	}
-
-	changed, summary, err := MigrateLocalDeploy(path, c.DryRun)
-	if err != nil {
-		return err
-	}
-	if !changed {
-		fmt.Println("ov migrate local-deploy: nothing to migrate (already on schema v4)")
-		return nil
-	}
-	prefix := "wrote "
-	if c.DryRun {
-		prefix = "[dry-run] would write "
-	}
-	fmt.Println(prefix + path)
-	for _, line := range summary {
-		fmt.Println("  " + line)
-	}
-	return nil
-}
 
 // MigrateLocalDeploy reads path, transforms a legacy `images:` map into the
 // modern `deploy:` map (with bind_mounts → volumes + workspace promotion),

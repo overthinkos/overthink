@@ -2,7 +2,7 @@ layer:
   name: traefik
   require:
     - supervisord
-  vars:
+  var:
     TRAEFIK_VERSION: v3.4.0
   port:
     - 8000

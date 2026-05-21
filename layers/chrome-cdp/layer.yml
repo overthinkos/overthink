@@ -22,7 +22,7 @@ layer:
     - "~/.local/bin"
   env:
     BROWSER: "browser-open"
-  env_provides:
+  env_provide:
     BROWSER_CDP_URL: "http://{{.ContainerName}}:9222"
   port:
     - 9222

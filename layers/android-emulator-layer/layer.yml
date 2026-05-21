@@ -152,7 +152,7 @@ layer:
       scope: deploy
       adb: shell
       # Args[0..] becomes argv for the shell. Result asserted on stdout.
-      args: [getprop, ro.build.version.release]
+      arg: [getprop, ro.build.version.release]
       stdout:
         - contains: "14"
     - id: adb-wait-for-device-ready
@@ -170,11 +170,11 @@ layer:
     - id: adb-disable-verifier
       scope: deploy
       adb: shell
-      args: [settings, put, global, package_verifier_enable, "0"]
+      arg: [settings, put, global, package_verifier_enable, "0"]
     - id: adb-disable-adb-install-verifier
       scope: deploy
       adb: shell
-      args: [settings, put, global, verifier_verify_adb_installs, "0"]
+      arg: [settings, put, global, verifier_verify_adb_installs, "0"]
     - id: adb-install-apidemos
       scope: deploy
       adb: install
@@ -188,7 +188,7 @@ layer:
     - id: adb-shell-confirms-apidemos-installed
       scope: deploy
       adb: shell
-      args: [pm, list, packages, io.appium.android.apis]
+      arg: [pm, list, packages, io.appium.android.apis]
       stdout:
         - contains: "io.appium.android.apis"
     - id: adb-screencap-png-min-size
@@ -200,7 +200,7 @@ layer:
       scope: deploy
       adb: uninstall
       # args[0] = package id (posPackageArg builder convention).
-      args: [io.appium.android.apis]
+      arg: [io.appium.android.apis]
       stdout:
         - contains: Success
 

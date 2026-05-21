@@ -17,8 +17,8 @@ type InitConfig struct {
 // InitDef defines an init system (supervisord, systemd, s6, etc.).
 type InitDef struct {
 	// Detection: which layer.yml fields and file patterns trigger this init system
-	LayerFields  []string `yaml:"layer_fields,omitempty"`
-	LayerFiles   []string `yaml:"layer_files,omitempty"`   // glob patterns (e.g., "*.service")
+	LayerFields  []string `yaml:"layer_field,omitempty"`
+	LayerFiles   []string `yaml:"layer_file,omitempty"`   // glob patterns (e.g., "*.service")
 	DependsLayer string   `yaml:"depends_layer,omitempty"` // layer name required in dependency chain
 	// RequiresCapabilities lists layer-aggregated capability names that
 	// must be present in the image composition for this init system to
@@ -54,7 +54,7 @@ type InitDef struct {
 
 	// Service management (ov service commands)
 	ManagementTool     string            `yaml:"management_tool,omitempty"`
-	ManagementCommands map[string]string `yaml:"management_commands,omitempty"`
+	ManagementCommands map[string]string `yaml:"management_command,omitempty"`
 
 	// OCI label key for service list
 	LabelKey string `yaml:"label_key,omitempty"`

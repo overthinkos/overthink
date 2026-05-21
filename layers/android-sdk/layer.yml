@@ -14,7 +14,7 @@ layer:
     - "/opt/android-sdk/cmdline-tools/latest/bin"
     - "/opt/android-sdk/platform-tools"
     - "/opt/android-sdk/emulator"
-  vars:
+  var:
     CMDLINE_TOOLS_BUILD: "11076708"
     EMULATOR_API_LEVEL: "34"
     EMULATOR_SYS_IMG: "x86_64"

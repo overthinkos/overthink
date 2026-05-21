@@ -75,7 +75,7 @@ func (c *ImageSetCmd) Run() error {
 	}
 	target := filepath.Join(dir, "overthink.yml")
 	if _, err := os.Stat(target); os.IsNotExist(err) {
-		return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate unified` to convert a legacy image.yml", dir)
+		return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate` to convert a legacy image.yml", dir)
 	}
 	return SetByDotPath(target, c.Path, c.Value)
 }

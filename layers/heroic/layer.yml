@@ -12,7 +12,7 @@ layer:
       path: "~/.config/heroic"
     - name: heroic-games
       path: "~/Games/Heroic"
-  vars:
+  var:
     HEROIC_VERSION: 2.20.1
   task:
     # Heroic ships as an .rpm from GitHub releases — fetch, install with dnf

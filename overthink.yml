@@ -1,4 +1,4 @@
-version: 4
+version: 2026.141.1530
 include:
     - eval.yml
     - deploy.yml
@@ -12,7 +12,7 @@ discover:
         - path: layers
           recursive: true
 defaults:
-    platforms:
+    platform:
         - linux/amd64
     tag: auto
     registry: ghcr.io/overthinkos
@@ -124,11 +124,11 @@ builder:
                   {{.}}{{end}} && \
                 mkdir -p /tmp/aur-pkgs && \
                 find /tmp/aur-build -name '*.pkg.tar.zst' -exec cp {} /tmp/aur-pkgs/ \;
-        copy_artifacts:
+        copy_artifact:
             - src: /tmp/aur-pkgs/
               dst: /tmp/aur-pkgs/
     cargo:
-        detect_files:
+        detect_file:
             - Cargo.toml
         requires_src_dir: true
         inline: true
@@ -138,7 +138,7 @@ builder:
             RUN --mount=type=bind,from={{.LayerStage}},source=/,target=/ctx \
                 {{cacheMountsOwned .CacheMounts .UID .GID}}cargo install --path /ctx
     npm:
-        detect_files:
+        detect_file:
             - package.json
         cache_mount:
             - dst: /tmp/npm-cache
@@ -152,12 +152,12 @@ builder:
             ENV NPM_CONFIG_PREFIX={{.Home}}/.npm-global
             COPY --chown={{.UID}}:{{.GID}} {{.CopySrc}}/package.json package.json
             RUN {{cacheMountsOwned .CacheMounts .UID .GID}}node -e 'var d=require("./package.json").dependencies||{};for(var[n,v]of Object.entries(d))console.log(v==="*"?n:n+"@"+v)' | xargs npm install -g && rm -f package.json
-        copy_artifacts:
+        copy_artifact:
             - src: '{{.Home}}'
               dst: '{{.Home}}'
               chown: true
     pixi:
-        detect_files:
+        detect_file:
             - pixi.toml
             - pyproject.toml
             - environment.yml
@@ -197,7 +197,7 @@ builder:
             {{- else}}
             RUN {{cacheMountsOwned .CacheMounts .UID .GID}}{{.InstallCmd}} && rm -f {{.Manifest}} pixi.lock
             {{- end}}
-        install_commands:
+        install_command:
             environment.yml: pixi project import environment.yml && pixi install
             pixi.toml: pixi install
             pixi.toml+lock: pixi install --frozen
@@ -205,7 +205,7 @@ builder:
         manylinux_fix: |
             RUN grep -q 'system-requirements' {{.Manifest}} || printf '\n[system-requirements]\nlibc = { family = "glibc", version = "2.39" }\n' >> {{.Manifest}}
         build_script: build.sh
-        copy_artifacts:
+        copy_artifact:
             - src: '{{.Home}}'
               dst: '{{.Home}}'
               chown: true
@@ -227,8 +227,8 @@ distro:
                 cache_mount:
                     - dst: /var/cache/pacman/pkg
                       sharing: locked
-                section_fields:
-                    options: list
+                section_field:
+                    option: list
                     package: list
                 install_template: |
                     COPY --from={{.StageName}} /tmp/aur-pkgs/ /tmp/aur-pkgs/
@@ -239,9 +239,9 @@ distro:
                 cache_mount:
                     - dst: /var/cache/pacman/pkg
                       sharing: locked
-                section_fields:
+                section_field:
                     keys: list
-                    options: list
+                    option: list
                     package: list
                     repo: list_of_maps
                 install_template: |
@@ -276,7 +276,7 @@ distro:
                     {{- range .Packages}} \
                           {{.}}{{end}}
         pacstrap:
-            base_packages:
+            base_package:
                 - base
                 - base-devel
                 - linux
@@ -390,7 +390,7 @@ distro:
     cachyos:
         inherits: archlinux
         pacstrap:
-            base_packages:
+            base_package:
                 - base
                 - base-devel
                 - linux-cachyos
@@ -442,8 +442,8 @@ distro:
                       sharing: locked
                     - dst: /var/lib/apt
                       sharing: locked
-                section_fields:
-                    options: list
+                section_field:
+                    option: list
                     package: list
                     repo: list_of_maps
                 install_template: |
@@ -468,10 +468,10 @@ distro:
             mirror: http://deb.debian.org/debian
             variant: minbase
             components: "main"
-            include_packages:
+            include_package:
                 - ca-certificates
                 - gnupg
-            base_packages:
+            base_package:
                 # systemd-sysv provides /sbin/init -> /lib/systemd/systemd.
                 # WITHOUT it, run-init from the initramfs aborts with
                 # "Target filesystem doesn't have requested /sbin/init"
@@ -631,18 +631,18 @@ distro:
             cache_mount:
                 - dst: /var/cache/libdnf5
                   sharing: locked
-        workarounds:
+        workaround:
             - rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true
         format:
             rpm:
                 cache_mount:
                     - dst: /var/cache/libdnf5
                       sharing: locked
-                section_fields:
+                section_field:
                     copr: list
                     exclude: list
                     module: list
-                    options: list
+                    option: list
                     package: list
                     repo: list_of_maps
                 install_template: |
@@ -700,10 +700,10 @@ distro:
             variant: minbase
             # debootstrap --components expects comma-separated, not space.
             components: "main,universe"
-            include_packages:
+            include_package:
                 - ca-certificates
                 - gnupg
-            base_packages:
+            base_package:
                 # systemd-sysv provides /sbin/init (see distro.debian).
                 - systemd-sysv
                 - dbus
@@ -727,7 +727,7 @@ distro:
                 # update-initramfs / chroot-grub-install are identical on Ubuntu.
 init:
     supervisord:
-        layer_fields:
+        layer_field:
             - service
         depends_layer: supervisord
         model: fragment_assembly
@@ -764,7 +764,7 @@ init:
             - sleep
             - infinity
         management_tool: supervisorctl
-        management_commands:
+        management_command:
             restart: restart {{.Service}}
             start: start {{.Service}}
             status: status
@@ -835,9 +835,9 @@ init:
                 stderr_logfile_maxbytes=0
                 {{- end}}
     systemd:
-        layer_fields:
+        layer_field:
             - service
-        layer_files:
+        layer_file:
             - '*.service'
         requires_capability:
             - preserve_user
@@ -860,7 +860,7 @@ init:
             - sleep
             - infinity
         management_tool: systemctl
-        management_commands:
+        management_command:
             restart: --user restart {{.Service}}
             start: --user start {{.Service}}
             status: --user status {{.Service}}
@@ -931,56 +931,3 @@ init:
                 {{- else}}
                 WantedBy=multi-user.target
                 {{- end}}
-image:
-    android-emulator:
-        base: selkies-desktop
-        platforms:
-            - linux/amd64
-        layer:
-            - nodejs
-            - java-openjdk
-            - android-sdk
-            - appium-server
-            - android-emulator-layer
-        port:
-            - "3000:3000"
-            - "4723:4723"
-            - "5037:5037"
-            - "2222:2222"
-            # Inherited from the selkies-desktop layer chain — chrome-cdp
-            # publishes 9222 (Chrome DevTools Protocol) and chrome-devtools-mcp
-            # publishes 9224 (Streamable HTTP MCP). The mcp-provides OCI label
-            # baked into selkies-desktop expects these ports published; declare
-            # them here so inherited eval probes resolve correctly.
-            - "9222:9222"
-            - "9224:9224"
-        env:
-            - EMULATOR_NAME=ov_avd_14
-            - EMULATOR_API_LEVEL=34
-            - EMULATOR_DEVICE=pixel_6
-        status: testing
-        info: |
-            Android 14 (API 34, Google APIs x86_64) emulator on top of the
-            selkies-desktop streaming chain. Browser UI on https://localhost:3000
-            (Selkies WebRTC), Appium WebDriver on :4723, ADB server on :5037
-            (set ANDROID_ADB_SERVER_SOCKET=tcp:localhost:5037 to drive from
-            host). Requires /dev/kvm + kvm-group passthrough for hardware
-            acceleration; the layer declares this via security.devices so the
-            quadlet auto-emits AddDevice=/dev/kvm.
-        eval:
-            - id: image-emulator-binary
-              file: /opt/android-sdk/emulator/emulator
-              exists: true
-            - id: image-adb-binary
-              file: /opt/android-sdk/platform-tools/adb
-              exists: true
-            - id: image-appium-binary
-              file: /usr/local/bin/appium
-              exists: true
-            - id: image-java-binary
-              file: /usr/bin/java
-              exists: true
-            - id: image-start-emulator-script
-              file: /usr/local/bin/start-emulator
-              exists: true
-              mode: "0755"

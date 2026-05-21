@@ -15,7 +15,7 @@ layer:
   volume:
     - name: models
       path: "~/.immich/models"
-  vars:
+  var:
     IMMICH_VERSION: v2.7.5
   task:
     # uv (Python package manager) — piped sh installer; env vars redirect it to

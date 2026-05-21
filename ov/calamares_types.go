@@ -59,7 +59,7 @@ func (p PackageItem) MarshalYAML() (interface{}, error) {
 // builder stage (not pacman directly).
 type AURPackages struct {
 	Package []PackageItem `yaml:"package,omitempty" json:"package,omitempty"`
-	Options []string      `yaml:"options,omitempty" json:"options,omitempty"`
+	Options []string      `yaml:"option,omitempty" json:"options,omitempty"`
 	// Replaces lists distro-repo packages whose file paths conflict
 	// with the AUR build artifact. Each entry is removed via
 	// `pacman -Rs --noconfirm <pkg>` BEFORE the AUR `pacman -U`
@@ -69,7 +69,7 @@ type AURPackages struct {
 	// `visual-studio-code-bin` and `code` both own /usr/bin/code).
 	// OCI image builds ignore this field — fresh rootfs has no
 	// conflicting package.
-	Replaces []string `yaml:"replaces,omitempty" json:"replaces,omitempty"`
+	Replaces []string `yaml:"replace,omitempty" json:"replaces,omitempty"`
 }
 
 // DistroPackages carries per-distro package overrides plus format-specific
@@ -84,7 +84,7 @@ type DistroPackages struct {
 	Copr     []string         `yaml:"copr,omitempty" json:"copr,omitempty"`       // fedora-only
 	Repo    []map[string]any `yaml:"repo,omitempty" json:"repo,omitempty"`       // free-form per-distro repo blocks
 	Exclude []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
-	Options []string         `yaml:"options,omitempty" json:"options,omitempty"` // extra installer flags
+	Options []string         `yaml:"option,omitempty" json:"options,omitempty"` // extra installer flags
 	Module  []string         `yaml:"module,omitempty" json:"module,omitempty"`   // dnf module enable
 	AUR      *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // archlinux-only
 

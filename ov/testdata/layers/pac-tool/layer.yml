@@ -5,7 +5,7 @@ layer:
       package:
         - neovim
         - ripgrep
-      options:
+      option:
         - --needed
       repo:
         - name: custom-repo

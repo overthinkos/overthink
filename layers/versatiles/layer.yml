@@ -23,7 +23,7 @@ layer:
   # VERSATILES_PUBLIC_URL is browser-side — embedded into MapLibre HTML
   # for the shortbread map cell (which fetches /tiles/<source>/{z}/{x}/{y}
   # directly from versatiles serve, bypassing the martin path).
-  env_provides:
+  env_provide:
     VERSATILES_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8090}}"
   task:
     # ---- versatiles-rs binary ----

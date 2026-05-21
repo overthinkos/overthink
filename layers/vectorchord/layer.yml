@@ -9,7 +9,7 @@ layer:
   env:
     VECTORCHORD_VERSION: "1.1.1"
     POSTGRES_SHARED_PRELOAD_LIBRARIES: "vchord.so"
-  vars:
+  var:
     # Also expose the version as a task-context var so the URL template below
     # reads naturally. Keep in sync with env.VECTORCHORD_VERSION above — this
     # duplication is unfortunate but separates build-time (vars:) from

@@ -62,7 +62,7 @@ layer:
         - tigervnc
         - virt-manager
         - virt-viewer
-      options:
+      option:
         - --allowerasing
     ubuntu:
       package:

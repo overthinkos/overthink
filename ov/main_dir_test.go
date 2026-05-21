@@ -107,11 +107,11 @@ func writeMinProject(t *testing.T, dir string) {
 	t.Helper()
 	// Post-unified-cutover: write overthink.yml (the unified format) instead
 	// of a legacy image.yml. LoadConfig reads overthink.yml exclusively.
-	overthinkYAML := `version: 4
+	overthinkYAML := `version: 2026.141.1530
 defaults:
   registry: ghcr.io/test
   tag: latest
-  platforms:
+  platform:
     - linux/amd64
   build: [rpm]
 

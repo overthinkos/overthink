@@ -1,6 +1,6 @@
 package main
 
-// migrate_field_singular.go — `ov migrate field-singular`.
+// migrate_field_singular.go — `ov migrate`.
 //
 // Hard cutover that singularizes every plural YAML field name in the
 // project schema. Rewrites every reachable .yml under the project root
@@ -66,7 +66,11 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"deployments": "deploy",
 	"deploys":     "deploy",
 	"clusters":    "cluster",
-	"groups":      "group",
+	// "groups": "group" — CARVE-OUT: the eval Check struct already has a
+	// verb-level `group:` scalar (the group-membership check), so renaming a
+	// Check's `groups:` list to `group:` would collide. cloud-init's `groups:`
+	// is also kept plural for the same global-key reason. (Same class of
+	// semantic carve-out as addr/addrs below.)
 	"targets":     "target",
 	"modules":     "module",
 
@@ -85,35 +89,21 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"cap_adds":              "cap_add",
 	"with_services":         "with_service",
 
-	// §A.2.d — domain/external-schema plurals
-	"cores":              "core",
-	"sockets":            "socket",
-	"threads":            "thread",
-	"dies":               "die",
-	"cpus":               "cpu",
-	"disks":              "disk",
-	"users":              "user",
+	// §A.2.d — domain plurals (overthink-native authoring keys)
 	"events":             "event",
 	"replicas":           "replica",
 	"ssh_args":           "ssh_arg",
-	"tolerations":        "toleration",
 	"mounts":             "mount",
-	"devices":            "device",
-	"channels":           "channel",
-	"mirrors":            "mirror",
 	"snapshots":          "snapshot",
 	"repos":              "repo",
-	"frequencies":        "frequency",
 	"subgroups":          "subgroup",
 // "addrs": "addr" — REVERTED: collides with existing addr: scalar field in evalspec.go (semantic carve-out)
 	"phases":             "phase",
 	"steps":              "step",
-	"timers":             "timer",
 	"metrics":            "metric",
 	"notes":              "note",
 	"examples":           "example",
 	"replaces":           "replace",
-	"oem_strings":        "oem_string",
 	"recipes":            "recipe",
 	"scenarios":          "scenario",
 	"versions":           "version",
@@ -121,17 +111,51 @@ var pluralToSingularYAMLKeys = map[string]string{
 	"start_retries":      "start_retry",
 	"start_secs":         "start_sec",
 	"wait_seconds":       "wait_second",
-	"retries":            "retry",
 	"solved_ids":         "solved_id",
 	"over_ids":           "over_id",
 	"newly_solved_ids":   "newly_solved_id",
-	"pull_secrets":       "pull_secret",
-	"port_forwards":      "port_forward",
 	"oci_labels":         "oci_label",
 	"extra_repos":        "extra_repo",
 	"pod_defaults":       "pod_default",
 	"env_defaults":       "env_default",
 	"path_contributions": "path_contribution",
+
+	// §A.2.e — field-singular completion batch (2026-05). Only overthink-NATIVE
+	// authoring keys are singularized here. EXTERNAL-SCHEMA keys are deliberately
+	// ABSENT and kept PLURAL so the authoring key matches the external output:
+	// overthink renders cloud-init / Kubernetes / libvirt config with the
+	// external schema's own plural keys (`users:`, `labels:`, `resources:`,
+	// `<devices>`, `<topology sockets= cores= threads=>`, …), so authoring those
+	// fields in the SAME plural spelling keeps a 1:1 mapping. The kept-plural set
+	// (defined by the keys living in cloud_init_types.go / k8s_spec.go /
+	// k8s_config.go / libvirt_yaml.go) includes: users, groups, mirrors,
+	// write_files, ethernets, hostnames, labels, annotations, tolerations,
+	// pull_secrets, resources, limits, requests, devices, channels, cores,
+	// sockets, threads, dies, disks, cpus, filesystems, interfaces, inputs,
+	// hostdevs, memnodes, snippets, graphics, hugepages, iothreads, timers,
+	// frequencies, retries, oem_strings, port_forwards, spinlocks, features,
+	// heads, shares, patches, kernel_hashes. Other carve-outs: groups/addrs
+	// (verb collisions, above); config.yml-only keys in runtime_config.go (not
+	// field-singular-walked).
+	"platforms":           "platform",
+	"instances":           "instance",
+	"options":             "option",
+	"opts":                "opt",
+	"headers":             "header",
+	"args":                "arg",
+	"workarounds":         "workaround",
+	"vars":                "var",
+	"install_commands":    "install_command",
+	"management_commands": "management_command",
+	"detect_files":        "detect_file",
+	"layer_files":         "layer_file",
+	"layer_fields":        "layer_field",
+	"section_fields":      "section_field",
+	"base_packages":       "base_package",
+	"include_packages":    "include_package",
+	"copy_artifacts":      "copy_artifact",
+	"exclude_distros":     "exclude_distro",
+	"env_provides":        "env_provide",
 }
 
 // orderedPluralKeys returns the keys of pluralToSingularYAMLKeys sorted
@@ -151,44 +175,6 @@ func orderedPluralKeys() []string {
 		return keys[i] < keys[j]
 	})
 	return keys
-}
-
-// MigrateFieldSingularCmd is `ov migrate field-singular`.
-type MigrateFieldSingularCmd struct {
-	Dir    string `arg:"" optional:"" help:"Project directory containing overthink.yml (default: cwd)"`
-	DryRun bool   `long:"dry-run" help:"Print files that would be rewritten and the keys touched; don't write any files"`
-}
-
-func (c *MigrateFieldSingularCmd) Run() error {
-	dir := c.Dir
-	if dir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		dir = cwd
-	}
-	res, err := MigrateFieldSingular(MigrateFieldSingularOpts{Dir: dir, DryRun: c.DryRun})
-	if err != nil {
-		return err
-	}
-	if len(res.Rewritten) == 0 {
-		fmt.Fprintln(os.Stderr, "ov migrate field-singular: nothing to migrate (every reachable .yml is already singular)")
-		return nil
-	}
-	prefix := "rewrote "
-	if c.DryRun {
-		prefix = "[dry-run] would rewrite "
-	}
-	for _, r := range res.Rewritten {
-		fmt.Fprintf(os.Stderr, "%s%s — %d key(s): %s\n", prefix, r.Path, len(r.Keys), strings.Join(r.Keys, ", "))
-	}
-	if c.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] %d file(s) would be rewritten\n", len(res.Rewritten))
-	} else {
-		fmt.Fprintf(os.Stderr, "%d file(s) rewritten; backups written with suffix %s\n", len(res.Rewritten), res.BackupSuffix)
-	}
-	return nil
 }
 
 // MigrateFieldSingularOpts configures MigrateFieldSingular.
@@ -496,7 +482,7 @@ func lookupMapNode(m *yaml.Node, key string) *yaml.Node {
 // RejectLegacyPluralKeys is the single rejection point used by every
 // YAML loader. Walks the top-level mapping of the document and returns
 // an error if any legacy plural field name is present, with a remediation
-// hint pointing at `ov migrate field-singular`. (R3 no-duplication: this
+// hint pointing at `ov migrate`. (R3 no-duplication: this
 // helper and pluralToSingularYAMLKeys live together so the loader
 // rejection and the migrator rewrite share ONE source of truth.)
 //
@@ -518,7 +504,7 @@ func RejectLegacyPluralKeys(path string, data []byte) error {
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		k := root.Content[i].Value
 		if singular, ok := pluralToSingularYAMLKeys[k]; ok {
-			return fmt.Errorf("%s: legacy plural field %q rejected; the project moved to singular field names. Run `ov migrate field-singular` to rewrite this file (key %q → %q)", path, k, k, singular)
+			return fmt.Errorf("%s: legacy plural field %q rejected; the project moved to singular field names. Run `ov migrate` to rewrite this file (key %q → %q)", path, k, k, singular)
 		}
 	}
 	return nil

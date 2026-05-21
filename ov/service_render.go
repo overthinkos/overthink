@@ -83,7 +83,7 @@ type ServiceEntry struct {
 
 	// Events — supervisord eventlistener trigger list (comma-separated),
 	// e.g. "PROCESS_STATE_FATAL". Required when kind: eventlistener.
-	Events string `yaml:"events,omitempty"`
+	Events string `yaml:"event,omitempty"`
 
 	// AutoStart is tri-state: nil → template default (true for program,
 	// true for eventlistener); *false → autostart=false; *true → autostart=true.
@@ -93,12 +93,12 @@ type ServiceEntry struct {
 
 	// StartRetries — max (re)start attempts before the program enters FATAL.
 	// Supervisord default is 3. Set explicitly to override.
-	StartRetries int `yaml:"start_retries,omitempty"`
+	StartRetries int `yaml:"start_retry,omitempty"`
 
 	// StartSecs — seconds the process must stay up to count as "started."
 	// Default 1; longer values are needed for services like Wayland
 	// compositors that take time to reach steady state.
-	StartSecs int `yaml:"start_secs,omitempty"`
+	StartSecs int `yaml:"start_sec,omitempty"`
 
 	// StopSignal — signal sent on graceful stop. Default TERM; some
 	// programs need INT or HUP. Case-insensitive.

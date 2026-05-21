@@ -166,8 +166,8 @@ type Check struct {
 	// metrics. Discriminator value is the metric kind ("latency"); siblings
 	// OverIDs / Metrics / EmitID / per-metric matchers configure it.
 	Summarize string   `yaml:"summarize,omitempty" json:"summarize,omitempty"`
-	OverIDs   []string `yaml:"over_ids,omitempty"  json:"over_ids,omitempty"`
-	Metrics   []string `yaml:"metrics,omitempty"   json:"metrics,omitempty"`
+	OverIDs   []string `yaml:"over_id,omitempty"  json:"over_ids,omitempty"`
+	Metrics   []string `yaml:"metric,omitempty"   json:"metrics,omitempty"`
 	EmitID    string   `yaml:"emit_id,omitempty"   json:"emit_id,omitempty"`
 	// Per-metric numeric matchers — when set, the verb fails if the metric
 	// exceeds the threshold. Reuses the existing Matcher type so lt/le/gt/ge
@@ -194,7 +194,7 @@ type Check struct {
 
 	// package-specific
 	Installed *bool    `yaml:"installed,omitempty" json:"installed,omitempty"`
-	Versions  []string `yaml:"versions,omitempty"  json:"versions,omitempty"`
+	Versions  []string `yaml:"version,omitempty"  json:"versions,omitempty"`
 	// PackageMap overrides the Package name per distro. Keys match the image's
 	// distro tags (e.g. "archlinux", "fedora", "ubuntu", "debian"). If the
 	// running image's distro tag is present in the map, that value replaces
@@ -210,7 +210,7 @@ type Check struct {
 	// probe when the package only ships on some distros' repos. Matched
 	// against the full image distro list (e.g. ["ubuntu:24.04", "ubuntu",
 	// "debian"]) so `ubuntu:24.04` and `ubuntu` both match.
-	ExcludeDistros []string `yaml:"exclude_distros,omitempty" json:"exclude_distros,omitempty"`
+	ExcludeDistros []string `yaml:"exclude_distro,omitempty" json:"exclude_distros,omitempty"`
 
 	// service-specific
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
@@ -228,7 +228,7 @@ type Check struct {
 	// http-specific
 	Status        int         `yaml:"status,omitempty"              json:"status,omitempty"`
 	Body          MatcherList `yaml:"body,omitempty"                json:"body,omitempty"`
-	Headers       MatcherList `yaml:"headers,omitempty"             json:"headers,omitempty"`
+	Headers       MatcherList `yaml:"header,omitempty"             json:"headers,omitempty"`
 	AllowInsecure bool        `yaml:"allow_insecure,omitempty"      json:"allow_insecure,omitempty"`
 	NoFollowRedir bool        `yaml:"no_follow_redirects,omitempty" json:"no_follow_redirects,omitempty"`
 	CAFile        string      `yaml:"ca_file,omitempty"             json:"ca_file,omitempty"`
@@ -258,7 +258,7 @@ type Check struct {
 	// mount-specific
 	MountSource string      `yaml:"mount_source,omitempty" json:"mount_source,omitempty"` // backing device/path
 	Filesystem  string      `yaml:"filesystem,omitempty"   json:"filesystem,omitempty"`
-	Opts        MatcherList `yaml:"opts,omitempty"         json:"opts,omitempty"`
+	Opts        MatcherList `yaml:"opt,omitempty"         json:"opts,omitempty"`
 
 	// addr-specific
 	Reachable *bool `yaml:"reachable,omitempty" json:"reachable,omitempty"`
@@ -274,7 +274,7 @@ type Check struct {
 	Selector         string   `yaml:"selector,omitempty"           json:"selector,omitempty"`           // cdp: click/type/wait/coords/axtree
 	Dest             string   `yaml:"dest,omitempty"               json:"dest,omitempty"`               // dbus: service name
 	Path             string   `yaml:"path,omitempty"               json:"path,omitempty"`               // dbus: object path
-	Args             []string `yaml:"args,omitempty"               json:"args,omitempty"`               // dbus: method args (type:value)
+	Args             []string `yaml:"arg,omitempty"               json:"args,omitempty"`               // dbus: method args (type:value)
 	Artifact              string `yaml:"artifact,omitempty"                json:"artifact,omitempty"`                // cdp/wl/vnc: output file path for screenshot / raw capture
 	ArtifactMinBytes      int    `yaml:"artifact_min_bytes,omitempty"      json:"artifact_min_bytes,omitempty"`      // post-run size assertion on artifact
 	ArtifactMinDimensions string `yaml:"artifact_min_dimensions,omitempty" json:"artifact_min_dimensions,omitempty"` // post-run "WxH" min dimensions assertion (PNG/JPEG header decode)

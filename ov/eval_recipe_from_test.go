@@ -32,7 +32,7 @@ func fxCheckLiveOnly(id string) Check {
 // through the projected-layers map, not uf.Layer.
 func fxUnified() *UnifiedFile {
 	return &UnifiedFile{
-		Version: 4,
+		Version: LatestSchemaVersion().String(),
 		Image:  map[string]ImageConfig{},
 		Pod:     map[string]*PodSpec{},
 		VM:      map[string]*VmSpec{},

@@ -167,10 +167,10 @@ rpm:
     - git
   copr:
     - owner/repo
-  repos:
+  repo:
     - name: test
       url: https://example.com/repo
-  options:
+  option:
     - --nogpgcheck
 `
 	var ly LayerYAML
@@ -194,11 +194,11 @@ rpm:
 	if _, ok := section.Raw["copr"]; !ok {
 		t.Error("Raw missing copr field")
 	}
-	if _, ok := section.Raw["repos"]; !ok {
-		t.Error("Raw missing repos field")
+	if _, ok := section.Raw["repo"]; !ok {
+		t.Error("Raw missing repo field")
 	}
-	if _, ok := section.Raw["options"]; !ok {
-		t.Error("Raw missing options field")
+	if _, ok := section.Raw["option"]; !ok {
+		t.Error("Raw missing option field")
 	}
 }
 

@@ -651,7 +651,7 @@ func pixiDefaultEnvName(layer *Layer) string {
 // compileServiceSteps — unified schema only. Each ServiceEntry becomes
 // either a ServicePackagedStep (use_packaged:) or a ServiceCustomStep
 // (custom exec). Legacy fields (raw-INI service:, system_services:) are
-// gone — external layers must run `ov migrate unified --rewrite-layers`.
+// gone — external layers must run `ov migrate`.
 //
 // **Init-system polymorphism filter (2026-05).** When a layer declares
 // the same service `name:` twice — once with `use_packaged:` and once

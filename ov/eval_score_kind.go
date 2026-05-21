@@ -95,7 +95,7 @@ type HarnessScore struct {
 
 	// Notes controls the persistent NOTES.md memory subsystem. Pointer
 	// so the default (true) and an explicit `false` are distinguishable.
-	Notes *bool `yaml:"notes,omitempty"`
+	Notes *bool `yaml:"note,omitempty"`
 
 	// ValidateAiArtifacts narrows artifact-producing state-dependent
 	// probes (the screenshot + record-stop methods listed in
@@ -292,7 +292,7 @@ func RenderScoreRecipesYAML(recipeNames []string, recipeCatalog map[string]*Harn
 	type recipeBlock struct {
 		Recipe      string     `yaml:"recipe"`
 		Description string     `yaml:"description,omitempty"`
-		Scenarios   []Scenario `yaml:"scenarios,omitempty"`
+		Scenarios   []Scenario `yaml:"scenario,omitempty"`
 	}
 	if len(recipeNames) == 0 {
 		return ""

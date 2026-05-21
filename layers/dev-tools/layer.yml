@@ -73,7 +73,7 @@ layer:
         - qemu-user-static
         - ShellCheck
         - thefuck
-      options:
+      option:
         - "--setopt=tsflags=noscripts"
     ubuntu:
       package:
@@ -127,7 +127,7 @@ layer:
     - id: fastfetch-binary
       file: /usr/bin/fastfetch
       exists: true
-      exclude_distros:
+      exclude_distro:
         - ubuntu:24.04
     - id: neovim-binary
       file: /usr/bin/nvim

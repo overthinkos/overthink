@@ -222,9 +222,7 @@ func (c *VmCreateCmd) Run() error {
 			"  Declare one (optionally paired with a bootc image), e.g.:\n"+
 			"      vms:\n"+
 			"        %s-bootc:\n"+
-			"          source: {kind: bootc, image: %s}\n"+
-			"  Or auto-generate paired entries from bootc:true images with:\n"+
-			"      ov migrate vm-spec",
+			"          source: {kind: bootc, image: %s}\n",
 		c.Image, c.Image, c.Image)
 }
 

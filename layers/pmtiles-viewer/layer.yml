@@ -24,7 +24,7 @@ layer:
         - git
   port:
     - 8001      # pmtiles-viewer static-dist HTTP server (host 28001)
-  env_provides:
+  env_provide:
     PMTILES_VIEWER_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8001}}"
   task:
     - mkdir: /opt/pmtiles-viewer

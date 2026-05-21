@@ -23,8 +23,7 @@ func TestMigrateDropKdbx_StripsResiduals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := &MigrateDropKdbxCmd{Path: path}
-	if err := cmd.Run(); err != nil {
+	if _, err := MigrateDropKdbx(path, false); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
 
@@ -50,7 +49,7 @@ func TestMigrateDropKdbx_StripsResiduals(t *testing.T) {
 	}
 
 	// Idempotent: a second run is a no-op and writes no further backup.
-	if err := cmd.Run(); err != nil {
+	if _, err := MigrateDropKdbx(path, false); err != nil {
 		t.Fatalf("second run: %v", err)
 	}
 	baks, _ = filepath.Glob(path + ".bak.*")
@@ -60,8 +59,7 @@ func TestMigrateDropKdbx_StripsResiduals(t *testing.T) {
 }
 
 func TestMigrateDropKdbx_NoFile(t *testing.T) {
-	cmd := &MigrateDropKdbxCmd{Path: filepath.Join(t.TempDir(), "absent.yml")}
-	if err := cmd.Run(); err != nil {
+	if _, err := MigrateDropKdbx(filepath.Join(t.TempDir(), "absent.yml"), false); err != nil {
 		t.Fatalf("missing file should be a no-op, got: %v", err)
 	}
 }
@@ -72,8 +70,7 @@ func TestMigrateDropKdbx_PreservesLiveSecretBackend(t *testing.T) {
 	if err := os.WriteFile(path, []byte("secret_backend: keyring\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	cmd := &MigrateDropKdbxCmd{Path: path}
-	if err := cmd.Run(); err != nil {
+	if _, err := MigrateDropKdbx(path, false); err != nil {
 		t.Fatal(err)
 	}
 	out, _ := os.ReadFile(path)
@@ -100,7 +97,7 @@ func TestLoadRuntimeConfig_RejectsKdbxResiduals(t *testing.T) {
 			if err == nil {
 				t.Fatalf("expected hard error for residual %q, got nil", name)
 			}
-			if !strings.Contains(err.Error(), "drop-kdbx") {
+			if !strings.Contains(err.Error(), "ov migrate") {
 				t.Errorf("error should point at the migration command, got: %v", err)
 			}
 		})

@@ -11,7 +11,7 @@ import (
 // expected fields.
 func TestLoadUnified_LocalMap_Inline(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 4
+	src := `version: 2026.141.1530
 local:
   dev-workstation:
     layer: [ripgrep, direnv]
@@ -54,7 +54,7 @@ local:
 // on a deployment that still uses the legacy target:host spelling.
 func TestLoadUnified_RejectLegacyTargetHost(t *testing.T) {
 	dir := t.TempDir()
-	src := `version: 4
+	src := `version: 2026.141.1530
 deploy:
   my-laptop:
     target: host
@@ -67,7 +67,7 @@ deploy:
 	if err == nil {
 		t.Fatal("expected hard load error for target: host")
 	}
-	if msg := err.Error(); !containsStr(msg, "ov migrate target-local") {
+	if msg := err.Error(); !containsStr(msg, "ov migrate") {
 		t.Errorf("error should reference migrate target-local, got: %v", err)
 	}
 }

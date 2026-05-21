@@ -6,7 +6,7 @@ layer:
     SHERPA_ONNX_RUNTIME_DIR: "~/.local/share/sherpa-onnx/runtime"
     SHERPA_ONNX_MODEL_DIR: "~/.local/share/sherpa-onnx/models"
 
-  vars:
+  var:
     SHERPA_VERSION: v1.12.23
 
   task:

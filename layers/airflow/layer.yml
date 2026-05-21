@@ -58,7 +58,7 @@ layer:
   #                              same-pod resolves to localhost:8080;
   #                              cross-pod resolves to ContainerName.
   #   AIRFLOW_DAGS_DIR    — static path inside the workspace volume.
-  env_provides:
+  env_provide:
     AIRFLOW_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8080}}"
     AIRFLOW_API_INTERNAL_URL: "http://{{.ContainerName}}:8080"
     AIRFLOW_DAGS_DIR: "/workspace/dags"

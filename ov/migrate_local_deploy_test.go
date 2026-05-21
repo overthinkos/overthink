@@ -307,7 +307,7 @@ func TestMigrateLocalDeploy_DryRun(t *testing.T) {
 
 // TestLoadDeployConfig_LegacySchemaErrors exercises the load-time guard:
 // a deploy.yml with `images:` at top level errors with a remediation hint
-// pointing at `ov migrate local-deploy`.
+// pointing at `ov migrate`.
 func TestLoadDeployConfig_LegacySchemaErrors(t *testing.T) {
 	dir := t.TempDir()
 	configDir := filepath.Join(dir, "xdg")
@@ -329,7 +329,7 @@ func TestLoadDeployConfig_LegacySchemaErrors(t *testing.T) {
 	if !strings.Contains(msg, "legacy top-level `images:`") {
 		t.Errorf("error message missing legacy-key hint: %s", msg)
 	}
-	if !strings.Contains(msg, "ov migrate local-deploy") {
+	if !strings.Contains(msg, "ov migrate") {
 		t.Errorf("error message missing remediation command: %s", msg)
 	}
 }

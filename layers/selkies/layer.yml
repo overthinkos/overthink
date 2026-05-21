@@ -39,7 +39,7 @@ layer:
         # the selkies-desktop build chain. Declared explicitly to insulate
         # against future base-image trimming.
         - openssl
-  vars:
+  var:
     TRAEFIK_VERSION: v3.4.0
   task:
     # Move pre-built Selkies web UI from the pixi build-stage output into the

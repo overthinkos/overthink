@@ -128,7 +128,7 @@ type LayerArtifact struct {
 	//
 	// This is a readiness probe (file existence is the synchronization
 	// primitive), not a sleep workaround — R4-compliant.
-	WaitSeconds int `yaml:"wait_seconds,omitempty" json:"wait_seconds,omitempty"`
+	WaitSeconds int `yaml:"wait_second,omitempty" json:"wait_seconds,omitempty"`
 }
 
 // LayerArtifactRewrite is a single find/replace pair.
@@ -271,7 +271,7 @@ type LayerYAML struct {
 	PortRelay     []int             `yaml:"port_relay,omitempty"`
 	SecretYAML    []SecretYAML      `yaml:"secret,omitempty"`
 	Data          []DataYAML        `yaml:"data,omitempty"`
-	EnvProvides   map[string]string `yaml:"env_provides,omitempty"`   // env vars provided to OTHER containers when this service is deployed
+	EnvProvides   map[string]string `yaml:"env_provide,omitempty"`   // env vars provided to OTHER containers when this service is deployed
 	EnvRequire    []EnvDependency   `yaml:"env_require,omitempty"`    // env vars this layer MUST have from the environment
 	EnvAccept     []EnvDependency   `yaml:"env_accept,omitempty"`     // env vars this layer CAN optionally use
 	SecretAccept  []EnvDependency   `yaml:"secret_accept,omitempty"`  // credential-store-backed env vars this layer CAN optionally use
@@ -290,7 +290,7 @@ type LayerYAML struct {
 	Distro  map[string]*DistroPackages `yaml:"distro,omitempty"`
 
 	// Replaces root.yml / user.yml — see Task type and docs/plan.
-	Vars map[string]string `yaml:"vars,omitempty"` // layer-local variables for ${VAR} substitution in tasks
+	Vars map[string]string `yaml:"var,omitempty"` // layer-local variables for ${VAR} substitution in tasks
 	Task []Task            `yaml:"task,omitempty"` // ordered install operations
 
 	// Shell-init declarations: an intrinsic body (init/path_append/path/
@@ -340,7 +340,7 @@ type LayerYAML struct {
 // `depends` renamed to `requires`. Calamares-shaped `packages` + `distros`
 // added as the unified package surface; per-format `rpm:`/`deb:`/`pac:`/
 // `aur:` and per-distro tag sections (debian:13: etc.) collapse into them
-// via `ov migrate calamares`.
+// via `ov migrate`.
 var layerYAMLKnownFields = map[string]bool{
 	"description": true, "version": true, "status": true,
 	"name": true, "from": true,
@@ -871,7 +871,7 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 
 	// Field-singular cutover hard-rejection: any legacy plural top-level
 	// key (layers:/ports:/...) fires a clear remediation hint pointing
-	// at `ov migrate field-singular` rather than letting the YAML decoder
+	// at `ov migrate` rather than letting the YAML decoder
 	// silently drop the unknown field.
 	if err := RejectLegacyPluralKeys(path, data); err != nil {
 		return nil, err
@@ -934,7 +934,7 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 			return nil, fmt.Errorf("%s: ambiguous — `layer:` wrapper present AND other top-level keys %v (pick one form)", path, other)
 		}
 		// 2026-05 Calamares cutover: hard-fail on legacy field shapes.
-		// Every legacy form has a one-shot remediation via `ov migrate calamares`.
+		// Every legacy form has a one-shot remediation via `ov migrate`.
 		body := inner.Content[layerIdx]
 		if body != nil && body.Kind == yaml.MappingNode {
 			if err := rejectLegacyLayerKeys(path, body); err != nil {
@@ -949,32 +949,32 @@ func parseLayerYAML(path string) (*LayerYAML, error) {
 	}
 
 	// No `layer:` wrapper — legacy flat form. Reject with migration hint.
-	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate unified --rewrite-layers` to convert to the canonical `layer:` kind-keyed form", path)
+	return nil, fmt.Errorf("%s: legacy flat layer.yml form is no longer accepted. Run `ov migrate` to convert to the canonical `layer:` kind-keyed form", path)
 }
 
 // rejectLegacyLayerKeys is the 2026-05 Calamares-cutover hard-fail gate:
 // every legacy field shape produces a clear error pointing at
-// `ov migrate calamares`. Runs before standard YAML decoding so the user
+// `ov migrate`. Runs before standard YAML decoding so the user
 // sees the migration hint, not a generic "field not found" error.
 func rejectLegacyLayerKeys(path string, body *yaml.Node) error {
 	for i := 0; i+1 < len(body.Content); i += 2 {
 		key := body.Content[i].Value
 		switch key {
 		case "depends":
-			return fmt.Errorf("%s: layer.yml uses legacy `depends:` field. Run: ov migrate calamares", path)
+			return fmt.Errorf("%s: layer.yml uses legacy `depends:` field. Run: ov migrate", path)
 		case "rpm", "deb", "pac", "aur":
-			return fmt.Errorf("%s: layer.yml uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: ov migrate calamares", path, key)
+			return fmt.Errorf("%s: layer.yml uses legacy `%s:` block at top level. Calamares-aligned schema uses unified top-level `packages:` + per-distro `distros:` map. Run: ov migrate", path, key)
 		case "directory":
-			return fmt.Errorf("%s: layer.yml uses legacy `directory:` field (removed in 2026-05 cutover). Run: ov migrate calamares", path)
+			return fmt.Errorf("%s: layer.yml uses legacy `directory:` field (removed in 2026-05 cutover). Run: ov migrate", path)
 		case "info":
-			return fmt.Errorf("%s: layer.yml uses legacy `info:` field (removed; use `description:`). Run: ov migrate calamares", path)
+			return fmt.Errorf("%s: layer.yml uses legacy `info:` field (removed; use `description:`). Run: ov migrate", path)
 		}
 		// Distro-tag sections like `debian:13:`, `ubuntu:24.04:`,
 		// `debian,ubuntu:` — only fire when the bare leading segment
 		// matches a known distro name (so we don't false-positive on
 		// arbitrary YAML keys with colons).
 		if d, isTag := classifyDistroTag(key); isTag && len(d) > 0 {
-			return fmt.Errorf("%s: layer.yml uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: ov migrate calamares", path, key)
+			return fmt.Errorf("%s: layer.yml uses legacy distro tag section `%s:` at top level. Calamares-aligned schema nests distro overrides under `distros:`. Run: ov migrate", path, key)
 		}
 	}
 	return nil
@@ -1291,7 +1291,7 @@ func (l *Layer) PortSpecs() []PortSpec {
 // Service returns the layer's unified service: list (ServiceEntry slice).
 // This is the only service schema — legacy raw-INI and system_services: are
 // retired entirely. External layers that still have the legacy forms must run
-// `ov migrate unified --rewrite-layers`.
+// `ov migrate`.
 func (l *Layer) Service() []ServiceEntry {
 	return l.service
 }

@@ -42,5 +42,5 @@ type K8sPatchTarget struct {
 
 // Schema v4: ClusterProfile / LoadClusterProfile / clusters/*.yaml loaders
 // have been removed. Cluster config lives on K8sSpec (kind:k8s entities in
-// overthink.yml / k8s.yml). `ov migrate schema-v4` synthesizes a kind:k8s
+// overthink.yml / k8s.yml). `ov migrate` synthesizes a kind:k8s
 // entry from any pre-existing clusters/<name>.yaml.

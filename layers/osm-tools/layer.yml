@@ -11,7 +11,7 @@ layer:
       # but their file lists overlap. Force overwrite so the ocl-icd
       # install replaces opencl-nvidia's libOpenCL.so files. NVIDIA
       # OpenCL still works at runtime via /etc/OpenCL/vendors/nvidia.icd.
-      options:
+      option:
         - --overwrite=*
       package:
         # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
@@ -65,7 +65,7 @@ layer:
   # address. The {{.HostPort 3000}} placeholder resolves at ov config
   # time against the actual resolved port mapping (works with both
   # `port: [auto]` and explicit `port: [23000:3000]` deploy.yml forms).
-  env_provides:
+  env_provide:
     MARTIN_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 3000}}"
   task:
     # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----

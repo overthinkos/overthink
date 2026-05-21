@@ -65,7 +65,7 @@
 # Plan: /home/atrawog/.claude/plans/can-you-have-a-recursive-axolotl.md
 # =============================================================================
 
-version: 4
+version: 2026.141.1530
 deploy:
     arch-pacstrap-vm:
         target: vm
@@ -409,7 +409,7 @@ deploy:
     # 2026-05; verbs disambiguate by command context (ov image build
     # ov-cachyos → image:ov-cachyos; ov rebuild ov-cachyos → the
     # deployment entry below). Migration from the prior `qc` /
-    # `cachyos-dx` names: `ov migrate ov-cachyos` (idempotent).
+    # `cachyos-dx` names: `ov migrate` (idempotent).
     # =================================================================
     ov-cachyos:
         target: local

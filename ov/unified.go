@@ -33,10 +33,10 @@ import (
 // UnifiedFileName is the canonical root file of the unified format.
 const UnifiedFileName = "overthink.yml"
 
-// schemaVersion is the on-disk overthink.yml schema version. Bumped on
-// each hard-cutover migration; the LoadUnified gate refuses anything
-// older with a hint pointing at `ov migrate schema-v4`.
-const schemaVersion = 4
+// The on-disk overthink.yml schema version is a CalVer string (e.g.
+// 2026.141.1530) — the same scheme as image tags. LatestSchemaVersion()
+// (migrate_registry.go) is the curated HEAD value; the LoadUnified gate
+// refuses anything older with a hint pointing at `ov migrate`.
 
 // MaxIncludeDepth caps recursive include resolution. A cycle or excessive depth
 // raises a clear error with the offending file path.
@@ -50,9 +50,9 @@ const MaxIncludeDepth = 8
 // Schema version 2 consolidates the legacy vms.yml + deploy.yml split into one
 // deploy.yml file carrying both `vm:` (singular) and `deployments:` at the
 // root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
-// `ov migrate merge-vms` for the one-shot migration from v1.
+// `ov migrate` for the one-shot migration from v1.
 type UnifiedFile struct {
-	Version  int                    `yaml:"version,omitempty"`
+	Version  string                 `yaml:"version,omitempty"`
 	Include  []string               `yaml:"include,omitempty"`
 	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
 	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
@@ -369,13 +369,13 @@ var entityKinds = []entityKind{
 //
 // Enforces schema version 2: any loaded overthink.yml whose `version:` is
 // absent or less than 2 is hard-rejected with a migration hint. v1 configs
-// used a separate vms.yml + plural `vms:` root key; `ov migrate merge-vms`
+// used a separate vms.yml + plural `vms:` root key; `ov migrate`
 // produces a v2 layout in one shot.
 // rejectLegacyLocalSurface refuses to load any project that still
 // carries kind:host, target:host, or DeploymentNode `host: <template>`
 // references against templates that no longer exist (the new `host:`
 // field is destination-only). All three are fixed by
-// `ov migrate target-local` in one pass.
+// `ov migrate` in one pass.
 // rejectLegacyDeploymentRefs scans every *.yml at the project root for
 // residual `deployment:` / `deployments:` / `kind: deployment` references
 // retired by the 2026-05 kind-files cutover. Catches data-loss footguns
@@ -407,19 +407,19 @@ func rejectLegacyDeploymentRefs(dir string) error {
 			// Case A: root-key `deployment:` (post-v4-pre-cutover singular alias).
 			if v := findMappingValue(root, "deployment"); v != nil {
 				return fmt.Errorf(
-					"%s (doc %d): root-key `deployment:` is retired (2026-05 kind-files cutover).\n  Renamed to `deploy:`. Run: ov migrate kind-files",
+					"%s (doc %d): root-key `deployment:` is retired (2026-05 kind-files cutover).\n  Renamed to `deploy:`. Run: ov migrate",
 					path, docIdx)
 			}
 			// Case B: root-key `deployments:` (v3 legacy plural).
 			if v := findMappingValue(root, "deployments"); v != nil {
 				return fmt.Errorf(
-					"%s (doc %d): root-key `deployments:` is retired (legacy v3 plural).\n  Run: ov migrate kind-files (which also covers ov migrate schema-v4)",
+					"%s (doc %d): root-key `deployments:` is retired (legacy v3 plural).\n  Run: ov migrate",
 					path, docIdx)
 			}
 			// Case C: kind-keyed wrapper `kind: deployment` scalar.
 			if v := findMappingValue(root, "kind"); v != nil && v.Kind == yaml.ScalarNode && v.Value == "deployment" {
 				return fmt.Errorf(
-					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `kind: deploy`. Run: ov migrate kind-files",
+					"%s (doc %d): `kind: deployment` is retired (2026-05 kind-files cutover).\n  Renamed to `kind: deploy`. Run: ov migrate",
 					path, docIdx)
 			}
 		}
@@ -438,7 +438,7 @@ func rejectLegacyLocalSurface(root string, merged *UnifiedFile) error {
 		}
 		if node.Target == "host" {
 			return fmt.Errorf(
-				"%s: deployment %q uses legacy `target: host` — schema renamed to `target: local`. Run: ov migrate target-local",
+				"%s: deployment %q uses legacy `target: host` — schema renamed to `target: local`. Run: ov migrate",
 				root, name)
 		}
 		for childName, child := range node.Nested {
@@ -480,7 +480,7 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 	}
 	if _, ok := merged.Image["marimo-ml"]; ok {
 		return fmt.Errorf(
-			"%s: image entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate marimo-rename",
+			"%s: image entry %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate",
 			root, "marimo-ml")
 	}
 	var walk func(name string, node *DeploymentNode) error
@@ -490,12 +490,12 @@ func rejectLegacyMarimoMl(root string, merged *UnifiedFile) error {
 		}
 		if name == "marimo-ml-pod" {
 			return fmt.Errorf(
-				"%s: deployment %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate marimo-rename",
+				"%s: deployment %q is retired (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa` (cross-kind name reuse). Run: ov migrate",
 				root, name)
 		}
 		if node.Image == "marimo-ml" {
 			return fmt.Errorf(
-				"%s: deployment %q references retired image %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: ov migrate marimo-rename",
+				"%s: deployment %q references retired image %q (2026-04 marimo-rename cutover, 2026-05 versa-rename cutover).\n  Renamed to `versa`. Run: ov migrate",
 				root, name, "marimo-ml")
 		}
 		for childName, child := range node.Nested {
@@ -529,7 +529,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	}
 	// Field-singular cutover (2026-05): hard-reject any residual plural
 	// top-level keys (images:/layers:/distros:/... ) in overthink.yml.
-	// `ov migrate field-singular` rewrites them in-place.
+	// `ov migrate` rewrites them in-place.
 	if rootData, err := os.ReadFile(root); err == nil {
 		if err := RejectLegacyPluralKeys(root, rootData); err != nil {
 			return nil, true, err
@@ -541,14 +541,14 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
-	if merged.Version < schemaVersion {
+	if v, ok := ParseCalVer(merged.Version); !ok || v.Less(LatestSchemaVersion()) {
 		return nil, true, fmt.Errorf(
-			"%s: schema v%d is required (found v%d). Run: ov migrate schema-v4",
-			root, schemaVersion, merged.Version,
+			"%s: schema %s is required (found %q). Run: ov migrate",
+			root, LatestSchemaVersion(), merged.Version,
 		)
 	}
 	// Reject any residual legacy local/host or status/info surface.
-	// `ov migrate target-local` fixes all of these in one shot.
+	// `ov migrate` fixes all of these in one shot.
 	if err := rejectLegacyLocalSurface(root, merged); err != nil {
 		return nil, true, err
 	}
@@ -564,7 +564,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	// local.cachyos-dx) point at the consolidated migration command.
 	if _, present := merged.Local["cachyos-dx"]; present {
 		return nil, true, fmt.Errorf(
-			"%s: kind:local key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
+			"%s: kind:local key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate",
 			root,
 		)
 	}
@@ -694,12 +694,12 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 	// (or `cachyos-dx:` kind:local key) needs a one-shot migration.
 	if _, present := deploy["qc"]; present {
 		return fmt.Errorf(
-			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate ov-cachyos",
+			"deployment key \"qc\" is retired (2026-05 cross-kind name reuse cutover).\n  Run: ov migrate",
 		)
 	}
 	if _, present := deploy["cachyos-dx"]; present {
 		return fmt.Errorf(
-			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate ov-cachyos",
+			"deployment key \"cachyos-dx\" is retired (2026-05 init-system-polymorphism cutover).\n  Run: ov migrate",
 		)
 	}
 	if err := validateDeployRequiresImage(deploy); err != nil {
@@ -721,7 +721,7 @@ func validateDeploymentTree(deploy map[string]DeploymentNode) error {
 // uses `vm:`, target: local is layer-driven, target: k8s
 // CLUSTER definitions live in the `k8s:` section (not deploy:).
 //
-// Remediation: `ov migrate require-image` (idempotent) walks every
+// Remediation: `ov migrate` (idempotent) walks every
 // affected deploy and injects the field, inferring the value from
 // the deploy key (`<base>` for `<base>/<instance>` keys; the key
 // itself otherwise).
@@ -733,7 +733,7 @@ func validateDeployRequiresImage(deploy map[string]DeploymentNode) error {
 		}
 		if node.Image == "" {
 			return fmt.Errorf(
-				"deploy entry %q lacks required `image:` field (2026-05-12 schema cutover — pod-target deploys must declare `image:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `ov migrate require-image` (one-shot, idempotent).",
+				"deploy entry %q lacks required `image:` field (2026-05-12 schema cutover — pod-target deploys must declare `image:` explicitly so the eval runner reads the operator's declared intent, not the running container's stale label).\n  Remediation: run `ov migrate` (one-shot, idempotent).",
 				name,
 			)
 		}
@@ -973,13 +973,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 			hasKind = true
 		}
 	}
-	// Legacy `benchmark:` root key — predates two cutovers. The eval
-	// migrator is forward-only (harness → eval); pre-April-2026 projects
-	// must run `ov migrate harness` from a pre-April-2026 ov release
-	// first, then upgrade and run `ov migrate eval`.
+	// Legacy `benchmark:` root key — predates the 2026-04 harness→eval
+	// cutover, whose forward-only migrator has since been removed. There is
+	// no automated path in the current binary; the block must be rewritten
+	// by hand as a `kind: score` + `kind: recipe` pair under `eval:`.
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
-			"the `benchmark:` root key is no longer accepted (this project predates two cutovers). Run `ov migrate harness` from a pre-April-2026 ov release first, then upgrade and run: ov migrate eval",
+			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→eval cutover, whose migrator has since been removed. Rewrite the block by hand as a `kind: score` + `kind: recipe` pair under `eval:` (see /ov-eval:eval)",
 		)
 	}
 	switch {
@@ -999,7 +999,7 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 // -----------------------------------------------------------------------------
 
 // validateHarnessYAMLNode rejects, with hard errors pointing at
-// `ov migrate harness`, two legacy shapes that the slim post-cutover
+// `ov migrate`, two legacy shapes that the slim post-cutover
 // HarnessRecipe / HarnessScore struct decoders would otherwise silently
 // drop:
 //
@@ -1089,13 +1089,13 @@ func validateRecipeBody(body *yaml.Node, name, source string, allowName bool) er
 		k := body.Content[i].Value
 		if k == "max_iteration" {
 			return fmt.Errorf(
-				"%s: recipe %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Run: ov migrate harness",
+				"%s: recipe %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Remove the field.",
 				source, name,
 			)
 		}
 		if !allowed[k] {
 			return fmt.Errorf(
-				"%s: recipe %q carries forbidden runner field %q. Recipes are pure spec (description + scenario only); runner fields (host/pod/vm, ai, plateau_iteration, prompt, deployment, target_image, mcp_endpoint, env, notes, recipes) live on a `kind: score` entry. Run: ov migrate harness",
+				"%s: recipe %q carries forbidden runner field %q. Recipes are pure spec (description + scenario only); runner fields (host/pod/vm, ai, plateau_iteration, prompt, deployment, target_image, mcp_endpoint, env, notes, recipes) live on a `kind: score` entry. Move them there.",
 				source, name, k,
 			)
 		}
@@ -1142,7 +1142,7 @@ func validateScoreBody(body *yaml.Node, name, source string) error {
 		k := body.Content[i].Value
 		if k == "max_iteration" {
 			return fmt.Errorf(
-				"%s: score %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Run: ov migrate harness",
+				"%s: score %q carries `max_iteration:` — the field was removed in the 2026-04 harness cutover. Loop bound is now plateau-only via score.plateau_iteration. Remove the field.",
 				source, name,
 			)
 		}
@@ -1262,7 +1262,7 @@ func normalizeV4Aliases(u *UnifiedFile) {
 // the root's values, so those fields stay untouched. src's fields that aren't
 // present in dst get copied over. That's the desired semantics.
 func mergeUnified(dst, src *UnifiedFile, srcDir string) {
-	if src.Version != 0 && dst.Version == 0 {
+	if src.Version != "" && dst.Version == "" {
 		dst.Version = src.Version
 	}
 	// Discover entries concatenate (not overwrite). Resolve relative

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,122 +10,60 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MigrateTailscaleSecretsCmd implements `ov migrate tailscale-secrets`.
-//
-// Background: the 2026-05-12 incident surfaced that the tailscale sidecar's
-// `secret: [{name: ts-authkey, env: TS_AUTHKEY}]` uses a flat env var name,
-// so a host with TWO tailnets can only store ONE auth-key — silently picking
-// the wrong tailnet for any deploy. The fix (2026-05-13) introduces a
-// per-tailnet env var convention `TS_AUTHKEY_<TAILNET-NORMALIZED>` where
-// TAILNET-NORMALIZED is the MagicDNS suffix uppercased with non-alphanumeric
-// chars replaced by '_'. The sidecar template's `env_from:` field renders
-// against `parameter.tailnet` to pick the right env var per deploy.
-//
-// This command does the one-shot migration:
-//  1. Read `.secrets` (via `ov secrets gpg show`) for the legacy `TS_AUTHKEY` entry.
-//  2. Prompt for the tailnet suffix this key belongs to (skipped with --tailnet).
-//  3. Write the value to `TS_AUTHKEY_<normalized>` via `ov secrets gpg set`.
-//  4. Optionally delete the legacy `TS_AUTHKEY` entry (--delete-legacy).
-//  5. Scan `~/.config/ov/deploy.yml` for `sidecars.tailscale:` entries lacking
-//     `parameter.tailnet:` and emit a per-entry warning (does NOT auto-write
-//     the parameter — the operator must choose which tailnet each deploy
-//     uses).
-//
-// Idempotent: re-running after migration is a no-op (legacy entry already
-// renamed; warnings repeat).
-type MigrateTailscaleSecretsCmd struct {
-	Tailnet       string `long:"tailnet" help:"MagicDNS suffix the legacy TS_AUTHKEY belongs to (e.g. armadillo-quail.ts.net). Empty = prompt interactively."`
-	DeleteLegacy  bool   `long:"delete-legacy" help:"After migration, delete the legacy TS_AUTHKEY entry from .secrets. Default: preserve."`
-	SecretsFile   string `long:"secrets-file" default:".secrets" help:"Path to GPG-encrypted .secrets file"`
-	DryRun        bool   `long:"dry-run" help:"Print what would change without writing"`
-}
-
-func (c *MigrateTailscaleSecretsCmd) Run() error {
-	// Step 1: read legacy TS_AUTHKEY from .secrets.
-	legacy, err := readSecretsEnv(c.SecretsFile, "TS_AUTHKEY")
+// MigrateTailscaleSecretsAuto is the non-interactive, chain-callable form of
+// the tailscale-secrets migration used by the unified `ov migrate` runner.
+// Unlike the interactive command it NEVER prompts: it renames the legacy flat
+// TS_AUTHKEY to TS_AUTHKEY_<TAILNET-NORMALIZED> only when the tailnet suffix
+// can be auto-detected from a running tailscale sidecar; otherwise it leaves
+// the legacy key in place, prints a one-line hint, and proceeds to the
+// (read-only) deploy.yml scan. It never deletes the legacy entry. Returns the
+// list of human-readable changes (or, under dryRun, would-be changes).
+func MigrateTailscaleSecretsAuto(secretsFile string, dryRun bool) ([]string, error) {
+	var changes []string
+	legacy, err := readSecretsEnv(secretsFile, "TS_AUTHKEY")
 	if err != nil {
-		return fmt.Errorf("reading legacy TS_AUTHKEY from %s: %w", c.SecretsFile, err)
+		// .secrets may be absent or gpg unavailable on this host — that is
+		// not a migration failure; fall through to the scan.
+		return changes, scanTailscaleDeployYAML()
 	}
 	if legacy == "" {
-		fmt.Fprintf(os.Stderr, "No legacy TS_AUTHKEY entry found in %s — nothing to migrate.\n", c.SecretsFile)
-		return c.scanDeployYAML()
+		return changes, scanTailscaleDeployYAML()
 	}
-
-	// Step 2: determine tailnet suffix.
-	suffix := strings.TrimSpace(c.Tailnet)
-	if suffix == "" {
-		// Try to auto-detect from a currently-deployed tailscale sidecar.
-		if detected, ok := detectTailnetFromRunningSidecar(); ok {
-			fmt.Fprintf(os.Stderr, "Auto-detected tailnet from running sidecar: %s\n", detected)
-			fmt.Fprintf(os.Stderr, "Press Enter to accept, or type a different MagicDNS suffix: ")
-			reader := bufio.NewReader(os.Stdin)
-			line, _ := reader.ReadString('\n')
-			line = strings.TrimSpace(line)
-			if line == "" {
-				suffix = detected
-			} else {
-				suffix = line
-			}
-		} else {
-			fmt.Fprintf(os.Stderr, "Tailnet MagicDNS suffix for the legacy TS_AUTHKEY (e.g. armadillo-quail.ts.net): ")
-			reader := bufio.NewReader(os.Stdin)
-			line, _ := reader.ReadString('\n')
-			suffix = strings.TrimSpace(line)
-		}
+	suffix, ok := detectTailnetFromRunningSidecar()
+	if !ok || strings.TrimSpace(suffix) == "" {
+		fmt.Fprintf(os.Stderr, "tailscale-secrets: legacy TS_AUTHKEY found in %s but the tailnet could not be auto-detected;\n", secretsFile)
+		fmt.Fprintln(os.Stderr, "  run `ov secrets gpg set TS_AUTHKEY_<TAILNET> <value>` manually to rename it (left in place for now).")
+		return changes, scanTailscaleDeployYAML()
 	}
-	if suffix == "" {
-		return fmt.Errorf("tailnet suffix is required (pass --tailnet or answer the prompt)")
-	}
-
-	// Step 3: compute the new env var name + write it.
 	newName := "TS_AUTHKEY_" + normalizeTailnetSuffix(suffix)
 	if newName == "TS_AUTHKEY_" {
-		return fmt.Errorf("tailnet suffix %q normalizes to an empty fragment; refusing", suffix)
+		return changes, scanTailscaleDeployYAML()
 	}
-
-	existing, err := readSecretsEnv(c.SecretsFile, newName)
+	existing, err := readSecretsEnv(secretsFile, newName)
 	if err != nil {
-		return fmt.Errorf("reading existing %s from %s: %w", newName, c.SecretsFile, err)
+		return changes, scanTailscaleDeployYAML()
 	}
 	if existing != "" {
-		if existing == legacy {
-			fmt.Fprintf(os.Stderr, "%s already set to the legacy TS_AUTHKEY value — no rename needed.\n", newName)
-		} else {
-			return fmt.Errorf("%s already exists in %s with a DIFFERENT value than legacy TS_AUTHKEY; refusing to overwrite. Resolve manually with `ov secrets gpg edit %s`", newName, c.SecretsFile, c.SecretsFile)
-		}
-	} else {
-		if c.DryRun {
-			fmt.Fprintf(os.Stderr, "DRY-RUN: would set %s in %s\n", newName, c.SecretsFile)
-		} else {
-			if err := setSecretsEnv(c.SecretsFile, newName, legacy); err != nil {
-				return fmt.Errorf("setting %s in %s: %w", newName, c.SecretsFile, err)
-			}
-			fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", newName, c.SecretsFile)
-		}
+		// Already migrated (or a conflicting value the operator must resolve
+		// — non-interactive mode leaves conflicts untouched).
+		return changes, scanTailscaleDeployYAML()
 	}
-
-	// Step 4: optionally delete the legacy entry.
-	if c.DeleteLegacy {
-		if c.DryRun {
-			fmt.Fprintf(os.Stderr, "DRY-RUN: would delete TS_AUTHKEY from %s\n", c.SecretsFile)
-		} else {
-			if err := unsetSecretsEnv(c.SecretsFile, "TS_AUTHKEY"); err != nil {
-				return fmt.Errorf("removing legacy TS_AUTHKEY from %s: %w", c.SecretsFile, err)
-			}
-			fmt.Fprintf(os.Stderr, "Removed legacy TS_AUTHKEY from %s\n", c.SecretsFile)
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "Legacy TS_AUTHKEY preserved in %s (pass --delete-legacy to remove).\n", c.SecretsFile)
+	if dryRun {
+		changes = append(changes, fmt.Sprintf("would set %s in %s (tailnet %s)", newName, secretsFile, suffix))
+		return changes, scanTailscaleDeployYAML()
 	}
-
-	// Step 5: scan deploy.yml for entries that need parameter.tailnet.
-	return c.scanDeployYAML()
+	if err := setSecretsEnv(secretsFile, newName, legacy); err != nil {
+		return changes, fmt.Errorf("setting %s in %s: %w", newName, secretsFile, err)
+	}
+	changes = append(changes, fmt.Sprintf("set %s in %s (tailnet %s; legacy TS_AUTHKEY preserved)", newName, secretsFile, suffix))
+	return changes, scanTailscaleDeployYAML()
 }
 
-// scanDeployYAML walks ~/.config/ov/deploy.yml for sidecars.tailscale entries
-// lacking parameter.tailnet and emits one warning per entry. Does NOT auto-
-// write (the operator chooses which tailnet per deploy).
-func (c *MigrateTailscaleSecretsCmd) scanDeployYAML() error {
+// scanTailscaleDeployYAML walks ~/.config/ov/deploy.yml for sidecars.tailscale
+// entries lacking parameter.tailnet and emits one warning per entry. Does NOT
+// auto-write (the operator chooses which tailnet per deploy). Used by
+// MigrateTailscaleSecretsAuto.
+func scanTailscaleDeployYAML() error {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		return nil // best-effort

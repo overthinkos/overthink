@@ -7,7 +7,7 @@ package main
 //
 // The kind:local `images:` field was removed; see local_spec.go and
 // the eval preflight in eval_image_preflight.go. Operators with
-// legacy YAML run `ov migrate local-images` to convert each block to
+// legacy YAML run `ov migrate` to convert each block to
 // a dated comment fence; the validator (validateLegacyLocalImagesField)
 // hard-errors on any surviving key so legacy configs cannot silently
 // load and behave differently than fresh ones.
@@ -193,7 +193,7 @@ func previousLinesContainMarker(lines []string, idx, n int, marker string) bool 
 // a stale schema field is loaded.
 func walkYAMLForLegacyLocalImages(dir string, errs *ValidationError) {
 	for _, block := range scanLegacyLocalImagesBlocks(dir) {
-		errs.Add("kind:local %q in %s:%d: legacy `images:` field detected — run `ov migrate local-images` to convert; the field was removed in the 2026-05 deploy-fetch-narrowing cutover (test-bed image preflight moved to `ov eval run`)",
+		errs.Add("kind:local %q in %s:%d: legacy `images:` field detected — run `ov migrate` to convert; the field was removed in the 2026-05 deploy-fetch-narrowing cutover (test-bed image preflight moved to `ov eval run`)",
 			block.TemplateName, relPathForError(dir, block.Path), block.StartLine)
 	}
 }

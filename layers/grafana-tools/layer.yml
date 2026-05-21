@@ -2,7 +2,7 @@ layer:
   name: grafana-tools
   description: Grafana observability CLI tools (mcp-grafana, logcli, promtool, mimirtool, tempo-cli, tanka, grafanactl)
 
-  vars:
+  var:
     MCP_GRAFANA_VERSION: v0.7.8
 
   task:

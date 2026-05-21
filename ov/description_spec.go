@@ -44,7 +44,7 @@ import (
 // the singular form (`scenario:`, `tag:`). The UnmarshalYAML shim below
 // also accepts the legacy plural keys (`scenarios:`, `tags:`) for one
 // release of overlap; layer.yml files in this repo are migrated by
-// `ov migrate harness`.
+// `ov migrate`.
 type Description struct {
 	Feature   string     `yaml:"feature"              json:"feature"`
 	Narrative string     `yaml:"narrative,omitempty"  json:"narrative,omitempty"`
@@ -60,7 +60,7 @@ type Description struct {
 //     `description: "..."` usage across layer.yml files
 //   - the legacy plural keys (`scenarios:`, `tags:`) — accept-both
 //     transitional shim removed at the close of the harness cutover
-//     once `ov migrate harness` has rewritten every consumer.
+//     once `ov migrate` has rewritten every consumer.
 func (d *Description) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
@@ -199,7 +199,7 @@ type Scenario struct {
 
 // UnmarshalYAML accepts both `tag:` and the legacy `tags:` key during
 // the cutover migration window. Removed once every layer.yml has been
-// rewritten by `ov migrate harness`.
+// rewritten by `ov migrate`.
 func (s *Scenario) UnmarshalYAML(node *yaml.Node) error {
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("scenario: expected mapping, got YAML kind %d", node.Kind)

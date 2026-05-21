@@ -1,6 +1,6 @@
 package main
 
-// migrate_calamares.go — `ov migrate calamares`.
+// migrate_calamares.go — `ov migrate`.
 //
 // One-shot migration that brings layer.yml authoring into 1:1 alignment with
 // Calamares' netinstall.yaml package-group vocabulary where the concepts
@@ -37,33 +37,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MigrateCalamaresCmd is `ov migrate calamares`.
-type MigrateCalamaresCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be modified, don't touch the filesystem"`
-}
-
-func (c *MigrateCalamaresCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	changed, err := MigrateCalamares(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	prefix := "modified "
-	if c.DryRun {
-		prefix = "[dry-run] would modify "
-	}
-	if len(changed) == 0 {
-		fmt.Println("ov migrate calamares: nothing to migrate (already at Calamares-aligned schema)")
-		return nil
-	}
-	for _, p := range changed {
-		fmt.Println(prefix + p)
-	}
-	return nil
-}
 
 // distroForFormat maps a legacy format-section name to the distro names that
 // install via that format. AUR is a special case — it lives under the

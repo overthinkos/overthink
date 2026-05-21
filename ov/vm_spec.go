@@ -56,7 +56,7 @@ type VmSpec struct {
 	// Actual existing snapshots live in registry.json under
 	// ~/.local/share/ov/vm/ov-<vm>/snapshots/registry.json — the
 	// declarative list is intent, not inventory.
-	Snapshots []VmSnapshotDecl `yaml:"snapshots,omitempty"`
+	Snapshots []VmSnapshotDecl `yaml:"snapshot,omitempty"`
 }
 
 // VmSnapshotDecl is one entry in the declarative `vm.<name>.snapshots`
@@ -94,7 +94,7 @@ type VmSnapshotDecl struct {
 // / `VmSpec.Lifecycle` fields were removed in the schema-v3 cutover —
 // the `ov rebuild <vm-name>` authorization reads from the
 // DeploymentNode(s) that reference this VM via `vm_source:` (see
-// rebuild.go:vmDisposableFromDeployments). `ov migrate deploy-v3`
+// rebuild.go:vmDisposableFromDeployments). `ov migrate`
 // moves any residual flags on a user's on-disk configs to the
 // matching deployment entries.
 

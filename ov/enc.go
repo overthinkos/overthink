@@ -807,7 +807,7 @@ func loadEncryptedVolume(imageName, instance string) ([]DeployVolumeConfig, stri
 	// drove the call into resolveEncPassphraseForMount → systemd-ask-
 	// password → indefinite hang waiting for stdin. Surfacing the error
 	// turns that hang into a clean error message with a remediation
-	// hint pointing at `ov migrate require-image`.
+	// hint pointing at `ov migrate`.
 	dc, err := LoadDeployConfig()
 	if err != nil {
 		return nil, "", fmt.Errorf("loading deploy config for encrypted volumes: %w", err)

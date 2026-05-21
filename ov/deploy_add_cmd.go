@@ -384,7 +384,7 @@ func classifyNodeTarget(node *DeploymentNode, path string) string {
 			// Legacy spelling — schema v4 uses "local". Routed for
 			// graceful in-progress migration; the loader rejects
 			// authored target:host entries with a hard error pointing
-			// at `ov migrate target-local`.
+			// at `ov migrate`.
 			return "local"
 		}
 		return node.Target

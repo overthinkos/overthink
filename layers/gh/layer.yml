@@ -20,7 +20,7 @@ layer:
     fedora:
       package:
         - gh
-      options:
+      option:
         - "--setopt=tsflags=noscripts"
     ubuntu:
       package:

@@ -14,7 +14,7 @@ layer:
   alias:
     - name: filebrowser
       command: filebrowser
-  vars:
+  var:
     FILEBROWSER_VERSION: v1.2.4-stable
   task:
     - download: "https://github.com/gtsteffaniak/filebrowser/releases/download/${FILEBROWSER_VERSION}/linux-${ARCH}-filebrowser"

@@ -152,7 +152,7 @@ func (c *EvalLiveCmd) Run() error {
 		imageRef = projectImage
 	} else {
 		return fmt.Errorf(
-			"no deploy entry found for %q (instance=%q); declare it in deploy.yml with the `image:` field, or run `ov migrate require-image` if you have a legacy entry without it",
+			"no deploy entry found for %q (instance=%q); declare it in deploy.yml with the `image:` field, or run `ov migrate` if you have a legacy entry without it",
 			c.Image, c.Instance,
 		)
 	}

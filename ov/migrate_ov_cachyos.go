@@ -1,6 +1,6 @@
 package main
 
-// migrate_ov_cachyos.go — `ov migrate ov-cachyos`.
+// migrate_ov_cachyos.go — `ov migrate`.
 //
 // One-shot migration that renames the operator-specific CachyOS
 // deployment to its 2026-05 canonical form `ov-cachyos`. Collapses
@@ -37,34 +37,6 @@ import (
 	"regexp"
 	"strings"
 )
-
-// MigrateOvCachyosCmd is `ov migrate ov-cachyos`.
-type MigrateOvCachyosCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be modified, don't touch the filesystem"`
-}
-
-func (c *MigrateOvCachyosCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	changed, err := MigrateOvCachyos(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	prefix := "modified "
-	if c.DryRun {
-		prefix = "[dry-run] would modify "
-	}
-	if len(changed) == 0 {
-		fmt.Println("ov migrate ov-cachyos: nothing to migrate (already renamed)")
-		return nil
-	}
-	for _, p := range changed {
-		fmt.Println(prefix + p)
-	}
-	return nil
-}
 
 // MigrateOvCachyos walks both the in-repo project files and the
 // per-machine ~/.config/ov/deploy.yml, applying the qc → ov-cachyos

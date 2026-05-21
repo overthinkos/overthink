@@ -1,6 +1,6 @@
 package main
 
-// migrate_local_images.go — `ov migrate local-images`.
+// migrate_local_images.go — `ov migrate`.
 //
 // One-shot migration of the (deleted) kind:local `images:` field to a
 // dated comment fence. The field was removed in the 2026-05
@@ -19,34 +19,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// MigrateLocalImagesCmd is `ov migrate local-images`.
-type MigrateLocalImagesCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be modified, don't touch the filesystem"`
-}
-
-func (c *MigrateLocalImagesCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	changes, err := MigrateLocalImage(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	if len(changes) == 0 {
-		fmt.Println("ov migrate local-images: nothing to migrate (no kind:local `images:` fields found)")
-		return nil
-	}
-	prefix := "modified "
-	if c.DryRun {
-		prefix = "[dry-run] would modify "
-	}
-	for _, p := range changes {
-		fmt.Println(prefix + p)
-	}
-	return nil
-}
 
 // MigrateLocalImage walks every *.yml / *.yaml file under dir and
 // rewrites legacy kind:local `images:` blocks to a dated comment

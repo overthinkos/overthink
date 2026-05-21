@@ -25,7 +25,7 @@ sidecar:
     # MagicDNS suffix (e.g. "armadillo-quail.ts.net"). The empty-string
     # sentinel below means "required, must be supplied by deploy" —
     # ResolveSidecar errors out at `ov config` time with a remediation
-    # hint pointing at `ov migrate tailscale-secrets` if it's missing.
+    # hint pointing at `ov migrate` if it's missing.
     #
     # Each tailnet's auth-key lives in `.secrets` (GPG-encrypted env
     # file, loaded by direnv) at the env var name resolved by the

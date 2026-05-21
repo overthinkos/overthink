@@ -9,7 +9,7 @@ layer:
       package:
         - steam
         - gamescope
-      options:
+      option:
         - --allowerasing
   security:
     shm_size: "1g"

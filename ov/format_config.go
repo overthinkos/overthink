@@ -16,7 +16,7 @@ type DistroConfig struct {
 type DistroDef struct {
 	Inherits    string                `yaml:"inherits,omitempty"`
 	Bootstrap   BootstrapDef          `yaml:"bootstrap"`
-	Workarounds []string              `yaml:"workarounds,omitempty"`
+	Workarounds []string              `yaml:"workaround,omitempty"`
 	Format      map[string]*FormatDef `yaml:"format,omitempty"`
 	// BaseUser declares a pre-existing uid account that ships in the
 	// upstream base image — e.g. ubuntu:ubuntu uid 1000 on ubuntu:24.04.
@@ -43,7 +43,7 @@ type DistroDef struct {
 
 // PacstrapDef configures pacstrap-flavored bootstrap (Arch, CachyOS).
 type PacstrapDef struct {
-	BasePackages    []string         `yaml:"base_packages,omitempty"`
+	BasePackages    []string         `yaml:"base_package,omitempty"`
 	KeyringInitCmd  string           `yaml:"keyring_init_cmd,omitempty"`
 	MirrorlistURL   string           `yaml:"mirrorlist_url,omitempty"`
 	ExtraRepos      []PacstrapRepo   `yaml:"extra_repo,omitempty"`
@@ -72,8 +72,8 @@ type DebootstrapDef struct {
 	Mirror          string            `yaml:"mirror,omitempty"`
 	Variant         string            `yaml:"variant,omitempty"`           // default: minbase
 	Components      string            `yaml:"components,omitempty"`        // "main" (Debian) | "main universe" (Ubuntu)
-	IncludePackages []string          `yaml:"include_packages,omitempty"`  // debootstrap --include=<csv>
-	BasePackages    []string          `yaml:"base_packages,omitempty"`     // chroot apt-get install <list>
+	IncludePackages []string          `yaml:"include_package,omitempty"`  // debootstrap --include=<csv>
+	BasePackages    []string          `yaml:"base_package,omitempty"`     // chroot apt-get install <list>
 	ExtraRepos      []DebootstrapRepo `yaml:"extra_repo,omitempty"`        // optional security/backports
 }
 
@@ -139,7 +139,7 @@ type CacheMountDef struct {
 // (Task 4 / 7 migrations) without breaking OCI output for the rest.
 type FormatDef struct {
 	CacheMount     []CacheMountDef   `yaml:"cache_mount"`
-	SectionFields   map[string]string `yaml:"section_fields"`
+	SectionFields   map[string]string `yaml:"section_field"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phase,omitempty"`
 	Validate        []FormatRule      `yaml:"validate,omitempty"`
@@ -401,7 +401,7 @@ type BuilderConfig struct {
 // invoke the builder via `podman run` with HOME-remapped bind-mounts
 // rather than as a build stage.
 type BuilderDef struct {
-	DetectFiles     []string          `yaml:"detect_files,omitempty"`
+	DetectFiles     []string          `yaml:"detect_file,omitempty"`
 	DetectConfig    string            `yaml:"detect_config,omitempty"`
 	RequiresSrcDir  bool              `yaml:"requires_src_dir,omitempty"`
 	Inline          bool              `yaml:"inline,omitempty"`
@@ -410,10 +410,10 @@ type BuilderDef struct {
 	StageTemplate   string            `yaml:"stage_template,omitempty"`
 	InstallTemplate string            `yaml:"install_template,omitempty"`
 	Phases          *PhaseSet         `yaml:"phase,omitempty"`
-	InstallCommands map[string]string `yaml:"install_commands,omitempty"`
+	InstallCommands map[string]string `yaml:"install_command,omitempty"`
 	ManylinuxFix    string            `yaml:"manylinux_fix,omitempty"`
 	BuildScript     string            `yaml:"build_script,omitempty"`
-	CopyArtifacts   []CopyDef         `yaml:"copy_artifacts,omitempty"`
+	CopyArtifacts   []CopyDef         `yaml:"copy_artifact,omitempty"`
 	CopyBinary      *CopyDef          `yaml:"copy_binary,omitempty"`
 
 	// PathContributions lists HOME-relative paths the builder's runtime
@@ -425,7 +425,7 @@ type BuilderDef struct {
 	// via layer.yml `path_append:` — both contribute to the same merged
 	// PATH. Empty list means the builder doesn't contribute (aur installs
 	// to /usr/bin via pacman -U).
-	PathContributions []string `yaml:"path_contributions,omitempty"`
+	PathContributions []string `yaml:"path_contribution,omitempty"`
 
 	// RuntimeEnv lists environment variables the builder contributes to the
 	// final image when triggered by any layer (e.g. PIXI_CACHE_DIR pointing
@@ -562,7 +562,7 @@ func LoadBuildConfigForImage(dir string) (*DistroConfig, *BuilderConfig, *InitCo
 		return nil, nil, nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
 	if !present {
-		return nil, nil, nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified`)", dir)
+		return nil, nil, nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate`)", dir)
 	}
 	return uf.ProjectDistroConfig(), uf.ProjectBuilderConfig(), uf.ProjectInitConfig(), nil
 }

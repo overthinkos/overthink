@@ -61,7 +61,7 @@ type SecurityConfig struct {
 	IpcMode     string   `yaml:"ipc_mode,omitempty" json:"ipc_mode,omitempty"`   // --ipc=<value>: "host" | "private" | "shareable" | "". When "host", podman REJECTS shm_size (the host's /dev/shm is shared in-kernel, sized by the host); the quadlet generator drops ShmSize= directives in that case.
 	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
-	Mounts      []string `yaml:"mounts,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
+	Mounts      []string `yaml:"mount,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 	// Resource caps. Sizes use the same suffixes as ShmSize ("6g", "500m", "1024k").
 	// Layer merging is smallest-wins (tightest cap is safest); image-level values override.
 	MemoryMax     string `yaml:"memory_max,omitempty" json:"memory_max,omitempty"`           // hard OOM threshold (cgroup memory.max, podman --memory, systemd MemoryMax)
@@ -110,7 +110,7 @@ type ImageConfig struct {
 	// emits FROM scratch + ADD. Mutually exclusive with Base.
 	From                  string        `yaml:"from,omitempty"`
 	BootstrapBuilderImage string        `yaml:"bootstrap_builder_image,omitempty"`
-	Platforms             []string      `yaml:"platforms,omitempty"`
+	Platforms             []string      `yaml:"platform,omitempty"`
 	Tag                   string        `yaml:"tag,omitempty"`
 	Registry              string        `yaml:"registry,omitempty"`
 	Distro                []string      `yaml:"distro,omitempty"` // distro tags ["fedora:43", "fedora"] — first-match for packages
@@ -284,7 +284,7 @@ func LoadConfigRaw(dir string) (*Config, error) {
 		return nil, fmt.Errorf("loading overthink.yml: %w", err)
 	}
 	if !present {
-		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate unified` to convert legacy image.yml/build.yml/deploy.yml)", dir)
+		return nil, fmt.Errorf("no overthink.yml found in %s (run `ov migrate` to convert legacy image.yml/build.yml/deploy.yml)", dir)
 	}
 	cfg := uf.ProjectConfig()
 	return cfg, nil
@@ -497,7 +497,7 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	// container image is bootc-bootable (for `ov vm build` to produce a
 	// qcow2 via `bootc install to-disk`). To run that bootc image as a
 	// VM, declare a paired `kind: vm` entity with `source.kind: bootc`
-	// in vms.yml (see `ov migrate vm-spec`).
+	// in vms.yml (see `ov migrate`).
 
 	// Resolve network: image -> defaults -> ""
 	resolved.Network = img.Network

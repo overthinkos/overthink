@@ -2,7 +2,7 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
-version: 4
+version: 2026.141.1530
 image:
     arch-coder:
         base: archlinux
@@ -222,7 +222,7 @@ image:
     aurora:
         enabled: false
         base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -233,7 +233,7 @@ image:
     bazzite-ai:
         enabled: false
         base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -260,7 +260,7 @@ image:
     comfyui:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -467,7 +467,7 @@ image:
     fedora-remote:
         enabled: false
         base: quay.io/fedora/fedora:43
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - '@github.com/overthinkos/overthink/layers/dev-tools:main'
@@ -503,7 +503,7 @@ image:
     githubrunner:
         enabled: false
         base: fedora
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -537,7 +537,7 @@ image:
     immich:
         enabled: false
         base: fedora-nonfree
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -553,7 +553,7 @@ image:
             - 2283:2283
     immich-ml:
         base: fedora
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -610,7 +610,7 @@ image:
     jupyter-ml:
         enabled: true
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -623,7 +623,7 @@ image:
     jupyter-ml-notebook:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -638,7 +638,6 @@ image:
         port:
             - 8888:8888
     versa:
-
         enabled: true
         base: cachyos
         # Override defaults (which point at fedora-builder); cachyos has
@@ -650,36 +649,36 @@ image:
             pixi: archlinux-builder
         build:
             - pac
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
-            - nvidia            # GPU runtime (nvidia-utils + nvidia-container-toolkit) — formerly via base: nvidia
-            - cuda              # CUDA toolkit (cuda + cudnn from Arch extra repo) — formerly via base: nvidia
-            - marimo            # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
-            - airflow           # Airflow 3.x LocalExecutor (no upstream MCP wrapper supports /api/v2 — removed 2026-05; consumers drive Airflow via direct REST /api/v2 calls)
-            - osm-tools         # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
-            - maputnik          # MapLibre style editor (built from npm source, served by python -m http.server)
-            - pmtiles-viewer    # protomaps/PMTiles /app SPA — visual inspector for PMTiles archives (port 8001)
-            - shortbread        # systemed/tilemaker + shortbread-tilemaker Lua config — generates shortbread-schema vector tiles from OSM PBF
-            - versatiles-style          # @versatiles/style MapLibre style generator (bundled to /opt/versatiles-style/, re-exported via versatiles-frontend's http.server at /style/)
-            - versatiles-fonts          # SDF font glyphs (Noto Sans + 9 others) bundled to /opt/versatiles-fonts/, re-exported at /fonts/
-            - maplibre-versatiles-styler  # interactive MapLibre control widget bundled to /opt/maplibre-versatiles-styler/, re-exported at /styler/
-            - versatiles                # versatiles-rs CLI + `versatiles serve` supervisord service on port 8090 (host-mapped 28090) — convert/serve for .versatiles/.pmtiles/.mbtiles
-            - versatiles-frontend       # versatiles-org/versatiles-frontend SPA (port 8002) — visual tile-content explorer; also re-exports versatiles-style/fonts/styler at /style/, /fonts/, /styler/
-            - notebook-osm      # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
-            - notebook-graph    # data layer: seeds /workspace/notebooks/gpu-libraries-demo.py — cuGraph/cuML/PyG/graphistry demo
-            - debug-tools       # network/process/file inspection toolkit for debugging the deployed services in this image
+            - nvidia # GPU runtime (nvidia-utils + nvidia-container-toolkit) — formerly via base: nvidia
+            - cuda # CUDA toolkit (cuda + cudnn from Arch extra repo) — formerly via base: nvidia
+            - marimo # marimo notebook + MCP server (--mcp), Polars-GPU/cuDF, geospatial, marimo-team/skills
+            - airflow # Airflow 3.x LocalExecutor (no upstream MCP wrapper supports /api/v2 — removed 2026-05; consumers drive Airflow via direct REST /api/v2 calls)
+            - osm-tools # tippecanoe + gdal + martin (PMTiles tile server) + pmtiles CLI
+            - maputnik # MapLibre style editor (built from npm source, served by python -m http.server)
+            - pmtiles-viewer # protomaps/PMTiles /app SPA — visual inspector for PMTiles archives (port 8001)
+            - shortbread # systemed/tilemaker + shortbread-tilemaker Lua config — generates shortbread-schema vector tiles from OSM PBF
+            - versatiles-style # @versatiles/style MapLibre style generator (bundled to /opt/versatiles-style/, re-exported via versatiles-frontend's http.server at /style/)
+            - versatiles-fonts # SDF font glyphs (Noto Sans + 9 others) bundled to /opt/versatiles-fonts/, re-exported at /fonts/
+            - maplibre-versatiles-styler # interactive MapLibre control widget bundled to /opt/maplibre-versatiles-styler/, re-exported at /styler/
+            - versatiles # versatiles-rs CLI + `versatiles serve` supervisord service on port 8090 (host-mapped 28090) — convert/serve for .versatiles/.pmtiles/.mbtiles
+            - versatiles-frontend # versatiles-org/versatiles-frontend SPA (port 8002) — visual tile-content explorer; also re-exports versatiles-style/fonts/styler at /style/, /fonts/, /styler/
+            - notebook-osm # data layer: seeds /workspace/notebooks/osm-monaco-viz.py (notebook self-authors its DAG at runtime)
+            - notebook-graph # data layer: seeds /workspace/notebooks/gpu-libraries-demo.py — cuGraph/cuML/PyG/graphistry demo
+            - debug-tools # network/process/file inspection toolkit for debugging the deployed services in this image
             - dbus
             - ov
         port:
-            - 2718:2718         # marimo edit + marimo MCP server (/mcp/server)
-            - 28080:8080        # airflow api-server (host 8080 taken by traefik)
-            - 3000:3000         # martin tile server (deploy.yml overrides host port to 23000)
-            - 8000:8000         # maputnik static editor (deploy.yml overrides host port to 28000)
-            - 8001:8001         # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
-            - 8002:8002         # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
-            - 8090:8090         # versatiles serve HTTP (deploy.yml overrides host port to 28090)
+            - 2718:2718 # marimo edit + marimo MCP server (/mcp/server)
+            - 28080:8080 # airflow api-server (host 8080 taken by traefik)
+            - 3000:3000 # martin tile server (deploy.yml overrides host port to 23000)
+            - 8000:8000 # maputnik static editor (deploy.yml overrides host port to 28000)
+            - 8001:8001 # pmtiles-viewer SPA (deploy.yml overrides host port to 28001)
+            - 8002:8002 # versatiles-frontend SPA (deploy.yml overrides host port to 28002)
+            - 8090:8090 # versatiles serve HTTP (deploy.yml overrides host port to 28090)
         # Image-level deploy-scope eval probes — run AFTER every layer's
         # eval block on `ov eval live versa`. The first probe is the
         # end-to-end driver: it triggers all 6 self-authored DAGs via
@@ -691,10 +690,10 @@ image:
             - id: versa-notebook-export
               scope: deploy
               command: |
-                  ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
-                    /workspace/notebooks/osm-monaco-viz.py \
-                    --include-outputs --sort topological \
-                    -o /tmp/notebook-run.ipynb -f
+                ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+                  /workspace/notebooks/osm-monaco-viz.py \
+                  --include-outputs --sort topological \
+                  -o /tmp/notebook-run.ipynb -f
               in_container: true
               exit_status: 0
               timeout: 600s
@@ -703,33 +702,33 @@ image:
               command: wc -c < /tmp/notebook-run.ipynb
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{5,}"   # >=100KB rendered ipynb (no anchors per /ov-eval:eval gotcha #6)
+                - matches: "[1-9][0-9]{5,}" # >=100KB rendered ipynb (no anchors per /ov-eval:eval gotcha #6)
             # Per-tile-source martin TileJSON reachability (4 sources).
             - id: versa-martin-monaco
               scope: deploy
               http: "http://127.0.0.1:${HOST_PORT:3000}/monaco"
               status: 200
               body:
-                  - contains: "tilejson"
-                  - contains: "vector_layers"
+                - contains: "tilejson"
+                - contains: "vector_layers"
             - id: versa-martin-monaco-gpqtiles
               scope: deploy
               http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-gpqtiles"
               status: 200
               body:
-                  - contains: "tilejson"
+                - contains: "tilejson"
             - id: versa-martin-monaco-duckdb-mvt
               scope: deploy
               http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-mvt"
               status: 200
               body:
-                  - contains: "tilejson"
+                - contains: "tilejson"
             - id: versa-martin-monaco-duckdb-freestiler
               scope: deploy
               http: "http://127.0.0.1:${HOST_PORT:3000}/monaco-duckdb-freestiler"
               status: 200
               body:
-                  - contains: "tilejson"
+                - contains: "tilejson"
             # Versatiles serve shortbread tile — zoom 0/0/0 exists in every
             # tilemaker output, including Monaco at low zoom. Probe at zoom 0
             # rather than 14 (zoom-14 tiles only exist where data actually
@@ -738,11 +737,11 @@ image:
             - id: versa-versatiles-shortbread-tile
               scope: deploy
               command: |
-                  curl -fsSI "http://127.0.0.1:${HOST_PORT:8090}/tiles/monaco-shortbread/0/0/0.pbf" \
-                    | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); print $2}'
+                curl -fsSI "http://127.0.0.1:${HOST_PORT:8090}/tiles/monaco-shortbread/0/0/0.pbf" \
+                  | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {gsub("\r",""); print $2}'
               in_container: false
               stdout:
-                  - matches: "[1-9][0-9]+"   # any positive byte count (PBF non-empty)
+                - matches: "[1-9][0-9]+" # any positive byte count (PBF non-empty)
             # DAG output artifact size probes (post-DAG existence + size).
             # No regex anchors — `wc -c` output ends with \n and Go's `$`
             # doesn't match before newline (see /ov-eval:eval gotcha #6).
@@ -755,19 +754,19 @@ image:
               command: wc -c < /workspace/tiles/work/monaco.parquet
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+                - matches: "[1-9][0-9]{5,}" # >=100KB
             - id: versa-artifact-pmtiles
               scope: deploy
               command: wc -c < /workspace/tiles/pmtiles/monaco.pmtiles
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+                - matches: "[1-9][0-9]{5,}" # >=100KB
             - id: versa-artifact-gtfs
               scope: deploy
               command: wc -c < /workspace/gtfs/raw/monaco.gtfs.zip
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+                - matches: "[1-9][0-9]{5,}" # >=100KB
             # Catches the silent-versatiles-fallback masking: the
             # existing versa-versatiles-shortbread-tile probe HEAD-checks
             # /tiles/monaco-shortbread/0/0/0.pbf and returns a non-empty
@@ -784,7 +783,7 @@ image:
               command: wc -c < /workspace/tiles/shortbread/monaco-shortbread.pmtiles
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{5,}"   # >=100KB
+                - matches: "[1-9][0-9]{5,}" # >=100KB
             # GPU libraries demo (cuGraph / cuML / PyG / graphistry).
             # versa-graph-imports asserts that all four library
             # families load + GPU is visible. versa-graph-cugraph-pagerank
@@ -797,46 +796,46 @@ image:
             - id: versa-graph-imports
               scope: deploy
               command: |
-                  ${HOME}/.pixi/envs/default/bin/python -c '
-                  import cugraph, cuml, nx_cugraph, pylibcugraph
-                  import torch_geometric, torch_scatter, torch_sparse, torch_cluster
-                  import graphistry, torch
-                  print(f"cugraph={cugraph.__version__}")
-                  print(f"cuml={cuml.__version__}")
-                  print(f"pyg={torch_geometric.__version__}")
-                  print(f"torch_scatter={torch_scatter.__version__}")
-                  print(f"graphistry={graphistry.__version__}")
-                  print(f"cuda_devices={torch.cuda.device_count()}")
-                  '
+                ${HOME}/.pixi/envs/default/bin/python -c '
+                import cugraph, cuml, nx_cugraph, pylibcugraph
+                import torch_geometric, torch_scatter, torch_sparse, torch_cluster
+                import graphistry, torch
+                print(f"cugraph={cugraph.__version__}")
+                print(f"cuml={cuml.__version__}")
+                print(f"pyg={torch_geometric.__version__}")
+                print(f"torch_scatter={torch_scatter.__version__}")
+                print(f"graphistry={graphistry.__version__}")
+                print(f"cuda_devices={torch.cuda.device_count()}")
+                '
               in_container: true
               stdout:
-                  - matches: "cugraph=[0-9]+"
-                  - matches: "cuml=[0-9]+"
-                  - matches: "pyg=[0-9]+"
-                  - matches: "torch_scatter=[0-9]+"
-                  - matches: "graphistry=[0-9]+"
-                  - matches: "cuda_devices=[1-9]"
+                - matches: "cugraph=[0-9]+"
+                - matches: "cuml=[0-9]+"
+                - matches: "pyg=[0-9]+"
+                - matches: "torch_scatter=[0-9]+"
+                - matches: "graphistry=[0-9]+"
+                - matches: "cuda_devices=[1-9]"
             - id: versa-graph-cugraph-pagerank
               scope: deploy
               command: |
-                  ${HOME}/.pixi/envs/default/bin/python -c '
-                  import networkx as nx
-                  G = nx.karate_club_graph()
-                  pr = nx.pagerank(G, backend="cugraph")
-                  print(f"pr_rows={len(pr)}")
-                  print(f"pr_top_node={max(pr, key=pr.get)}")
-                  '
+                ${HOME}/.pixi/envs/default/bin/python -c '
+                import networkx as nx
+                G = nx.karate_club_graph()
+                pr = nx.pagerank(G, backend="cugraph")
+                print(f"pr_rows={len(pr)}")
+                print(f"pr_top_node={max(pr, key=pr.get)}")
+                '
               in_container: true
               stdout:
-                  - matches: "pr_rows=[1-9][0-9]+"
-                  - matches: "pr_top_node=[0-9]+"
+                - matches: "pr_rows=[1-9][0-9]+"
+                - matches: "pr_top_node=[0-9]+"
             - id: versa-graph-notebook-export
               scope: deploy
               command: |
-                  ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
-                    /workspace/notebooks/gpu-libraries-demo.py \
-                    --include-outputs --sort topological \
-                    -o /tmp/gpu-demo.ipynb -f
+                ${HOME}/.pixi/envs/default/bin/marimo export ipynb \
+                  /workspace/notebooks/gpu-libraries-demo.py \
+                  --include-outputs --sort topological \
+                  -o /tmp/gpu-demo.ipynb -f
               in_container: true
               exit_status: 0
               timeout: 600s
@@ -845,10 +844,10 @@ image:
               command: wc -c < /tmp/gpu-demo.ipynb
               in_container: true
               stdout:
-                  - matches: "[1-9][0-9]{4,}"   # >=10KB rendered ipynb (matches the 18KB observed live)
+                - matches: "[1-9][0-9]{4,}" # >=10KB rendered ipynb (matches the 18KB observed live)
     nvidia:
         base: fedora-nonfree
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -857,7 +856,7 @@ image:
     ollama:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -879,7 +878,7 @@ image:
     openclaw-browser-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -906,7 +905,7 @@ image:
     openclaw-full-ml:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -922,7 +921,7 @@ image:
     openclaw-full-sway:
         enabled: false
         base: fedora
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -936,7 +935,7 @@ image:
     openclaw-ollama:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -950,7 +949,7 @@ image:
     openclaw-ollama-sway-browser:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -967,7 +966,7 @@ image:
             - 11434:11434
     openclaw-sway-browser:
         base: fedora
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1002,14 +1001,14 @@ image:
     python-ml:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
             - python-ml
     selkies-desktop:
         base: fedora-nonfree
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1033,7 +1032,7 @@ image:
     selkies-desktop-bootc:
         enabled: false
         base: quay.io/fedora/fedora-bootc:43
-        platforms:
+        platform:
             - linux/amd64
         distro:
             - fedora:43
@@ -1058,7 +1057,7 @@ image:
     selkies-desktop-nvidia:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1072,7 +1071,7 @@ image:
             - 2222:2222
     selkies-desktop-ov:
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1144,7 +1143,7 @@ image:
               in_container: true
     sway-browser-vnc:
         base: fedora
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1287,7 +1286,7 @@ image:
     unsloth-studio:
         enabled: false
         base: nvidia
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - agent-forwarding
@@ -1468,3 +1467,55 @@ image:
         layer:
             - eval-image-layer
             - eval-deploy-layer
+    android-emulator:
+        base: selkies-desktop
+        platform:
+            - linux/amd64
+        layer:
+            - nodejs
+            - java-openjdk
+            - android-sdk
+            - appium-server
+            - android-emulator-layer
+        port:
+            - "3000:3000"
+            - "4723:4723"
+            - "5037:5037"
+            - "2222:2222"
+            # Inherited from the selkies-desktop layer chain — chrome-cdp
+            # publishes 9222 (Chrome DevTools Protocol) and chrome-devtools-mcp
+            # publishes 9224 (Streamable HTTP MCP). The mcp-provides OCI label
+            # baked into selkies-desktop expects these ports published; declare
+            # them here so inherited eval probes resolve correctly.
+            - "9222:9222"
+            - "9224:9224"
+        env:
+            - EMULATOR_NAME=ov_avd_14
+            - EMULATOR_API_LEVEL=34
+            - EMULATOR_DEVICE=pixel_6
+        status: testing
+        info: |
+            Android 14 (API 34, Google APIs x86_64) emulator on top of the
+            selkies-desktop streaming chain. Browser UI on https://localhost:3000
+            (Selkies WebRTC), Appium WebDriver on :4723, ADB server on :5037
+            (set ANDROID_ADB_SERVER_SOCKET=tcp:localhost:5037 to drive from
+            host). Requires /dev/kvm + kvm-group passthrough for hardware
+            acceleration; the layer declares this via security.devices so the
+            quadlet auto-emits AddDevice=/dev/kvm.
+        eval:
+            - id: image-emulator-binary
+              file: /opt/android-sdk/emulator/emulator
+              exists: true
+            - id: image-adb-binary
+              file: /opt/android-sdk/platform-tools/adb
+              exists: true
+            - id: image-appium-binary
+              file: /usr/local/bin/appium
+              exists: true
+            - id: image-java-binary
+              file: /usr/bin/java
+              exists: true
+            - id: image-start-emulator-script
+              file: /usr/local/bin/start-emulator
+              exists: true
+              mode: "0755"

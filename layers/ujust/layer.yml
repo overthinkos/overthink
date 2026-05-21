@@ -2,7 +2,7 @@ layer:
   name: ujust
   description: Just task runner + ujust wrapper (Universal Blue convention)
 
-  vars:
+  var:
     JUST_VERSION: "1.46.0"
 
   task:

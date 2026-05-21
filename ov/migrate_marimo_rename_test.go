@@ -52,7 +52,7 @@ deploy:
 
 // TestApplyMarimoRenameRewrites_Idempotent confirms that running the
 // rewrite on an already-migrated file is a no-op. This is the load-
-// bearing safety property: ov migrate marimo-rename can be run
+// bearing safety property: ov migrate can be run
 // repeatedly without corrupting the canonical form.
 func TestApplyMarimoRenameRewrites_Idempotent(t *testing.T) {
 	post := `version: 4

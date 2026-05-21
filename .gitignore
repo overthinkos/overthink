@@ -28,6 +28,11 @@ go.work.sum
 .env
 .secrets
 
+# Migration rollback backups (`ov migrate` writes <file>.bak.<unix-ts>
+# before rewriting a config; per-run, per-machine — not version-controlled)
+*.bak
+*.bak.*
+
 # Editor/IDE
 # .idea/
 # .vscode/

@@ -75,9 +75,7 @@ func (c *VmBuildCmd) Run() error {
 			"          source:\n"+
 			"            kind: bootc\n"+
 			"            image: %s\n"+
-			"          disk_size: 20G\n"+
-			"  Or auto-generate paired entries for bootc:true images:\n"+
-			"      ov migrate vm-spec",
+			"          disk_size: 20G\n",
 		imageName, imageName, imageName)
 }
 

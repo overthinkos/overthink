@@ -21,10 +21,10 @@ distro:
       mirror: http://deb.debian.org/debian
       variant: minbase
       components: "main"
-      include_packages:
+      include_package:
         - ca-certificates
         - gnupg
-      base_packages:
+      base_package:
         - linux-image-amd64
         - grub-efi-amd64
         - openssh-server
@@ -85,7 +85,7 @@ distro:
     debootstrap:
       suite: trixie
       mirror: http://deb.debian.org/debian
-      base_packages: [linux-image-amd64]
+      base_package: [linux-image-amd64]
     bootloader:
       install_template: "BOOTLOADER-DEBIAN"
   ubuntu:
@@ -97,7 +97,7 @@ distro:
       suite: noble
       mirror: http://archive.ubuntu.com/ubuntu
       components: "main universe"
-      base_packages: [linux-image-generic]
+      base_package: [linux-image-generic]
 `
 	var dc DistroConfig
 	if err := yaml.Unmarshal([]byte(yamlText), &dc); err != nil {

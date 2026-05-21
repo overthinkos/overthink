@@ -89,7 +89,7 @@ discover:
   - "@github.com/team/private/layers"   # remote repo (any ref form)
 ```
 
-Each `layer.yml` uses a strict kind-keyed wrapper (`layer: {...}`); flat-form files are rejected at parse time. Projects predating this format convert in one shot with `ov migrate unified --rewrite-layers` — the command is idempotent and auto-invoked on remote-cache fetches so external repos pull through cleanly. See `/ov-build:migrate` and `/ov-image:layer`.
+Each `layer.yml` uses a strict kind-keyed wrapper (`layer: {...}`); flat-form files are rejected at parse time. Projects predating this format convert in one shot with `ov migrate` — the command is idempotent and auto-invoked on remote-cache fetches so external repos pull through cleanly. See `/ov-build:migrate` and `/ov-image:layer`.
 
 ### Building Layers: Package Managers & Config Files
 
@@ -237,7 +237,7 @@ vms:
     ram: 8G
 ```
 
-The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fields are **removed** from `kind: image` entries in the hard cutover. Projects predating this schema convert in one shot with `ov migrate vm-spec` — idempotent, preserves any hand-authored `vms:` keys. See `/ov-build:migrate` for the command and `/ov-internals:cutover-policy` for the policy.
+The legacy `image.bootc: true` + `image.vm: {...}` + `image.libvirt: [...]` fields are **removed** from `kind: image` entries in the hard cutover and are rejected at load time. Projects predating this schema re-declare those VMs as `kind: vm` entities in `vm.yml` (see `/ov-vm:vms-catalog`). See `/ov-internals:cutover-policy` for the policy.
 
 `ov deploy add vm:<name> <ref>` applies host-deploy-style layer recipes **inside** a provisioned VM over SSH. The same `InstallPlan` IR drives container, host, VM, and K8s deploys — write a layer once, deploy it anywhere. See `/ov-internals:vm-deploy-target` for the SSH-executor model and `/ov-vm:vms-catalog` for the full authoring reference.
 
@@ -259,7 +259,7 @@ See `/ov-vm:arch` for the canonical cloud_image VM with BIOS-firmware + virtio-g
 go install github.com/overthinkos/overthink/ov@latest
 ```
 
-This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `overthink.yml` and a `layers/` directory. Legacy `image.yml`/`build.yml`/flat-form `layer.yml` projects convert in one shot with `ov migrate unified --rewrite-layers` (see `/ov-build:migrate`).
+This puts `ov` in your `$GOPATH/bin`. No other setup needed — just create an `overthink.yml` and a `layers/` directory. Legacy `image.yml`/`build.yml`/flat-form `layer.yml` projects convert in one shot with `ov migrate` (see `/ov-build:migrate`).
 
 **Full project bootstrap** (to build images from this repo):
 
@@ -488,7 +488,7 @@ Each entry points to the canonical skill — details belong there, not here.
 | Build cache stale | `ov image build --no-cache <image>` (`/ov-build:build`) |
 | Tunnel not appearing on a new instance | Tunnel config is deploy.yml-only — add manually per instance (`/ov-core:deploy`) |
 | Service built fine but broken in production | `ov eval live <image>` runs the baked layer + image + deploy checks against the live container; `ov eval image <image>` checks the disposable build (`/ov-eval:eval`) |
-| `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vms.yml` or run `ov migrate vm-spec` to convert legacy `image.vm:` (`/ov-vm:vms-catalog`, `/ov-build:migrate`) |
+| `ov vm build` fails: "no kind:vm entity in vms.yml" | Declare a `kind: vm` entity in `vm.yml` (`/ov-vm:vms-catalog`) |
 | SPICE console blank on cloud_image VM | Known `simpledrm → qxldrmfb` race under UEFI + stale BOOTX64.EFI; switch to `firmware: bios` in `vms.yml` (`/ov-vm:arch` Finding B) |
 | `virsh` cannot connect to session / "End of file while reading data" | virtqemud-sock path on libvirt ≥ 8.0 (`/ov-vm:vm` Backend matrix) |
 | `ov deploy add vm:<name>` errors "VM does not exist" | Run `ov vm create <name>` first — VM deploy is not auto-provisioning (`/ov-core:deploy` "VM target") |

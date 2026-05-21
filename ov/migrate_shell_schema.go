@@ -11,41 +11,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MigrateShellSchemaCmd is `ov migrate shell-schema`. Scans every layer
-// under layers/<name>/ for cmd: tasks whose body matches the legacy
-// shell-rc heredoc pattern (`# overthink:begin direnv-hook` etc.) and
-// rewrites the layer to use the structured shell: schema. Deletes the
-// legacy cmd: tasks. Idempotent: a second run is a no-op.
-//
-// Use cases:
-//   - Out-of-tree projects whose layer.yml authors haven't yet updated
-//     to the post-2026-05 shell:-schema cutover.
-//   - Re-migrate after pulling new in-tree updates if any leftover
-//     heredoc tasks slipped through.
-//
-// In-tree migrations (direnv / keepassxc-keyring / pixi) were already
-// done by hand in the same PR that introduced the schema; this command
-// is for everything else.
-type MigrateShellSchemaCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be rewritten, don't touch the filesystem"`
-}
-
-// Run walks the project's layers/ directory and migrates each layer.yml.
-func (c *MigrateShellSchemaCmd) Run() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	layersDir := filepath.Join(cwd, "layers")
+// MigrateShellSchema walks dir/layers/ and rewrites every layer.yml carrying
+// a legacy shell-rc heredoc cmd: task into the structured shell: schema.
+// Returns the list of files changed (or that would change under dryRun).
+// This is the chain-callable form used by the unified `ov migrate` runner.
+func MigrateShellSchema(dir string, dryRun bool) ([]string, error) {
+	layersDir := filepath.Join(dir, "layers")
 	entries, err := os.ReadDir(layersDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Println("(no layers/ directory; nothing to migrate)")
-			return nil
+			return nil, nil
 		}
-		return err
+		return nil, err
 	}
-	var rewritten, untouched int
+	var changed []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -54,23 +33,15 @@ func (c *MigrateShellSchemaCmd) Run() error {
 		if _, err := os.Stat(layerYAML); err != nil {
 			continue
 		}
-		changed, err := migrateLayerShellSchema(layerYAML, c.DryRun)
+		did, err := migrateLayerShellSchema(layerYAML, dryRun)
 		if err != nil {
-			return fmt.Errorf("%s: %w", layerYAML, err)
+			return changed, fmt.Errorf("%s: %w", layerYAML, err)
 		}
-		if changed {
-			prefix := "rewrote "
-			if c.DryRun {
-				prefix = "[dry-run] would rewrite "
-			}
-			fmt.Println(prefix + layerYAML)
-			rewritten++
-		} else {
-			untouched++
+		if did {
+			changed = append(changed, layerYAML)
 		}
 	}
-	fmt.Printf("Migration complete: %d rewritten, %d unchanged.\n", rewritten, untouched)
-	return nil
+	return changed, nil
 }
 
 // migrateLayerShellSchema parses one layer.yml, scans for legacy

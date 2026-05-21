@@ -132,7 +132,7 @@ func renderSidecarEnvFrom(s SidecarSecret, params map[string]string) (string, er
 		v, ok := params[paramName]
 		if !ok || v == "" {
 			return "", fmt.Errorf("sidecar secret %q references parameter %q which is unset. "+
-				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in deploy.yml or run `ov migrate tailscale-secrets`",
+				"Set `sidecars.<sidecar-name>.parameter.%s: <value>` in deploy.yml or run `ov migrate`",
 				s.Name, paramName, paramName)
 		}
 	}

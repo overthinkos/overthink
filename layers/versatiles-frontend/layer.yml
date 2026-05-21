@@ -23,7 +23,7 @@ layer:
   # reads both: STYLE_PUBLIC_URL for the MapLibre style JSON, and
   # ASSETS_PUBLIC_URL as the asset-root prefix for font glyphs and
   # sprites referenced from the style.
-  env_provides:
+  env_provide:
     VERSATILES_STYLE_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8002}}/style"
     VERSATILES_ASSETS_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8002}}"
   task:

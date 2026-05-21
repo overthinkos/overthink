@@ -1,6 +1,6 @@
 package main
 
-// migrate_require_image.go — `ov migrate require-image`.
+// migrate_require_image.go — `ov migrate`.
 //
 // One-shot migration for the 2026-05-12 schema cutover that hard-
 // requires the `image:` field on every `target: pod` deploy entry.
@@ -45,43 +45,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 )
-
-// MigrateRequireImageCmd is `ov migrate require-image`.
-type MigrateRequireImageCmd struct {
-	DryRun bool `long:"dry-run" help:"Print what would change, don't touch the filesystem"`
-}
-
-func (c *MigrateRequireImageCmd) Run() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	results, warnings, err := MigrateRequireImage(cwd, c.DryRun, true)
-	if err != nil {
-		return err
-	}
-	if len(results) == 0 && len(warnings) == 0 {
-		fmt.Println("ov migrate require-image: nothing to migrate (every target:pod deploy already declares image:)")
-		return nil
-	}
-	prefix := "wrote "
-	if c.DryRun {
-		prefix = "[dry-run] would write "
-	}
-	for _, r := range results {
-		fmt.Println(prefix + r.Path)
-		for _, change := range r.Changes {
-			fmt.Println("  " + change)
-		}
-	}
-	for _, w := range warnings {
-		fmt.Fprintln(os.Stderr, "warning: "+w)
-	}
-	if len(warnings) > 0 {
-		return fmt.Errorf("%d entries need manual `image:` declaration (see warnings above)", len(warnings))
-	}
-	return nil
-}
 
 // RequireImageResult is the per-file summary of injections applied.
 type RequireImageResult struct {
@@ -152,7 +115,9 @@ func MigrateRequireImage(cwd string, dryRun bool, includeHostFile bool) ([]Requi
 	// touching operator state.
 	if includeHostFile {
 		hostPath, err := DeployConfigPath()
-		if err == nil && hostPath != "" {
+		// A host that has never run `ov config` has no ~/.config/ov/deploy.yml;
+		// that is normal, not a migration failure — skip it silently.
+		if _, statErr := os.Stat(hostPath); err == nil && hostPath != "" && statErr == nil {
 			abs, _ := filepath.Abs(hostPath)
 			cwdAbs, _ := filepath.Abs(cwd)
 			if !strings.HasPrefix(abs, cwdAbs+string(os.PathSeparator)) {

@@ -41,7 +41,7 @@ layer:
   # and to the instance-scoped container name for instances (e.g.
   # "http://ov-immich-ml-test:2283/api" for immich-ml -i test). Consumers like
   # openwebui and hermes already declare this env var in their env_accept.
-  env_provides:
+  env_provide:
     IMMICH_API_URL: "http://{{.ContainerName}}:2283/api"
   env_accept:
     - name: IMMICH_API_URL

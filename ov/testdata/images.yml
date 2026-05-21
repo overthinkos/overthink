@@ -1,6 +1,6 @@
 defaults:
     base: quay.io/fedora/fedora:43
-    platforms:
+    platform:
         - linux/amd64
         - linux/arm64
     tag: auto
@@ -14,12 +14,12 @@ image:
     bazzite:
         base: ghcr.io/ublue-os/bazzite:stable
         bootc: true
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - custom-packages
     cuda:
-        platforms:
+        platform:
             - linux/amd64
         layer:
             - pixi

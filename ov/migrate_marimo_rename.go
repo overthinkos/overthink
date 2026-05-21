@@ -1,6 +1,6 @@
 package main
 
-// migrate_marimo_rename.go — `ov migrate marimo-rename`.
+// migrate_marimo_rename.go — `ov migrate`.
 //
 // One-shot migration that renames the legacy `marimo-ml` image and the
 // `marimo-ml-pod` deployment straight to the post-2026-05 canonical
@@ -24,34 +24,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// MigrateMarimoRenameCmd is `ov migrate marimo-rename`.
-type MigrateMarimoRenameCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be modified, don't touch the filesystem"`
-}
-
-func (c *MigrateMarimoRenameCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	changed, err := MigrateMarimoRename(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	prefix := "modified "
-	if c.DryRun {
-		prefix = "[dry-run] would modify "
-	}
-	if len(changed) == 0 {
-		fmt.Println("ov migrate marimo-rename: nothing to migrate (already renamed)")
-		return nil
-	}
-	for _, p := range changed {
-		fmt.Println(prefix + p)
-	}
-	return nil
-}
 
 // MigrateMarimoRename walks both the in-repo project files and the
 // per-machine ~/.config/ov/deploy.yml, applying the marimo-ml(-pod) →

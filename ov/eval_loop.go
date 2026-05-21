@@ -211,7 +211,7 @@ type FinalReport struct {
 	BestIteration    int               `yaml:"best_iteration"`
 	OvharnessBranch  string            `yaml:"ovharness_branch,omitempty"`
 	Summary          ReportSummary     `yaml:"summary"`
-	Phases           []PhaseReport     `yaml:"phases,omitempty"`
+	Phases           []PhaseReport     `yaml:"phase,omitempty"`
 	PhasesCompleted  int               `yaml:"phases_completed,omitempty"`
 	Iterations       []IterationState  `yaml:"iteration,omitempty"`
 	FinalScenario    []ScenarioVerdict `yaml:"final_scenario,omitempty"`
@@ -1280,8 +1280,8 @@ type ScopeHistoryEntry struct {
 	K                   int      `yaml:"k"`
 	Score               int      `yaml:"score"`
 	ScoreDelta          int      `yaml:"score_delta"`
-	SolvedIDs           []string `yaml:"solved_ids,omitempty"`
-	NewlySolvedIDs      []string `yaml:"newly_solved_ids,omitempty"`
+	SolvedIDs           []string `yaml:"solved_id,omitempty"`
+	NewlySolvedIDs      []string `yaml:"newly_solved_id,omitempty"`
 	Runtime             string   `yaml:"runtime,omitempty"`
 	PlateauCounterAfter int      `yaml:"plateau_counter_after,omitempty"`
 }

@@ -1,6 +1,6 @@
 package main
 
-// migrate_schema_v4.go — `ov migrate schema-v4`.
+// migrate_schema_v4.go — `ov migrate`.
 //
 // Converts schema v3 configs to v4:
 //
@@ -31,77 +31,54 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"gopkg.in/yaml.v3"
 )
 
-// MigrateSchemaV4Cmd is `ov migrate schema-v4`.
-type MigrateSchemaV4Cmd struct {
-	Path   string `arg:"" optional:"" help:"Path to overthink.yml / deploy.yml / image.yml (default: <cwd>/overthink.yml, falling back to deploy.yml then image.yml)"`
-	DryRun bool   `long:"dry-run" help:"Print transformations that would be applied, don't touch the file"`
+// schemaV4CandidateFiles are the project-root YAML files that may carry v3
+// schema structure. The chain applies MigrateSchemaV4 to each that exists.
+var schemaV4CandidateFiles = []string{
+	"overthink.yml", "deploy.yml", "image.yml", "images.yml",
+	"vm.yml", "vms.yml", "pod.yml", "k8s.yml", "local.yml", "eval.yml",
 }
 
-func (c *MigrateSchemaV4Cmd) Run() error {
-	path, err := c.resolvePath()
-	if err != nil {
-		return err
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading %s: %w", path, err)
-	}
-
-	var doc yaml.Node
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		return fmt.Errorf("parsing %s: %w", path, err)
-	}
-
-	result := MigrateSchemaV4(&doc)
-	if result.NoChanges {
-		fmt.Fprintf(os.Stderr, "%s: already at schema v4 (no changes)\n", path)
-		return nil
-	}
-
-	for _, t := range result.Transforms {
-		fmt.Fprintln(os.Stderr, t)
-	}
-
-	if c.DryRun {
-		fmt.Fprintf(os.Stderr, "[dry-run] would rewrite %s\n", path)
-		return nil
-	}
-
-	var out bytes.Buffer
-	enc := yaml.NewEncoder(&out)
-	enc.SetIndent(4)
-	if err := enc.Encode(&doc); err != nil {
-		return fmt.Errorf("encoding migrated document: %w", err)
-	}
-	enc.Close()
-
-	if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
-		return fmt.Errorf("writing %s: %w", path, err)
-	}
-	fmt.Fprintf(os.Stderr, "wrote %s (schema v4)\n", path)
-	return nil
-}
-
-func (c *MigrateSchemaV4Cmd) resolvePath() (string, error) {
-	if c.Path != "" {
-		return c.Path, nil
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", err
-	}
-	for _, name := range []string{"overthink.yml", "deploy.yml", "image.yml", "images.yml"} {
-		p := filepath.Join(cwd, name)
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
+// MigrateSchemaV4Files applies the v3→v4 transforms to every candidate YAML
+// file under dir, preserving comments via yaml.Node round-trip. It is the
+// chain-callable form used by the unified `ov migrate` runner. Returns the
+// list of files changed (or, under dryRun, that would change). Files already
+// at v4 are no-ops.
+func MigrateSchemaV4Files(dir string, dryRun bool) ([]string, error) {
+	var changed []string
+	for _, name := range schemaV4CandidateFiles {
+		path := filepath.Join(dir, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue // absent file → nothing to migrate
+		}
+		var doc yaml.Node
+		if err := yaml.Unmarshal(data, &doc); err != nil {
+			return changed, fmt.Errorf("parsing %s: %w", path, err)
+		}
+		if MigrateSchemaV4(&doc).NoChanges {
+			continue
+		}
+		changed = append(changed, path)
+		if dryRun {
+			continue
+		}
+		var out bytes.Buffer
+		enc := yaml.NewEncoder(&out)
+		enc.SetIndent(4)
+		if err := enc.Encode(&doc); err != nil {
+			return changed, fmt.Errorf("encoding %s: %w", path, err)
+		}
+		enc.Close()
+		if err := os.WriteFile(path, out.Bytes(), 0o644); err != nil {
+			return changed, fmt.Errorf("writing %s: %w", path, err)
 		}
 	}
-	return "", fmt.Errorf("no overthink.yml / deploy.yml / image.yml in %s", cwd)
+	return changed, nil
 }
 
 // MigrateSchemaV4Result reports what the migration changed.
@@ -125,12 +102,18 @@ func MigrateSchemaV4(doc *yaml.Node) MigrateSchemaV4Result {
 	}
 
 	changed := false
-	// 1. Bump version to 4 (if present and < 4).
+	// 1. Bump a legacy integer version (1/2/3) to 4. A CalVer string (the
+	//    post-2026-05 schema version, e.g. 2026.141.1530) or an already-current
+	//    value is left untouched — the terminal calver-schema step owns the HEAD
+	//    stamp. Without this guard the v3→v4 bump would rewrite a CalVer DOWN to
+	//    "4" and corrupt every versioned file.
 	if v := findMappingValue(root, "version"); v != nil && v.Kind == yaml.ScalarNode {
-		if v.Value != "4" {
-			result.Transforms = append(result.Transforms, fmt.Sprintf("version: %s → 4", v.Value))
-			v.Value = "4"
-			changed = true
+		if _, isCalVer := ParseCalVer(v.Value); !isCalVer {
+			if n, err := strconv.Atoi(v.Value); err == nil && n < 4 {
+				result.Transforms = append(result.Transforms, fmt.Sprintf("version: %s → 4", v.Value))
+				v.Value = "4"
+				changed = true
+			}
 		}
 	}
 

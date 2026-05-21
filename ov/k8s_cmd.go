@@ -881,7 +881,7 @@ func kindToPluralResource(kind string) (string, bool) {
 //
 // The user-scoped auto-write to ~/.config/ov/clusters/<name>.yaml is gone.
 // k3s-provisioned clusters get a kind:k8s entity authored inline (via
-// `ov migrate schema-v4` for existing profiles, or directly in
+// `ov migrate` for existing profiles, or directly in
 // overthink.yml / k8s.yml for new deployments).
 //
 // A stub is kept below so k3s_post.go compiles; in v4, the k3s-server

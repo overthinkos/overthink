@@ -50,7 +50,7 @@ func TestScaffoldProject_AddImageRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if !strings.Contains(string(data), "overthink.yml — unified project root (schema v4).") {
+	if !strings.Contains(string(data), "overthink.yml — unified project root.") {
 		t.Errorf("scaffold's leading comment was destroyed by AddImage; overthink.yml=\n%s", data)
 	}
 	// Confirm the structure is parseable AND the image is present. The

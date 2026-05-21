@@ -202,7 +202,7 @@ type DeploymentNode struct {
 	// we do NOT parse, validate, or interpret these args. Use sparingly —
 	// ssh-config Host stanzas are the right home for persistent options.
 	// Common cases: "-o ProxyJump=bastion", "-o ServerAliveInterval=30".
-	SSHArgs []string `yaml:"ssh_args,omitempty"`
+	SSHArgs []string `yaml:"ssh_arg,omitempty"`
 
 	// --- Scalar overrides of target-template defaults ---
 
@@ -697,7 +697,7 @@ type VmDeployState struct {
 	// a deploy.yml-side mirror of the per-VM registry.json so other
 	// commands can interrogate snapshot state without filesystem
 	// access. Maintained by `ov vm snapshot create/delete/promote`.
-	Snapshots []VmSnapshotState `yaml:"snapshots,omitempty"`
+	Snapshots []VmSnapshotState `yaml:"snapshot,omitempty"`
 
 	// Ephemeral, when non-nil, captures the live runtime state of an
 	// active ephemeral instantiation: the registered systemd transient
@@ -804,7 +804,7 @@ type VmKeyInjectionResolved struct {
 // deploy. Mirrors the command-line flags on DeployAddCmd so a user can
 // pin their choices in deploy.yml instead of repeating them.
 type InstallOptsConfig struct {
-	WithServices     bool   `yaml:"with_services,omitempty"`
+	WithServices     bool   `yaml:"with_service,omitempty"`
 	AllowRepoChanges bool   `yaml:"allow_repo_changes,omitempty"`
 	AllowRootTasks   bool   `yaml:"allow_root_tasks,omitempty"`
 	SkipIncompatible bool   `yaml:"skip_incompatible,omitempty"`
@@ -1011,7 +1011,7 @@ func LoadDeployConfig() (*DeployConfig, error) {
 	// disappear. Fail loud at load time instead, with a remediation hint.
 	if hasLegacyImagesKey(data) {
 		return nil, fmt.Errorf(
-			"deploy.yml at %s: legacy top-level `images:` field detected — run `ov migrate local-deploy` to convert; the field was renamed to `deploy:` in the 2026-04 unified-config cutover (encryption guarantees disappear silently otherwise)",
+			"deploy.yml at %s: legacy top-level `images:` field detected — run `ov migrate` to convert; the field was renamed to `deploy:` in the 2026-04 unified-config cutover (encryption guarantees disappear silently otherwise)",
 			path,
 		)
 	}

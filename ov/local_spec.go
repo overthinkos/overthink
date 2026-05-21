@@ -52,7 +52,7 @@ type LocalSpec struct {
 	// previous template-level `images:` field was removed in the
 	// 2026-05 deploy-fetch-narrowing cutover; legacy YAML carrying it
 	// hard-errors at validate time with a pointer to
-	// `ov migrate local-images`.
+	// `ov migrate`.
 }
 
 // findLocalSpec looks up a LocalSpec by name from the unified loader.

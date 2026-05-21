@@ -305,7 +305,7 @@ func WriteVmImportDeclaration(name string, spec *VmSpec) error {
 	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` first or `ov migrate unified` to convert legacy configs", cwd)
+			return fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` first or `ov migrate` to convert legacy configs", cwd)
 		}
 		return fmt.Errorf("stat overthink.yml: %w", err)
 	}
@@ -386,7 +386,7 @@ func UpdateImportedVm(name, domainName string, replaceLibvirt bool) (*VmSpec, er
 	target := filepath.Join(cwd, "overthink.yml")
 	if _, err := os.Stat(target); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` or `ov migrate unified`", cwd)
+			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` or `ov migrate`", cwd)
 		}
 		return nil, fmt.Errorf("stat overthink.yml: %w", err)
 	}

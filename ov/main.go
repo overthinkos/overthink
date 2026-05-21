@@ -49,7 +49,7 @@ type CLI struct {
 	Layer       LayerCmd        `cmd:"" help:"Edit layer.yml files in the project's layers/ directory"`
 	Logs        LogsCmd         `cmd:"" help:"Show service container logs"`
 	Mcp         McpCmdGroup     `cmd:"" help:"Run an MCP server exposing the ov CLI as tools"`
-	Migrate     MigrateCmdGroup `cmd:"" help:"Migrate between configuration schemas (unified format, etc.)"`
+	Migrate     MigrateCmd      `cmd:"" help:"Migrate any overthink config up to the latest schema CalVer (single idempotent chain — no sub-verbs)"`
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
 	Restart     RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`

@@ -5,68 +5,38 @@ import (
 	"os"
 )
 
-// MigrateCmdGroup groups `ov migrate` subcommands.
+// MigrateCmd is `ov migrate` — the single, idempotent command that brings any
+// overthink config up to the latest schema CalVer. It runs the full ordered
+// migration chain (see migrate_registry.go) across the project tree, the
+// per-host ~/.config/ov files, the encrypted-volume quadlets, and the .secrets
+// file, then stamps every versioned file to LatestSchemaVersion.
 //
-// Retired migration commands (deleted with the bootstrap-builder cutover):
-//   - vm-spec: legacy `bootc: true` schema migration; replaced by layer
-//     capability aggregation (no migration required — bootc-config layer
-//     contributes preserve_user, no image-level flag exists).
-//   - merge-vms: legacy vms.yml -> deploy.yml merge + arch-cloud-base
-//     rename; project is on schema v4, no remaining input.
-//   - deploy-v3: deploy.yml v2 -> v3 migration; project is on v4.
-//   - eval: harness.yml -> eval.yml + tests:->eval: rename; project is
-//     on eval.yml already.
-type MigrateCmdGroup struct {
-	Unified     MigrateUnifiedCmd     `cmd:"" help:"Migrate build.yml/image.yml/deploy.yml/layer.yml to the unified overthink.yml format"`
-	SchemaV4    MigrateSchemaV4Cmd    `cmd:"schema-v4" help:"Migrate schema v3 → v4: flatten deployments.images→deployment, rename plurals to singular, children:→nested:, remove deploy-choice fields from images, bump version 3→4"`
-	Description MigrateDescriptionCmd `cmd:"description" help:"Scaffold a Gherkin-shaped description: block on every kind-keyed entity that has legacy info:/status: text but no description:"`
-	TargetLocal MigrateTargetLocalCmd `cmd:"target-local" help:"Rename kind:host → kind:local (host.yml → local.yml, target:host → target:local, host:<template> → local:<template>); drop legacy status:/info: scalars + VmDeployState.ssh_key_path; idempotent"`
-	Calamares   MigrateCalamaresCmd   `cmd:"calamares" help:"Align layer.yml authoring with Calamares vocabulary: rename depends:→requires:, collapse rpm:/deb:/pac:/aur: + per-distro tag sections (debian:13:, ubuntu:24.04:, debian,ubuntu:) into top-level packages: + per-distro distros: map; AUR under distros.archlinux.aur; delete dead directory:/info: keys; idempotent"`
-	ShellSchema MigrateShellSchemaCmd `cmd:"shell-schema" help:"Convert legacy cmd: shell-rc heredoc tasks (the # overthink:begin direnv-hook / ssh-auth-sock fence patterns) into the structured shell: schema; idempotent"`
-	OvCachyos   MigrateOvCachyosCmd   `cmd:"ov-cachyos" help:"Rename the operator-specific CachyOS deployment to its 2026-05 canonical name 'ov-cachyos'. Collapses qc → cachyos-dx → ov-cachyos into a single hop, handles BOTH legacy keys, also moves the matching kind:local template name. Walks overthink.yml + ~/.config/ov/deploy.yml. Idempotent."`
-	MarimoRename MigrateMarimoRenameCmd `cmd:"marimo-rename" help:"Rename the legacy marimo-ml image and marimo-ml-pod deployment straight to the post-2026-05 canonical 'versa' (cross-kind name reuse — skips the intermediate marimo state that briefly existed between the 2026-04 marimo-ml → marimo and 2026-05 marimo → versa cutovers). Walks overthink.yml + deploy.yml + image.yml + ~/.config/ov/deploy.yml. Longest-first textual rewrite collapses marimo-ml-pod and marimo-ml to a single canonical 'versa'. Idempotent."`
-	LocalImages MigrateLocalImagesCmd `cmd:"local-images" help:"Migrate kind:local 'images:' field to comment-form per the 2026-05 deploy-fetch-narrowing cutover; idempotent. After migration, run 'ov image validate' to verify. The deploy now fetches NOTHING speculative — test-bed image preflight moved to 'ov eval run'."`
-	KindFiles     MigrateKindFilesCmd     `cmd:"kind-files" help:"2026-05 kind-files cutover: extract inline image:/vm: from overthink.yml into image.yml/vm.yml siblings, create empty pod.yml/k8s.yml stubs, append entries to includes:, and rename kind: deployment → kind: deploy in every reachable YAML doc + root-key deployment: → deploy: in deploy.yml. Idempotent."`
-	FieldSingular MigrateFieldSingularCmd `cmd:"field-singular" help:"Singularize every plural YAML field name in every reachable .yml under the project root. Rewrites layers→layer, ports→port, env_requires→env_require, requires_capabilities→requires_capability, etc. Special case: builds→produce (semantic, avoids collision with existing build: tag in ImageConfig). Idempotent."`
-	LocalDeploy MigrateLocalDeployCmd `cmd:"local-deploy" help:"Migrate ~/.config/ov/deploy.yml from the pre-2026-04 legacy schema (top-level images: + per-entry bind_mounts: + workspace: scalar) to the modern v4 schema (top-level deploy: + per-entry volumes: with type: encrypted/bind + workspace promoted to a volumes entry). Idempotent. Writes a .bak.<unix-ts> rollback file before rewriting."`
-	Quadlets    MigrateQuadletsCmd    `cmd:"quadlets" help:"Walk ~/.config/containers/systemd/ov-*.container and regenerate any quadlet that declares encrypted volumes in deploy.yml but lacks the ExecStartPre=ov config mount <image> auto-mount hook (added 2026-04-16). Pre-cutover quadlets silently boot containers against empty plain/ FUSE mountpoints when gocryptfs is unmounted, leading to plaintext writes on top of an encrypted vault. Idempotent."`
-	RequireImage MigrateRequireImageCmd `cmd:"require-image" help:"2026-05-12 schema cutover: hard-required image: field on every target:pod deploy entry. Walks every deploy.yml under cwd + the per-host ~/.config/ov/deploy.yml; for each pod-target entry lacking image:, infers the value (Pattern A: <base>/<instance> key → <base>; deploy key matching a kind:image entry → that key; sibling cluster → reuse declared image). Entries that can't be inferred raise a per-entry warning. Idempotent. Backs up each modified file as <path>.bak.<unix-ts>."`
-	TailscaleSecrets MigrateTailscaleSecretsCmd `cmd:"tailscale-secrets" help:"2026-05-13 multi-tailnet schema cutover: rename legacy flat TS_AUTHKEY env var in .secrets to the new per-tailnet form TS_AUTHKEY_<TAILNET-NORMALIZED> (where TAILNET-NORMALIZED is the MagicDNS suffix uppercased with '-'/'.' replaced by '_'). Prompts for the tailnet suffix unless --tailnet is supplied. Warns about deploy.yml sidecars.tailscale entries that lack parameter.tailnet. Idempotent. The legacy TS_AUTHKEY entry is preserved by default; pass --delete-legacy to remove it."`
-	DropKdbx MigrateDropKdbxCmd `cmd:"drop-kdbx" help:"2026-05-21 cutover: drop the direct KeePass .kdbx credential backend. Strips secret_backend: kdbx and the legacy secrets_kdbx_path / secrets_kdbx_key_file / kdbx_cache / kdbx_cache_timeout keys from ~/.config/ov/config.yml. Idempotent; writes a .bak.<unix-ts> rollback before rewriting. Existing .kdbx secrets remain available via KeePassXC's Secret Service (FdoSecrets) — the keyring backend, which is unaffected."`
+// It replaces the former ~16 `ov migrate <name>` sub-verbs: there is nothing to
+// choose — `ov migrate` always migrates, and only ever to the latest CalVer.
+// Future cutovers add one MigrationStep to the registry; the operator command
+// never changes.
+//
+// The project directory is taken from the current working directory; use the
+// top-level `-C` / `--dir` / OV_PROJECT_DIR global to point at a different
+// project (main() chdir's before dispatch, so os.Getwd already reflects it).
+type MigrateCmd struct {
+	DryRun bool `long:"dry-run" help:"Print every change the chain would make without touching the filesystem"`
 }
 
-// MigrateUnifiedCmd is `ov migrate unified`. The project directory is taken
-// from the top-level --dir / -C / OV_PROJECT_DIR flag (no local --dir here to
-// avoid clashing with the parent flag).
-type MigrateUnifiedCmd struct {
-	Monolithic    bool `long:"monolithic" help:"Emit a single flat overthink.yml instead of using includes:"`
-	DryRun        bool `long:"dry-run" help:"Print files that would be written, don't touch the filesystem"`
-	RewriteLayers bool `long:"rewrite-layers" help:"Rewrite layer.yml files into kind-keyed form (layer: {name, ...})"`
-}
-
-func (c *MigrateUnifiedCmd) Run() error {
-	cwd, err := os.Getwd()
+func (c *MigrateCmd) Run() error {
+	dir, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	dir := cwd
-	written, err := MigrateUnified(MigrateUnifiedOpts{
-		Dir:           dir,
-		Monolithic:    c.Monolithic,
-		DryRun:        c.DryRun,
-		RewriteLayers: c.RewriteLayers,
-	})
+	ctx, err := NewMigrateContext(dir, c.DryRun)
 	if err != nil {
 		return err
 	}
-	prefix := ""
+	if _, err := RunMigrations(ctx); err != nil {
+		return err
+	}
 	if c.DryRun {
-		prefix = "[dry-run] would write "
-	} else {
-		prefix = "wrote "
-	}
-	for _, p := range written {
-		fmt.Println(prefix + p)
+		fmt.Fprintln(os.Stderr, "(dry-run — no files were modified)")
 	}
 	return nil
 }

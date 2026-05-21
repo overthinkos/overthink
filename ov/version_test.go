@@ -70,3 +70,72 @@ func TestComputeCalVer(t *testing.T) {
 		t.Errorf("ComputeCalVer() = %q, expected format YYYY.DDD.HHMM with 2 dots", version)
 	}
 }
+
+func TestParseCalVer(t *testing.T) {
+	cases := []struct {
+		in   string
+		ok   bool
+		year int
+		day  int
+		hhmm int
+	}{
+		{"2026.141.1530", true, 2026, 141, 1530},
+		{"2026.1.0", true, 2026, 1, 0},
+		{"  2026.366.2359  ", true, 2026, 366, 2359}, // trimmed
+		{"4", false, 0, 0, 0},                        // legacy integer schema version
+		{"", false, 0, 0, 0},
+		{"2026.141", false, 0, 0, 0},       // too few parts
+		{"2026.141.15.30", false, 0, 0, 0}, // too many parts
+		{"x.y.z", false, 0, 0, 0},
+		{"2026.0.0", false, 0, 0, 0},      // day < 1
+		{"2026.367.0", false, 0, 0, 0},    // day > 366
+		{"2026.141.2400", false, 0, 0, 0}, // hhmm > 2359
+		{"1969.1.0", false, 0, 0, 0},      // year < 1970
+	}
+	for _, c := range cases {
+		got, ok := ParseCalVer(c.in)
+		if ok != c.ok {
+			t.Errorf("ParseCalVer(%q) ok = %v, want %v", c.in, ok, c.ok)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if got.Year != c.year || got.Day != c.day || got.HHMM != c.hhmm {
+			t.Errorf("ParseCalVer(%q) = %+v, want {%d %d %d}", c.in, got, c.year, c.day, c.hhmm)
+		}
+	}
+}
+
+func TestCalVerRoundTrip(t *testing.T) {
+	for _, s := range []string{"2026.141.1530", "2026.1.0", "2026.366.2359"} {
+		v, ok := ParseCalVer(s)
+		if !ok {
+			t.Fatalf("ParseCalVer(%q) failed", s)
+		}
+		if v.String() != s {
+			t.Errorf("round-trip %q -> %q", s, v.String())
+		}
+	}
+}
+
+func TestCalVerLess(t *testing.T) {
+	cases := []struct {
+		a, b string
+		less bool
+	}{
+		{"2026.112.522", "2026.114.1558", true},   // earlier day
+		{"2026.114.1558", "2026.114.2207", true},  // same day, earlier time
+		{"2026.141.1326", "2026.141.1530", true},  // drop-kdbx < calver-schema (HEAD)
+		{"2026.141.1530", "2026.141.1530", false}, // equal is not less
+		{"2026.141.1530", "2026.141.1326", false}, // reverse
+		{"2025.366.2359", "2026.1.0", true},       // year boundary
+	}
+	for _, c := range cases {
+		a, _ := ParseCalVer(c.a)
+		b, _ := ParseCalVer(c.b)
+		if got := a.Less(b); got != c.less {
+			t.Errorf("(%s).Less(%s) = %v, want %v", c.a, c.b, got, c.less)
+		}
+	}
+}

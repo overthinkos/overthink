@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,12 +160,13 @@ func EnsureRepoDownloaded(repoPath, version string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// One-shot migration of the freshly-cloned cache. Idempotent: if the
-	// remote is already in unified form, this is a no-op.
-	if _, err := MigrateUnified(MigrateUnifiedOpts{
-		Dir:           path,
-		RewriteLayers: true,
-	}); err != nil {
+	// One-shot migration of the freshly-cloned cache to the latest schema
+	// CalVer. Runs the project-only subset of the chain (RunProjectMigrations)
+	// so a remote fetch never mutates the user's per-host state; HostDeployPath
+	// is left empty so even the calver-schema stamp touches only the cache's
+	// project files. Idempotent: an already-current remote is a no-op.
+	ctx := &MigrateContext{Dir: path, Out: io.Discard}
+	if _, err := RunProjectMigrations(ctx); err != nil {
 		return path, fmt.Errorf("auto-migrating remote cache %s: %w", path, err)
 	}
 	return path, nil

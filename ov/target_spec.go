@@ -17,7 +17,7 @@ type TargetSpec struct {
 
 	// Calamares settings.conf core fields.
 	ModulesSearch []string             `yaml:"modules-search,omitempty" json:"modules-search,omitempty"`
-	Instances     []TargetInstance     `yaml:"instances,omitempty" json:"instances,omitempty"`
+	Instances     []TargetInstance     `yaml:"instance,omitempty" json:"instances,omitempty"`
 	Sequence      *TargetSequence      `yaml:"sequence,omitempty" json:"sequence,omitempty"`
 	Branding      string               `yaml:"branding,omitempty" json:"branding,omitempty"`
 	PromptInstall bool                 `yaml:"prompt-install,omitempty" json:"prompt-install,omitempty"`

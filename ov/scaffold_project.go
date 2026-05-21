@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,13 +21,13 @@ import (
 //
 // Schema v4 cutover (2026-05): every authoring verb defaults to
 // overthink.yml as the canonical root file. Legacy projects with a
-// per-kind image.yml at the project root must run `ov migrate unified`
+// per-kind image.yml at the project root must run `ov migrate`
 // first; the scaffolders error cleanly when overthink.yml is missing.
 
 // scaffoldOverthinkYAML is the seed overthink.yml written into a fresh
 // project. Uses the upstream build.yml via format_config remote ref so
 // the new project doesn't have to copy the canonical 1k-line build.yml.
-const scaffoldOverthinkYAML = `# overthink.yml — unified project root (schema v4).
+const scaffoldOverthinkYAML = `# overthink.yml — unified project root.
 # See https://github.com/overthinkos/overthink for documentation.
 #
 # Before building you must wire format_config to a build.yml — either:
@@ -40,7 +41,7 @@ const scaffoldOverthinkYAML = `# overthink.yml — unified project root (schema 
 # pod: entry, a vm: entry, a k8s: entry, a local: entry, AND a
 # deployment: entry. ov verbs disambiguate by command context.
 
-version: 4
+version: __SCHEMA_VERSION__
 
 defaults:
   registry: ghcr.io/example
@@ -77,7 +78,8 @@ func ScaffoldProject(dir string) error {
 	if _, err := os.Stat(overthinkPath); err == nil {
 		return fmt.Errorf("overthink.yml already exists at %s; refusing to overwrite", overthinkPath)
 	}
-	if err := os.WriteFile(overthinkPath, []byte(scaffoldOverthinkYAML), 0o644); err != nil {
+	seed := strings.ReplaceAll(scaffoldOverthinkYAML, "__SCHEMA_VERSION__", LatestSchemaVersion().String())
+	if err := os.WriteFile(overthinkPath, []byte(seed), 0o644); err != nil {
 		return fmt.Errorf("writing overthink.yml: %w", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, "layers"), 0o755); err != nil {
@@ -211,7 +213,7 @@ func loadOverthinkYAMLNode(dir string) (*yaml.Node, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate unified` to convert legacy image.yml", dir)
+			return nil, fmt.Errorf("overthink.yml not found in %s; run `ov image new project .` to scaffold or `ov migrate` to convert legacy image.yml", dir)
 		}
 		return nil, fmt.Errorf("reading overthink.yml: %w", err)
 	}

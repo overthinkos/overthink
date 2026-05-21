@@ -127,10 +127,10 @@ func LoadRuntimeConfig() (*RuntimeConfig, error) {
 // carries any artefact of the removed KeePass .kdbx backend: the legacy
 // secrets_kdbx_* / kdbx_cache* keys (detected on the raw YAML, since they no
 // longer map to struct fields) or secret_backend: kdbx. The remediation hint
-// points at `ov migrate drop-kdbx`, which strips them in place.
+// points at `ov migrate`, which strips them in place.
 func validateNoKdbxResiduals(data []byte, cfg *RuntimeConfig) error {
 	if cfg.SecretBackend == "kdbx" {
-		return fmt.Errorf("secret_backend: kdbx — the direct KeePass .kdbx backend was removed; run `ov migrate drop-kdbx` (KeePassXC still works via Secret Service)")
+		return fmt.Errorf("secret_backend: kdbx — the direct KeePass .kdbx backend was removed; run `ov migrate` (KeePassXC still works via Secret Service)")
 	}
 	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
@@ -138,7 +138,7 @@ func validateNoKdbxResiduals(data []byte, cfg *RuntimeConfig) error {
 	}
 	for _, k := range []string{"secrets_kdbx_path", "secrets_kdbx_key_file", "kdbx_cache", "kdbx_cache_timeout"} {
 		if _, ok := raw[k]; ok {
-			return fmt.Errorf("legacy key %q — the direct KeePass .kdbx backend was removed; run `ov migrate drop-kdbx`", k)
+			return fmt.Errorf("legacy key %q — the direct KeePass .kdbx backend was removed; run `ov migrate`", k)
 		}
 	}
 	return nil

@@ -54,7 +54,7 @@ func TestRenderSidecarEnvFrom(t *testing.T) {
 			envFallback: "TS_AUTHKEY",
 			params:      map[string]string{"tailnet": ""},
 			wantErr:     true,
-			errContains: "ov migrate tailscale-secrets",
+			errContains: "ov migrate",
 		},
 		{
 			name:        "non_tailnet_special_chars_normalized",

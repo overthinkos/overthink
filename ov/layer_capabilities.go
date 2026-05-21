@@ -24,7 +24,7 @@ type LayerCapabilities struct {
 	NeedsRootAfterInit bool              `yaml:"needs_root_after_init,omitempty"`
 	InitSystemHint     string            `yaml:"init_system_hint,omitempty"`
 	DataOnly           bool              `yaml:"data_only,omitempty"`
-	OCILabels          map[string]string `yaml:"oci_labels,omitempty"`
+	OCILabels          map[string]string `yaml:"oci_label,omitempty"`
 }
 
 // AggregatedLayerCaps is the output of walking all layers in resolution

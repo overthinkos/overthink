@@ -9,56 +9,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// MigrateDescriptionCmd is `ov migrate description`. Walks every
-// YAML file under the project root, finds every kind-keyed or
-// standalone entity (layer:, image:, pod:, vm:, k8s:, host:,
-// deployment:), and if the entity carries legacy `info:` / `status:`
-// text but no `description:` block, synthesizes a Gherkin-shaped
-// description skeleton:
-//
-//   - description.feature = first non-empty line of info: (or the
-//     entity name if info: is empty)
-//   - description.narrative = full info: text
-//   - description.tags = [<status>] when status: is non-empty
-//   - description.scenarios = [one skeleton scenario tagged @skeleton]
-//
-// Legacy info: / status: fields are NOT deleted by this migrator —
-// that's the hard-cutover step. They remain authoritative until the
-// cutover commit removes the fields from the Go structs. This allows
-// a clean staging order: migrate → review → hard-delete.
-//
-// Idempotent: running twice is a no-op (entities that already have
-// description: are skipped).
-type MigrateDescriptionCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be written, don't touch the filesystem"`
-}
-
-// Run executes the migration against the current working directory.
-func (c *MigrateDescriptionCmd) Run() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	written, err := MigrateDescription(MigrateDescriptionOpts{
-		Dir:    cwd,
-		DryRun: c.DryRun,
-	})
-	if err != nil {
-		return err
-	}
-	prefix := "wrote "
-	if c.DryRun {
-		prefix = "[dry-run] would write "
-	}
-	for _, p := range written {
-		fmt.Println(prefix + p)
-	}
-	if len(written) == 0 {
-		fmt.Println("No legacy info:/status: fields found without a description: — nothing to migrate.")
-	}
-	return nil
-}
-
 // MigrateDescriptionOpts carries migration inputs.
 type MigrateDescriptionOpts struct {
 	Dir    string

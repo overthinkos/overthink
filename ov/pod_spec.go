@@ -34,7 +34,7 @@ type PodSpec struct {
 	// same default (e.g., WEBUI_ADMIN_EMAIL=admin@example.com). The image
 	// declares WHICH env vars exist; this field provides OPTIONAL default
 	// values. Deployment overrides any of them.
-	EnvDefaults []string `yaml:"env_defaults,omitempty"`
+	EnvDefaults []string `yaml:"env_default,omitempty"`
 
 	// Tests are optional target-specific build-scope checks that run for
 	// every deployment using this template. Default empty — layer tests

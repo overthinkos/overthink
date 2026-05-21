@@ -1,6 +1,6 @@
 package main
 
-// migrate_target_local.go — `ov migrate target-local`.
+// migrate_target_local.go — `ov migrate`.
 //
 // One-shot migration that brings legacy projects up to the
 // kind:local + Ansible-style host: + Description-only schema:
@@ -12,7 +12,7 @@ package main
 //   - rename DeploymentNode `host: <template-name>` → `local: <template-name>`
 //     (heuristic: when value matches a known kind:local template name)
 //   - drop `status:` / `info:` scalar fields (already migrated to
-//     `description:` by `ov migrate description`; this command is the
+//     `description:` by `ov migrate`; this command is the
 //     belt-and-suspenders pass for projects that didn't run that one)
 //   - drop `ssh_key_path` from any persisted VmDeployState block in
 //     deploy.yml (path now lives in the managed ssh-config fragment)
@@ -28,34 +28,6 @@ import (
 	"path/filepath"
 	"strings"
 )
-
-// MigrateTargetLocalCmd is `ov migrate target-local`.
-type MigrateTargetLocalCmd struct {
-	DryRun bool `long:"dry-run" help:"Print files that would be modified, don't touch the filesystem"`
-}
-
-func (c *MigrateTargetLocalCmd) Run() error {
-	dir, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	changes, err := MigrateTargetLocal(dir, c.DryRun)
-	if err != nil {
-		return err
-	}
-	prefix := "modified "
-	if c.DryRun {
-		prefix = "[dry-run] would modify "
-	}
-	if len(changes) == 0 {
-		fmt.Println("ov migrate target-local: nothing to migrate (already at schema target-local)")
-		return nil
-	}
-	for _, p := range changes {
-		fmt.Println(prefix + p)
-	}
-	return nil
-}
 
 // MigrateTargetLocal walks every *.yml in dir (recursively) and applies
 // the legacy → kind:local rewrites. Returns the list of touched paths.
@@ -184,7 +156,7 @@ func applyTargetLocalRewrites(src string, templates map[string]bool) string {
 
 		// NOTE: legacy `status:` / `info:` line deletion would conflict
 		// with HTTP probe checks (`status: 200`) and is left to
-		// `ov migrate description`. The struct-level fields are deleted
+		// `ov migrate`. The struct-level fields are deleted
 		// in this cutover, so YAML residue is silently ignored by the
 		// loader — no corruption risk.
 		//

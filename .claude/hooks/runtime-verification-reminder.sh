@@ -106,7 +106,7 @@ TRIGGER → SKILL MAPPING. Consult BEFORE the first tool call:
   Editing image.yml                    →  /ov-image:image
   ov image build / generate            →  /ov-build:build + /ov-build:generate
   ov image validate                    →  /ov-build:validate
-  ov secrets / kdbx                    →  /ov-build:secrets
+  ov secrets / Secret Service / gpg    →  /ov-build:secrets
   Schema migration                     →  /ov-build:migrate
   Go source / code work                →  /ov-internals:go
   IR / DeployTarget / OCITarget        →  /ov-internals:install-plan

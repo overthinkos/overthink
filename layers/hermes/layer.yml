@@ -22,7 +22,7 @@ layer:
     - name: IMMICH_API_URL
       description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
   # Credential-store-backed env vars. Values live in the user's credential
-  # backend (keyring/kdbx/config) and are injected at runtime via podman
+  # backend (keyring/config) and are injected at runtime via podman
   # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
   # or the quadlet file as plaintext. The ov/api-key/* keys are shared with
   # openwebui so one `ov secrets set` populates both consumers. See

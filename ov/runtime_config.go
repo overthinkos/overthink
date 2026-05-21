@@ -22,13 +22,9 @@ type RuntimeConfig struct {
 	BindAddress            string            `yaml:"bind_address,omitempty"`
 	EncryptedStoragePath   string            `yaml:"encrypted_storage_path,omitempty"`
 	VolumesPath            string            `yaml:"volumes_path,omitempty"`
-	SecretBackend          string            `yaml:"secret_backend,omitempty"`        // "auto", "keyring", "kdbx", "config"
-	SecretsKdbxPath        string            `yaml:"secrets_kdbx_path,omitempty"`     // Path to .kdbx database file
-	SecretsKdbxKeyFile     string            `yaml:"secrets_kdbx_key_file,omitempty"` // Optional key file for .kdbx
-	KdbxCache              *bool             `yaml:"kdbx_cache,omitempty"`            // Cache kdbx password in kernel keyring (default: true)
-	KdbxCacheTimeout       int               `yaml:"kdbx_cache_timeout,omitempty"`    // Kernel keyring TTL in seconds (default: 3600)
-	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty"`     // Forward host GPG agent socket into containers (default: true)
-	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty"`     // Forward host SSH agent socket into containers (default: true)
+	SecretBackend          string            `yaml:"secret_backend,omitempty"`    // "auto", "keyring", "config"
+	ForwardGpgAgent        *bool             `yaml:"forward_gpg_agent,omitempty"` // Forward host GPG agent socket into containers (default: true)
+	ForwardSshAgent        *bool             `yaml:"forward_ssh_agent,omitempty"` // Forward host SSH agent socket into containers (default: true)
 	Vm                     RuntimeVmConfig   `yaml:"vm,omitempty"`
 	VncPasswords           map[string]string `yaml:"vnc_passwords,omitempty"`            // VNC passwords keyed by image[-instance]
 	KeyringKeys            []string          `yaml:"keyring_keys,omitempty"`             // Shadow index: names of keys stored in keyring (no values)
@@ -116,7 +112,36 @@ func LoadRuntimeConfig() (*RuntimeConfig, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 
+	// Hard load-time guard for the dropped KeePass .kdbx backend. yaml.Unmarshal
+	// silently ignores the removed secrets_kdbx_* keys, so scan the raw bytes to
+	// catch them; secret_backend: kdbx parses into the struct but no longer has a
+	// backend. Either residual points the operator at the migration command.
+	if err := validateNoKdbxResiduals(data, &cfg); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+
 	return &cfg, nil
+}
+
+// validateNoKdbxResiduals returns a hard error when the runtime config still
+// carries any artefact of the removed KeePass .kdbx backend: the legacy
+// secrets_kdbx_* / kdbx_cache* keys (detected on the raw YAML, since they no
+// longer map to struct fields) or secret_backend: kdbx. The remediation hint
+// points at `ov migrate drop-kdbx`, which strips them in place.
+func validateNoKdbxResiduals(data []byte, cfg *RuntimeConfig) error {
+	if cfg.SecretBackend == "kdbx" {
+		return fmt.Errorf("secret_backend: kdbx — the direct KeePass .kdbx backend was removed; run `ov migrate drop-kdbx` (KeePassXC still works via Secret Service)")
+	}
+	var raw map[string]any
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil // malformed YAML already reported by the struct unmarshal
+	}
+	for _, k := range []string{"secrets_kdbx_path", "secrets_kdbx_key_file", "kdbx_cache", "kdbx_cache_timeout"} {
+		if _, ok := raw[k]; ok {
+			return fmt.Errorf("legacy key %q — the direct KeePass .kdbx backend was removed; run `ov migrate drop-kdbx`", k)
+		}
+	}
+	return nil
 }
 
 // SaveRuntimeConfig writes the runtime config file, creating directories as needed.
@@ -382,20 +407,6 @@ func GetConfigValue(key string) (string, error) {
 		return cfg.SecretBackend, nil
 	case "keyring_collection_label":
 		return cfg.KeyringCollectionLabel, nil
-	case "secrets.kdbx_path":
-		return cfg.SecretsKdbxPath, nil
-	case "secrets.kdbx_key_file":
-		return cfg.SecretsKdbxKeyFile, nil
-	case "secrets.kdbx_cache":
-		if cfg.KdbxCache != nil {
-			return fmt.Sprintf("%t", *cfg.KdbxCache), nil
-		}
-		return "true", nil // default
-	case "secrets.kdbx_cache_timeout":
-		if cfg.KdbxCacheTimeout > 0 {
-			return fmt.Sprintf("%d", cfg.KdbxCacheTimeout), nil
-		}
-		return "3600", nil // default
 	case "forward_gpg_agent":
 		if cfg.ForwardGpgAgent != nil {
 			if *cfg.ForwardGpgAgent {
@@ -460,7 +471,7 @@ func GetConfigValue(key string) (string, error) {
 			}
 			return val, nil
 		}
-		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, keyring_collection_label, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return "", fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, volumes_path, secret_backend, keyring_collection_label, forward_gpg_agent, forward_ssh_agent, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 }
 
@@ -495,20 +506,11 @@ func SetConfigValue(key, value string) error {
 	case "volumes_path":
 		// Any non-empty path is valid
 	case "secret_backend":
-		if value != "auto" && value != "keyring" && value != "kdbx" && value != "config" {
-			return fmt.Errorf("secret_backend must be \"auto\", \"keyring\", \"kdbx\", or \"config\", got %q", value)
+		if value == "kdbx" {
+			return fmt.Errorf("secret_backend \"kdbx\" was removed; the direct KeePass .kdbx backend is gone. Use \"auto\", \"keyring\", or \"config\" (KeePassXC still works via Secret Service / the keyring backend)")
 		}
-	case "secrets.kdbx_path":
-		// Any non-empty path is valid
-	case "secrets.kdbx_key_file":
-		// Any non-empty path is valid
-	case "secrets.kdbx_cache":
-		if value != "true" && value != "false" {
-			return fmt.Errorf("secrets.kdbx_cache must be \"true\" or \"false\", got %q", value)
-		}
-	case "secrets.kdbx_cache_timeout":
-		if _, err := strconv.Atoi(value); err != nil {
-			return fmt.Errorf("secrets.kdbx_cache_timeout must be an integer (seconds), got %q", value)
+		if value != "auto" && value != "keyring" && value != "config" {
+			return fmt.Errorf("secret_backend must be \"auto\", \"keyring\", or \"config\", got %q", value)
 		}
 	case "forward_gpg_agent":
 		if value != "true" && value != "false" {
@@ -551,7 +553,7 @@ func SetConfigValue(key, value string) error {
 			// VNC passwords are free-form strings, no validation needed.
 			break
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	cfg, err := LoadRuntimeConfig()
@@ -583,16 +585,6 @@ func SetConfigValue(key, value string) error {
 		resetDefaultStore()
 	case "keyring_collection_label":
 		cfg.KeyringCollectionLabel = value
-	case "secrets.kdbx_path":
-		cfg.SecretsKdbxPath = value
-	case "secrets.kdbx_key_file":
-		cfg.SecretsKdbxKeyFile = value
-	case "secrets.kdbx_cache":
-		b := value == "true"
-		cfg.KdbxCache = &b
-	case "secrets.kdbx_cache_timeout":
-		n, _ := strconv.Atoi(value)
-		cfg.KdbxCacheTimeout = n
 	case "forward_gpg_agent":
 		b := value == "true"
 		cfg.ForwardGpgAgent = &b
@@ -671,14 +663,6 @@ func ResetConfigValue(key string) error {
 		resetDefaultStore()
 	case "keyring_collection_label":
 		cfg.KeyringCollectionLabel = ""
-	case "secrets.kdbx_path":
-		cfg.SecretsKdbxPath = ""
-	case "secrets.kdbx_key_file":
-		cfg.SecretsKdbxKeyFile = ""
-	case "secrets.kdbx_cache":
-		cfg.KdbxCache = nil
-	case "secrets.kdbx_cache_timeout":
-		cfg.KdbxCacheTimeout = 0
 	case "forward_gpg_agent":
 		cfg.ForwardGpgAgent = nil
 	case "forward_ssh_agent":
@@ -710,7 +694,7 @@ func ResetConfigValue(key string) error {
 			name := strings.TrimPrefix(key, "vnc.password.")
 			return DefaultCredentialStore().Delete(CredServiceVNC, name)
 		}
-		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, secrets.kdbx_path, secrets.kdbx_key_file, secrets.kdbx_cache, secrets.kdbx_cache_timeout, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
+		return fmt.Errorf("unknown config key %q (valid: engine.build, engine.run, engine.rootful, run_mode, auto_enable, bind_address, encrypted_storage_path, secret_backend, forward_gpg_agent, forward_ssh_agent, hosts.<alias>, vm.backend, vm.disk_size, vm.root_size, vm.ram, vm.cpus, vm.rootfs, vm.transport, vnc.password.<image>)", key)
 	}
 
 	return SaveRuntimeConfig(cfg)
@@ -813,44 +797,6 @@ func ListConfigValues() ([]configKeySource, error) {
 		return configKeySource{Key: "vm.cpus", Value: "2", Source: "default"}
 	}
 
-	kdbxCacheEntry := func(cfg *RuntimeConfig) configKeySource {
-		envVal := os.Getenv("OV_KDBX_CACHE")
-		if envVal != "" {
-			source := "env (OV_KDBX_CACHE)"
-			if DotenvLoaded("OV_KDBX_CACHE") {
-				source = "env (.env)"
-			}
-			val := "true"
-			if envVal == "false" || envVal == "0" {
-				val = "false"
-			}
-			return configKeySource{Key: "secrets.kdbx_cache", Value: val, Source: source}
-		}
-		if cfg.KdbxCache != nil {
-			val := "false"
-			if *cfg.KdbxCache {
-				val = "true"
-			}
-			return configKeySource{Key: "secrets.kdbx_cache", Value: val, Source: "config"}
-		}
-		return configKeySource{Key: "secrets.kdbx_cache", Value: "true", Source: "default"}
-	}
-
-	kdbxCacheTimeoutEntry := func(cfg *RuntimeConfig) configKeySource {
-		envVal := os.Getenv("OV_KDBX_CACHE_TIMEOUT")
-		if envVal != "" {
-			source := "env (OV_KDBX_CACHE_TIMEOUT)"
-			if DotenvLoaded("OV_KDBX_CACHE_TIMEOUT") {
-				source = "env (.env)"
-			}
-			return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: envVal, Source: source}
-		}
-		if cfg.KdbxCacheTimeout > 0 {
-			return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: fmt.Sprintf("%d", cfg.KdbxCacheTimeout), Source: "config"}
-		}
-		return configKeySource{Key: "secrets.kdbx_cache_timeout", Value: "3600", Source: "default"}
-	}
-
 	out := []configKeySource{
 		resolve("engine.build", "OV_BUILD_ENGINE", cfg.Engine.Build, "auto"),
 		resolve("engine.run", "OV_RUN_ENGINE", cfg.Engine.Run, "auto"),
@@ -862,10 +808,6 @@ func ListConfigValues() ([]configKeySource, error) {
 		resolve("volumes_path", "OV_VOLUMES_PATH", cfg.VolumesPath, defaultVolumesPath),
 		resolve("secret_backend", "OV_SECRET_BACKEND", cfg.SecretBackend, "auto"),
 		resolve("keyring_collection_label", "OV_KEYRING_COLLECTION_LABEL", cfg.KeyringCollectionLabel, ""),
-		resolve("secrets.kdbx_path", "OV_KDBX_PATH", cfg.SecretsKdbxPath, ""),
-		resolve("secrets.kdbx_key_file", "OV_KDBX_KEY_FILE", cfg.SecretsKdbxKeyFile, ""),
-		kdbxCacheEntry(cfg),
-		kdbxCacheTimeoutEntry(cfg),
 		boolEntry("forward_gpg_agent", "OV_FORWARD_GPG_AGENT", cfg.ForwardGpgAgent, "true"),
 		boolEntry("forward_ssh_agent", "OV_FORWARD_SSH_AGENT", cfg.ForwardSshAgent, "true"),
 		resolve("vm.backend", "OV_VM_BACKEND", cfg.Vm.Backend, "auto"),

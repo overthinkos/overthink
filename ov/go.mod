@@ -11,7 +11,6 @@ require (
 	github.com/kata-containers/govmm v0.0.0-20220119175834-88960a15dacd
 	github.com/modelcontextprotocol/go-sdk v1.5.0
 	github.com/tebeka/selenium v0.9.9
-	github.com/tobischo/gokeepasslib/v3 v3.6.2
 	github.com/zach-klippenstein/goadb v0.0.0-20201208042340-620e0e950ed7
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.49.0
@@ -50,7 +49,6 @@ require (
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/pflag v1.0.9 // indirect
-	github.com/tobischo/argon2 v0.1.0 // indirect
 	github.com/vbatts/tar-split v0.12.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect

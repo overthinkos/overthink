@@ -6,141 +6,66 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 )
 
-// SecretsCmdGroup groups ov secrets subcommands for KeePass .kdbx management
-// and GPG-encrypted .secrets file management.
+// SecretsCmdGroup groups `ov secrets` subcommands. The plain (non-gpg)
+// subcommands operate on the active credential store resolved by
+// DefaultCredentialStore() — the system keyring (Secret Service, incl.
+// KeePassXC via FdoSecrets) with the config-file plaintext fallback for
+// headless hosts. The `gpg` subgroup manages GPG-encrypted .secrets files
+// and is independent of the credential store.
 type SecretsCmdGroup struct {
-	Delete SecretsDeleteCmd `cmd:"" help:"Delete an entry"`
-	Export SecretsExportCmd `cmd:"" help:"Export kdbx entries to stdout"`
+	Delete SecretsDeleteCmd `cmd:"" help:"Delete a credential from the active store"`
+	Export SecretsExportCmd `cmd:"" help:"Export all ov credentials to stdout (plaintext!)"`
 	Get    SecretsGetCmd    `cmd:"" help:"Get a credential value"`
 	Gpg    SecretsGpgCmd    `cmd:"" help:"Manage GPG-encrypted .secrets environment files"`
-	Import SecretsImportCmd `cmd:"" help:"Import credentials from config/keyring into kdbx"`
-	Init   SecretsInitCmd   `cmd:"" help:"Create a new .kdbx database for ov"`
-	List   SecretsListCmd   `cmd:"" help:"List all ov entries in kdbx"`
-	Path   SecretsPathCmd   `cmd:"" help:"Print kdbx file path"`
+	Import SecretsImportCmd `cmd:"" help:"Import plaintext config + keyring credentials into the active store"`
+	List   SecretsListCmd   `cmd:"" help:"List all ov credentials in the active store"`
 	Set    SecretsSetCmd    `cmd:"" help:"Set a credential"`
-}
-
-// --- Init ---
-
-// SecretsInitCmd creates a new .kdbx database for ov.
-type SecretsInitCmd struct {
-	DbPath string `arg:"" optional:"" help:"Path for new .kdbx file (default: ~/.config/ov/secrets.kdbx)"`
-	Force  bool   `long:"force" help:"Overwrite existing database"`
-}
-
-func (c *SecretsInitCmd) Run() error {
-	path := c.DbPath
-	if path == "" {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return fmt.Errorf("determining config directory: %w", err)
-		}
-		path = filepath.Join(configDir, "ov", "secrets.kdbx")
-	}
-
-	if _, err := os.Stat(path); err == nil && !c.Force {
-		return fmt.Errorf("database already exists at %s (use --force to overwrite)", path)
-	}
-
-	// Use OV_KDBX_PASSWORD env var if set (for automation/CI), otherwise prompt
-	var pw1 string
-	if envPw := os.Getenv("OV_KDBX_PASSWORD"); envPw != "" {
-		pw1 = envPw
-	} else {
-		var err error
-		pw1, err = promptPassword("New KeePass database password: ")
-		if err != nil {
-			return err
-		}
-		pw2, err := promptPassword("Confirm password: ")
-		if err != nil {
-			return err
-		}
-		if pw1 != pw2 {
-			return fmt.Errorf("passwords do not match")
-		}
-		if pw1 == "" {
-			return fmt.Errorf("password cannot be empty")
-		}
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return fmt.Errorf("creating directory: %w", err)
-	}
-
-	if err := CreateKdbxDatabase(path, pw1); err != nil {
-		return fmt.Errorf("creating database: %w", err)
-	}
-
-	// Auto-set the config key
-	if err := SetConfigValue("secrets.kdbx_path", path); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not save kdbx path to config: %v\n", err)
-	}
-
-	fmt.Fprintf(os.Stderr, "Created KeePass database at %s\n", path)
-	fmt.Fprintf(os.Stderr, "To activate: ov config set secret_backend kdbx\n")
-	fmt.Fprintf(os.Stderr, "Or it will auto-activate when keyring is unavailable.\n")
-	return nil
 }
 
 // --- List ---
 
-// SecretsListCmd lists entries in the kdbx database.
+// SecretsListCmd lists credentials known to the active store.
 type SecretsListCmd struct {
-	Service string `arg:"" optional:"" help:"Service filter (e.g., ov/vnc)"`
+	Service string `arg:"" optional:"" help:"Service prefix filter (e.g., ov/vnc)"`
 }
 
 func (c *SecretsListCmd) Run() error {
-	path, keyFile, err := resolveAndValidateKdbxPath()
+	names, err := collectCredentialNames()
 	if err != nil {
 		return err
 	}
 
-	prefix := "ov"
-	if c.Service != "" {
-		prefix = c.Service
+	shown := 0
+	for _, n := range names {
+		full := n.Service + "/" + n.Key
+		if c.Service != "" && !strings.HasPrefix(full, c.Service) {
+			continue
+		}
+		fmt.Println(full)
+		shown++
 	}
-
-	entries, err := ListAllKdbxEntries(path, keyFile, prefix)
-	if err != nil {
-		return err
-	}
-
-	if len(entries) == 0 {
+	if shown == 0 {
 		fmt.Fprintln(os.Stderr, "No entries found.")
-		return nil
-	}
-
-	for _, e := range entries {
-		fmt.Printf("%s/%s\n", e.Service, e.Key)
 	}
 	return nil
 }
 
 // --- Get ---
 
-// SecretsGetCmd gets a credential value from the kdbx database.
+// SecretsGetCmd gets a credential value from the active store.
 type SecretsGetCmd struct {
 	Service string `arg:"" help:"Service name (e.g., ov/vnc)"`
 	Key     string `arg:"" help:"Entry key (e.g., my-image)"`
 }
 
 func (c *SecretsGetCmd) Run() error {
-	path, keyFile, err := resolveAndValidateKdbxPath()
-	if err != nil {
-		return err
-	}
-
-	// KdbxStore.Get prompts (with retry) on first access — no need to
-	// pre-resolve the password.
-	store := &KdbxStore{path: path, keyFile: keyFile}
+	store := DefaultCredentialStore()
 	val, err := store.Get(c.Service, c.Key)
 	if err != nil {
 		return err
@@ -154,7 +79,7 @@ func (c *SecretsGetCmd) Run() error {
 
 // --- Set ---
 
-// SecretsSetCmd sets a credential in the kdbx database.
+// SecretsSetCmd sets a credential in the active store.
 type SecretsSetCmd struct {
 	Service  string `arg:"" help:"Service name (e.g., ov/vnc)"`
 	Key      string `arg:"" help:"Entry key (e.g., my-image)"`
@@ -163,11 +88,6 @@ type SecretsSetCmd struct {
 }
 
 func (c *SecretsSetCmd) Run() error {
-	path, keyFile, err := resolveAndValidateKdbxPath()
-	if err != nil {
-		return err
-	}
-
 	var value string
 	if c.Generate {
 		b := make([]byte, 16)
@@ -179,6 +99,7 @@ func (c *SecretsSetCmd) Run() error {
 	} else if c.Value != "" {
 		value = c.Value
 	} else {
+		var err error
 		value, err = promptPassword("Secret value: ")
 		if err != nil {
 			return err
@@ -188,63 +109,54 @@ func (c *SecretsSetCmd) Run() error {
 		}
 	}
 
-	// KdbxStore.Set prompts (with retry) on first access.
-	store := &KdbxStore{path: path, keyFile: keyFile}
+	PrintStoreInfo()
+	store := DefaultCredentialStore()
 	if err := store.Set(c.Service, c.Key, value); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Stored %s/%s in %s\n", c.Service, c.Key, path)
+	fmt.Fprintf(os.Stderr, "Stored %s/%s in %s\n", c.Service, c.Key, store.Name())
 	return nil
 }
 
 // --- Delete ---
 
-// SecretsDeleteCmd deletes an entry from the kdbx database.
+// SecretsDeleteCmd deletes a credential from the active store.
 type SecretsDeleteCmd struct {
 	Service string `arg:"" help:"Service name (e.g., ov/vnc)"`
 	Key     string `arg:"" help:"Entry key"`
 }
 
 func (c *SecretsDeleteCmd) Run() error {
-	path, keyFile, err := resolveAndValidateKdbxPath()
-	if err != nil {
-		return err
-	}
-
-	// KdbxStore.Delete prompts (with retry) on first access.
-	store := &KdbxStore{path: path, keyFile: keyFile}
+	store := DefaultCredentialStore()
 	if err := store.Delete(c.Service, c.Key); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "Deleted %s/%s from %s\n", c.Service, c.Key, path)
+	fmt.Fprintf(os.Stderr, "Deleted %s/%s from %s\n", c.Service, c.Key, store.Name())
 	return nil
 }
 
 // --- Import ---
 
-// SecretsImportCmd imports credentials from config.yml and keyring into the kdbx database.
+// SecretsImportCmd consolidates credentials from config.yml plaintext and the
+// keyring into the active store. This COPIES (does not clear the source) —
+// distinct from `ov settings migrate-secrets`, which MOVES config plaintext
+// into the keyring and then strips the plaintext copies.
 type SecretsImportCmd struct {
 	DryRun bool `long:"dry-run" help:"Show what would be imported without making changes"`
 }
 
 func (c *SecretsImportCmd) Run() error {
-	// Collect credentials from config file
 	cfg, err := LoadRuntimeConfig()
 	if err != nil {
 		return err
 	}
 	configEntries := PlaintextCredentialEntries(cfg)
 
-	// Collect credentials from keyring (if available)
+	// Collect credentials from the keyring (if available) via the shadow index.
 	var keyringEntries []struct{ Service, Key, Value string }
 	keyringStore := &KeyringStore{}
 	if keyringStore.Probe() == nil {
 		for _, indexEntry := range cfg.KeyringKeys {
-			parts := strings.SplitN(indexEntry, "/", 2)
-			if len(parts) != 2 {
-				continue
-			}
-			// Reconstruct service from index entry: "ov/vnc/my-image" → service="ov/vnc", key="my-image"
 			lastSlash := strings.LastIndex(indexEntry, "/")
 			if lastSlash < 0 {
 				continue
@@ -276,13 +188,8 @@ func (c *SecretsImportCmd) Run() error {
 		return nil
 	}
 
-	path, keyFile, err := resolveAndValidateKdbxPath()
-	if err != nil {
-		return err
-	}
-
-	// KdbxStore.Set prompts (with retry) on first access.
-	store := &KdbxStore{path: path, keyFile: keyFile}
+	PrintStoreInfo()
+	store := DefaultCredentialStore()
 
 	imported := 0
 	fmt.Fprintf(os.Stderr, "Importing %d credential(s):\n", total)
@@ -291,7 +198,7 @@ func (c *SecretsImportCmd) Run() error {
 			fmt.Fprintf(os.Stderr, "  %-45s → FAILED: %v\n", e.Service+"/"+e.Key, err)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "  %-45s → kdbx ✓ (from config)\n", e.Service+"/"+e.Key)
+		fmt.Fprintf(os.Stderr, "  %-45s → %s ✓ (from config)\n", e.Service+"/"+e.Key, store.Name())
 		imported++
 	}
 	for _, e := range keyringEntries {
@@ -299,41 +206,45 @@ func (c *SecretsImportCmd) Run() error {
 			fmt.Fprintf(os.Stderr, "  %-45s → FAILED: %v\n", e.Service+"/"+e.Key, err)
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "  %-45s → kdbx ✓ (from keyring)\n", e.Service+"/"+e.Key)
+		fmt.Fprintf(os.Stderr, "  %-45s → %s ✓ (from keyring)\n", e.Service+"/"+e.Key, store.Name())
 		imported++
 	}
 
-	fmt.Fprintf(os.Stderr, "\nImported %d credential(s) into %s\n", imported, path)
+	fmt.Fprintf(os.Stderr, "\nImported %d credential(s) into %s\n", imported, store.Name())
 	return nil
 }
 
 // --- Export ---
 
-// SecretsExportCmd exports all entries from the kdbx database.
+// SecretsExportCmd exports all known ov credentials, resolving each value
+// through the active store (with config-file fallback).
 type SecretsExportCmd struct {
 	Format string `long:"format" default:"yaml" enum:"yaml,json" help:"Output format (yaml, json)"`
 }
 
 func (c *SecretsExportCmd) Run() error {
-	path, keyFile, err := resolveAndValidateKdbxPath()
-	if err != nil {
-		return err
-	}
-
 	fmt.Fprintln(os.Stderr, "WARNING: This exports plaintext credentials. Handle with care.")
 
-	entries, err := ListAllKdbxEntries(path, keyFile, "ov")
+	names, err := collectCredentialNames()
 	if err != nil {
 		return err
 	}
 
 	// Build nested map: service -> key -> value
 	data := make(map[string]map[string]string)
-	for _, e := range entries {
-		if data[e.Service] == nil {
-			data[e.Service] = make(map[string]string)
+	for _, n := range names {
+		val, source := ResolveCredential("", n.Service, n.Key, "")
+		if source == "locked" {
+			fmt.Fprintf(os.Stderr, "  %s/%s — keyring locked, skipped\n", n.Service, n.Key)
+			continue
 		}
-		data[e.Service][e.Key] = e.Value
+		if val == "" {
+			continue
+		}
+		if data[n.Service] == nil {
+			data[n.Service] = make(map[string]string)
+		}
+		data[n.Service][n.Key] = val
 	}
 
 	switch c.Format {
@@ -353,36 +264,39 @@ func (c *SecretsExportCmd) Run() error {
 	return nil
 }
 
-// --- Path ---
-
-// SecretsPathCmd prints the resolved kdbx file path.
-type SecretsPathCmd struct{}
-
-func (c *SecretsPathCmd) Run() error {
-	path, _ := resolveKdbxPaths()
-	if path == "" {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return err
-		}
-		path = filepath.Join(configDir, "ov", "secrets.kdbx") + " (default, not yet created)"
-	}
-	fmt.Println(path)
-	return nil
-}
-
 // --- Helpers ---
 
-// resolveAndValidateKdbxPath resolves the kdbx path and validates it exists.
-func resolveAndValidateKdbxPath() (path, keyFile string, err error) {
-	path, keyFile = resolveKdbxPaths()
-	if path == "" {
-		return "", "", fmt.Errorf("no kdbx database configured.\nRun: ov secrets init  (or: ov config set secrets.kdbx_path /path/to/database.kdbx)")
+// collectCredentialNames returns the union of credential identities known to
+// the active store: the keyring shadow index (cfg.KeyringKeys) plus the
+// plaintext config-file entries. Values are NOT included — callers resolve
+// them through the store / ResolveCredential so the active backend supplies
+// the current value. Results are de-duplicated by "service/key".
+func collectCredentialNames() ([]struct{ Service, Key string }, error) {
+	cfg, err := LoadRuntimeConfig()
+	if err != nil {
+		return nil, err
 	}
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return "", "", fmt.Errorf("kdbx database not found at %s.\nRun: ov secrets init %s", path, path)
+	seen := map[string]bool{}
+	var out []struct{ Service, Key string }
+	add := func(service, key string) {
+		id := service + "/" + key
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		out = append(out, struct{ Service, Key string }{service, key})
 	}
-	return path, keyFile, nil
+	for _, entry := range cfg.KeyringKeys {
+		lastSlash := strings.LastIndex(entry, "/")
+		if lastSlash < 0 {
+			continue
+		}
+		add(entry[:lastSlash], entry[lastSlash+1:])
+	}
+	for _, e := range PlaintextCredentialEntries(cfg) {
+		add(e.Service, e.Key)
+	}
+	return out, nil
 }
 
 // promptPassword reads a password from the terminal without echo.

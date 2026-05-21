@@ -22,7 +22,6 @@ type CLI struct {
 	// ov/host_exec.go for the exec dispatch.
 	Host string `long:"host" env:"OV_HOST" help:"Remote host (alias or user@host[:port]) to run this command on via SSH"`
 
-	Kdbx string `long:"kdbx" help:"Path to KeePass .kdbx database" type:"path"`
 	// Dir is the project directory that every build-mode command resolves
 	// image.yml / layers/ / build.yml relative to. Default is the process
 	// cwd. Useful for MCP servers and remote agents that run outside a
@@ -54,7 +53,7 @@ type CLI struct {
 	ReapOrphans ReapOrphansCmd  `cmd:"reap-orphans" help:"Find ephemeral deployments whose underlying resource is gone and clean them up"`
 	Remove      RemoveCmd       `cmd:"" help:"Remove service container"`
 	Restart     RestartCmd      `cmd:"" help:"Restart a service container atomically (systemctl --user restart)"`
-	Secrets     SecretsCmdGroup `cmd:"" help:"Manage credentials in KeePass (.kdbx) database"`
+	Secrets     SecretsCmdGroup `cmd:"" help:"Manage credentials (Secret Service / config) and GPG-encrypted .secrets files"`
 	Service     ServiceCmd      `cmd:"" help:"Manage supervisord services inside a running container"`
 	Settings    SettingsCmd     `cmd:"" help:"Manage runtime configuration (get/set/list)"`
 	Shell       ShellCmd        `cmd:"" help:"Start a bash shell in a container image"`
@@ -702,11 +701,6 @@ func main() {
 	// touched when we're about to forward the command.
 	if shouldReexecForHost(&cli, ctx.Command()) {
 		os.Exit(ReexecOverSSH(&cli))
-	}
-
-	// Set global --kdbx flag into env so resolveKdbxPaths() picks it up everywhere
-	if cli.Kdbx != "" {
-		os.Setenv("OV_KDBX_PATH", cli.Kdbx)
 	}
 
 	// Resolve --repo before --dir. Both end up driving the same chdir

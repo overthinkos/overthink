@@ -34,7 +34,7 @@ import (
 //
 // All consumers in this codebase treat the return value as an opaque
 // string — none decode it back to bytes — so the format change is
-// invisible to existing keyring/kdbx-stored secrets (which remain in
+// invisible to existing keyring-stored secrets (which remain in
 // whatever format they were originally stored).
 func generateRandomSecretToken(byteCount int) string {
 	b := make([]byte, byteCount)
@@ -306,7 +306,7 @@ func resolveSecretValue(s CollectedSecret, imageName, instance string) (value, s
 // missing" from "optional and absent" with actionable remediation.
 type SecretResolution struct {
 	Name     string // env var name (e.g., "OPENROUTER_API_KEY")
-	Source   string // ResolveCredential source classification (env/keyring/kdbx/config/locked/unavailable/default)
+	Source   string // ResolveCredential source classification (env/keyring/config/locked/unavailable/default)
 	Resolved bool   // true iff a non-empty value was obtained
 	Required bool   // true iff the entry came from secret_requires (not secret_accepts)
 }

@@ -103,7 +103,6 @@ var sweepablePatterns = []string{
 	"ov-extpass-",            // enc.go encExtpassArgs
 	"ov-oldpass-",            // enc.go credential migration
 	"ov-secrets-",            // secrets_gpg.go
-	".ov-kdbx-",              // credential_kdbx.go (note dot prefix)
 	"ov-libvirt-screenshot-", // libvirt_ops.go
 	"ov-cidata-",             // cloud_init_iso.go
 	"ov-aur-",                // deploy_target_host.go

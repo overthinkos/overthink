@@ -8,7 +8,7 @@ layer:
       * Disable competing Secret Service daemons (gnome-keyring + kwallet)
         at the per-user XDG-autostart and systemd-user-unit layers — fully
         reversible, never touches the system package.
-      * Install the runtime packages (pinentry, libsecret, keyutils) the
+      * Install the runtime packages (pinentry, libsecret) the
         .secrets + direnv + GPG + KeePassXC chain depends on.
       * Install generic direnv shell hooks for bash, zsh, and fish so .envrc
         activates on `cd` regardless of the user's chosen shell.
@@ -20,8 +20,6 @@ layer:
     - keepassxc
     - gnupg
     - direnv
-  package:
-    - keyutils
   distro:
     archlinux:
       package:
@@ -348,9 +346,6 @@ layer:
       exit_status: 0
     - id: secret-tool-installed
       command: command -v secret-tool
-      exit_status: 0
-    - id: keyutils-installed
-      command: command -v keyctl
       exit_status: 0
     - id: keepassxc-ini-fdosecrets
       command: grep -q '^Enabled=true' ${HOME}/.config/keepassxc/keepassxc.ini

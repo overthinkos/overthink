@@ -296,7 +296,7 @@ func kongLeafToTool(leaf *kong.Node, path string, destructive bool) *mcp.Tool {
 		}
 	}
 
-	// Flags from all ancestor branches (includes --kdbx from root). Kong's
+	// Flags from all ancestor branches (e.g. --dir / --repo from root). Kong's
 	// AllFlags returns grouped slices; flatten.
 	for _, group := range leaf.AllFlags(true) {
 		for _, f := range group {

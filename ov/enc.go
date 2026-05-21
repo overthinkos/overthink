@@ -116,13 +116,13 @@ func encExtpassArgs(imageID string) ([]string, func()) {
 }
 
 // resolveEncPassphrase resolves the gocryptfs passphrase for an image.
-// Resolution order: GOCRYPTFS_PASSWORD env var → credential store (kdbx/keyring/config) → auto-generate or interactive prompt.
+// Resolution order: GOCRYPTFS_PASSWORD env var → credential store (keyring/config) → auto-generate or interactive prompt.
 func resolveEncPassphrase(imageName string, autoGenerate bool) (string, error) {
 	// 1. Test/CI override
 	if pw := os.Getenv("GOCRYPTFS_PASSWORD"); pw != "" {
 		return pw, nil
 	}
-	// 2. Credential store (kdbx / keyring / config)
+	// 2. Credential store (keyring / config)
 	if val, _ := ResolveCredential("", "ov/enc", imageName, ""); val != "" {
 		return val, nil
 	}
@@ -694,7 +694,7 @@ func encPasswd(imageName, instance string) error {
 // ensureEncryptedMounts auto-initializes and mounts encrypted volumes as needed.
 // Called by ov start to transparently handle encrypted volume setup without
 // requiring the user to run ov config init/mount manually first.
-// Resolves the enc passphrase once (kdbx → keyring → interactive prompt).
+// Resolves the enc passphrase once (keyring → config → interactive prompt).
 func ensureEncryptedMounts(imageName, instance string, autoGenerate bool) error {
 	mounts, storagePath, err := loadEncryptedVolume(imageName, instance)
 	if err != nil || len(mounts) == 0 {

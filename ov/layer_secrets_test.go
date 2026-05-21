@@ -1,7 +1,6 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -17,8 +16,6 @@ func setupIsolatedConfigStore(t *testing.T) (cleanup func()) {
 		return filepath.Join(dir, "config.yml"), nil
 	}
 	t.Setenv("OV_SECRET_BACKEND", "config")
-	// Clear the keyring/kdbx env overrides that other tests may have set.
-	os.Unsetenv("OV_KDBX_PATH")
 	resetDefaultStore()
 	return func() {
 		RuntimeConfigPath = defaultRuntimeConfigPath

@@ -210,7 +210,7 @@ func TestQuadletWithEncryptedBindMountsKeyring(t *testing.T) {
 	}
 }
 
-func TestQuadletWithEncryptedBindMountsKdbx(t *testing.T) {
+func TestQuadletWithEncryptedBindMountsNonKeyring(t *testing.T) {
 	cfg := QuadletConfig{
 		ImageName:   "myapp",
 		ImageRef:    "ghcr.io/test/myapp:latest",
@@ -221,7 +221,7 @@ func TestQuadletWithEncryptedBindMountsKdbx(t *testing.T) {
 		},
 		OvBin:           "/usr/local/bin/ov",
 		EncryptedMounts: true,
-		KeyringBackend:  false, // kdbx or config backend
+		KeyringBackend:  false, // config (non-keyring) backend
 	}
 
 	got := generateQuadlet(cfg)

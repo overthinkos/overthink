@@ -43,7 +43,7 @@ func shouldReexecForHost(cli *CLI, cmdPath string) bool {
 }
 
 // ReexecOverSSH rewrites os.Args by stripping --host and the client-
-// local path flags (--dir/-C, --repo, --kdbx), then invokes
+// local path flags (--dir/-C, --repo), then invokes
 // `ssh <resolved-target> ov <rest of argv>`. Stdin/stdout/stderr are
 // piped straight through. The returned exit code is whatever `ssh`
 // exits with (which propagates the remote `ov` exit code).
@@ -101,7 +101,6 @@ func resolveHostAlias(h string) (string, error) {
 //   - --host X  /  --host=X
 //   - --dir / -C X  /  --dir=X
 //   - --repo X / --repo=X
-//   - --kdbx X / --kdbx=X
 //
 // Everything else is passed through verbatim.
 func buildRemoteArgv(argv []string) []string {
@@ -113,15 +112,14 @@ func buildRemoteArgv(argv []string) []string {
 			skipNext = false
 			continue
 		}
-		if a == "--host" || a == "--dir" || a == "-C" || a == "--repo" || a == "--kdbx" {
+		if a == "--host" || a == "--dir" || a == "-C" || a == "--repo" {
 			skipNext = true
 			continue
 		}
 		if strings.HasPrefix(a, "--host=") ||
 			strings.HasPrefix(a, "--dir=") ||
 			strings.HasPrefix(a, "-C=") ||
-			strings.HasPrefix(a, "--repo=") ||
-			strings.HasPrefix(a, "--kdbx=") {
+			strings.HasPrefix(a, "--repo=") {
 			continue
 		}
 		_ = i

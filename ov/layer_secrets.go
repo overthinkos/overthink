@@ -35,7 +35,7 @@ import (
 // the default lookup is service="ov/secret", key=Name.
 //
 // Race-free across multiple layers declaring the same secret: the first
-// caller's store.Set lands in the active backend (keyring/kdbx/config
+// caller's store.Set lands in the active backend (keyring/config
 // fallback per credential_store.go DefaultCredentialStore); the second
 // caller's ResolveCredential reads the persisted value. All callers in
 // one process share the cached singleton.

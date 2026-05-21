@@ -267,6 +267,63 @@ func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
 	}
 }
 
+func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
+	// A disabled image's remote layer refs must be collected when a
+	// `--include-disabled <name>` build scopes IncludeDisabled to that image —
+	// so the FETCH set (CollectRemoteRefsOpts) stays in lockstep with the
+	// RESOLVE set (ResolveAllImage/GlobalLayerOrder). Regression guard for the
+	// 2026-05 deb-family split: no enabled debian image references `pixi`, so a
+	// disabled `debian-builder --include-disabled` would otherwise hit
+	// "unknown layer .../pixi" in computing global layer order.
+	cfg := &Config{
+		Image: map[string]ImageConfig{
+			"debian-builder": {
+				Enabled: boolPtr(false),
+				Layer: []string{
+					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	// Default opts (enabled-only) → the disabled image is skipped, no downloads.
+	if dls, err := CollectRemoteRefs(cfg, layers); err != nil {
+		t.Fatalf("CollectRemoteRefs() error = %v", err)
+	} else if len(dls) != 0 {
+		t.Fatalf("default opts: len(downloads) = %d, want 0 (disabled image skipped)", len(dls))
+	}
+
+	// Scoped --include-disabled debian-builder → the ref IS collected.
+	opts := ResolveOpts{IncludeDisabled: true, IncludeDisabledNames: map[string]bool{"debian-builder": true}}
+	dls, err := CollectRemoteRefsOpts(cfg, layers, opts)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefsOpts() error = %v", err)
+	}
+	found := make(map[string]string)
+	for _, dl := range dls {
+		found[dl.RepoPath] = dl.Version
+	}
+	if found["github.com/overthinkos/overthink"] != "v1.0.0" {
+		t.Errorf("scoped include-disabled: overthink version = %q, want %q (disabled image's remote layer not collected)", found["github.com/overthinkos/overthink"], "v1.0.0")
+	}
+
+	// A DIFFERENT disabled image must stay filtered under the scoped opts.
+	cfg.Image["other-disabled"] = ImageConfig{
+		Enabled: boolPtr(false),
+		Layer:   []string{"@github.com/myorg/other/layers/x:v3.0.0"},
+	}
+	dls2, err := CollectRemoteRefsOpts(cfg, layers, opts)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefsOpts() error = %v", err)
+	}
+	for _, dl := range dls2 {
+		if dl.RepoPath == "github.com/myorg/other" {
+			t.Errorf("scoped opts leaked an unscoped disabled image's refs: %s", dl.RepoPath)
+		}
+	}
+}
+
 func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
 	// Same bare ref at different versions should error
 	cfg := &Config{

@@ -128,7 +128,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 	}
 	SetFormatNames(defaultDistroCfg)
 
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, err := ScanAllLayerWithConfigOpts(dir, cfg, opts)
 	if err != nil {
 		return nil, err
 	}

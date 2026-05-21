@@ -180,11 +180,27 @@ type RemoteDownload struct {
 	Refs     []string // bare refs to import (e.g. "github.com/org/repo/layers/name")
 }
 
-// CollectRemoteRefs collects all unique remote refs from image.yml layer lists
-// and layer.yml depends/layers fields. Different layers from the same repo can
-// use different versions. Only the same bare ref at conflicting versions is an error.
-// Returns a list of RemoteDownload grouped by (repoPath, version).
+// CollectRemoteRefs is the default-opts wrapper (enabled images only) around
+// CollectRemoteRefsOpts. The overwhelming majority of call sites want
+// enabled-only collection, so they keep this two-arg form.
 func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload, error) {
+	return CollectRemoteRefsOpts(cfg, layers, ResolveOpts{})
+}
+
+// CollectRemoteRefsOpts collects all unique remote refs from image.yml layer
+// lists and layer.yml depends/layers fields. Different layers from the same repo
+// can use different versions. Only the same bare ref at conflicting versions is
+// an error. Returns a list of RemoteDownload grouped by (repoPath, version).
+//
+// opts gates the disabled-image walk: a disabled image's layer refs are
+// collected when opts.shouldIncludeDisabled(name) is true (i.e. a
+// `--include-disabled <name>` build). This keeps the remote-ref FETCH set in
+// lockstep with the RESOLVE set walked by ResolveAllImage / GlobalLayerOrder —
+// the same shouldIncludeDisabled predicate gates both. Without it, a disabled
+// named image lands in the build working set but its remote layers are never
+// fetched/registered, surfacing as "unknown layer" while computing global layer
+// order.
+func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOpts) ([]RemoteDownload, error) {
 	// bareRef -> version (for conflict detection)
 	refVersions := make(map[string]string)
 	// (repoPath, version) -> set of bare refs
@@ -235,7 +251,7 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 	// Scan image.yml layer references
 	if cfg != nil {
 		for imgName, img := range cfg.Image {
-			if !img.IsEnabled() {
+			if !img.IsEnabled() && !opts.shouldIncludeDisabled(imgName) {
 				continue
 			}
 			for _, layerRef := range img.Layer {

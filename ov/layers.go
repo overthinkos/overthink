@@ -1638,9 +1638,19 @@ func ScanAllLayer(dir string) (map[string]*Layer, error) {
 	return ScanAllLayerWithConfig(dir, nil)
 }
 
-// ScanAllLayerWithConfig scans local and remote layers.
-// Collects remote refs from @-prefixed layer references and auto-downloads repos.
+// ScanAllLayerWithConfig is the default-opts wrapper (enabled images only)
+// around ScanAllLayerWithConfigOpts. Most call sites (deploy-mode, runtime,
+// inspect) want enabled-only scanning and keep this two-arg form.
 func ScanAllLayerWithConfig(dir string, cfg *Config) (map[string]*Layer, error) {
+	return ScanAllLayerWithConfigOpts(dir, cfg, ResolveOpts{})
+}
+
+// ScanAllLayerWithConfigOpts scans local and remote layers.
+// Collects remote refs from @-prefixed layer references and auto-downloads
+// repos. opts is forwarded to CollectRemoteRefsOpts so a build with
+// `--include-disabled <name>` also fetches the named disabled image's remote
+// layers — keeping the FETCH set aligned with the RESOLVE set.
+func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[string]*Layer, error) {
 	// 1. Scan local layers
 	layers, err := ScanLayer(dir)
 	if err != nil {
@@ -1648,7 +1658,7 @@ func ScanAllLayerWithConfig(dir string, cfg *Config) (map[string]*Layer, error) 
 	}
 
 	// 2. Collect remote refs from @-prefixed layer references
-	downloads, err := CollectRemoteRefs(cfg, layers)
+	downloads, err := CollectRemoteRefsOpts(cfg, layers, opts)
 	if err != nil {
 		return nil, err
 	}

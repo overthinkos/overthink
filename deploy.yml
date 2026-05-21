@@ -58,16 +58,6 @@
 
 version: 2026.141.1600
 deploy:
-    debian-debootstrap-vm:
-        target: vm
-        vm: debian-debootstrap
-        disposable: true
-        lifecycle: dev
-    ubuntu-debootstrap-vm:
-        target: vm
-        vm: ubuntu-debootstrap
-        disposable: true
-        lifecycle: dev
     # =================================================================
     # Bed 1: openclaw-sway-browser-pod (target: pod)
     # ---------------------------------------------------------------

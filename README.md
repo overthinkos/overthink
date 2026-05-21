@@ -319,6 +319,14 @@ cd image/arch && ov image build arch-test     # auto-builds base + builder deps
 # image pulls it back via a remote include (main → cachyos coupling).
 ov -C image/cachyos image build cachyos
 
+# Build a Debian or Ubuntu image. The whole deb-family moved into two dedicated
+# submodules: overthinkos/debian (image/debian) and overthinkos/ubuntu
+# (image/ubuntu). Each owns its base + builder + coder + debootstrap entries and
+# pulls layers from this repo by git ref. Nothing in main consumes them, so
+# there is NO main ↔ debian/ubuntu coupling (cleaner than Arch/CachyOS).
+ov -C image/debian image build debian
+ov -C image/ubuntu image build ubuntu
+
 # Drop into an interactive shell
 ov shell fedora
 

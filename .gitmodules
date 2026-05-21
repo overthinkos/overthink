@@ -11,3 +11,9 @@
 [submodule "image/cachyos"]
 	path = image/cachyos
 	url = https://github.com/overthinkos/cachyos.git
+[submodule "image/debian"]
+	path = image/debian
+	url = https://github.com/overthinkos/debian.git
+[submodule "image/ubuntu"]
+	path = image/ubuntu
+	url = https://github.com/overthinkos/ubuntu.git

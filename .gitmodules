@@ -17,3 +17,6 @@
 [submodule "image/ubuntu"]
 	path = image/ubuntu
 	url = https://github.com/overthinkos/ubuntu.git
+[submodule "image/fedora"]
+	path = image/fedora
+	url = https://github.com/overthinkos/fedora.git

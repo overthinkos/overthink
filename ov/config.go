@@ -10,6 +10,11 @@ import (
 type Config struct {
 	Defaults ImageConfig            `yaml:"defaults"`
 	Image    map[string]ImageConfig `yaml:"image"`
+	// Local carries kind:local templates so remote-ref collection +
+	// validation walk their layer: lists symmetrically with image layer
+	// lists (kind:local templates compose remote @-ref layers too). Populated
+	// from UnifiedFile.Local by ProjectConfig().
+	Local map[string]*LocalSpec `yaml:"local,omitempty"`
 }
 
 // BuildFormats handles YAML unmarshal of the build: field.

@@ -197,9 +197,18 @@ func validateLocalTemplates(dir string, layers map[string]*Layer, errs *Validati
 			errs.Add("kind:local %q: missing required field `layers:` (use `layers: []` for an explicit placeholder)", name)
 			continue
 		}
-		for _, layerName := range spec.Layer {
+		for _, layerRef := range spec.Layer {
+			// Normalize remote @-refs to their bare key form (mirror of the
+			// image layer path in validateLayerReferences) — remote layers are
+			// stored in the map keyed by bare ref.
+			layerName := BareRef(layerRef)
 			if _, ok := layers[layerName]; !ok {
-				errs.Add("kind:local %q: layer %q not found", name, layerName)
+				if IsRemoteLayerRef(layerRef) {
+					parsed := ParseRemoteRef(layerRef)
+					errs.Add("kind:local %q: remote layer %q not found (layer %q doesn't exist in %s)", name, layerRef, parsed.Name, parsed.RepoPath)
+				} else {
+					errs.Add("kind:local %q: layer %q not found", name, layerName)
+				}
 			}
 		}
 	}

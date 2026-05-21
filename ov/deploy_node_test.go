@@ -144,8 +144,9 @@ func TestHasChildren(t *testing.T) {
 // merged via MergeDeployConfigs(projectDC, localDC), leaving runLocal with an
 // empty layer list and a silent no-op install.
 //
-// Fixture name `ov-cachyos` matches the in-repo deployment key (renamed
-// from `qc` in the 2026-05 cross-kind name reuse cutover).
+// Fixture name `ov-cachyos` matches the deployment key (renamed from `qc`
+// in the 2026-05 cross-kind name reuse cutover; the entry itself relocated to
+// the overthinkos/cachyos submodule in the 2026-05 CachyOS migration).
 func TestMergeDeployConfigsLocalCutoverFields(t *testing.T) {
 	project := &DeployConfig{Deploy: map[string]DeploymentNode{
 		"ov-cachyos": {

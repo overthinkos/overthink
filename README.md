@@ -312,6 +312,13 @@ ov image build fedora
 # their layers from this repo by git ref; the archlinux base + builder stay here.
 cd image/arch && ov image build arch-test     # auto-builds base + builder deps
 
+# Build a CachyOS image. ALL CachyOS entities (the cachyos base, cachyos-pacstrap*,
+# the cachyos-vm, and the ov-cachyos workstation profile) live in the
+# overthinkos/cachyos submodule at image/cachyos and pull their layers from this
+# repo by git ref. Unlike Arch, the cachyos BASE moved too — this repo's `versa`
+# image pulls it back via a remote include (main → cachyos coupling).
+ov -C image/cachyos image build cachyos
+
 # Drop into an interactive shell
 ov shell fedora
 

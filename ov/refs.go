@@ -244,6 +244,20 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 				}
 			}
 		}
+		// Scan kind:local template layer references — symmetric with the image
+		// layer walk above. A kind:local template (e.g. an operator workstation
+		// profile) composes remote @-ref layers exactly like an image does, so
+		// its layer: list must feed the same collection/download path.
+		for tplName, spec := range cfg.Local {
+			if spec == nil {
+				continue
+			}
+			for _, layerRef := range spec.Layer {
+				if err := addRef(layerRef, fmt.Sprintf("kind:local %s", tplName)); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	// Scan layer.yml depends and layers: fields

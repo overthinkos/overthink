@@ -2085,6 +2085,7 @@ func (uf *UnifiedFile) ProjectConfig() *Config {
 	return &Config{
 		Defaults: uf.Defaults,
 		Image:    images,
+		Local:    uf.Local,
 	}
 }
 

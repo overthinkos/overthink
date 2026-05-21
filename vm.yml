@@ -4,40 +4,6 @@
 #  2026-05 kind-files cutover.
 version: 2026.141.1600
 vm:
-    cachyos-vm:
-        source:
-            kind: bootstrap
-            builder: pacstrap
-            builder_image: cachyos-pacstrap-builder
-            distro: cachyos
-            package:
-                - sudo
-                - openssh
-                - qemu-guest-agent
-                - cloud-init
-                - grub
-                - efibootmgr
-            rootfs: btrfs
-            kernel_args: console=tty0 console=ttyS0,115200
-        disk_size: 25G
-        ram: 4G
-        cpu: 2
-        machine: q35
-        firmware: uefi-insecure
-        network:
-            mode: user
-        ssh:
-            user: cachy
-            port: 12226
-            key_source: generate
-        cloud_init:
-            user:
-                - name: cachy
-                  sudo: true
-                  shell: /bin/bash
-            runcmd:
-                - systemctl enable --now sshd
-                - systemctl enable --now qemu-guest-agent
     debian-debootstrap:
         source:
             kind: bootstrap

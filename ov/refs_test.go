@@ -225,6 +225,48 @@ func TestCollectRemoteRefs(t *testing.T) {
 	}
 }
 
+func TestCollectRemoteRefsLocalTemplate(t *testing.T) {
+	// kind:local template layer: lists must feed the same remote-ref collection
+	// path as image layer: lists (regression guard for the 2026-05 CachyOS
+	// migration, where the ov-cachyos kind:local template composes 30 remote
+	// @-ref layers — previously invisible to CollectRemoteRefs).
+	cfg := &Config{
+		Image: map[string]ImageConfig{
+			"myapp": {
+				Layer: []string{
+					"@github.com/overthinkos/overthink/layers/pixi:v1.0.0",
+				},
+			},
+		},
+		Local: map[string]*LocalSpec{
+			"workstation": {
+				Layer: []string{
+					"@github.com/overthinkos/overthink/layers/nvidia:v1.0.0",
+					"@github.com/myorg/extra-layers/layers/svc:v2.0.0",
+				},
+			},
+		},
+	}
+	layers := map[string]*Layer{}
+
+	downloads, err := CollectRemoteRefs(cfg, layers)
+	if err != nil {
+		t.Fatalf("CollectRemoteRefs() error = %v", err)
+	}
+	found := make(map[string]string)
+	for _, dl := range downloads {
+		found[dl.RepoPath] = dl.Version
+	}
+	// The image ref and the kind:local template ref share a repo at the same
+	// version → one download for overthink, one for the extra repo.
+	if found["github.com/overthinkos/overthink"] != "v1.0.0" {
+		t.Errorf("overthink version = %q, want %q", found["github.com/overthinkos/overthink"], "v1.0.0")
+	}
+	if found["github.com/myorg/extra-layers"] != "v2.0.0" {
+		t.Errorf("extra-layers version = %q, want %q (kind:local template ref not collected)", found["github.com/myorg/extra-layers"], "v2.0.0")
+	}
+}
+
 func TestCollectRemoteRefsSameLayerConflict(t *testing.T) {
 	// Same bare ref at different versions should error
 	cfg := &Config{

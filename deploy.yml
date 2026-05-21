@@ -58,11 +58,6 @@
 
 version: 2026.141.1600
 deploy:
-    cachyos-vm-deploy:
-        target: vm
-        vm: cachyos-vm
-        disposable: true
-        lifecycle: dev
     debian-debootstrap-vm:
         target: vm
         vm: debian-debootstrap
@@ -208,37 +203,6 @@ deploy:
             # contains: operator-map form for substring matching (scalar
             # shorthand under `contains:` is parsed as equals).
             - {id: kv-matching, scope: deploy, matching: "k3s-vm up", contains: {contains: "k3s"}}
-    # =================================================================
-    # ov-cachyos — this CachyOS workstation, target: local + host: local
-    # ---------------------------------------------------------------
-    # Applies the ov-cachyos kind:local template (defined in local.yml)
-    # directly to the current machine via ShellExecutor — no SSH, no VM,
-    # no container. Marked disposable: operator has authorized this host
-    # as a test system, so `ov rebuild ov-cachyos` (full destroy +
-    # reinstall via the install ledger) is allowed for strict R10
-    # verification.
-    #
-    # The deployment shares the name `ov-cachyos` with the kind:local
-    # template it applies — cross-kind name reuse is permitted as of
-    # 2026-05; verbs disambiguate by command context (ov image build
-    # ov-cachyos → image:ov-cachyos; ov rebuild ov-cachyos → the
-    # deployment entry below). Migration from the prior `qc` /
-    # `cachyos-dx` names: `ov migrate` (idempotent).
-    # =================================================================
-    ov-cachyos:
-        target: local
-        local: ov-cachyos
-        host: local
-        disposable: true
-        install_opts:
-            with_service: true
-            allow_repo_changes: true
-            allow_root_tasks: true
-        env:
-            - EDITOR=nvim
-        description:
-            feature: Apply ov-cachyos to this workstation
-            tag: [testing]
     # =================================================================
     # Per-kind R10 smoke beds — disposable, fast (fedora-minimal:43).
     # One bed per kind so a single `ov eval live <bed>` end-to-end runs

@@ -9,6 +9,11 @@ include:
     - k8s.yml
     - build.yml
     - arch-base.yml
+    # cachyos base image — owned by the overthinkos/cachyos submodule (the
+    # CachyOS family was split out 2026-05); pulled back by github reference
+    # because main's `versa` image is `base: cachyos`. This is the deliberate
+    # main → cachyos coupling (see image/cachyos/README.md).
+    - '@github.com/overthinkos/cachyos/cachyos-base.yml:v2026.141.1747'
 discover:
     layer:
         - path: layers

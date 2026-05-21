@@ -8,3 +8,6 @@
 	path = image/arch
 	url = https://github.com/overthinkos/arch.git
 	branch = main
+[submodule "image/cachyos"]
+	path = image/cachyos
+	url = https://github.com/overthinkos/cachyos.git

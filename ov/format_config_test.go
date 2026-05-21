@@ -75,16 +75,16 @@ func TestLoadDistroConfigFromFile(t *testing.T) {
 		t.Error("ubuntu should inherit debian's deb format")
 	}
 
-	// Check archlinux has both pac and aur formats
-	archResolved := distroCfg.ResolveDistro([]string{"archlinux"})
+	// Check arch has both pac and aur formats
+	archResolved := distroCfg.ResolveDistro([]string{"arch"})
 	if archResolved == nil {
-		t.Fatal("ResolveDistro returned nil for archlinux")
+		t.Fatal("ResolveDistro returned nil for arch")
 	}
 	if archResolved.Format["pac"] == nil {
-		t.Error("archlinux should have pac format")
+		t.Error("arch should have pac format")
 	}
 	if archResolved.Format["aur"] == nil {
-		t.Error("archlinux should have aur format")
+		t.Error("arch should have aur format")
 	}
 }
 

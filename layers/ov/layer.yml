@@ -2,7 +2,7 @@ layer:
   name: ov
   description: Overthink CLI (ov) binary
   distro:
-    archlinux:
+    arch:
       package:
         - portaudio
         - opusfile
@@ -19,9 +19,18 @@ layer:
         - libportaudio2
         - libopusfile0
   task:
-    - copy: bin/ov
-      to: /usr/local/bin/ov
-      mode: "0755"
+    # Install the ov binary. Local builds (`task build:ov`) ship bin/ov in the
+    # layer dir → use it directly. Remote github-ref composition does NOT (bin/ov
+    # is a gitignored build artifact, absent from a git clone) → download the
+    # published release asset instead. This keeps the 38 MB binary out of git
+    # while making the layer remote-composable.
+    - cmd: |
+        if [ -f /ctx/bin/ov ]; then
+          install -m 0755 /ctx/bin/ov /usr/local/bin/ov
+        else
+          curl -fsSL "https://github.com/overthinkos/overthink/releases/download/v2026.141.1600/ov-linux-${ARCH}" -o /usr/local/bin/ov
+          chmod 0755 /usr/local/bin/ov
+        fi
       user: root
   eval:
     - id: ov-binary

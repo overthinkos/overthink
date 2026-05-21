@@ -37,7 +37,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	dc := &DeployConfig{Deploy: map[string]DeploymentNode{
 		"foo":         {Target: "pod", Image: "foo"},
 		"foo/inst1":   {Target: "pod", Image: "foo"},
-		"vm:archlinux": {Target: "vm"},
+		"vm:arch": {Target: "vm"},
 	}}
 
 	// Lookup (image, instance) form.
@@ -55,8 +55,8 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 	if entry, ok := dc.LookupKey("foo/inst1"); !ok || entry.Image != "foo" {
 		t.Errorf("LookupKey(foo/inst1) = (%+v, %v); want present", entry, ok)
 	}
-	if entry, ok := dc.LookupKey("vm:archlinux"); !ok || entry.Target != "vm" {
-		t.Errorf("LookupKey(vm:archlinux) = (%+v, %v); want present", entry, ok)
+	if entry, ok := dc.LookupKey("vm:arch"); !ok || entry.Target != "vm" {
+		t.Errorf("LookupKey(vm:arch) = (%+v, %v); want present", entry, ok)
 	}
 	if entry, ok := dc.LookupKey("missing"); ok {
 		t.Errorf("LookupKey(missing) = (%+v, %v); want absent", entry, ok)
@@ -75,7 +75,7 @@ func TestDeployConfigLookup_PresentAndAbsent(t *testing.T) {
 // ABORT and leave the file byte-identical — not silently construct a
 // fresh empty config and truncate the on-disk file.
 //
-// Pre-fix reproduction: `ov deploy add archlinux archlinux --disposable`
+// Pre-fix reproduction: `ov deploy add arch arch --disposable`
 // against a deploy.yml whose pre-existing entries lacked the required
 // `image:` field destroyed the entire file's content (provides section,
 // other deploy entries) and wrote only the new disposable: true marker.

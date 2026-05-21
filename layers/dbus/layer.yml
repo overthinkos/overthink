@@ -5,7 +5,7 @@ layer:
   env:
     DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-session"
   distro:
-    archlinux:
+    arch:
       package:
         - dbus
     debian:
@@ -24,7 +24,7 @@ layer:
     - id: dbus-daemon-package
       package: dbus-daemon
       package_map:
-        archlinux: dbus
+        arch: dbus
       installed: true
     - id: dbus-session-env
       scope: deploy

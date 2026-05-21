@@ -38,7 +38,7 @@ layer:
         - tmux
         - rsync
         - yq                     # YAML manipulator (Fedora ships a Python yq)
-    archlinux:
+    arch:
       package:
         - procps-ng
         - htop

@@ -465,7 +465,7 @@ func TestRpmTemplateWithModules(t *testing.T) {
 }
 
 func TestPacTemplateBasic(t *testing.T) {
-	arch := testDistroDef("archlinux")
+	arch := testDistroDef("arch")
 	pac := arch.Format["pac"]
 	ctx := &InstallContext{
 		CacheMounts: pac.CacheMount,
@@ -490,7 +490,7 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 	builderCfg := testBuilderCfg()
 	aurBuilder := builderCfg.Builder["aur"]
 	ctx := &BuildStageContext{
-		BuilderRef:  "ghcr.io/overthinkos/archlinux-builder:latest",
+		BuilderRef:  "ghcr.io/overthinkos/arch-builder:latest",
 		StageName:   "my-tool-aur-build",
 		UID:         1000,
 		Home:        "/home/user",
@@ -502,7 +502,7 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("render error: %v", err)
 	}
-	if !strings.Contains(out, "FROM ghcr.io/overthinkos/archlinux-builder:latest AS my-tool-aur-build") {
+	if !strings.Contains(out, "FROM ghcr.io/overthinkos/arch-builder:latest AS my-tool-aur-build") {
 		t.Error("should have correct FROM line")
 	}
 	if !strings.Contains(out, "yay -S --noconfirm --needed") {
@@ -514,7 +514,7 @@ func TestAurBuilderStageTemplate(t *testing.T) {
 }
 
 func TestAurInstallTemplate(t *testing.T) {
-	arch := testDistroDef("archlinux")
+	arch := testDistroDef("arch")
 	aur := arch.Format["aur"]
 	ctx := &InstallContext{
 		CacheMounts: aur.CacheMount,
@@ -536,10 +536,10 @@ func TestBuilderRefForFormat(t *testing.T) {
 	g := &Generator{
 		Images: map[string]*ResolvedImage{
 			"arch-img": {
-				Builder: BuilderMap{"aur": "archlinux-builder", "pixi": "archlinux-builder"},
+				Builder: BuilderMap{"aur": "arch-builder", "pixi": "arch-builder"},
 			},
-			"archlinux-builder": {
-				FullTag: "ghcr.io/overthinkos/archlinux-builder:2026.84.1200",
+			"arch-builder": {
+				FullTag: "ghcr.io/overthinkos/arch-builder:2026.84.1200",
 			},
 			"no-aur-img": {
 				Builder: BuilderMap{},
@@ -548,12 +548,12 @@ func TestBuilderRefForFormat(t *testing.T) {
 	}
 
 	ref := g.builderRefForFormat("arch-img", "aur")
-	if ref != "ghcr.io/overthinkos/archlinux-builder:2026.84.1200" {
+	if ref != "ghcr.io/overthinkos/arch-builder:2026.84.1200" {
 		t.Errorf("builderRefForFormat(aur) = %q, want full tag", ref)
 	}
 
 	ref = g.builderRefForFormat("arch-img", "pixi")
-	if ref != "ghcr.io/overthinkos/archlinux-builder:2026.84.1200" {
+	if ref != "ghcr.io/overthinkos/arch-builder:2026.84.1200" {
 		t.Errorf("builderRefForFormat(pixi) = %q, want full tag", ref)
 	}
 

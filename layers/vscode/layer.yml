@@ -1,7 +1,7 @@
 layer:
   name: vscode
   distro:
-    archlinux:
+    arch:
       aur:
         package:
           - visual-studio-code-bin

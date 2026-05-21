@@ -261,13 +261,13 @@ func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
 	// cachyos-pacstrap-builder, and runPrivilegedBootstrap then hard-failed
 	// at resolveLocalImageRef with "build the bootstrap_builder_image first".
 	images := map[string]*ResolvedImage{
-		"archlinux": {
-			Name:           "archlinux",
+		"arch": {
+			Name:           "arch",
 			IsExternalBase: true,
 		},
 		"cachyos-pacstrap-builder": {
 			Name:           "cachyos-pacstrap-builder",
-			Base:           "archlinux",
+			Base:           "arch",
 			IsExternalBase: false,
 		},
 		"cachyos": {
@@ -282,13 +282,13 @@ func TestFilterImagesIncludesBootstrapBuilder(t *testing.T) {
 		},
 	}
 
-	order := []string{"archlinux", "cachyos-pacstrap-builder", "cachyos", "app"}
+	order := []string{"arch", "cachyos-pacstrap-builder", "cachyos", "app"}
 
 	filtered, err := filterImage(order, []string{"app"}, images)
 	if err != nil {
 		t.Fatalf("filterImage() error: %v", err)
 	}
-	want := []string{"archlinux", "cachyos-pacstrap-builder", "cachyos", "app"}
+	want := []string{"arch", "cachyos-pacstrap-builder", "cachyos", "app"}
 	if !reflect.DeepEqual(filtered, want) {
 		t.Errorf("filterImage() = %v, want %v", filtered, want)
 	}

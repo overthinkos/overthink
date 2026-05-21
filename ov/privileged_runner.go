@@ -15,7 +15,7 @@ import (
 // -v /dev:/dev. Used for pacstrap/debootstrap rootfs bootstrap and
 // for VM disk-build chroots.
 type PrivilegedRun struct {
-	// Image is the builder image ref (e.g. archlinux-pacstrap-builder:CALVER).
+	// Image is the builder image ref (e.g. arch-pacstrap-builder:CALVER).
 	Image string
 	// Script is the bash body executed inside the container. Run via
 	// `bash -s <<'EOF' ... EOF` so quoting in the script body is preserved.

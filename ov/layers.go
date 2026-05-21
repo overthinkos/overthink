@@ -247,7 +247,7 @@ func sortedEnvDeps(m map[string]EnvDependency) []EnvDependency {
 
 // LayerYAML represents the parsed layer.yml file.
 // Unknown top-level keys are captured as tag-based package sections
-// (e.g., "fedora:", "archlinux:", "fedora:43:", "debian,ubuntu:").
+// (e.g., "fedora:", "arch:", "fedora:43:", "debian,ubuntu:").
 type LayerYAML struct {
 	Version     string       `yaml:"version,omitempty"`     // CalVer version (YYYY.DDD.HHMM) of this layer definition
 	Description *Description `yaml:"description,omitempty"` // Gherkin-shaped self-description; replaces retired info:/status:
@@ -283,7 +283,7 @@ type LayerYAML struct {
 	// Calamares-aligned package surface (2026-05 cutover). The unified
 	// flat top-level `packages:` is the Calamares group / module package
 	// list shape. Per-distro overrides + format-specific extras (copr,
-	// repos, options, exclude, modules, archlinux AUR sub-block) live
+	// repos, options, exclude, modules, arch AUR sub-block) live
 	// under `distros:` keyed by distro name (or distro-version e.g.
 	// `debian-13`, `ubuntu-24.04`).
 	Package []PackageItem              `yaml:"package,omitempty"`
@@ -390,8 +390,8 @@ func SetFormatNames(dc *DistroConfig) {
 //   - `distros.fedora.*`     → FormatSections["rpm"]   + raw extras
 //   - `distros.debian.*`     → FormatSections["deb"]   + raw extras
 //   - `distros.ubuntu.*`     → FormatSections["deb"]   (unioned with debian)
-//   - `distros.archlinux.*`  → FormatSections["pac"]   + raw extras
-//   - `distros.archlinux.aur.*` → FormatSections["aur"]
+//   - `distros.arch.*`  → FormatSections["pac"]   + raw extras
+//   - `distros.arch.aur.*` → FormatSections["aur"]
 //   - `distros.<name>-<ver>.*` → TagSections["<name>:<ver>"] (dash → colon)
 func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 	topPkgs := PackageNames(ly.Package)
@@ -400,7 +400,7 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 		"fedora":    "rpm",
 		"debian":    "deb",
 		"ubuntu":    "deb",
-		"archlinux": "pac",
+		"arch": "pac",
 	}
 
 	ensureFormat := func(fmtName string) *PackageSection {
@@ -513,8 +513,8 @@ func derivePackageSectionsFromCalamares(layer *Layer, ly *LayerYAML) {
 		if dp.Module != nil {
 			mergeRaw(ps, "module", dp.Module)
 		}
-		// AUR sub-block under archlinux.
-		if distroKey == "archlinux" && dp.AUR != nil {
+		// AUR sub-block under arch.
+		if distroKey == "arch" && dp.AUR != nil {
 			aurPS := ensureFormat("aur")
 			addPackages(aurPS, PackageNames(dp.AUR.Package))
 			if dp.AUR.Options != nil {
@@ -1571,6 +1571,25 @@ func (l *Layer) HasPypiDeps() bool {
 // ScanRemoteLayer scans specific layers from a downloaded remote repository.
 // Only imports layers whose bare refs are in the wantRefs set.
 // Bare refs use the full path format: "github.com/org/repo/layers/name".
+// qualifyRemoteSiblingDeps rewrites a freshly-scanned remote layer's plain-name
+// require:/layers: deps into fully-qualified "<repo>/<subpathprefix><dep>" map
+// keys (the same form ScanRemoteLayer keys fetched siblings under). @-ref deps
+// are left untouched — scanLayer already reduced them to their bare path.
+// Indexed off RawRequire/RawIncludedLayer, which preserve the original ref form
+// (1:1 with the BareRef'd Require/IncludedLayer that scanLayer produced).
+func qualifyRemoteSiblingDeps(layer *Layer) {
+	for i, raw := range layer.RawRequire {
+		if i < len(layer.Require) && !IsRemoteLayerRef(raw) {
+			layer.Require[i] = layer.RepoPath + "/" + layer.SubPathPrefix + raw
+		}
+	}
+	for i, raw := range layer.RawIncludedLayer {
+		if i < len(layer.IncludedLayer) && !IsRemoteLayerRef(raw) {
+			layer.IncludedLayer[i] = layer.RepoPath + "/" + layer.SubPathPrefix + raw
+		}
+	}
+}
+
 func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) (map[string]*Layer, error) {
 	layers := make(map[string]*Layer)
 
@@ -1599,6 +1618,12 @@ func ScanRemoteLayer(repoDir string, repoPath string, wantRefs map[string]bool) 
 		if idx := strings.LastIndex(subPath, "/"); idx != -1 {
 			layer.SubPathPrefix = subPath[:idx+1]
 		}
+		// Qualify plain-name sibling deps (require:/layers:) to fully-qualified
+		// "<repo>/<subpathprefix><dep>" map keys, matching how fetched siblings
+		// are keyed. This lets the dependency graph (graph.go) and validator
+		// resolve a remote layer's transitive deps against siblings pulled from
+		// the same repo, without per-call-site repo-path plumbing.
+		qualifyRemoteSiblingDeps(layer)
 
 		layers[bareRef] = layer
 	}
@@ -1632,34 +1657,97 @@ func ScanAllLayerWithConfig(dir string, cfg *Config) (map[string]*Layer, error) 
 		return layers, nil
 	}
 
-	// 3. Auto-download and scan each required (repo, version) pair
-	for _, dl := range downloads {
-		cachePath, err := EnsureRepoDownloaded(dl.RepoPath, dl.Version)
-		if err != nil {
-			return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
-		}
-
-		// Build set of wanted bare refs
-		wantRefs := make(map[string]bool)
-		for _, ref := range dl.Refs {
-			wantRefs[ref] = true
-		}
-
-		// Scan only the specific layers referenced
-		remoteLayers, err := ScanRemoteLayer(cachePath, dl.RepoPath, wantRefs)
-		if err != nil {
-			return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
-		}
-
-		// Merge into main map
-		for ref, layer := range remoteLayers {
-			if existing, ok := layers[ref]; ok && existing.Remote {
-				return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.RepoPath, layer.RepoPath)
+	// 3. Auto-download and scan each required (repo, version) pair, RECURSING
+	// into every fetched remote layer's transitive deps. A remote layer's
+	// plain-name require:/layers: dep resolves to a sibling in the same repo at
+	// the same version; an @-ref dep resolves to its own repo/version. Fix-point
+	// until no new refs surface, so cross-repo transitive closures (e.g.
+	// ov-full → virtualization → socat) are fully materialized.
+	type repoVer struct{ repo, ver string }
+	scanned := make(map[string]bool)           // bare refs already scanned
+	defaultBranches := make(map[string]string) // repo → resolved default branch
+	queue := downloads
+	for len(queue) > 0 {
+		nextByKey := make(map[repoVer]map[string]bool)
+		enqueue := func(repo, ver, bare string) error {
+			if scanned[bare] {
+				return nil
 			}
-			if _, ok := layers[layer.Name]; ok {
-				fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)
+			if ver == "" {
+				if b, ok := defaultBranches[repo]; ok {
+					ver = b
+				} else {
+					b, err := GitDefaultBranch(RepoGitURL(repo))
+					if err != nil {
+						return fmt.Errorf("resolving default branch for %s: %w", repo, err)
+					}
+					defaultBranches[repo] = b
+					ver = b
+				}
 			}
-			layers[ref] = layer
+			key := repoVer{repo, ver}
+			if nextByKey[key] == nil {
+				nextByKey[key] = make(map[string]bool)
+			}
+			nextByKey[key][bare] = true
+			return nil
+		}
+
+		for _, dl := range queue {
+			cachePath, err := EnsureRepoDownloaded(dl.RepoPath, dl.Version)
+			if err != nil {
+				return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
+			}
+			wantRefs := make(map[string]bool)
+			for _, ref := range dl.Refs {
+				if !scanned[ref] {
+					wantRefs[ref] = true
+				}
+			}
+			if len(wantRefs) == 0 {
+				continue
+			}
+			remoteLayers, err := ScanRemoteLayer(cachePath, dl.RepoPath, wantRefs)
+			if err != nil {
+				return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
+			}
+			for ref, layer := range remoteLayers {
+				if existing, ok := layers[ref]; ok && existing.Remote {
+					return nil, fmt.Errorf("layer reference conflict: %q provided by both %s and %s", ref, existing.RepoPath, layer.RepoPath)
+				}
+				if _, ok := layers[layer.Name]; ok {
+					fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)
+				}
+				layers[ref] = layer
+				scanned[ref] = true
+
+				// Enqueue this layer's transitive deps. Use the RAW form so an
+				// @-ref's pinned version survives; plain names become same-repo,
+				// same-version siblings.
+				rawDeps := append(append([]string{}, layer.RawRequire...), layer.RawIncludedLayer...)
+				for _, raw := range rawDeps {
+					if IsRemoteLayerRef(raw) {
+						p := ParseRemoteRef(raw)
+						if err := enqueue(p.RepoPath, p.Version, BareRef(raw)); err != nil {
+							return nil, err
+						}
+					} else {
+						sibling := dl.RepoPath + "/" + layer.SubPathPrefix + raw
+						if err := enqueue(dl.RepoPath, dl.Version, sibling); err != nil {
+							return nil, err
+						}
+					}
+				}
+			}
+		}
+
+		queue = nil
+		for key, refs := range nextByKey {
+			refList := make([]string, 0, len(refs))
+			for r := range refs {
+				refList = append(refList, r)
+			}
+			queue = append(queue, RemoteDownload{RepoPath: key.repo, Version: key.ver, Refs: refList})
 		}
 	}
 

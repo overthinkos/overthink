@@ -233,13 +233,13 @@ type VmSource struct {
 	// BuilderImage is the OCI image ref of the privileged builder used
 	// to host the rootfs creation step. Typically points at a
 	// project-internal image with arch-install-scripts / debootstrap /
-	// apk pre-installed (e.g. archlinux-pacstrap-builder). Required for
+	// apk pre-installed (e.g. arch-pacstrap-builder). Required for
 	// privileged bootstrap builders.
 	BuilderImage string `yaml:"builder_image,omitempty"`
 
 	// Distro selects the DistroDef in build.yml whose Pacstrap /
 	// Debootstrap / AlpineBootstrap / Bootloader sub-blocks drive the
-	// bootstrap and bootloader install. Examples: "archlinux", "cachyos",
+	// bootstrap and bootloader install. Examples: "arch", "cachyos",
 	// "debian", "ubuntu", "alpine".
 	Distro string `yaml:"distro,omitempty"`
 

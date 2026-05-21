@@ -246,7 +246,7 @@ type ResolvedImage struct {
 }
 
 // SupportsTag returns true if this image has the given tag.
-// Tags include format (rpm, deb, pac), distro (fedora, archlinux),
+// Tags include format (rpm, deb, pac), distro (fedora, arch),
 // version (fedora:43), and the implicit "all".
 func (img *ResolvedImage) SupportsTag(tag string) bool {
 	for _, t := range img.Tags {

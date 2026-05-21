@@ -15,7 +15,7 @@ layer:
       package:
         - java-21-openjdk-headless
         - java-21-openjdk-devel
-    archlinux:
+    arch:
       package:
         - jdk21-openjdk
     debian:

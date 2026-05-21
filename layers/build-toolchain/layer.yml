@@ -16,7 +16,7 @@ layer:
     - nasm
     - patch
   distro:
-    archlinux:
+    arch:
       package:
         - clang
         - ffmpeg

@@ -6,7 +6,7 @@ layer:
     - fuse-overlayfs
     - skopeo
   distro:
-    archlinux:
+    arch:
       package:
         - crun
         - libsecret

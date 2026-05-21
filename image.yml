@@ -2,146 +2,12 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.141.1530
+version: 2026.141.1600
 image:
-    arch-coder:
-        base: archlinux
-        layer:
-            - agent-forwarding
-            - sshd
-            - ov-full
-            - ov-mcp
-            - container-nesting
-            - dbus
-            - tmux
-            - language-runtimes
-            - golang
-            - nodejs
-            - rust
-            - pixi
-            - uv
-            - build-toolchain
-            - dev-tools
-            - pre-commit
-            - direnv
-            - gh
-            - typst
-            - asciinema
-            - claude-code
-            - codex
-            - gemini
-            - forgecode
-            - oracle
-            - devops-tools
-            - kubernetes
-            - docker-ce
-            - github-actions
-            - google-cloud
-            - google-cloud-npm
-            - grafana-tools
-        port:
-            - 2222:2222
-            - 18765:18765
-        eval:
-            - command: test -x ${HOME}/.npm-global/bin/claude && test -x ${HOME}/.npm-global/bin/codex && test -x ${HOME}/.npm-global/bin/gemini && test -x ${HOME}/.npm-global/bin/forge
-              id: arch-coder-ai-clis
-              exit_status: 0
-            - command: test -x /usr/bin/go && test -x /usr/bin/node && { test -x ${HOME}/.cargo/bin/cargo || test -x /usr/bin/cargo; }
-              id: arch-coder-languages
-              exit_status: 0
-            - command: test -x /usr/bin/kubectl && test -x /usr/bin/docker && test -x /usr/local/bin/aws && test -x /usr/bin/gcloud && test -x /usr/local/bin/tofu
-              id: arch-coder-devops
-              exit_status: 0
-            - command: test -x /usr/local/bin/ov
-              id: arch-coder-ov
-              exit_status: 0
-            - addr: 127.0.0.1:${HOST_PORT:2222}
-              id: arch-coder-sshd-port
-              timeout: 5s
-              scope: deploy
-              reachable: true
-            - command: ov version
-              id: arch-coder-ov-version
-              scope: deploy
-              in_container: true
-              exit_status: 0
-            - addr: 127.0.0.1:${HOST_PORT:18765}
-              id: arch-coder-mcp-port
-              timeout: 5s
-              scope: deploy
-              reachable: true
-    arch-ov:
-        enabled: false
-        base: archlinux
-        layer:
-            - agent-forwarding
-            - ov-full
-            - ov-mcp
-            - golang
-            - gh
-            - sshd
-            - container-nesting
-            - nvidia
-        port:
-            - 2222:2222
-            - 18765:18765
-    arch-test:
-        enabled: false
-        base: archlinux
-        build:
-            - pac
-            - aur
-        layer:
-            - agent-forwarding
-            - arch-pac-test
-            - arch-aur-test
-    archlinux:
-        base: docker.io/library/archlinux:latest
-        distro:
-            - archlinux
-        build:
-            - pac
-        builder:
-            aur: archlinux-builder
-            cargo: archlinux-builder
-            npm: archlinux-builder
-            pixi: archlinux-builder
-        produce:
-            - pixi
-            - npm
-            - cargo
-            - aur
-    archlinux-builder:
-        base: archlinux
-        layer:
-            - pixi
-            - nodejs
-            - build-toolchain
-            - yay
-        produce:
-            - pixi
-            - npm
-            - cargo
-            - aur
-    archlinux-pacstrap-builder:
-        base: archlinux
-        distro:
-            - archlinux
-        build:
-            - pac
-        layer:
-            - pacstrap-builder
-    archlinux-pacstrap:
-        from: builder:pacstrap
-        bootstrap_builder_image: archlinux-pacstrap-builder
-        distro:
-            - archlinux
-        build:
-            - pac
     cachyos-pacstrap-builder:
-        base: archlinux
+        base: arch
         distro:
-            - archlinux
+            - arch
         build:
             - pac
         layer:
@@ -161,7 +27,7 @@ image:
         base: docker.io/cachyos/cachyos-v3:latest
         distro:
             - cachyos
-            - archlinux
+            - arch
         build:
             - pac
     cachyos-pacstrap:
@@ -181,7 +47,7 @@ image:
         bootstrap_builder_image: cachyos-pacstrap-builder
         distro:
             - cachyos
-            - archlinux
+            - arch
         build:
             - pac
     debian-debootstrap-builder:
@@ -644,9 +510,9 @@ image:
         # no builder: of its own, so without this override pixi/npm/cargo
         # builders would resolve to fedora-builder on an Arch-based image.
         builder:
-            cargo: archlinux-builder
-            npm: archlinux-builder
-            pixi: archlinux-builder
+            cargo: arch-builder
+            npm: arch-builder
+            pixi: arch-builder
         build:
             - pac
         platform:

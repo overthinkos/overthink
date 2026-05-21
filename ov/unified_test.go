@@ -35,7 +35,7 @@ func TestLoadUnified_AbsentFileReturnsNotPresent(t *testing.T) {
 
 func TestLoadUnified_BasicRoot(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 defaults:
   registry: quay.io/example
   build: [rpm]
@@ -67,9 +67,34 @@ image:
 	}
 }
 
+func TestLoadUnified_NewerSchemaRejectedWithUpdateHint(t *testing.T) {
+	root := t.TempDir()
+	// A version far past LatestSchemaVersion(): the binary is behind the
+	// config, so migrating cannot help — the user must update ov.
+	writeFixture(t, root, "overthink.yml", `version: 9999.141.1530
+image:
+  fedora:
+    base: quay.io/fedora/fedora:43
+`)
+	_, _, err := LoadUnified(root)
+	if err == nil {
+		t.Fatal("expected hard-fail for a config newer than the binary supports")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "newer than this ov supports") {
+		t.Errorf("error %q missing 'newer than this ov supports'", msg)
+	}
+	if !strings.Contains(msg, "Update ov") {
+		t.Errorf("error %q missing 'Update ov' advice", msg)
+	}
+	if strings.Contains(msg, "ov migrate") {
+		t.Errorf("error %q wrongly advises 'ov migrate' for a too-new config", msg)
+	}
+}
+
 func TestLoadUnified_IncludesMerge(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 include:
   - build.yml
   - images.yml
@@ -111,7 +136,7 @@ image:
 
 func TestLoadUnified_IncludeCycleDetected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 include: [a.yml]
 `)
 	writeFixture(t, root, "a.yml", `include: [b.yml]
@@ -129,7 +154,7 @@ include: [a.yml]
 
 func TestLoadUnified_MultiDocumentKindKeyed(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 include: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `---
@@ -165,9 +190,9 @@ image:
 
 func TestLoadUnified_AmbiguousDocRejected(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 include: [bundle.yml]
 `)
 	writeFixture(t, root, "bundle.yml", `layer:
@@ -196,7 +221,7 @@ rpm:
 rpm:
   package: [firefox]
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 discover:
   layer: [layers]
 `)
@@ -220,7 +245,7 @@ func TestLoadUnified_DiscoverExplicitWinsOverDiscovered(t *testing.T) {
 	writeFixture(t, root, "layers/chrome/layer.yml", `version: "from-disk"
 rpm: { packages: [chromium] }
 `)
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 discover:
   layer: [layers]
 layer:
@@ -244,7 +269,7 @@ layer:
 
 func TestLoadUnified_ScanSpecStringShorthand(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 discover:
   layer:
     - layers
@@ -281,7 +306,7 @@ discover:
 // (no stale references).
 func TestLoadUnified_DeploymentsSection(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 deployments:
   openclaw:
     port: ["8080:80"]
@@ -301,7 +326,7 @@ deployments:
 
 func TestLoadUnified_ProjectConfig(t *testing.T) {
 	root := t.TempDir()
-	writeFixture(t, root, "overthink.yml", `version: 2026.141.1530
+	writeFixture(t, root, "overthink.yml", `version: 2026.141.1600
 defaults: { registry: r.example.com }
 image:
   foo: { base: alpine }

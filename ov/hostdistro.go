@@ -101,17 +101,17 @@ func splitOsReleaseLine(line string) (key, val string, ok bool) {
 
 // distroIDAliases maps /etc/os-release ID= values to the canonical
 // name used inside build.yml's distro: map. Arch Linux reports ID=arch
-// but build.yml keys the distro as "archlinux"; several Fedora
+// but build.yml keys the distro as "arch"; several Fedora
 // spin-offs report their own name but ov treats them as "fedora".
 //
 // Populated tags include both the os-release name and the build.yml
 // canonical name so layer tag-section matching and build.yml
 // format-lookup both succeed.
 var distroIDAliases = map[string]string{
-	"arch":        "archlinux",
-	"archarm":     "archlinux",
-	"manjaro":     "archlinux",
-	"endeavouros": "archlinux",
+	"arch":        "arch",
+	"archarm":     "arch",
+	"manjaro":     "arch",
+	"endeavouros": "arch",
 	"almalinux":   "fedora",
 	"rocky":       "fedora",
 	"centos":      "fedora",

@@ -19,7 +19,7 @@ layer:
     - yq
     - zoxide
   distro:
-    archlinux:
+    arch:
       package:
         - android-tools
         - arch-install-scripts

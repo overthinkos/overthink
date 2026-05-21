@@ -1,5 +1,5 @@
 distro:
-    archlinux:
+    arch:
         bootstrap:
             install_cmd: pacman -Syu --noconfirm
             package:

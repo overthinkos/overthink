@@ -196,7 +196,7 @@ type Check struct {
 	Installed *bool    `yaml:"installed,omitempty" json:"installed,omitempty"`
 	Versions  []string `yaml:"version,omitempty"  json:"versions,omitempty"`
 	// PackageMap overrides the Package name per distro. Keys match the image's
-	// distro tags (e.g. "archlinux", "fedora", "ubuntu", "debian"). If the
+	// distro tags (e.g. "arch", "fedora", "ubuntu", "debian"). If the
 	// running image's distro tag is present in the map, that value replaces
 	// Package for the probe; otherwise Package is used as-is. Required for
 	// cross-distro tests where the same software ships under different

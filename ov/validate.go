@@ -471,22 +471,16 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 			errs.Add("layer %q: Cargo.toml requires src/ directory", name)
 		}
 
-		// Validate depends references
+		// Validate depends references. Remote layers' deps were qualified to
+		// fully-qualified map keys at scan time (qualifyRemoteSiblingDeps), so a
+		// direct lookup covers both local short names and remote sibling refs.
 		for _, dep := range layer.Require {
-			resolved := dep
-			// Within a remote repo, short-name depends resolve to siblings in the same repo
-			if layer.Remote && !IsRemoteLayerRef(dep) {
-				resolved = layer.RepoPath + "/" + layer.SubPathPrefix + dep
-			}
-			if _, ok := layers[resolved]; !ok {
-				// Try original name too (for cross-repo deps using full paths)
-				if _, ok := layers[dep]; !ok {
-					suggestion := findSimilarName(dep, LayerNames(layers))
-					if suggestion != "" {
-						errs.Add("layer %q depends: unknown layer %q (did you mean %q?)", name, dep, suggestion)
-					} else {
-						errs.Add("layer %q depends: unknown layer %q", name, dep)
-					}
+			if _, ok := layers[dep]; !ok {
+				suggestion := findSimilarName(dep, LayerNames(layers))
+				if suggestion != "" {
+					errs.Add("layer %q depends: unknown layer %q (did you mean %q?)", name, dep, suggestion)
+				} else {
+					errs.Add("layer %q depends: unknown layer %q", name, dep)
 				}
 			}
 		}
@@ -601,19 +595,14 @@ func validateLayerIncludes(layers map[string]*Layer, errs *ValidationError) {
 				continue
 			}
 
-			// Check ref exists
-			resolved := ref
-			if layer.Remote && !IsRemoteLayerRef(ref) {
-				resolved = layer.RepoPath + "/" + layer.SubPathPrefix + ref
-			}
-			if _, ok := layers[resolved]; !ok {
-				if _, ok := layers[ref]; !ok {
-					suggestion := findSimilarName(ref, LayerNames(layers))
-					if suggestion != "" {
-						errs.Add("layer %q layers: unknown layer %q (did you mean %q?)", name, ref, suggestion)
-					} else {
-						errs.Add("layer %q layers: unknown layer %q", name, ref)
-					}
+			// Check ref exists. Deps are pre-qualified at scan time, so a direct
+			// lookup covers both local short names and remote sibling refs.
+			if _, ok := layers[ref]; !ok {
+				suggestion := findSimilarName(ref, LayerNames(layers))
+				if suggestion != "" {
+					errs.Add("layer %q layers: unknown layer %q (did you mean %q?)", name, ref, suggestion)
+				} else {
+					errs.Add("layer %q layers: unknown layer %q", name, ref)
 				}
 			}
 
@@ -1074,7 +1063,7 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 				// not actually needed even though the layer has the section.
 				// Multi-distro layers can carry rpm: + pac: + aur:
 				// simultaneously without forcing every Fedora consumer to
-				// declare an archlinux-builder.
+				// declare an arch-builder.
 				//
 				// detect_files-based detection is NOT gated: pixi/npm/cargo
 				// artifacts are produced once at build time and copied into

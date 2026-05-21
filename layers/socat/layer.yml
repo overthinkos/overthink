@@ -4,7 +4,7 @@ layer:
   package:
     - socat
   distro:
-    archlinux:
+    arch:
       package:
         - iproute2
     debian:

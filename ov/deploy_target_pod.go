@@ -140,7 +140,8 @@ func (t *PodDeployTarget) renderOverlayServices(overlayLayers []string) (string,
 		if l == nil || !l.HasInit(initName) {
 			continue
 		}
-		fileName := fmt.Sprintf("%02d-%s.conf", i+1, layerName)
+		// Short name, not the slashed remote map key.
+		fileName := fmt.Sprintf("%02d-%s.conf", i+1, l.Name)
 		srcRel := filepath.Join(overlayDir, overlayImageName, initDef.FragmentDir, fileName)
 		fmt.Fprintf(&stage, "COPY %s /supervisor-overlay/%s\n", srcRel, fileName)
 	}

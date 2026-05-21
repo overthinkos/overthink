@@ -12,7 +12,7 @@ layer:
     # against the same paths regardless of distro.
     CUDA_HOME: "/usr"
   distro:
-    archlinux:
+    arch:
       package:
         # Arch extra/cuda is a precompiled binary package — full toolkit
         # (nvcc, cudart, nvrtc, cupti, curand, cccl, cufile) at /opt/cuda.
@@ -22,7 +22,7 @@ layer:
         # python-onnxruntime-cpu is in the CachyOS extra repo (pulled
         # transitively as a dependency); no AUR build needed — the bare
         # `python-onnxruntime` AUR package fails to build under the
-        # rootless archlinux-builder stage. The eval probe below maps
+        # rootless arch-builder stage. The eval probe below maps
         # `onnxruntime` to `python-onnxruntime-cpu` on Arch via
         # package_map.
         - cuda
@@ -114,7 +114,7 @@ layer:
     - id: cuda-cudart-package
       package: cuda-cudart-devel
       package_map:
-        archlinux: cuda
+        arch: cuda
         fedora: cuda-cudart-devel
       installed: true
     - id: cudnn-header
@@ -123,6 +123,6 @@ layer:
     - id: onnxruntime-package
       package: onnxruntime
       package_map:
-        archlinux: python-onnxruntime-cpu
+        arch: python-onnxruntime-cpu
         fedora: onnxruntime
       installed: true

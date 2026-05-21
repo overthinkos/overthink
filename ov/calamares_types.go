@@ -53,7 +53,7 @@ func (p PackageItem) MarshalYAML() (interface{}, error) {
 	}{p.Name, p.Description}, nil
 }
 
-// AURPackages is the per-distro AUR sub-block under `distros.archlinux.aur`.
+// AURPackages is the per-distro AUR sub-block under `distros.arch.aur`.
 // One ov-specific extension to the otherwise-flat Calamares package shape:
 // AUR sources need a separate manifest because they are built via yay in a
 // builder stage (not pacman directly).
@@ -77,7 +77,7 @@ type AURPackages struct {
 // per-format / per-distro-tag sections.
 //
 // The map key on `LayerYAML.Distros` / `GroupSpec.Distros` identifies the
-// distro (e.g. `fedora`, `archlinux`, `debian`, `ubuntu`) or a versioned
+// distro (e.g. `fedora`, `arch`, `debian`, `ubuntu`) or a versioned
 // variant (`debian-13`, `ubuntu-24.04`).
 type DistroPackages struct {
 	Package []PackageItem    `yaml:"package,omitempty" json:"package,omitempty"`
@@ -86,7 +86,7 @@ type DistroPackages struct {
 	Exclude []string         `yaml:"exclude,omitempty" json:"exclude,omitempty"` // package excludes
 	Options []string         `yaml:"option,omitempty" json:"options,omitempty"` // extra installer flags
 	Module  []string         `yaml:"module,omitempty" json:"module,omitempty"`   // dnf module enable
-	AUR      *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // archlinux-only
+	AUR      *AURPackages     `yaml:"aur,omitempty" json:"aur,omitempty"`         // arch-only
 
 	// Raw captures the entire YAML map for template rendering. Populated by
 	// the migrator and the parser in lockstep so install templates that read

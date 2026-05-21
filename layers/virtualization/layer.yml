@@ -11,7 +11,7 @@ layer:
     `virtualization-host` sibling — see CLAUDE.md "Init-system
     polymorphism via mixed `service:` entries".
   distro:
-    archlinux:
+    arch:
       package:
         - qemu-full
         - qemu-img
@@ -119,7 +119,7 @@ layer:
     - id: libvirt-qemu-driver-package
       package: libvirt-daemon-driver-qemu
       package_map:
-        archlinux: libvirt
+        arch: libvirt
         fedora: libvirt-daemon-driver-qemu
         fedora:43: libvirt-daemon-driver-qemu
         debian: libvirt-daemon-system

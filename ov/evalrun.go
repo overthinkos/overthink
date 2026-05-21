@@ -104,7 +104,7 @@ type Runner struct {
 	Image       string
 	Instance    string
 	// Distros is the image's distro tag list (e.g. ["fedora:43", "fedora"]
-	// or ["archlinux"]). Used by the `package:` verb's PackageMap resolution
+	// or ["arch"]). Used by the `package:` verb's PackageMap resolution
 	// to pick a distro-specific package name when names diverge across
 	// distros (e.g. openssh-server on Fedora vs openssh on Arch).
 	Distros []string

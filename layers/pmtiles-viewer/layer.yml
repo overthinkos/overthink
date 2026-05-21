@@ -4,7 +4,7 @@ layer:
   require:
     - supervisord
   distro:
-    archlinux:
+    arch:
       package:
         # nodejs + npm in the cachyos extra repo (same as the maputnik
         # layer); git pulls the PMTiles source at image-build time. The

@@ -423,6 +423,15 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 // Appends -2, -3 etc. to avoid conflicts with existing or already-created images.
 func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, result, origImages map[string]*ResolvedImage) string {
 	lastLayer := pathLayers[len(pathLayers)-1]
+	// Remote layer keys are fully-qualified paths
+	// ("github.com/overthinkos/overthink/layers/pixi"); reduce to the short
+	// layer name so the intermediate gets a valid, slash-free OCI image name
+	// ("arch-pixi", not "arch-github.com/.../layers/pixi" — the latter is a
+	// malformed ref that crashes buildah's content-summary on COPY/FROM). Local
+	// layer keys are already short, so this is a no-op for them.
+	if i := strings.LastIndex(lastLayer, "/"); i >= 0 {
+		lastLayer = lastLayer[i+1:]
+	}
 
 	// Extract short parent name from OCI refs: "quay.io/fedora/fedora:43" → "fedora"
 	shortParent := parentName
@@ -470,7 +479,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 	// Distro + BuildFormats MUST come from the parent first. Only non-auto
 	// parents have their own values; external roots fall back to defaults.
 	// This was previously inverted — defaults won even when the parent was
-	// an explicit non-default base (e.g. archlinux with build: [pac]), so
+	// an explicit non-default base (e.g. arch with build: [pac]), so
 	// every arch-rooted auto-intermediate got mis-tagged as build: [rpm]
 	// and all `pac:`-only layer sections silently dropped out of the
 	// generated Containerfile. Fixed by resolving parent first.

@@ -2,45 +2,8 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: vm` for kind-keyed entries; root-shape map is `vm:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.141.1530
+version: 2026.141.1600
 vm:
-    arch-pacstrap:
-        source:
-            kind: bootstrap
-            builder: pacstrap
-            builder_image: archlinux-pacstrap-builder
-            distro: archlinux
-            package:
-                - sudo
-                - openssh
-                - qemu-guest-agent
-                - cloud-init
-                - grub
-                - efibootmgr
-            rootfs: ext4
-            kernel_args: console=tty0 console=ttyS0,115200
-        disk_size: 20G
-        ram: 4G
-        cpu: 2
-        machine: q35
-        firmware: uefi-insecure
-        network:
-            mode: user
-        ssh:
-            user: arch
-            port: 12225
-            key_source: generate
-        cloud_init:
-            user:
-                - name: arch
-                  sudo: true
-                  shell: /bin/bash
-            runcmd:
-                - systemctl enable --now sshd
-                - systemctl enable --now qemu-guest-agent
-                # Diagnostic: write network + sshd state to /boot so it can
-                # be mount-inspected after a failed-boot cycle.
-                - "{ ip a; echo ===listen===; ss -tlnp; echo ===sshd===; systemctl status sshd --no-pager; } > /boot/ov-diag.txt 2>&1"
     cachyos-vm:
         source:
             kind: bootstrap

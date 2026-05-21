@@ -214,14 +214,14 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	// cachyos-pacstrap-builder and runPrivilegedBootstrap would fail at
 	// resolveLocalImageRef (build.go:294).
 	images := map[string]*ResolvedImage{
-		"archlinux": {
-			Name:           "archlinux",
+		"arch": {
+			Name:           "arch",
 			Base:           "docker.io/library/archlinux:latest",
 			IsExternalBase: true,
 		},
 		"cachyos-pacstrap-builder": {
 			Name:           "cachyos-pacstrap-builder",
-			Base:           "archlinux",
+			Base:           "arch",
 			IsExternalBase: false,
 		},
 		"cachyos": {
@@ -257,8 +257,8 @@ func TestResolveImageOrderWithBootstrapBuilder(t *testing.T) {
 	if indexOf("cachyos") > indexOf("app") {
 		t.Errorf("cachyos must come before app (base dep), got order %v", order)
 	}
-	if indexOf("archlinux") > indexOf("cachyos-pacstrap-builder") {
-		t.Errorf("archlinux must come before cachyos-pacstrap-builder (base dep), got order %v", order)
+	if indexOf("arch") > indexOf("cachyos-pacstrap-builder") {
+		t.Errorf("arch must come before cachyos-pacstrap-builder (base dep), got order %v", order)
 	}
 
 	// Same property must hold for ResolveImageLevels (concurrent-build mode).

@@ -7,19 +7,12 @@
 # port, process, command, http, dns, user, group, interface, kernel-param,
 # mount, addr, matching, cdp, wl, dbus, vnc, mcp, record, spice, libvirt, k8s).
 #
-# A `./ov eval live arch-vm && ./ov eval live arch-host && ./ov eval live openclaw-sway-browser-pod &&
-# ./ov eval live k3s-vm` smoke run catches regressions across the entire ov stack.
+# A `./ov eval live openclaw-sway-browser-pod && ./ov eval live k3s-vm` smoke run
+# catches regressions across the ov stack. (The Arch beds — vm + nested host —
+# moved to the overthinkos/arch submodule at image/arch.)
 #
-# Bed-to-verb coverage map:
-#   arch-vm       (target: vm)   — libvirt, spice, command (SSH-in-guest),
-#                                  file/service/port/process/package/user/
-#                                  group/interface/kernel-param/mount (guest),
-#                                  addr, dns, http, matching
-#   arch-vm.arch-host
-#                 (target: host) — command (nested SSH), file, package (proof
-#                                  of user-space install), process, port,
-#                                  matching  (exercises HostDeployTarget code
-#                                  path inside the VM guest's FS)
+# Bed-to-verb coverage map (the Arch beds — vm + nested host — moved to the
+# overthinkos/arch submodule at image/arch):
 #   openclaw-sway-browser-pod      (target: pod)  — cdp, wl, vnc, dbus, mcp, record,
 #                                  file/service/port/process/http (pod-side)
 #   k3s-vm        (target: vm)   — k8s (all 13 methods), file/service/
@@ -48,8 +41,6 @@
 #                                       via ShellExecutor on the operator host
 #
 # Zero-operator-side-effect audit:
-#   arch-vm            libvirt /var/lib/libvirt/images/  (standard qcow2)
-#   arch-vm.arch-host  INSIDE arch-vm guest — zero operator FS writes
 #   openclaw-sway-browser-pod           ~/.local/share/containers/        (rootless podman)
 #   k3s-vm             libvirt /var/lib/libvirt/images/  (standard qcow2)
 #
@@ -65,13 +56,8 @@
 # Plan: /home/atrawog/.claude/plans/can-you-have-a-recursive-axolotl.md
 # =============================================================================
 
-version: 2026.141.1530
+version: 2026.141.1600
 deploy:
-    arch-pacstrap-vm:
-        target: vm
-        vm: arch-pacstrap
-        disposable: true
-        lifecycle: dev
     cachyos-vm-deploy:
         target: vm
         vm: cachyos-vm
@@ -88,179 +74,7 @@ deploy:
         disposable: true
         lifecycle: dev
     # =================================================================
-    # Bed 1: arch-vm (target: vm)
-    # ---------------------------------------------------------------
-    # Disposable Arch Linux VM. Exercises the VM lifecycle + libvirt +
-    # spice + ssh + cloud-init + qemu-guest-agent + in-guest OS probes.
-    # No k3s here (moved to k3s-vm); no heavy layer application here
-    # (moved to arch-vm.arch-host child).
-    # =================================================================
-    arch-vm:
-        target: vm
-        vm: arch
-        disposable: true
-        lifecycle: dev
-        # Minimal in-guest tooling so arch-host (child) has something
-        # to depend on, and so the command: probes have ripgrep/uv/
-        # pre-commit versions to verify.
-        add_layer:
-            - ripgrep
-            - uv
-            - pre-commit
-        install_opts:
-            with_service: true
-            allow_repo_changes: true # pacman-key + mirror tweaks
-            skip_incompatible: true # skip rpm:/deb:-only layer sections
-            verify: true
-        env:
-            - OVERTHINK_DEV=true
-        eval:
-            # --- C.1  Guest identity + SSH connectivity ---------------
-            - {id: guest-identity-uid, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
-            - {id: guest-identity-wheel, scope: deploy, command: id, stdout: {contains: wheel}}
-            - {id: guest-hostname-nonempty, scope: deploy, command: "cat /etc/hostname", stdout: {matches: ".+"}}
-            - {id: guest-os-release-arch, scope: deploy, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}}
-            - {id: guest-sudo-nopasswd, scope: deploy, command: "sudo -n whoami", stdout: {equals: root}}
-            - {id: guest-kernel-release, scope: deploy, command: "uname -r", stdout: {matches: "[0-9]+\\.[0-9]+"}}
-            # --- C.2  Cloud-init completion ---------------------------
-            - {id: cloud-init-status-done, scope: deploy, command: "cloud-init status --wait --long", stdout: {contains: "status: done"}}
-            - {id: cloud-init-instance-dir, scope: deploy, command: "test -d /var/lib/cloud/instance"}
-            - {id: cloud-init-no-errors, scope: deploy, command: "cat /var/lib/cloud/data/result.json", stdout: {contains: "\"errors\": []"}}
-            # --- C.3  spice-vdagent + virtio-gpu (in guest) ----------
-            - {id: spice-vdagentd-active, scope: deploy, command: "systemctl is-active spice-vdagentd", stdout: {equals: active}}
-            - {id: spice-vdagentd-enabled, scope: deploy, command: "systemctl is-enabled spice-vdagentd", stdout: {matches: "^(enabled|static)"}}
-            - {id: virtio-gpu-module, scope: deploy, command: "lsmod | grep -q virtio_gpu"}
-            - {id: dri-card0-present, scope: deploy, command: "test -e /dev/dri/card0"}
-            # --- C.4  SPICE wire (host-side via spice: verb) ---------
-            - {id: spice-status-main, scope: deploy, spice: status, stdout: {contains: display}}
-            - id: spice-framebuffer-nonzero
-              scope: deploy
-              spice: screenshot
-              artifact: /tmp/arch-vm-spice.png
-              artifact_min_bytes: 1024
-            # --- C.5  libvirt domain (host-side via libvirt: verb) ---
-            - {id: libvirt-domain-running, scope: deploy, libvirt: info, stdout: {contains: running}}
-            - {id: libvirt-domain-xml-q35, scope: deploy, libvirt: "domain-xml", stdout: {contains: q35}}
-            - {id: libvirt-domain-xml-virtio, scope: deploy, libvirt: "domain-xml", stdout: {contains: "type='virtio'"}}
-            - {id: libvirt-qmp-query-status, scope: deploy, libvirt: qmp, text: query-status, stdout: {contains: running}}
-            - {id: libvirt-guest-agent-ping, scope: deploy, libvirt: "guest/ping", stderr: {contains: responsive}}
-            - {id: libvirt-guest-hostname, scope: deploy, libvirt: "guest/hostname", stdout: {matches: ".+"}}
-            - {id: libvirt-guest-os-info, scope: deploy, libvirt: "guest/os-info", stdout: {contains: arch}}
-            - {id: libvirt-guest-interfaces, scope: deploy, libvirt: "guest/interfaces", stdout: {contains: lo}}
-            # --- C.6  Pacman + repo health ---------------------------
-            - {id: pacman-key-populated, scope: deploy, command: "pacman-key --list-keys archlinux 2>&1 | grep -q pub"}
-            - {id: pacman-repos-reachable, scope: deploy, command: "sudo pacman -Sy --noconfirm"}
-            # --- C.7  SSH key injection ------------------------------
-            - {id: ssh-authorized-keys, scope: deploy, command: "test -f /home/arch/.ssh/authorized_keys"}
-            - {id: ssh-ed25519-key-count, scope: deploy, command: "grep -c ssh-ed25519 /home/arch/.ssh/authorized_keys", stdout: {matches: "[1-9]"}}
-            # --- C.8  Resource sizing (4 cpus, 8G mem, 40G disk) -----
-            - {id: cpu-count-4, scope: deploy, command: nproc, stdout: {matches: "^4"}}
-            - {id: mem-8g-ballpark, scope: deploy, command: "awk '/MemTotal/ {print int($2/1024/1024)}' /proc/meminfo", stdout: {matches: "^[78]"}}
-            - {id: disk-ballpark, scope: deploy, command: "df -BG / | awk 'NR==2 {gsub(\"G\",\"\",$2); print int($2)}'", stdout: {matches: "^([1-9][0-9]|[1-9][0-9][0-9])"}}
-            # --- C.9  Layer-applied tooling + ov itself --------------
-            - {id: ov-binary-present, scope: deploy, command: "command -v ov"}
-            - {id: ov-version, scope: deploy, command: "ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}}
-            - {id: ov-help-works, scope: deploy, command: "ov --help 2>&1 | head -1", stdout: {contains: ov}}
-            - {id: ripgrep-version, scope: deploy, command: "rg --version", stdout: {contains: ripgrep}}
-            - {id: uv-version, scope: deploy, command: "uv --version", stdout: {contains: "uv "}}
-            - {id: pre-commit-version, scope: deploy, command: "pre-commit --version", stdout: {contains: pre-commit}}
-            - {id: tooling-on-path, scope: deploy, command: "command -v rg uv pre-commit"}
-            # --- C.10 Structured probes (package/service/port/process/
-            #          user/group/interface/kernel-param/mount) -------
-            - {id: pkg-base-devel-present, scope: deploy, package: base-devel, installed: true}
-            - {id: pkg-git-present, scope: deploy, package: git, installed: true}
-            - {id: svc-spice-vdagentd-running, scope: deploy, service: spice-vdagentd, running: true}
-            - {id: svc-sshd-running, scope: deploy, service: sshd, running: true}
-            - {id: port-22-listening, scope: deploy, port: 22, listening: true}
-            - {id: proc-sshd-running, scope: deploy, process: sshd, running: true}
-            - {id: user-arch-present, scope: deploy, user: arch, uid: 1000}
-            - {id: group-wheel-present, scope: deploy, group: wheel}
-            - {id: iface-lo-up, scope: deploy, interface: lo, mtu: 65536}
-            - {id: mount-root-mounted, scope: deploy, mount: /}
-            # --- C.11 Network / DNS (host-side + guest-side) ---------
-            - {id: dns-archlinux-org, scope: deploy, command: "getent hosts archlinux.org"}
-            - {id: https-archlinux-org, scope: deploy, command: "curl -sfo /dev/null -w '%{http_code}' https://archlinux.org/", stdout: {matches: "^(20[0-9]|30[0-9])"}}
-            - {id: dns-check-operator-side, scope: deploy, dns: archlinux.org, resolvable: true}
-            - {id: addr-ssh-reachable, scope: deploy, addr: "127.0.0.1:2224", reachable: true, timeout: "5s"}
-            # --- C.12 matching: verb smoke ---------------------------
-            # matching: <literal> checks the literal against contains/equals
-            # operators. Input is the matching: field itself.
-            - {id: matching-smoke, scope: deploy, matching: "arch", equals: "arch"}
-        # -----------------------------------------------------------------
-        # Bed 2: arch-host (target: host, nested in arch-vm)
-        # -----------------------------------------------------------------
-        # Exercises HostDeployTarget / InstallPlan / ReverseOps / ledger
-        # code path INSIDE arch-vm's guest FS via the existing
-        # parent-child NestedExecutor plumbing. Zero operator-side writes.
-        # Layers chosen for dotfile-only side effects so the bed is about
-        # exercising the code path, not installing services.
-        # -----------------------------------------------------------------
-        nested:
-            # -----------------------------------------------------------------
-            # R10 bed for tailscale + tailscale-up runtime wiring.
-            # ---------------------------------------------------------------
-            # Exercises layers/tailscale (daemon install + systemctl enable)
-            # AND layers/tailscale-up (--operator + --hostname runtime task)
-            # via the nested HostDeployTarget in arch-vm. The arch user
-            # has uid 1000 + passwordless wheel sudo per the cloud-init
-            # config, matching the canonical ov-cachyos host shape.
-            # The test bed's tailscaled is logged out (no auth performed),
-            # which is the layer's expected pass-by-skip state for the
-            # operator-readable / hostname-tracks-system probes — the
-            # explicit baseline probes below cover the daemon-up shape.
-            # -----------------------------------------------------------------
-            ov-cachyos-tailscale-test:
-                target: local
-                disposable: true
-                lifecycle: dev
-                add_layer:
-                    - tailscale
-                    - tailscale-up
-                install_opts:
-                    with_service: true
-                    allow_root_tasks: true
-                description:
-                    feature: R10 bed for tailscale + tailscale-up runtime wiring
-                    tag: [testing]
-                eval:
-                    - {id: tt-tailscale-binary, scope: deploy, command: "test -x /usr/bin/tailscale && test -x /usr/sbin/tailscaled"}
-                    - {id: tt-tailscaled-active, scope: deploy, command: "systemctl is-active tailscaled", stdout: {equals: active}}
-                    - {id: tt-tailscaled-enabled, scope: deploy, command: "systemctl is-enabled tailscaled.service", stdout: {matches: "^enabled"}}
-                    # The layer-baked operator-readable + hostname-tracks-system
-                    # probes self-gate via the "Logged out" check and
-                    # pass-by-skip on this bed (no `tailscale up` is performed).
-            arch-host:
-                target: local
-                disposable: true
-                lifecycle: dev
-                add_layer:
-                    - direnv
-                eval:
-                    # Nested command runs: SSH into arch-vm → exec as arch user.
-                    # `ov deploy show` lists entries in schema v4 (there is
-                    # no `ov deploy list` subcommand).
-                    - {id: ah-ov-deploy-show, scope: deploy, command: "ov deploy show"}
-                    - {id: ah-direnv-version, scope: deploy, command: "direnv --version"}
-                    # Ledger entries land in guest ~/.config/overthink/installed/
-                    # (NOT operator-side).
-                    - {id: ah-ledger-deploys-dir, scope: deploy, command: "test -d /home/arch/.config/overthink/installed/deploys"}
-                    - {id: ah-ledger-layers-dir, scope: deploy, command: "test -d /home/arch/.config/overthink/installed/layers"}
-                    # Ledger directories exist (created on first nested
-                    # host-deploy). Per-layer/per-deploy ledger files are
-                    # written on the OPERATOR side for nested host-
-                    # deploys today (known nested-routing rough edge —
-                    # unrelated to schema v4).
-                    # On Arch, direnv ships as a pacman package, so the
-                    # direnv layer installs it that way (no user-space
-                    # bootstrap needed). installed: true is correct.
-                    - {id: ah-direnv-installed, scope: deploy, package: direnv, installed: true}
-                    # Nothing listening (host overlay runs no services).
-                    - {id: ah-no-listeners, scope: deploy, command: "ss -tlnp 2>/dev/null | wc -l", stdout: {matches: "^[0-9]+"}}
-                    # matching: verb — operator-map form {contains: X} gives
-                    # substring semantics; bare scalar shorthand is equals.
-                    - {id: ah-matching-list, scope: deploy, matching: "arch-host in list", contains: {contains: "arch"}}
-    # =================================================================
-    # Bed 3: openclaw-sway-browser-pod (target: pod)
+    # Bed 1: openclaw-sway-browser-pod (target: pod)
     # ---------------------------------------------------------------
     # Disposable rootless podman container running the full Sway desktop
     # + Chrome + wayvnc stack. Exercises every live-container test verb
@@ -330,7 +144,7 @@ deploy:
             # --- matching: verb smoke -----------------------------
             - {id: sp-matching, scope: deploy, matching: "sway", equals: "sway"}
     # =================================================================
-    # Bed 4: k3s-vm (target: vm, k3s-server inside the VM)
+    # Bed 2: k3s-vm (target: vm, k3s-server inside the VM)
     # ---------------------------------------------------------------
     # Disposable libvirt-backed VM running k3s-server. The kubeconfig
     # artifact is pulled back to the operator for host-side `k8s:`
@@ -548,119 +362,8 @@ deploy:
 # Each entity is a build-time spec; deploy-time properties (disposable,
 # lifecycle, layers, env, ports, tests) live on the matching deployments:
 # entry. Disposability FIELDS ARE A DEPLOY PROPERTY (see /ov-internals:disposable);
-# the `vm.arch.disposable` entry below is retained for backward compatibility
-# during the Phase 6 migration — the load-bearing copy is in
-# deployments.images.arch-vm.disposable.
 # =============================================================================
 vm:
-    arch:
-        source:
-            kind: cloud_image
-            url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
-            checksum:
-                type: sha256
-            base_user: arch
-        # Retained for Phase 6 migration; load-bearing copy is on
-        # deployments.images.arch-vm (deploy-level property).
-        disposable: true
-        lifecycle: dev
-        # `backend: libvirt` is REQUIRED — the arch-vm bed's eval list
-        # contains 8 `ov eval libvirt …` probes + 2 `ov eval spice …`
-        # probes that all hit the libvirt user-session daemon socket.
-        # With `backend: auto` and the daemon NOT running on the
-        # operator's machine, resolveVmBackend silently falls through
-        # to direct-qemu and every libvirt-RPC probe fails with
-        # "no such file or directory". Explicit `backend: libvirt`
-        # makes resolveVmBackend fail loudly with a `systemctl --user
-        # enable --now virtqemud.service` hint instead. See
-        # /ov-vm:vm "Backend matrix" for the prereq.
-        backend: libvirt
-        disk_size: 40G
-        ram: 8G
-        cpu: 4
-        machine: q35
-        firmware: bios
-        network:
-            mode: user
-        ssh:
-            port: 2224
-            key_source: generate
-        cloud_init:
-            timezone: UTC
-            package:
-                # The host's ov binary (PKGBUILD `depends=()`) is built
-                # with cgo for SPICE audio: `gordonklaus/portaudio`
-                # links against libportaudio.so.2; the SPICE protocol
-                # path also pulls `libopusfile.so.0` and `libopus.so.0`
-                # transitively. Under `ov_install.strategy: auto` the
-                # host binary is scp'd into the guest, so the guest
-                # MUST ship those .so files — `portaudio` and
-                # `opusfile` (which pulls `opus`) cover all three.
-                # Without any of them, `ov version` exits 127 with
-                # "error while loading shared libraries".
-                #
-                # `base-devel` and `git` are required by the bed's
-                # `package:` eval probes (deploy.yml lines ~145, ~146).
-                # They were dropped in error during the runcmd cleanup
-                # of the 2026-05 R10 follow-up; re-added 2026-05-06.
-                - sudo
-                - spice-vdagent
-                - qemu-guest-agent
-                - portaudio
-                - opusfile
-                - base-devel
-                - git
-            runcmd:
-                # Activate the desktop / agent units that came in with
-                # cloud_init.packages. The legacy ov-from-source build
-                # block (git clone + makepkg + pacman -U) was DELETED
-                # in the 2026-05 R10 follow-up: it was redundant with
-                # `ov_install.strategy: auto` (which scps the host
-                # binary post-boot via VmDeployTarget) AND timed out
-                # under load — leaving non-empty errors[] in
-                # /var/lib/cloud/data/result.json that broke the
-                # `cloud-init no-errors` eval probe.
-                #
-                # `pacman-key --init && --populate archlinux` is
-                # required for post-boot pacman invocations driven
-                # by `ov deploy add arch-vm <ref>` (layer install via
-                # SSH). Without it, `pacman -Sy <pkg>` fails with
-                # `keyring is not writable / required key missing`.
-                # Cloud-init's own `packages:` step is unaffected
-                # (cloud-init bootstraps its own keyring); only the
-                # later operator-driven pacman calls need this.
-                - pacman-key --init
-                - pacman-key --populate archlinux
-                - systemctl enable --now spice-vdagentd
-                - systemctl enable --now qemu-guest-agent
-            ov_install:
-                # `auto` scps the host's ov binary into the guest
-                # after cloud-init reaches steady-state. Sole install
-                # path; no defence-in-depth runcmd fallback (it could
-                # not consume the scp's failure signal anyway because
-                # cloud-init runs before VmDeployTarget.Emit fires).
-                strategy: auto
-        libvirt:
-            device:
-                channel:
-                    - type: spicevmc
-                      name: com.redhat.spice.0
-                graphics:
-                    - type: spice
-                      listen:
-                        - type: socket
-                video:
-                    - model: virtio
-                      vram: 65536
-                      heads: 1
-                      accel3d: false
-                rng:
-                    - model: virtio
-                      backend: /dev/urandom
-                memballoon:
-                    model: virtio
-            snippets:
-                - "<channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>"
     # =================================================================
     # k3s-vm entity — dedicated VM for the k3s-vm deployment bed.
     # Cloud-image Arch (same base as `arch`) because a k3s server
@@ -700,7 +403,7 @@ vm:
                 # k3s-pod bed's host-port choice.
                 - "16443:6443"
         ssh:
-            port: 2225 # non-default, coexists with arch-vm's 2224
+            port: 2225 # non-default host SSH port for the k3s-vm bed
             key_source: generate
         cloud_init:
             # Minimal. Arch cloud image ships pacman-key populated, so

@@ -7,7 +7,7 @@ layer:
     - rsync
     - unzip
   distro:
-    archlinux:
+    arch:
       package:
         - bind-tools
     debian:

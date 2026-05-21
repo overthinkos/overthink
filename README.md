@@ -307,8 +307,10 @@ Manage `.secrets` with `ov secrets gpg {env, show, set, unset, edit, encrypt, re
 # Build a single image for your platform
 ov image build fedora
 
-# Build an Arch Linux image (auto-builds base + builder dependencies)
-ov image build arch-test
+# Build an Arch Linux image. The Arch consumer images (arch-coder, arch-ov,
+# arch-test, …) live in the overthinkos/arch submodule at image/arch and pull
+# their layers from this repo by git ref; the archlinux base + builder stay here.
+cd image/arch && ov image build arch-test     # auto-builds base + builder deps
 
 # Drop into an interactive shell
 ov shell fedora

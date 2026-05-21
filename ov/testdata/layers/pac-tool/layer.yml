@@ -1,7 +1,7 @@
 layer:
   name: pac-tool
   distro:
-    archlinux:
+    arch:
       package:
         - neovim
         - ripgrep

@@ -1342,7 +1342,7 @@ func renderCargoScript(s *BuilderStep, hostHome string) string {
 // installs the SAME passwordless-sudo policy used on standard Arch
 // hosts (e.g. CachyOS / EndeavourOS): the `wheel` group gets
 // `NOPASSWD: ALL` via `/etc/sudoers.d/20-nopasswd-wheel`. The
-// archlinux-builder's `user` account is added to wheel idempotently.
+// arch-builder's `user` account is added to wheel idempotently.
 // Then the script drops to that user via `sudo -u user yay -S …`:
 //
 //   * yay/makepkg run as the unprivileged user (modern makepkg refuses
@@ -1368,7 +1368,7 @@ func renderAurScript(s *BuilderStep, hostHome string) string {
 	b.WriteString("echo '%wheel ALL=(ALL:ALL) NOPASSWD: ALL' > /etc/sudoers.d/20-nopasswd-wheel\n")
 	b.WriteString("chmod 0440 /etc/sudoers.d/20-nopasswd-wheel\n")
 	// Ensure the unprivileged builder user is a member of wheel. The
-	// archlinux-builder image creates `user` (uid 1000) but does not
+	// arch-builder image creates `user` (uid 1000) but does not
 	// add it to wheel by default. groupadd -f is idempotent.
 	b.WriteString("getent group wheel >/dev/null || groupadd wheel\n")
 	b.WriteString("usermod -aG wheel user\n")

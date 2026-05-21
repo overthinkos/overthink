@@ -4,7 +4,7 @@ layer:
   package:
     - nvidia-container-toolkit
   distro:
-    archlinux:
+    arch:
       package:
         - nvidia-utils
     fedora:

@@ -1125,10 +1125,10 @@ recipe:
         select: [sshd-binary, sshd-wrapper]
         prefix: solo
       - kind: image
-        name: arch-coder
+        name: fedora-coder
         pod:  selftest-image
         scope: [image]
-        select: [arch-coder-ov]
+        select: [fedora-coder-ov]
         prefix: solo
       # Multi-kind composition onto the SAME pod, with filter pipeline.
       - kind: layer
@@ -1136,11 +1136,11 @@ recipe:
         pod:  composition-app
         select: [sshd-binary]
       - kind: image
-        name: arch-coder
+        name: fedora-coder
         pod:  composition-app
         scope: [image]
-        select: [arch-coder-ov, arch-coder-languages]
-        exclude: [arch-coder-languages]
+        select: [fedora-coder-ov, fedora-coder-languages]
+        exclude: [fedora-coder-languages]
         prefix: img
     scenario:
       # Hand-written scenario whose depends_on: crosses the imported↔

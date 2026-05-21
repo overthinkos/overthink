@@ -1078,7 +1078,7 @@ func syntheticVmImage(spec *VmSpec) *ResolvedImage {
 		UID:          1000,
 		GID:          1000,
 		Home:         "/home/" + user,
-		Distro:       []string{"archlinux"}, // cloud_image today is arch; extend when more VM distros land.
+		Distro:       []string{"arch"}, // cloud_image today is arch; extend when more VM distros land.
 		Pkg:          "pac",
 		BuildFormats: []string{"pac"},
 	}

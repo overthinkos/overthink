@@ -10,7 +10,7 @@ package main
 //
 // This replaces the former ~16 hand-invoked `ov migrate <name>` sub-verbs. The
 // version representation moved from an integer (`version: 4`) to a CalVer
-// (`version: 2026.141.1530`): LatestSchemaVersion is the HEAD step's CalVer, the
+// (`version: 2026.141.1600`): LatestSchemaVersion is the HEAD step's CalVer, the
 // curated constant every versioned file is stamped to and the load-time gate
 // compares against.
 //
@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.141.1530")
+var latestSchemaVersion = mustCalVer("2026.141.1600")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -145,6 +145,10 @@ func migrationSteps() []MigrationStep {
 		}},
 		{mustCalVer("2026.141.1326"), "drop-kdbx", true, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateDropKdbx(c.HostConfigPath, c.DryRun)
+			return len(w) > 0, err
+		}},
+		{mustCalVer("2026.141.1559"), "arch-rename", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateArchRename(c.Dir, c.HostDeployPath, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

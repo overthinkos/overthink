@@ -5,7 +5,7 @@ layer:
     - git
     - git-lfs
   distro:
-    archlinux:
+    arch:
       package:
         - github-cli
     debian:

@@ -521,14 +521,14 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			// Level 0: defines build
-			"archlinux": {
+			"arch": {
 				Base:   "docker.io/library/archlinux:latest",
 				Build:  BuildFormats{"pac"},
 				Layer: []string{},
 			},
-			// Level 1: no build set, should inherit from archlinux
+			// Level 1: no build set, should inherit from arch
 			"arch-extended": {
-				Base:   "archlinux",
+				Base:   "arch",
 				Layer: []string{},
 			},
 			// Level 2: no build set, should inherit through chain
@@ -544,7 +544,7 @@ func TestResolveImageBuildBaseChain(t *testing.T) {
 		imageName string
 		wantBuild []string
 	}{
-		{"level 0: defines build", "archlinux", []string{"pac"}},
+		{"level 0: defines build", "arch", []string{"pac"}},
 		{"level 1: inherits from parent", "arch-extended", []string{"pac"}},
 		{"level 2: inherits through chain", "arch-app", []string{"pac"}},
 	}

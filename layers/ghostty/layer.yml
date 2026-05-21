@@ -2,7 +2,7 @@ layer:
   name: ghostty
   description: Ghostty terminal emulator
   distro:
-    archlinux:
+    arch:
       package:
         - ghostty
   eval:

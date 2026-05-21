@@ -5,7 +5,7 @@ layer:
   package:
     - cloud-init
   distro:
-    archlinux:
+    arch:
       package:
         - cloud-guest-utils
     debian:

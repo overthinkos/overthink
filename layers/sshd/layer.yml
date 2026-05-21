@@ -6,7 +6,7 @@ layer:
   package:
     - sudo
   distro:
-    archlinux:
+    arch:
       package:
         - openssh
     debian:
@@ -58,7 +58,7 @@ layer:
     - id: openssh-server-package
       package: openssh-server
       package_map:
-        archlinux: openssh
+        arch: openssh
         fedora: openssh-server
         fedora:43: openssh-server
       installed: true

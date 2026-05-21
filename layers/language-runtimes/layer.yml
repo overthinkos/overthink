@@ -4,7 +4,7 @@ layer:
     - nodejs
     - rust
   distro:
-    archlinux:
+    arch:
       package:
         - dotnet-sdk
         - go

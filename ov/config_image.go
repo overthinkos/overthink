@@ -125,7 +125,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// Route Pattern B's image short-name through the same local-CalVer
 		// resolver Pattern A uses on line above. Without this, ExtractMetadata
 		// gets a bare short name that podman storage doesn't know (storage
-		// is keyed by full registry refs like ghcr.io/overthinkos/archlinux:TAG).
+		// is keyed by full registry refs like ghcr.io/overthinkos/arch:TAG).
 		// Pre-2026-05-16 bug: ensure-image succeeded (internal short-name
 		// resolution) but the very next ExtractMetadata call errored with
 		// "image X is not available locally" — contradictory output from

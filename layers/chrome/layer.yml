@@ -29,7 +29,7 @@ layer:
     - procps-ng
     - libva-utils
   distro:
-    archlinux:
+    arch:
       package:
         - vulkan-icd-loader
         - mesa

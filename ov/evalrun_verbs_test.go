@@ -255,10 +255,10 @@ func TestResolvePackageName(t *testing.T) {
 		{
 			name: "map key matches distro tag",
 			check: Check{Package: "openssh-server", PackageMap: map[string]string{
-				"archlinux": "openssh",
+				"arch": "openssh",
 				"fedora":    "openssh-server",
 			}},
-			distros: []string{"archlinux"},
+			distros: []string{"arch"},
 			want:    "openssh",
 		},
 		{
@@ -273,7 +273,7 @@ func TestResolvePackageName(t *testing.T) {
 		{
 			name: "no tag matches — fallback to scalar",
 			check: Check{Package: "openssh-server", PackageMap: map[string]string{
-				"archlinux": "openssh",
+				"arch": "openssh",
 			}},
 			distros: []string{"ubuntu"},
 			want:    "openssh-server",
@@ -281,7 +281,7 @@ func TestResolvePackageName(t *testing.T) {
 		{
 			name: "empty distros — fallback to scalar",
 			check: Check{Package: "openssh-server", PackageMap: map[string]string{
-				"archlinux": "openssh",
+				"arch": "openssh",
 			}},
 			distros: nil,
 			want:    "openssh-server",
@@ -289,10 +289,10 @@ func TestResolvePackageName(t *testing.T) {
 		{
 			name: "empty string map value — fall through to next distro",
 			check: Check{Package: "openssh-server", PackageMap: map[string]string{
-				"archlinux": "",
+				"arch": "",
 				"fedora":    "openssh-server",
 			}},
-			distros: []string{"archlinux", "fedora"},
+			distros: []string{"arch", "fedora"},
 			want:    "openssh-server",
 		},
 	}

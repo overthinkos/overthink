@@ -2,7 +2,7 @@ layer:
   name: ssh-client
   description: OpenSSH client tools for SSH agent forwarding
   distro:
-    archlinux:
+    arch:
       package:
         - openssh
     debian:

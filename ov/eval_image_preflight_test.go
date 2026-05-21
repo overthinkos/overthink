@@ -45,21 +45,21 @@ func TestResolveImageRefForEnsure_ShortNameRequiresCfg(t *testing.T) {
 // TestBuildableShortName_FullRefBasenameLookup — the build-fallback
 // path for full registry refs reverse-resolves the basename against
 // cfg.Image. This is what lets
-// `ghcr.io/overthinkos/archlinux-builder:<tag>` build locally on a
+// `ghcr.io/overthinkos/arch-builder:<tag>` build locally on a
 // host with no ghcr.io credentials.
 func TestBuildableShortName_FullRefBasenameLookup(t *testing.T) {
 	cfg := &Config{Image: map[string]ImageConfig{
-		"archlinux-builder": {},
+		"arch-builder": {},
 		"fedora-builder":    {},
 	}}
 	cases := []struct {
 		image string
 		want  string
 	}{
-		{"ghcr.io/overthinkos/archlinux-builder:2026.122.2252", "archlinux-builder"},
+		{"ghcr.io/overthinkos/arch-builder:2026.122.2252", "arch-builder"},
 		{"ghcr.io/overthinkos/fedora-builder:latest", "fedora-builder"},
-		{"localhost:5000/archlinux-builder:dev", "archlinux-builder"},
-		{"archlinux-builder", "archlinux-builder"},
+		{"localhost:5000/arch-builder:dev", "arch-builder"},
+		{"arch-builder", "arch-builder"},
 		{"some-unknown-image", ""},
 		{"ghcr.io/owner/totally-unknown:v1", ""},
 	}

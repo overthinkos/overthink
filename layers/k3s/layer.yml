@@ -7,7 +7,7 @@ layer:
     - fuse-overlayfs
     - socat
   distro:
-    archlinux:
+    arch:
       package:
         - conntrack-tools
         - iptables-nft
@@ -90,4 +90,4 @@ layer:
       package: iptables
       installed: true
       package_map:
-        archlinux: iptables-nft
+        arch: iptables-nft

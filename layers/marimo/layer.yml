@@ -12,7 +12,7 @@ layer:
     # SKILL.md discovery used by overthink's own plugins/<plugin>/skills/.
     MARIMO_SKILLS_DIR: "/opt/marimo-skills"
   distro:
-    archlinux:
+    arch:
       package:
         - git           # required by the marimo-team/skills tarball extract validation step
         - gcc           # Arch's gcc package includes both C and C++ frontends (no gcc-c++ split)

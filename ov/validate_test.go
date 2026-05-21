@@ -266,7 +266,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"arch-img": {
-				Base:   "archlinux:latest",
+				Base:   "arch:latest",
 				Build:  BuildFormats{"pac", "aur"},
 				Layer: []string{"aur-layer"},
 			},
@@ -294,7 +294,7 @@ func TestValidateAurWithoutAurBuilder(t *testing.T) {
 // A layer that ships rpm: AND aur: sections is consumed by a Fedora image
 // with build: [rpm]. The IR compiler skips the aur: section entirely
 // (install_build.go:236-249 iterates only img.BuildFormats), so the
-// archlinux-builder is never invoked. The validator must NOT require
+// arch-builder is never invoked. The validator must NOT require
 // builder.aur on the Fedora consumer.
 func TestValidateAurOnFedoraImageNoError(t *testing.T) {
 	cfg := &Config{
@@ -335,7 +335,7 @@ func TestValidateAurOnArchImageWithoutAurInBuildFormats(t *testing.T) {
 		},
 		Image: map[string]ImageConfig{
 			"arch-pac-only": {
-				Base:   "archlinux:latest",
+				Base:   "arch:latest",
 				Build:  BuildFormats{"pac"},
 				Layer: []string{"aur-layer"},
 			},

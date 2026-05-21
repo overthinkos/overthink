@@ -158,8 +158,16 @@ func TestScanRemoteLayers(t *testing.T) {
 	if !pyml.HasPixiToml {
 		t.Error("python-ml should have pixi.toml")
 	}
-	if len(pyml.Require) != 1 || pyml.Require[0] != "cuda" {
-		t.Errorf("python-ml.Requires = %v", pyml.Require)
+	// A remote layer's plain-name sibling dep is qualified at scan time to the
+	// sibling's fully-qualified map key, so the dependency graph resolves it
+	// against the cuda layer fetched from the same repo (keyed identically).
+	wantDep := "github.com/overthinkos/ml-layers/layers/cuda"
+	if len(pyml.Require) != 1 || pyml.Require[0] != wantDep {
+		t.Errorf("python-ml.Require = %v, want [%s]", pyml.Require, wantDep)
+	}
+	// RawRequire preserves the original short-name form for transitive fetch.
+	if len(pyml.RawRequire) != 1 || pyml.RawRequire[0] != "cuda" {
+		t.Errorf("python-ml.RawRequire = %v, want [cuda]", pyml.RawRequire)
 	}
 }
 

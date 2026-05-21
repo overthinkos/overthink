@@ -434,13 +434,19 @@ func (g *Generator) generateContainerfile(imageName string) error {
 		// Emit scratch stage with COPY lines for fragments
 		b.WriteString(fmt.Sprintf("FROM scratch AS %s\n", def.StageName))
 		if def.StageHeaderCopy != "" {
-			b.WriteString(def.StageHeaderCopy + "\n")
+			headerCopy, err := g.rewriteHeaderCopyForRemote(def.StageHeaderCopy)
+			if err != nil {
+				return err
+			}
+			b.WriteString(headerCopy + "\n")
 		}
 		for i, layerName := range initLayerOrder {
 			layer := g.Layers[layerName]
 			// Service content fragments (fragment_assembly model)
 			if def.Model == "fragment_assembly" && layer.HasInit(initName) {
-				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layerName)
+				// Use the SHORT name (not the map key) — a remote layer's key is
+				// a slashed github ref that would create bogus nested dirs.
+				fileName := fmt.Sprintf("%02d-%s.conf", i+1, layer.Name)
 				copyLine, err := def.RenderStageFragmentCopy(imageName, fileName)
 				if err != nil {
 					return fmt.Errorf("rendering stage fragment copy for %s/%s: %w", initName, layerName, err)
@@ -1149,7 +1155,8 @@ func (g *Generator) generateInitFragments(imageName, initName string, def *InitD
 				}
 			}
 			if layerBuf.Len() > 0 {
-				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layerName))
+				// Short name, not the slashed remote map key (see scratch-stage note).
+				fragFile := filepath.Join(fragDir, fmt.Sprintf("%02d-%s.conf", idx, layer.Name))
 				if err := os.WriteFile(fragFile, []byte(layerBuf.String()), 0644); err != nil {
 					return err
 				}
@@ -1399,14 +1406,14 @@ func (g *Generator) layerNeedsBuilder(img *ResolvedImage, layer *Layer, builderD
 		if section != nil && len(section.Packages) > 0 {
 			// Distro-aware gate: a config-only detection (no DetectFiles
 			// match) means the builder is tightly coupled to a specific
-			// distro's install_template (e.g. archlinux.formats.aur runs
+			// distro's install_template (e.g. arch.formats.aur runs
 			// `pacman -U`). The IR compiler (install_build.go:236-249)
 			// only emits install steps for formats in img.BuildFormats —
 			// so when the image's build modes don't include this format,
 			// the section is unreachable and the builder is not needed.
 			// Multi-distro layers can carry rpm: + pac: + aur: together
 			// without forcing every Fedora consumer to invoke
-			// archlinux-builder. Mirrors the validate.go validateBuilders
+			// arch-builder. Mirrors the validate.go validateBuilders
 			// gate (Section K-1).
 			if img != nil && !buildFormatsInclude(img.BuildFormats, builderDef.DetectConfig) {
 				return false
@@ -1485,7 +1492,7 @@ func (g *Generator) buildStageContext(layer *Layer, builderName string, builderD
 		BuilderRef:  builderRef,
 		StageName:   stageName,
 		LayerStage:  layer.Name,
-		CopySrc:     g.layerCopySource(layer.Name),
+		CopySrc:     g.layerCopySource(layerMapKey(layer)),
 		UID:         img.UID,
 		GID:         img.GID,
 		Home:        img.Home,
@@ -2184,6 +2191,71 @@ func (g *Generator) createRemoteLayerCopies() error {
 	return nil
 }
 
+// remoteBuildConfigCacheRoot derives the repo cache root that a remotely-included
+// build.yml was read from, by stripping the layer subpath off any remote layer's
+// cached Path (every remote layer + the remote build.yml share one repo@version
+// cache). Returns "" when the build-config is local (no remote layers).
+func (g *Generator) remoteBuildConfigCacheRoot() string {
+	for _, l := range g.Layers {
+		if l.Remote && l.Path != "" {
+			suffix := filepath.Join(l.SubPathPrefix, l.Name) // e.g. "layers/pixi"
+			if trimmed := strings.TrimSuffix(l.Path, suffix); trimmed != l.Path {
+				return strings.TrimRight(trimmed, string(filepath.Separator))
+			}
+		}
+	}
+	return ""
+}
+
+// materializeBuildConfigAsset ensures a build-config asset file (referenced by a
+// remotely-included build.yml — e.g. the init header_file) is available in the
+// build context. If the project ships the file locally (local build.yml), relPath
+// is returned unchanged. Otherwise the file is copied from the remote build-config
+// cache into .build/_buildconfig/<relPath> (gitignored, like .build/_layers/) and
+// the build-root-relative path is returned for use as a COPY source.
+func (g *Generator) materializeBuildConfigAsset(relPath string) (string, error) {
+	if relPath == "" {
+		return relPath, nil
+	}
+	if _, err := os.Stat(filepath.Join(g.Dir, relPath)); err == nil {
+		return relPath, nil // local build-config ships the asset; COPY works as-is
+	}
+	root := g.remoteBuildConfigCacheRoot()
+	if root == "" {
+		return relPath, nil // no remote source to pull from; leave as authored
+	}
+	srcAbs := filepath.Join(root, relPath)
+	if _, err := os.Stat(srcAbs); err != nil {
+		return relPath, nil // not in the remote cache either; leave as authored
+	}
+	destAbs := filepath.Join(g.BuildDir, "_buildconfig", relPath)
+	if err := os.MkdirAll(filepath.Dir(destAbs), 0755); err != nil {
+		return relPath, err
+	}
+	if out, err := exec.Command("cp", "-a", srcAbs, destAbs).CombinedOutput(); err != nil {
+		return relPath, fmt.Errorf("materializing build-config asset %s: %s: %w", relPath, string(out), err)
+	}
+	return filepath.ToSlash(filepath.Join(".build", "_buildconfig", relPath)), nil
+}
+
+// rewriteHeaderCopyForRemote rewrites a `COPY <src> <dst>` header directive so its
+// source points at a materialized build-config asset when the original src isn't in
+// the local build context. Plain 3-token COPY only; anything else passes through.
+func (g *Generator) rewriteHeaderCopyForRemote(headerCopy string) (string, error) {
+	fields := strings.Fields(headerCopy)
+	if len(fields) != 3 || fields[0] != "COPY" {
+		return headerCopy, nil
+	}
+	newSrc, err := g.materializeBuildConfigAsset(fields[1])
+	if err != nil {
+		return headerCopy, err
+	}
+	if newSrc == fields[1] {
+		return headerCopy, nil
+	}
+	return fmt.Sprintf("COPY %s %s", newSrc, fields[2]), nil
+}
+
 // layerCopySource returns the COPY source path for a layer in the Containerfile,
 // relative to the build context root (g.Dir).
 //
@@ -2195,6 +2267,18 @@ func (g *Generator) createRemoteLayerCopies() error {
 // layers/<name>/ location, the result is the build-root-relative path to
 // SourceDir so that Containerfile COPY directives pick up files from the author's
 // chosen config directory.
+// layerMapKey returns the key under which a layer is stored in g.Layers: the
+// fully-qualified remote ref (RepoPath/SubPathPrefix/Name) for remote layers,
+// the short name for local ones. Use this whenever code holds a *Layer but
+// needs to look it up (or pass its key to layerCopySource), since a remote
+// layer's short Name does NOT match its map key.
+func layerMapKey(layer *Layer) string {
+	if layer.Remote {
+		return layer.RepoPath + "/" + layer.SubPathPrefix + layer.Name
+	}
+	return layer.Name
+}
+
 func (g *Generator) layerCopySource(layerRef string) string {
 	layer := g.Layers[layerRef]
 	if layer.Remote {

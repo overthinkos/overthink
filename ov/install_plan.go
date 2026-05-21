@@ -82,7 +82,7 @@ const (
 	VenueHostNative Venue = iota
 
 	// VenueContainerBuilder runs the step inside the existing multi-stage
-	// builder image (fedora-builder / archlinux-builder / ...). On the
+	// builder image (fedora-builder / arch-builder / ...). On the
 	// host target this means `podman run --user <host-uid> -v <paths>
 	// <builder> bash -c "..."`. On the OCI target this is a FROM + RUN
 	// pair that becomes its own build stage, with copy_artifacts pulling

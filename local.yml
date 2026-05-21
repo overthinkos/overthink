@@ -1,4 +1,4 @@
-version: 2026.141.1530
+version: 2026.141.1600
 
 local:
   ov-cachyos:
@@ -73,11 +73,11 @@ local:
       with_service: true
       allow_repo_changes: true
       allow_root_tasks: true
-      # Use the locally-cached archlinux-builder for cargo/npm/pixi steps.
+      # Use the locally-cached arch-builder for cargo/npm/pixi steps.
       # FQDN form bypasses the need for podman unqualified-search-registries
-      # config, and archlinux-builder is more appropriate than the project
+      # config, and arch-builder is more appropriate than the project
       # default fedora-builder for an Arch/CachyOS host.
-      builder_image: ghcr.io/overthinkos/archlinux-builder:2026.122.2252
+      builder_image: ghcr.io/overthinkos/arch-builder:2026.122.2252
 
     env:
       - EDITOR=nvim

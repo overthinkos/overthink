@@ -3,7 +3,7 @@ layer:
   path_append:
     - "~/.cargo/bin"
   distro:
-    archlinux:
+    arch:
       package:
         - rust
     debian:

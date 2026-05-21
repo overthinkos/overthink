@@ -2,7 +2,7 @@ layer:
   name: golang
   description: Go programming language compiler
   distro:
-    archlinux:
+    arch:
       package:
         - go
     debian:

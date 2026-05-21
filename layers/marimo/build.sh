@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Post-pixi install for the marimo pixi env. Runs in the
-# archlinux-builder pixi-builder stage AFTER `pixi install`, so
+# arch-builder pixi-builder stage AFTER `pixi install`, so
 # every wheel + binary in ~/.pixi/envs/default/ is available
 # (torch 2.11.x+cu130, cuda runtime, gcc, etc.) and gets COPIED
 # into the final image alongside whatever this script adds.

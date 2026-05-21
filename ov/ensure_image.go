@@ -20,7 +20,7 @@ package main
 //     Build-fallback reverse-resolves the basename against
 //     `cfg.Image`; when the basename matches a project image entry,
 //     the local build runs that entry. This is what makes the
-//     operator's `ghcr.io/overthinkos/archlinux-builder:<tag>`
+//     operator's `ghcr.io/overthinkos/arch-builder:<tag>`
 //     buildable on a CachyOS host that has no ghcr.io credentials.
 //
 //   - Remote project ref (e.g.
@@ -204,8 +204,8 @@ func podmanPullForEnsure(ctx context.Context, ref string) error {
 //     `cfg.Image[name]` exists.
 //   - Full registry refs have their basename (last path segment,
 //     before the tag) extracted and checked against `cfg.Image`.
-//     This is what lets `ghcr.io/overthinkos/archlinux-builder:<tag>`
-//     fall back to building the project's `archlinux-builder` image.
+//     This is what lets `ghcr.io/overthinkos/arch-builder:<tag>`
+//     fall back to building the project's `arch-builder` image.
 //   - Remote `@github.com/...` refs are skipped — the remote
 //     project's image.yml already determined the canonical ref;
 //     local build-fallback is not applicable.

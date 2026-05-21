@@ -4,7 +4,7 @@ layer:
   require:
     - supervisord
   distro:
-    archlinux:
+    arch:
       package:
         # Arch ships nodejs (currently 24+) and npm in extra; package names
         # match Fedora exactly. The supervisor RPM/PAC pulls python3 in as

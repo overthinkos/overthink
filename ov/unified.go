@@ -541,7 +541,20 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
-	if v, ok := ParseCalVer(merged.Version); !ok || v.Less(LatestSchemaVersion()) {
+	fileVer, verOK := ParseCalVer(merged.Version)
+	switch {
+	case verOK && LatestSchemaVersion().Less(fileVer):
+		// The config was written for a NEWER schema than this ov binary
+		// understands. `ov migrate` cannot help — migration only moves
+		// configs forward to THIS binary's HEAD, and the file is already
+		// past it. The binary itself is behind, so the only fix is to
+		// update ov. Hard-fail with that advice instead of letting a
+		// newer field shape silently mis-parse.
+		return nil, true, fmt.Errorf(
+			"%s: config schema %s is newer than this ov supports (max %s). Update ov (reinstall the latest overthink package, or run 'task build:ov' from a fresh checkout)",
+			root, merged.Version, LatestSchemaVersion(),
+		)
+	case !verOK || fileVer.Less(LatestSchemaVersion()):
 		return nil, true, fmt.Errorf(
 			"%s: schema %s is required (found %q). Run: ov migrate",
 			root, LatestSchemaVersion(), merged.Version,

@@ -420,7 +420,7 @@ func TestShQuoteEnv(t *testing.T) {
 // fail with EACCES.
 func TestBuildBuilderRunArgsRunAsRoot(t *testing.T) {
 	opts := BuilderRunOpts{
-		BuilderImage: "archlinux-builder:latest",
+		BuilderImage: "arch-builder:latest",
 		LayerDir:     "/home/user/layers/pre-commit",
 		HostHome:     "/home/user",
 		RunAsRoot:    true,

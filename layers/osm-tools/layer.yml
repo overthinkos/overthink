@@ -4,7 +4,7 @@ layer:
   require:
     - supervisord
   distro:
-    archlinux:
+    arch:
       # gdal pulls in ocl-icd which collides with opencl-nvidia's
       # /usr/lib/libOpenCL.so (NVIDIA ships its own ICD loader rather
       # than the generic one). The two are both legitimate OpenCL ICDs,
@@ -53,7 +53,7 @@ layer:
         - gcc-c++
         - sqlite-devel
         - zlib-devel
-        # rust: same rationale as the archlinux section — used by the
+        # rust: same rationale as the arch section — used by the
         # cargo install gpq-tiles task below.
         - rust
         - cargo

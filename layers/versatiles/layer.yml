@@ -4,7 +4,7 @@ layer:
   require:
     - supervisord
   distro:
-    archlinux:
+    arch:
       package:
         # curl + jq pull the GitHub-API release listing dynamically so
         # the install step picks up whatever versatiles-rs version is

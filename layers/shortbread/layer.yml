@@ -4,7 +4,7 @@ layer:
   require:
     - supervisord
   distro:
-    archlinux:
+    arch:
       package:
         # Tilemaker's build deps. On Arch the gcc package supplies the
         # C++ frontend (no -devel split). lua is the embedding runtime

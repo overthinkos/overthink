@@ -564,7 +564,7 @@ func (t *VmDeployTarget) execBuilder(ctx context.Context, s *BuilderStep, plan *
 	// to that user to run the existing aur build flow. The host-side
 	// renderAurScript assumes a pre-baked sudoers (OCI multistage
 	// builds add it via stage_template); deploy-time podman-run on a
-	// stock archlinux-builder image doesn't have that, so we set it
+	// stock arch-builder image doesn't have that, so we set it
 	// up ourselves before invoking the inner build.
 	innerScript, err := renderBuilderScript(s, hostHome)
 	if err != nil {

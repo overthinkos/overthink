@@ -2,7 +2,7 @@ layer:
   name: gnupg
   description: GnuPG encryption and signing tools for GPG agent forwarding
   distro:
-    archlinux:
+    arch:
       package:
         - gnupg
     debian:

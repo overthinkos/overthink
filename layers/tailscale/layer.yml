@@ -4,7 +4,7 @@ layer:
   package:
     - tailscale
   distro:
-    archlinux: {}
+    arch: {}
     debian-13:
       repo:
         - name: tailscale

@@ -21,7 +21,7 @@ layer:
     - gnupg
     - direnv
   distro:
-    archlinux:
+    arch:
       package:
         - pinentry
         - libsecret

@@ -25,7 +25,7 @@ import (
 // spiceConnector satisfies spice.Connector by dialing a fixed SPICE
 // endpoint. The endpoint can be a TCP host:port (classic) or a UNIX
 // socket path (modern default for ov-managed VMs after the hard
-// cutover — see vms.yml arch). Compress is passed through
+// cutover — see vm.yml arch). Compress is passed through
 // as a hint to the library.
 type spiceConnector struct {
 	network string // "tcp" | "unix"

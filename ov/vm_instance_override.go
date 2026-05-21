@@ -14,7 +14,7 @@ import (
 // sibling to the SSH key, NVRAM, and console socket already kept
 // there. The presence of this file lets an operator override the
 // project-level VM classification for their specific instance
-// without modifying the project's deploy.yml or vms.yml.
+// without modifying the project's deploy.yml or vm.yml.
 //
 // Today the override only carries `disposable:` and `lifecycle:` —
 // the two fields that gate `ov rebuild <vm-entity>`. Future fields

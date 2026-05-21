@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -261,6 +263,57 @@ func (c *BuildCmd) buildImage(engine, dir, name string, img *ResolvedImage, cfg 
 // Skipped (returns nil) when img.From is not a builder ref. Errors when
 // the builder is missing, isn't kind: bootstrap, or doesn't have a
 // resolved BuilderImage on the ResolvedImage.
+// pacstrapMicroarchRe matches pacman microarchitecture-level tokens (e.g.
+// x86_64_v3) embedded in a repo Server URL. CachyOS's cachyos-v3 repos serve
+// such packages; pacman rejects them unless the matching token is in
+// Architecture.
+var pacstrapMicroarchRe = regexp.MustCompile(`x86_64_v[0-9]+`)
+
+// renderPacstrapExtraConf builds the pacman.conf fragment appended to
+// /etc/pacman.conf inside the bootstrap container before `pacstrap` runs. It is
+// the SINGLE source of truth for both the image bootstrap path
+// (runPrivilegedBootstrap) and the VM bootstrap path (vm_bootstrap.go) — these
+// previously each open-coded the rendering and drifted: the VM path dropped the
+// per-repo SigLevel, so a SigLevel=Never repo (CachyOS) fell back to the
+// default Required and `pacman -Sy` failed with "GPGME error: No data /
+// corrupted PGP signature". Both paths now share this function.
+//
+// It emits, in order:
+//  1. an [options] Architecture directive whenever any repo Server declares a
+//     microarch variant (e.g. x86_64_v3). pacman's default Architecture (auto →
+//     x86_64) otherwise rejects those packages with "package architecture is
+//     not valid". Architecture is cumulative in pacman, so appending this to
+//     the base config widens the accepted set rather than replacing it.
+//  2. each [repo] block with its Server and (when set) SigLevel.
+func renderPacstrapExtraConf(p *PacstrapDef) string {
+	if p == nil || len(p.ExtraRepos) == 0 {
+		return ""
+	}
+	seen := map[string]bool{}
+	var microarch []string
+	for _, r := range p.ExtraRepos {
+		for _, m := range pacstrapMicroarchRe.FindAllString(r.Server, -1) {
+			if !seen[m] {
+				seen[m] = true
+				microarch = append(microarch, m)
+			}
+		}
+	}
+	sort.Strings(microarch)
+
+	var b strings.Builder
+	if len(microarch) > 0 {
+		fmt.Fprintf(&b, "[options]\nArchitecture = x86_64 %s\n", strings.Join(microarch, " "))
+	}
+	for _, r := range p.ExtraRepos {
+		fmt.Fprintf(&b, "[%s]\nServer = %s\n", r.Name, r.Server)
+		if r.SigLevel != "" {
+			fmt.Fprintf(&b, "SigLevel = %s\n", r.SigLevel)
+		}
+	}
+	return b.String()
+}
+
 func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *ResolvedImage) error {
 	if !strings.HasPrefix(img.From, "builder:") {
 		return nil
@@ -321,17 +374,11 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 		Distro:   img.DistroDef,
 		Packages: bootstrapPackagesForImage(img),
 	}
-	// CachyOS et al. need extra repo blocks injected into pacman.conf
-	// before pacstrap so the new packages resolve from the right repos.
-	if img.DistroDef.Pacstrap != nil && len(img.DistroDef.Pacstrap.ExtraRepos) > 0 {
-		var b strings.Builder
-		for _, r := range img.DistroDef.Pacstrap.ExtraRepos {
-			fmt.Fprintf(&b, "[%s]\nServer = %s\n", r.Name, r.Server)
-			if r.SigLevel != "" {
-				fmt.Fprintf(&b, "SigLevel = %s\n", r.SigLevel)
-			}
-		}
-		ctx.ExtraPacmanConf = b.String()
+	// CachyOS et al. need extra repo blocks (+ an Architecture directive for
+	// microarch repos) injected into pacman.conf before pacstrap so the new
+	// packages resolve from the right repos. Shared with the VM bootstrap path.
+	if img.DistroDef != nil {
+		ctx.ExtraPacmanConf = renderPacstrapExtraConf(img.DistroDef.Pacstrap)
 	}
 	// Debian-family security/backports apt sources injected before stage-2.
 	if img.DistroDef.Debootstrap != nil && len(img.DistroDef.Debootstrap.ExtraRepos) > 0 {

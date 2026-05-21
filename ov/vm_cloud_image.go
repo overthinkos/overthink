@@ -148,7 +148,7 @@ func BuildCloudImage(
 
 // RegenerateSeedISO re-renders cloud-init user-data/meta-data/network-config
 // from the current VmSpec and overwrites the seed ISO in place. Used by
-// `ov vm create` to pick up vms.yml edits (new runcmd entries, packages,
+// `ov vm create` to pick up vm.yml edits (new runcmd entries, packages,
 // network config, etc.) without requiring a full `ov vm build` rerun.
 //
 // The qcow2 disk is left untouched — only the 180-sector seed ISO is

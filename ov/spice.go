@@ -32,8 +32,8 @@ type SpiceCmd struct {
 // ---------------- helper: open session from vm-name or --address ----------------
 
 type spiceConnectFlags struct {
-	Address  string `long:"address" help:"Bypass vms.yml lookup; host:port"`
-	Socket   string `long:"socket" help:"Bypass vms.yml lookup; UNIX socket path (spice+unix://)"`
+	Address  string `long:"address" help:"Bypass vm.yml lookup; host:port"`
+	Socket   string `long:"socket" help:"Bypass vm.yml lookup; UNIX socket path (spice+unix://)"`
 	Password string `long:"password" help:"SPICE password (for --address); empty = none"`
 	Uri      string `name:"uri" env:"OV_LIBVIRT_URI" help:"Libvirt URI (default: qemu:///session). Use qemu+ssh://[user@]host/session for remote hypervisors (auto-tunnels the display socket)."`
 }
@@ -64,7 +64,7 @@ func (f *spiceConnectFlags) open(vmName string) (*SpiceSession, error) {
 	if f.Socket != "" {
 		return DialSpiceUnix(f.Socket, f.Password)
 	}
-	// vms.yml path.
+	// vm.yml path.
 	t, err := ResolveVmTarget(vmName, f.Uri)
 	if err != nil {
 		return nil, err

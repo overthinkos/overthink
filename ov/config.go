@@ -496,13 +496,13 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 	// MergeDeployOntoMetadata → ImageMetadata directly.
 
 	// VM configuration (disk_size, ram, cpus, firmware, libvirt, …) lives
-	// on `kind: vm` entities in vms.yml, NOT on image.yml entries. The
+	// on `kind: vm` entities in vm.yml, NOT on image.yml entries. The
 	// legacy ImageConfig.Vm / .Libvirt fields were removed in the VM
 	// hard-cutover; `bootc: true` on an image now only declares that the
 	// container image is bootc-bootable (for `ov vm build` to produce a
 	// qcow2 via `bootc install to-disk`). To run that bootc image as a
 	// VM, declare a paired `kind: vm` entity with `source.kind: bootc`
-	// in vms.yml (see `ov migrate`).
+	// in vm.yml (see `ov migrate`).
 
 	// Resolve network: image -> defaults -> ""
 	resolved.Network = img.Network
@@ -635,7 +635,7 @@ func intPtr(v int) *int {
 }
 
 // resolveVmConfig was removed in the VM hard-cutover. VM configuration
-// now lives on `kind: vm` entities in vms.yml (VmSpec); image.yml
+// now lives on `kind: vm` entities in vm.yml (VmSpec); image.yml
 // entries no longer carry vm: or libvirt: fields.
 
 // walkBaseChainDistro walks the base chain through image.yml entries to find

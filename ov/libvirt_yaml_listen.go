@@ -108,7 +108,7 @@ func (ll *LibvirtGraphicsListeners) UnmarshalYAML(value *yaml.Node) error {
 
 // MarshalYAML preserves the shorthand: a single address listener
 // marshals as a scalar; everything else marshals as a sequence.
-// Keeps re-marshaled vms.yml readable.
+// Keeps re-marshaled vm.yml readable.
 func (ll LibvirtGraphicsListeners) MarshalYAML() (any, error) {
 	if len(ll) == 1 {
 		l := ll[0]

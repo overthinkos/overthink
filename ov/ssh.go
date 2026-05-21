@@ -38,7 +38,7 @@ type sshTunnelFlags struct {
 // ---------------- tunnel spice ----------------
 
 type SshTunnelSpiceCmd struct {
-	Vm string `arg:"" help:"VM name (vms.yml entity)"`
+	Vm string `arg:"" help:"VM name (vm.yml entity)"`
 	sshTunnelFlags
 }
 
@@ -49,7 +49,7 @@ func (c *SshTunnelSpiceCmd) Run() error {
 // ---------------- tunnel vnc ----------------
 
 type SshTunnelVncCmd struct {
-	Vm string `arg:"" help:"VM name (vms.yml entity)"`
+	Vm string `arg:"" help:"VM name (vm.yml entity)"`
 	sshTunnelFlags
 }
 

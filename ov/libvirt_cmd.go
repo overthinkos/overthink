@@ -102,7 +102,7 @@ func (c *LibvirtListCmd) Run() error {
 // ---------------- info ----------------
 
 type LibvirtInfoCmd struct {
-	Vm     string `arg:"" help:"VM name (vms.yml entity)"`
+	Vm     string `arg:"" help:"VM name (vm.yml entity)"`
 	Format string `long:"format" default:"text" help:"Output format: text, json"`
 	libvirtURIFlag
 }

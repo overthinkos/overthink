@@ -87,7 +87,7 @@ type EvalLiveCmd struct {
 }
 
 func (c *EvalLiveCmd) Run() error {
-	// VM dispatch: if the name matches a vms.yml entity, route the test run
+	// VM dispatch: if the name matches a vm.yml entity, route the test run
 	// through SSH instead of podman exec. VM deploys don't have an OCI image
 	// to pull labels from, so tests come exclusively from the deploy.yml
 	// overlay. This keeps the same declarative `tests:` authoring surface

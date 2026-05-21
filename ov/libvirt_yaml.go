@@ -3,13 +3,13 @@ package main
 // LibvirtDomain is the overthink YAML-facing shape for the libvirt
 // <domain> configuration (and the applicable-subset QEMU argv).
 //
-// vms.yml authors write this struct as the `libvirt:` stanza under a
+// vm.yml authors write this struct as the `libvirt:` stanza under a
 // kind:vm entity. At render time it converts to a libvirtxml.Domain
 // via ToLibvirtXML (see libvirt_yaml_bridge.go) and is marshaled to
 // the XML libvirt actually consumes.
 //
 // The YAML shape is preserved verbatim from the prior LibvirtConfig
-// type — existing vms.yml files load unchanged. The rename reflects
+// type — existing vm.yml files load unchanged. The rename reflects
 // the post-cutover architecture: the overthink YAML layer is a
 // translation facade over libvirtxml, not an independent schema.
 //
@@ -20,7 +20,7 @@ package main
 //     known until the image is composed.
 //   - XMLPassthrough: declarative verbatim libvirt XML fragments
 //     merged into the rendered domain at ToLibvirtXML time (Rule 6
-//     of the YAML↔XML mapping table). Read directly from vms.yml
+//     of the YAML↔XML mapping table). Read directly from vm.yml
 //     and baked into the domain XML before libvirtxml.Marshal.
 type LibvirtDomain struct {
 	// Snippets are raw XML strings classified by the existing
@@ -28,7 +28,7 @@ type LibvirtDomain struct {
 	// into <devices>, domain-scoped elements before </domain>.
 	// Deduplicated by exact string match. Composed by the layer
 	// machinery (CollectLibvirtSnippets); NOT a user-authored
-	// vms.yml field.
+	// vm.yml field.
 	Snippets []string `yaml:"snippets,omitempty"`
 
 	// XMLPassthrough accepts one or more verbatim libvirt XML

@@ -87,7 +87,7 @@ func CollectLibvirtSnippets(cfg *Config, layers map[string]*Layer, imageName str
 
 	// Image-level `libvirt:` field was removed in the VM hard-cutover.
 	// Raw XML snippets now live on the paired `kind: vm` entity's
-	// `spec.libvirt.snippets:` list in vms.yml.
+	// `spec.libvirt.snippets:` list in vm.yml.
 	_ = img
 
 	return snippets

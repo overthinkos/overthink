@@ -37,7 +37,7 @@ const (
 	LabelEnv   = "org.overthinkos.env"
 	LabelHooks = "org.overthinkos.hooks"
 	// LabelVm + LabelLibvirt: removed in the VM hard-cutover. VM specs
-	// now live in vms.yml as `kind: vm` entities; no longer embedded
+	// now live in vm.yml as `kind: vm` entities; no longer embedded
 	// in container image OCI labels.
 	LabelRoutes          = "org.overthinkos.routes"
 	LabelInit            = "org.overthinkos.init"
@@ -158,7 +158,7 @@ type ImageMetadata struct {
 	Env       []string
 	Hooks     *HooksConfig
 	// Vm / Libvirt: removed in the VM hard-cutover. VM config lives on
-	// `kind: vm` entities in vms.yml (VmSpec / LibvirtDomain), not on
+	// `kind: vm` entities in vm.yml (VmSpec / LibvirtDomain), not on
 	// container image OCI labels.
 	Routes         []LabelRoute
 	Init           string              // active init system name ("supervisord", "systemd", "")
@@ -348,7 +348,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	}
 
 	// VM config + libvirt snippets: removed in the VM hard-cutover. No
-	// longer emitted as OCI labels; VM definitions live in vms.yml as
+	// longer emitted as OCI labels; VM definitions live in vm.yml as
 	// `kind: vm` entities.
 
 	// Routes

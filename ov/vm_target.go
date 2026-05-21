@@ -3,7 +3,7 @@ package main
 // Shared VM target resolution for `ov eval spice` and `ov eval libvirt`.
 //
 // ResolveVmTarget opens a session-scoped libvirt connection, finds
-// the running domain whose name matches the vms.yml entity, and
+// the running domain whose name matches the vm.yml entity, and
 // parses its live XML via libvirtxml. Callers get:
 //
 //   - A libvirt connection they can use for further RPCs
@@ -13,7 +13,7 @@ package main
 //   - Convenience methods: SpiceAddress(), AgentReachable().
 //
 // Error taxonomy (surfaces the same wording to both commands):
-//   - Unknown vm-name: "no vms.yml entity named <name>; known: …"
+//   - Unknown vm-name: "no vm.yml entity named <name>; known: …"
 //   - Stopped domain: "domain <dom> is not running; start with
 //     `ov vm start <name>`"
 //   - No graphics stanza of matching type: "VM <name> has no <kind>
@@ -38,15 +38,15 @@ type VmTarget struct {
 	Conn    *libvirtConn       // shared connection wrapper
 	Domain  libvirt.Domain     // libvirt handle
 	XML     *libvirtxml.Domain // parsed live XML
-	Spec    *VmSpec            // vms.yml entity
-	VmName  string             // vms.yml key
+	Spec    *VmSpec            // vm.yml entity
+	VmName  string             // vm.yml key
 	DomName string             // libvirt domain name (typically "ov-<vmName>")
 	Uri     string             // libvirt URI used to resolve this target (empty = local)
 }
 
 // ResolveVmTarget opens a libvirt connection (local by default or
 // remote when uri is qemu+ssh://…) and resolves the running domain
-// for a vms.yml entity. Caller must Close() the returned target.
+// for a vm.yml entity. Caller must Close() the returned target.
 //
 // The domain-name convention matches `ov vm start`: "ov-<vmName>".
 // For entity names already prefixed with "ov-" (rare), the prefix is
@@ -57,7 +57,7 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 		return nil, fmt.Errorf("getting working directory: %w", err)
 	}
 
-	// Load the vms.yml entity.
+	// Load the vm.yml entity.
 	uf, ok, err := LoadUnified(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading overthink.yml: %w", err)
@@ -84,7 +84,7 @@ func ResolveVmTarget(vmName, uri string) (*VmTarget, error) {
 			known = append(known, k)
 		}
 		sort.Strings(known)
-		return nil, fmt.Errorf("no vms.yml entity named %q; known: %s", vmName, strings.Join(known, ", "))
+		return nil, fmt.Errorf("no vm.yml entity named %q; known: %s", vmName, strings.Join(known, ", "))
 	}
 
 	// Open libvirt (local or remote per uri).
@@ -221,7 +221,7 @@ func (t *VmTarget) SpiceEndpoint() (DisplayEndpoint, error) {
 		}
 		return ep, nil
 	}
-	return DisplayEndpoint{}, fmt.Errorf("VM %s has no SPICE graphics device declared in vms.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no SPICE graphics device declared in vm.yml", t.VmName)
 }
 
 // VncEndpoint is the VNC counterpart of SpiceEndpoint.
@@ -262,7 +262,7 @@ func (t *VmTarget) VncEndpoint() (DisplayEndpoint, error) {
 		}
 		return ep, nil
 	}
-	return DisplayEndpoint{}, fmt.Errorf("VM %s has no VNC graphics device declared in vms.yml", t.VmName)
+	return DisplayEndpoint{}, fmt.Errorf("VM %s has no VNC graphics device declared in vm.yml", t.VmName)
 }
 
 // SpiceAddress returns the TCP form of the SPICE endpoint — provided
@@ -314,7 +314,7 @@ func (t *VmTarget) AgentReachable(timeout time.Duration) bool {
 }
 
 // vmDomainNameFor returns the libvirt domain name convention for a
-// vms.yml entity. Matches `ov vm start`'s naming.
+// vm.yml entity. Matches `ov vm start`'s naming.
 func vmDomainNameFor(vmName string) string {
 	if strings.HasPrefix(vmName, "ov-") {
 		return vmName

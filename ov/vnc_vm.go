@@ -1,7 +1,7 @@
 package main
 
 // `ov eval vnc vm <name> <verb>` — RFB/VNC verbs targeting a VM
-// declared in vms.yml, mirroring the shape of `ov eval spice`.
+// declared in vm.yml, mirroring the shape of `ov eval spice`.
 //
 // For VMs whose <graphics type='vnc'> listens on a UNIX socket,
 // we dial the socket directly (local) or tunnel it over SSH (remote);

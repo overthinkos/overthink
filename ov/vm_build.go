@@ -65,12 +65,12 @@ func (c *VmBuildCmd) Run() error {
 	// Reached here = no `kind: vm` entity matched imageName. The legacy
 	// ImageConfig.Vm / ImageConfig.Bootc fallback for VM builds was
 	// removed in the VM hard-cutover. Users must declare a `kind: vm`
-	// entity in vms.yml — paired with the bootc image if applicable.
+	// entity in vm.yml — paired with the bootc image if applicable.
 	_ = calverTag
 	return fmt.Errorf(
-		"VM %q has no kind:vm entity in vms.yml.\n"+
-			"  For a bootc VM, declare one in vms.yml:\n"+
-			"      vms:\n"+
+		"VM %q has no kind:vm entity in vm.yml.\n"+
+			"  For a bootc VM, declare one in vm.yml:\n"+
+			"      vm:\n"+
 			"        %s-bootc:\n"+
 			"          source:\n"+
 			"            kind: bootc\n"+

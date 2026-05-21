@@ -1704,7 +1704,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 	}
 
 	// VM config + libvirt snippets labels removed in the hard-cutover.
-	// VM definitions live in vms.yml (`kind: vm` entities) as a
+	// VM definitions live in vm.yml (`kind: vm` entities) as a
 	// separate artifact from the container image; container image OCI
 	// labels no longer describe VM boot parameters.
 

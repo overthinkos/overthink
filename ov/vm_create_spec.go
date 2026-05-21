@@ -45,7 +45,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		return err
 	}
 
-	// For cloud_image sources, always regenerate the seed ISO so vms.yml
+	// For cloud_image sources, always regenerate the seed ISO so vm.yml
 	// edits (cloud_init packages/runcmd/network-config/etc.) take effect on
 	// `ov vm create` without forcing an explicit `ov vm build`. The qcow2
 	// disk is left alone — only the seed ISO is cheap to rebuild.
@@ -57,7 +57,7 @@ func (c *VmCreateCmd) runVmSpecCreate(vmName string, spec *VmSpec, backend strin
 		if err := RegenerateSeedISO(spec, seedISOAbs, vmStateDir, existingState); err != nil {
 			return fmt.Errorf("regenerating seed ISO: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "Regenerated cloud-init seed ISO from vms.yml\n")
+		fmt.Fprintf(os.Stderr, "Regenerated cloud-init seed ISO from vm.yml\n")
 	}
 	pubKey, err := resolveSSHPubKeyForSpec(spec, vmStateDir)
 	if err != nil {

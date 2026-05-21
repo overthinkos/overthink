@@ -218,9 +218,9 @@ func (c *VmCreateCmd) Run() error {
 	_ = rt
 	_ = backend
 	return fmt.Errorf(
-		"VM %q has no kind:vm entity in vms.yml.\n"+
+		"VM %q has no kind:vm entity in vm.yml.\n"+
 			"  Declare one (optionally paired with a bootc image), e.g.:\n"+
-			"      vms:\n"+
+			"      vm:\n"+
 			"        %s-bootc:\n"+
 			"          source: {kind: bootc, image: %s}\n",
 		c.Image, c.Image, c.Image)
@@ -915,7 +915,7 @@ type VmSshCmd struct {
 }
 
 func (c *VmSshCmd) Run() error {
-	// Resolve SSH port from the kind:vm entity in vms.yml.
+	// Resolve SSH port from the kind:vm entity in vm.yml.
 	// (Legacy OCI LabelVm lookup was removed in the VM hard-cutover.)
 	if c.Port == 2222 {
 		if dir, derr := os.Getwd(); derr == nil {

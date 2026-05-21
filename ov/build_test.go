@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -464,5 +465,52 @@ func TestHostPlatform(t *testing.T) {
 	// Should start with linux/
 	if p != "linux/amd64" && p != "linux/arm64" {
 		t.Logf("hostPlatform() = %q (non-standard arch, that's OK)", p)
+	}
+}
+
+// TestRenderPacstrapExtraConf locks in the shared pacstrap pacman.conf renderer:
+// (1) a microarch repo (CachyOS x86_64_v3) yields an [options] Architecture
+// directive — the fix for "package architecture is not valid"; (2) per-repo
+// SigLevel is always emitted — the fix for the VM bootstrap path dropping it
+// (GPGME "No data" on SigLevel=Never repos); (3) non-microarch / empty inputs
+// stay clean (no spurious [options], no regression for arch-pacstrap).
+func TestRenderPacstrapExtraConf(t *testing.T) {
+	cachyos := &PacstrapDef{ExtraRepos: []PacstrapRepo{
+		{Name: "cachyos-v3", Server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo", SigLevel: "Never"},
+		{Name: "cachyos-core-v3", Server: "https://mirror.cachyos.org/repo/x86_64_v3/$repo", SigLevel: "Never"},
+		{Name: "cachyos", Server: "https://mirror.cachyos.org/repo/$arch/$repo", SigLevel: "Never"},
+	}}
+	got := renderPacstrapExtraConf(cachyos)
+	if !strings.Contains(got, "[options]\nArchitecture = x86_64 x86_64_v3\n") {
+		t.Errorf("missing/incorrect Architecture directive for x86_64_v3 repos:\n%s", got)
+	}
+	if strings.Count(got, "SigLevel = Never") != 3 {
+		t.Errorf("expected SigLevel emitted for all 3 repos, got:\n%s", got)
+	}
+	if strings.Count(got, "Architecture =") != 1 {
+		t.Errorf("expected exactly one Architecture directive (deduped), got:\n%s", got)
+	}
+
+	// nil / empty → empty fragment (no spurious [options]).
+	if s := renderPacstrapExtraConf(nil); s != "" {
+		t.Errorf("nil PacstrapDef should render empty, got %q", s)
+	}
+	if s := renderPacstrapExtraConf(&PacstrapDef{}); s != "" {
+		t.Errorf("no-repos PacstrapDef should render empty, got %q", s)
+	}
+
+	// Plain (non-microarch) repo without SigLevel → repo block, no [options].
+	plain := &PacstrapDef{ExtraRepos: []PacstrapRepo{
+		{Name: "extra", Server: "https://example.org/repo/$arch/$repo"},
+	}}
+	got = renderPacstrapExtraConf(plain)
+	if strings.Contains(got, "[options]") {
+		t.Errorf("plain repo should not emit [options]/Architecture, got:\n%s", got)
+	}
+	if !strings.Contains(got, "[extra]\nServer = https://example.org/repo/$arch/$repo\n") {
+		t.Errorf("plain repo block missing, got:\n%s", got)
+	}
+	if strings.Contains(got, "SigLevel") {
+		t.Errorf("no SigLevel set → none should be emitted, got:\n%s", got)
 	}
 }

@@ -2,7 +2,7 @@ package main
 
 // YAML ↔ libvirt XML bridge.
 //
-// Converts overthink's YAML-facing LibvirtDomain (authored in vms.yml
+// Converts overthink's YAML-facing LibvirtDomain (authored in vm.yml
 // as the `libvirt:` stanza) into libvirt.org/go/libvirtxml's Domain —
 // the type system used to marshal the actual libvirt domain XML.
 //

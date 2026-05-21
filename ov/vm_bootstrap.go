@@ -90,15 +90,12 @@ func BuildBootstrapVM(
 		Arch:     spec.Source.BootstrapArch,
 		Variant:  spec.Source.BootstrapVariant,
 	}
-	// Inject CachyOS / other distro-specific repo blocks into pacman.conf
-	// inside the bootstrap container before pacstrap runs.
-	if distro.Pacstrap != nil && len(distro.Pacstrap.ExtraRepos) > 0 {
-		var rb strings.Builder
-		for _, r := range distro.Pacstrap.ExtraRepos {
-			fmt.Fprintf(&rb, "[%s]\nServer = %s\n", r.Name, r.Server)
-		}
-		rootfsCtx.ExtraPacmanConf = rb.String()
-	}
+	// Inject CachyOS / other distro-specific repo blocks (+ Architecture for
+	// microarch repos, + per-repo SigLevel) into pacman.conf inside the
+	// bootstrap container before pacstrap runs. Shared renderer with the image
+	// bootstrap path — previously this path open-coded the loop and dropped
+	// SigLevel, breaking GPGME verification for SigLevel=Never repos.
+	rootfsCtx.ExtraPacmanConf = renderPacstrapExtraConf(distro.Pacstrap)
 	// Inject optional extra apt sources (security/backports) into
 	// /etc/apt/sources.list.d/ inside the chroot before stage-2 install.
 	if distro.Debootstrap != nil && len(distro.Debootstrap.ExtraRepos) > 0 {

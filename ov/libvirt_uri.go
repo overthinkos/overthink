@@ -1,6 +1,6 @@
 package main
 
-// Libvirt URI parsing — bridges our CLI's `--uri` flag / vms.yml
+// Libvirt URI parsing — bridges our CLI's `--uri` flag / vm.yml
 // fields to the go-libvirt transport.
 //
 // The library itself does NOT speak libvirt-URI transports like

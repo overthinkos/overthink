@@ -7,13 +7,13 @@
 # port, process, command, http, dns, user, group, interface, kernel-param,
 # mount, addr, matching, cdp, wl, dbus, vnc, mcp, record, spice, libvirt, k8s).
 #
-# A `./ov eval live openclaw-sway-browser-pod && ./ov eval live k3s-vm` smoke run
+# A `./ov eval live eval-sway-browser-vnc-pod && ./ov eval live k3s-vm` smoke run
 # catches regressions across the ov stack. (The Arch beds — vm + nested host —
 # moved to the overthinkos/arch submodule at image/arch.)
 #
 # Bed-to-verb coverage map (the Arch beds — vm + nested host — moved to the
 # overthinkos/arch submodule at image/arch):
-#   openclaw-sway-browser-pod      (target: pod)  — cdp, wl, vnc, dbus, mcp, record,
+#   eval-sway-browser-vnc-pod     (target: pod)  — cdp, wl, vnc, dbus, mcp, record,
 #                                  file/service/port/process/http (pod-side)
 #   k3s-vm        (target: vm)   — k8s (all 13 methods), file/service/
 #                                  port/process (guest-side), http via
@@ -41,7 +41,7 @@
 #                                       via ShellExecutor on the operator host
 #
 # Zero-operator-side-effect audit:
-#   openclaw-sway-browser-pod           ~/.local/share/containers/        (rootless podman)
+#   eval-sway-browser-vnc-pod         ~/.local/share/containers/        (rootless podman)
 #   k3s-vm             libvirt /var/lib/libvirt/images/  (standard qcow2)
 #
 # No test writes to ~/.local/bin/, ~/.config/overthink/, /etc, /usr, or any
@@ -59,75 +59,22 @@
 version: 2026.141.1600
 deploy:
     # =================================================================
-    # Bed 1: openclaw-sway-browser-pod (target: pod)
+    # Bed 1: eval-sway-browser-vnc-pod (target: pod)
     # ---------------------------------------------------------------
-    # Disposable rootless podman container running the full Sway desktop
-    # + Chrome + wayvnc stack. Exercises every live-container test verb
-    # (cdp, wl, vnc, dbus, mcp, record) plus in-container health probes.
+    # Disposable rootless podman container running the Sway desktop +
+    # Chrome + wayvnc stack (eval twin of sway-browser-vnc). Exercises
+    # every live-container test verb (cdp, wl, vnc, dbus, mcp, record)
+    # plus in-container health probes — all baked into the
+    # eval-sway-browser-vnc image's eval: block, so this bed is
+    # config-free: it publishes the image's isolated host ports
+    # (15900/19222/19224 → container 5900/9222/9224), so it coexists
+    # with production sway/selkies/android containers on a shared host.
     # =================================================================
-    openclaw-sway-browser-pod:
+    eval-sway-browser-vnc-pod:
         target: pod
-        image: openclaw-sway-browser
+        image: eval-sway-browser-vnc
         disposable: true
         lifecycle: dev
-        # Maps host ports so operator-side probes can reach them.
-        # HOST_PORT:N substitution is available for `http:` tests.
-        port:
-            - 18790:18789 # openclaw gateway
-            - 5901:5900 # wayvnc
-            - 9223:9222 # chrome devtools
-        eval:
-            # --- Pod-runtime health (in-container) -------------------
-            - {id: sp-sway-running, scope: deploy, process: sway, running: true}
-            - {id: sp-chrome-present, scope: deploy, command: "command -v google-chrome || command -v chromium"}
-            - {id: sp-port-9222-listening, scope: deploy, port: 9222, listening: true}
-            - {id: sp-port-5900-listening, scope: deploy, port: 5900, listening: true}
-            - {id: sp-port-18789-listening, scope: deploy, port: 18789, listening: true}
-            # --- http: (operator-side, via HOST_PORT substitution) ---
-            - id: sp-http-cdp-json-version
-              scope: deploy
-              http: "http://127.0.0.1:${HOST_PORT:9222}/json/version"
-              status: 200
-            # --- cdp: verb (Chrome DevTools Protocol) ----------------
-            - {id: sp-cdp-status, scope: deploy, cdp: status}
-            - {id: sp-cdp-list, scope: deploy, cdp: list}
-            - {id: sp-cdp-open-blank, scope: deploy, cdp: open, url: "about:blank",}
-            # eval + screenshot require a tab id. Use sp-cdp-list first
-            # to enumerate tabs; skip these deeper cdp checks here since
-            # targeting a specific tab requires multi-step orchestration
-            # beyond a single declarative probe.
-
-            # --- wl: verb (Wayland + sway IPC) -----------------------
-            - {id: sp-wl-status, scope: deploy, wl: status}
-            - id: sp-wl-screenshot
-              scope: deploy
-              wl: screenshot
-              artifact: /tmp/openclaw-sway-browser-pod-wl.png
-              artifact_min_bytes: 1024
-            - {id: sp-wl-sway-tree, scope: deploy, wl: "sway-tree"}
-            - {id: sp-wl-sway-workspaces, scope: deploy, wl: "sway-workspaces"}
-            - {id: sp-wl-sway-outputs, scope: deploy, wl: "sway-outputs"}
-            # --- vnc: verb (RFB wire to wayvnc) ----------------------
-            - {id: sp-vnc-status, scope: deploy, vnc: status}
-            - id: sp-vnc-screenshot
-              scope: deploy
-              vnc: screenshot
-              artifact: /tmp/openclaw-sway-browser-pod-vnc.png
-              artifact_min_bytes: 1024
-            # --- dbus: verb (D-Bus calls into container) -------------
-            - {id: sp-dbus-list, scope: deploy, dbus: list}
-            # --- mcp: verb (Model Context Protocol) ------------------
-            - {id: sp-mcp-ping, scope: deploy, mcp: ping}
-            - {id: sp-mcp-servers, scope: deploy, mcp: servers}
-            - {id: sp-mcp-list-tools, scope: deploy, mcp: "list-tools"}
-            # --- record: verb (asciinema / pixelflux) ----------------
-            # start exercises the verb surface; cmd+stop require
-            # multi-step orchestration state that doesn't survive
-            # the declarative-probe boundary. Use `ov eval record`
-            # CLI interactively for full record→cmd→stop cycles.
-            - {id: sp-record-terminal-start, scope: deploy, record: start, record_name: test-term, record_mode: terminal}
-            # --- matching: verb smoke -----------------------------
-            - {id: sp-matching, scope: deploy, matching: "sway", equals: "sway"}
     # =================================================================
     # Bed 2: k3s-vm (target: vm, k3s-server inside the VM)
     # ---------------------------------------------------------------

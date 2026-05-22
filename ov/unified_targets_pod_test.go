@@ -7,9 +7,9 @@ import (
 
 // TestPodUnifiedTarget_Basics verifies the trivial accessor methods.
 func TestPodUnifiedTarget_Basics(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "sway-pod"}
-	if got := target.Name(); got != "sway-pod" {
-		t.Errorf("Name = %q, want %q", got, "sway-pod")
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
+	if got := target.Name(); got != "eval-sway-browser-vnc-pod" {
+		t.Errorf("Name = %q, want %q", got, "eval-sway-browser-vnc-pod")
 	}
 	if got := target.Kind(); got != "pod" {
 		t.Errorf("Kind = %q, want %q", got, "pod")
@@ -26,14 +26,14 @@ func TestPodUnifiedTarget_Basics(t *testing.T) {
 // empty Engine → "podman").
 func TestPodUnifiedTarget_engine(t *testing.T) {
 	{
-		target := &PodUnifiedTarget{NodeName: "sway-pod"}
+		target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
 		if got := target.engine(); got != "podman" {
 			t.Errorf("engine(no embed) = %q, want podman", got)
 		}
 	}
 	{
 		target := &PodUnifiedTarget{
-			NodeName:        "sway-pod",
+			NodeName:        "eval-sway-browser-vnc-pod",
 			PodDeployTarget: &PodDeployTarget{Engine: "docker"},
 		}
 		if got := target.engine(); got != "docker" {
@@ -42,7 +42,7 @@ func TestPodUnifiedTarget_engine(t *testing.T) {
 	}
 	{
 		target := &PodUnifiedTarget{
-			NodeName:        "sway-pod",
+			NodeName:        "eval-sway-browser-vnc-pod",
 			PodDeployTarget: &PodDeployTarget{},
 		}
 		if got := target.engine(); got != "podman" {
@@ -59,7 +59,7 @@ func TestPodUnifiedTarget_engine(t *testing.T) {
 func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
 	// Without any embed, Executor returns a non-nil ShellExecutor
 	// — so Test should run on it. We use a hermetic command:true.
-	target := &PodUnifiedTarget{NodeName: "sway-pod"}
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
 	checks := []Check{{ID: "ok", Command: "true"}}
 	if err := target.Test(context.Background(), checks, TestOpts{}); err != nil {
 		t.Errorf("Test(local fallback): %v", err)
@@ -69,7 +69,7 @@ func TestPodUnifiedTarget_Test_NilExecutor(t *testing.T) {
 // TestPodUnifiedTarget_Update_DryRun verifies the dry-run path emits
 // the expected ov-update line without invoking the subcommand.
 func TestPodUnifiedTarget_Update_DryRun(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "sway-pod"}
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod"}
 	if err := target.Update(context.Background(), nil, UpdateOpts{DryRun: true}); err != nil {
 		t.Errorf("Update dry-run: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestPodUnifiedTarget_Update_DryRun(t *testing.T) {
 // the expected ov-build/eval/deploy/stop/config/start sequence without
 // invoking the subcommands.
 func TestPodUnifiedTarget_Rebuild_DryRun(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "sway-pod", BaseImageRef: "openclaw-sway-browser"}
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod", BaseImageRef: "eval-sway-browser-vnc"}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: true}); err != nil {
 		t.Errorf("Rebuild dry-run: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestPodUnifiedTarget_Rebuild_BaseRefFallback(t *testing.T) {
 	// stdout capture, but we can confirm the dry-run branch returns
 	// nil even when BaseImageRef is unset (Rebuild's internal
 	// fallback prevents an empty-ref panic / shell-out).
-	target := &PodUnifiedTarget{NodeName: "sway-pod" /* BaseImageRef unset */}
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod" /* BaseImageRef unset */}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: true}); err != nil {
 		t.Errorf("Rebuild dry-run with empty BaseImageRef: %v", err)
 	}

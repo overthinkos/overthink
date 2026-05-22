@@ -19,7 +19,7 @@ local:
     # 2026-05 cutover (` + "`kind: local`" + ` ` + "`images:`" + ` field).
     images:
       - eval-target
-      - openclaw-sway-browser
+      - sway-browser-vnc
       - fedora-coder
 
     install_opts:
@@ -44,7 +44,7 @@ func TestRewriteLegacyLocalImages_ReplacesBlockWithCommentFence(t *testing.T) {
 		t.Errorf("missing cutover marker:\n%s", got)
 	}
 	// Original list values preserved as comments.
-	for _, expected := range []string{"#   - eval-target", "#   - openclaw-sway-browser", "#   - fedora-coder"} {
+	for _, expected := range []string{"#   - eval-target", "#   - sway-browser-vnc", "#   - fedora-coder"} {
 		if !strings.Contains(got, expected) {
 			t.Errorf("missing migrated comment %q in:\n%s", expected, got)
 		}

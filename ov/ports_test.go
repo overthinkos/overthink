@@ -317,7 +317,7 @@ func TestCheckPortAvailabilityInUse(t *testing.T) {
 
 func TestFormatPortConflicts(t *testing.T) {
 	conflicts := []PortConflict{
-		{HostPort: 5900, ContPort: 5900, Owner: "ov-openclaw-sway-browser", OwnerType: "ov-container"},
+		{HostPort: 5900, ContPort: 5900, Owner: "ov-sway-browser-vnc", OwnerType: "ov-container"},
 		{HostPort: 11434, ContPort: 11434, Owner: "ollama-1", OwnerType: "container"},
 	}
 

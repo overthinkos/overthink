@@ -410,6 +410,19 @@ skip, do not parallelize.
    must say "push" / "and push" / "commit and push" explicitly in
    THIS plan's authorization. Otherwise the commit lands locally and
    the user runs `git push` themselves. NEVER force-push to `main`.
+   **Tag every push with the schema CalVer.** When you DO push an
+   ov-project repo (any repo with an `overthink.yml`), the push MUST
+   carry an annotated git tag `v<version>`, where `<version>` is that
+   repo's `overthink.yml` `version:` field (the CalVer schema version).
+   The tag is **immutable**: create + push it the first time a
+   `version:` value lands on a pushed commit; NEVER move it or
+   force-push it. A new tag appears only when `version:` is bumped by a
+   schema migration (a new `MigrationStep` raising
+   `LatestSchemaVersion()`); a push at an unchanged `version:` adds no
+   new tag — the existing `v<version>` already marks that schema
+   version. Each repo uses ITS OWN `overthink.yml` `version:` (do not
+   reuse another repo's). Repos without an `overthink.yml` (`plugins`,
+   `pkg/arch`) are out of scope. See `/ov-build:migrate`.
 4. **Working-tree cleanliness.** After commit, `git status` must be
    clean (no uncommitted changes from the cutover). Untracked files
    that aren't part of the cutover (test artifacts, build outputs)
@@ -483,6 +496,7 @@ See `plugins/README.md` for the full skill index (250+ skills across `ov`, `ov-d
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov-image:layer`, `/ov-image:image`, `/ov-build:migrate`.
 - **Schema v4** — six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deploy`) with singular root-shape keys throughout (filename and kind name now match: `kind: deploy` in `deploy.yml`, `kind: image` in `image.yml`, etc.). File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. The schema version is a CalVer string (e.g. `2026.141.1530`), the same scheme as image tags; legacy configs (any version older than `LatestSchemaVersion()`, including the pre-CalVer integer `version: 4`) migrate via the single idempotent `ov migrate`, which replays every historical cutover hop in one ordered chain. Nesting of deployments uses `nested:` (was `children:`). See `/ov-build:migrate`, `/ov-image:image`, `/ov-core:deploy`, `/ov-vm:vm`, `/ov-local:local-spec`.
 - **Hard cutover by default.** See `/ov-internals:cutover-policy` and the "Hard Cutover by Default" section above.
+- **Tag every push with the schema CalVer.** When pushing an ov-project repo (one with an `overthink.yml`), the push carries an **immutable** annotated git tag `v<version>` matching that repo's OWN `overthink.yml` `version:` field (the CalVer schema version). Created once per `version:` value, never moved or force-pushed; a new tag only when a schema migration bumps `version:`. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are exempt. See "Post-Execution Policies" and `/ov-build:migrate`.
 - **Deploy fetches NOTHING speculative.** Every `ov deploy add` (any target kind: `local`, `pod`, `vm`, `k8s`) MUST emit zero image-pull / image-build steps unless an explicit layer step at deploy time requires the image — and no layer does today. Test-bed image preflight is the test/eval entry point's job, not the deploy's: `ov eval run` collects `score.target_image:` + per-scenario `pod:` declarations and ensures each is present in podman storage BEFORE running scenarios. The retired `kind: local` `image:` field violated this invariant; it was deleted in the 2026-05 deploy-fetch-narrowing cutover. Migration: `ov migrate` (idempotent). See `/ov-local:local-spec`, `/ov-eval:eval`.
 - **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-internals:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) unchanged.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-internals:go` "Mode purity".

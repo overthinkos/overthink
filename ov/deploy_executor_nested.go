@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -550,6 +551,13 @@ func parsePositiveInt(s string) (int, error) {
 // stays unset in the child, preserving the existing in-container
 // defaults for verbs that don't need the parent's session.
 //
+// A value that references the host's per-user session runtime dir
+// (/run/user/<uid>) is ALSO skipped (see referencesHostSessionRuntimeDir):
+// that path is created by the host login session and does not exist in a
+// rootless pod, so forcing it breaks podman/buildah/rootless-libvirt. The
+// libvirt-socket case above is unaffected — it pins XDG_RUNTIME_DIR to
+// $HOME/.local/share/ov-runtime, which is not under /run/user/<uid>.
+//
 // The allowlist is deliberately narrow. New entries should require
 // explicit justification (a verb that needs them, an actual
 // reproducible bug from a canary).
@@ -560,17 +568,45 @@ var containerEnvPropagationKeys = []string{
 	"DBUS_SESSION_BUS_ADDRESS",
 }
 
+// hostSessionRuntimeDirPattern matches a reference to the host's per-user XDG
+// session runtime directory, `/run/user/<numeric-uid>`. It matches both the
+// bare directory (XDG_RUNTIME_DIR=/run/user/1000) and embedded forms
+// (DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus).
+var hostSessionRuntimeDirPattern = regexp.MustCompile(`/run/user/[0-9]+`)
+
+// referencesHostSessionRuntimeDir reports whether a session-env value points at
+// the host's per-user session runtime directory. Such a value must NEVER be
+// forced into a target container: `/run/user/<uid>` is created by the host's
+// login session (logind/pam_systemd) and does not exist inside a rootless pod,
+// which bakes its OWN XDG_RUNTIME_DIR (desktop images use /tmp). Forcing the
+// host path makes podman / buildah / rootless-libvirt `lstat` a non-existent
+// directory and fail ("lstat /run/user/1000: no such file or directory" /
+// "Cannot create user runtime directory '/run/user/1000/libvirt'"). Only an
+// explicitly-pinned, bind-mounted runtime location (the libvirt-socket case in
+// containerEnvPropagationKeys uses $HOME/.local/share/ov-runtime, NOT
+// /run/user/<uid>) is safe to cross the container boundary.
+func referencesHostSessionRuntimeDir(v string) bool {
+	return hostSessionRuntimeDirPattern.MatchString(v)
+}
+
 // buildContainerEnvFlags returns a space-separated string of `--env
 // KEY=VALUE` flags for the curated allowlist, suitable for inlining
 // into a `<engine> exec ...` command. Returns "" when none of the
 // allowlisted vars are set in the parent environ — the caller then
 // emits a no-flags exec line, matching the pre-2026-04-27 behaviour
-// when no propagation is needed.
+// when no propagation is needed. Values that reference the host's
+// per-user session runtime dir (/run/user/<uid>) are skipped — see
+// referencesHostSessionRuntimeDir — so the container's own baked
+// XDG_RUNTIME_DIR (e.g. /tmp) stands and nested rootless podman /
+// buildah / libvirt-session keep working.
 func buildContainerEnvFlags() string {
 	var flags []string
 	for _, key := range containerEnvPropagationKeys {
 		val := os.Getenv(key)
 		if val == "" {
+			continue
+		}
+		if referencesHostSessionRuntimeDir(val) {
 			continue
 		}
 		flags = append(flags, "--env", deployShellQuote(key+"="+val))

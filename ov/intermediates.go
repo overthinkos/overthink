@@ -396,7 +396,13 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 			} else {
 				// 0 or 2+ user images: create auto-intermediate
 				intermediateName := pickAutoName(pathLayers, parentName, uid, defaultUID, result, origImages)
-				createIntermediate(intermediateName, parentName, uid, pathLayers, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
+				// Every terminal image in this subtree will base (directly or
+				// transitively) on this intermediate, so it must carry the UNION
+				// of their build formats / distro tags — a layer hoisted here whose
+				// package section is keyed on a format only the consumers declare
+				// would otherwise be silently dropped. See createIntermediate.
+				consumerImages := collectSubtreeImages(current)
+				createIntermediate(intermediateName, parentName, uid, pathLayers, consumerImages, result, origImages, cfg, tag, layers, globalOrder, pixiBound)
 				// Rebase all terminal images to this intermediate
 				for _, imgName := range current.images {
 					updateImageBase(imgName, intermediateName, result)
@@ -413,6 +419,19 @@ func walkTrieScoped(node *trieNode, parentName string, uid, defaultUID int, resu
 		}
 	}
 	return nil
+}
+
+// collectSubtreeImages returns every terminal user image in the subtree rooted
+// at node — the images terminating at node plus all images in descendant nodes.
+// These are exactly the images that will base, directly or transitively, on an
+// auto-intermediate created at this node, so they define the union of build
+// formats / distro tags the intermediate must carry (see createIntermediate).
+func collectSubtreeImages(node *trieNode) []string {
+	out := append([]string(nil), node.images...)
+	for _, child := range node.children {
+		out = append(out, collectSubtreeImages(child)...)
+	}
+	return out
 }
 
 // pickAutoName chooses a name for an auto-intermediate using {parent}-{lastLayer}.
@@ -463,7 +482,7 @@ func pickAutoName(pathLayers []string, parentName string, uid, defaultUID int, r
 // uid is the sibling group's UID — it determines the intermediate's User/GID/Home
 // so HOME-relative env/path_append expansion matches the children that will
 // inherit from this intermediate.
-func createIntermediate(name, parentName string, uid int, pathLayers []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
+func createIntermediate(name, parentName string, uid int, pathLayers []string, consumerImages []string, result map[string]*ResolvedImage, origImages map[string]*ResolvedImage, cfg *Config, tag string, layers map[string]*Layer, globalOrder []string, pixiBound map[string]bool) {
 	ownLayers := computeOwnLayers(parentName, pathLayers, result, layers, globalOrder, pixiBound)
 
 	isExternalBase := false
@@ -496,6 +515,47 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 		inheritedBuilds = []string(cfg.Defaults.Build)
 	}
 
+	// An auto-intermediate hosts layers hoisted out of its consuming images.
+	// When a hoisted layer's package section is keyed on a build format (or
+	// distro tag) the PARENT chain doesn't declare but a CONSUMER does — e.g.
+	// the cachyos base is build:[pac] while selkies-desktop/openclaw-desktop are
+	// build:[pac,aur] and the hoisted chrome layer needs aur for google-chrome —
+	// parent-only inheritance silently drops that section (the AUR gate in
+	// generate.go keys on BuildFormats). Union the parent's formats/distro with
+	// every consuming descendant's, keeping the parent's primary format FIRST
+	// (it drives img.Pkg + cache mounts below). No-op when consumers share the
+	// parent's formats (the common case). Mirrors the parent-first inheritance
+	// fix above for the orthogonal "format declared on children" case.
+	buildSeen := make(map[string]bool, len(inheritedBuilds))
+	for _, f := range inheritedBuilds {
+		buildSeen[f] = true
+	}
+	distroSeen := make(map[string]bool, len(inheritedDistro))
+	for _, d := range inheritedDistro {
+		distroSeen[d] = true
+	}
+	for _, cname := range consumerImages {
+		c, ok := result[cname]
+		if !ok {
+			c, ok = origImages[cname]
+		}
+		if !ok {
+			continue
+		}
+		for _, f := range c.BuildFormats {
+			if !buildSeen[f] {
+				buildSeen[f] = true
+				inheritedBuilds = append(inheritedBuilds, f)
+			}
+		}
+		for _, d := range c.Distro {
+			if !distroSeen[d] {
+				distroSeen[d] = true
+				inheritedDistro = append(inheritedDistro, d)
+			}
+		}
+	}
+
 	// Derive User/GID/Home from the sibling group's UID. uid=0 is root with
 	// /root as HOME; any other UID reuses cfg.Defaults.User (typically "user")
 	// and /home/<user>. This keeps HOME-relative ENV expansion consistent
@@ -513,6 +573,38 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 		gid = resolveIntPtr(cfg.Defaults.GID, nil, 1000)
 	}
 
+	// Builder map: defaults as the base, then the PARENT wins — so a base image's
+	// aur→arch-builder propagates down the auto-intermediate chain (intermediates
+	// are created parent-first, so result[parentName].Builder is already set when
+	// we get here), then fill any remaining gap from a consumer. Without parent
+	// inheritance, an intermediate that now carries `aur` (from the BuildFormats
+	// union above) would have no builders.aur and the hoisted AUR layer (chrome's
+	// google-chrome) would fail to build with "needs builder aur but no
+	// builders.aur configured". Same parent-first principle as Distro/BuildFormats.
+	builderMap := make(BuilderMap)
+	for k, v := range cfg.Defaults.Builder {
+		builderMap[k] = v
+	}
+	if parent, ok := result[parentName]; ok {
+		for k, v := range parent.Builder {
+			builderMap[k] = v
+		}
+	}
+	for _, cname := range consumerImages {
+		c, ok := result[cname]
+		if !ok {
+			c, ok = origImages[cname]
+		}
+		if !ok {
+			continue
+		}
+		for k, v := range c.Builder {
+			if _, exists := builderMap[k]; !exists {
+				builderMap[k] = v
+			}
+		}
+	}
+
 	img := &ResolvedImage{
 		Name:           name,
 		Base:           parentName,
@@ -527,7 +619,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, r
 		UID:            uid,
 		GID:            gid,
 		Merge:          cfg.Defaults.Merge,
-		Builder:        BuilderMap(cfg.Defaults.Builder),
+		Builder:        builderMap,
 		Auto:           true,
 	}
 	if len(img.BuildFormats) == 0 {

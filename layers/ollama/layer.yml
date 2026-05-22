@@ -1,7 +1,11 @@
 layer:
   name: ollama
   require:
-    - cuda
+    # GPU-agnostic: the ollama binary auto-detects the GPU at runtime (CPU
+    # fallback when none present), so CUDA is an IMAGE-level composition choice
+    # (the `ollama` image lists `cuda` explicitly), NOT a layer dependency.
+    # This lets CPU consumers (e.g. `openclaw-desktop` on cachyos) compose the
+    # layer without dragging the Fedora/NVIDIA `cuda` layer onto a pac base.
     - supervisord
   env:
     OLLAMA_HOST: "0.0.0.0"

@@ -1445,6 +1445,9 @@ score:
 #   eval-selkies-desktop-pod  (pod) — CPU streaming desktop on the cachyos base
 #                                     (labwc/waybar/swaync/pipewire/selkies +
 #                                     AUR google-chrome/wlrctl, pixelflux build)
+#   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
+#                                     (claude-code/codex/gemini) + CPU ollama +
+#                                     nested ov toolchain (ov-full+container-nesting)
 #
 # Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
 # qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
@@ -1679,6 +1682,41 @@ eval:
             - {id: esd-pod-labwc, scope: deploy, file: /usr/bin/labwc, exists: true}
             - {id: esd-pod-swaync, scope: deploy, file: /usr/bin/swaync, exists: true}
             - {id: esd-pod-pipewire, scope: deploy, file: /usr/bin/pipewire, exists: true}
+    # eval-openclaw-desktop-pod deploys the all-in-one openclaw-desktop image on
+    # the CachyOS (Arch) base — the selkies streaming desktop fused with the
+    # openclaw-full gateway/tool stack (claude-code/codex/gemini), a CPU ollama,
+    # and the full nested ov toolchain (ov-full + container-nesting + golang + gh).
+    # Ports are remapped into a free 340xx block to coexist with the
+    # selkies/openclaw beds. The image-level eval (baked) carries the nested-
+    # rootless posture + nested-podman + libvirt-session + ov version/doctor +
+    # the three services' liveness; this bed's deploy-scope probes assert the
+    # cross-stack headline artifacts (AUR chrome, selkies HTTPS UI, the AI CLIs,
+    # the ollama binary) actually landed on the running combined container.
+    eval-openclaw-desktop-pod:
+        target: pod
+        image: openclaw-desktop
+        disposable: true
+        lifecycle: dev
+        port:
+            - 34000:3000
+            - 34222:9222
+            - 34224:9224
+            - 34022:2222
+            - 34789:18789
+            - 34434:11434
+        description:
+            feature: "R10 bed for openclaw-desktop — the all-in-one CachyOS image fusing the selkies streaming desktop, the openclaw-full gateway+tools stack (claude-code/codex/gemini), a CPU ollama, and the full nested ov toolchain (ov-full + container-nesting + golang + gh). Exercises AUR google-chrome, the ollama binary tarball on a pac base, and nested rootless podman on one image."
+            tag: [testing]
+        eval:
+            # selkies desktop — AUR browser + the streaming UI is live
+            - {id: eod-pod-chrome-aur, scope: deploy, file: /usr/bin/google-chrome-stable, exists: true}
+            - {id: eod-pod-selkies-https, scope: deploy, http: "https://127.0.0.1:${HOST_PORT:3000}/", status: 200, allow_insecure: true}
+            # openclaw — the three AI CLIs landed on the running container
+            - {id: eod-pod-claude, scope: deploy, file: "${HOME}/.npm-global/bin/claude", exists: true}
+            - {id: eod-pod-codex, scope: deploy, file: "${HOME}/.npm-global/bin/codex", exists: true}
+            - {id: eod-pod-gemini, scope: deploy, file: "${HOME}/.npm-global/bin/gemini", exists: true}
+            # CPU ollama binary (distro-agnostic tarball, no cuda)
+            - {id: eod-pod-ollama-bin, scope: deploy, file: /usr/bin/ollama, exists: true}
 # =============================================================================
 # vm: — kind:vm entity backing the eval-k3s-vm bed (referenced via `vm: k3s-vm`).
 # Cloud-image Arch; single-node control-plane sizing (2 cpu / 4G / 20G).

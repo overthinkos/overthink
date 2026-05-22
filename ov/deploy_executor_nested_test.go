@@ -259,3 +259,53 @@ func TestNestedExecutor_EnvVarsPropagated_DisplayWayland(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildContainerEnvFlags_SkipsHostSessionRuntimeDir guards the fix for the
+// nested-toolchain regression surfaced by the eval-openclaw-desktop-pod bed:
+// the harness forced the host's XDG_RUNTIME_DIR=/run/user/1000 onto its
+// `podman exec`, clobbering the pod's baked /tmp and breaking rootless
+// podman/buildah/libvirt with "lstat /run/user/1000: no such file or directory".
+// Session-env values that reference the host /run/user/<uid> session dir must
+// be skipped; non-session values must still propagate.
+func TestBuildContainerEnvFlags_SkipsHostSessionRuntimeDir(t *testing.T) {
+	for _, k := range containerEnvPropagationKeys {
+		t.Setenv(k, "") // hermetic: empty values are skipped by buildContainerEnvFlags
+	}
+	t.Setenv("XDG_RUNTIME_DIR", "/run/user/1000")
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1000/bus")
+	t.Setenv("DISPLAY", ":0")
+	t.Setenv("WAYLAND_DISPLAY", "wayland-0")
+
+	got := buildContainerEnvFlags()
+
+	if strings.Contains(got, "/run/user/1000") {
+		t.Errorf("must NOT forward the host session runtime dir into the container; got: %q", got)
+	}
+	if strings.Contains(got, "XDG_RUNTIME_DIR") {
+		t.Errorf("XDG_RUNTIME_DIR=/run/user/1000 should be skipped entirely; got: %q", got)
+	}
+	if strings.Contains(got, "DBUS_SESSION_BUS_ADDRESS") {
+		t.Errorf("DBUS_SESSION_BUS_ADDRESS referencing /run/user/<uid> should be skipped; got: %q", got)
+	}
+	if !strings.Contains(got, "DISPLAY=:0") {
+		t.Errorf("DISPLAY=:0 (no /run/user ref) should be propagated; got: %q", got)
+	}
+	if !strings.Contains(got, "WAYLAND_DISPLAY=wayland-0") {
+		t.Errorf("WAYLAND_DISPLAY should be propagated; got: %q", got)
+	}
+}
+
+// TestBuildContainerEnvFlags_PropagatesPinnedRuntimeDir confirms the fix does
+// NOT break the libvirt-socket case: an explicitly-pinned XDG_RUNTIME_DIR that
+// is NOT under /run/user/<uid> (the ov-runtime location) must still propagate so
+// nested `ov eval libvirt` finds its socket.
+func TestBuildContainerEnvFlags_PropagatesPinnedRuntimeDir(t *testing.T) {
+	for _, k := range containerEnvPropagationKeys {
+		t.Setenv(k, "")
+	}
+	t.Setenv("XDG_RUNTIME_DIR", "/home/user/.local/share/ov-runtime")
+	got := buildContainerEnvFlags()
+	if !strings.Contains(got, "XDG_RUNTIME_DIR=/home/user/.local/share/ov-runtime") {
+		t.Errorf("an explicitly-pinned (non-/run/user) XDG_RUNTIME_DIR must be propagated; got: %q", got)
+	}
+}

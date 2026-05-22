@@ -1207,6 +1207,94 @@ func TestComputeIntermediates_InheritDistroFromParent(t *testing.T) {
 	}
 }
 
+// TestComputeIntermediates_UnionChildBuildFormats guards the orthogonal case to
+// the test above: a build format declared on the CONSUMING children but NOT the
+// parent must still reach an auto-intermediate that hoists a layer needing it.
+// Real-world regression: the cachyos base is build:[pac]; selkies-desktop and
+// openclaw-desktop are build:[pac,aur]; the shared chrome layer (aur:
+// google-chrome) gets hoisted into a shared intermediate. With parent-only
+// inheritance the intermediate was [pac]-only, so chrome's aur: section was
+// silently dropped and google-chrome never built. The fix unions the parent's
+// formats with every consuming descendant's, parent's primary format first.
+func TestComputeIntermediates_UnionChildBuildFormats(t *testing.T) {
+	layers := map[string]*Layer{
+		"a": {Name: "a", HasTasks: true},
+		"b": {Name: "b", HasTasks: true},
+		"c": {Name: "c", HasTasks: true},
+	}
+
+	images := map[string]*ResolvedImage{
+		"cachyos": {
+			Name: "cachyos", Base: "ext:cachyos", IsExternalBase: true,
+			Layer: []string{}, Tag: "v1", Registry: "r",
+			FullTag: "r/cachyos:v1", Pkg: "pac",
+			Distro:       []string{"cachyos", "arch"},
+			BuildFormats: []string{"pac"},
+			Builder:      BuilderMap{"aur": "arch-builder"},
+		},
+		"cachyos-a-b": {
+			Name: "cachyos-a-b", Base: "cachyos", IsExternalBase: false,
+			Layer: []string{"a", "b"}, Tag: "v1", Registry: "r",
+			FullTag: "r/cachyos-a-b:v1", Pkg: "pac",
+			Distro: []string{"cachyos", "arch"}, BuildFormats: []string{"pac", "aur"},
+		},
+		"cachyos-a-c": {
+			Name: "cachyos-a-c", Base: "cachyos", IsExternalBase: false,
+			Layer: []string{"a", "c"}, Tag: "v1", Registry: "r",
+			FullTag: "r/cachyos-a-c:v1", Pkg: "pac",
+			Distro: []string{"cachyos", "arch"}, BuildFormats: []string{"pac", "aur"},
+		},
+	}
+
+	cfg := &Config{
+		Defaults: ImageConfig{
+			Registry: "r",
+			Distro:   []string{"fedora"},
+			Build:    BuildFormats{"rpm"},
+		},
+		Image: map[string]ImageConfig{
+			"cachyos":     {Base: "ext:cachyos", Layer: []string{}},
+			"cachyos-a-b": {Base: "cachyos", Layer: []string{"a", "b"}},
+			"cachyos-a-c": {Base: "cachyos", Layer: []string{"a", "c"}},
+		},
+	}
+
+	result, err := ComputeIntermediates(images, layers, cfg, "v1")
+	if err != nil {
+		t.Fatalf("ComputeIntermediates() error = %v", err)
+	}
+
+	// Find the auto-intermediate that hoists layer "a" rooted at cachyos.
+	var inter *ResolvedImage
+	for _, img := range result {
+		if img.Auto && img.Base == "cachyos" {
+			inter = img
+			break
+		}
+	}
+	if inter == nil {
+		t.Fatalf("expected an auto-intermediate with Base=cachyos, got none. result keys: %v", resultNames(result))
+	}
+
+	// The intermediate must carry the UNION: parent's [pac] first, then the
+	// consumer-only aur appended. Without the fix this is [pac] only and the
+	// hoisted aur-bearing layer is silently dropped.
+	if got, want := inter.BuildFormats, []string{"pac", "aur"}; !slicesEqual(got, want) {
+		t.Errorf("auto-intermediate %q: BuildFormats = %v, want %v (parent pac first + consumer-only aur appended)",
+			inter.Name, got, want)
+	}
+	// Parent's primary format stays primary (drives img.Pkg + cache mounts).
+	if inter.Pkg != "pac" {
+		t.Errorf("auto-intermediate %q: Pkg = %q, want %q (parent primary preserved)", inter.Name, inter.Pkg, "pac")
+	}
+	// And the builder map for the unioned `aur` format must be inherited from the
+	// parent chain — otherwise the intermediate carries aur but can't build it
+	// ("needs builder aur but no builders.aur configured").
+	if got := inter.Builder["aur"]; got != "arch-builder" {
+		t.Errorf("auto-intermediate %q: Builder[aur] = %q, want %q (must inherit from parent so the unioned aur format is buildable)", inter.Name, got, "arch-builder")
+	}
+}
+
 func resultNames(m map[string]*ResolvedImage) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

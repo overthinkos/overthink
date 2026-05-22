@@ -152,7 +152,7 @@ layer:
     # alive instead of self-exiting on idle). priority=5 places it
     # ahead of every desktop service. No `user=` directive — the
     # daemon inherits supervisord's uid (root on fedora-ov/arch-ov,
-    # user on selkies-desktop-ov); qemu:///session keys off
+    # user on openclaw-desktop); qemu:///session keys off
     # $XDG_RUNTIME_DIR so both work.
     - name: virtqemud
       exec: "/usr/sbin/virtqemud --timeout 0"

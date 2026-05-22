@@ -101,6 +101,52 @@ func TestCollectTests_EmptyReturnsNil(t *testing.T) {
 	}
 }
 
+// Regression: an image whose layer list uses RAW @github.com/...:version refs
+// (the submodule git-ref composition pattern used by image/bootc, image/fedora,
+// etc.) must still collect the referenced layers' eval blocks. Before the
+// BareRef chokepoint fix in ExpandLayer (ov/graph.go), CollectEval walked the
+// raw refs against the BareRef-keyed layer map, missed every one, silently
+// swallowed the resulting "unknown layer" error, and collected ZERO
+// layer-level checks — so every @github-ref-composed image shipped with
+// image-level checks only (e.g. selkies-desktop-bootc: 1 instead of ~77). The
+// same chokepoint feeds CollectHooks/Shell/Descriptions/Security/Volumes/Alias,
+// so this single test guards the whole family.
+func TestCollectEval_RemoteRefLayersResolve(t *testing.T) {
+	// Remote layers are keyed by their BareRef (no @ prefix, no :version
+	// suffix) — see ScanRemoteLayer in layers.go.
+	const bareRef = "github.com/overthinkos/overthink/layers/tailscale"
+	layers := map[string]*Layer{
+		bareRef: {
+			Name:  "tailscale",
+			tests: []Check{{File: "/usr/bin/tailscale", Exists: ptrBool(true)}},
+		},
+	}
+	cfg := &Config{
+		Image: map[string]ImageConfig{
+			"selkies-bootc": {
+				Enabled: boolPtr(true),
+				// RAW @github ref with :version — exactly as the submodule
+				// image.yml writes it.
+				Layer: []string{"@" + bareRef + ":v2026.141.1600"},
+			},
+		},
+	}
+
+	got := CollectEval(cfg, layers, "selkies-bootc")
+	if got == nil {
+		t.Fatal("expected non-nil LabelEvalSet — the @github-ref layer's eval block was dropped (BareRef regression)")
+	}
+	if len(got.Layer) != 1 {
+		t.Fatalf("layer section has %d entries, want 1 (the tailscale check): %+v", len(got.Layer), got.Layer)
+	}
+	if got.Layer[0].File != "/usr/bin/tailscale" {
+		t.Errorf("collected wrong check: %+v", got.Layer[0])
+	}
+	if got.Layer[0].Origin != "layer:"+bareRef {
+		t.Errorf("origin = %q, want %q", got.Layer[0].Origin, "layer:"+bareRef)
+	}
+}
+
 // Verifies each of the three MergeDeployEval rules.
 func TestMergeDeployTests(t *testing.T) {
 	baked := []Check{

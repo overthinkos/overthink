@@ -23,8 +23,21 @@ func ExpandLayer(requested []string, layers map[string]*Layer) ([]string, error)
 	seen := make(map[string]bool)
 	expanding := make(map[string]bool)
 
-	var expand func(name string) error
-	expand = func(name string) error {
+	var expand func(rawName string) error
+	expand = func(rawName string) error {
+		// BareRef-normalize every ref before lookup so callers that pass the
+		// RAW image.yml layer list (cfg.Image[...].Layer with @github.com/...
+		// :version refs) resolve against the BareRef-keyed layer map. This is
+		// the single chokepoint every ResolveLayerOrder caller funnels through,
+		// so one normalization here fixes all of them. It is idempotent for
+		// already-bare names — local plain names and the build path's
+		// pre-normalized ResolvedImage.Layer (config.go: BareRef per ref) — so
+		// the build/install path is byte-unchanged. Without it the collectors
+		// that walk RAW cfg.Image[...].Layer (eval/hooks/shell/descriptions/
+		// security/volumes/alias/engine + validateInitDependencies) silently
+		// dropped every layer-level contribution for @github-ref-composed
+		// images (the whole submodule image family).
+		name := BareRef(rawName)
 		if seen[name] {
 			return nil
 		}

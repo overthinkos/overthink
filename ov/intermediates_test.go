@@ -505,10 +505,10 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 			Layer: []string{"ollama"}, Tag: "v1", Registry: "r",
 			FullTag: "r/ollama:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
-		"openclaw-ollama": {
-			Name: "openclaw-ollama", Base: "nvidia", IsExternalBase: false,
+		"gpu-gateway": {
+			Name: "gpu-gateway", Base: "nvidia", IsExternalBase: false,
 			Layer: []string{"openclaw", "ollama"}, Tag: "v1", Registry: "r",
-			FullTag: "r/openclaw-ollama:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
+			FullTag: "r/gpu-gateway:v1", Pkg: "rpm", Builder: BuilderMap{"pixi": "builder", "npm": "builder"},
 		},
 		"fedora-test": {
 			Name: "fedora-test", Base: "fedora", IsExternalBase: false,
@@ -537,7 +537,7 @@ func TestComputeIntermediates_NvidiaScenario(t *testing.T) {
 			"jupyter":         {Base: "python-ml", Layer: []string{"jupyter"}},
 			"comfyui":         {Base: "python-ml", Layer: []string{"comfyui"}},
 			"ollama":          {Base: "nvidia", Layer: []string{"ollama"}},
-			"openclaw-ollama": {Base: "nvidia", Layer: []string{"openclaw", "ollama"}},
+			"gpu-gateway": {Base: "nvidia", Layer: []string{"openclaw", "ollama"}},
 			"fedora-test":     {Base: "fedora", Layer: []string{"traefik", "testapi"}},
 			"openclaw":        {Base: "fedora", Layer: []string{"openclaw"}},
 			"githubrunner":    {Base: "fedora", Layer: []string{"github-runner"}},

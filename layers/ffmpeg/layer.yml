@@ -2,6 +2,9 @@ layer:
   name: ffmpeg
   description: FFmpeg multimedia framework
   distro:
+    arch:
+      package:
+        - ffmpeg
     fedora:
       package:
         - ffmpeg
@@ -9,3 +12,7 @@ layer:
         - name: fedora-multimedia
           url: "https://negativo17.org/repos/fedora-multimedia.repo"
           gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
+  eval:
+    - id: ffmpeg-binary
+      file: /usr/bin/ffmpeg
+      exists: true

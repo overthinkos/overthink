@@ -9,8 +9,10 @@ layer:
     - "~/go/bin"
   task:
     - cmd: |
-        # Pinned to v0.4.2 — go 1.25 compat (v0.13.0 requires go 1.26.2,
-        # which the current builder toolchain doesn't carry).
-        go install github.com/steipete/gogcli/cmd/gog@v0.4.2
+        go install github.com/steipete/gogcli/cmd/gog@latest
         go clean -cache
       user: "${USER}"
+  eval:
+    - id: gog-binary
+      file: ${HOME}/go/bin/gog
+      exists: true

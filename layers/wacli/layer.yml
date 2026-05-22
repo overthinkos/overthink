@@ -9,6 +9,6 @@ layer:
     - "~/go/bin"
   task:
     - cmd: |
-        go install github.com/steipete/wacli/cmd/wacli@latest
+        go install github.com/openclaw/wacli/cmd/wacli@latest
         go clean -cache
       user: "${USER}"

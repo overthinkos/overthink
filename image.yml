@@ -397,8 +397,8 @@ image:
         port:
             - 11434:11434
     openclaw:
-        enabled: false
-        base: fedora
+        enabled: true
+        base: cachyos
         layer:
             - agent-forwarding
             - openclaw
@@ -407,29 +407,13 @@ image:
         port:
             - 18789:18789
     openclaw-full:
-        enabled: false
-        base: fedora
+        enabled: true
+        base: cachyos
         layer:
             - agent-forwarding
             - openclaw-full
         port:
             - 18789:18789
-            - 9222:9222
-            - 9224:9224
-    openclaw-ollama:
-        enabled: false
-        base: nvidia
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - openclaw
-            - ollama
-            - dbus
-            - ov
-        port:
-            - 18789:18789
-            - 11434:11434
     openwebui:
         enabled: false
         base: fedora

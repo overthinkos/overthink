@@ -1439,6 +1439,9 @@ score:
 #   eval-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
 #   eval-versa-pod            (pod) — versa OSM analytics + vector-tile + marimo MCP
 #   eval-android-emulator-pod (pod) — Android 14 emulator (/dev/kvm) + adb/appium
+#   eval-openclaw-pod         (pod) — minimal openclaw gateway on the cachyos base
+#   eval-openclaw-full-pod    (pod) — maximal openclaw-full on cachyos (AUR chrome,
+#                                     gogcli@latest, ffmpeg/sqlite arch coverage)
 #
 # Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
 # qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
@@ -1609,6 +1612,41 @@ eval:
         description:
             feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. R10 of adb/appium eval verbs uses host-path `apk:` for adb: install and a pre-staged /tmp/ApiDemos-debug.apk for appium: install-app (podman cp before `ov eval live`)."
             tag: [testing]
+    # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
+    # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the
+    # openclaw package + the dbus/ov/socat/supervisord stack. The deploy-scope
+    # probe confirms the openclaw CLI binary landed under ~/.npm-global/bin.
+    eval-openclaw-pod:
+        target: pod
+        image: openclaw
+        disposable: true
+        lifecycle: dev
+        port:
+            - 38789:18789
+        description:
+            feature: "R10 bed for the minimal headless openclaw gateway on the CachyOS (Arch) base — exercises the cachyos→arch-builder npm build of the openclaw package plus the dbus/ov/socat/supervisord layer stack."
+            tag: [testing]
+        eval:
+            - {id: eoc-pod-openclaw-binary, scope: deploy, file: "${HOME}/.npm-global/bin/openclaw", exists: true}
+    # eval-openclaw-full-pod deploys the maximal headless openclaw-full on the
+    # CachyOS (Arch) base — a non-browser gateway (no chrome/chrome-cdp). Exercises
+    # the tool stack incl. gogcli@latest (Arch go 1.26.x) and the ffmpeg/sqlite
+    # Arch package coverage. The eval: block asserts those migration-critical
+    # artifacts are present on the running container.
+    eval-openclaw-full-pod:
+        target: pod
+        image: openclaw-full
+        disposable: true
+        lifecycle: dev
+        port:
+            - 38789:18789
+        description:
+            feature: "R10 bed for the maximal headless openclaw-full on the CachyOS (Arch) base — a non-browser gateway exercising the tool stack incl. the gogcli@latest go install (Arch go 1.26.x) and the ffmpeg/sqlite Arch package coverage."
+            tag: [testing]
+        eval:
+            - {id: eocf-pod-gog-latest, scope: deploy, file: "${HOME}/go/bin/gog", exists: true}
+            - {id: eocf-pod-ffmpeg-arch, scope: deploy, file: /usr/bin/ffmpeg, exists: true}
+            - {id: eocf-pod-sqlite-arch, scope: deploy, file: /usr/bin/sqlite3, exists: true}
 # =============================================================================
 # vm: — kind:vm entity backing the eval-k3s-vm bed (referenced via `vm: k3s-vm`).
 # Cloud-image Arch; single-node control-plane sizing (2 cpu / 4G / 20G).

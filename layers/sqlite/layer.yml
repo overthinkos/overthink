@@ -2,6 +2,13 @@ layer:
   name: sqlite
   description: SQLite database CLI
   distro:
+    arch:
+      package:
+        - sqlite
     fedora:
       package:
         - sqlite
+  eval:
+    - id: sqlite3-binary
+      file: /usr/bin/sqlite3
+      exists: true

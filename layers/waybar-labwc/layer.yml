@@ -3,6 +3,9 @@ layer:
   require:
     - labwc
   distro:
+    arch:
+      package:
+        - waybar
     fedora:
       package:
         - waybar

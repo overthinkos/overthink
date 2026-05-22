@@ -3,6 +3,10 @@ layer:
   require:
     - dbus
   distro:
+    arch:
+      package:
+        - python-atspi
+        - python-gobject
     fedora:
       package:
         - python3-pyatspi
@@ -10,9 +14,15 @@ layer:
   eval:
     - id: python3-pyatspi-installed
       package: python3-pyatspi
+      package_map:
+        arch: python-atspi
+        fedora: python3-pyatspi
       installed: true
     - id: python3-gobject-installed
       package: python3-gobject
+      package_map:
+        arch: python-gobject
+        fedora: python3-gobject
       installed: true
     # pyatspi is installed for the system python3, not the pixi Python env that
     # dominates PATH on these images. Use the absolute system path.

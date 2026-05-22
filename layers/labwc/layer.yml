@@ -16,6 +16,12 @@ layer:
     - name: XKB_DEFAULT_OPTIONS
       description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
   distro:
+    arch:
+      package:
+        - labwc
+        - foot
+        - xorg-xwayland
+        - thunar
     fedora:
       package:
         - labwc

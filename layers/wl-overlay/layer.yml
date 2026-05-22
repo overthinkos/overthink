@@ -4,6 +4,11 @@ layer:
   require:
     - dbus
   distro:
+    arch:
+      package:
+        - gtk4
+        - gtk4-layer-shell
+        - python-gobject
     fedora:
       package:
         - gtk4

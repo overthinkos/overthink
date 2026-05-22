@@ -16,6 +16,23 @@ layer:
     - name: selkies-config
       path: "~/.config/selkies"
   distro:
+    arch:
+      package:
+        - wl-clipboard
+        - libice
+        - libsm
+        - libpulse
+        - libva-mesa-driver
+        - libva
+        - libva-utils
+        - procps-ng
+        - iproute2
+        - iputils
+        - strace
+        - htop
+        - file
+        - lsof
+        - openssl
     fedora:
       package:
         - wl-clipboard

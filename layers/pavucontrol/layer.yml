@@ -3,6 +3,9 @@ layer:
   require:
     - pipewire
   distro:
+    arch:
+      package:
+        - pavucontrol
     fedora:
       package:
         - pavucontrol

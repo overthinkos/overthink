@@ -442,7 +442,10 @@ image:
             - agent-forwarding
             - python-ml
     selkies-desktop:
-        base: fedora-nonfree
+        base: cachyos
+        build:
+            - pac
+            - aur
         platform:
             - linux/amd64
         layer:

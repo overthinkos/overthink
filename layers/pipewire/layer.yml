@@ -5,6 +5,11 @@ layer:
   env:
     XDG_RUNTIME_DIR: "/tmp"
   distro:
+    arch:
+      package:
+        - pipewire
+        - pipewire-pulse
+        - wireplumber
     fedora:
       package:
         - pipewire

@@ -2,6 +2,9 @@ layer:
   name: fastfetch
   description: Fast system information tool (neofetch successor)
   distro:
+    arch:
+      package:
+        - fastfetch
     fedora:
       package:
         - fastfetch

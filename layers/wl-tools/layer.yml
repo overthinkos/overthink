@@ -1,6 +1,18 @@
 layer:
   name: wl-tools
   distro:
+    arch:
+      package:
+        - wl-clipboard
+        - wlr-randr
+        - xdotool
+        - xorg-xprop
+        - xorg-xwininfo
+        - ydotool
+        - wtype
+      aur:
+        package:
+          - wlrctl
     fedora:
       package:
         - wtype
@@ -23,6 +35,9 @@ layer:
       exists: true
     - id: wlr-randr-binary
       file: /usr/bin/wlr-randr
+      exists: true
+    - id: wlrctl-binary
+      file: /usr/bin/wlrctl
       exists: true
     - id: xdotool-binary
       file: /usr/bin/xdotool

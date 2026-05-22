@@ -3,6 +3,9 @@ layer:
   require:
     - dbus
   distro:
+    arch:
+      package:
+        - swaync
     fedora:
       package:
         - SwayNotificationCenter

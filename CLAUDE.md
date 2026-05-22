@@ -383,19 +383,25 @@ skip, do not parallelize.
    must say "push" / "and push" / "commit and push" explicitly in
    THIS plan's authorization. Otherwise the commit lands locally and
    the user runs `git push` themselves. NEVER force-push to `main`.
-   **Tag every push with the schema CalVer.** When you DO push an
+   **Tag every push with a fresh CalVer timestamp.** When you push an
    ov-project repo (any repo with an `overthink.yml`), the push MUST
-   carry an annotated git tag `v<version>`, where `<version>` is that
-   repo's `overthink.yml` `version:` field (the CalVer schema version).
-   The tag is **immutable**: create + push it the first time a
-   `version:` value lands on a pushed commit; NEVER move it or
-   force-push it. A new tag appears only when `version:` is bumped by a
-   schema migration (a new `MigrationStep` raising
-   `LatestSchemaVersion()`); a push at an unchanged `version:` adds no
-   new tag — the existing `v<version>` already marks that schema
-   version. Each repo uses ITS OWN `overthink.yml` `version:` (do not
-   reuse another repo's). Repos without an `overthink.yml` (`plugins`,
-   `pkg/arch`) are out of scope. See `/ov-build:migrate`.
+   carry a **fresh** annotated git tag `v<YYYY.DDD.HHMM>` computed from
+   the current UTC push time (the same CalVer scheme as image tags).
+   EVERY push gets its OWN timestamp tag, so a repo accumulates MULTIPLE
+   `v…` tags over time — one per push — INDEPENDENT of the
+   `overthink.yml` `version:` field. Do NOT skip the tag when `version:`
+   is unchanged: the timestamp tag is per-push, not per-version. The
+   `version:` field is the SCHEMA version, bumped ONLY when a
+   `MigrationStep` raises `LatestSchemaVersion()`; never bump it just to
+   mint a tag, and never above `LatestSchemaVersion()` (newer configs
+   hard-fail at load). Tags are **immutable**: only ever ADD new ones —
+   NEVER move or force-push an existing tag. The day-of-year is NOT
+   zero-padded (`v2026.64.1937`, `v2026.142.1640`); compute with
+   `v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)`, never bare
+   `+%Y.%j.%H%M`. Push order: submodule(s) first, then the superproject,
+   then `git tag -a <tag>` the pushed superproject HEAD and push the
+   tag. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are
+   exempt — never tag them. See `/ov-build:migrate`.
 4. **Working-tree cleanliness.** After commit, `git status` must be
    clean (no uncommitted changes from the cutover). Untracked files
    that aren't part of the cutover (test artifacts, build outputs)
@@ -472,7 +478,7 @@ See `plugins/README.md` for the full skill index (250+ skills). README.md carrie
 - **Unified YAML.** `overthink.yml` is the single project entry point. See `/ov-image:layer`, `/ov-image:image`, `/ov-build:migrate`.
 - **Schema.** Six singular kinds (`image`, `pod`, `vm`, `k8s`, `local`, `deploy`) with singular root-shape keys throughout (filename and kind name match: `kind: deploy` in `deploy.yml`, `kind: image` in `image.yml`, etc.). File convention: `image.yml` / `pod.yml` / `vm.yml` / `k8s.yml` / `local.yml` / `deploy.yml` all optionally included from `overthink.yml`, or inlined in a single file. The schema version is a CalVer string (e.g. `2026.141.1530`), the same scheme as image tags; configs older than `LatestSchemaVersion()` migrate via the single idempotent `ov migrate`. Nesting of deployments uses `nested:`. See `/ov-build:migrate`, `/ov-image:image`, `/ov-core:deploy`, `/ov-vm:vm`, `/ov-local:local-spec`.
 - **Hard cutover by default.** See `/ov-internals:cutover-policy` and the "Hard Cutover by Default" section above.
-- **Tag every push with the schema CalVer.** When pushing an ov-project repo (one with an `overthink.yml`), the push carries an **immutable** annotated git tag `v<version>` matching that repo's OWN `overthink.yml` `version:` field (the CalVer schema version). Created once per `version:` value, never moved or force-pushed; a new tag only when a schema migration bumps `version:`. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are exempt. See "Post-Execution Policies" and `/ov-build:migrate`.
+- **Tag every push with a fresh CalVer timestamp.** When pushing an ov-project repo (one with an `overthink.yml`), the push carries a **fresh** annotated git tag `v<YYYY.DDD.HHMM>` from the current UTC push time — ONE per push, accumulating multiple tags per repo over time, INDEPENDENT of the `overthink.yml` `version:` field (the schema version, bumped only by a `MigrationStep`). Tag every push, **including at an unchanged `version:`**. Tags are immutable — only ever added, never moved or force-pushed. Day-of-year is NOT zero-padded; compute `v$(date -u +%Y).$((10#$(date -u +%j))).$(date -u +%H%M)` (not bare `+%Y.%j.%H%M`). Push order: submodule(s) first, then the superproject, then the tag on the pushed HEAD. Repos without an `overthink.yml` (`plugins`, `pkg/arch`) are exempt. See "Post-Execution Policies" and `/ov-build:migrate`.
 - **Deploy fetches NOTHING speculative.** Every `ov deploy add` (any target kind: `local`, `pod`, `vm`, `k8s`) MUST emit zero image-pull / image-build steps unless an explicit layer step at deploy time requires the image — and no layer does today. Test-bed image preflight is the test/eval entry point's job, not the deploy's: `ov eval run` collects `score.target_image:` + per-scenario `pod:` declarations and ensures each is present in podman storage BEFORE running scenarios. A `kind: local` template carries no `image:` field. See `/ov-local:local-spec`, `/ov-eval:eval`.
 - **Engineering discipline (R1–R5) comes before runtime verification (R6–R9) before R10.** R1 (RCA on every failure), R2 (no "pre-existing" / "out of scope"), R3 (no duplication; generic > ad-hoc), R4 (no ad-hoc workarounds), R5 (hard cutover: deprecated + stale references in same change). See `/ov-internals:strict-policy` for the operationalization. R10 (disposable + fresh-rebuild) is the final acceptance gate.
 - **Mode purity.** `LoadUnified` reads `overthink.yml` only; never merges `deploy.yml`. See `/ov-internals:go` "Mode purity".

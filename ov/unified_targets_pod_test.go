@@ -79,7 +79,7 @@ func TestPodUnifiedTarget_Update_DryRun(t *testing.T) {
 // the expected ov-build/eval/deploy/stop/config/start sequence without
 // invoking the subcommands.
 func TestPodUnifiedTarget_Rebuild_DryRun(t *testing.T) {
-	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod", BaseImageRef: "eval-sway-browser-vnc"}
+	target := &PodUnifiedTarget{NodeName: "eval-sway-browser-vnc-pod", BaseImageRef: "sway-browser-vnc"}
 	if err := target.Rebuild(context.Background(), RebuildOpts{DryRun: true, RebuildImage: true}); err != nil {
 		t.Errorf("Rebuild dry-run: %v", err)
 	}

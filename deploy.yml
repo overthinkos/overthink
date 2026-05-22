@@ -61,20 +61,37 @@ deploy:
     # =================================================================
     # Bed 1: eval-sway-browser-vnc-pod (target: pod)
     # ---------------------------------------------------------------
-    # Disposable rootless podman container running the Sway desktop +
-    # Chrome + wayvnc stack (eval twin of sway-browser-vnc). Exercises
-    # every live-container test verb (cdp, wl, vnc, dbus, mcp, record)
-    # plus in-container health probes — all baked into the
-    # eval-sway-browser-vnc image's eval: block, so this bed is
-    # config-free: it publishes the image's isolated host ports
-    # (15900/19222/19224 → container 5900/9222/9224), so it coexists
-    # with production sway/selkies/android containers on a shared host.
+    # Disposable rootless podman container deploying the SHIPPING
+    # sway-browser-vnc image (Sway desktop + Chrome + wayvnc). Exercises
+    # every live-container test verb (cdp, wl, vnc, dbus, mcp, record):
+    # sway-browser-vnc bakes binaries/services/cdp/vnc/wl/dbus + mcp
+    # (chrome-devtools-mcp layer); the eval: block below adds the
+    # remaining deploy-scope probes (operator-side http, cdp list,
+    # wl sway-tree, record). Publishes sway-browser-vnc's canonical ports
+    # 5900/9222/9224 — shared with sway-browser-vnc, so only one runs at
+    # a time (per ov image validate).
     # =================================================================
     eval-sway-browser-vnc-pod:
         target: pod
-        image: eval-sway-browser-vnc
+        image: sway-browser-vnc
         disposable: true
         lifecycle: dev
+        eval:
+            - http: "http://127.0.0.1:${HOST_PORT:9222}/json/version"
+              id: esbv-pod-http-cdp
+              scope: deploy
+              status: 200
+            - cdp: list
+              id: esbv-pod-cdp-list
+              scope: deploy
+            - wl: sway-tree
+              id: esbv-pod-wl-sway-tree
+              scope: deploy
+            - record: start
+              id: esbv-pod-record-start
+              scope: deploy
+              record_name: eval-term
+              record_mode: terminal
     # =================================================================
     # Bed 2: k3s-vm (target: vm, k3s-server inside the VM)
     # ---------------------------------------------------------------

@@ -197,7 +197,7 @@ func (t *PodDeployTarget) Emit(plans []*InstallPlan, opts EmitOpts) error {
 		// Schema v3: still tag the base as `<registry>/<deploy-name>:
 		// latest` so `ov config/start <deploy-name>` can resolve it by
 		// deployment name when deploy-name != image-name (e.g. a pod
-		// deployment `eval-sway-browser-vnc-pod` targeting image `eval-sway-browser-vnc`).
+		// deployment `eval-sway-browser-vnc-pod` targeting image `sway-browser-vnc`).
 		if opts.DryRun {
 			return nil
 		}

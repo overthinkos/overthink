@@ -18,8 +18,8 @@ package main
 //   2. `<base>-pod` deploy-key suffix → `image: <base>` (the
 //      established multi-pod convention; see project deploy.yml's
 //      jupyter-pod → image: jupyter, jupyter-ml-pod → image:
-//      jupyter-ml, eval-sway-browser-vnc-pod → image:
-//      eval-sway-browser-vnc).
+//      jupyter-ml, sway-browser-vnc-pod → image:
+//      sway-browser-vnc).
 //   3. Deploy key matches a kind:image entry name (same document) →
 //      `image: <key>` (the exact-name match convention for ollama,
 //      openwebui, immich-ml, …).

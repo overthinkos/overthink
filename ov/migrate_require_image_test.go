@@ -86,7 +86,7 @@ deploy:
         target: pod
     jupyter-ml-pod:
         target: pod
-    eval-sway-browser-vnc-pod:
+    sway-browser-vnc-pod:
         target: pod
 `
 	path := filepath.Join(dir, "deploy.yml")
@@ -107,7 +107,7 @@ deploy:
 	for _, want := range []string{
 		"image: jupyter",
 		"image: jupyter-ml",
-		"image: eval-sway-browser-vnc",
+		"image: sway-browser-vnc",
 	} {
 		if !strings.Contains(string(got), want) {
 			t.Fatalf("missing injection %q:\n%s", want, got)

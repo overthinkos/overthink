@@ -20,3 +20,6 @@
 [submodule "image/fedora"]
 	path = image/fedora
 	url = https://github.com/overthinkos/fedora.git
+[submodule "image/bootc"]
+	path = image/bootc
+	url = https://github.com/overthinkos/bootc.git

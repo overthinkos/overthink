@@ -377,37 +377,6 @@ vm:
                       backend: /dev/urandom
                 memballoon:
                     model: virtio
-    aurora-bootc:
-        source:
-            kind: bootc
-            image: aurora
-        disk_size: 80 GiB
-        ram: 12G
-        cpu: 4
-    bazzite-ai-bootc:
-        source:
-            kind: bootc
-            image: bazzite-ai
-    openclaw-browser-bootc-bootc:
-        source:
-            kind: bootc
-            image: openclaw-browser-bootc
-        disk_size: 20 GiB
-        ram: 4G
-        cpu: 2
-        ssh:
-            user: root
-            port: 2222
-    selkies-desktop-bootc-bootc:
-        source:
-            kind: bootc
-            image: selkies-desktop-bootc
-        disk_size: 40 GiB
-        ram: 8G
-        cpu: 4
-        ssh:
-            user: root
-            port: 2250
 # ============================================================================
 # kind:k8s entity — used by `k8s:` test verbs (cluster: "vm-k3s-vm")
 # to resolve the kubectl context that K3sPostProvision merged into

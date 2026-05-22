@@ -4,44 +4,6 @@
 #  2026-05 kind-files cutover.
 version: 2026.141.1600
 image:
-    aurora:
-        enabled: false
-        base: ghcr.io/ublue-os/aurora-dx-nvidia-open:stable-daily-43.20260305
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - bootc-base
-            - sshd
-            - ov-full
-            - golang
-    bazzite-ai:
-        enabled: false
-        base: ghcr.io/ublue-os/bazzite-nvidia-open:stable-43.20260120.1
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - bootc-base
-            - build-toolchain
-            - language-runtimes
-            - ujust
-            - dev-tools
-            - github-actions
-            - virtualization
-            - kubernetes
-            - docker-ce
-            - google-cloud
-            - vr-streaming
-            - cuda
-            - devops-tools
-            - grafana-tools
-            - desktop-apps
-            - vscode
-            - typst
-            - copr-desktop
-            - os-config
-            - os-system-files
     comfyui:
         enabled: false
         base: nvidia
@@ -444,23 +406,6 @@ image:
             - ov
         port:
             - 18789:18789
-    openclaw-browser-bootc:
-        enabled: false
-        base: quay.io/fedora/fedora-bootc:43
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - bootc-base
-            - openclaw
-            - pipewire
-            - wayvnc
-            - chrome-sway
-        port:
-            - 18789:18789
-            - 5900:5900
-            - 9222:9222
-            - 9224:9224
     openclaw-full:
         enabled: false
         base: fedora
@@ -598,31 +543,6 @@ image:
               timeout: 5s
               scope: deploy
               reachable: true
-    selkies-desktop-bootc:
-        enabled: false
-        base: quay.io/fedora/fedora-bootc:43
-        platform:
-            - linux/amd64
-        distro:
-            - fedora:43
-            - fedora
-        layer:
-            - agent-forwarding
-            - bootc-base
-            - rpmfusion
-            - selkies-desktop
-            - tailscale
-            - keepassxc
-            - dbus
-            - ov
-        port:
-            - 13000:3000
-            - 19222:9222
-            - 19224:9224
-        eval:
-            - command: test -x /usr/bin/labwc && test -x /usr/bin/google-chrome-stable && test -x /usr/bin/tailscale && test -x /usr/bin/keepassxc
-              id: selkies-desktop-bootc-binaries
-              exit_status: 0
     selkies-desktop-nvidia:
         enabled: false
         base: nvidia

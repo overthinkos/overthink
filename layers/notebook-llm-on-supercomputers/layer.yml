@@ -11,7 +11,7 @@ layer:
       Supercomputers" course curriculum into the workspace volume's
       `llms_on_supercomputers/` subdirectory at deploy time.
       Notebooks are organised as a structured curriculum (D0_*,
-      D1_*, D2_*, D3_* prefixes for course days) covering Bazzite-AI
+      D1_*, D2_*, D3_* prefixes for course days) covering Bazzite
       setup, distributed training fundamentals, scaling patterns,
       and HPC-specific tooling. Data-only — no packages, no
       services.

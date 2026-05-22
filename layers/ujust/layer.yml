@@ -30,7 +30,7 @@ layer:
           cat > /usr/share/ublue-os/justfile << 'JF'
         set allow-duplicate-recipes := true
         set ignore-comments := true
-        import "/usr/share/bazzite-ai/just/_entry.just"
+        import "/usr/share/bazzite/just/_entry.just"
         JF
         fi
       user: root

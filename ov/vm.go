@@ -98,6 +98,30 @@ func resolveVmBackend(configured string) (string, error) {
 	return "", fmt.Errorf("no VM backend available (install libvirt or qemu-system)")
 }
 
+// vmConfiguredBackend returns the backend string to feed resolveVmBackend for
+// a vm entity: the entity's `backend:` pin (VmSpec.Backend) when set, else the
+// global vm.backend setting. THE single source so EVERY vm verb (create /
+// destroy / start / stop / console) resolves the SAME backend for a given
+// entity. Without it, `ov vm create` (honoring the pin) and `ov vm destroy`
+// (using the global setting) can pick DIFFERENT backends — the destroy then
+// silently operates on the wrong backend's (non-existent) domain and leaves
+// the created libvirt domain running, surfacing as "domain already exists" on
+// the next create (the eval-k3s-vm `ov update` failure when vm.backend=qemu
+// but the bed pins backend: libvirt).
+func vmConfiguredBackend(vmName, rtBackend string) string {
+	if vmName == "" {
+		return rtBackend
+	}
+	if dir, err := os.Getwd(); err == nil {
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil && uf.VM != nil {
+			if spec, hit := uf.VM[vmName]; hit && spec.Backend != "" {
+				return spec.Backend
+			}
+		}
+	}
+	return rtBackend
+}
+
 // startLibvirtUserSession ensures the libvirt user-session daemon is
 // running. Modular libvirt's `virtqemud --timeout=120` auto-exits
 // after 120 s of idle, so consecutive `ov eval libvirt …` calls
@@ -195,21 +219,26 @@ func (c *VmCreateCmd) Run() error {
 	// surfaces the actual issue.
 	startLibvirtUserSession()
 
-	backend, err := resolveVmBackend(rt.VmBackend)
+	// --- New kind:vm entity path (D1, D4, D12) ---
+	// Resolve the kind:vm entity FIRST so its `backend:` pin (when set)
+	// overrides the global vm.backend setting BEFORE backend resolution —
+	// the documented "pin backend: libvirt so the auto→qemu fallback can't
+	// mask a missing daemon" behavior. (VmSpec.Backend was previously
+	// absent, so the pin was silently dropped; now it is honored.)
+	dir, _ := os.Getwd()
+	var spec *VmSpec
+	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
+		spec = uf.VM[c.Image]
+	}
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
-
-	// --- New kind:vm entity path (D1, D4, D12) ---
-	// When c.Image matches a kind:vm entity in overthink.yml, branch
-	// into the VmSpec-driven create pipeline: RenderDomain for libvirt,
-	// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed}.qcow2/iso
-	// produced by `ov vm build` (the cloud_image branch of vm_build.go).
-	dir, _ := os.Getwd()
-	if uf, ok, ufErr := LoadUnified(dir); ufErr == nil && ok && uf.VM != nil {
-		if spec, hit := uf.VM[c.Image]; hit {
-			return c.runVmSpecCreate(c.Image, spec, backend)
-		}
+	if spec != nil {
+		// VmSpec-driven create pipeline: RenderDomain for libvirt,
+		// RenderQemuArgv for qemu. Uses output/qcow2/{disk,seed} produced
+		// by `ov vm build` (the cloud_image branch of vm_build.go).
+		return c.runVmSpecCreate(c.Image, spec, backend)
 	}
 
 	// Reached here = image is not a `kind: vm` entity, AND the legacy
@@ -366,7 +395,7 @@ func (c *VmStartCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(rt.VmBackend)
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
@@ -429,7 +458,7 @@ func (c *VmStopCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(rt.VmBackend)
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
@@ -501,7 +530,7 @@ func (c *VmDestroyCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(rt.VmBackend)
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
 		return err
 	}
@@ -579,8 +608,8 @@ func (c *VmDestroyCmd) Run() error {
 // --- VmListCmd ---
 
 type VmListCmd struct {
-	All           bool `short:"a" long:"all" help:"Show all VMs including stopped"`
-	CleanOrphans  bool `long:"clean-orphans" help:"Detect and undefine orphan libvirt domains (defined but no qcow2 backing or state dir)"`
+	All          bool `short:"a" long:"all" help:"Show all VMs including stopped"`
+	CleanOrphans bool `long:"clean-orphans" help:"Detect and undefine orphan libvirt domains (defined but no qcow2 backing or state dir)"`
 }
 
 func (c *VmListCmd) Run() error {
@@ -682,9 +711,9 @@ func (c *VmListCmd) Run() error {
 
 // runCleanOrphans detects orphan libvirt domains and undefines them.
 // A domain is "orphan" when:
-//   1. Defined in libvirt
-//   2. State == shut off (not running)
-//   3. Either: backing qcow2 doesn't exist, OR no matching state dir.
+//  1. Defined in libvirt
+//  2. State == shut off (not running)
+//  3. Either: backing qcow2 doesn't exist, OR no matching state dir.
 //
 // Active (running) domains are never touched. Cleanup runs
 // DomainUndefineFlags(libvirt.DomainUndefineNvram) and removes the
@@ -747,7 +776,7 @@ func (c *VmConsoleCmd) Run() error {
 		return err
 	}
 
-	backend, err := resolveVmBackend(rt.VmBackend)
+	backend, err := resolveVmBackend(vmConfiguredBackend(c.Image, rt.VmBackend))
 	if err != nil {
 		return err
 	}

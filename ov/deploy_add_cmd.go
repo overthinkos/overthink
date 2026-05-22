@@ -341,7 +341,10 @@ func (c *DeployAddCmd) dispatchNode(path string, node *DeploymentNode, parentExe
 		case strings.Contains(path, "."):
 			c.Name = "vm:" + pathLeaf(path)
 		}
-		err := c.runVM(plans, dir, opts)
+		// Pass the ORIGINAL deploy name (the bed key, e.g. eval-k3s-vm) —
+		// c.Name is now the rewritten "vm:<entity>" form, but runVM needs the
+		// deploy key to resolve the entry's env: for artifact rewrites.
+		err := c.runVM(saved, plans, dir, opts)
 		c.Name = saved
 		return err
 	case "k8s":

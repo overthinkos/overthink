@@ -155,6 +155,13 @@ func (c *EvalRunCmd) Run() error {
 			fmt.Fprintf(os.Stderr, "ov eval run %s: %s (steps=%d)\n",
 				c.Name, summaryStatus(res.OK), len(res.Step))
 		}
+		// Propagate the eval-check exit code (2) when the bed failed at an
+		// eval step (eval-image/eval-live reporting failing checks), so
+		// `ov eval run <bed>` distinguishes "the thing under test is broken"
+		// from an infra failure (build/deploy/vm-create) which stays exit 1.
+		if runErr != nil && res != nil && res.FailExitCode == EvalCheckFailExitCode {
+			return &EvalFailedError{Msg: fmt.Sprintf("ov eval run %s: eval checks failed", c.Name)}
+		}
 		return runErr
 	}
 
@@ -305,6 +312,7 @@ func runAllEvalBeds(beds map[string]DeploymentNode, opts bedRunOpts) error {
 	}
 	sort.Strings(names)
 	var failures []string
+	allEvalFails := true // every failure so far is a failing-checks (exit 2) failure
 	for _, n := range names {
 		res, runErr := runEvalBed(exe, n, beds[n], opts)
 		if res != nil {
@@ -313,11 +321,20 @@ func runAllEvalBeds(beds map[string]DeploymentNode, opts bedRunOpts) error {
 		}
 		if runErr != nil {
 			failures = append(failures, fmt.Sprintf("%s: %v", n, runErr))
+			if res == nil || res.FailExitCode != EvalCheckFailExitCode {
+				allEvalFails = false
+			}
 		}
 	}
 	if len(failures) > 0 {
-		return fmt.Errorf("ov eval run --all-beds: %d failure(s):\n  - %s",
+		msg := fmt.Sprintf("ov eval run --all-beds: %d failure(s):\n  - %s",
 			len(failures), strings.Join(failures, "\n  - "))
+		// All failures were failing checks → eval-fail exit code (2). Any
+		// infra failure (build/deploy/vm-create) keeps the generic exit 1.
+		if allEvalFails {
+			return &EvalFailedError{Msg: msg}
+		}
+		return fmt.Errorf("%s", msg)
 	}
 	return nil
 }

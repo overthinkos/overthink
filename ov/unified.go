@@ -845,6 +845,9 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		if err := validateHarnessYAMLNode(&node, fmt.Sprintf("%s:doc%d", abs, docIdx)); err != nil {
 			return err
 		}
+		// Surface key misalignments (silently-dropped unknown keys) as
+		// non-fatal warnings before the lenient decode below.
+		warnUnknownYAMLKeys(&node, shape, fmt.Sprintf("%s:doc%d", abs, docIdx))
 		switch shape {
 		case docShapeRoot:
 			var uf UnifiedFile

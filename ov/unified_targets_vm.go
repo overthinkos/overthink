@@ -316,6 +316,14 @@ func (t *VmUnifiedTarget) vmEntityName() string {
 	if t.VmDeployTarget != nil && t.VMName != "" {
 		return t.VMName
 	}
+	// NodeName is the DEPLOY key, which is NOT the vm entity name when they
+	// differ (e.g. bed eval-k3s-vm -> vm: k3s-vm). Resolve the deploy's
+	// `vm:` cross-ref via the shared resolver so `ov update <bed>` runs
+	// `ov vm create <vm-entity>`, not `ov vm create <deploy-key>`. Fall back
+	// to NodeName only for legacy vm:<name> deploy keys that declare no `vm:`.
+	if vm := vmEntityForDeploy(t.NodeName); vm != "" {
+		return vm
+	}
 	return t.NodeName
 }
 

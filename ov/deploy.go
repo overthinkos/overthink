@@ -988,6 +988,66 @@ func resolveDeployKeyToImage(key, instance string) string {
 	return ""
 }
 
+// findVmDeployNode finds the DeploymentNode for a vm-target deploy. It is
+// THE shared "which deploy entry backs this VM" lookup used by both
+// `ov deploy add` (artifact-env collection) and `ov eval live` (tests
+// overlay), so the two never diverge. Resolution order:
+//  1. by deploy NAME (the entry key) — the precise match;
+//  2. by the legacy "vm:<name>" key form;
+//  3. by scanning for any target:vm entry whose `vm:` field == vmName (or
+//     == name) — the fallback when the caller only knows the vm entity.
+//
+// Keying by the deploy NAME first is load-bearing: a bed whose key differs
+// from its vm entity (e.g. eval-k3s-vm -> vm: k3s-vm) is found by its key,
+// not mis-resolved via the vm entity name.
+func findVmDeployNode(deploys map[string]DeploymentNode, name, vmName string) (DeploymentNode, bool) {
+	if deploys == nil {
+		return DeploymentNode{}, false
+	}
+	if name != "" {
+		if e, ok := deploys[name]; ok && (e.Target == "vm" || e.Vm != "") {
+			return e, true
+		}
+		if e, ok := deploys["vm:"+name]; ok {
+			return e, true
+		}
+	}
+	for _, e := range deploys {
+		if e.Target == "vm" && e.Vm != "" && (e.Vm == vmName || e.Vm == name) {
+			return e, true
+		}
+	}
+	return DeploymentNode{}, false
+}
+
+// vmEntityForDeploy resolves a vm-target deploy KEY to its `vm:` cross-ref
+// (the kind:vm entity name) — operator overlay first, then project config,
+// via the shared findVmDeployNode. Returns "" when no entry declares a vm
+// entity. THE single deploy-key→vm-entity resolver so `ov update <bed>`
+// (VmUnifiedTarget) and any other vm-deploy consumer agree: the deploy KEY
+// (e.g. eval-k3s-vm) is NOT the vm entity name (k3s-vm) when they differ —
+// blindly using the key breaks `ov vm create`/`destroy` for such beds.
+func vmEntityForDeploy(deployName string) string {
+	if deployName == "" {
+		return ""
+	}
+	if dc := loadDeployConfigForRead("vmEntityForDeploy"); dc != nil {
+		if node, ok := findVmDeployNode(dc.Deploy, deployName, ""); ok && node.Vm != "" {
+			return node.Vm
+		}
+	}
+	if dir, err := os.Getwd(); err == nil {
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+			if pc := uf.ProjectDeployConfig(); pc != nil {
+				if node, ok := findVmDeployNode(pc.Deploy, deployName, ""); ok && node.Vm != "" {
+					return node.Vm
+				}
+			}
+		}
+	}
+	return ""
+}
+
 // resolveDeployImageName is THE single deploy-key→image-name resolver used
 // by every deploy-mode command that starts from a deploy key (ov config /
 // start / shell / eval live). It returns the deploy entry's declared

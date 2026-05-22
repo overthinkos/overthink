@@ -20,7 +20,7 @@ import (
 // Pre-flight: the VM must already be booted. Callers typically run
 // `ov vm create <vm-name>` first. A future enhancement (Task 19's
 // vm.go integration) will auto-boot on first apply.
-func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) error {
+func (c *DeployAddCmd) runVM(deployName string, plans []*InstallPlan, dir string, opts EmitOpts) error {
 	vmName, err := vmNameFromDeployName(c.Name)
 	if err != nil {
 		return err
@@ -152,41 +152,34 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	for k, v := range secretEnv {
 		artifactEnv[k] = v
 	}
-	// Upstream dispatch may have rewritten c.Name to "vm:<entity>" for
-	// VM-target routing. The deploy.yml key is the ORIGINAL node name
-	// (e.g. "eval-k3s-vm"), not the prefixed form — look up under both so
-	// the env lookup works regardless of which form was passed in.
-	envLookupKeys := []string{c.Name, strings.TrimPrefix(c.Name, "vm:")}
-	// Pull env from project-level deploy config (overthink.yml's
-	// deployments: section, not the per-machine overlay ~/.config/ov/
-	// deploy.yml which LoadDeployConfig reads).
-	if uf != nil {
-		if pdc := uf.ProjectDeployConfig(); pdc != nil {
-			for _, k := range envLookupKeys {
-				if entry, exists := pdc.Deploy[k]; exists {
-					for _, line := range entry.Env {
-						if idx := strings.Index(line, "="); idx > 0 {
-							artifactEnv[line[:idx]] = line[idx+1:]
-						}
-					}
-					break
-				}
+	// Merge the deploy entry's env: entries so artifact rewrite rules like
+	// "${K3S_KUBECONFIG_SERVER}" resolve to the declared value instead of
+	// the literal placeholder / shell default. The deploy entry is keyed by
+	// the DEPLOY NAME (the bed key, e.g. "eval-k3s-vm"), NOT the vm entity
+	// name — resolve it via the shared findVmDeployNode(deployName, vmName).
+	// Pre-fix this keyed off c.Name (rewritten upstream to "vm:<entity>"),
+	// which silently missed any bed whose key differs from its vm entity
+	// name (the eval-k3s-vm -> vm: k3s-vm case), defaulting the kubeconfig
+	// server rewrite to :6443. Operator overlay (dc) merges over project
+	// (pdc): later wins.
+	mergeNodeEnv := func(deploys map[string]DeploymentNode) {
+		node, ok := findVmDeployNode(deploys, deployName, vmName)
+		if !ok {
+			return
+		}
+		for _, line := range node.Env {
+			if idx := strings.Index(line, "="); idx > 0 {
+				artifactEnv[line[:idx]] = line[idx+1:]
 			}
 		}
 	}
-	// Per-machine overlay env also merges in (same precedence rule: later
-	// wins, operator overlay is "later").
-	if dc != nil {
-		for _, k := range envLookupKeys {
-			if entry, exists := dc.Deploy[k]; exists {
-				for _, line := range entry.Env {
-					if idx := strings.Index(line, "="); idx > 0 {
-						artifactEnv[line[:idx]] = line[idx+1:]
-					}
-				}
-				break
-			}
+	if uf != nil {
+		if pdc := uf.ProjectDeployConfig(); pdc != nil {
+			mergeNodeEnv(pdc.Deploy)
 		}
+	}
+	if dc != nil {
+		mergeNodeEnv(dc.Deploy)
 	}
 
 	// Auto-boot integration (formerly Task 19, deferred at

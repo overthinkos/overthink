@@ -1169,7 +1169,7 @@ score:
     plateau_iteration: 3
     progressive: true                 # curriculum-style: phase N adds recipe N
     target_image: "eval-target"      # informational prompt token (${TARGET_IMAGE})
-    deployment: "eval-default"     # informational prompt token (${DEPLOYMENT})
+    deploy: "eval-default"           # HarnessScore.Deploy (yaml:"deploy") — names the scored deployment
     note: true
     mcp_endpoint: "http://localhost:18765/mcp"
     env: {}
@@ -1630,7 +1630,12 @@ vm:
         firmware: bios
         network:
             mode: user
-            port_forward:
+            # `port_forwards` (plural) is the canonical key — VmNetwork.PortForwards
+            # (yaml:"port_forwards"), a kept-plural key in the field-singular cutover.
+            # The original bed used the singular `port_forward:`, which YAML silently
+            # dropped → no host:16443 forward → the k8s probes hit
+            # `dial 127.0.0.1:16443: connection refused`.
+            port_forwards:
                 - "16443:6443"
         ssh:
             port: 2225 # non-default host SSH port for the eval-k3s-vm bed
@@ -1642,7 +1647,7 @@ vm:
             ov_install:
                 strategy: auto
         libvirt:
-            device:
+            devices:
                 rng:
                     - model: virtio
                       backend: /dev/urandom

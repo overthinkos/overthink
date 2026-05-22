@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -745,5 +746,16 @@ func main() {
 	SweepStaleTemps()
 
 	err := ctx.Run()
+	// `ov eval` distinguishes "the thing under test is broken" from "the
+	// command/usage/infra errored" via a distinct exit code: 0 = pass,
+	// 1 = command error (Kong's FatalIfErrorf default), 2 = eval checks
+	// failed. See EvalFailedError / EvalCheckFailExitCode in eval_cmd.go.
+	if err != nil {
+		var evalFail *EvalFailedError
+		if errors.As(err, &evalFail) {
+			fmt.Fprintln(os.Stderr, FormatCLIError(err))
+			os.Exit(EvalCheckFailExitCode)
+		}
+	}
 	ctx.FatalIfErrorf(FormatCLIError(err))
 }

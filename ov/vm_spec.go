@@ -17,9 +17,17 @@ type VmSpec struct {
 
 	DiskSize string `yaml:"disk_size,omitempty"` // e.g. "20G", "10 GiB"
 	Ram      string `yaml:"ram,omitempty"`       // e.g. "4G", "8192M"
-	Cpus     int    `yaml:"cpus,omitempty"`      // e.g. 2
+	Cpus     int    `yaml:"cpu,omitempty"`       // e.g. 2 (YAML key `cpu` — native VmSpec key, singular per the field-singular cutover; rendered to libvirt <vcpu>)
 	Machine  string `yaml:"machine,omitempty"`   // q35 | virt (arm64) | i440fx — default: host-native
 	Firmware string `yaml:"firmware,omitempty"`  // bios | uefi-insecure | uefi-secure — default: bios
+
+	// Backend pins the VM backend for THIS entity (auto | libvirt | qemu),
+	// overriding the global vm.backend setting. Honored by VmCreateCmd.Run.
+	// Previously this field was MISSING, so a `backend:` key on a vm entity
+	// was silently dropped and the pin never took effect (the documented
+	// "pin backend: libvirt so the auto→qemu fallback can't mask a missing
+	// daemon" behavior was a no-op until this field was added).
+	Backend string `yaml:"backend,omitempty"`
 
 	// --- Network (structured; replaces old VmConfig.Network string tag) ---
 
@@ -46,8 +54,8 @@ type VmSpec struct {
 	// composition machinery. These slots are ONLY for tests genuinely
 	// specific to the VM template (e.g., checking a cloud-init runcmd
 	// took effect, probing a libvirt device).
-	Eval        []Check `yaml:"eval,omitempty"`
-	DeployEval  []Check `yaml:"deploy_eval,omitempty"`
+	Eval       []Check `yaml:"eval,omitempty"`
+	DeployEval []Check `yaml:"deploy_eval,omitempty"`
 
 	// --- Declarative snapshot intent (optional; default empty) ---
 	//
@@ -104,8 +112,8 @@ type VmSnapshotDecl struct {
 //   - "bootc"       — `bootc install to-disk` from a kind:image entry
 //   - "clone"       — qcow2 backing-chain overlay on another VM's snapshot
 //   - "imported"    — adopt an externally-managed VM (virsh-defined,
-//                     virt-manager-created, etc.); ov tracks lifecycle
-//                     but does not rebuild the disk
+//     virt-manager-created, etc.); ov tracks lifecycle
+//     but does not rebuild the disk
 type VmSource struct {
 	// Kind discriminates the branches. Must be "cloud_image", "bootc",
 	// "clone", or "imported".

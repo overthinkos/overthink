@@ -27,6 +27,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -53,6 +54,25 @@ type bedRunResult struct {
 	CalVer string
 	Step   []stepResult
 	OK     bool
+	// FailExitCode is the exit code of the FIRST failed step (0 = none).
+	// EvalCheckFailExitCode (2) means an eval step (eval-image/eval-live)
+	// reported failing checks; anything else is an infra failure (build /
+	// deploy / vm-create). The caller maps it to the process exit code so
+	// `ov eval run <bed>` distinguishes "checks failed" from "couldn't run".
+	FailExitCode int
+}
+
+// exitCodeOf extracts a subprocess exit code from an exec error. Non-ExitError
+// failures (couldn't even spawn) map to 1; nil maps to 0.
+func exitCodeOf(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return 1
 }
 
 // summaryStatus formats a bool as a human-readable status word.
@@ -90,6 +110,12 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		res.Step = append(res.Step, stepResult{Name: stepName, Duration: dur, OK: ok})
 		if !ok {
 			res.OK = false
+			if res.FailExitCode == 0 {
+				// First failure wins (fail() short-circuits the sequence);
+				// capture the sub-ov exit code so the caller can tell an
+				// eval-check failure (2) from an infra failure (1).
+				res.FailExitCode = exitCodeOf(runErr)
+			}
 		}
 		// Write the step log even on success — useful for debugging
 		// non-fatal warnings.

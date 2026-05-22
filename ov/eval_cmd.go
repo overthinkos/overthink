@@ -11,6 +11,30 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// EvalCheckFailExitCode is the process exit code `ov eval` returns when an
+// eval RAN to completion but one or more checks FAILED — deliberately
+// distinct from 0 (all checks passed) and 1 (command / usage / infra error:
+// couldn't build, deploy, or even run the eval). This lets automation (and
+// `ov eval run <bed>`) tell "the thing under test is broken" apart from "the
+// eval itself couldn't run". Mirrors the goss / pytest 0/1/2 convention;
+// main() maps EvalFailedError to this code.
+const EvalCheckFailExitCode = 2
+
+// EvalFailedError marks an eval that ran but had failing checks. main()
+// detects it via errors.As and exits EvalCheckFailExitCode. Wrap with %w to
+// preserve the chain through callers.
+type EvalFailedError struct {
+	Failed int    // number of failed checks (0 = aggregate/unknown)
+	Msg    string // optional message override (e.g. a bed-level aggregate)
+}
+
+func (e *EvalFailedError) Error() string {
+	if e.Msg != "" {
+		return e.Msg
+	}
+	return fmt.Sprintf("%d check(s) failed", e.Failed)
+}
+
 // EvalCmd is the unified `ov eval` command tree — declarative evaluation,
 // AI-driven iteration, and live-container probe verbs all under one
 // prefix. Three primary verbs (image / live / run) replace the old
@@ -186,7 +210,7 @@ func (c *EvalLiveCmd) Run() error {
 	fmt.Fprintf(os.Stderr, "Image: %s (container: %s)\n", meta.Image, containerName)
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
-		return fmt.Errorf("%d check(s) failed", fails)
+		return &EvalFailedError{Failed: fails}
 	}
 	return nil
 }
@@ -317,40 +341,23 @@ func (c *EvalLiveCmd) runVm() error {
 	// This is what makes `ov eval live <deploy-name>` work for beds like
 	// `arch-vm` that don't carry the legacy `vm:` prefix in the key.
 	// Merge by id (local replaces project); same rules as MergeDeployEval.
-	findVmEntry := func(images map[string]DeploymentNode) *DeploymentNode {
-		if images == nil {
-			return nil
-		}
-		// Schema v4: direct deployment-key lookup (c.Image matches a
-		// kind:deployment name with target:vm).
-		if entry, ok := images[c.Image]; ok && entry.Target == "vm" {
-			return &entry
-		}
-		// Legacy: `vm:<name>` deploy key.
-		if entry, ok := images["vm:"+c.Image]; ok {
-			return &entry
-		}
-		// By VM template name: c.Image matches the referenced kind:vm.
-		for _, entry := range images {
-			if entry.Target == "vm" && entry.Vm == c.Image {
-				e := entry
-				return &e
-			}
-		}
-		return nil
-	}
+	// Resolve the VM's deploy entry via THE shared findVmDeployNode (deploy.go)
+	// — the same lookup `ov deploy add` uses — by deploy NAME (c.Image) first,
+	// then the vm entity (vmName). Keying by name first means a bed whose key
+	// differs from its vm entity (eval-k3s-vm -> vm: k3s-vm) resolves to its
+	// own entry rather than being mis-matched via the vm entity name.
 	var projectTests, localTests []Check
 	// Nested dotted-path short-circuit: when the request is for a
 	// child node, use its own Tests directly instead of the parent's.
 	if nestedLeaf != nil {
 		projectTests = nestedLeaf.Eval
 	} else if pc := uf.ProjectDeployConfig(); pc != nil {
-		if entry := findVmEntry(pc.Deploy); entry != nil {
+		if entry, ok := findVmDeployNode(pc.Deploy, c.Image, vmName); ok {
 			projectTests = entry.Eval
 		}
 	}
 	if dc := loadDeployConfigForRead("ov eval vm"); dc != nil {
-		if entry := findVmEntry(dc.Deploy); entry != nil {
+		if entry, ok := findVmDeployNode(dc.Deploy, c.Image, vmName); ok {
 			localTests = entry.Eval
 			if entry.VmState != nil {
 				if entry.VmState.SshUser != "" {
@@ -410,7 +417,7 @@ func (c *EvalLiveCmd) runVm() error {
 	fmt.Fprintf(os.Stderr, "VM: ov-%s (ssh %s@%s:%d)\n", c.Image, user, host, port)
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
-		return fmt.Errorf("%d check(s) failed", fails)
+		return &EvalFailedError{Failed: fails}
 	}
 	return nil
 }
@@ -485,7 +492,7 @@ func (c *EvalImageCmd) Run() error {
 
 	fails := formatResults(results, c.Format)
 	if fails > 0 {
-		return fmt.Errorf("%d check(s) failed", fails)
+		return &EvalFailedError{Failed: fails}
 	}
 	return nil
 }

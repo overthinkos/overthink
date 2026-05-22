@@ -567,6 +567,17 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		Sidecar:     deploySidecars,
 		Tunnel:      meta.Tunnel,
 		SecretNames: secretDepNames(meta),
+		// Image + Target are required by the 2026-05-12 require-image
+		// validator (validateDeployRequiresImage). Without them, the entry
+		// `ov config` writes would be rejected by the loader on the next
+		// `ov` invocation, forcing an `ov migrate`. saveDeployState only
+		// writes these when the existing entry doesn't already declare them
+		// (never clobbers operator-authored refs). ov config is exclusively
+		// a pod-deploy setup verb, and its deploy key is the image name, so
+		// Target is always "pod" and Image is c.Image. Mirrors the same
+		// fields set by the container path in deploy_add_cmd.go.
+		Image:  c.Image,
+		Target: "pod",
 	})
 
 	// Direct mode: skip quadlet+systemctl and run podman directly. Used

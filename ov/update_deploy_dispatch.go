@@ -37,6 +37,22 @@ import (
 //
 // No silent fallbacks. The user gets a clear error pointing at the
 // right alternative or the field they need to fix.
+// resolveUpdateDeployNode looks up the deploy entry for an `ov update`
+// invocation by the FULL deploy key. deployKey applies the -i instance,
+// returning the bare (or dotted-nested) name unchanged when instance is
+// empty — so `ov update <base> -i <inst>` finds the instance-keyed
+// `<base>/<inst>` entry, plain names still resolve, and dotted nested
+// paths (`a.b.c`) still walk. Mirrors the composition `ov start` uses via
+// dc.Lookup(c.Image, c.Instance). On miss the error reports the full key.
+func resolveUpdateDeployNode(tree map[string]DeploymentNode, image, instance string) (*DeploymentNode, error) {
+	key := deployKey(image, instance)
+	node, _, err := ResolveNodePath(tree, key)
+	if err != nil || node == nil {
+		return nil, fmt.Errorf("no deploy named %q in deploy.yml. To refresh an image artifact only, use 'ov image pull %s'", key, image)
+	}
+	return node, nil
+}
+
 func (c *UpdateCmd) dispatchByDeployTarget() error {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -49,9 +65,9 @@ func (c *UpdateCmd) dispatchByDeployTarget() error {
 	if tree == nil {
 		return fmt.Errorf("no deploy.yml found relative to %s; ov update requires a deploy name. To refresh an image artifact only, use 'ov image pull %s'", dir, c.Image)
 	}
-	node, _, err := ResolveNodePath(tree, c.Image)
-	if err != nil || node == nil {
-		return fmt.Errorf("no deploy named %q in deploy.yml. To refresh an image artifact only, use 'ov image pull %s'", c.Image, c.Image)
+	node, err := resolveUpdateDeployNode(tree, c.Image, c.Instance)
+	if err != nil {
+		return err
 	}
 
 	// Normalize the target. Empty / "container" both mean "pod".

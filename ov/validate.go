@@ -1377,12 +1377,39 @@ func validatePackagedServices(cfg *Config, layers map[string]*Layer, errs *Valid
 		for _, layerRef := range img.Layer {
 			bare := BareRef(layerRef)
 			layer, ok := layers[bare]
-			if !ok || !layerHasPackaged(layer) {
+			if !ok || !layerHasOrphanPackaged(layer) {
 				continue
 			}
-			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with use_packaged entries, but composition does not preserve_user (systemd units will be ignored)\n", imageName, bare)
+			fmt.Fprintf(os.Stderr, "Warning: image %q includes layer %q with a packaged-only service (no custom-exec sibling), but composition does not preserve_user (its systemd unit will be ignored)\n", imageName, bare)
 		}
 	}
+}
+
+// layerHasOrphanPackaged reports whether the layer has a use_packaged service
+// entry with NO custom-exec sibling of the same name. Only such "orphan"
+// packaged units are genuinely dropped under supervisord (the container default
+// init can't consume packaged systemd units), so only they warrant the
+// preserve_user warning. When a same-name exec sibling exists — the canonical
+// mixed-form init polymorphism pattern (e.g. sshd: use_packaged sshd.service +
+// exec sshd-wrapper) — supervisord renders the exec form, nothing is lost, and
+// warning would be a false positive.
+func layerHasOrphanPackaged(l *Layer) bool {
+	if l == nil {
+		return false
+	}
+	svcs := l.Service()
+	customNames := make(map[string]bool)
+	for i := range svcs {
+		if !svcs[i].IsPackaged() && svcs[i].Exec != "" && svcs[i].Name != "" {
+			customNames[svcs[i].Name] = true
+		}
+	}
+	for i := range svcs {
+		if svcs[i].IsPackaged() && !customNames[svcs[i].Name] {
+			return true
+		}
+	}
+	return false
 }
 
 // isValidPort checks if a string is a valid port number (1-65535).

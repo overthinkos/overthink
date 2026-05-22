@@ -6,10 +6,11 @@
 #  `overthinkos/fedora` submodule (remotely, via
 #  `include: '@github.com/overthinkos/overthink/fedora-base.yml:<tag>'`).
 #
-#  fedora is the ecosystem default base: ~40 main images root on `fedora` /
-#  `fedora-nonfree` (jupyter, immich, hermes, selkies-desktop, nvidia, the
-#  openclaw family, the eval beds, …) and `fedora-builder` is main's
-#  defaults.builder. The base stack therefore STAYS in main — only the Fedora
+#  fedora is the ecosystem default base: most main images root on `fedora` /
+#  `fedora-nonfree` (jupyter, immich, hermes, nvidia, the eval beds, …) and
+#  `fedora-builder` is main's defaults.builder. (selkies-desktop and the
+#  openclaw family moved to the cachyos base — see CHANGELOG.md.) The base
+#  stack therefore STAYS in main — only the Fedora
 #  consumer showcase images (fedora-coder / fedora-ov / fedora-test) moved to
 #  the submodule. There is NO main → fedora coupling: main owns this file
 #  locally and remote-includes nothing from the new repo.

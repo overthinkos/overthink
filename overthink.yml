@@ -1,7 +1,10 @@
 version: 2026.141.1600
 include:
+    # eval.yml carries kind:ai/recipe/score AND the kind:eval disposable R10
+    # beds (+ their supporting vm:/k8s: entities). deploy.yml was deleted in
+    # the 2026-05 kind:eval cutover — the repo ships only eval beds; operator
+    # deployments live in the per-host ~/.config/ov/deploy.yml.
     - eval.yml
-    - deploy.yml
     - local.yml
     - image.yml
     - vm.yml

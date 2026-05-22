@@ -13,7 +13,7 @@ import (
 // adb.go implements `ov eval adb …` — the host-side Android Debug Bridge
 // client. The host `ov` binary connects to the running container's
 // host-published ADB server port (container :5037 → host's HOST_PORT:5037,
-// e.g. 35002 on android-emulator-pod) using github.com/zach-klippenstein/goadb,
+// e.g. 35002 on eval-android-emulator-pod) using github.com/zach-klippenstein/goadb,
 // then issues ADB protocol operations against the emulator backing that
 // server (typically `emulator-5554`).
 //

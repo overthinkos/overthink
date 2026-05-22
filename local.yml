@@ -3,7 +3,7 @@ version: 2026.141.1600
 local:
   # =================================================================
   # eval-local — per-kind R10 smoke template for kind:local.
-  # Applied via the eval-local-deploy bed in deploy.yml. Single layer
+  # Applied via the eval-local bed (kind:eval) in eval.yml. Single layer
   # (eval-local-layer) drops a marker file the deploy-scope eval probe
   # verifies on the host (not in a container).
   # =================================================================

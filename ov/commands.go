@@ -360,15 +360,28 @@ func (c *RemoveCmd) runPreRemoveHook(engine, containerName, imageName string) {
 	}
 }
 
-// containerImage returns the image name for a running container (best-effort).
-func containerImage(engine, containerName string) string {
-	binary := EngineBinary(engine)
-	cmd := exec.Command(binary, "inspect", "--format", "{{.Config.Image}}", containerName)
-	out, err := cmd.Output()
+// containerImageRef returns the image ref backing a running container
+// (.Config.Image via `<engine> inspect`). THE single container→image-ref
+// inspector — used wherever a command must read what a LIVE container is
+// actually running (mcp probes, service init detection, remove hooks,
+// direct-mode start). containerImage is the best-effort (""-on-error)
+// wrapper over it, so there is exactly one inspect implementation.
+func containerImageRef(engine, containerName string) (string, error) {
+	out, _, exit, err := runCaptureCmd(exec.Command(EngineBinary(engine), "inspect", "--format", "{{.Config.Image}}", containerName))
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("inspecting container %s: %w", containerName, err)
 	}
-	return strings.TrimSpace(string(out))
+	if exit != 0 {
+		return "", fmt.Errorf("inspect %s: exit %d", containerName, exit)
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// containerImage returns the image ref for a running container, best-effort
+// ("" on error). Thin wrapper over containerImageRef.
+func containerImage(engine, containerName string) string {
+	ref, _ := containerImageRef(engine, containerName)
+	return ref
 }
 
 // resolveImageName extracts the short image name from a ref that may be

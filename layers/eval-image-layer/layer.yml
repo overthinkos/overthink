@@ -4,8 +4,9 @@ layer:
     feature: Drop /etc/eval-image-marker for kind:image smoke probes
     narrative: |
       Single-file marker layer used as the build-scope smoke target for
-      `ov eval kind image`. Composes alone in the eval-image bed and as
-      the first layer of the eval-layer composition test.
+      the eval-image-pod bed (`ov eval run eval-image-pod`). Composes alone
+      in the eval-image image and as the first layer of the eval-layer
+      composition test.
     tag: [working]
   task:
     - write: /etc/eval-image-marker

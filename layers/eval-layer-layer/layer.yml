@@ -4,9 +4,9 @@ layer:
     feature: Compose on top of eval-image-layer to verify layer ordering
     narrative: |
       Drops /etc/eval-layer-marker AND asserts /etc/eval-image-marker is
-      already present from the prior layer in the stack. Used by
-      `ov eval kind layer` to prove that layer composition order survives
-      the build pipeline.
+      already present from the prior layer in the stack. Used by the
+      eval-layer-pod bed (`ov eval run eval-layer-pod`) to prove that layer
+      composition order survives the build pipeline.
     tag: [working]
   task:
     - write: /etc/eval-layer-marker

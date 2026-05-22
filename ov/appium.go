@@ -18,7 +18,7 @@ import (
 // appium.go implements `ov eval appium …` — the host-side Appium
 // WebDriver client. The host `ov` binary connects to the container's
 // host-published Appium port (container :4723 → host's HOST_PORT:4723,
-// e.g. 35001 on android-emulator-pod) using github.com/tebeka/selenium
+// e.g. 35001 on eval-android-emulator-pod) using github.com/tebeka/selenium
 // (W3C WebDriver client, talks Appium 2.x and 3.x because W3C is stable).
 //
 // Appium-specific endpoints not in the standard WebDriver surface
@@ -373,7 +373,7 @@ func (s *w3cSession) executeScript(script string, args []interface{}) (json.RawM
 // the W3C ExecuteScript escape hatch with `mobile: installApp`. The
 // `appPath` arg accepts either a remote path on the device or — when
 // the running Appium has the host filesystem visible — a host path.
-// Most setups, including android-emulator-pod, expose the host workspace
+// Most setups, including eval-android-emulator-pod, expose the host workspace
 // inside the container at /workspace, so passing the in-container path
 // works without uploading.
 //

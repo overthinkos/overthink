@@ -1,9 +1,12 @@
-# harness.yml — three kinds:
+# eval.yml — four kinds:
 #   kind: ai     — reusable AI-CLI catalog
 #   kind: recipe — pure spec; every scenario carries `pod:` declaring
 #                  the one container its steps probe
 #   kind: score  — runner config (target eval-pod, AI, plateau, prompt)
 #                  referencing one or more recipes via `recipes:`
+#   kind: eval   — disposable R10 test beds (deploy-shaped), run with
+#                  `ov eval run <bed>`; the kind:eval section is at the
+#                  END of this file, after score:.
 #
 # Architecture: the harness owns the eval-pod (rebuilt fresh per run);
 # the AI inside eval-pod owns everything else (image builds, deployments,
@@ -1403,3 +1406,254 @@ score:
       hot-reload Go code. Your fix takes effect on the NEXT harness
       run, not the current one. Record the fix in your iteration
       notes and exit cleanly; the next run picks up the new binary.
+
+# =============================================================================
+# kind: eval — disposable, zero-operator-side-effect R10 test beds.
+# =============================================================================
+# Each entry is a disposable deployment (a DeploymentNode), folded into the
+# Deploy map at load time so every deploy verb resolves it by name. Run the
+# full R10 acceptance sequence on any of them — build → eval image → deploy →
+# eval live → fresh update (R10 gate) → tear down — with:
+#
+#     ov eval run <bed>          # one bed
+#     ov eval run --all-beds     # every bed, name-sorted
+#
+# `disposable: true` is the SOLE authorization for that unattended destroy +
+# rebuild (see /ov-internals:disposable). Naming: eval-<descriptor>-<kind>,
+# dropping a redundant suffix when descriptor == kind AND the short form is
+# free (eval-local). The kind:pod bed stays `eval-pod-pod` — `eval-pod` is
+# reserved as the harness AI-sandbox pod name (the score `pod:` target).
+#
+# Bed-to-verb coverage map:
+#   eval-sway-browser-vnc-pod (pod) — cdp, wl, vnc, dbus, mcp, record + pod-side
+#                                     file/service/port/process/http
+#   eval-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
+#                                     file/service/port/process, http via
+#                                     port-forward, VmDeployTarget end-to-end
+#   eval-image-pod            (pod) — kind:image build + eval image + pod deploy
+#   eval-layer-pod            (pod) — kind:layer composition order
+#   eval-pod-pod              (pod) — kind:pod runtime + ports + supervisord render
+#   eval-deploy-pod           (pod) — every DeployTarget rendering path
+#   eval-local                (local) — kind:local layer apply via ShellExecutor
+#   eval-jupyter-pod          (pod) — jupyter-mcp regression coverage
+#   eval-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
+#   eval-versa-pod            (pod) — versa OSM analytics + vector-tile + marimo MCP
+#   eval-android-emulator-pod (pod) — Android 14 emulator (/dev/kvm) + adb/appium
+#
+# Zero-operator-side-effect: pod beds → rootless podman; eval-k3s-vm → libvirt
+# qcow2; eval-local → a disposable scratch dir. No test writes to ~/.local/bin,
+# ~/.config/overthink, /etc, /usr, or any operator-side directory.
+# =============================================================================
+eval:
+    # eval-sway-browser-vnc-pod deploys the SHIPPING sway-browser-vnc image
+    # (Sway desktop + Chrome + wayvnc). The image bakes binaries/services/
+    # cdp/vnc/wl/dbus + mcp (chrome-devtools-mcp layer); the eval: block adds
+    # the remaining deploy-scope probes (operator-side http, cdp list, wl
+    # sway-tree, record). Publishes the image's canonical 5900/9222/9224.
+    eval-sway-browser-vnc-pod:
+        target: pod
+        image: sway-browser-vnc
+        disposable: true
+        lifecycle: dev
+        eval:
+            - http: "http://127.0.0.1:${HOST_PORT:9222}/json/version"
+              id: esbv-pod-http-cdp
+              scope: deploy
+              status: 200
+            - cdp: list
+              id: esbv-pod-cdp-list
+              scope: deploy
+            - wl: sway-tree
+              id: esbv-pod-wl-sway-tree
+              scope: deploy
+            - record: start
+              id: esbv-pod-record-start
+              scope: deploy
+              record_name: eval-term
+              record_mode: terminal
+    # eval-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
+    # pulled back for host-side k8s: probes (all 13 methods) via the forwarded
+    # :6443. A VM (native kernel + cgroup tree) sidesteps the rootless-podman
+    # cpuset-delegation blocker that makes a pod-hosted k3s impossible.
+    # References the vm: entity `k3s-vm` (defined below).
+    eval-k3s-vm:
+        target: vm
+        vm: k3s-vm
+        disposable: true
+        lifecycle: dev
+        add_layer:
+            - k3s-server
+        env:
+            - K3S_SERVER_HOSTNAME=127.0.0.1
+            # Host port 16443 forwards into the guest's :6443; the retrieved
+            # kubeconfig's server: line is rewritten to this URL.
+            - K3S_KUBECONFIG_SERVER=https://127.0.0.1:16443
+        install_opts:
+            with_service: true
+            allow_repo_changes: true # pacman sync / repo key import
+            skip_incompatible: true # skip rpm:/deb:-only layer sections
+            verify: true
+        eval:
+            # --- Guest identity + VM health --------------------------
+            - {id: kv-guest-identity, scope: deploy, command: id, stdout: {contains: "uid=1000(arch)"}}
+            - {id: kv-guest-os-release, scope: deploy, command: "cat /etc/os-release", stdout: {contains: "ID=arch"}}
+            # --- k3s-server in-guest health --------------------------
+            # The k3s binary re-execs into `k3s-server` (the unambiguous
+            # post-exec comm name).
+            - {id: kv-k3s-process, scope: deploy, process: "k3s-server", running: true}
+            - {id: kv-port-6443-listening, scope: deploy, port: 6443, listening: true}
+            - {id: kv-kubeconfig-file, scope: deploy, file: /etc/rancher/k3s/k3s.yaml, exists: true}
+            # NOTE: no http: /healthz probe — k3s v1.31 gates /healthz behind
+            # authn (401 to anonymous). kv-k8s-raw-version exercises the
+            # authenticated API path end-to-end via the retrieved kubeconfig.
+            # --- k8s: verb (all 13 methods) --------------------------
+            - {id: kv-k8s-nodes, scope: deploy, k8s: nodes, cluster: "vm-k3s-vm"}
+            - {id: kv-k8s-wait-nodes, scope: deploy, k8s: "wait-nodes", cluster: "vm-k3s-vm", k8s_count: 1, timeout: "300s"}
+            - {id: kv-k8s-pods, scope: deploy, k8s: pods, cluster: "vm-k3s-vm", namespace: kube-system}
+            - {id: kv-k8s-wait-ready, scope: deploy, k8s: "wait-ready", cluster: "vm-k3s-vm", k8s_kind: Deployment, namespace: kube-system, name: coredns, timeout: "180s"}
+            - {id: kv-k8s-ingressclass-traefik, scope: deploy, k8s: ingressclass, cluster: "vm-k3s-vm"}
+            - {id: kv-k8s-storageclass-localpath, scope: deploy, k8s: storageclass, cluster: "vm-k3s-vm", stdout: {contains: "local-path"}}
+            - {id: kv-k8s-addons, scope: deploy, k8s: addons, cluster: "vm-k3s-vm"}
+            - {id: kv-k8s-raw-version, scope: deploy, k8s: raw, cluster: "vm-k3s-vm", text: "version -o json"}
+            - {id: kv-k8s-service-kubernetes, scope: deploy, k8s: service, cluster: "vm-k3s-vm", namespace: default, name: kubernetes}
+            # --- command: ov-specific operator-side smoke ------------
+            - {id: kv-ov-version, scope: deploy, command: "/tmp/ov-build/ov version || ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
+            # --- matching: verb smoke --------------------------------
+            - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
+    # Per-kind R10 smoke beds — disposable, fast (fedora-minimal:43 base).
+    eval-image-pod:
+        target: pod
+        image: eval-image
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising kind:image
+            tag: [working]
+    eval-layer-pod:
+        target: pod
+        image: eval-layer
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising kind:layer composition
+            tag: [working]
+    eval-pod-pod:
+        target: pod
+        image: eval-pod
+        disposable: true
+        lifecycle: dev
+        port:
+            - 18794:18794
+        description:
+            feature: Fast pod bed exercising kind:pod runtime
+            tag: [working]
+    eval-deploy-pod:
+        target: pod
+        image: eval-deploy
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast pod bed exercising DeployTarget rendering
+            tag: [working]
+    eval-local:
+        target: local
+        local: eval-local
+        host: local
+        disposable: true
+        lifecycle: dev
+        description:
+            feature: Fast local bed exercising kind:local layer application
+            tag: [working]
+    eval-jupyter-pod:
+        target: pod
+        image: jupyter
+        disposable: true
+        lifecycle: dev
+        port:
+            - 28888:8888
+        description:
+            feature: R10 bed for jupyter-mcp regression coverage (auto-attach, canonicalization, idle-room sweep, cell_update id-preservation)
+            tag: [working]
+    eval-jupyter-ml-pod:
+        target: pod
+        image: jupyter-ml
+        disposable: true
+        lifecycle: dev
+        port:
+            - 28889:8888
+        description:
+            feature: R10 bed for jupyter-ml — exercises spacy-import, jupyterlab-quarto-enabled build-scope checks plus deploy-scope MCP probes against the GPU-backed image
+            tag: [testing]
+    eval-versa-pod:
+        target: pod
+        image: versa
+        disposable: true
+        lifecycle: dev
+        # 2026-05 cutover: `port: [auto]` lets ov config allocate free host
+        # ports at deploy time; the env_provides templates on the producer
+        # layers substitute against the resolved expansion.
+        port: [auto]
+        description:
+            feature: "R10 bed for versa — exercises the full OSM analytics + vector-tile pipeline (quackosm PBF→GeoParquet, tippecanoe→PMTiles, martin serve, maputnik editor) plus the marimo MCP server (10 read-only notebook-inspection tools) plus the marimo-team/learn curriculum import surface plus the polars-st/geopolars/geoarrow/lonboard geospatial extensions. The 2026-05 cutover replaced an 8-element explicit port list + 4-entry env block with `port: [auto]` and per-producing-layer env_provides templates. Followup 2026-05-12: removed the airflow MCP wrapper (no Airflow-3 v2 release of mcp-server-apache-airflow exists); consumers drive Airflow via direct REST /api/v2 calls."
+            tag: [testing]
+    eval-android-emulator-pod:
+        target: pod
+        image: android-emulator
+        disposable: true
+        lifecycle: dev
+        port:
+            - 35000:3000  # Selkies HTTPS web UI
+            - 35001:4723  # Appium WebDriver
+            - 35002:5037  # ADB server
+            - 35003:2222  # SSH
+        description:
+            feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. R10 of adb/appium eval verbs uses host-path `apk:` for adb: install and a pre-staged /tmp/ApiDemos-debug.apk for appium: install-app (podman cp before `ov eval live`)."
+            tag: [testing]
+# =============================================================================
+# vm: — kind:vm entity backing the eval-k3s-vm bed (referenced via `vm: k3s-vm`).
+# Cloud-image Arch; single-node control-plane sizing (2 cpu / 4G / 20G).
+# Port-forwards guest :6443 to host :16443 for operator-side kubectl.
+# =============================================================================
+vm:
+    k3s-vm:
+        source:
+            kind: cloud_image
+            url: https://fastly.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2
+            checksum:
+                type: sha256
+            base_user: arch
+        backend: libvirt
+        disk_size: 20G
+        ram: 4G
+        cpu: 2
+        machine: q35
+        firmware: bios
+        network:
+            mode: user
+            port_forward:
+                - "16443:6443"
+        ssh:
+            port: 2225 # non-default host SSH port for the eval-k3s-vm bed
+            key_source: generate
+        cloud_init:
+            timezone: UTC
+            package:
+                - sudo
+            ov_install:
+                strategy: auto
+        libvirt:
+            device:
+                rng:
+                    - model: virtio
+                      backend: /dev/urandom
+                memballoon:
+                    model: virtio
+# =============================================================================
+# k8s: — kind:k8s entity resolving the kubectl context (cluster: "vm-k3s-vm")
+# that K3sPostProvision merged into ~/.kube/config during the eval-k3s-vm
+# deploy. Without it, cluster: <name> falls through to the current-context.
+# =============================================================================
+k8s:
+    vm-k3s-vm:
+        image: ""
+        kubeconfig_context: vm-k3s-vm

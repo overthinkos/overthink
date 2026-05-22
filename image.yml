@@ -768,7 +768,7 @@ image:
         produce: []
         description:
             feature: Fast eval bed for kind:image smoke
-            narrative: Single-layer fedora-minimal image used as the kind:image bed for `ov eval kind image`.
+            narrative: Single-layer fedora-minimal image backing the eval-image-pod kind:eval bed (`ov eval run eval-image-pod`).
             tag:
                 - working
         layer:

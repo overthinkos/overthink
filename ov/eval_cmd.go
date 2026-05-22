@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 
@@ -22,7 +21,13 @@ import (
 //     volumes attached).
 //   - `ov eval live <name>` — full-stack eval against a running
 //     deployment (pod / vm / host / k8s); runtime variables resolved.
-//   - `ov eval run <score>` — drive an AI through iteration cycles.
+//   - `ov eval run <name>` — overloaded by the resolved kind: a
+//     kind:eval bed runs the full R10 sequence (build → eval image →
+//     deploy → eval live → fresh update → tear down); a kind:score
+//     drives an AI through iteration cycles. `--all-beds` runs every
+//     kind:eval bed. (Replaces the retired `ov eval kind <subkind>`,
+//     whose hardcoded per-kind bed table moved into eval.yml as
+//     kind:eval entities.)
 //
 // The mode is explicit; there is no autodetect or implicit fallback.
 //
@@ -36,9 +41,8 @@ type EvalCmd struct {
 	// Three primary modes
 	Image  EvalImageCmd  `cmd:"" help:"Pure-image eval (disposable container, build-scope checks)"`
 	Live   EvalLiveCmd   `cmd:"" help:"Full-stack eval against a running deployment"`
-	Run    EvalRunCmd    `cmd:"" help:"Drive an AI through iteration cycles for the named score"`
+	Run    EvalRunCmd    `cmd:"" help:"Run a kind:eval R10 bed (full sequence) or drive an AI through a kind:score's iteration cycles"`
 	Recipe EvalRecipeCmd `cmd:"" help:"Run a recipe's scenarios once (deterministic; no AI iteration)"`
-	Kind   EvalKindCmd   `cmd:"" name:"kind" help:"Run the canonical R10 sequence (build → deploy → eval live → fresh-rebuild) on a per-kind eval bed"`
 
 	// Live-container probe verbs (each requires a running target)
 	Cdp     CdpCmd     `cmd:"" help:"Chrome DevTools Protocol (open, list, click, eval)"`
@@ -116,14 +120,12 @@ func (c *EvalLiveCmd) Run() error {
 	var localTests []Check
 	var projectTests []Check
 	var deployOverlay *DeploymentNode
-	var projectImage string
 	var projectCfg *Config
 	if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
 		projectCfg = uf.ProjectConfig()
 		if pc := uf.ProjectDeployConfig(); pc != nil {
 			if entry, ok := pc.Deploy[c.Image]; ok {
 				projectTests = entry.Eval
-				projectImage = entry.Image
 			}
 		}
 	}
@@ -138,24 +140,16 @@ func (c *EvalLiveCmd) Run() error {
 		}
 	}
 
-	// Resolve the image ref from the deploy entry. User-side deploy.yml
-	// wins over the project-level fallback (operator's local pin is
-	// always more specific than the repo default). If neither source
-	// declares the entry the user is running an undeclared deploy — a
-	// pre-existing condition that container-running invariants already
-	// prevent in practice (you can't `ov eval live` a name that has no
-	// container), but we surface a clear error here for completeness.
-	var imageRef string
-	if deployOverlay != nil && deployOverlay.Image != "" {
-		imageRef = deployOverlay.Image
-	} else if projectImage != "" {
-		imageRef = projectImage
-	} else {
-		return fmt.Errorf(
-			"no deploy entry found for %q (instance=%q); declare it in deploy.yml with the `image:` field, or run `ov migrate` if you have a legacy entry without it",
-			c.Image, c.Instance,
-		)
-	}
+	// Resolve the deploy key → declared image short-name via THE shared
+	// resolver (deploy.go resolveDeployImageName) — the same one ov config /
+	// start / shell use. This used to be an inline operator-then-project
+	// copy, which is exactly how `ov eval live` diverged from `ov config`
+	// for kind:eval beds where key != image (eval-image-pod → eval-image).
+	// deployOverlay (loaded above) is still consulted for the tests overlay
+	// + runtime var resolution. The hard-required `image:` field
+	// (validateDeployRequiresImage) guarantees a real image for every pod
+	// deploy, so the resolver returns the declared image, never the key.
+	imageRef := resolveDeployImageName(c.Image, c.Instance)
 	// Short names (e.g. `versa`) need to be resolved to a fully-
 	// qualified registry ref before ExtractMetadata can read OCI
 	// labels. Full refs and remote refs pass through unchanged. The
@@ -611,16 +605,6 @@ func formatResults(results []EvalResult, format string) int {
 	}
 }
 
-// containerImageRef looks up the image ref backing a running container so
-// we can pull labels from the image (not the container, which podman inspect
-// does not propagate labels from by default).
-func containerImageRef(engine, containerName string) (string, error) {
-	out, _, exit, err := runCaptureCmd(exec.Command(EngineBinary(engine), "inspect", "--format", "{{.Config.Image}}", containerName))
-	if err != nil {
-		return "", fmt.Errorf("inspecting container %s: %w", containerName, err)
-	}
-	if exit != 0 {
-		return "", fmt.Errorf("inspect %s: exit %d", containerName, exit)
-	}
-	return strings.TrimSpace(out), nil
-}
+// containerImageRef + containerImage (the live-container image-ref
+// inspectors) live in commands.go — ONE inspect implementation shared by
+// mcp / service / remove / start-direct and the eval runner.

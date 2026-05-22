@@ -154,7 +154,7 @@ func (c *DeployAddCmd) runVM(plans []*InstallPlan, dir string, opts EmitOpts) er
 	}
 	// Upstream dispatch may have rewritten c.Name to "vm:<entity>" for
 	// VM-target routing. The deploy.yml key is the ORIGINAL node name
-	// (e.g. "k3s-vm"), not the prefixed form — look up under both so
+	// (e.g. "eval-k3s-vm"), not the prefixed form — look up under both so
 	// the env lookup works regardless of which form was passed in.
 	envLookupKeys := []string{c.Name, strings.TrimPrefix(c.Name, "vm:")}
 	// Pull env from project-level deploy config (overthink.yml's

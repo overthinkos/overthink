@@ -84,6 +84,14 @@ type UnifiedFile struct {
 	Recipe map[string]*HarnessRecipe `yaml:"recipe,omitempty"`
 	Score  map[string]*HarnessScore  `yaml:"score,omitempty"`
 
+	// Eval (kind:eval) — disposable R10 test beds. A deploy-shaped map
+	// (bed-name → DeploymentNode) authored in eval.yml alongside the
+	// recipe/score framework. foldEvalBeds() copies each entry into the
+	// Deploy map (EvalBed=true) at load time so every deploy verb resolves
+	// a bed by name through the SAME path as any deploy; `ov eval run <bed>`
+	// drives the full R10 sequence. EvalBeds() enumerates them.
+	Eval map[string]DeploymentNode `yaml:"eval,omitempty"`
+
 	// Calamares-aligned kinds (2026-05 cutover). `group:` ↔ Calamares
 	// netinstall package group; `target:` ↔ Calamares settings.conf
 	// install target; `module:` ↔ Calamares module.desc descriptor.
@@ -568,7 +576,18 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	if err := rejectLegacyMarimoMl(root, merged); err != nil {
 		return nil, true, err
 	}
+	// Fold kind:eval beds into the Deploy map (EvalBed=true) so every
+	// deploy verb resolves them by name through the same path as any
+	// deploy. Disjoint-name guard inside. Runs BEFORE validateDeploymentTree
+	// so folded beds get the same deploy validation (name shape, required
+	// image: on pod targets).
+	if err := foldEvalBeds(merged); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
 	if err := validateDeploymentTree(merged.Deploy); err != nil {
+		return nil, true, fmt.Errorf("%s: %w", root, err)
+	}
+	if err := validateEvalBeds(merged); err != nil {
 		return nil, true, fmt.Errorf("%s: %w", root, err)
 	}
 	// Hard load-time error for the retired `local.cachyos-dx` key.
@@ -921,6 +940,11 @@ var rootShapeKeys = map[string]bool{
 	// root-shape collection-map keys (in addition to being valid
 	// kind-keyed forms). Mirrors how image/pod/vm work.
 	"ai": true, "recipe": true, "score": true,
+	// kind:eval disposable R10 beds — root-shape collection map
+	// (bed-name → DeploymentNode) authored in eval.yml. The nested `eval:`
+	// PROBE-LIST field never appears as a top-level document key, so this
+	// only ever matches the bed collection.
+	"eval": true,
 	// Calamares-aligned kinds (also used as DiscoverConfig field names).
 	"group": true, "target": true, "module": true,
 }
@@ -1313,6 +1337,7 @@ func mergeUnified(dst, src *UnifiedFile, srcDir string) {
 	mergeTargetMap(&dst.Target, src.Target)
 	mergeModuleMap(&dst.Module, src.Module)
 	mergeDeployMaps(&dst.Deploy, src.Deploy)
+	mergeDeployMaps(&dst.Eval, src.Eval)
 	if dst.Provides == nil && src.Provides != nil {
 		dst.Provides = src.Provides
 	}
@@ -1571,6 +1596,85 @@ func mergeDeployMaps(dst *map[string]DeploymentNode, src map[string]DeploymentNo
 			(*dst)[k] = v
 		}
 	}
+}
+
+// foldEvalBeds copies every kind:eval bed (uf.Eval) into the Deploy map
+// with EvalBed=true so that every deploy verb (`ov deploy add`, `ov config`,
+// `ov start`, `ov eval live`, `ov update`, `ov remove`) resolves a bed by
+// name through the SAME Deploy-map path it already uses — no per-verb
+// special case. uf.Eval is retained as the authoritative bed set for
+// EvalBeds() enumeration. A name present as BOTH a kind:eval bed and a
+// kind:deploy entry is a hard error (disjoint namespaces by construction).
+func foldEvalBeds(uf *UnifiedFile) error {
+	if len(uf.Eval) == 0 {
+		return nil
+	}
+	if uf.Deploy == nil {
+		uf.Deploy = make(map[string]DeploymentNode, len(uf.Eval))
+	}
+	for name, node := range uf.Eval {
+		if _, clash := uf.Deploy[name]; clash {
+			return fmt.Errorf(
+				"name %q is declared as both a kind:eval bed and a kind:deploy entry — names must be unique across the two kinds; rename one",
+				name,
+			)
+		}
+		node.EvalBed = true
+		uf.Deploy[name] = node
+		uf.Eval[name] = node // keep the marker on the retained bed set too
+	}
+	return nil
+}
+
+// EvalBeds returns the kind:eval disposable R10 beds keyed by name. It is
+// the single enumeration source for `ov eval run <bed>` / `--all-beds`;
+// every other consumer reads the folded entries from the Deploy map.
+func (uf *UnifiedFile) EvalBeds() map[string]DeploymentNode {
+	if uf == nil {
+		return nil
+	}
+	return uf.Eval
+}
+
+// validateEvalBeds enforces the kind:eval bed-specific invariants beyond the
+// generic deploy validation (which already runs on the folded beds via
+// validateDeploymentTree → validateDeployRequiresImage, covering the pod
+// `image:` requirement). Runs at LOAD time so EVERY command that resolves a
+// bed (ov eval run, ov deploy add, ov config, ov image validate, …) sees the
+// same friendly error — not just `ov image validate`.
+func validateEvalBeds(uf *UnifiedFile) error {
+	for name, node := range uf.Eval {
+		// Disposable is the sole authorization for the destroy+rebuild the
+		// R10 sequence drives; a non-disposable bed can't be rebuilt
+		// unattended (see /ov-internals:disposable).
+		if !node.IsDisposable() {
+			return fmt.Errorf(
+				"kind:eval bed %q must set `disposable: true` — `ov eval run` destroys + rebuilds it unattended (R10 acceptance gate)",
+				name)
+		}
+		switch node.Target {
+		case "pod":
+			// image: presence enforced by validateDeployRequiresImage on the
+			// folded Deploy entry — no duplicate check here.
+		case "vm":
+			if node.Vm == "" {
+				return fmt.Errorf("kind:eval bed %q (target: vm) must set `vm: <entity>`", name)
+			}
+			if _, ok := uf.VM[node.Vm]; !ok {
+				return fmt.Errorf("kind:eval bed %q references vm entity %q which is not defined", name, node.Vm)
+			}
+		case "local":
+			if node.Local == "" {
+				return fmt.Errorf("kind:eval bed %q (target: local) must set `local: <template>`", name)
+			}
+			if _, ok := uf.Local[node.Local]; !ok {
+				return fmt.Errorf("kind:eval bed %q references local template %q which is not defined", name, node.Local)
+			}
+		default:
+			return fmt.Errorf("kind:eval bed %q has unsupported target %q (must be pod, vm, or local)", name, node.Target)
+		}
+	}
+	return nil
 }
 
 // mergeImageConfig preserves dst's already-set fields and fills only the

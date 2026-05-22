@@ -119,19 +119,20 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// / secret-name / deploy.yml-key composition. Pre-2026-05-12
 	// the arg was always treated as a kind:image short-name; this
 	// split lets the deploy-key and the image-ref diverge.
-	imageRef := resolveShellImageRef("", c.Image, c.Tag)
-	if rewritten := resolveDeployKeyToImage(c.Image, c.Instance); rewritten != "" && rewritten != c.Image {
-		fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, rewritten)
-		// Route Pattern B's image short-name through the same local-CalVer
-		// resolver Pattern A uses on line above. Without this, ExtractMetadata
-		// gets a bare short name that podman storage doesn't know (storage
-		// is keyed by full registry refs like ghcr.io/overthinkos/arch:TAG).
-		// Pre-2026-05-16 bug: ensure-image succeeded (internal short-name
-		// resolution) but the very next ExtractMetadata call errored with
-		// "image X is not available locally" — contradictory output from
-		// one command. Fixed by symmetric resolution.
-		imageRef = resolveShellImageRef("", rewritten, c.Tag)
+	// Resolve the deploy key to its declared image short-name via THE shared
+	// resolver (deploy.go resolveDeployImageName) that config / start / shell
+	// / eval live all use, so they never diverge. Falls back to the key for
+	// the key==image convention. c.Image stays the deploy-KEY for container /
+	// quadlet / secret / deploy.yml-key composition; only the image ref and
+	// the persisted `image:` field (below) use the resolved name. Routing the
+	// short name through resolveShellImageRef yields a full local-CalVer ref
+	// podman storage knows (storage is keyed by full registry refs like
+	// ghcr.io/overthinkos/arch:TAG, not bare short names).
+	deployImageName := resolveDeployImageName(c.Image, c.Instance)
+	if deployImageName != c.Image {
+		fmt.Fprintf(os.Stderr, "config: deploy %q declares image: %q\n", c.Image, deployImageName)
 	}
+	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
 	podmanRT := &ResolvedRuntime{BuildEngine: rt.BuildEngine, RunEngine: "podman"}
 	if err := EnsureImage(imageRef, podmanRT); err != nil {
 		return err
@@ -236,7 +237,7 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 	// to that exact tag is the whole point, so don't substitute
 	// the deploy-key into a freshly-composed ref.
 	if meta.Registry != "" && !looksLikeFullRef(imageRef) {
-		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}
 
 	// Resolve tunnel config from labels
@@ -573,10 +574,12 @@ func (c *ImageConfigSetupCmd) runConfig(rt *ResolvedRuntime) error {
 		// `ov` invocation, forcing an `ov migrate`. saveDeployState only
 		// writes these when the existing entry doesn't already declare them
 		// (never clobbers operator-authored refs). ov config is exclusively
-		// a pod-deploy setup verb, and its deploy key is the image name, so
-		// Target is always "pod" and Image is c.Image. Mirrors the same
-		// fields set by the container path in deploy_add_cmd.go.
-		Image:  c.Image,
+		// a pod-deploy setup verb, so Target is always "pod"; Image is the
+		// RESOLVED image short-name (deployImageName), NOT the deploy key —
+		// the key and the image diverge for kind:eval beds and Pattern-B
+		// deploys. Mirrors the fields set by the container path in
+		// deploy_add_cmd.go.
+		Image:  deployImageName,
 		Target: "pod",
 	})
 
@@ -1734,40 +1737,4 @@ func sortedStringMapKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
-}
-
-// resolveDeployKeyToImage maps an arbitrary deploy-key name to the
-// `image:` field of its deploy.yml entry. Returns "" if no entry
-// declares this key (caller falls back to treating `key` as an
-// image short-name). User deploy.yml wins over project deploy.yml
-// (matches the same priority used by the eval runner in
-// EvalLiveCmd.Run).
-//
-// Implements the Pattern B (arbitrary deploy-key + version-pin)
-// lookup at the lifecycle command level. See /ov-core:deploy
-// "Two supported deploy patterns".
-func resolveDeployKeyToImage(key, instance string) string {
-	if key == "" {
-		return ""
-	}
-	// User-side first.
-	if dc := loadDeployConfigForRead("resolveImageNameForDeploy"); dc != nil {
-		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Image != "" {
-			return entry.Image
-		}
-		if entry, ok := dc.Deploy[key]; ok && entry.Image != "" {
-			return entry.Image
-		}
-	}
-	// Project-level fallback.
-	if dir, err := os.Getwd(); err == nil {
-		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
-			if pc := uf.ProjectDeployConfig(); pc != nil {
-				if entry, ok := pc.Deploy[key]; ok && entry.Image != "" {
-					return entry.Image
-				}
-			}
-		}
-	}
-	return ""
 }

@@ -12,7 +12,9 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
+	"strings"
 )
 
 // The HarnessCmd top-level type was deleted in the eval-cutover. Its
@@ -92,12 +94,21 @@ func (c *EvalListScoreCmd) Run() error {
 // run — host-side dispatcher
 // ---------------------------------------------------------------------------
 
-// EvalRunCmd is `ov eval run <score>`.
+// EvalRunCmd is `ov eval run <name>` — overloaded by the kind the name
+// resolves to: a kind:eval bed runs the full R10 sequence (build → eval
+// image → deploy → eval live → fresh update → tear down); a kind:score
+// drives the AI iteration loop. The two namespaces are disjoint (a name
+// cannot be both — foldEvalBeds enforces it at load time).
 type EvalRunCmd struct {
-	Score string `arg:"" help:"Score name (from eval.yml)"`
-	AI    string `name:"ai" help:"Pick which AI to run (required if score.ai has more than one entry)"`
+	Name string `arg:"" optional:"" help:"kind:eval bed (full R10 sequence) or kind:score (AI iteration loop). Omit with --all-beds."`
+	AI   string `name:"ai" help:"Pick which AI to run (required if score.ai has more than one entry)"`
 
-	// Mutually-exclusive target overrides.
+	// kind:eval bed-path flags (ignored on the kind:score path).
+	AllBeds   bool `name:"all-beds" help:"Run every kind:eval bed (name-sorted) through the full R10 sequence"`
+	Keep      bool `name:"keep" help:"kind:eval beds: don't tear the bed down after the run"`
+	NoRebuild bool `name:"no-rebuild" help:"kind:eval beds: skip the fresh-update R10 re-verify step (R10 acceptance gate)"`
+
+	// Mutually-exclusive target overrides (kind:score path).
 	Pod  string `name:"on-pod" xor:"target" help:"Override score target with this pod deployment"`
 	VM   string `name:"on-vm" xor:"target" help:"Override score target with this VM"`
 	Host bool   `name:"on-host" xor:"target" help:"Override score target to run on the host directly"`
@@ -123,7 +134,32 @@ func (c *EvalRunCmd) Run() error {
 	if !ok || uf == nil {
 		return fmt.Errorf("ov eval run: no overthink.yml in %s", cwd)
 	}
-	score, err := ResolveScore(uf.Score, c.Score)
+
+	// kind:eval bed dispatch — beds and scores share the `ov eval run`
+	// verb. --all-beds runs every bed; a bare name that resolves to a bed
+	// runs that one; otherwise fall through to the kind:score AI loop.
+	beds := uf.EvalBeds()
+	if c.AllBeds {
+		return runAllEvalBeds(beds, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
+	}
+	if c.Name == "" {
+		return fmt.Errorf("ov eval run: provide a kind:eval bed or kind:score name, or pass --all-beds")
+	}
+	if node, isBed := beds[c.Name]; isBed {
+		exe, exeErr := os.Executable()
+		if exeErr != nil {
+			exe = os.Args[0]
+		}
+		res, runErr := runEvalBed(exe, c.Name, node, bedRunOpts{Keep: c.Keep, NoRebuild: c.NoRebuild})
+		if res != nil {
+			fmt.Fprintf(os.Stderr, "ov eval run %s: %s (steps=%d)\n",
+				c.Name, summaryStatus(res.OK), len(res.Step))
+		}
+		return runErr
+	}
+
+	// kind:score path (AI iteration loop).
+	score, err := ResolveScore(uf.Score, c.Name)
 	if err != nil {
 		return err
 	}
@@ -147,7 +183,7 @@ func (c *EvalRunCmd) Run() error {
 	}
 
 	runID := GenerateRunID()
-	args := []string{"eval", "run-local", c.Score, "--run-id", runID}
+	args := []string{"eval", "run-local", c.Name, "--run-id", runID}
 	if c.AI != "" {
 		args = append(args, "--ai", c.AI)
 	}
@@ -221,11 +257,11 @@ func (c *EvalRunCmd) Run() error {
 				// Re-sync AI credentials (claude creds, etc.) into the
 				// freshly-restarted pod. Use the host's just-built ov
 				// binary so the sync logic itself is post-cutover.
-				credSync := exec.Command(findOvForEval(), "eval", "sync-credential", c.Score)
+				credSync := exec.Command(findOvForEval(), "eval", "sync-credential", c.Name)
 				credSync.Stdout = os.Stderr
 				credSync.Stderr = os.Stderr
 				if err := credSync.Run(); err != nil {
-					return fmt.Errorf("preflight sync of credentials for score %q: %w", c.Score, err)
+					return fmt.Errorf("preflight sync of credentials for score %q: %w", c.Name, err)
 				}
 			}
 		}
@@ -242,13 +278,48 @@ func (c *EvalRunCmd) Run() error {
 				return err
 			}
 		}
-		return runLocalInProcess(args, c.Score, runID, score, uf, cwd)
+		return runLocalInProcess(args, c.Name, runID, score, uf, cwd)
 	case TargetKindPod:
-		return dispatchToPod(tn, c.Score, args)
+		return dispatchToPod(tn, c.Name, args)
 	case TargetKindVM:
-		return dispatchToVM(tn, c.Score, args)
+		return dispatchToVM(tn, c.Name, args)
 	}
 	return fmt.Errorf("unsupported target kind: %s", tk)
+}
+
+// runAllEvalBeds runs every kind:eval bed (name-sorted for determinism)
+// through the full R10 sequence — the `--all-beds` replacement for the
+// retired `ov eval kind all`. Aggregates failures so one broken bed
+// doesn't mask the rest.
+func runAllEvalBeds(beds map[string]DeploymentNode, opts bedRunOpts) error {
+	if len(beds) == 0 {
+		return fmt.Errorf("ov eval run --all-beds: no kind:eval beds defined in eval.yml")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		exe = os.Args[0]
+	}
+	names := make([]string, 0, len(beds))
+	for n := range beds {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var failures []string
+	for _, n := range names {
+		res, runErr := runEvalBed(exe, n, beds[n], opts)
+		if res != nil {
+			fmt.Fprintf(os.Stderr, "ov eval run %s: %s (steps=%d)\n",
+				n, summaryStatus(res.OK), len(res.Step))
+		}
+		if runErr != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", n, runErr))
+		}
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("ov eval run --all-beds: %d failure(s):\n  - %s",
+			len(failures), strings.Join(failures, "\n  - "))
+	}
+	return nil
 }
 
 // runLocalInProcess invokes EvalRunLocalCmd in-process for host targets.

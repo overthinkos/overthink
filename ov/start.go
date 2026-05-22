@@ -62,8 +62,14 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 		deployVolumes = overlay.Volume
 	}
 
+	// Resolve the deploy key to its declared image short-name via THE shared
+	// resolver (deploy.go) — the same one ov config / shell / eval live use,
+	// so no command diverges when key != image (kind:eval beds, Pattern B).
+	// c.Image stays the deploy-KEY for container / quadlet / overlay lookups;
+	// only the image ref uses the resolved name.
+	deployImageName := resolveDeployImageName(c.Image, c.Instance)
 	// Resolve from image labels (+ deploy.yml overlay). No image.yml.
-	imageRef := resolveShellImageRef("", c.Image, c.Tag)
+	imageRef := resolveShellImageRef("", deployImageName, c.Tag)
 	if err := EnsureImage(imageRef, rt); err != nil {
 		return err
 	}
@@ -96,7 +102,7 @@ func (c *StartCmd) runDirect(rt *ResolvedRuntime) error {
 	envAccepts := meta.EnvAccepts
 	envRequires := meta.EnvRequires
 	if meta.Registry != "" {
-		imageRef = resolveShellImageRef(meta.Registry, c.Image, c.Tag)
+		imageRef = resolveShellImageRef(meta.Registry, deployImageName, c.Tag)
 	}
 
 	// Apply instance-specific volume naming

@@ -81,6 +81,14 @@ type DeploymentNode struct {
 	// with id:X and skip:true effectively disables the baked check.
 	Eval []Check `yaml:"eval,omitempty"`
 
+	// EvalBed marks this entry as a `kind: eval` disposable R10 bed,
+	// folded into the Deploy map by foldEvalBeds() at load time so every
+	// deploy verb resolves it by name with no per-verb change. Never
+	// authored as a field — the `kind: eval` discriminator is what sets
+	// it. Read by `ov eval run` to enumerate beds and by validate.go for
+	// the bed-specific rules (disposable required, cross-ref resolvable).
+	EvalBed bool `yaml:"-"`
+
 	// Shell is the deploy-level overlay for the org.overthinkos.shell
 	// label. Same id-based replace/skip/append semantics as Eval —
 	// applied via MergeDeployShell at deploy time. 2026-05 cutover.
@@ -945,6 +953,57 @@ func parseDeployKey(key string) (imageName, instance string) {
 		return key[:idx], key[idx+1:]
 	}
 	return key, ""
+}
+
+// resolveDeployKeyToImage maps a deploy-key name to the `image:` field of
+// its deploy entry. User (~/.config/ov/deploy.yml) wins over project
+// (overthink.yml/eval.yml) — the same precedence the eval runner and
+// `ov config` use. Returns "" when no entry declares an image for the key
+// (caller decides the fallback). Implements the Pattern-B (arbitrary
+// deploy-key + version-pin) and kind:eval-bed (key != image) lookups.
+// See /ov-core:deploy "Two supported deploy patterns".
+func resolveDeployKeyToImage(key, instance string) string {
+	if key == "" {
+		return ""
+	}
+	// User-side first.
+	if dc := loadDeployConfigForRead("resolveDeployKeyToImage"); dc != nil {
+		if entry, ok := dc.Deploy[deployKey(key, instance)]; ok && entry.Image != "" {
+			return entry.Image
+		}
+		if entry, ok := dc.Deploy[key]; ok && entry.Image != "" {
+			return entry.Image
+		}
+	}
+	// Project-level fallback.
+	if dir, err := os.Getwd(); err == nil {
+		if uf, ok, _ := LoadUnified(dir); ok && uf != nil {
+			if pc := uf.ProjectDeployConfig(); pc != nil {
+				if entry, ok := pc.Deploy[key]; ok && entry.Image != "" {
+					return entry.Image
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// resolveDeployImageName is THE single deploy-key→image-name resolver used
+// by every deploy-mode command that starts from a deploy key (ov config /
+// start / shell / eval live). It returns the deploy entry's declared
+// `image:` (resolveDeployKeyToImage), falling back to the key itself when
+// no entry declares one (the key==image convention). Before this was
+// shared, `ov config` resolved key→image but `ov start`/`ov shell`/
+// `ov eval live` treated the key AS the image — so a kind:eval bed
+// (eval-image-pod → eval-image) or any Pattern-B deploy resolved a
+// different (wrong/unresolvable) image per command. `ov update` reaches the
+// same value via its already-resolved merged-tree node (node.Image), so it
+// reads that directly rather than re-loading config here.
+func resolveDeployImageName(key, instance string) string {
+	if img := resolveDeployKeyToImage(key, instance); img != "" {
+		return img
+	}
+	return key
 }
 
 // DeployedContainerNames returns hostnames for all deployed images.

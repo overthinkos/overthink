@@ -243,11 +243,23 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 	// Compute pixi-bound layers: these must not be extracted into intermediates
 	pixiBound := pixiBoundLayers(layers)
 
-	// Collect all builder image names to exclude from intermediate generation
+	// Collect all builder image names to exclude from intermediate generation.
 	builderNames := make(map[string]bool)
 	for _, builder := range cfg.Defaults.Builder {
 		if builder != "" {
 			builderNames[builder] = true
+		}
+	}
+	// Also exclude builders referenced by ANY image's builder map (not just
+	// defaults) — e.g. a submodule consumer's `builder: {pixi: ov.arch-builder}`.
+	// Without this, a pulled namespaced builder (ov.arch-builder) would be grouped
+	// with its consumers and factored into an intermediate it must itself build,
+	// producing a `builder -> intermediate -> builder` dependency cycle.
+	for _, img := range images {
+		for _, builder := range img.Builder {
+			if builder != "" {
+				builderNames[builder] = true
+			}
 		}
 	}
 
@@ -259,6 +271,13 @@ func ComputeIntermediates(images map[string]*ResolvedImage, layers map[string]*L
 	siblingGroups := make(map[siblingKey][]string)
 	for name, img := range images {
 		if builderNames[name] {
+			continue
+		}
+		// Pulled namespace-qualified images (e.g. ov.arch, ov.arch-builder,
+		// cachyos.cachyos) are external/fixed dependencies, not local siblings —
+		// never factor them into local intermediates. (Local consumers that root
+		// ON them have unqualified names and ARE grouped by their qualified base.)
+		if strings.Contains(name, ".") {
 			continue
 		}
 		k := siblingKey{img.Base, img.UID}
@@ -573,14 +592,16 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 		gid = resolveIntPtr(cfg.Defaults.GID, nil, 1000)
 	}
 
-	// Builder map: defaults as the base, then the PARENT wins — so a base image's
-	// aur→arch-builder propagates down the auto-intermediate chain (intermediates
-	// are created parent-first, so result[parentName].Builder is already set when
-	// we get here), then fill any remaining gap from a consumer. Without parent
-	// inheritance, an intermediate that now carries `aur` (from the BuildFormats
-	// union above) would have no builders.aur and the hoisted AUR layer (chrome's
-	// google-chrome) would fail to build with "needs builder aur but no
-	// builders.aur configured". Same parent-first principle as Distro/BuildFormats.
+	// Builder map: defaults as the base, then the PARENT, then the CONSUMERS win.
+	// The hoisted layers belong to the consumers, so the consumers' builder map is
+	// authoritative for them. In the flat case the consumers inherit the parent's
+	// builder (so they agree — consumer-wins is a no-op vs parent-wins). In the
+	// import-namespace case the parent is a cross-namespace base (e.g.
+	// cachyos.cachyos) whose builder refs are relative to ITS namespace
+	// (`ov.arch-builder`) and do NOT resolve in this context; the consumers carry
+	// the correct context-local builder (`arch-builder`), so consumer-wins is what
+	// lets the hoisted AUR layer (chrome's google-chrome) find its builder instead
+	// of failing with "needs builder aur but no builders.aur configured".
 	builderMap := make(BuilderMap)
 	for k, v := range cfg.Defaults.Builder {
 		builderMap[k] = v
@@ -599,9 +620,7 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 			continue
 		}
 		for k, v := range c.Builder {
-			if _, exists := builderMap[k]; !exists {
-				builderMap[k] = v
-			}
+			builderMap[k] = v
 		}
 	}
 

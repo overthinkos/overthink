@@ -75,15 +75,18 @@ When services run as separate containers, **service discovery happens automatica
 
 ### The Unified YAML: `overthink.yml`
 
-A single `overthink.yml` at the repo root is the project's entry point — everything else (distro / builder / init vocabulary, image definitions, layer definitions) is expressed as kind-keyed `build:` / `image:` / `layer:` entries in that file (or in files pulled in via `include:`). `ov` never reads `image.yml` directly any more; the loader (`LoadUnified`) resolves includes, auto-discovers layers via `discover:`, and fetches remote `@host/org/repo:version` refs into a transparent cache at `~/.cache/ov/repos/`.
+A single `overthink.yml` at the repo root is the project's entry point — everything else (distro / builder / init vocabulary, image definitions, layer definitions) is expressed as kind-keyed `build:` / `image:` / `layer:` entries in that file (or in files pulled in via the `import:` statement). `ov` never reads `image.yml` directly any more; the loader (`LoadUnified`) resolves imports, auto-discovers layers via `discover:`, and fetches remote `@host/org/repo:version` refs into a transparent cache at `~/.cache/ov/repos/`.
+
+The single composition statement is `import:` — a **list** whose items are either a bare string (a **flat** import merged into the root namespace; used for same-repo file splits + the shared `build.yml` distro/builder/init vocabulary) or a single-key map `alias: ref` (a **namespaced** child import of another project, whose entries are referenced QUALIFIED as `alias.entry` — e.g. `base: cachyos.cachyos`, `builder: {pixi: ov.arch-builder}`). Resolution is namespace-relative, Go-package-member style. Builder maps do NOT cross a namespace boundary — a consumer declares its own builder map.
 
 ```yaml
 # overthink.yml
-version: 1
-includes:
-  - build.yml                           # distro/builder/init vocabulary (kind: build)
-  - image.yml                           # image definitions (kind: image)
-  - vms.yml                             # VM definitions (kind: vm)
+version: 2026.143.844
+import:
+  - build.yml                           # flat: distro/builder/init vocabulary (kind: build)
+  - image.yml                           # flat: image definitions (kind: image)
+  - vm.yml                              # flat: VM definitions (kind: vm)
+  - cachyos: image/cachyos              # namespaced: mount another project → cachyos.<entry>
 discover:
   - layers                              # scan layers/*/layer.yml for kind: layer
   - "@github.com/team/private/layers"   # remote repo (any ref form)
@@ -103,7 +106,7 @@ Each layer lives in its own directory under `layers/` and can use any combinatio
 
 `ov` detects which files are present and generates the appropriate build stages automatically. You only include what you need — a layer with just `layer.yml` listing rpm packages is perfectly valid.
 
-The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a `build:` entry (commonly split out to `build.yml` and pulled in via `overthink.yml includes:`). Three top-level sections (`distro:`, `builder:`, `init:`), one loader. See `/ov-build:build` for the full layout.
+The vocabulary layers draw from — per-distro bootstrap commands, multi-stage builder templates (pixi/npm/cargo/aur), and init-system definitions (supervisord/systemd) — all lives in a `build:` entry (commonly split out to `build.yml` and pulled in via a flat `overthink.yml import:` item). Three top-level sections (`distro:`, `builder:`, `init:`), one loader. See `/ov-build:build` for the full layout.
 
 ### Multi-Distro Support: `distro:` and `build:`
 
@@ -209,7 +212,7 @@ VM creation also works **rootless** via `qemu:///session` and a supervisord-mana
 
 ### VMs: `kind: vm` entities in `vms.yml`
 
-VMs are a first-class authoring surface alongside container images. `vms.yml` declares `kind: vm` entities with a discriminated-union `source:` block — either `source.kind: cloud_image` (external qcow2 + cloud-init) or `source.kind: bootc` (pairs with a `bootc: true` container image in the repo). Resolved through `overthink.yml includes:` into `VmSpec` Go types, then consumed by `ov vm build/create` and the `ov deploy add vm:<name>` target.
+VMs are a first-class authoring surface alongside container images. `vms.yml` declares `kind: vm` entities with a discriminated-union `source:` block — either `source.kind: cloud_image` (external qcow2 + cloud-init) or `source.kind: bootc` (pairs with a `bootc: true` container image in the repo). Resolved through `overthink.yml import:` into `VmSpec` Go types, then consumed by `ov vm build/create` and the `ov deploy add vm:<name>` target.
 
 ```yaml
 # vms.yml
@@ -316,7 +319,8 @@ cd image/arch && ov image build arch-test     # auto-builds base + builder deps
 # the cachyos-vm, and the ov-cachyos workstation profile) live in the
 # overthinkos/cachyos submodule at image/cachyos and pull their layers from this
 # repo by git ref. Unlike Arch, the cachyos BASE moved too — this repo's `versa`
-# image pulls it back via a remote include (main → cachyos coupling).
+# image pulls it back via the `cachyos` import namespace (base: cachyos.cachyos,
+# main → cachyos coupling).
 ov -C image/cachyos image build cachyos
 
 # Build a Debian or Ubuntu image. The whole deb-family moved into two dedicated
@@ -331,8 +335,9 @@ ov -C image/ubuntu image build ubuntu
 # (fedora-coder, fedora-ov, fedora-test) live in the overthinkos/fedora submodule
 # at image/fedora and pull their layers from this repo by git ref. Unlike the
 # deb-family, the fedora base stack (fedora + fedora-builder + fedora-nonfree)
-# STAYS here — fedora is the ecosystem default base (in fedora-base.yml, also
-# remote-included by the submodule), exactly like Arch. No main → fedora coupling.
+# STAYS here — fedora is the ecosystem default base (in base.yml, which the
+# submodule imports under the `ov` namespace as ov.fedora), exactly like Arch.
+# No main → fedora coupling.
 ov -C image/fedora image build fedora-coder
 
 # Drop into an interactive shell

@@ -5,11 +5,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// namespaceAliasRe constrains an `import:` namespace alias to a bare
+// lowercase-hyphenated identifier — no dots, since `.` is the
+// qualified-reference separator (`alias.entry`).
+var namespaceAliasRe = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // -----------------------------------------------------------------------------
 // Unified YAML Format — Parts B/C/D/E of the refactor plan.
@@ -52,9 +58,15 @@ const MaxIncludeDepth = 8
 // root. The top-level `vm:` key replaces the legacy `vms:` (plural). See
 // `ov migrate` for the one-shot migration from v1.
 type UnifiedFile struct {
-	Version  string                 `yaml:"version,omitempty"`
-	Include  []string               `yaml:"include,omitempty"`
-	Discover *DiscoverConfig        `yaml:"discover,omitempty"`
+	Version string `yaml:"version,omitempty"`
+	// Import is the SINGLE composition statement (the legacy `include:` key
+	// was deleted in the 2026-05 import-namespace cutover). A list whose
+	// items are either a bare string (flat import into THIS root namespace —
+	// same-repo file splits + shared build.yml vocabulary) or a single-key
+	// map `alias: ref` (a namespaced child import — cross-repo entity
+	// cherry-pick, referenced qualified as `alias.entry`). See ImportList.
+	Import   ImportList      `yaml:"import,omitempty"`
+	Discover *DiscoverConfig `yaml:"discover,omitempty"`
 	Distro   map[string]*DistroDef  `yaml:"distro,omitempty"`
 	Builder  map[string]*BuilderDef `yaml:"builder,omitempty"`
 	Init     map[string]*InitDef    `yaml:"init,omitempty"`
@@ -101,6 +113,80 @@ type UnifiedFile struct {
 	Group  map[string]*GroupSpec  `yaml:"group,omitempty"`
 	Target map[string]*TargetSpec `yaml:"target,omitempty"`
 	Module map[string]*ModuleSpec `yaml:"module,omitempty"`
+
+	// Namespaces holds child namespaces mounted by namespaced `import:`
+	// entries (alias → fully-resolved isolated UnifiedFile). NOT authored
+	// directly and NOT flat-merged into the root maps — populated at load
+	// time by loadUnifiedInto. Entries are referenced qualified, e.g.
+	// `base: cachyos.cachyos` resolves `cachyos` in Namespaces, then its
+	// Image["cachyos"]. Bare refs inside a namespace resolve within that
+	// namespace first (Go package-member semantics). See ov/namespace.go.
+	Namespaces map[string]*UnifiedFile `yaml:"-"`
+}
+
+// ImportEntry is one parsed `import:` list item. A flat entry (Namespace == "")
+// merges the referenced file into the current root namespace; a namespaced
+// entry mounts the referenced project under Namespace.
+type ImportEntry struct {
+	Namespace string // "" = flat import into the current root namespace
+	Ref       string // local path or `@host/org/repo[/sub/path]:version`
+}
+
+// ImportList is the `import:` field type. Custom YAML decoding accepts a list
+// whose items are either a bare string (flat) or a single-key mapping
+// `alias: ref` (namespaced child import).
+type ImportList []ImportEntry
+
+// UnmarshalYAML decodes the mixed-shape import list.
+func (il *ImportList) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind != yaml.SequenceNode {
+		return fmt.Errorf("import: must be a list (got kind=%v)", node.Kind)
+	}
+	out := make(ImportList, 0, len(node.Content))
+	for i, item := range node.Content {
+		switch item.Kind {
+		case yaml.ScalarNode:
+			if item.Value == "" {
+				return fmt.Errorf("import[%d]: empty ref", i)
+			}
+			out = append(out, ImportEntry{Ref: item.Value})
+		case yaml.MappingNode:
+			if len(item.Content) != 2 {
+				return fmt.Errorf("import[%d]: a namespaced entry must be a single-key map `alias: ref`", i)
+			}
+			alias := item.Content[0].Value
+			ref := item.Content[1].Value
+			if alias == "" || ref == "" {
+				return fmt.Errorf("import[%d]: namespaced entry needs both an alias and a ref", i)
+			}
+			out = append(out, ImportEntry{Namespace: alias, Ref: ref})
+		default:
+			return fmt.Errorf("import[%d]: each item must be a string ref or a single-key `alias: ref` map (got kind=%v)", i, item.Kind)
+		}
+	}
+	*il = out
+	return nil
+}
+
+// MarshalYAML emits each entry compactly: a flat entry as a scalar string, a
+// namespaced entry as a single-key `alias: ref` map — the same shapes
+// UnmarshalYAML accepts (round-trip safe; used by migrators that write configs).
+func (il ImportList) MarshalYAML() (interface{}, error) {
+	seq := &yaml.Node{Kind: yaml.SequenceNode}
+	for _, e := range il {
+		if e.Namespace == "" {
+			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: e.Ref})
+			continue
+		}
+		seq.Content = append(seq.Content, &yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: e.Namespace},
+				{Kind: yaml.ScalarNode, Value: e.Ref},
+			},
+		})
+	}
+	return seq, nil
 }
 
 // DiscoverConfig drives filesystem scans for standalone kind-keyed files. Each
@@ -545,7 +631,7 @@ func LoadUnified(dir string) (*UnifiedFile, bool, error) {
 	}
 	merged := &UnifiedFile{}
 	visited := map[string]bool{}
-	if err := loadUnifiedInto(root, merged, visited, 0); err != nil {
+	if err := loadUnifiedInto(root, merged, visited, 0, map[string]*UnifiedFile{}); err != nil {
 		return nil, true, err
 	}
 	normalizeV4Aliases(merged)
@@ -807,8 +893,11 @@ func validateDeploymentName(name, parentPath string) error {
 }
 
 // loadUnifiedInto reads one file, merges every one of its documents into merged,
-// then recurses into any `includes:` it declared. Cycle-safe via the visited set.
-func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int) error {
+// then processes any `import:` it declared. Flat imports recurse into the SAME
+// merged/visited (root namespace); namespaced imports mount an isolated child
+// UnifiedFile under merged.Namespaces via the shared nsCache (cycle-broken).
+// Cycle-safe within a namespace via the visited set; across namespaces via nsCache.
+func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, depth int, nsCache map[string]*UnifiedFile) error {
 	if depth > MaxIncludeDepth {
 		return fmt.Errorf("include depth exceeded %d at %s", MaxIncludeDepth, path)
 	}
@@ -829,7 +918,7 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 	// Parse as a multi-document YAML stream.
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
 	docIdx := 0
-	var includesQueue []string
+	var importQueue ImportList
 	for {
 		var node yaml.Node
 		if err := decoder.Decode(&node); err != nil {
@@ -854,12 +943,10 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 			if err := node.Decode(&uf); err != nil {
 				return fmt.Errorf("%s:doc%d: decoding root-shape document: %w", abs, docIdx, err)
 			}
-			// Queue includes for recursion after current-file merging.
-			for _, inc := range uf.Include {
-				includesQueue = append(includesQueue, inc)
-			}
-			// Clear includes before merging so they don't leak into merged struct.
-			uf.Include = nil
+			// Queue imports for processing after current-file merging.
+			importQueue = append(importQueue, uf.Import...)
+			// Clear before merge so they don't leak into the merged struct.
+			uf.Import = nil
 			// Queue discovery roots (resolved relative to this file).
 			// Discovery runs only AFTER all includes are fully merged, so
 			// collect them on merged.Discover directly and process at end.
@@ -879,38 +966,106 @@ func loadUnifiedInto(path string, merged *UnifiedFile, visited map[string]bool, 
 		docIdx++
 	}
 
-	// Recurse into includes relative to this file's directory.
+	// Process imports relative to this file's directory.
 	base := filepath.Dir(abs)
-	for _, inc := range includesQueue {
-		incPath := inc
-		if strings.HasPrefix(incPath, "@") {
-			// Remote ref (@host/org/repo/sub/path:version) — parse, download,
-			// resolve SubPath. Flow through the existing cycle-detect map on
-			// the resolved absolute path (like any local include).
-			parsed := ParseRemoteRef(incPath)
-			version := parsed.Version
-			if version == "" {
-				repoURL := RepoGitURL(parsed.RepoPath)
-				branch, err := GitDefaultBranch(repoURL)
-				if err != nil {
-					return fmt.Errorf("%s: resolving default branch for %s: %w", abs, parsed.RepoPath, err)
-				}
-				version = branch
-			}
-			cachePath, err := EnsureRepoDownloaded(parsed.RepoPath, version)
+	for _, imp := range importQueue {
+		if imp.Namespace == "" {
+			// Flat import — merge UNDER the root file (root wins). We already
+			// merged the root's fields above; the merge function preserves
+			// existing (root) values. Shares merged + visited.
+			_, incPath, err := canonicalRef(imp.Ref, base)
 			if err != nil {
-				return fmt.Errorf("%s: downloading remote include %q: %w", abs, incPath, err)
+				return fmt.Errorf("%s: import %q: %w", abs, imp.Ref, err)
 			}
-			incPath = filepath.Join(cachePath, parsed.SubPath)
-		} else if !filepath.IsAbs(incPath) {
-			incPath = filepath.Join(base, incPath)
+			if err := loadUnifiedInto(incPath, merged, visited, depth+1, nsCache); err != nil {
+				return err
+			}
+			continue
 		}
-		// Includes merge UNDER the root file — root wins. In our implementation,
-		// we already merged the root's fields above; now we merge includes on
-		// top but the merge function below preserves existing (root) values.
-		if err := loadUnifiedInto(incPath, merged, visited, depth+1); err != nil {
-			return err
+		// Namespaced import — mount an isolated child UnifiedFile.
+		if err := validateNamespaceAlias(imp.Namespace); err != nil {
+			return fmt.Errorf("%s: import %q: %w", abs, imp.Ref, err)
 		}
+		sub, err := loadNamespaceCached(imp.Ref, base, nsCache)
+		if err != nil {
+			return fmt.Errorf("%s: import %s (%q): %w", abs, imp.Namespace, imp.Ref, err)
+		}
+		if merged.Namespaces == nil {
+			merged.Namespaces = map[string]*UnifiedFile{}
+		}
+		if existing, ok := merged.Namespaces[imp.Namespace]; ok && existing != sub {
+			return fmt.Errorf("%s: import namespace %q bound to two different refs", abs, imp.Namespace)
+		}
+		merged.Namespaces[imp.Namespace] = sub
+	}
+	return nil
+}
+
+// canonicalRef resolves an import ref (local path or
+// `@host/org/repo[/sub/path]:version`) to a concrete on-disk path AND a stable
+// cache key. Remote refs are downloaded into the shared repo cache (and
+// auto-migrated). The key dedups identical refs across the whole load so a
+// diamond — or the intentional main<->cachyos cycle — of namespaced imports
+// resolves exactly once.
+func canonicalRef(ref, baseDir string) (key, path string, err error) {
+	if strings.HasPrefix(ref, "@") {
+		parsed := ParseRemoteRef(ref)
+		version := parsed.Version
+		if version == "" {
+			branch, e := GitDefaultBranch(RepoGitURL(parsed.RepoPath))
+			if e != nil {
+				return "", "", fmt.Errorf("resolving default branch for %s: %w", parsed.RepoPath, e)
+			}
+			version = branch
+		}
+		cachePath, e := EnsureRepoDownloaded(parsed.RepoPath, version)
+		if e != nil {
+			return "", "", fmt.Errorf("downloading remote ref %q: %w", ref, e)
+		}
+		return parsed.RepoPath + "@" + version + "/" + parsed.SubPath,
+			filepath.Join(cachePath, parsed.SubPath), nil
+	}
+	p := ref
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(baseDir, ref)
+	}
+	abs, e := filepath.Abs(p)
+	if e != nil {
+		return "", "", fmt.Errorf("resolving %s: %w", ref, e)
+	}
+	return abs, abs, nil
+}
+
+// loadNamespaceCached loads a namespaced import target as a fully-resolved,
+// isolated UnifiedFile — its OWN files (flat imports for vocabulary, its own
+// entities) plus its OWN namespaced imports. A fresh `visited` set isolates its
+// file-cycle detection; the shared nsCache breaks cross-namespace cycles
+// (including the intentional main<->cachyos mutual import) by recording an
+// in-progress node BEFORE recursing. A whole-repo ref (empty sub-path) resolves
+// to its overthink.yml.
+func loadNamespaceCached(ref, baseDir string, nsCache map[string]*UnifiedFile) (*UnifiedFile, error) {
+	key, path, err := canonicalRef(ref, baseDir)
+	if err != nil {
+		return nil, err
+	}
+	if existing, ok := nsCache[key]; ok {
+		return existing, nil
+	}
+	if info, statErr := os.Stat(path); statErr == nil && info.IsDir() {
+		path = filepath.Join(path, UnifiedFileName)
+	}
+	sub := &UnifiedFile{}
+	nsCache[key] = sub // in-progress marker BEFORE recursing (cycle break)
+	if err := loadUnifiedInto(path, sub, map[string]bool{}, 0, nsCache); err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// validateNamespaceAlias enforces a bare lowercase-hyphenated alias (no dots).
+func validateNamespaceAlias(alias string) error {
+	if !namespaceAliasRe.MatchString(alias) {
+		return fmt.Errorf("import namespace alias %q must match %s", alias, namespaceAliasRe.String())
 	}
 	return nil
 }
@@ -932,7 +1087,7 @@ const (
 // Plural spellings (images:/vms:) are legacy; classifyDoc rejects them
 // with a migration hint.
 var rootShapeKeys = map[string]bool{
-	"version": true, "include": true, "discover": true, "defaults": true,
+	"version": true, "import": true, "discover": true, "defaults": true,
 	"provides": true,
 	// Field-singular cutover (2026-05): plurals collapsed.
 	"distro": true, "builder": true, "init": true,
@@ -989,11 +1144,15 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	hasRoot, hasKind := false, false
 	var keys []string
 	hasLegacyBenchmarkKey := false
+	hasLegacyIncludeKey := false
 	for i := 0; i < len(inner.Content); i += 2 {
 		k := inner.Content[i].Value
 		keys = append(keys, k)
 		if k == "benchmark" {
 			hasLegacyBenchmarkKey = true
+		}
+		if k == "include" {
+			hasLegacyIncludeKey = true
 		}
 		// Schema v4: the target-template kind keys (image/pod/vm/k8s/host/
 		// deployment) overlap with root-shape map keys. Disambiguate by
@@ -1020,6 +1179,13 @@ func classifyDoc(node *yaml.Node) (docShape, error) {
 	if hasLegacyBenchmarkKey {
 		return 0, fmt.Errorf(
 			"the `benchmark:` root key is no longer accepted — it predates the 2026-04 harness→eval cutover, whose migrator has since been removed. Rewrite the block by hand as a `kind: score` + `kind: recipe` pair under `eval:` (see /ov-eval:eval)",
+		)
+	}
+	// 2026-05 import-namespace cutover: `include:` was deleted in favor of
+	// the single `import:` statement (flat + namespaced child imports).
+	if hasLegacyIncludeKey {
+		return 0, fmt.Errorf(
+			"the `include:` key is no longer accepted — it was replaced by `import:` (flat string items + namespaced `alias: ref` items) in the 2026-05 import-namespace cutover. Run: ov migrate",
 		)
 	}
 	switch {
@@ -2185,15 +2351,33 @@ func applyScanSpecsKindKeyed(specs []ScanSpec, rootDir, filename string, perDir 
 
 // ProjectConfig returns the *Config equivalent of uf (image.yml view).
 func (uf *UnifiedFile) ProjectConfig() *Config {
+	return uf.projectConfigCached(map[*UnifiedFile]*Config{})
+}
+
+// projectConfigCached projects uf (and its import namespaces, recursively) into
+// a *Config. The pointer-keyed cache breaks the intentional main<->cachyos
+// import cycle (the shared UnifiedFile node is projected exactly once).
+func (uf *UnifiedFile) projectConfigCached(cache map[*UnifiedFile]*Config) *Config {
+	if c, ok := cache[uf]; ok {
+		return c
+	}
 	images := uf.Image
 	if images == nil {
 		images = map[string]ImageConfig{}
 	}
-	return &Config{
+	c := &Config{
 		Defaults: uf.Defaults,
 		Image:    images,
 		Local:    uf.Local,
 	}
+	cache[uf] = c // cache BEFORE recursing (cycle break)
+	if len(uf.Namespaces) > 0 {
+		c.Namespaces = make(map[string]*Config, len(uf.Namespaces))
+		for ns, sub := range uf.Namespaces {
+			c.Namespaces[ns] = sub.projectConfigCached(cache)
+		}
+	}
+	return c
 }
 
 // ProjectDistroConfig returns the *DistroConfig equivalent (distros: section).

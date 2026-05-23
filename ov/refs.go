@@ -248,32 +248,49 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 	// format_config: has been removed. Remote build-config refs now live in
 	// overthink.yml's `includes:` mechanism (see unified.go).
 
-	// Scan image.yml layer references
-	if cfg != nil {
-		for imgName, img := range cfg.Image {
+	// Scan image + kind:local layer references, recursively across import
+	// namespaces. A pulled-in namespaced base/builder image (e.g.
+	// `ov.arch-builder`) carries its own @github layers; they must land in the
+	// same shared (bare-ref-keyed) layer map. Over-collecting an unreferenced
+	// namespace image's layers is harmless — all refs pin the same version, so
+	// the conflict check below never fires; under-collecting would surface as
+	// "unknown layer" at generate time. seenCfg breaks the main<->cachyos cycle.
+	seenCfg := map[*Config]bool{}
+	var scanCfg func(c *Config) error
+	scanCfg = func(c *Config) error {
+		if c == nil || seenCfg[c] {
+			return nil
+		}
+		seenCfg[c] = true
+		for imgName, img := range c.Image {
 			if !img.IsEnabled() && !opts.shouldIncludeDisabled(imgName) {
 				continue
 			}
 			for _, layerRef := range img.Layer {
-				if err := addRef(layerRef, fmt.Sprintf("image.yml image %s", imgName)); err != nil {
-					return nil, err
+				if err := addRef(layerRef, fmt.Sprintf("image %s", imgName)); err != nil {
+					return err
 				}
 			}
 		}
-		// Scan kind:local template layer references — symmetric with the image
-		// layer walk above. A kind:local template (e.g. an operator workstation
-		// profile) composes remote @-ref layers exactly like an image does, so
-		// its layer: list must feed the same collection/download path.
-		for tplName, spec := range cfg.Local {
+		for tplName, spec := range c.Local {
 			if spec == nil {
 				continue
 			}
 			for _, layerRef := range spec.Layer {
 				if err := addRef(layerRef, fmt.Sprintf("kind:local %s", tplName)); err != nil {
-					return nil, err
+					return err
 				}
 			}
 		}
+		for _, sub := range c.Namespaces {
+			if err := scanCfg(sub); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := scanCfg(cfg); err != nil {
+		return nil, err
 	}
 
 	// Scan layer.yml depends and layers: fields

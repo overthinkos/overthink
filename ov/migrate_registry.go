@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.141.1600")
+var latestSchemaVersion = mustCalVer("2026.143.844")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -149,6 +149,15 @@ func migrationSteps() []MigrationStep {
 		}},
 		{mustCalVer("2026.141.1559"), "arch-rename", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateArchRename(c.Dir, c.HostDeployPath, c.DryRun)
+			return len(w) > 0, err
+		}},
+		// 2026-05 import-namespace cutover: the `include:` composition key was
+		// deleted in favor of the single `import:` statement (flat + namespaced
+		// `alias: ref` items). This step renames include: → import: in every
+		// project YAML; repo-specific reshaping (base.yml merge, cachyos
+		// namespace, deploy→eval beds) is hand-authored. See CHANGELOG.md.
+		{mustCalVer("2026.143.843"), "import-namespace", false, func(c *MigrateContext) (bool, error) {
+			w, err := MigrateImportNamespace(c.Dir, c.DryRun)
 			return len(w) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up

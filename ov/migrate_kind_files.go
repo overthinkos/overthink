@@ -285,17 +285,24 @@ func writeYAMLDoc(path string, doc *yaml.Node) error {
 // canonical singular key — without this dual lookup the migrator never finds
 // the existing `include:` and spuriously injects a redundant `includes:` block.
 func ensureIncludes(rootMap *yaml.Node, desired []string) int {
-	includes := findMappingValue(rootMap, "include")
+	// Canonical key is `import:` (the legacy `include:`/`includes:` keywords
+	// were deleted in the 2026-05 import-namespace cutover). Accept the legacy
+	// keys when replaying an ancient config mid-chain; the final import-namespace
+	// step renames any residual legacy key to `import:`.
+	includes := findMappingValue(rootMap, "import")
+	if includes == nil {
+		includes = findMappingValue(rootMap, "include")
+	}
 	if includes == nil {
 		includes = findMappingValue(rootMap, "includes")
 	}
 	if includes == nil {
-		// Create include: as a SequenceNode and prepend to the mapping.
+		// Create import: as a SequenceNode and prepend to the mapping.
 		seq := &yaml.Node{Kind: yaml.SequenceNode}
 		for _, e := range desired {
 			seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Value: e})
 		}
-		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "include"}
+		key := &yaml.Node{Kind: yaml.ScalarNode, Value: "import"}
 		// Insert after `version:` if present, else at the start.
 		insertAt := 0
 		for i := 0; i < len(rootMap.Content)-1; i += 2 {

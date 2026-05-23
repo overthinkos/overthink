@@ -618,15 +618,46 @@ func (c *DeployAddCmd) emitOpts() EmitOpts {
 // For layer refs: compile a single plan. For remote refs: fetch and
 // proceed (remote fetch is handled by existing EnsureRepoDownloaded).
 func (c *DeployAddCmd) compilePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
-	if ref.Source == RefSourceRemote {
-		// Remote fetch: deferred. Returning a typed error keeps the
-		// surface clean for tests + the command help output.
-		return nil, "", nil, fmt.Errorf("remote refs not yet fetched by DeployAddCmd (layer=%s)", ref.Name)
+	if ref.Source == RefSourceRemote && ref.Kind == RefKindImage {
+		return nil, "", nil, fmt.Errorf("remote image refs are not supported by deploy add (ref=%s)", ref.Raw)
 	}
 	if ref.Kind == RefKindImage {
 		return c.compileImagePlans(ref, cfg, distroCfg, builderCfg, dir)
 	}
+	// Local AND remote layer refs flow here — scanLayersForRef fetches a
+	// remote `--add-layer @host/org/repo/layers/<name>:ver` (and its deps)
+	// on demand, so deploy add of remote layers is fully automatic.
 	return c.compileLayerPlans(ref, cfg, distroCfg, builderCfg, dir)
+}
+
+// scanLayersForRef scans the layer set needed to compile `ref`, returning the
+// layer map plus the map KEY for ref. A LOCAL layer ref keys by its short name.
+// A REMOTE ref (`@host/org/repo/layers/<name>:ver`) is fetched + scanned with
+// its transitive deps — by augmenting cfg with a synthetic image that carries
+// the ref, so the existing CollectRemoteRefs/ScanAllLayer machinery pulls it —
+// and keys by its bare ref. This makes `ov deploy add --add-layer <remote>`
+// (e.g. the VM eval beds' add_layer:) fully automatic with no manual pre-fetch.
+func (c *DeployAddCmd) scanLayersForRef(ref *DeployRef, cfg *Config, dir string) (map[string]*Layer, string, error) {
+	scanCfg := cfg
+	layerKey := ref.Name
+	if ref.Source == RefSourceRemote {
+		aug := *cfg
+		aug.Image = make(map[string]ImageConfig, len(cfg.Image)+1)
+		for k, v := range cfg.Image {
+			aug.Image[k] = v
+		}
+		aug.Image["__ov_addlayer_fetch__"] = ImageConfig{Layer: []string{ref.Raw}}
+		scanCfg = &aug
+		layerKey = BareRef(ref.Raw)
+	}
+	layers, err := ScanAllLayerWithConfig(dir, scanCfg)
+	if err != nil {
+		return nil, "", err
+	}
+	if _, ok := layers[layerKey]; !ok {
+		return nil, "", fmt.Errorf("layer %q not found", ref.Raw)
+	}
+	return layers, layerKey, nil
 }
 
 func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
@@ -667,16 +698,13 @@ func (c *DeployAddCmd) compileImagePlans(ref *DeployRef, cfg *Config, distroCfg 
 // context, not the operator host's).
 func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string, ctx *ResolvedImage) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, layerKey, err := c.scanLayersForRef(ref, cfg, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	if _, ok := layers[ref.Name]; !ok {
-		return nil, "", nil, fmt.Errorf("layer %q not found", ref.Name)
-	}
-	order, err := ResolveLayerOrder([]string{ref.Name}, layers, nil)
+	order, err := ResolveLayerOrder([]string{layerKey}, layers, nil)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
+		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Raw, err)
 	}
 	if distroCfg != nil && ctx.DistroDef == nil {
 		ctx.DistroDef = distroCfg.ResolveDistro(ctx.Distro)
@@ -698,22 +726,16 @@ func (c *DeployAddCmd) compileLayerPlansWithContext(ref *DeployRef, cfg *Config,
 
 func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg *DistroConfig, builderCfg *BuilderConfig, dir string) ([]*InstallPlan, string, []string, error) {
 	_ = builderCfg
-	layers, err := ScanAllLayerWithConfig(dir, cfg)
+	layers, layerKey, err := c.scanLayersForRef(ref, cfg, dir)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	if _, ok := layers[ref.Name]; !ok {
-		return nil, "", nil, fmt.Errorf("layer %q not found", ref.Name)
-	}
-	// Expand transitive deps — a layer deploy (either a bare
-	// `ov deploy add <layer>` or a `--add-layer <name>`) MUST pull in
-	// the layer's `depends:` graph in topological order. Without this,
-	// layers whose build-time tasks rely on upstream binaries (e.g.
-	// `pre-commit`'s `cargo install` requiring `rust`) fail at first
-	// execution with "command not found" errors. Feeding the requested
-	// layer through ResolveLayerOrder matches what compileImagePlans
-	// does for image-level deploys.
-	order, err := ResolveLayerOrder([]string{ref.Name}, layers, nil)
+	// Expand transitive deps — a layer deploy (bare `ov deploy add <layer>`
+	// or `--add-layer <name>`) MUST pull in the layer's `requires:` graph in
+	// topological order. Without this, layers whose tasks rely on upstream
+	// binaries (e.g. pre-commit's cargo install needing rust) fail with
+	// "command not found". Remote refs key by their bare ref (scanLayersForRef).
+	order, err := ResolveLayerOrder([]string{layerKey}, layers, nil)
 	if err != nil {
 		return nil, "", nil, fmt.Errorf("resolving deps for %s: %w", ref.Name, err)
 	}

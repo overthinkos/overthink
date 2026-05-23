@@ -33,6 +33,32 @@ type BuildCmd struct {
 	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in image.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
 }
 
+// ensureBuilderImageBuilt resolves an internal builder-image name to its newest
+// local CalVer tag, BUILDING it on demand when it isn't in local storage. This
+// makes bootstrap image/VM builds fully automatic — no manual
+// `ov image build <builder>` prerequisite. A ref containing "/" (a full registry
+// ref) is returned unchanged. Shared by the kind:image bootstrap path
+// (BuildCmd) and the kind:vm bootstrap path (vm_bootstrap.go) — one helper, both
+// call sites.
+func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
+	if strings.Contains(builderRef, "/") {
+		return builderRef, nil
+	}
+	if resolved, err := resolveLocalImageRef(engine, builderRef); err == nil {
+		return resolved, nil
+	}
+	fmt.Fprintf(os.Stderr, "Builder image %q not in local storage — building it automatically...\n", builderRef)
+	bc := &BuildCmd{Images: []string{builderRef}, Jobs: 4, IncludeDisabled: true}
+	if err := bc.Run(); err != nil {
+		return "", fmt.Errorf("auto-building builder image %q: %w", builderRef, err)
+	}
+	resolved, err := resolveLocalImageRef(engine, builderRef)
+	if err != nil {
+		return "", fmt.Errorf("builder image %q still not found after auto-build: %w", builderRef, err)
+	}
+	return resolved, nil
+}
+
 func (c *BuildCmd) Run() error {
 	// Check if any image arg is a remote ref
 	for _, img := range c.Images {
@@ -354,13 +380,10 @@ func (c *BuildCmd) runPrivilegedBootstrap(engine, dir, imageName string, img *Re
 	// resolved to the newest local CalVer tag via the same machinery
 	// as `ov shell <name>` so build never tries to pull a `:latest`
 	// that ov doesn't emit.
-	builderRef := img.BootstrapBuilderImage
-	if !strings.Contains(builderRef, "/") {
-		resolved, err := resolveLocalImageRef(engine, builderRef)
-		if err != nil {
-			return fmt.Errorf("resolving builder image %q: %w (build the bootstrap_builder_image first)", builderRef, err)
-		}
-		builderRef = resolved
+	// Resolve + auto-build the bootstrap builder image on demand (fully automatic).
+	builderRef, err := ensureBuilderImageBuilt(engine, img.BootstrapBuilderImage)
+	if err != nil {
+		return err
 	}
 
 	ctx := struct {
@@ -666,20 +689,31 @@ func detectRemoteIncludePassthrough(dir string, images []string) (string, bool) 
 		return "", false
 	}
 	var peek struct {
-		Include []string                   `yaml:"include"`
-		Image   map[string]json.RawMessage `yaml:"image"`
+		// Read the `import:` list generically (items are either bare strings —
+		// flat imports — or single-key `alias: ref` maps — namespaced imports).
+		Import []interface{}              `yaml:"import"`
+		Image  map[string]json.RawMessage `yaml:"image"`
 	}
 	if err := yaml.Unmarshal(data, &peek); err != nil {
 		return "", false
 	}
-	if len(peek.Include) != 1 {
+	// The passthrough fires only for a thin project whose SOLE import is one
+	// flat remote ref (a single-string import naming another repo). A project
+	// with namespaced imports or multiple imports uses the normal build path.
+	var stringImports []string
+	for _, it := range peek.Import {
+		if s, ok := it.(string); ok {
+			stringImports = append(stringImports, s)
+		}
+	}
+	if len(peek.Import) != 1 || len(stringImports) != 1 {
 		return "", false
 	}
 	// If the image is declared locally, keep the normal local path.
 	if _, hasLocal := peek.Image[imageName]; hasLocal {
 		return "", false
 	}
-	inc := peek.Include[0]
+	inc := stringImports[0]
 	if !strings.HasPrefix(inc, "@") {
 		return "", false
 	}

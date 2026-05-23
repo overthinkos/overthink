@@ -128,19 +128,17 @@ func BuildBootstrapVM(
 	// Resolve the builder image ref. Internal kind:image names need
 	// resolution to a newest local CalVer tag — sudo podman won't auto-
 	// pull from registries that don't have the build.
+	// Resolve + auto-build the bootstrap builder image on demand (fully
+	// automatic — no manual `ov image build <builder>` prerequisite).
 	builderRef := spec.Source.BuilderImage
-	if !strings.Contains(builderRef, "/") {
-		// Determine engine for local-image lookup.
-		rt, _ := ResolveRuntime()
-		engine := "podman"
-		if rt != nil {
-			engine = EngineBinary(rt.RunEngine)
-		}
-		resolved, err := resolveLocalImageRef(engine, builderRef)
-		if err != nil {
-			return BootstrapVMResult{}, fmt.Errorf("resolving builder image %q: %w (build the builder first via `ov image build %s`)", builderRef, err, builderRef)
-		}
-		builderRef = resolved
+	rt, _ := ResolveRuntime()
+	engine := "podman"
+	if rt != nil {
+		engine = EngineBinary(rt.RunEngine)
+	}
+	builderRef, err = ensureBuilderImageBuilt(engine, builderRef)
+	if err != nil {
+		return BootstrapVMResult{}, err
 	}
 	if err := RunPrivileged(PrivilegedRun{
 		Image:      builderRef,

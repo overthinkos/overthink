@@ -51,8 +51,8 @@ image:
 		t.Fatalf("read root: %v", err)
 	}
 	s := string(rootData)
-	if !strings.Contains(s, "include:") {
-		t.Error("root overthink.yml missing include:")
+	if !strings.Contains(s, "import:") {
+		t.Error("root overthink.yml missing import:")
 	}
 	if !strings.Contains(s, "build.yml") {
 		t.Error("includes missing build.yml")

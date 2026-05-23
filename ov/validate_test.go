@@ -1071,7 +1071,7 @@ func TestValidatePerImageBuilderNotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent per-image builder")
 	}
-	if !strings.Contains(err.Error(), "not found in image.yml") {
+	if !strings.Contains(err.Error(), "is not found") {
 		t.Errorf("unexpected error: %v", err)
 	}
 }

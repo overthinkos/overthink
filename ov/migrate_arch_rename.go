@@ -16,7 +16,7 @@ package main
 // starts with `archlinux`, a single `archlinux`→`arch` substitution collapses
 // all of them at once. Covers:
 //
-//   - overthink.yml + per-kind siblings + build.yml + arch-base.yml (project)
+//   - overthink.yml + per-kind siblings + build.yml + base.yml (project)
 //   - every layers/<name>/layer.yml (distros: archlinux: sections, archlinux:
 //     package-map keys)
 //   - the per-machine ~/.config/ov/deploy.yml (host overlay)
@@ -84,7 +84,7 @@ func MigrateArchRename(dir, hostDeployPath string, dryRun bool) ([]string, error
 
 	for _, f := range []string{
 		"overthink.yml", "image.yml", "vm.yml", "deploy.yml", "eval.yml",
-		"local.yml", "pod.yml", "k8s.yml", "build.yml", "arch-base.yml",
+		"local.yml", "pod.yml", "k8s.yml", "build.yml", "base.yml",
 	} {
 		mod, err := rewriteArchRenameFile(filepath.Join(dir, f), dryRun)
 		if err != nil {

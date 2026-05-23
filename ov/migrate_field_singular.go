@@ -365,8 +365,8 @@ func discoverProjectYAMLs(dir string) ([]string, error) {
 		var doc yaml.Node
 		if err := yaml.Unmarshal(data, &doc); err == nil && len(doc.Content) > 0 && doc.Content[0].Kind == yaml.MappingNode {
 			rootMap := doc.Content[0]
-			// includes: / include:
-			for _, key := range []string{"includes", "include"} {
+			// import: (canonical) / legacy includes: / include:
+			for _, key := range []string{"import", "includes", "include"} {
 				if seq := lookupMapNode(rootMap, key); seq != nil && seq.Kind == yaml.SequenceNode {
 					for _, item := range seq.Content {
 						if item.Kind == yaml.ScalarNode && item.Value != "" {

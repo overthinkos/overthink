@@ -22,6 +22,71 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Replace `include:` with a Go-style `import:` namespace system; combine the base files into `base.yml`; single-file image submodules; ecosystem-wide deploy→eval beds (breaking, schema 2026.143.844)
+
+The `include:` YAML composition key was **deleted** and replaced by a single
+forward-looking `import:` statement modelled on Go's package imports. `import:`
+is a LIST whose items are either a **bare string** (a *flat* import into the
+importing repo's root namespace — used for same-repo per-kind files and the
+shared `build.yml` distro/builder/init *vocabulary*) or a **single-key map
+`alias: ref`** (a *namespaced* child import that mounts another project under
+`alias`, whose entries are then referenced QUALIFIED as `alias.entry`). This
+removes the old flat-merge limitation: a repo can now cherry-pick exactly the
+entities it needs from another repo over GitHub (`base: cachyos.cachyos`,
+`builder: {pixi: ov.arch-builder}`) instead of flat-merging a whole file. A
+residual `include:` key is now a hard load-time error pointing at `ov migrate`.
+
+**Resolution model** (`ov/namespace.go`, `ov/unified.go`): `UnifiedFile.Import`
+(custom mixed-list marshal/unmarshal) + `UnifiedFile.Namespaces`; namespaced
+imports load into an isolated child `UnifiedFile` via `loadNamespaceCached`,
+whose shared resolved-ref cache breaks the intentional main↔cachyos mutual
+import. The resolver (`resolveImageRef` / `resolveNamespacedBases` /
+`pullNamespacedImage`) is namespace-relative (Go package-member semantics): a
+bare ref inside namespace `ov` resolves within `ov` first; qualified refs
+descend. `distro:`/`build:` are VALUES and inherit across a namespace boundary;
+`builder:` is a map of namespace-relative REFS and does NOT cross — a consumer
+declares its own builder map (the auto-intermediate builder map now lets the
+consumer's builder win over a cross-namespace base's, in `intermediates.go`).
+Threaded through the image base check, the base-chain walkers, `ResolveAllImage`,
+`CollectRemoteRefs` (walks namespaces so a pulled builder's `@github` layers are
+collected), and the builder validators in `validate.go`. An RCA caught two
+defects fixed in the same cutover: `validateImageDAG` resolved images without
+`resolveNamespacedBases` (a dangling namespaced base edge surfaced as a
+zero-length "image dependency cycle"), and the namespaced-builder walk pulled a
+layerless base's namespace-relative builder ref from the wrong context.
+
+**Config reshape.** The main repo's former `arch-base.yml` + `fedora-base.yml`
+were combined into one `base.yml` (entities `arch`, `arch-builder`, `fedora`,
+`fedora-builder`, `fedora-nonfree`). The CachyOS base stays owned by the
+`overthinkos/cachyos` submodule; main's `versa` (and the selkies/openclaw family
+that roots on the cachyos base) now use `base: cachyos.cachyos` via the `cachyos`
+import namespace, each carrying an explicit `arch-builder` map. The main repo
+**keeps its multi-file layout**; **every `image/<distro>` submodule
+(arch/cachyos/debian/ubuntu/fedora/bootc) is now a single `overthink.yml`** (all
+per-kind siblings inlined) that imports `build.yml` flat and (where it needs main's
+base entities) imports main under the `ov` namespace (`ov.arch`, `ov.fedora`,
+`ov.arch-builder`, `ov.fedora-builder`). Several latent pre-existing bugs were
+fixed in passing per R2 (a stray `disposable:` on a VmSpec, singular
+`libvirt.device:`/`channel:` keys that silently dropped the SPICE channel, and
+`cloud_init.user:` → `users:` in the debian/ubuntu/arch VMs).
+
+**deploy→eval unification.** Repo-shipped disposable VM test beds in the
+submodules (`arch-vm` + its nested beds, `arch-pacstrap-vm`, `cachyos-vm-deploy`,
+`debian-debootstrap-vm`, `ubuntu-debootstrap-vm`) moved from `kind: deploy`
+(deploy.yml) to `kind: eval` (in the single overthink.yml), matching the main
+repo's model. The cachyos `ov-cachyos` operator workstation profile stays
+`kind: deploy` (it mutates a real host — not a zero-side-effect bed). The
+now-empty submodule `deploy.yml` files were deleted.
+
+**Schema + migration.** Schema CalVer bumped `2026.141.1600` → **`2026.143.844`**.
+A new idempotent `import-namespace` `MigrationStep` (CalVer 2026.143.843) renames
+`include:` → `import:` in every project YAML; `migrate_arch_rename.go`'s hardcoded
+`arch-base.yml` became `base.yml`. This established the standing rule (CLAUDE.md,
+`/ov-build:migrate`): **every YAML schema/format change MUST raise
+`LatestSchemaVersion()` via a `MigrationStep` (re-stamping `version:` in every
+yml) AND carry a fresh per-push `v<CalVer>` repo git tag — format change ⟹
+`version:` bump ⟹ git tag.**
+
 ### 2026-05-22 — Add `openclaw-desktop` all-in-one image; decouple CUDA from the ollama layer; drop `selkies-desktop-ov` (breaking)
 
 A new **`openclaw-desktop`** image fuses four stacks onto one `base: cachyos`, `build: [pac, aur]` image: `selkies-desktop` (the streaming Wayland desktop), `openclaw-full` (the gateway + 27 tools, **already including `claude-code`/`codex`/`gemini`** — those three named CLIs are layers of the openclaw-full metalayer, not separate adds), a **CPU `ollama`**, and the full nested `ov` toolchain (`ov-full` + `container-nesting` + `golang` + `gh`). It exposes 3000/9222/9224/2222 (selkies) + 18789 (openclaw gateway) + 11434 (ollama), runs at uid 1000 with the `unmask=/proc/*` rootless-nesting posture from `container-nesting` (no `--privileged`, no added caps), and gains a positive synergy: openclaw-full's `playwright` (headless, no system browser) now drives selkies' real `chrome` + `chrome-cdp` on :9222. Composition analysis confirmed zero port/service-name collisions across the union, and every constituent layer is cachyos-safe (the ov-full/nesting layers carry `distro.arch` sections; `gocryptfs` installs via its distro-agnostic top-level `package: [gocryptfs]` → `pacman -S gocryptfs`, already proven by `arch-ov`).

@@ -294,8 +294,13 @@ func emitWithIncludes(dir string, bs *buildSections, is *imageSections, ds *Depl
 		includes = append(includes, "deploy.yml")
 	}
 
-	// Root overthink.yml
-	root.Include = includes
+	// Root overthink.yml — the unified step emits the canonical `import:`
+	// statement (flat string items for these same-repo files). The legacy
+	// `include:` keyword was deleted in the 2026-05 import-namespace cutover.
+	root.Import = make(ImportList, len(includes))
+	for i, inc := range includes {
+		root.Import[i] = ImportEntry{Ref: inc}
+	}
 	if dirExists(filepath.Join(dir, "layers")) {
 		root.Discover = &DiscoverConfig{Layer: []ScanSpec{{Path: "layers", Recursive: true}}}
 	}

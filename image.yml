@@ -172,12 +172,16 @@ image:
             - 8888:8888
     versa:
         enabled: true
-        base: cachyos
-        # builder: is inherited from the cachyos base (cachyos-base.yml, owned by
-        # overthinkos/cachyos and remote-included in overthink.yml): it maps
-        # pixi/npm/cargo/aur → arch-builder, so no per-image override is needed
-        # here. (The cachyos base moved out of this repo in the 2026-05 CachyOS
-        # migration; main consumes it by remote include.)
+        base: cachyos.cachyos
+        # Explicit builder map: the cachyos base is reached via the `cachyos`
+        # import namespace, and builder maps do NOT cross a namespace boundary.
+        # arch-builder is this repo's own (base.yml), so the bare ref resolves
+        # in the root namespace.
+        builder:
+            pixi: arch-builder
+            npm: arch-builder
+            cargo: arch-builder
+            aur: arch-builder
         build:
             - pac
         platform:
@@ -398,7 +402,12 @@ image:
             - 11434:11434
     openclaw:
         enabled: true
-        base: cachyos
+        base: cachyos.cachyos
+        builder:
+            pixi: arch-builder
+            npm: arch-builder
+            cargo: arch-builder
+            aur: arch-builder
         layer:
             - agent-forwarding
             - openclaw
@@ -414,7 +423,12 @@ image:
         # desktop). build:[pac,aur] is required for selkies' AUR google-chrome
         # + wlrctl.
         enabled: true
-        base: cachyos
+        base: cachyos.cachyos
+        builder:
+            pixi: arch-builder
+            npm: arch-builder
+            cargo: arch-builder
+            aur: arch-builder
         build:
             - pac
             - aur
@@ -509,7 +523,12 @@ image:
               scope: deploy
     openclaw-full:
         enabled: true
-        base: cachyos
+        base: cachyos.cachyos
+        builder:
+            pixi: arch-builder
+            npm: arch-builder
+            cargo: arch-builder
+            aur: arch-builder
         layer:
             - agent-forwarding
             - openclaw-full
@@ -543,7 +562,12 @@ image:
             - agent-forwarding
             - python-ml
     selkies-desktop:
-        base: cachyos
+        base: cachyos.cachyos
+        builder:
+            pixi: arch-builder
+            npm: arch-builder
+            cargo: arch-builder
+            aur: arch-builder
         build:
             - pac
             - aur

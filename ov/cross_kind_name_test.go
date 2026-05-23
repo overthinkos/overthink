@@ -37,7 +37,7 @@ func TestCrossKindNameReuse_LoaderAcceptsAllKinds(t *testing.T) {
 		[]byte("rpm:\n  packages: [example]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	overthink := `version: 2026.141.1600
+	overthink := `version: 2026.143.844
 defaults:
   registry: ghcr.io/example
   build: [rpm]
@@ -113,7 +113,7 @@ func TestCrossKindNameReuse_RetiredKeysRejected(t *testing.T) {
 	}{
 		{
 			name: "deployment.qc",
-			overthink: `version: 2026.141.1600
+			overthink: `version: 2026.143.844
 deploy:
   qc:
     target: local
@@ -124,7 +124,7 @@ deploy:
 		},
 		{
 			name: "deployment.cachyos-dx",
-			overthink: `version: 2026.141.1600
+			overthink: `version: 2026.143.844
 deploy:
   cachyos-dx:
     target: local
@@ -135,7 +135,7 @@ deploy:
 		},
 		{
 			name: "local.cachyos-dx",
-			overthink: `version: 2026.141.1600
+			overthink: `version: 2026.143.844
 local:
   cachyos-dx:
     layer: [example]

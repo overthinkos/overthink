@@ -1,9 +1,9 @@
-version: 2026.141.1600
-include:
-    # eval.yml carries kind:ai/recipe/score AND the kind:eval disposable R10
-    # beds (+ their supporting vm:/k8s: entities). deploy.yml was deleted in
-    # the 2026-05 kind:eval cutover — the repo ships only eval beds; operator
-    # deployments live in the per-host ~/.config/ov/deploy.yml.
+version: 2026.143.844
+import:
+    # Flat imports (root namespace) — this repo's own per-kind files + the
+    # combined base.yml (arch + fedora stacks). eval.yml carries kind:ai/recipe/
+    # score AND the kind:eval disposable R10 beds (+ supporting vm:/k8s:
+    # entities); operator deployments live in the per-host ~/.config/ov/deploy.yml.
     - eval.yml
     - local.yml
     - image.yml
@@ -11,18 +11,16 @@ include:
     - pod.yml
     - k8s.yml
     - build.yml
-    - arch-base.yml
-    # fedora base stack (fedora + fedora-builder + fedora-nonfree) — the
-    # ecosystem default base. Lives here (single source of truth) and is
-    # remote-included by the overthinkos/fedora submodule; the Fedora consumer
-    # showcase images (fedora-coder/ov/test) were split out 2026-05. No
-    # main → fedora coupling (main remote-includes nothing from that repo).
-    - fedora-base.yml
-    # cachyos base image — owned by the overthinkos/cachyos submodule (the
-    # CachyOS family was split out 2026-05); pulled back by github reference
-    # because main's `versa` image is `base: cachyos`. This is the deliberate
-    # main → cachyos coupling (see image/cachyos/README.md).
-    - '@github.com/overthinkos/cachyos/cachyos-base.yml:v2026.142.1421'
+    # arch + fedora base stacks (arch/arch-builder/fedora/fedora-builder/
+    # fedora-nonfree). Combined from arch-base.yml + fedora-base.yml in the
+    # 2026-05 import-namespace cutover.
+    - base.yml
+    # cachyos base image — owned by the overthinkos/cachyos submodule. Mounted
+    # under the `cachyos` import namespace and referenced as `cachyos.cachyos`
+    # (main's `versa` image is `base: cachyos.cachyos`). This is the deliberate
+    # main → cachyos coupling. The cachyos repo, in turn, imports this repo under
+    # the `ov` namespace for ov.arch-builder (mutual import; cycle-broken at load).
+    - cachyos: '@github.com/overthinkos/cachyos:v2026.143.844'
 discover:
     layer:
         - path: layers

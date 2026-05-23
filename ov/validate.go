@@ -732,6 +732,11 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 	if len(images) == 0 {
 		return
 	}
+	// Pull in namespace-qualified base images (e.g. `versa: base: cachyos.cachyos`)
+	// so the DAG's base edges don't dangle — same enrichment ResolveAllImage does.
+	// Best-effort: a namespace-resolution error here is surfaced by the resolve
+	// path, not the DAG check, so ignore it (matches the per-image skip above).
+	_ = cfg.resolveNamespacedBases(images, calverTag, dir, opts)
 
 	_, orderErr := ResolveImageOrder(images, layers)
 	if orderErr != nil {
@@ -943,9 +948,11 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			errs.Add("defaults.builder: build type %q is not valid (known builders: %s)", typ, strings.Join(builderCfg.BuilderNames(), ", "))
 		}
 		if builder != "" {
-			builderImg, exists := cfg.Image[builder]
+			// Namespace-aware: a defaults builder ref may be qualified (e.g.
+			// `ov.fedora-builder`), resolving through an import namespace.
+			builderImg, _, exists := cfg.resolveImageRef(builder)
 			if !exists {
-				errs.Add("defaults.builder.%s: image %q not found in image.yml", typ, builder)
+				errs.Add("defaults.builder.%s: image %q not found", typ, builder)
 			} else if !builderImg.IsEnabled() {
 				errs.Add("defaults.builder.%s: image %q is disabled", typ, builder)
 			}
@@ -975,9 +982,11 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 				continue
 			}
 			if builder != "" {
-				builderImg, exists := cfg.Image[builder]
+				// Namespace-aware: a builder ref may be qualified (e.g.
+				// `ov.arch-builder`), resolving through an import namespace.
+				builderImg, _, exists := cfg.resolveImageRef(builder)
 				if !exists {
-					errs.Add("image %q: builder.%s references %q which is not found in image.yml", imageName, typ, builder)
+					errs.Add("image %q: builder.%s references %q which is not found", imageName, typ, builder)
 					continue
 				}
 				if !builderImg.IsEnabled() {

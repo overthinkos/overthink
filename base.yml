@@ -1,0 +1,91 @@
+#  SINGLE SOURCE OF TRUTH for the main repo's base image stacks — the Arch pair
+#  (`arch` + `arch-builder`) and the Fedora stack (`fedora` + `fedora-builder` +
+#  `fedora-nonfree`). Combined from the former arch-base.yml + fedora-base.yml in
+#  the 2026-05 import-namespace cutover. There is exactly ONE copy of each
+#  definition — they are NOT also in image.yml — so there is no duplication.
+#
+#  Flat-imported by this repo's overthink.yml (root namespace) AND by the
+#  overthinkos/{arch,fedora,bootc} submodules (which import it under the `ov`
+#  namespace — `ov.arch`, `ov.fedora`, `ov.arch-builder`, …). The CachyOS base
+#  is NOT here: it is owned by the overthinkos/cachyos submodule and pulled back
+#  into this repo's `versa` image via the `cachyos` import namespace.
+#
+#  Every builder/nonfree layer: list uses github references (not plain names) so
+#  the SAME file resolves both locally (root namespace) and remotely (the `ov`
+#  namespace in a submodule that has no layers/ of its own). github references
+#  everywhere, one definition. Each layer github ref MUST pin to the SAME tag the
+#  submodules pin their other refs to (CollectRemoteRefs rejects one bare ref at
+#  two versions; the shared pixi/nodejs/build-toolchain refs are the constraint).
+#
+#  version: is the SCHEMA CalVer (bumped by the import-namespace cutover); the
+#  internal layer refs stay at the ecosystem layer tag v2026.141.1600 (the layers
+#  did not move).
+version: 2026.143.844
+image:
+    arch:
+        base: docker.io/library/archlinux:latest
+        distro:
+            - arch
+        build:
+            - pac
+        builder:
+            aur: arch-builder
+            cargo: arch-builder
+            npm: arch-builder
+            pixi: arch-builder
+        produce:
+            - pixi
+            - npm
+            - cargo
+            - aur
+    arch-builder:
+        base: arch
+        layer:
+            - '@github.com/overthinkos/overthink/layers/pixi:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/yay:v2026.141.1600'
+        produce:
+            - pixi
+            - npm
+            - cargo
+            - aur
+    fedora:
+        base: quay.io/fedora/fedora:43
+        distro:
+            - fedora:43
+            - fedora
+        builder:
+            cargo: fedora-builder
+            npm: fedora-builder
+            pixi: fedora-builder
+        produce:
+            - pixi
+            - npm
+            - cargo
+    fedora-builder:
+        base: fedora
+        layer:
+            - '@github.com/overthinkos/overthink/layers/rpmfusion:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/pixi:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.141.1600'
+        produce:
+            - pixi
+            - npm
+            - cargo
+    fedora-nonfree:
+        base: fedora
+        # Explicit builder map: fedora-nonfree is a base consumers compile on
+        # (e.g. fedora-coder), and builder maps do NOT propagate transitively
+        # through the base chain — nor across an import-namespace boundary. In
+        # the main repo this is redundant with defaults.builder, but a submodule
+        # importing this as ov.fedora-nonfree declares no defaults.builder, so
+        # consumers there inherit their builders from this map (qualified as
+        # ov.fedora-builder at the consumer site).
+        builder:
+            cargo: fedora-builder
+            npm: fedora-builder
+            pixi: fedora-builder
+        layer:
+            - '@github.com/overthinkos/overthink/layers/rpmfusion:v2026.141.1600'

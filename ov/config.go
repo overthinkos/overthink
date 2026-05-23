@@ -15,6 +15,11 @@ type Config struct {
 	// lists (kind:local templates compose remote @-ref layers too). Populated
 	// from UnifiedFile.Local by ProjectConfig().
 	Local map[string]*LocalSpec `yaml:"local,omitempty"`
+	// Namespaces carries child namespaces mounted by namespaced `import:`
+	// entries (alias → projected sub-Config). Qualified refs like
+	// `cachyos.cachyos` resolve through here. Populated from
+	// UnifiedFile.Namespaces by ProjectConfig(). See namespace.go.
+	Namespaces map[string]*Config `yaml:"-"`
 }
 
 // BuildFormats handles YAML unmarshal of the build: field.
@@ -366,8 +371,9 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 			resolved.Base = "quay.io/fedora/fedora:43"
 		}
 
-		// Check if base is internal (another enabled image in image.yml) or external
-		if baseImg, isInternal := c.Image[resolved.Base]; isInternal && baseImg.IsEnabled() {
+		// Check if base is internal (another enabled image — local OR resolved
+		// through an import namespace, e.g. `cachyos.cachyos`) or external.
+		if baseImg, _, isInternal := c.resolveImageRef(resolved.Base); isInternal && baseImg.IsEnabled() {
 			resolved.IsExternalBase = false
 		} else {
 			resolved.IsExternalBase = true
@@ -601,6 +607,13 @@ func (c *Config) ResolveAllImage(calverTag string, dir string, opts ResolveOpts)
 		}
 		resolved[name] = ri
 	}
+	// Pull in any namespace-qualified base images (e.g. versa's
+	// `base: cachyos.cachyos`) resolved within their own namespace context,
+	// keyed by the fully-qualified name, so the build graph + generator can
+	// reference them. See namespace.go.
+	if err := c.resolveNamespacedBases(resolved, calverTag, dir, opts); err != nil {
+		return nil, err
+	}
 	return resolved, nil
 }
 
@@ -643,13 +656,16 @@ func intPtr(v int) *int {
 // defines distro tags or the chain reaches an external base image.
 func (c *Config) walkBaseChainDistro(baseName string) []string {
 	seen := make(map[string]bool)
+	cur := c
 	current := baseName
 	for {
 		if seen[current] {
 			return nil // cycle detected
 		}
 		seen[current] = true
-		baseImg, ok := c.Image[current]
+		// resolveImageRef crosses import namespaces (`cachyos.cachyos`); distro
+		// is a VALUE so inheriting it across a namespace boundary is correct.
+		baseImg, sub, ok := cur.resolveImageRef(current)
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}
@@ -659,6 +675,7 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 		if baseImg.Base == "" {
 			return nil
 		}
+		cur = sub
 		current = baseImg.Base
 	}
 }
@@ -668,13 +685,16 @@ func (c *Config) walkBaseChainDistro(baseName string) []string {
 // defines build formats or the chain reaches an external base image.
 func (c *Config) walkBaseChainBuild(baseName string) []string {
 	seen := make(map[string]bool)
+	cur := c
 	current := baseName
 	for {
 		if seen[current] {
 			return nil // cycle detected
 		}
 		seen[current] = true
-		baseImg, ok := c.Image[current]
+		// Crosses import namespaces; build: is a VALUE (format list), inherited
+		// across a namespace boundary like distro:.
+		baseImg, sub, ok := cur.resolveImageRef(current)
 		if !ok || !baseImg.IsEnabled() {
 			return nil // external base or disabled
 		}
@@ -684,6 +704,7 @@ func (c *Config) walkBaseChainBuild(baseName string) []string {
 		if baseImg.Base == "" {
 			return nil
 		}
+		cur = sub
 		current = baseImg.Base
 	}
 }

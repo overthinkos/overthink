@@ -22,6 +22,43 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Fix layer-ordering bug (authored `layer:` order ignored by `GlobalLayerOrder`) + base `fedora-builder` on `fedora-nonfree` (bug fix, no schema bump)
+
+Surfaced while extracting the selkies image family into a submodule. A submodule
+that mixes an **arch-builder** image (`selkies-desktop`) and a **fedora-builder**
+image (`sway-browser-vnc`) failed to build: `fedora-builder` tried to
+`dnf install ffmpeg-devel x264-devel` (RPM Fusion packages) **before** the
+`rpmfusion` layer enabled the repos — `No match for argument: ffmpeg-devel`.
+
+Root cause (ov code): `GlobalLayerOrder` (`ov/intermediates.go`) built its layer
+dependency graph **only** from `requires:` + `layers:` edges and ordered the rest
+by cross-image *popularity*. The authored `layer:` list order was never a
+constraint. `fedora-builder`'s `[rpmfusion, …, build-toolchain]` has no
+`require:` edge (build-toolchain can't `require: rpmfusion` — on Arch the codec
+libs come from the distro repos), so in a project where `build-toolchain` is the
+more popular layer (shared by arch-builder + fedora-builder), popularity placed
+it ahead of `rpmfusion`. Main and the pure-Fedora submodule happened to order
+correctly only because `rpmfusion` was more popular there.
+
+Fix (two parts, both shipped):
+1. **`ov/intermediates.go`** — `GlobalLayerOrder` now adds each image's (and each
+   metalayer's) authored list-adjacent graph-node pairs as dependency edges,
+   cycle-safe (an edge that would create a cycle — i.e. genuinely conflicting
+   authored orders across images — is skipped, falling back to the popularity
+   tie-break). Popularity remains the tie-break among unconstrained layers.
+   Regression tests: `TestGlobalLayerOrder_RespectsAuthoredListOrder` (reproduces
+   the popularity inversion) + `TestGlobalLayerOrder_ConflictingListOrderFallsBack`.
+2. **`base.yml`** — `fedora-builder` now `base: fedora-nonfree` (was `fedora` +
+   an in-image `rpmfusion` layer). RPM Fusion now lands in the base chain, before
+   any builder layer, making the builder correct independent of layer ordering —
+   architecturally right since fedora-builder compiles nonfree codecs.
+
+No schema/format change → no `MigrationStep`, no `version:` bump; the landing
+push carries a fresh per-push `v<CalVer>` tag. Verified: `go test ./...` green;
+`ov image build fedora-builder` installs ffmpeg-devel/x264-devel cleanly; with
+the OLD `fedora-builder` definition + the new binary, the selkies submodule's
+generated `ov.fedora-builder` Containerfile orders rpmfusion before ffmpeg-devel.
+
 ### 2026-05-23 — Extract the NVIDIA GPU base family (`nvidia` + `python-ml`) into the `overthinkos/nvidia` submodule (content cutover, no schema bump)
 
 First family in the program to move *images* (not just distro layers) out of the

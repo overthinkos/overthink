@@ -102,8 +102,93 @@ func GlobalLayerOrder(images map[string]*ResolvedImage, layers map[string]*Layer
 		graph[name] = deps
 	}
 
+	// Authored layer-list order is an ordering CONSTRAINT, not just a seed set.
+	// When an image (or metalayer) writes `layer: [A, B]`, the author means A's
+	// install steps run before B's — even when B declares no `require: A`. The
+	// canonical case is the builder images' `[rpmfusion, …, build-toolchain]`:
+	// build-toolchain installs ffmpeg-devel / x264-devel / libva-devel, which
+	// live in the RPM Fusion repos that the rpmfusion layer enables, yet
+	// build-toolchain CANNOT `require: rpmfusion` (it is also used on Arch, where
+	// those libs come from the distro repos). Without honoring authored order the
+	// popularity tie-break can place build-toolchain ahead of rpmfusion in a
+	// project whose image set makes build-toolchain the more popular layer,
+	// emitting its dnf install before the repos exist and breaking the build.
+	//
+	// We add each list-adjacent graph-node pair as a dependency edge (the later
+	// entry depends on the earlier), skipping any edge that is redundant or that
+	// would create a cycle — so genuinely conflicting authored orders fall back
+	// to the popularity tie-break exactly as before, while consistent orders
+	// (the overwhelming majority) are now respected.
+	isNode := func(name string) bool {
+		if _, ok := popularity[name]; !ok {
+			return false
+		}
+		_, ok := layers[name]
+		return ok
+	}
+	addListOrderEdge := func(prev, cur string) {
+		if prev == cur || !isNode(prev) || !isNode(cur) {
+			return
+		}
+		for _, d := range graph[cur] {
+			if d == prev {
+				return // already constrained
+			}
+		}
+		// Adding "cur depends on prev" creates a cycle iff prev already
+		// (transitively) depends on cur.
+		if graphReaches(graph, prev, cur) {
+			return
+		}
+		graph[cur] = append(graph[cur], prev)
+	}
+	addListEdges := func(list []string) {
+		for i := 1; i < len(list); i++ {
+			addListOrderEdge(list[i-1], list[i])
+		}
+	}
+	// Every authored layer list contributes ordering edges: image-level lists
+	// AND metalayer `layers:` (IncludedLayer) lists. Non-node entries (pure-
+	// composition metalayers with no RUN steps) are skipped by addListOrderEdge,
+	// so only content layers are constrained.
+	for _, img := range images {
+		addListEdges(img.Layer)
+	}
+	for name := range popularity {
+		if l, ok := layers[name]; ok {
+			addListEdges(l.IncludedLayer)
+		}
+	}
+
 	// Kahn's algorithm with popularity-based tie-breaking
 	return topoSortByPopularity(graph, popularity)
+}
+
+// graphReaches reports whether `to` is reachable from `from` by following
+// dependency edges (graph[x] lists the layers x depends on). Used to keep
+// authored-list-order edge insertion cycle-safe in GlobalLayerOrder.
+func graphReaches(graph map[string][]string, from, to string) bool {
+	if from == to {
+		return true
+	}
+	visited := make(map[string]bool)
+	var dfs func(n string) bool
+	dfs = func(n string) bool {
+		if n == to {
+			return true
+		}
+		if visited[n] {
+			return false
+		}
+		visited[n] = true
+		for _, d := range graph[n] {
+			if dfs(d) {
+				return true
+			}
+		}
+		return false
+	}
+	return dfs(from)
 }
 
 // topoSortByPopularity performs topological sort with popularity tie-breaking.

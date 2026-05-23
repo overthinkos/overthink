@@ -66,6 +66,64 @@ func TestGlobalLayerOrder_RespectsDependencies(t *testing.T) {
 	}
 }
 
+func TestGlobalLayerOrder_RespectsAuthoredListOrder(t *testing.T) {
+	// build-toolchain has NO `require: rpmfusion` (on Arch the codec -devel libs
+	// come from the distro repos, not RPM Fusion), but fedora-builder authors
+	// `layer: [rpmfusion, build-toolchain]` so rpmfusion MUST come first. Here
+	// build-toolchain is the more popular layer (2 images) — which, before the
+	// authored-list-order fix, made the popularity tie-break place it ahead of
+	// rpmfusion (the exact bug that broke fedora-builder in a mixed
+	// arch-builder + fedora-builder submodule).
+	layers := map[string]*Layer{
+		"rpmfusion":       {Name: "rpmfusion"},
+		"build-toolchain": {Name: "build-toolchain"},
+		"pixi":            {Name: "pixi"},
+	}
+	images := map[string]*ResolvedImage{
+		"fedora-builder": {Name: "fedora-builder", Base: "ext:1", IsExternalBase: true, Layer: []string{"rpmfusion", "build-toolchain"}},
+		"arch-builder":   {Name: "arch-builder", Base: "ext:2", IsExternalBase: true, Layer: []string{"build-toolchain", "pixi"}},
+	}
+
+	order, err := GlobalLayerOrder(images, layers)
+	if err != nil {
+		t.Fatalf("GlobalLayerOrder() error = %v", err)
+	}
+
+	indexOf := func(name string) int {
+		for i, n := range order {
+			if n == name {
+				return i
+			}
+		}
+		return -1
+	}
+	if indexOf("rpmfusion") > indexOf("build-toolchain") {
+		t.Errorf("rpmfusion must precede build-toolchain (authored list order), got order %v", order)
+	}
+}
+
+// TestGlobalLayerOrder_ConflictingListOrderFallsBack ensures that when two
+// images author opposite orders for the same pair, the cycle-safe edge
+// insertion falls back to the popularity tie-break instead of erroring.
+func TestGlobalLayerOrder_ConflictingListOrderFallsBack(t *testing.T) {
+	layers := map[string]*Layer{
+		"x": {Name: "x"},
+		"y": {Name: "y"},
+	}
+	images := map[string]*ResolvedImage{
+		"a": {Name: "a", Base: "ext:1", IsExternalBase: true, Layer: []string{"x", "y"}},
+		"b": {Name: "b", Base: "ext:2", IsExternalBase: true, Layer: []string{"y", "x"}},
+	}
+
+	order, err := GlobalLayerOrder(images, layers)
+	if err != nil {
+		t.Fatalf("GlobalLayerOrder() should not error on conflicting authored orders, got %v", err)
+	}
+	if len(order) != 2 {
+		t.Fatalf("expected 2 layers, got %d: %v", len(order), order)
+	}
+}
+
 func TestAbsoluteLayerSequence_WithInternalBase(t *testing.T) {
 	layers := map[string]*Layer{
 		"pixi":    {Name: "pixi", Require: nil},

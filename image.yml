@@ -2,7 +2,7 @@
 #  overthink.yml's `includes:` list. The schema kind discriminator is
 #  `kind: image` for kind-keyed entries; root-shape map is `image:` (this file).
 #  2026-05 kind-files cutover.
-version: 2026.141.1600
+version: 2026.143.844
 image:
     comfyui:
         enabled: false

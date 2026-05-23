@@ -1911,6 +1911,12 @@ func mergeImageConfig(dst, src *ImageConfig) {
 	if dst.Cache == "" {
 		dst.Cache = src.Cache
 	}
+	if dst.KeepImages == nil {
+		dst.KeepImages = src.KeepImages
+	}
+	if dst.KeepEvalRuns == nil {
+		dst.KeepEvalRuns = src.KeepEvalRuns
+	}
 }
 
 // mergeKindDoc routes a kind-keyed single-entity document into the correct

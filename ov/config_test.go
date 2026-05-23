@@ -171,8 +171,16 @@ func TestMergeImageConfig_BuildTunables(t *testing.T) {
 		PodmanJobsCap: intPtr(8),
 		ContextIgnore: []string{"image", ".eval"},
 		Cache:         "image",
+		KeepImages:    intPtr(5),
+		KeepEvalRuns:  intPtr(10),
 	}
 	mergeImageConfig(dst, src)
+	if dst.KeepImages == nil || *dst.KeepImages != 5 {
+		t.Errorf("KeepImages not merged from src: %v", dst.KeepImages)
+	}
+	if dst.KeepEvalRuns == nil || *dst.KeepEvalRuns != 10 {
+		t.Errorf("KeepEvalRuns not merged from src: %v", dst.KeepEvalRuns)
+	}
 	if dst.Jobs == nil || *dst.Jobs != 4 {
 		t.Errorf("Jobs not merged from src: %v", dst.Jobs)
 	}

@@ -42,6 +42,7 @@ type CLI struct {
 	Repo string `long:"repo" env:"OV_PROJECT_REPO" placeholder:"OWNER/REPO[@REF]" help:"Read image.yml from a remote git repo (e.g. overthinkos/overthink). Use 'default' for overthinkos/overthink."`
 
 	Alias       AliasCmd        `cmd:"" help:"Manage command aliases for container images"`
+	Clean       CleanCmd        `cmd:"" help:"Prune reusable build artifacts to defaults: retention (images, eval runs) + sweep one-time makepkg leftovers"`
 	Cmd         CmdCmd          `cmd:"" help:"Run a command in a running container (with notification)"`
 	Config      ImageConfigCmd  `cmd:"" help:"Configure image deployment (setup, secrets, encrypted volumes)"`
 	Deploy      DeployCmd       `cmd:"" help:"Manage deploy.yml deployment overrides"`

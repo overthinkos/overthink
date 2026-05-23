@@ -800,7 +800,7 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 
 	// Minimal labels (no init, no services, no ports)
 	b.WriteString("# Image metadata\n")
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, LabelSchemaVersion))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.Tag))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
 	if img.Registry != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
@@ -1691,8 +1691,11 @@ func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages
 func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedImage) {
 	b.WriteString("# Image metadata\n")
 
-	// Always-present labels
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, LabelSchemaVersion))
+	// Always-present labels. org.overthinkos.version carries the BUILD CalVer
+	// (== the image's tag) — the version the generate run stamped the image
+	// with — so it's meaningful and matches the tag. ExtractMetadata uses it as
+	// the "is this an ov image?" presence sentinel.
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.Tag))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))

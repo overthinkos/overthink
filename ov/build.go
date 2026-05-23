@@ -238,6 +238,19 @@ func (c *BuildCmd) Run() error {
 		}
 	}
 
+	// Reusable-artifact retention: prune old CalVer tags per image down to
+	// defaults.keep_images (in-use images skipped; rmi without -f). Skipped for
+	// push runs. keep_images: 0 / absent disables. See `ov clean`.
+	if !c.Push {
+		if keep := resolveIntPtr(def.KeepImages, nil, keepImagesFallback); keep > 0 {
+			if removed, err := pruneImagesByRetention(engine, keep, false); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: image retention prune: %v\n", err)
+			} else if len(removed) > 0 {
+				fmt.Fprintf(os.Stderr, "Pruned %d old image tag(s) (keep_images=%d)\n", len(removed), keep)
+			}
+		}
+	}
+
 	return nil
 }
 

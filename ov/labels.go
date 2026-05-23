@@ -85,9 +85,6 @@ const (
 	LabelShell = "org.overthinkos.shell"
 )
 
-// LabelSchemaVersion is the current label schema version.
-const LabelSchemaVersion = "1"
-
 // LabelVolume represents a volume in the label JSON (short name form).
 type LabelVolume struct {
 	Name string `json:"name"`

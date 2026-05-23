@@ -67,6 +67,12 @@ tasks:
               fi
               makepkg -sefi --noconfirm
               echo "Installed system-wide via pacman (makepkg in pkg/arch)"
+              # One-time cleanup: the package is already installed via pacman, so
+              # makepkg's src/, pkg/, the built *.pkg.tar.zst, and *.log are pure
+              # transient waste. Always removed immediately so pkg/arch doesn't
+              # accumulate (war-story: 138 stale *.pkg.tar.zst = 1.3G). The
+              # `ov clean` verb sweeps these too. See /ov-core:clean.
+              rm -rf src pkg ./*.pkg.tar.zst ./*.log
               exit 0
             fi
             ;;

@@ -12,6 +12,7 @@ import (
 // LocalImageInfo describes an image present in the engine's local storage.
 // Populated by ListLocalImages from `{podman,docker} images --format json`.
 type LocalImageInfo struct {
+	ID     string            // image ID (sha256:...) — used by `ov clean` to skip in-use images
 	Names  []string          // Full refs: ["ghcr.io/overthinkos/jupyter:latest", ...]
 	Labels map[string]string // OCI labels from the image config
 }
@@ -36,6 +37,12 @@ func defaultListLocalImages(engine string) ([]LocalImageInfo, error) {
 	result := make([]LocalImageInfo, 0, len(rawImages))
 	for _, raw := range rawImages {
 		info := LocalImageInfo{Labels: make(map[string]string)}
+		// Image ID: podman uses "Id", docker uses "ID".
+		if id, ok := raw["Id"].(string); ok {
+			info.ID = id
+		} else if id, ok := raw["ID"].(string); ok {
+			info.ID = id
+		}
 		if names, ok := raw["Names"].([]any); ok {
 			for _, n := range names {
 				if s, ok := n.(string); ok {

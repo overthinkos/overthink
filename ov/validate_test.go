@@ -46,6 +46,10 @@ func TestValidateBuildTunables(t *testing.T) {
 		{"bad cache mode rejected", ImageConfig{Cache: "bogus"}, "cache must be one of"},
 		{"cache none allowed", ImageConfig{Cache: "none"}, ""},
 		{"empty context_ignore entry rejected", ImageConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
+		{"keep_images zero allowed (disabled)", ImageConfig{KeepImages: intPtr(0)}, ""},
+		{"keep_images negative rejected", ImageConfig{KeepImages: intPtr(-1)}, "keep_images must be >= 0"},
+		{"keep_eval_runs valid", ImageConfig{KeepEvalRuns: intPtr(10)}, ""},
+		{"keep_eval_runs negative rejected", ImageConfig{KeepEvalRuns: intPtr(-3)}, "keep_eval_runs must be >= 0"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

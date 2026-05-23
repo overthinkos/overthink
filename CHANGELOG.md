@@ -22,6 +22,54 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Build-artifact cleanup: one-time auto-purge + configurable reusable-artifact retention (`ov clean`, `defaults.keep_images`/`keep_eval_runs`) (additive, no schema bump)
+
+Follow-up to the build-speedup cutover. Investigation found the project tree had
+grown to ~12G of build artifacts from three never-cleaned accumulators: `pkg/arch`
+(1.4G — 138 stale makepkg `*.pkg.tar.zst` + `src/`/`pkg/`, `task build:ov` never
+cleaned up), podman image storage (164GB reclaimable from old CalVer image tags),
+and `.eval/` (1.7G run output). Operator principle: **one-time artifacts are
+always cleaned immediately; reusable artifacts get retention configurable in
+`defaults:`**, with both auto-pruning at creation AND an explicit `ov clean`.
+
+Additive, like the build-speedup keys: optional `defaults:` sub-keys with Go
+fallbacks ⇒ no MigrationStep, no `LatestSchemaVersion` bump.
+
+- **One-time (always immediate):** `task build:ov` now removes makepkg `src/`,
+  `pkg/`, `*.pkg.tar.zst`, `*.log` after install (Taskfile change).
+- **`defaults.keep_images`** — after `ov image build` (push runs excluded),
+  prune all but the newest N CalVer tags per `org.overthinkos.image` group,
+  ordered by the `org.overthinkos.version` label. Safety: skip any image in use
+  by a container (`podman ps -a`), and `rmi` WITHOUT `-f` as a backstop so the
+  engine refuses any still-referenced image. `keep_images: 0`/absent disables.
+- **`defaults.keep_eval_runs`** — after `ov eval run` (any path: bed /
+  `--all-beds` / score), trim `.eval/<bed|score>/` to the newest N run artifacts
+  (CalVer run dirs, `runs/<id>` dirs, `result-<calver>.yml`). `NOTES.md` (durable
+  Syncthing memory) is ALWAYS preserved. `keep_eval_runs: 0`/absent disables.
+- **`ov clean`** — on-demand verb applying the same retention now, plus the
+  makepkg sweep; clears the existing backlog (the 138 `.pkg.tar.zst` + old image
+  tags). `--dry-run` / `--images` / `--eval` / `--keep N`.
+- Repo `overthink.yml` ships `keep_images: 3`, `keep_eval_runs: 3`. Go fallbacks
+  are 0 (disabled) so third-party configs get no surprise pruning.
+
+**Fixed `org.overthinkos.version` (was hardcoded `"1"`).** The label now carries
+the BUILD CalVer — the version the generate run stamped the image with, equal to
+the image's tag (e.g. `2026.143.1234`) — instead of the meaningless
+`LabelSchemaVersion` constant `"1"`. `ExtractMetadata` only ever used this label
+as the "is this an ov image?" presence sentinel, so the value change is safe; the
+dead `LabelSchemaVersion` const was removed (its only two uses were these
+emission sites). Retention orders builds by the CalVer in the image **tag**
+(`extractCalVerTag`), so it works even on images built before this fix (their
+label is still the stale `"1"`).
+
+Implementation: `ov/clean.go` (`pruneImagesByRetention`, `pruneEvalRuns`,
+`cleanMakepkgArtifacts`, `CleanCmd`); hooks in `BuildCmd.Run` / `EvalRunCmd.Run`;
+`LocalImageInfo.ID` added for the in-use skip; same `mergeImageConfig` field-carry
+discipline as the build-speedup keys. VM disks (`output/`, `image/*/output/`) are
+out of scope — single products per type, no accumulation, removed on demand by
+`ov vm destroy --disk`; the VM raw intermediate is already auto-cleaned
+(`vm_cloud_image.go`).
+
 ### 2026-05-23 — Config-driven build-speedup tunables (`defaults.{jobs,podman_jobs,podman_jobs_cap,context_ignore,cache}` + `distro.<name>.dnf` + committed `pixi.lock`) (additive, no schema bump)
 
 A four-part build-speed cutover landed as ONE atomic, **additive** commit. It is

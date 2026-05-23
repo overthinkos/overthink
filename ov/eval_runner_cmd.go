@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -133,6 +134,18 @@ func (c *EvalRunCmd) Run() error {
 	}
 	if !ok || uf == nil {
 		return fmt.Errorf("ov eval run: no overthink.yml in %s", cwd)
+	}
+
+	// Reusable-artifact retention: after the run completes (any path — bed,
+	// --all-beds, or score), trim .eval to defaults.keep_eval_runs. Runs after
+	// the new run's output is written, so the newest run is kept; NOTES.md is
+	// always preserved. keep_eval_runs: 0 / absent disables. See `ov clean`.
+	if keep := resolveIntPtr(uf.Defaults.KeepEvalRuns, nil, keepEvalRunsFallback); keep > 0 {
+		defer func() {
+			if removed, e := pruneEvalRuns(filepath.Join(cwd, ".eval"), keep, false); e == nil && len(removed) > 0 {
+				fmt.Fprintf(os.Stderr, "Pruned %d old eval run artifact(s) (keep_eval_runs=%d)\n", len(removed), keep)
+			}
+		}()
 	}
 
 	// kind:eval bed dispatch — beds and scores share the `ov eval run`

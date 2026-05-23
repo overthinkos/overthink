@@ -156,6 +156,13 @@ type ImageConfig struct {
 	ContextIgnore []string `yaml:"context_ignore,omitempty"` // extra build-context excludes merged into the generated .containerignore/.dockerignore
 	Cache         string   `yaml:"cache,omitempty"`          // default build cache mode (image|registry|gha|none); flag --cache / env OV_BUILD_CACHE wins
 
+	// Reusable-artifact retention (project-wide; authored under defaults:).
+	// keep_images = newest CalVer tags to keep per image after `ov image build`;
+	// keep_eval_runs = newest run dirs to keep per bed/score after `ov eval run`.
+	// 0 (or absent → Go fallback 0) disables pruning. See `ov clean`.
+	KeepImages   *int `yaml:"keep_images,omitempty"`
+	KeepEvalRuns *int `yaml:"keep_eval_runs,omitempty"`
+
 	// Tests are image-level declarative checks (cross-layer invariants).
 	// Entries without explicit scope default to "build" and land in the
 	// image section of the OCI label.

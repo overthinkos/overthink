@@ -48,6 +48,7 @@ Consult this table BEFORE the first tool call of every task. If your task matche
 | Editing `image.yml`, image composition | `/ov-image:image` |
 | `ov image build` / `ov image generate` / Containerfile | `/ov-build:build` + `/ov-build:generate` + `/ov-internals:generate-source` |
 | `ov image validate` / schema error | `/ov-build:validate` |
+| `ov clean` / build-artifact retention / `keep_images` / `keep_eval_runs` / image-tag pruning / `.eval` run cleanup | `/ov-core:clean` |
 | Secret management / `ov secrets` / Secret Service / GPG `.secrets` | `/ov-build:secrets` |
 | `ov migrate` / schema migration / legacy → latest CalVer / CalVer schema version | `/ov-build:migrate` |
 | Hard-cutover concerns / rename sweeps | `/ov-internals:cutover-policy` |

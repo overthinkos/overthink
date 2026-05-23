@@ -899,6 +899,12 @@ func validateBuildTunables(cfg *Config, errs *ValidationError) {
 				errs.Add("%s: context_ignore[%d] must not be empty", name, i)
 			}
 		}
+		if ic.KeepImages != nil && *ic.KeepImages < 0 {
+			errs.Add("%s: keep_images must be >= 0 (0 = disabled), got %d", name, *ic.KeepImages)
+		}
+		if ic.KeepEvalRuns != nil && *ic.KeepEvalRuns < 0 {
+			errs.Add("%s: keep_eval_runs must be >= 0 (0 = disabled), got %d", name, *ic.KeepEvalRuns)
+		}
 	}
 
 	check("defaults", cfg.Defaults)

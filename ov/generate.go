@@ -219,6 +219,14 @@ func (g *Generator) Generate() error {
 		return fmt.Errorf("creating .build directory: %w", err)
 	}
 
+	// Render the build-context ignore files (.containerignore + .dockerignore)
+	// from defaults.context_ignore. The context tar streams to the build
+	// engine on EVERY build regardless of cache state, so excluding heavy
+	// never-COPYed directories is the dominant warm-rebuild win.
+	if err := g.writeContextIgnore(); err != nil {
+		return fmt.Errorf("writing context ignore files: %w", err)
+	}
+
 	// Create symlinks for remote layers in .build/_layers/
 	if err := g.createRemoteLayerCopies(); err != nil {
 		return fmt.Errorf("creating remote layer symlinks: %w", err)
@@ -244,6 +252,80 @@ func (g *Generator) Generate() error {
 		}
 	}
 
+	return nil
+}
+
+// baselineContextIgnore is the always-excluded set written into the generated
+// .containerignore / .dockerignore regardless of project config. It combines
+// the universal VCS/binary excludes (formerly the static .containerignore)
+// with the cache-hygiene globs (formerly the static .dockerignore) that keep
+// editor and Python/Node cruft from busting the build cache. Project-specific
+// heavy directories are layered on top via defaults.context_ignore so a
+// third-party project with no context_ignore still gets sane defaults.
+var baselineContextIgnore = []string{
+	".git",
+	"bin",
+	"ov",
+	"*.md",
+	"**/__pycache__",
+	"**/*.pyc",
+	"**/*.pyo",
+	"**/*.egg-info",
+	"**/node_modules",
+	"**/.git",
+	"**/.DS_Store",
+	"**/*~",
+	"**/*.swp",
+	"**/*.swo",
+	"**/.pytest_cache",
+	"**/.mypy_cache",
+}
+
+// contextIgnoreFiles are the two engine-native build-context ignore files ov
+// generates. podman reads .containerignore (preferring it) or .dockerignore;
+// docker reads only .dockerignore. Emitting both from one source covers both
+// engines with no divergent hand-maintained dotfile.
+var contextIgnoreFiles = []string{".containerignore", ".dockerignore"}
+
+// writeContextIgnore renders the build-context exclude list
+// (baselineContextIgnore + defaults.context_ignore) into BOTH
+// .containerignore and .dockerignore at the project root (the build context
+// root). Single source of values, two render targets — keeps podman and
+// docker builds in lockstep without a hand-maintained dotfile. Insertion
+// order is deterministic (fixed baseline, then author-ordered config),
+// duplicates collapsed.
+func (g *Generator) writeContextIgnore() error {
+	seen := make(map[string]bool)
+	var patterns []string
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" || seen[p] {
+			return
+		}
+		seen[p] = true
+		patterns = append(patterns, p)
+	}
+	for _, p := range baselineContextIgnore {
+		add(p)
+	}
+	if g.Config != nil {
+		for _, p := range g.Config.Defaults.ContextIgnore {
+			add(p)
+		}
+	}
+
+	var b strings.Builder
+	for _, name := range contextIgnoreFiles {
+		b.Reset()
+		fmt.Fprintf(&b, "# %s (generated -- do not edit; source: defaults.context_ignore in overthink.yml)\n", name)
+		for _, p := range patterns {
+			b.WriteString(p)
+			b.WriteByte('\n')
+		}
+		if err := os.WriteFile(filepath.Join(g.Dir, name), []byte(b.String()), 0o644); err != nil {
+			return fmt.Errorf("writing %s: %w", name, err)
+		}
+	}
 	return nil
 }
 
@@ -810,6 +892,30 @@ func (g *Generator) builderRefForFormat(imageName, format string) string {
 	return ""
 }
 
+// renderDnfConfWrite returns a bootstrap-RUN fragment that appends the
+// configured dnf download-speed knobs to /etc/dnf/dnf.conf, terminated with
+// ` && \` so it chains into the rest of the bootstrap RUN. Returns "" when the
+// distro has no dnf config or no knobs set (so non-dnf distros and unset
+// configs emit nothing). The keys land under the file's [main] section
+// (Fedora's stock dnf.conf is [main]-only).
+func renderDnfConfWrite(d *DnfConfig) string {
+	if d == nil {
+		return ""
+	}
+	var lines []string
+	if d.MaxParallelDownloads > 0 {
+		lines = append(lines, fmt.Sprintf("max_parallel_downloads=%d", d.MaxParallelDownloads))
+	}
+	if d.Fastestmirror {
+		lines = append(lines, "fastestmirror=True")
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	body := strings.Join(lines, "\\n") + "\\n"
+	return fmt.Sprintf("printf '%s' >> /etc/dnf/dnf.conf && \\\n    ", body)
+}
+
 // writeBootstrap writes the bootstrap preamble for external base images.
 // All distro-specific behavior is driven by build.yml distro: section config.
 func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
@@ -832,6 +938,14 @@ func (g *Generator) writeBootstrap(b *strings.Builder, img *ResolvedImage) {
 		}
 	}
 	b.WriteString(RenderCacheMounts(cacheMounts, -1, 0, " \\\n    ", true))
+
+	// dnf download tuning (max_parallel_downloads / fastestmirror) → written to
+	// /etc/dnf/dnf.conf BEFORE the bootstrap install, so it speeds up the
+	// bootstrap install itself AND every per-layer dnf install in this image
+	// and its descendants. Speed-only — never changes package selection.
+	if distroDef != nil {
+		b.WriteString(renderDnfConfWrite(distroDef.Dnf))
+	}
 
 	// Install bootstrap packages using distro's install command
 	if distroDef != nil && distroDef.Bootstrap.InstallCmd != "" && len(distroDef.Bootstrap.Package) > 0 {

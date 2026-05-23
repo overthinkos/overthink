@@ -94,6 +94,9 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 	// Validate merge config
 	validateMergeConfig(cfg, errs)
 
+	// Validate build-speed tunables (defaults.jobs / podman_jobs / cache / …)
+	validateBuildTunables(cfg, errs)
+
 	// Validate aliases
 	validateAliases(cfg, layers, errs)
 
@@ -863,6 +866,47 @@ func validateMergeConfig(cfg *Config, errs *ValidationError) {
 			continue
 		}
 		check(fmt.Sprintf("image %q", name), img.Merge)
+	}
+}
+
+// validBuildCacheModes is the allow-list for defaults.cache / image.cache.
+// Empty string means "auto" (resolved at build time in cacheArgs).
+var validBuildCacheModes = map[string]bool{
+	"": true, "image": true, "registry": true, "gha": true, "none": true,
+}
+
+// validateBuildTunables validates the build-speed knobs on defaults: and any
+// image entry: jobs >= 1, podman_jobs >= 0, podman_jobs_cap >= 1, cache in
+// the allow-list, and no empty context_ignore entries. These are project-wide
+// defaults; values are validated wherever they appear so a typo surfaces at
+// `ov image validate` rather than silently mis-driving a build.
+func validateBuildTunables(cfg *Config, errs *ValidationError) {
+	check := func(name string, ic ImageConfig) {
+		if ic.Jobs != nil && *ic.Jobs < 1 {
+			errs.Add("%s: jobs must be >= 1, got %d", name, *ic.Jobs)
+		}
+		if ic.PodmanJobs != nil && *ic.PodmanJobs < 0 {
+			errs.Add("%s: podman_jobs must be >= 0, got %d", name, *ic.PodmanJobs)
+		}
+		if ic.PodmanJobsCap != nil && *ic.PodmanJobsCap < 1 {
+			errs.Add("%s: podman_jobs_cap must be >= 1, got %d", name, *ic.PodmanJobsCap)
+		}
+		if !validBuildCacheModes[ic.Cache] {
+			errs.Add("%s: cache must be one of image|registry|gha|none, got %q", name, ic.Cache)
+		}
+		for i, p := range ic.ContextIgnore {
+			if strings.TrimSpace(p) == "" {
+				errs.Add("%s: context_ignore[%d] must not be empty", name, i)
+			}
+		}
+	}
+
+	check("defaults", cfg.Defaults)
+	for name, img := range cfg.Image {
+		if !img.IsEnabled() {
+			continue
+		}
+		check(fmt.Sprintf("image %q", name), img)
 	}
 }
 

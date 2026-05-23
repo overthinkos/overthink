@@ -30,6 +30,44 @@ func TestValidateSuccess(t *testing.T) {
 	}
 }
 
+func TestValidateBuildTunables(t *testing.T) {
+	cases := []struct {
+		name    string
+		ic      ImageConfig
+		wantErr string // substring; "" = expect no error
+	}{
+		{"all unset is valid", ImageConfig{}, ""},
+		{"valid full set", ImageConfig{Jobs: intPtr(4), PodmanJobs: intPtr(0), PodmanJobsCap: intPtr(8), Cache: "image", ContextIgnore: []string{"image", ".eval"}}, ""},
+		{"jobs zero rejected", ImageConfig{Jobs: intPtr(0)}, "jobs must be >= 1"},
+		{"jobs negative rejected", ImageConfig{Jobs: intPtr(-2)}, "jobs must be >= 1"},
+		{"podman_jobs negative rejected", ImageConfig{PodmanJobs: intPtr(-1)}, "podman_jobs must be >= 0"},
+		{"podman_jobs zero allowed (auto)", ImageConfig{PodmanJobs: intPtr(0)}, ""},
+		{"podman_jobs_cap zero rejected", ImageConfig{PodmanJobsCap: intPtr(0)}, "podman_jobs_cap must be >= 1"},
+		{"bad cache mode rejected", ImageConfig{Cache: "bogus"}, "cache must be one of"},
+		{"cache none allowed", ImageConfig{Cache: "none"}, ""},
+		{"empty context_ignore entry rejected", ImageConfig{ContextIgnore: []string{"image", "  "}}, "context_ignore[1] must not be empty"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := &Config{Defaults: tc.ic, Image: map[string]ImageConfig{}}
+			errs := &ValidationError{}
+			validateBuildTunables(cfg, errs)
+			if tc.wantErr == "" {
+				if errs.HasErrors() {
+					t.Errorf("expected no error, got: %v", errs.Errors)
+				}
+				return
+			}
+			if !errs.HasErrors() {
+				t.Fatalf("expected error containing %q, got none", tc.wantErr)
+			}
+			if !strings.Contains(strings.Join(errs.Errors, "\n"), tc.wantErr) {
+				t.Errorf("expected error containing %q, got: %v", tc.wantErr, errs.Errors)
+			}
+		})
+	}
+}
+
 func TestValidateInvalidPkg(t *testing.T) {
 	cfg := &Config{
 		Defaults: ImageConfig{

@@ -1894,6 +1894,23 @@ func mergeImageConfig(dst, src *ImageConfig) {
 	if dst.Init == "" {
 		dst.Init = src.Init
 	}
+	// Build-speed tunables (defaults: block) — carried through the same
+	// per-field "dst wins if set" merge as the rest of ImageConfig.
+	if dst.Jobs == nil {
+		dst.Jobs = src.Jobs
+	}
+	if dst.PodmanJobs == nil {
+		dst.PodmanJobs = src.PodmanJobs
+	}
+	if dst.PodmanJobsCap == nil {
+		dst.PodmanJobsCap = src.PodmanJobsCap
+	}
+	if len(dst.ContextIgnore) == 0 {
+		dst.ContextIgnore = src.ContextIgnore
+	}
+	if dst.Cache == "" {
+		dst.Cache = src.Cache
+	}
 }
 
 // mergeKindDoc routes a kind-keyed single-entity document into the correct

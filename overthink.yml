@@ -39,3 +39,19 @@ defaults:
         cargo: fedora-builder
         npm: fedora-builder
         pixi: fedora-builder
+    # Build-speed tunables (project-wide). Precedence: CLI flag / env wins,
+    # then these defaults, then a built-in fallback. See /ov-build:build.
+    jobs: 4 # outer: concurrent IMAGE builds per DAG level (--jobs / OV_BUILD_JOBS)
+    podman_jobs: 0 # inner: stages per `podman build`; 0 = auto = min(NCPU, podman_jobs_cap)
+    podman_jobs_cap: 8 # ceiling for the auto calc — proven safe on podman 5.8.2 (20-run race gate)
+    # Heavy directories never COPYed by any Containerfile — merged into the
+    # generated .containerignore/.dockerignore on top of the built-in baseline
+    # (.git, bin, ov, *.md, editor/python/node cache-bust globs).
+    context_ignore:
+        - image
+        - .eval
+        - output
+        - pkg
+        - tests
+        - .regression-snapshot
+    cache: image # default build cache mode (image local read / registry read+write)

@@ -244,3 +244,43 @@ func TestLoadBuildConfigForImageFallback(t *testing.T) {
 		t.Error("expected distro config from default ref")
 	}
 }
+
+func TestDnfConfigParse(t *testing.T) {
+	var d DistroDef
+	if err := yaml.Unmarshal([]byte("dnf:\n  max_parallel_downloads: 10\n  fastestmirror: true\n"), &d); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if d.Dnf == nil {
+		t.Fatal("expected Dnf parsed")
+	}
+	if d.Dnf.MaxParallelDownloads != 10 || !d.Dnf.Fastestmirror {
+		t.Errorf("Dnf = %+v, want {10 true}", *d.Dnf)
+	}
+}
+
+// TestDnfConfigInherit verifies a child distro inherits the parent's Dnf when
+// it declares none, and its own Dnf wins when set — same per-field merge as
+// the other DistroDef sub-blocks (BaseUser, Pacstrap, …).
+func TestDnfConfigInherit(t *testing.T) {
+	dc := &DistroConfig{Distro: map[string]*DistroDef{
+		"fedora": {
+			Bootstrap: BootstrapDef{InstallCmd: "dnf install -y"},
+			Dnf:       &DnfConfig{MaxParallelDownloads: 10, Fastestmirror: true},
+		},
+		"fedora-child":  {Inherits: "fedora"},                                  // no own Dnf → inherits
+		"fedora-child2": {Inherits: "fedora", Dnf: &DnfConfig{MaxParallelDownloads: 3}}, // own Dnf wins
+	}}
+
+	got := dc.ResolveDistro([]string{"fedora-child"})
+	if got == nil || got.Dnf == nil {
+		t.Fatal("expected inherited Dnf on child")
+	}
+	if got.Dnf.MaxParallelDownloads != 10 || !got.Dnf.Fastestmirror {
+		t.Errorf("inherited Dnf = %+v, want {10 true}", *got.Dnf)
+	}
+
+	got2 := dc.ResolveDistro([]string{"fedora-child2"})
+	if got2 == nil || got2.Dnf == nil || got2.Dnf.MaxParallelDownloads != 3 {
+		t.Errorf("child's own Dnf should win, got %+v", got2.Dnf)
+	}
+}

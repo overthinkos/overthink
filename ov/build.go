@@ -28,9 +28,15 @@ type BuildCmd struct {
 	Platform        string   `long:"platform" help:"Target platform (default: host platform)"`
 	Cache           string   `long:"cache" help:"Build cache type: registry, image, gha, none (default: auto)" env:"OV_BUILD_CACHE"`
 	NoCache         bool     `long:"no-cache" help:"Disable build cache entirely"`
-	Jobs            int      `long:"jobs" help:"Max concurrent image builds per level (default: 4)" default:"4"`
-	PodmanJobs      int      `long:"podman-jobs" help:"Override --jobs passed to podman build (0=auto, default min(NCPU,4)). Capped because podman-5.7.x races under high concurrency with --cache-from on multi-stage builds." env:"OV_PODMAN_JOBS"`
+	Jobs            int      `long:"jobs" help:"Max concurrent image builds per DAG level (0=auto: defaults.jobs, else 4)" env:"OV_BUILD_JOBS"`
+	PodmanJobs      int      `long:"podman-jobs" help:"Stages per podman build (0=auto: min(NCPU, defaults.podman_jobs_cap))" env:"OV_PODMAN_JOBS"`
 	IncludeDisabled bool     `long:"include-disabled" help:"Build images with enabled: false in image.yml (does not modify the file). Use for one-off operational rebuilds without flipping authored config."`
+
+	// podmanJobsCap is the resolved ceiling for the auto podman-jobs calc,
+	// sourced from defaults.podman_jobs_cap in Run() (0 → podmanJobsCapFallback).
+	// Not a CLI flag — the cap is a project-wide config knob; per-build
+	// overrides go through --podman-jobs / OV_PODMAN_JOBS.
+	podmanJobsCap int
 }
 
 // ensureBuilderImageBuilt resolves an internal builder-image name to its newest
@@ -48,7 +54,7 @@ func ensureBuilderImageBuilt(engine, builderRef string) (string, error) {
 		return resolved, nil
 	}
 	fmt.Fprintf(os.Stderr, "Builder image %q not in local storage — building it automatically...\n", builderRef)
-	bc := &BuildCmd{Images: []string{builderRef}, Jobs: 4, IncludeDisabled: true}
+	bc := &BuildCmd{Images: []string{builderRef}, IncludeDisabled: true}
 	if err := bc.Run(); err != nil {
 		return "", fmt.Errorf("auto-building builder image %q: %w", builderRef, err)
 	}
@@ -107,6 +113,21 @@ func (c *BuildCmd) Run() error {
 		return fmt.Errorf("generating build files: %w", err)
 	}
 
+	// Resolve build-speed tunables from defaults: (the CLI flag / env layer
+	// already populated these BuildCmd fields when set; fill the gaps from
+	// project config — a named fallback applies later if config is silent too).
+	def := gen.Config.Defaults
+	if c.Jobs == 0 {
+		c.Jobs = resolveIntPtr(def.Jobs, nil, 0)
+	}
+	if c.PodmanJobs == 0 {
+		c.PodmanJobs = resolveIntPtr(def.PodmanJobs, nil, 0)
+	}
+	c.podmanJobsCap = resolveIntPtr(def.PodmanJobsCap, nil, 0)
+	if c.Cache == "" {
+		c.Cache = def.Cache
+	}
+
 	if err := ensureOvBinaryFresh(dir, gen.Images, c.Images); err != nil {
 		return fmt.Errorf("refreshing ov binary: %w", err)
 	}
@@ -152,7 +173,7 @@ func (c *BuildCmd) Run() error {
 
 		jobs := c.Jobs
 		if jobs < 1 {
-			jobs = 1
+			jobs = jobsFallback
 		}
 
 		for i, level := range levels {
@@ -504,34 +525,40 @@ func (c *BuildCmd) pushImage(dir string, tags []string) error {
 	return nil
 }
 
-// podmanJobsDefault is the maximum number of concurrent stage builds ov
-// asks podman to run inside a single `podman build` invocation. The cap
-// exists because podman-5.7.x's storage backend races under high concurrency
-// during multi-stage builds with --cache-from: when many goroutines call
-// into storageImageDestination.TryReusingBlobWithOptions and queueOrCommit
-// at the same time, the shared state gets corrupted and the process aborts
-// with SIGABRT. Observed reproducibly on selkies-desktop (29-stage DAG)
-// with --jobs runtime.NumCPU() (16 on a 16-core host) and --cache-from.
-// Four is chosen as a balance: still meaningful parallelism for typical
-// builds, narrow enough race window that the bug has not been observed
-// to fire in practice. Override via --podman-jobs or OV_PODMAN_JOBS.
-const podmanJobsDefault = 4
+// podmanJobsCapFallback is the ceiling on the auto-computed
+// `podman build --jobs` value, used ONLY when defaults.podman_jobs_cap is
+// absent from project config. The operative ceiling is
+// overthink.yml `defaults.podman_jobs_cap`; this conservative constant just
+// keeps configs that don't declare the key on a safe value. The per-build
+// override is --podman-jobs / OV_PODMAN_JOBS. (See CHANGELOG.md for the
+// podman-5.7.x blob-reuse SIGABRT race that originally motivated a hard cap.)
+const podmanJobsCapFallback = 4
+
+// jobsFallback is the outer image-level concurrency (images per DAG level)
+// used when neither --jobs / OV_BUILD_JOBS nor defaults.jobs is set.
+const jobsFallback = 4
 
 // numCPU is a package-level alias for runtime.NumCPU so tests can inject
 // a fixed value via the init in build_jobs_test.go.
 var numCPU = runtime.NumCPU
 
 // resolvePodmanJobs returns the --jobs value to pass to `podman build`.
-// If override > 0, it wins. Otherwise returns min(numCPU(), podmanJobsDefault).
-func resolvePodmanJobs(override int) int {
+// An explicit override (>0, from --podman-jobs / OV_PODMAN_JOBS /
+// defaults.podman_jobs) wins. Otherwise the value is CPU-proportional,
+// capped at `cap` (defaults.podman_jobs_cap, else podmanJobsCapFallback):
+// min(numCPU(), cap). A cap < 1 falls back to podmanJobsCapFallback.
+func resolvePodmanJobs(override, jobsCap int) int {
 	if override > 0 {
 		return override
 	}
+	if jobsCap < 1 {
+		jobsCap = podmanJobsCapFallback
+	}
 	n := numCPU()
-	if n < podmanJobsDefault {
+	if n < jobsCap {
 		return n
 	}
-	return podmanJobsDefault
+	return jobsCap
 }
 
 // buildLocalArgs constructs args for a local (single-platform, load into store) build.
@@ -545,7 +572,7 @@ func (c *BuildCmd) buildLocalArgs(engine string, tags []string, platform, name, 
 		args = append(args, "--platform", platform)
 	}
 	if engine == "podman" {
-		args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs)))
+		args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs, c.podmanJobsCap)))
 	}
 	args = append(args, c.cacheArgs(name, registry, engine)...)
 	args = append(args, ".")
@@ -637,7 +664,7 @@ func (c *BuildCmd) buildPodmanPushArgs(tags []string, platforms []string, name, 
 	if len(platforms) > 0 {
 		args = append(args, "--platform", strings.Join(platforms, ","))
 	}
-	args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs)))
+	args = append(args, "--jobs", strconv.Itoa(resolvePodmanJobs(c.PodmanJobs, c.podmanJobsCap)))
 	args = append(args, c.cacheArgs(name, registry, "podman")...)
 	args = append(args, ".")
 	return args

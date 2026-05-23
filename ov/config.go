@@ -145,6 +145,17 @@ type ImageConfig struct {
 	Init      string          `yaml:"init,omitempty"`       // explicit init system override ("supervisord", "systemd", "")
 	DataImage bool            `yaml:"data_image,omitempty"` // true = scratch-based data-only image (no runtime, no init)
 
+	// Build-speed tunables — authored under `defaults:` (project-wide build
+	// knobs, not per-image-output settings). The CLI flag / env layer wins,
+	// then these `defaults:` values, then a named Go fallback (see build.go
+	// jobsFallback / podmanJobsCapFallback). Pointers distinguish "unset"
+	// from a deliberate zero so the precedence chain is exact.
+	Jobs          *int     `yaml:"jobs,omitempty"`            // outer: concurrent IMAGE builds per DAG level (flag --jobs / env OV_BUILD_JOBS)
+	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`    // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env OV_PODMAN_JOBS)
+	PodmanJobsCap *int     `yaml:"podman_jobs_cap,omitempty"` // ceiling for the auto podman-jobs calc: min(NCPU, cap)
+	ContextIgnore []string `yaml:"context_ignore,omitempty"` // extra build-context excludes merged into the generated .containerignore/.dockerignore
+	Cache         string   `yaml:"cache,omitempty"`          // default build cache mode (image|registry|gha|none); flag --cache / env OV_BUILD_CACHE wins
+
 	// Tests are image-level declarative checks (cross-layer invariants).
 	// Entries without explicit scope default to "build" and land in the
 	// image section of the OCI label.

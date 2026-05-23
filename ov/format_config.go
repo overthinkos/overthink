@@ -39,6 +39,19 @@ type DistroDef struct {
 	// generation. Distinct from bootc-VM which handles its own bootloader
 	// install internally via `bootc install to-disk`.
 	Bootloader *BootloaderDef `yaml:"bootloader,omitempty"`
+
+	// Dnf tunes dnf download behaviour for dnf-based distros (fedora). Nil on
+	// non-dnf distros. Rendered into /etc/dnf/dnf.conf during the bootstrap.
+	Dnf *DnfConfig `yaml:"dnf,omitempty"`
+}
+
+// DnfConfig holds dnf download-speed knobs written to /etc/dnf/dnf.conf during
+// the bootstrap, so they apply uniformly to the bootstrap install AND every
+// per-layer dnf install in this image and its descendants. These are
+// SPEED-only settings — they never change which packages are selected.
+type DnfConfig struct {
+	MaxParallelDownloads int  `yaml:"max_parallel_downloads,omitempty"` // dnf max_parallel_downloads (concurrent package downloads)
+	Fastestmirror        bool `yaml:"fastestmirror,omitempty"`          // dnf fastestmirror (sort mirrors by measured speed)
 }
 
 // PacstrapDef configures pacstrap-flavored bootstrap (Arch, CachyOS).
@@ -278,6 +291,10 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 	if bootloader == nil {
 		bootloader = resolved.Bootloader
 	}
+	dnf := def.Dnf
+	if dnf == nil {
+		dnf = resolved.Dnf
+	}
 
 	if def.Bootstrap.InstallCmd != "" {
 		// Child has its own bootstrap. Merge inherited optional sub-blocks
@@ -296,6 +313,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 			Debootstrap:     debootstrap,
 			AlpineBootstrap: alpineBootstrap,
 			Bootloader:      bootloader,
+			Dnf:             dnf,
 		}
 		return merged
 	}
@@ -315,6 +333,7 @@ func (dc *DistroConfig) resolveInherits(def *DistroDef, maxDepth int) *DistroDef
 		Debootstrap:     debootstrap,
 		AlpineBootstrap: alpineBootstrap,
 		Bootloader:      bootloader,
+		Dnf:             dnf,
 	}
 	return merged
 }

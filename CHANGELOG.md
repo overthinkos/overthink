@@ -22,6 +22,86 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Config-driven build-speedup tunables (`defaults.{jobs,podman_jobs,podman_jobs_cap,context_ignore,cache}` + `distro.<name>.dnf` + committed `pixi.lock`) (additive, no schema bump)
+
+A four-part build-speed cutover landed as ONE atomic, **additive** commit. It is
+deliberately NOT a schema change: every new key is an optional sub-key of an
+existing kind (`defaults:` / `distro:`) with a Go fallback, so per the
+cutover-policy skill ("purely additive ⇒ no cutover") there is no
+`MigrationStep`, no `LatestSchemaVersion()` bump, and no load-time gate — old
+configs keep loading via fallbacks, and third-party configs are never forced to
+run `ov migrate` for keys they don't use.
+
+**Item 1 — build-context excludes (`defaults.context_ignore`).** The static
+hand-maintained `.containerignore` (`​.git bin ov *.md`) and `.dockerignore`
+(editor/python/node cache-bust globs) were **deleted** and are now GENERATED at
+the project root by `ov image generate` (`writeContextIgnore` in
+`ov/generate.go`) from a single source: a Go baseline (the union of both former
+dotfiles) plus `defaults.context_ignore`. Both engine files are emitted from one
+value set (podman reads `.containerignore`, docker reads `.dockerignore`), and
+both are now gitignored. The repo's `context_ignore` adds the heavy never-COPYed
+directories `image/` (3.5 GB submodules), `.eval/`, `output/`, `pkg/`, `tests/`,
+`.regression-snapshot/` — ~7.3 GB that previously streamed into the context tar
+on EVERY build regardless of cache state. Confirmed via grep that no generated
+Containerfile COPY/ADDs from any excluded directory (only `layers/`,
+`templates/`, `.build/`).
+
+**Item 2 — config-driven parallelism (`defaults.{jobs,podman_jobs,podman_jobs_cap}`).**
+The hard-coded `const podmanJobsDefault = 4` was removed and replaced by
+`resolvePodmanJobs(override, cap)`, where the cap comes from
+`defaults.podman_jobs_cap` (named fallback `podmanJobsCapFallback = 4` only when
+the key is wholly absent). The outer image-level concurrency reads
+`defaults.jobs` (fallback `jobsFallback = 4`). The missing `env:"OV_BUILD_JOBS"`
+binding on `--jobs` was added (doc/code drift the build SKILL had documented but
+the struct tag lacked). Precedence everywhere: CLI flag → env → `defaults:` →
+fallback. The repo ships `podman_jobs_cap: 8`, proven safe by the 20-run race
+gate below.
+
+*Relocated incident (formerly the `podmanJobsDefault` comment in
+`ov/build.go`):* the cap originally existed because podman-5.7.x's storage
+backend raced under high concurrency during multi-stage builds with
+`--cache-from` — many goroutines calling
+`storageImageDestination.TryReusingBlobWithOptions` and `queueOrCommit`
+concurrently corrupted shared state and aborted with SIGABRT, observed
+reproducibly on `selkies-desktop` (29-stage DAG) with `--jobs runtime.NumCPU()`
+(16 on a 16-core host) and `--cache-from`. Four was chosen as a balance. The
+host is now podman 5.8.2; the cutover's mandatory 20-run race gate
+(`--podman-jobs 16` × 10 warm builds each of `fedora-coder` + `selkies-desktop`,
+the exact old trigger) is the precondition for shipping any cap > 4.
+
+**Item 3 — committed `pixi.lock` for all 15 pixi layers.** The
+`pixi install --frozen` fast-path was already fully wired (`build.yml` install
+command map, `HasPixiLock` detection, the stage template's conditional
+`COPY pixi.lock`); only the lock artifacts were missing, so generation emitted
+plain `pixi install` (a full SAT solve over ~300 deps across conda-forge +
+multiple PyPI indexes on every cache miss). A `pixi.lock` is now committed next
+to every `layers/*/pixi.toml`, generated with the builder's own pixi (0.69.0)
+and the same `[system-requirements] glibc 2.39` manylinux fix the build stage
+applies, so the committed lock matches what `--frozen` installs. Generation
+auto-flips to `pixi install --frozen` (no Go change). Lock drift is caught
+loudly — `--frozen` fails the build if a lock is stale, so a future `pixi.toml`
+edit without regenerating the lock is a hard build error, not a silent skew.
+
+**Item 4 — dnf download tuning (`distro.<name>.dnf`).** A new optional
+`DnfConfig` (`max_parallel_downloads`, `fastestmirror`) on `DistroDef` is
+written to `/etc/dnf/dnf.conf` during the bootstrap (`renderDnfConfWrite` in
+`ov/generate.go`), so it speeds up the bootstrap install AND every per-layer dnf
+install in the image + descendants. These are SPEED-only knobs — they never
+change package selection, so `install_weak_deps` stays exactly as the existing
+bootstrap `--setopt=install_weak_deps=False` (unchanged) to keep the cutover
+purely additive. `build.yml distro.fedora.dnf` ships `max_parallel_downloads:
+10`, `fastestmirror: true`. The block inherits across distro inheritance like
+the other `DistroDef` sub-blocks.
+
+**Regression caught during implementation:** `mergeImageConfig` (`ov/unified.go`)
+is a hand-maintained field-by-field merger for the `defaults:` block; the five
+new `ImageConfig` fields were initially dropped after the unified loader merged
+the flat imports, so `defaults.context_ignore` authored in `overthink.yml` never
+reached the generator (the YAML parsed but the runtime value was empty). Fixed
+by adding the fields to the merger in-pattern; guarded by
+`TestMergeImageConfig_BuildTunables`. This is the canonical reminder that adding
+any `ImageConfig` field requires updating `mergeImageConfig`.
+
 ### 2026-05-23 — Replace `include:` with a Go-style `import:` namespace system; combine the base files into `base.yml`; single-file image submodules; ecosystem-wide deploy→eval beds (breaking, schema 2026.143.844)
 
 The `include:` YAML composition key was **deleted** and replaced by a single

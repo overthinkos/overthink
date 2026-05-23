@@ -612,6 +612,14 @@ distro:
                   sharing: locked
         workaround:
             - rm -f /etc/yum.repos.d/terra-mesa.repo 2>/dev/null || true
+        # dnf download-speed tuning written to /etc/dnf/dnf.conf during the
+        # bootstrap (applies to the bootstrap install AND every per-layer dnf
+        # install in this image + descendants). Speed-only — never changes
+        # which packages are selected (install_weak_deps stays on the bootstrap
+        # install_cmd --setopt above, unchanged).
+        dnf:
+            max_parallel_downloads: 10
+            fastestmirror: true
         format:
             rpm:
                 cache_mount:

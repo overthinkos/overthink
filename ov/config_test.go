@@ -156,6 +156,50 @@ func TestResolveImageNotFound(t *testing.T) {
 	}
 }
 
+// TestMergeImageConfig_BuildTunables guards the regression where new
+// ImageConfig fields are silently dropped during the unified loader's
+// defaults: merge because mergeImageConfig is a hand-maintained field-by-field
+// merger. The build-speed tunables (jobs / podman_jobs / podman_jobs_cap /
+// context_ignore / cache) MUST survive the merge, or defaults.context_ignore
+// authored in overthink.yml never reaches the generator.
+func TestMergeImageConfig_BuildTunables(t *testing.T) {
+	// dst empty → fills from src (the path that dropped these fields).
+	dst := &ImageConfig{}
+	src := &ImageConfig{
+		Jobs:          intPtr(4),
+		PodmanJobs:    intPtr(0),
+		PodmanJobsCap: intPtr(8),
+		ContextIgnore: []string{"image", ".eval"},
+		Cache:         "image",
+	}
+	mergeImageConfig(dst, src)
+	if dst.Jobs == nil || *dst.Jobs != 4 {
+		t.Errorf("Jobs not merged from src: %v", dst.Jobs)
+	}
+	if dst.PodmanJobs == nil || *dst.PodmanJobs != 0 {
+		t.Errorf("PodmanJobs (explicit 0) not merged from src: %v", dst.PodmanJobs)
+	}
+	if dst.PodmanJobsCap == nil || *dst.PodmanJobsCap != 8 {
+		t.Errorf("PodmanJobsCap not merged from src: %v", dst.PodmanJobsCap)
+	}
+	if len(dst.ContextIgnore) != 2 {
+		t.Errorf("ContextIgnore not merged from src: %v", dst.ContextIgnore)
+	}
+	if dst.Cache != "image" {
+		t.Errorf("Cache not merged from src: %q", dst.Cache)
+	}
+
+	// dst already set → src must NOT override (per-field "dst wins if set").
+	dst2 := &ImageConfig{Jobs: intPtr(2), Cache: "registry"}
+	mergeImageConfig(dst2, &ImageConfig{Jobs: intPtr(9), Cache: "image"})
+	if dst2.Jobs == nil || *dst2.Jobs != 2 {
+		t.Errorf("dst Jobs should win, got %v", dst2.Jobs)
+	}
+	if dst2.Cache != "registry" {
+		t.Errorf("dst Cache should win, got %q", dst2.Cache)
+	}
+}
+
 func TestImageNames(t *testing.T) {
 	cfg, err := LoadConfig("testdata")
 	if err != nil {

@@ -23,3 +23,6 @@
 [submodule "image/bootc"]
 	path = image/bootc
 	url = https://github.com/overthinkos/bootc.git
+[submodule "image/nvidia"]
+	path = image/nvidia
+	url = https://github.com/overthinkos/nvidia.git

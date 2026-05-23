@@ -6,7 +6,7 @@ version: 2026.143.844
 image:
     comfyui:
         enabled: false
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:
@@ -142,7 +142,7 @@ image:
               exit_status: 0
     jupyter-ml:
         enabled: true
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:
@@ -155,7 +155,7 @@ image:
             - 8888:8888
     jupyter-ml-notebook:
         enabled: false
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:
@@ -380,17 +380,9 @@ image:
               in_container: true
               stdout:
                 - matches: "[1-9][0-9]{4,}" # >=10KB rendered ipynb (matches the 18KB observed live)
-    nvidia:
-        base: fedora-nonfree
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - nvidia
-            - cuda
     ollama:
         enabled: false
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:
@@ -553,14 +545,6 @@ image:
               scope: deploy
               in_container: true
               exit_status: 0
-    python-ml:
-        enabled: false
-        base: nvidia
-        platform:
-            - linux/amd64
-        layer:
-            - agent-forwarding
-            - python-ml
     selkies-desktop:
         base: cachyos.cachyos
         builder:
@@ -594,7 +578,7 @@ image:
               reachable: true
     selkies-desktop-nvidia:
         enabled: false
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:
@@ -656,7 +640,7 @@ image:
               artifact_min_bytes: 5000
     unsloth-studio:
         enabled: false
-        base: nvidia
+        base: nvidia.nvidia
         platform:
             - linux/amd64
         layer:

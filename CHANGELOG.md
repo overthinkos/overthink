@@ -22,6 +22,39 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Extract the NVIDIA GPU base family (`nvidia` + `python-ml`) into the `overthinkos/nvidia` submodule (content cutover, no schema bump)
+
+First family in the program to move *images* (not just distro layers) out of the
+main repo into a dedicated `image/<family>` submodule, continuing the
+arch/cachyos/fedora/debian/ubuntu/bootc precedent. The two GPU base images moved
+to `overthinkos/nvidia` (mounted at `image/nvidia`):
+
+- `nvidia` — GPU base (`base: ov.fedora-nonfree` + the `nvidia` + `cuda` layers)
+- `python-ml` — GPU ML Python env (PyTorch/transformers/vLLM/llama.cpp), disabled
+
+**The GPU runtime *layers* stayed in main.** `nvidia`, `cuda`, `python-ml`, and
+`llama-cpp` are shared infrastructure consumed across many families (`versa`,
+`immich-ml`, `jupyter-ml`, `comfyui`, `unsloth-studio`, `whisper`, `marimo`) and
+by the arch/cachyos/fedora/bootc base submodules, so by the shared-layer rule
+they remain in `main/layers/` and are reached from the submodule by `@github`
+ref. The new submodule therefore **vendors nothing** — it pins layers + build.yml
+to the ecosystem tag `v2026.141.1600` and imports main under the `ov` namespace at
+`v2026.143.844` (for `ov.fedora-nonfree` + `ov.fedora-builder`).
+
+**Mutual import (like cachyos).** main now imports `nvidia:
+'@github.com/overthinkos/nvidia:v2026.143.1840'` and its six GPU pod families
+(`comfyui`, `jupyter-ml`, `jupyter-ml-notebook`, `ollama`,
+`selkies-desktop-nvidia`, `unsloth-studio`) root on `base: nvidia.nvidia`; the
+nvidia repo imports main under `ov`. The cycle is broken at load.
+
+No schema change (relocation only): no `MigrationStep`, no `version:` bump
+(stays `2026.143.844`); each repo carries a fresh per-push `v<CalVer>` tag.
+
+R10 (build-scope floor on a no-GPU host): `nvidia` built →
+`ov eval image` 11/0/0 (nvcc, cudnn.h); `python-ml` built →
+`ov eval image` 14/0/0 (torch + vllm importable). GPU runtime probes
+(`nvidia-smi`, `torch.cuda.is_available()`) deferred to a GPU host.
+
 ### 2026-05-23 — Relocate single-repo layers into their owning `image/<distro>` submodules + enable all submodule images (content cutover, no schema bump)
 
 Reversed the "vendors nothing" stance for layers used by exactly one repo: every

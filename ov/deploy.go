@@ -1055,7 +1055,7 @@ func vmEntityForDeploy(deployName string) string {
 // no entry declares one (the key==image convention). Before this was
 // shared, `ov config` resolved key→image but `ov start`/`ov shell`/
 // `ov eval live` treated the key AS the image — so a kind:eval bed
-// (eval-image-pod → eval-image) or any Pattern-B deploy resolved a
+// (eval-jupyter-pod → jupyter) or any Pattern-B deploy resolved a
 // different (wrong/unresolvable) image per command. `ov update` reaches the
 // same value via its already-resolved merged-tree node (node.Image), so it
 // reads that directly rather than re-loading config here.

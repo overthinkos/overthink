@@ -48,7 +48,7 @@ func CollectSecurity(cfg *Config, layers map[string]*Layer, imageName string) Se
 			merged.CgroupNS = sec.CgroupNS
 		}
 		if sec.IpcMode != "" {
-			// Same last-writer semantics as CgroupNS. The eval-pod
+			// Same last-writer semantics as CgroupNS. The harness sandbox
 			// declares ipc_mode: host so the nested-podman child can
 			// share /dev/shm with the host (chrome / large-shm
 			// workloads). When this is set, the quadlet generator

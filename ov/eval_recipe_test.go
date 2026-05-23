@@ -15,13 +15,13 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestResolveScoreTarget_ExactlyOnePod(t *testing.T) {
-	s := &HarnessScore{Pod: "eval-pod"}
+	s := &HarnessScore{Pod: "sample-pod"}
 	k, n, err := ResolveScoreTarget(s)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if k != TargetKindPod || n != "eval-pod" {
-		t.Errorf("got (%s, %s), want (pod, eval-pod)", k, n)
+	if k != TargetKindPod || n != "sample-pod" {
+		t.Errorf("got (%s, %s), want (pod, sample-pod)", k, n)
 	}
 }
 

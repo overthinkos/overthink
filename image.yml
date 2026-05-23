@@ -794,39 +794,15 @@ image:
               id: composition-source-marker
               exit_status: 0
     # =================================================================
-    # Per-kind R10 smoke beds (eval-image / eval-layer / eval-pod /
-    # eval-deploy). All four use fedora-minimal:43 for fast rebuild
-    # cycles. Together with the eval-local kind:local template, they
-    # exercise one entity per kind so a single
-    # `ov eval live <bed>` run smoke-tests every kind path end-to-end.
+    # eval-pod — combined fast R10 mechanism fixture (fedora-minimal:43).
+    # Two layers cover four pipeline mechanisms in one disposable bed:
+    # kind:image build (markers), kind:layer composition order
+    # (eval-stack-layer asserts eval-base-layer's marker survived),
+    # kind:pod runtime (nc on :18794 + supervisord), and DeployTarget
+    # rendering (supervisord sleep service). Together with the eval-local
+    # kind:local template it smoke-tests every container-side kind path
+    # end-to-end via `ov eval run eval-pod`.
     # =================================================================
-    eval-image:
-        base: quay.io/fedora/fedora-minimal:43
-        distro:
-            - fedora:43
-            - fedora
-        produce: []
-        description:
-            feature: Fast eval bed for kind:image smoke
-            narrative: Single-layer fedora-minimal image backing the eval-image-pod kind:eval bed (`ov eval run eval-image-pod`).
-            tag:
-                - working
-        layer:
-            - eval-image-layer
-    eval-layer:
-        base: quay.io/fedora/fedora-minimal:43
-        distro:
-            - fedora:43
-            - fedora
-        produce: []
-        description:
-            feature: Fast eval bed for kind:layer composition smoke
-            narrative: Two-layer fedora-minimal image asserting the composition order works.
-            tag:
-                - working
-        layer:
-            - eval-image-layer
-            - eval-layer-layer
     eval-pod:
         base: quay.io/fedora/fedora-minimal:43
         distro:
@@ -834,29 +810,15 @@ image:
             - fedora
         produce: []
         description:
-            feature: Fast eval bed for kind:pod runtime smoke
-            narrative: Minimal pod target — listens on 18794 via nc, exercises supervisord render path.
+            feature: Combined fast eval fixture — image/layer/pod/DeployTarget mechanism smoke
+            narrative: Two-layer fedora-minimal image backing the eval-pod kind:eval bed (`ov eval run eval-pod`) — covers kind:image build, kind:layer composition order, kind:pod runtime (nc :18794 + supervisord), and DeployTarget rendering (supervisord sleep).
             tag:
                 - working
         layer:
-            - eval-image-layer
-            - eval-pod-layer
+            - eval-base-layer
+            - eval-stack-layer
         port:
             - 18794:18794
-    eval-deploy:
-        base: quay.io/fedora/fedora-minimal:43
-        distro:
-            - fedora:43
-            - fedora
-        produce: []
-        description:
-            feature: Fast eval bed for kind:deploy DeployTarget interface smoke
-            narrative: Minimal pod target with a supervisord-managed sleep service — exercises ALL DeployTarget rendering paths.
-            tag:
-                - working
-        layer:
-            - eval-image-layer
-            - eval-deploy-layer
     android-emulator:
         base: selkies-desktop
         platform:

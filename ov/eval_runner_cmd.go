@@ -229,10 +229,10 @@ func (c *EvalRunCmd) Run() error {
 		args = append(args, "--format", c.Format)
 	}
 
-	// Per-run freshness for pod targets: if the eval-pod is marked
+	// Per-run freshness for pod targets: if the harness sandbox is marked
 	// disposable, restart its systemd quadlet unit so the container is
 	// destroyed (`--rm` flag in the quadlet) and recreated from scratch
-	// before dispatching. The eval-pod IS the harness's sole disposable
+	// before dispatching. The sandbox pod IS the harness's sole disposable
 	// resource — everything inside (deployments, images, AI work) is
 	// the AI's job and lives inside the pod's nested podman, all
 	// destroyed when the pod's container layer is wiped on restart.
@@ -249,7 +249,7 @@ func (c *EvalRunCmd) Run() error {
 				unit := "ov-" + tn + ".service"
 				container := "ov-" + tn
 				fmt.Fprintf(os.Stderr,
-					"harness: preflight restart of disposable eval-pod %q (fresh-per-run)\n", tn)
+					"harness: preflight restart of disposable harness sandbox %q (fresh-per-run)\n", tn)
 				cmd := exec.Command("systemctl", "--user", "restart", unit)
 				cmd.Stdout = os.Stderr
 				cmd.Stderr = os.Stderr
@@ -418,7 +418,7 @@ var phaseResyncFn = func(scoreName string, phase int) error {
 // goroutine to refresh AI credentials on the target before iter 1's
 // claude subprocess spawns.
 //
-// Why: the eval-pod's `~/.claude/.credentials.json` is a one-shot copy
+// Why: the harness sandbox's `~/.claude/.credentials.json` is a one-shot copy
 // taken by the host preflight. Anthropic OAuth access tokens are
 // short-lived (typically ~8h, often less if the copy was already aged
 // at run start). A long phase 4 — which can hold the AI for ~50 min on
@@ -581,7 +581,7 @@ func (c *EvalSelfEvalCmd) Run() error {
 		return fmt.Errorf("ov eval self-evaluate: load eval.yml: %w", err)
 	}
 	if !ok || uf == nil {
-		return fmt.Errorf("ov eval self-evaluate: no eval.yml at project root %s — self-evaluate must run from a directory with a project tree containing eval.yml (typically /workspace inside the eval-pod)", cwd)
+		return fmt.Errorf("ov eval self-evaluate: no eval.yml at project root %s — self-evaluate must run from a directory with a project tree containing eval.yml (typically /workspace inside the harness sandbox)", cwd)
 	}
 	resolvedScore, err := ResolveScore(uf.Score, score)
 	if err != nil {

@@ -1,14 +1,14 @@
 package main
 
 // harness_score_live.go — score the merged scenario set against the
-// live deployments inside the eval-pod's nested podman.
+// live deployments inside the harness sandbox's nested podman.
 //
 // Post the 2026-04 pod-cutover, EVERY recipe scenario carries a
 // `pod:` field naming the container its steps probe. The harness:
 //
 //  1. AI sees the scenarios via ${SCENARIOS}/${RECIPES} in its prompt.
 //  2. AI builds whatever images each pod needs and `ov deploy add`s
-//     each pod by name inside eval-pod's nested podman.
+//     each pod by name inside harness sandbox's nested podman.
 //  3. After the AI exits, this code groups scenarios by their `Pod`
 //     field and runs each group's scenarios against `ov-<pod>` via
 //     a fresh ContainerExecutor.
@@ -473,7 +473,7 @@ func stableScenarioIDsByKey(scenarios []Scenario) map[scenarioKey]string {
 //     (single-hop into "ov-<pod>"); preserves the pre-cutover behaviour.
 //
 // A nil tree (no deploy.yml in cwd) always falls through to ContainerChain
-// — the harness loop running inside eval-pod with no nested infra still
+// — the harness loop running inside harness sandbox with no nested infra still
 // scores flat pods exactly like before.
 func resolveScoringChain(roots map[string]DeploymentNode, pod string) (DeployExecutor, error) {
 	if strings.Contains(pod, ".") && roots != nil {

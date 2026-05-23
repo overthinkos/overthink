@@ -22,6 +22,61 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Merge the four "mechanism" eval fixtures into one `eval-pod` bed + rename the AI sandbox to `eval-sandbox` (content cutover, no schema bump)
+
+The four per-mechanism R10 smoke fixtures — beds `eval-image-pod` / `eval-layer-pod` /
+`eval-pod-pod` / `eval-deploy-pod`, their images `eval-image` / `eval-layer` /
+`eval-pod` / `eval-deploy`, and the four `layers/eval-{image,layer,pod,deploy}-layer/`
+dirs — collapsed into a SINGLE `eval-pod` bed backed by a single two-layer
+`eval-pod` image. An R10 mechanism sweep previously ran four full
+build → eval image → deploy → eval live → fresh-update → teardown cycles
+(~85–105s each); it now runs ONE cycle (~110s) with every check preserved.
+Coverage is intact because the two layers keep the layer-composition test alive:
+
+- `layers/eval-base-layer/` writes `/etc/eval-base-marker` (build smoke +
+  composition anchor).
+- `layers/eval-stack-layer/` asserts the base marker survived (composition
+  order), runs `nc -lk 18794` (kind:pod runtime) AND `sleep infinity`
+  (DeployTarget rendering) under supervisord, and carries the port-listening +
+  service-running deploy-scope probes.
+
+Diagnostic granularity survives at the `id:` level — a failing
+`eval-service-running` still names exactly which mechanism broke.
+
+**AI-sandbox rename `eval-pod` → `eval-sandbox`.** The merged bed needed the
+name `eval-pod`, which was previously reserved for the harness AI-sandbox pod
+(the `default` + `scaffolding-selftest` score `pod:` target). The sandbox was
+renamed to `eval-sandbox` so `eval-pod` is free for the bed. The derived
+container/unit (`ov-eval-sandbox[.service]`) follows automatically — production
+Go already builds it as `"ov-"+tn` where `tn` comes from
+`ResolveScoreTarget(score.Pod)`, so no Go logic changed, only the score's
+`pod:` value.
+
+**No hardcoded names in `ov` Go code (operator request).** The cutover removed
+every baked sandbox/bed name from the Go source: comments now refer generically
+to "the harness sandbox" / "the sandbox pod"; the preflight log message
+interpolates the configured name via `%q`; and test fixtures use neutral
+`sample-*` placeholders (`eval_bed_run_test.go`, `eval_recipe_test.go`,
+`eval_substitute_test.go`, `clean_test.go`) so they prove the mechanism for ANY
+name rather than coupling to config. The name lives in exactly one place —
+eval.yml `score.pod` — and the score prompts reference it through the existing
+`${TARGET_NAME}` substitution token (`eval_substitute.go`) instead of repeating
+the literal. The `eval-image` / `eval-live` strings remaining in Go are the
+`ov eval image` / `ov eval live` verb-step labels, not the deleted fixture image.
+
+Also removed the stale `--keep-eval-pod` reference from CLAUDE.md's score-flag
+list — no such flag exists in the eval-run command (`ov/eval_runner_cmd.go`
+ships `--keep` / `--no-rebuild` / `--all-beds` / `--keep-repo` / `--on-*` /
+`--plateau-iteration` / `--max-scenario` / `--tag` / `--dry-run` /
+`--skip-rebuild`).
+
+This is a content/instance cutover (renamed + merged specific entities), not a
+schema-shape change — so NO `MigrationStep` and NO `LatestSchemaVersion` /
+`version:` bump, mirroring the earlier deploy→eval-bed relocation. Operators who
+run the harness must rename their `~/.config/ov/deploy.yml` `eval-pod`
+AI-sandbox deploy to `eval-sandbox` (it lives in the per-host deploy file, which
+`ov migrate` does not rewrite from a score-value change).
+
 ### 2026-05-23 — Build-artifact cleanup: one-time auto-purge + configurable reusable-artifact retention (`ov clean`, `defaults.keep_images`/`keep_eval_runs`) (additive, no schema bump)
 
 Follow-up to the build-speedup cutover. Investigation found the project tree had

@@ -36,7 +36,7 @@ import (
 // 2026-04-27 N canary: `/run/user/1000` disappeared between phases 6
 // and 7, breaking the harness's per-iter `RunEvalLive`
 // probes for every pre-existing pod. Pinning to `$HOME/.local/share/ov-runtime`
-// (a regular directory on the eval-pod's persistent overlay) survives
+// (a regular directory on the harness sandbox's persistent overlay) survives
 // whatever wipes the tmpfs.
 //
 // Only relocates when XDG_RUNTIME_DIR is empty or a `/run/user/...`
@@ -90,7 +90,7 @@ func (c *EvalRunLocalCmd) Run() error {
 	// operation runs. Every child process the harness spawns — the AI's
 	// claude subprocess, its bash subshells, the per-iter probe path's
 	// `podman exec` calls — inherits this env. With it pinned, crun
-	// status files live on the eval-pod's overlay (persistent) rather
+	// status files live on the harness sandbox's overlay (persistent) rather
 	// than `/run/user/1000` (transient).
 	if err := pinPersistentXDGRuntimeDir(); err != nil {
 		return err
@@ -197,9 +197,9 @@ func (c *EvalRunLocalCmd) Run() error {
 		targetImage = score.TargetImage
 	}
 
-	// No in-pod preflight: the harness only owns the eval-pod itself
+	// No in-pod preflight: the harness only owns the harness sandbox itself
 	// (rebuilt fresh per run by the host-side preflight in eval_runner_cmd.go).
-	// Inside eval-pod, the AI is on its own — it builds whatever images
+	// Inside the harness sandbox, the AI is on its own — it builds whatever images
 	// each scenario needs, creates each pod a scenario references via
 	// `ov deploy add`, and modifies state until scenarios pass. The
 	// harness scoring code probes per scenario.Pod after the AI exits.
@@ -307,7 +307,7 @@ func runSinglePhaseHarness(
 // next phase begins with state still in place (no preflight reset).
 //
 // State across phases:
-//   - The eval-pod, nested-podman containers, and bind-mounted
+//   - The harness sandbox, nested-podman containers, and bind-mounted
 //     /workspace are NOT touched between phases — the AI's deployed
 //     pods stay running, fingerprints persist, NOTES.md persists.
 //   - Nonces are run-scoped (generated once over the full recipe set)

@@ -550,7 +550,7 @@ func runOneIteration(
 	}
 
 	// 0. Pre-iter fixture-persistence check (iter ≥ 2 only): probe whether
-	// every in-scope scenario's `pod:` is still running inside the eval-pod.
+	// every in-scope scenario's `pod:` is still running inside the harness sandbox.
 	// Per the harness contract, fixtures from earlier phases must persist
 	// for cumulative scoring; if one disappeared (R10 saw ov-desktop's
 	// supervisord exit cleanly mid-run between phases 6 and 7), warn the
@@ -1183,7 +1183,7 @@ func warnMissingInScopePods(scenarios []Scenario) {
 
 // killOrphanLoopBashes kills issue-52328 deadlock orphans inside the
 // target's PID namespace. The orchestrator runs HOST-side; orphans
-// accumulate INSIDE the eval-pod (where the AI runner spawns claude,
+// accumulate INSIDE the harness sandbox (where the AI runner spawns claude,
 // which forks `bash -c 'while true; do sleep N; done'` heartbeats and
 // `bash -c '... pgrep -f ...; do sleep N'` self-match polls). Without
 // `podman exec`, pkill on the host would scan the wrong PID namespace.
@@ -1192,7 +1192,7 @@ func warnMissingInScopePods(scenarios []Scenario) {
 //   - `while true.*sleep [0-9]+`            (heartbeat keepalives)
 //   - `bash -c .*pgrep -f .*sleep`          (self-match polls)
 //
-// Best-effort: failures are silent (no eval-pod = nothing to kill).
+// Best-effort: failures are silent (no harness sandbox = nothing to kill).
 // Pod-target only: vm/host targets don't have the same PID-namespace
 // shape and the AI runs natively, so the issue does not apply.
 func killOrphanLoopBashes(targetKind, targetName string) {

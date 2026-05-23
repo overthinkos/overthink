@@ -70,7 +70,7 @@ func TestPruneImagesByRetention_Disabled(t *testing.T) {
 // runs/<id> mtime path, and the NOTES.md preservation invariant.
 func TestPruneEvalRuns(t *testing.T) {
 	root := t.TempDir()
-	bed := filepath.Join(root, "eval-image-pod")
+	bed := filepath.Join(root, "sample-bed")
 	// 3 CalVer run dirs (newest = 2026.143.300) + NOTES.md.
 	for _, cv := range []string{"2026.143.100", "2026.143.200", "2026.143.300"} {
 		mustMkdir(t, filepath.Join(bed, cv))

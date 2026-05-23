@@ -31,7 +31,7 @@ import (
 // `root`.
 //
 // `root` is typically &ShellExecutor{} (the operator's host, or
-// the inside-of-eval-pod context the harness loop runs in). Pass nil to
+// the harness-sandbox context the harness loop runs in). Pass nil to
 // substitute ShellExecutor.
 //
 // For each path segment, a single hop is added based on the node's

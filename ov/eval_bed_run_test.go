@@ -53,15 +53,15 @@ func TestEvalFailedError(t *testing.T) {
 func TestFoldEvalBeds_FoldsIntoDeploy(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"eval-image-pod": {Target: "pod", Image: "eval-image", Disposable: true},
-			"eval-k3s-vm":    {Target: "vm", Vm: "k3s-vm", Disposable: true},
-			"eval-local":     {Target: "local", Local: "eval-local", Disposable: true},
+			"sample-pod-bed":   {Target: "pod", Image: "sample-image", Disposable: true},
+			"sample-vm-bed":    {Target: "vm", Vm: "sample-vm", Disposable: true},
+			"sample-local-bed": {Target: "local", Local: "sample-local", Disposable: true},
 		},
 	}
 	if err := foldEvalBeds(uf); err != nil {
 		t.Fatalf("foldEvalBeds: %v", err)
 	}
-	for _, name := range []string{"eval-image-pod", "eval-k3s-vm", "eval-local"} {
+	for _, name := range []string{"sample-pod-bed", "sample-vm-bed", "sample-local-bed"} {
 		d, ok := uf.Deploy[name]
 		if !ok {
 			t.Errorf("bed %q not folded into Deploy", name)
@@ -98,7 +98,7 @@ func TestFoldEvalBeds_DisjointNameGuard(t *testing.T) {
 func TestValidateEvalBeds_DisposableRequired(t *testing.T) {
 	uf := &UnifiedFile{
 		Eval: map[string]DeploymentNode{
-			"eval-image-pod": {Target: "pod", Image: "eval-image"}, // not disposable
+			"sample-pod-bed": {Target: "pod", Image: "sample-image"}, // not disposable
 		},
 	}
 	err := validateEvalBeds(uf)

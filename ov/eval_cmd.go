@@ -168,7 +168,7 @@ func (c *EvalLiveCmd) Run() error {
 	// resolver (deploy.go resolveDeployImageName) — the same one ov config /
 	// start / shell use. This used to be an inline operator-then-project
 	// copy, which is exactly how `ov eval live` diverged from `ov config`
-	// for kind:eval beds where key != image (eval-image-pod → eval-image).
+	// for kind:eval beds where key != image (eval-jupyter-pod → jupyter).
 	// deployOverlay (loaded above) is still consulted for the tests overlay
 	// + runtime var resolution. The hard-required `image:` field
 	// (validateDeployRequiresImage) guarantees a real image for every pod

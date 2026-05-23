@@ -2,17 +2,17 @@
 #   kind: ai     — reusable AI-CLI catalog
 #   kind: recipe — pure spec; every scenario carries `pod:` declaring
 #                  the one container its steps probe
-#   kind: score  — runner config (target eval-pod, AI, plateau, prompt)
+#   kind: score  — runner config (target eval-sandbox, AI, plateau, prompt)
 #                  referencing one or more recipes via `recipes:`
 #   kind: eval   — disposable R10 test beds (deploy-shaped), run with
 #                  `ov eval run <bed>`; the kind:eval section is at the
 #                  END of this file, after score:.
 #
-# Architecture: the harness owns the eval-pod (rebuilt fresh per run);
-# the AI inside eval-pod owns everything else (image builds, deployments,
+# Architecture: the harness owns the eval-sandbox (rebuilt fresh per run);
+# the AI inside eval-sandbox owns everything else (image builds, deployments,
 # state edits). The harness scores the live state per recipe scenarios
 # after each iteration — `containerName := "ov-" + scenario.pod`,
-# `podman exec` against eval-pod's nested podman.
+# `podman exec` against eval-sandbox's nested podman.
 #
 # Recipe authoring discipline (2026-04 cutover):
 #   1. Each recipe is a producer→consumer chain. A "fixture pod" produces
@@ -974,7 +974,7 @@ recipe:
 
           What must be true to pass this test:
             - A VM named `nested-eval-vm` is running and reachable
-              from the eval-pod (`uptime` runs successfully inside
+              from the eval-sandbox (`uptime` runs successfully inside
               the VM via the harness chain).
             - The VM guest has `/dev/kvm` available
               (hardware-accelerated virtualization is reachable).
@@ -1068,7 +1068,7 @@ recipe:
             command: "redis-cli get bench:${EVAL_NONCE_KEY}"
             stdout: { contains: ["${EVAL_NONCE_VALUE}"] }
 
-      # ─── Cross-hop reachability (VM-to-eval-pod-redis) ──────────────
+      # ─── Cross-hop reachability (VM-to-eval-sandbox-redis) ──────────────
       - name: vm-can-reach-redis
         pod: nested-eval-vm
         depends_on: [vm-running]
@@ -1164,7 +1164,7 @@ score:
   default:
     description:
       feature: "Default benchmark — progressive verb-coverage curriculum across the full `ov eval` surface (system state → network → cross-pod → MCP → Kubernetes → desktop → VM → nested)."
-    pod: eval-pod                    # iterations + scoring run inside ov-eval-pod
+    pod: eval-sandbox                # the AI-sandbox pod; harness runs iterations inside ov-<pod>
     ai: [claude]
     plateau_iteration: 3
     progressive: true                 # curriculum-style: phase N adds recipe N
@@ -1199,7 +1199,7 @@ score:
     prompt: |
       == Where you are ==
       Your cwd is /workspace — the project tree, bind-mounted from the host
-      into this freshly-rebuilt eval-pod. You have FULL sudo + nested
+      into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo + nested
       podman + every package the recipes need. Host services are completely
       invisible; you cannot conflict with them.
 
@@ -1263,8 +1263,8 @@ score:
 
       == Ground rules ==
         - Recipe scenarios are immutable — they live in harness.yml.
-        - The eval-pod was rebuilt FRESH for this run; it persists across
-          iters but is destroyed + recreated NEXT run.
+        - The ${TARGET_NAME} sandbox was rebuilt FRESH for this run; it persists
+          across iters but is destroyed + recreated NEXT run.
         - Every pod a scenario references MUST be running at exit (that's
           what gets scored). Fixtures from earlier phases must STAY
           running for later phases' consumer probes.
@@ -1316,7 +1316,7 @@ score:
 
       == When a source-code fix can't apply mid-run ==
       The harness loop runs as a long-lived Go process (PID inside
-      eval-pod). Source fixes you make to /workspace/ov/*.go and
+      ${TARGET_NAME}). Source fixes you make to /workspace/ov/*.go and
       rebuilds appear on disk via the bind-mount, BUT the running
       harness PID has the OLD binary mmap'd and CANNOT hot-reload Go
       code. Your fix takes effect on the NEXT harness run — not the
@@ -1335,7 +1335,7 @@ score:
   scaffolding-selftest:
     description:
       feature: "End-to-end self-test of the harness benchmark scaffolding chain — loader + composition + cross-namespace deps + live scoring against AI-deployed pods."
-    pod: eval-pod
+    pod: eval-sandbox
     ai: [claude]
     plateau_iteration: 3
     progressive: false
@@ -1347,7 +1347,7 @@ score:
     prompt: |
       == Where you are ==
       Your cwd is /workspace — the project tree, bind-mounted from the
-      host into this freshly-rebuilt eval-pod. You have FULL sudo +
+      host into this freshly-rebuilt ${TARGET_NAME}. You have FULL sudo +
       nested podman + every package the recipes need. Host services are
       completely invisible; you cannot conflict with them.
 
@@ -1421,8 +1421,8 @@ score:
 # `disposable: true` is the SOLE authorization for that unattended destroy +
 # rebuild (see /ov-internals:disposable). Naming: eval-<descriptor>-<kind>,
 # dropping a redundant suffix when descriptor == kind AND the short form is
-# free (eval-local). The kind:pod bed stays `eval-pod-pod` — `eval-pod` is
-# reserved as the harness AI-sandbox pod name (the score `pod:` target).
+# free (eval-local, eval-pod). The harness AI-sandbox pod is named
+# `eval-sandbox` (the score `pod:` target), kept disjoint from these beds.
 #
 # Bed-to-verb coverage map:
 #   eval-sway-browser-vnc-pod (pod) — cdp, wl, vnc, dbus, mcp, record + pod-side
@@ -1430,10 +1430,10 @@ score:
 #   eval-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
 #                                     file/service/port/process, http via
 #                                     port-forward, VmDeployTarget end-to-end
-#   eval-image-pod            (pod) — kind:image build + eval image + pod deploy
-#   eval-layer-pod            (pod) — kind:layer composition order
-#   eval-pod-pod              (pod) — kind:pod runtime + ports + supervisord render
-#   eval-deploy-pod           (pod) — every DeployTarget rendering path
+#   eval-pod                  (pod) — combined: kind:image build + kind:layer
+#                                     composition order + kind:pod runtime
+#                                     (nc :18794 + supervisord) + every
+#                                     DeployTarget rendering path
 #   eval-local                (local) — kind:local layer apply via ShellExecutor
 #   eval-jupyter-pod          (pod) — jupyter-mcp regression coverage
 #   eval-jupyter-ml-pod       (pod) — jupyter-ml spacy/quarto + GPU MCP probes
@@ -1529,24 +1529,11 @@ eval:
             - {id: kv-ov-version, scope: deploy, command: "/tmp/ov-build/ov version || ov version", stdout: {matches: "[0-9]{4}\\.[0-9]+"}, in_container: false}
             # --- matching: verb smoke --------------------------------
             - {id: kv-matching, scope: deploy, matching: "eval-k3s-vm up", contains: {contains: "k3s"}}
-    # Per-kind R10 smoke beds — disposable, fast (fedora-minimal:43 base).
-    eval-image-pod:
-        target: pod
-        image: eval-image
-        disposable: true
-        lifecycle: dev
-        description:
-            feature: Fast pod bed exercising kind:image
-            tag: [working]
-    eval-layer-pod:
-        target: pod
-        image: eval-layer
-        disposable: true
-        lifecycle: dev
-        description:
-            feature: Fast pod bed exercising kind:layer composition
-            tag: [working]
-    eval-pod-pod:
+    # Combined R10 mechanism bed — disposable, fast (fedora-minimal:43 base).
+    # One bed covers kind:image build + kind:layer composition order +
+    # kind:pod runtime (nc :18794 + supervisord) + DeployTarget rendering
+    # (supervisord sleep), via the two-layer eval-pod image.
+    eval-pod:
         target: pod
         image: eval-pod
         disposable: true
@@ -1554,15 +1541,7 @@ eval:
         port:
             - 18794:18794
         description:
-            feature: Fast pod bed exercising kind:pod runtime
-            tag: [working]
-    eval-deploy-pod:
-        target: pod
-        image: eval-deploy
-        disposable: true
-        lifecycle: dev
-        description:
-            feature: Fast pod bed exercising DeployTarget rendering
+            feature: Combined fast pod bed — kind:image + kind:layer + kind:pod + DeployTarget mechanisms
             tag: [working]
     eval-local:
         target: local

@@ -449,7 +449,7 @@ func scopeSection(c Check) string {
 // filterDropLiveOnly removes checks that use a verb requiring live-
 // container infrastructure (cdp / wl / dbus / vnc / mcp / record /
 // spice / libvirt / k8s). These verbs don't compose cleanly into a
-// generic harness eval-pod and are dropped by default. Authors can
+// generic harness sandbox and are dropped by default. Authors can
 // re-enable per from-entry via `skip_live_only: false`.
 func filterDropLiveOnly(checks []Check) []Check {
 	out := make([]Check, 0, len(checks))

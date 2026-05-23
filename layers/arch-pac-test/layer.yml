@@ -1,7 +1,0 @@
-layer:
-  name: arch-pac-test
-  distro:
-    arch:
-      package:
-        - neovim
-        - ripgrep

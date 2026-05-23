@@ -22,6 +22,64 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-23 — Relocate single-repo layers into their owning `image/<distro>` submodules + enable all submodule images (content cutover, no schema bump)
+
+Reversed the "vendors nothing" stance for layers used by exactly one repo: every
+layer whose entire consumer set lived in a single `image/<distro>` submodule was
+physically moved out of main's shared `layers/` tree into that submodule's own
+`layers/` dir, its reference switched from a pinned `@github…/layers/<name>` ref
+to a bare local name, and the submodule given a `discover: { layer: [{path:
+layers, recursive: true}] }` block so the bare names resolve. Shared layers
+(used by main or by ≥2 submodules) stay in main and are still pulled by `@github`
+ref. main's `layers/` went 186 → 173.
+
+**13 layers relocated** (computed from the submodules' explicit remote refs, then
+filtered against main's own refs — including the remote-ref form in `base.yml`
+that hides `yay`/`rpmfusion` usage — and against layer-level `require:`/`layer:`
+consumers reachable from main):
+
+- `image/arch` ← `arch-aur-test`, `arch-pac-test`
+- `image/bootc` ← `bootc-base`, `bootc-config`, `copr-desktop`, `desktop-apps`,
+  `os-config`, `os-system-files`, `ujust`, `vr-streaming`
+- `image/cachyos` ← `ghostty`, `keepassxc-keyring`, `wheel-nopasswd`
+
+`bootc-config` was not in the initial direct-ref list — its only consumer is
+`bootc-base` (via the inner `layer:` composition), making it transitively
+bootc-exclusive; it moved too. Conversely `ov`, `cuda`, `selkies-desktop`,
+`virtualization`, `nodejs24` (direct main refs), `rpmfusion`/`yay` (remote refs in
+`base.yml`), and `chrome`/`gnupg`/`ripgrep` (transitive main use via
+`selkies-desktop`/`agent-forwarding`/`dev-tools`) all STAYED in main. `testapi`
+and `traefik` (used only by the now-enabled `fedora-test`) also STAYED in main by
+operator decision — generic test-API / reverse-proxy infrastructure kept in the
+shared library for future cross-repo reuse rather than vendored into `image/fedora`,
+which therefore vendors no layers and keeps its `@github`-ref'd fedora-test stack.
+
+**Cross-repo deps stay in main, pulled by `@github` ref from inside the moved
+layer.** `bootc-base`'s composition now `@github`-refs `sshd` + `qemu-guest-agent`
+(local `bootc-config`); `keepassxc-keyring`'s `require:` `@github`-refs
+`keepassxc`/`gnupg`/`direnv`. `CollectRemoteRefsOpts` already scans `layer.RawRequire` /
+`RawIncludedLayer`, so layer-level `@`-refs download correctly — no Go change.
+
+**All 7 disabled submodule images enabled** (`enabled: false` removed):
+`image/arch`: `arch-ov`, `arch-test`; `image/bootc`: `aurora`, `bazzite`,
+`selkies-desktop-bootc`; `image/fedora`: `fedora-ov`, `fedora-test`.
+
+No eval entities moved: the submodule-specific eval beds (`arch-vm`,
+`cachyos-vm-deploy`, `debian-debootstrap-vm`, …) already lived in their
+submodules, and every `eval-*` fixture layer + every bed in main's `eval.yml`
+serves a main-repo image.
+
+**Immutable-tag note:** the cachyos↔main mutual import pins main at
+`v2026.143.844` (which still contains the relocated layers), so
+`ov -C image/cachyos image validate` emits benign "local layer X shadows remote
+layer github.com/…/layers/X" notes — the local layer correctly wins. These
+persist by design until the next coordinated `ov`-import tag bump; the old tag's
+tree is never rewritten.
+
+No schema-shape change (`discover:` is an existing top-level key; ref-form and
+`enabled:` edits are content), so `LatestSchemaVersion()` and every `version:`
+stay at `2026.143.844`.
+
 ### 2026-05-23 — Merge the four "mechanism" eval fixtures into one `eval-pod` bed + rename the AI sandbox to `eval-sandbox` (content cutover, no schema bump)
 
 The four per-mechanism R10 smoke fixtures — beds `eval-image-pod` / `eval-layer-pod` /

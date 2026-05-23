@@ -392,6 +392,8 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 | **Security & Identity** | `agent-forwarding`, `gnupg`, `direnv`, `ssh-client`, `sshd`, `gocryptfs`, `container-nesting`, `tailscale`, `keepassxc` | Agent forwarding, encrypted storage, mesh VPN, password manager, nesting |
 | **OS / Bootc** | `bootc-base`, `bootc-config`, `cloud-init`, `os-config`, `os-system-files`, `qemu-guest-agent`, `socat` | Bootable disk image and VM integration |
 
+> Layers used by only one image family are **vendored in that `image/<distro>` submodule**, not the shared `layers/` tree: the bootc-exclusive set (`bootc-base`, `bootc-config`, `copr-desktop`, `desktop-apps`, `os-config`, `os-system-files`, `ujust`, `vr-streaming`) in `image/bootc`; `ghostty` + `keepassxc-keyring` + `wheel-nopasswd` in `image/cachyos`; the `arch-*-test` fixtures in `image/arch`. Shared layers are pulled by `@github` ref; each repo vendors only its own exclusive layers.
+
 **Composition meta-layers** — `sway-desktop`, `sway-desktop-vnc`, `selkies-desktop`, `bootc-base`, `openclaw-full`, `openclaw-full-ml`, `python-ml`, `jupyter-ml`, `unsloth-studio` bundle curated layer sets. See the matching `/ov-distros:<name> / /ov-languages:<name> / /ov-infrastructure:<name> / /ov-tools:<name>` skill for the exact composition recipe.
 
 ### Data Layers

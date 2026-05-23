@@ -1714,7 +1714,7 @@ func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelBootc, "true"))
 	}
 	// Layer-contributed OCI labels (capabilities.oci_labels). Includes
-	// dev.containers.bootc=true emitted from layers/bootc-config when its
+	// dev.containers.bootc=true emitted from the bootc-config layer when its
 	// preserve_user capability is in the composition. Sorted for
 	// determinism so Containerfile diffs stay stable.
 	if img.LayerCaps != nil && len(img.LayerCaps.OCILabels) > 0 {

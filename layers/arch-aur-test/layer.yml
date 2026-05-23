@@ -1,7 +1,0 @@
-layer:
-  name: arch-aur-test
-  distro:
-    arch:
-      aur:
-        package:
-          - yay-bin

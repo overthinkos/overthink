@@ -133,6 +133,14 @@ type BootstrapDef struct {
 type CacheMountDef struct {
 	Dst     string `yaml:"dst"`
 	Sharing string `yaml:"sharing,omitempty"` // default: "locked"
+	// Owned renders this entry as a uid/gid-owned cache (user-writable)
+	// instead of the default shared/locked (root) form. Use for user-level
+	// build caches inside a builder stage that runs as the build user —
+	// makepkg SRCDEST, yay's AUR clone cache, etc. — so they persist across
+	// builds the same way the root pacman cache does. Rendered via
+	// cacheMountsAuto (which reads UID/GID from the stage). The default
+	// (false) keeps the shared/locked form for root system caches.
+	Owned bool `yaml:"owned,omitempty"`
 }
 
 // FormatDef defines a package format (rpm, deb, pac, aur, apk, etc.).

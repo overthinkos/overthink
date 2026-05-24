@@ -240,6 +240,88 @@ image:
 	}
 }
 
+// TestResolveBuilder_DistroKeyed_NoExplicitMap is the regression guard for the
+// distro-keyed builder default: an image whose base is reached through an import
+// namespace and resolves to a cachyos/Arch distro must auto-select arch-builder
+// WITHOUT any per-image `builder:` declaration — the root `arch` image (whose
+// distro: matches and whose bare arch-builder ref resolves in root) supplies it.
+// Without the fix this resolves fedora-builder (the Fedora-only defaults.builder)
+// — the exact bug that silently built a Fedora builder for cachyos images.
+func TestResolveBuilder_DistroKeyed_NoExplicitMap(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "overthink.yml", `version: 2026.143.844
+import:
+  - sub: ./sub
+defaults:
+  builder:
+    pixi: fedora-builder
+    npm: fedora-builder
+image:
+  arch:
+    base: quay.io/cachyos/cachyos:latest
+    distro: [arch]
+    build: [pac]
+    builder:
+      pixi: arch-builder
+      npm: arch-builder
+  arch-builder:
+    base: quay.io/cachyos/cachyos:latest
+    distro: [arch]
+    build: [pac]
+    produce: [pixi, npm]
+  fedora-builder:
+    base: quay.io/fedora/fedora:43
+    distro: [fedora]
+    build: [rpm]
+    produce: [pixi, npm]
+  cachyos-app:
+    base: sub.cachyos
+  fedora-app:
+    base: sub.fedora
+`)
+	writeFixture(t, root, "sub/overthink.yml", `version: 2026.143.844
+import:
+  - up: ../
+image:
+  cachyos:
+    base: quay.io/cachyos/cachyos:latest
+    distro: [cachyos, arch]
+    build: [pac, aur]
+  fedora:
+    base: quay.io/fedora/fedora:43
+    distro: [fedora]
+    build: [rpm]
+`)
+	uf, _, err := LoadUnified(root)
+	if err != nil {
+		t.Fatalf("LoadUnified: %v", err)
+	}
+	cfg := uf.ProjectConfig()
+	resolved, err := cfg.ResolveAllImage("test", root, ResolveOpts{})
+	if err != nil {
+		t.Fatalf("ResolveAllImage: %v", err)
+	}
+	app, ok := resolved["cachyos-app"]
+	if !ok {
+		t.Fatalf("cachyos-app not resolved (keys: %v)", keysOf(resolved))
+	}
+	// THE FIX: namespaced cachyos/arch base → arch-builder, no per-image map.
+	if got := app.Builder.BuilderFor("pixi"); got != "arch-builder" {
+		t.Errorf("cachyos-app pixi builder = %q, want arch-builder (distro-keyed default)", got)
+	}
+	if got := app.Builder.BuilderFor("npm"); got != "arch-builder" {
+		t.Errorf("cachyos-app npm builder = %q, want arch-builder", got)
+	}
+	// Guard: a fedora-distro image must still resolve fedora-builder.
+	fa, ok := resolved["fedora-app"]
+	if !ok {
+		t.Fatalf("fedora-app not resolved")
+	}
+	if got := fa.Builder.BuilderFor("pixi"); got != "fedora-builder" {
+		t.Errorf("fedora-app pixi builder = %q, want fedora-builder (no regression)", got)
+	}
+}
+
 func keysOf(m map[string]*ResolvedImage) []string {
 	ks := make([]string, 0, len(m))
 	for k := range m {

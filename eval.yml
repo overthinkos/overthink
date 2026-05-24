@@ -1564,7 +1564,7 @@ eval:
             - 35002:5037  # ADB server
             - 35003:2222  # SSH
         description:
-            feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. R10 of adb/appium eval verbs uses host-path `apk:` for adb: install and a pre-staged /tmp/ApiDemos-debug.apk for appium: install-app (podman cp before `ov eval live`)."
+            feature: "R10 bed for android-emulator — Android 14 (API 34 x86_64 google_apis) emulator with /dev/kvm passthrough, Selkies web UI on https://localhost:35000, Appium WebDriver on http://localhost:35001/wd/hub, ADB via ANDROID_ADB_SERVER_SOCKET=tcp:localhost:35002 adb devices. R10 of adb/appium eval verbs uses host-path `apk:` for BOTH adb: install and appium: install-app (each stages the host APK into the container itself; no external pre-staging)."
             tag: [testing]
     # eval-openclaw-pod deploys the minimal headless openclaw gateway on the
     # CachyOS (Arch) base. Exercises the cachyos→arch-builder npm build of the

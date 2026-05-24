@@ -22,6 +22,129 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — android-emulator R10 bed green: build fixes + adb-eval ordering + appium host-path install + keep-pod-on-failure
+
+The `eval-android-emulator-pod` bed had never passed end-to-end. Five
+coordinated fixes, all surfaced by one failed `ov eval run` and fixed in one
+working tree (R2), landed it.
+
+**Build (cachyos/Arch base).** `android-sdk` was Fedora-only — on the cachyos
+(Arch) `selkies.selkies-desktop` base the SDK build failed at `unzip: command
+not found` and the emulator's Qt/GL/audio runtime libs were absent. Added an
+`arch:` package section (unzip, which, gcc-libs, mesa, libglvnd, the libx11/xcb
+stack, alsa-lib, libpulse, xcb-util-cursor). `java-openjdk` had hardcoded
+`JAVA_HOME=/usr/lib/jvm/jre-21-openjdk`, a Fedora-only path that silently broke
+every other distro; replaced with a canonical distro-agnostic symlink
+`/usr/lib/jvm/ov-jdk21` (a build task picks the installed JDK 21 root, preferring
+the full JDK over a bare JRE) consumed by android-sdk / appium-server / the
+emulator service, guarded by two build-scope evals. `start-emulator` used
+`-accel kvm`, which the Android emulator rejects (`-accel` only accepts
+on|off|auto) — it exited immediately and supervisord reported "FATAL Exited too
+quickly"; changed to a KVM-probe that selects `-accel on` (KVM reachable) or
+`-accel off` (TCG fallback).
+
+**adb-eval ordering (the bed's eval-live failures).** The eval runner executes
+checks in declaration order (`Runner.Run`, sequential, no sort), but the
+android-emulator layer declared the one-shot `adb getprop sys.boot_completed`
+and `adb shell` probes BEFORE the `adb wait-for-device` readiness gate. The
+`adb: getprop`/`adb: shell` verbs are single-shot — a check's `timeout:` is a
+per-attempt cap, NOT a retry budget — so they fired while the emulator was still
+booting (device "unknown") and failed instantly with `AdbError: error performing
+RunCommand`. Reordered so `adb-wait-for-device-ready` (which polls
+`sys.boot_completed` every 2s until 1, tolerating the early-boot window) runs
+FIRST; every one-shot probe after it now runs against a fully-booted device. No
+sleeps, no retry magic — the synchronization primitive (`wait-for-device`) was
+already present, only mis-ordered. A second readiness gap surfaced after the
+reorder: PackageManager keeps initializing for a few seconds AFTER
+`sys.boot_completed=1`, so the `adb install` that runs right after the boot gate
+failed with "Failed to parse APK file" (verified live: the SAME install
+succeeds once the device settles, and the later `appium: install-app` of the
+same APK passed because session-create overhead let the device settle first).
+The dependent confirm/uninstall failures were pure cascade. Fixed by adding the
+framework's `eventually:` poll (180s deadline / 5s interval) to the single
+post-boot package-install check — it re-runs the idempotent install until it
+succeeds, polling the exact end-to-end readiness condition (a synchronization
+primitive with a deadline, not a fixed sleep); the confirm/uninstall/appium ops
+that follow a settled device stay one-shot.
+
+**appium install-app host-path staging.** `appium: install-app` assumed the APK
+was already inside the container (the layer pointed `apk:` at a `/tmp/...` path
+that nothing staged, and the appium skill documented a `tests/data → /workspace`
+bind that was never implemented — the bed mounts no host dir). `mobile:
+installApp` requires an `appPath` the in-container server can read (the base64
+`{"app":…}` form is rejected with HTTP 400 "required parameter is missing:
+appPath" — verified live), so the file MUST be in-container. The verb now treats
+`--apk` as a HOST path (symmetric with `adb: install`), stages it into the
+container via `<engine> cp` to a temp path, calls installApp, and removes the
+temp file. No bind-mount, no external staging step. The appium SKILL.md gotcha
+and table, the layer check (`apk: ./tests/data/ApiDemos-debug.apk`), and the
+eval.yml bed feature-description were all corrected (R5); the fictional
+"R10 harness podman cp / README APK staging" comment was deleted.
+
+**Generic download/build caching (the structural build-flake fix).** The
+android-emulator build re-downloaded the ~1.5GB Android SDK from Google's CDN on
+every full chain rebuild (the arch/cachyos base's `pacman -Syu` is
+non-deterministic, so the base cache-misses and cascades down), and the CDN
+intermittently served corrupt zips ("Error on ZipFile unknown archive"),
+flaking the build ~50%. Root cause in the generator: the `download:` verb
+DECLARED a `/tmp/downloads` cache mount but streamed curl straight into `tar` /
+wrote to `/tmp/dl.zip` — the cache was never used; and `cmd:` tasks (sdkmanager)
+had no download cache at all. Two generic, config-driven fixes (no
+android-specific code in ov):
+1. `emitDownload` (`ov/tasks.go`) now fetches every `download:` to a
+   content-addressed file in the `/tmp/downloads` mount (keyed by URL sha256),
+   reuses it across builds, and is integrity-safe (curl writes `<hash>.part`,
+   atomically renamed only on success — a partial/corrupt download is never
+   reused). So the generic "download a file" task caches automatically.
+2. A new generic `cache:` task modifier (`Task.Cache`, honored by `cmd:` and
+   `download:`) lets ANY task declare extra BuildKit cache-mount paths, owned
+   per the task's `user:` (root → shared/locked, non-root → uid/gid-owned) via
+   the existing `CacheMount` machinery — the same way package caches persist.
+   The android-sdk layer DECLARES `cache: [/var/cache/ov-android-sdk]` and
+   installs the heavy sdkmanager packages into it (`--sdk_root`, sentinel-guarded
+   against partial installs), then copies them into the image SDK root. A rebuild
+   reuses the cached SDK instead of re-downloading — eliminating the CDN-flake
+   exposure on every rebuild. The cache-USE logic lives in the layer.yml task
+   body; ov only provides the mount.
+
+**Core namespace builder-resolution fix (distro-keyed default + one unified code
+path).** An image whose `base:` is reached through an import namespace and
+resolves to a cachyos/Arch distro (android-emulator → selkies.selkies-desktop →
+cachyos.cachyos; versa/openclaw* → cachyos.cachyos) silently resolved its
+pixi/npm/cargo/aur builder to `fedora-builder` (main's Fedora-only
+`defaults.builder`) — building a whole Fedora builder, cross-distro, for a
+cachyos image — UNLESS the image hand-declared `builder: {…: arch-builder}`.
+android-emulator had simply forgotten the declaration. Root cause:
+`ResolveImage`'s builder precedence (`defaults → direct-local-base →
+img.Builder`) never consulted the image's resolved DISTRO, and builder maps are
+namespace-relative refs that (correctly) don't cross an import-namespace
+boundary — so a namespaced-base cachyos image fell through to the Fedora
+default. Fix: a distro-keyed default — `resolveEffectiveBuilder` /
+`distroBuilderMap` (ov/config.go) source the builder from the root-namespace
+image whose `distro:` matches the resolving image's resolved distro (e.g.
+base.yml's `arch` → arch-builder), whose bare refs resolve in the importing
+namespace; `distro:` DOES cross the boundary, so the right builder is selected
+automatically with NO per-image declaration. The five per-image
+`builder: arch-builder` band-aids (versa, openclaw, openclaw-desktop,
+openclaw-full, android-emulator) were DELETED. Crucially, builder resolution was
+ALSO re-implemented inline in THREE other places that had silently diverged —
+`ov image validate` (which produced a false "no builder.aur configured" error
+because its private copy lacked the distro-keyed default), the `ov deploy add`
+synthetic host/VM image (defaults-only), and the auto-intermediate generator —
+all now route through the SINGLE `resolveEffectiveBuilder`, so builder
+resolution is identical across `build` / `generate` / `inspect` / `validate` /
+`deploy`. One code path, no drift.
+
+**keep-pod-on-failure (operator debugging).** `ov eval run <bed>` used to tear
+the bed down on ANY step failure (the shared `fail()` tail called `cleanup()`,
+ignoring `--keep`), destroying the very target needed to diagnose the failure.
+Now a FAILED run LEAVES the bed running and prints target-appropriate inspect +
+destroy hints (`ov eval live <name>` / `podman exec ov-<name>` / `ov remove
+<name>`, or `ov vm destroy` for VM beds). To keep this from blocking re-runs, the
+pod/local bring-up gained a best-effort pre-run teardown (symmetry with the VM
+path's pre-destroy), so a kept-alive bed from a prior failure is cleared before
+the fresh deploy. The happy-path teardown still honours `--keep`.
+
 ### 2026-05-24 — selkies image-family extraction (program family #2) + namespace builder-ref resolver fix
 
 The **selkies/sway streaming-desktop family** moved out of the main repo into the

@@ -173,15 +173,6 @@ image:
     versa:
         enabled: true
         base: cachyos.cachyos
-        # Explicit builder map: the cachyos base is reached via the `cachyos`
-        # import namespace, and builder maps do NOT cross a namespace boundary.
-        # arch-builder is this repo's own (base.yml), so the bare ref resolves
-        # in the root namespace.
-        builder:
-            pixi: arch-builder
-            npm: arch-builder
-            cargo: arch-builder
-            aur: arch-builder
         build:
             - pac
         platform:
@@ -395,11 +386,6 @@ image:
     openclaw:
         enabled: true
         base: cachyos.cachyos
-        builder:
-            pixi: arch-builder
-            npm: arch-builder
-            cargo: arch-builder
-            aur: arch-builder
         layer:
             - agent-forwarding
             - openclaw
@@ -416,11 +402,6 @@ image:
         # + wlrctl.
         enabled: true
         base: cachyos.cachyos
-        builder:
-            pixi: arch-builder
-            npm: arch-builder
-            cargo: arch-builder
-            aur: arch-builder
         build:
             - pac
             - aur
@@ -516,11 +497,6 @@ image:
     openclaw-full:
         enabled: true
         base: cachyos.cachyos
-        builder:
-            pixi: arch-builder
-            npm: arch-builder
-            cargo: arch-builder
-            aur: arch-builder
         layer:
             - agent-forwarding
             - openclaw-full

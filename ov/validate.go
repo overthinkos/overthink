@@ -102,7 +102,7 @@ func Validate(cfg *Config, layers map[string]*Layer, dir string, opts ResolveOpt
 
 	// Validate builders and builds
 	if defaultBuilderCfg != nil {
-		validateBuilders(cfg, layers, defaultBuilderCfg, errs)
+		validateBuilders(cfg, layers, defaultBuilderCfg, dir, opts, errs)
 	}
 
 	// Validate DNS and ACME email
@@ -1000,7 +1000,7 @@ func validateAliases(cfg *Config, layers map[string]*Layer, errs *ValidationErro
 }
 
 // validateBuilders validates builder and builds configuration
-func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *BuilderConfig, errs *ValidationError) {
+func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *BuilderConfig, dir string, opts ResolveOpts, errs *ValidationError) {
 	// Validate defaults.builder entries
 	for typ, builder := range cfg.Defaults.Builder {
 		if !builderCfg.ValidBuilderType(typ) {
@@ -1066,40 +1066,26 @@ func validateBuilders(cfg *Config, layers map[string]*Layer, builderCfg *Builder
 			}
 		}
 
-		// Resolve effective builder map (image -> base -> defaults) to check needs
-		resolved := make(BuilderMap)
-		for typ, builder := range cfg.Defaults.Builder {
-			resolved[typ] = builder
+		// Resolve the image through the SINGLE canonical path (ResolveImage) —
+		// the SAME resolution `ov image build` / `generate` / `inspect` use — so
+		// the effective builder map and build formats checked here are exactly
+		// what the build will see. This block previously RE-IMPLEMENTED builder +
+		// build-format resolution inline, which silently diverged from
+		// ResolveImage (it missed the distro-keyed builder default, so a cachyos
+		// image's auto-resolved arch-builder — including aur — was invisible to
+		// validation and produced a false "no builder.aur configured" error).
+		// One code path, no drift.
+		ri, rerr := cfg.ResolveImage(imageName, "test", dir, opts)
+		if rerr != nil {
+			// Can't resolve (e.g. a namespaced base unavailable during basic
+			// validation) — validateImageDAG surfaces resolution errors; skip
+			// the builder-needed check rather than false-positive on a
+			// half-resolved map.
+			continue
 		}
-		if baseImg, ok := cfg.Image[img.Base]; ok && baseImg.IsEnabled() {
-			for typ, builder := range baseImg.Builder {
-				resolved[typ] = builder
-			}
-		}
-		for typ, builder := range img.Builder {
-			resolved[typ] = builder
-		}
-		// Filter self-references
-		for typ, builder := range resolved {
-			if builder == imageName {
-				delete(resolved, typ)
-			}
-		}
-
-		// Resolve effective build formats (image → base chain → defaults) — same
-		// inheritance order ResolveImage uses (config.go:372-386). This is what
-		// the IR compiler iterates when emitting per-format install steps;
-		// builders whose DetectConfig isn't in this list are unreachable for
-		// this image and we should not require them.
-		buildFmts := []string(img.Build)
-		if len(buildFmts) == 0 {
-			buildFmts = cfg.walkBaseChainBuild(img.Base)
-		}
-		if len(buildFmts) == 0 {
-			buildFmts = []string(cfg.Defaults.Build)
-		}
-		buildFmtSet := make(map[string]bool, len(buildFmts))
-		for _, f := range buildFmts {
+		resolved := ri.Builder
+		buildFmtSet := make(map[string]bool, len(ri.BuildFormats))
+		for _, f := range ri.BuildFormats {
 			buildFmtSet[f] = true
 		}
 
@@ -2179,6 +2165,20 @@ func validateSingleTask(layerName string, idx int, verb string, t *Task, known m
 	// mode: format check (applies to mkdir/copy/write/download)
 	if t.Mode != "" && !taskModePattern.MatchString(t.Mode) {
 		errs.Add("layer %q: tasks[%d]: mode: %q is not valid octal (expected ^0[0-7]{3,4}$)", layerName, idx, t.Mode)
+	}
+
+	// cache: additional buildkit cache mounts — only meaningful on the
+	// RUN-emitting verbs (cmd/download); each path must be absolute (or
+	// ~/ / ${HOME}, which resolve to absolute mount points).
+	if len(t.Cache) > 0 {
+		if verb != "cmd" && verb != "download" {
+			errs.Add("layer %q: tasks[%d]: cache: is only valid on cmd: or download: tasks (got %s)", layerName, idx, verb)
+		}
+		for _, p := range t.Cache {
+			if !isAbsOrHomePath(p) {
+				errs.Add("layer %q: tasks[%d]: cache: %q must be an absolute path (or start with ~/ / ${HOME})", layerName, idx, p)
+			}
+		}
 	}
 
 	// Per-verb required modifiers

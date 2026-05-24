@@ -29,6 +29,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -81,6 +82,27 @@ func summaryStatus(ok bool) string {
 		return "PASS"
 	}
 	return "FAIL"
+}
+
+// printDebugRetentionNotice tells the operator that a FAILED bed was left
+// running for inspection, with the target-appropriate inspect + destroy
+// commands. Pod/local beds tear down with `ov remove`; VM beds with
+// `ov vm destroy`. The next `ov eval run` best-effort clears the lingering
+// target before rebuilding, so leaving it up never blocks a re-run.
+func printDebugRetentionNotice(w io.Writer, name string, node DeploymentNode) {
+	switch node.Target {
+	case "vm":
+		fmt.Fprintf(w, "\n[ov eval run] bed %q FAILED — VM %q left running for debugging.\n"+
+			"  inspect: ov eval live %s | ov vm ssh %s\n"+
+			"  destroy: ov vm destroy %s\n", name, node.Vm, name, node.Vm, node.Vm)
+	case "local":
+		fmt.Fprintf(w, "\n[ov eval run] bed %q FAILED — local apply left in place for debugging.\n"+
+			"  destroy: ov remove %s\n", name, name)
+	default: // pod
+		fmt.Fprintf(w, "\n[ov eval run] bed %q FAILED — pod left running for debugging.\n"+
+			"  inspect: ov eval live %s | podman exec ov-%s sh\n"+
+			"  destroy: ov remove %s\n", name, name, name, name)
+	}
 }
 
 // runEvalBed executes the canonical R10 sequence for one `kind: eval` bed
@@ -140,12 +162,26 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		}
 	}
 
-	// fail is the SINGLE failure tail shared by every step (was 8 copies
-	// of writeSummary + cleanup + wrapped-return): record the summary, tear
-	// the bed down, and wrap the error.
+	// fail is the SINGLE failure tail shared by every step: record the
+	// summary, wrap the error, and — crucially — LEAVE THE BED RUNNING so
+	// the operator can debug the live target (the eval-live failure is
+	// already on record). Teardown on failure is deliberately suppressed:
+	// the happy path (and --keep) still controls teardown via cleanup() at
+	// the end, but a FAILED run preserves the target for inspection
+	// (`ov eval live <name>`, `podman exec ov-<name> …`, `ov eval adb/appium
+	// <name> …`). The next `ov eval run` best-effort removes the lingering
+	// bed before rebuilding (see the pre-run cleanup below), so kept-alive
+	// state never blocks a re-run.
+	// deployed flips true once the bed's target actually exists (after
+	// deploy-add). The debug-retention notice is gated on it: a failure at
+	// image-build / eval-image (before any target is created) has nothing to
+	// keep running, so it must NOT claim a pod was left up.
+	deployed := false
 	fail := func(format string, args ...any) (*bedRunResult, error) {
 		writeBedSummary(logDir, res)
-		cleanup()
+		if deployed {
+			printDebugRetentionNotice(os.Stderr, name, node)
+		}
 		return res, fmt.Errorf(format, args...)
 	}
 
@@ -176,6 +212,7 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if err := step("vm-create", []string{"vm", "create", vmTemplate}); err != nil {
 			return fail("vm create %s: %w", vmTemplate, err)
 		}
+		deployed = true // VM domain exists — keep it on any later failure
 		// `ov vm create` auto-starts the domain, but in-guest sshd takes
 		// 30-90s on cold boot; poll until ssh connects so deploy-add starts
 		// at a known-ready state. Best-effort: silent on timeout.
@@ -189,9 +226,16 @@ func runEvalBed(exe, name string, node DeploymentNode, opts bedRunOpts) (*bedRun
 		if isLocal {
 			ref = localRef
 		}
+		// Best-effort tear-down of any lingering bed from a previous
+		// interrupted/failed run (symmetry with the VM path's pre-destroy
+		// above). A failed run now LEAVES the bed up for debugging, so this
+		// clears it before the fresh deploy — kept-alive state never blocks
+		// a re-run. Silent on the common no-op case.
+		_ = exec.Command(exe, "remove", name).Run()
 		if err := step("deploy-add", []string{"deploy", "add", name, ref}); err != nil {
 			return fail("deploy add %s: %w", name, err)
 		}
+		deployed = true // target registered — keep it on any later failure
 		// Pod beds: deploy add registers the entry but does not generate the
 		// quadlet or start the service — `ov config` writes the unit,
 		// `ov start` activates it. kind:local applies layers in place during

@@ -353,8 +353,33 @@ func emitSetcapBatch(b *strings.Builder, tasks []Task, img *ResolvedImage) {
 	b.WriteString("RUN " + strings.Join(parts, " && ") + "\n")
 }
 
-// emitDownload emits one RUN per download task: curl to the appropriate
-// extractor. Uses a shared /tmp/downloads cache mount.
+// taskCacheMounts renders a task's layer-declared `cache:` paths as BuildKit
+// cache-mount flags, so ANY cmd:/download: task can persist heavy downloads or
+// build artifacts across builds the SAME way package caches do (surviving an
+// upstream layer cache-miss instead of re-fetching). Ownership follows the
+// task's user: root → shared (sharing=locked), non-root → uid/gid-owned. The
+// cache-USE logic (sentinel guards, copy-into-place) lives in the task body;
+// this only emits the mount. Generic + config-driven — nothing layer-specific.
+func taskCacheMounts(t Task, img *ResolvedImage) []string {
+	if len(t.Cache) == 0 {
+		return nil
+	}
+	directive, _ := resolveUserSpec(t.User, img)
+	root := directive == "0"
+	out := make([]string, 0, len(t.Cache))
+	for _, p := range t.Cache {
+		p = taskSubstPath(p, img)
+		if root {
+			out = append(out, SharedCacheMount(p, "").String())
+		} else {
+			out = append(out, OwnedCacheMount(p, img.UID, img.GID).String())
+		}
+	}
+	return out
+}
+
+// emitDownload emits one RUN per download task: fetch to a content-addressed
+// /tmp/downloads cache, then extract. Honors layer-declared `cache:` mounts.
 func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 	url := t.Download // no generate-time substitution — left for shell/ENV to handle
 	dest := taskSubstPath(t.To, img)
@@ -388,50 +413,60 @@ func emitDownload(b *strings.Builder, t Task, img *ResolvedImage) error {
 		stripFlag = fmt.Sprintf(" --strip-components=%d", t.StripComponents)
 	}
 
-	var cmd string
-	switch extract {
-	case "tar.gz", "":
-		// Default to tar.gz if extract unspecified and url ends in .tar.gz/.tgz
-		// otherwise fall through to "none" behaviour.
-		if extract == "" && !strings.HasSuffix(url, ".tar.gz") && !strings.HasSuffix(url, ".tgz") {
-			extract = "none"
-		} else {
+	// Resolve an empty extract: a tarball-looking URL → tar.gz, else none.
+	if extract == "" {
+		if strings.HasSuffix(url, ".tar.gz") || strings.HasSuffix(url, ".tgz") {
 			extract = "tar.gz"
+		} else {
+			extract = "none"
 		}
-		if extract == "tar.gz" {
-			inc := strings.Join(t.Include, " ")
-			cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xzf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
-		}
+	}
+	if extract == "none" && dest == "" {
+		return fmt.Errorf("download %q: extract=none requires `to:` destination", url)
+	}
+
+	// Content-addressed download cache in the /tmp/downloads mount: the file is
+	// fetched ONCE (keyed by the URL's sha256) and reused across builds — the
+	// SAME persistence package caches get — so an upstream layer cache-miss
+	// never forces a re-download. Integrity-safe: curl writes <hash>.part and it
+	// is atomically renamed to <hash> only on success, so a partial or corrupt
+	// download (e.g. a flaky CDN) is never reused (next build re-fetches). The
+	// previous implementation declared the /tmp/downloads mount but streamed
+	// curl straight to tar / wrote to /tmp/dl.zip — the cache was never used.
+	fetch := fmt.Sprintf(`%s mkdir -p /tmp/downloads; __u=%q; __c=/tmp/downloads/$(printf %%s "$__u" | sha256sum | cut -c1-64); [ -s "$__c" ] || { curl -fsSL "$__u" -o "$__c.part" && mv -f "$__c.part" "$__c"; }`, envPrefix, url)
+
+	var extractCmd string
+	switch extract {
+	case "tar.gz":
+		extractCmd = fmt.Sprintf(`tar -xzf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
 	case "tar.xz":
-		inc := strings.Join(t.Include, " ")
-		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar -xJf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
+		extractCmd = fmt.Sprintf(`tar -xJf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
 	case "tar.zst":
-		inc := strings.Join(t.Include, " ")
-		cmd = fmt.Sprintf(`%s curl -fsSL %q | tar --zstd -xf -%s -C %s %s`, envPrefix, url, stripFlag, dest, inc)
+		extractCmd = fmt.Sprintf(`tar --zstd -xf "$__c"%s -C %s %s`, stripFlag, dest, strings.Join(t.Include, " "))
 	case "zip":
-		cmd = fmt.Sprintf(`%s curl -fsSL %q -o /tmp/dl.zip && unzip -o /tmp/dl.zip -d %s && rm /tmp/dl.zip`, envPrefix, url, dest)
+		extractCmd = fmt.Sprintf(`unzip -o "$__c" -d %s`, dest)
 	case "sh":
-		// For piped install scripts, curl doesn't need the env vars — only
-		// the shell running the script does. Put env vars before `sh`.
-		cmd = fmt.Sprintf(`curl -fsSL %q | %s sh`, url, envForSh)
+		// Run the cached install script (exported env above is inherited; also
+		// passed explicitly to mirror the prior `| ENV sh` form).
+		extractCmd = fmt.Sprintf(`%s sh "$__c"`, envForSh)
 	case "none":
-		if dest == "" {
-			return fmt.Errorf("download %q: extract=none requires `to:` destination", url)
-		}
-		cmd = fmt.Sprintf(`%s curl -fsSL %q -o %s`, envPrefix, url, dest)
+		extractCmd = fmt.Sprintf(`cp -f "$__c" %s`, dest)
 	default:
 		return fmt.Errorf("download %q: unknown extract %q", url, extract)
 	}
 
-	if extract != "none" && extract != "sh" && t.Mode != "" {
-		// Apply mode to extracted files in dest
-		cmd += fmt.Sprintf(" && chmod -R %s %s", t.Mode, dest)
-	}
-	if t.Mode != "" && extract == "none" {
-		cmd += fmt.Sprintf(" && chmod %s %s", t.Mode, dest)
+	cmd := fetch + " && " + extractCmd
+	if t.Mode != "" {
+		if extract == "none" {
+			cmd += fmt.Sprintf(" && chmod %s %s", t.Mode, dest)
+		} else if extract != "sh" {
+			cmd += fmt.Sprintf(" && chmod -R %s %s", t.Mode, dest)
+		}
 	}
 
-	b.WriteString("RUN " + SharedCacheMount("/tmp/downloads", "").String() + " bash -c " + shellSingleQuote(cmd) + "\n")
+	mounts := []string{SharedCacheMount("/tmp/downloads", "").String()}
+	mounts = append(mounts, taskCacheMounts(t, img)...)
+	b.WriteString("RUN " + strings.Join(mounts, " ") + " bash -c " + shellSingleQuote(cmd) + "\n")
 	return nil
 }
 
@@ -457,6 +492,10 @@ func emitCmd(b *strings.Builder, t Task, layerStage string, img *ResolvedImage, 
 		// Non-root: npm cache (matches old writeUserYml)
 		mounts = append(mounts, OwnedCacheMount("/tmp/npm-cache", img.UID, img.GID).String())
 	}
+
+	// Layer-declared `cache:` mounts (generic, config-driven) — let a task
+	// persist heavy downloads/build artifacts the same way package caches do.
+	mounts = append(mounts, taskCacheMounts(t, img)...)
 
 	b.WriteString("RUN ")
 	for _, m := range mounts {

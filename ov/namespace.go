@@ -20,10 +20,16 @@ import (
 //
 // Inheritance across a namespace boundary:
 //   - distro:/build: are VALUES (tags, formats) → inherited across namespaces.
-//   - builder: is a map of REFS relative to the base's namespace → NOT inherited
-//     across a boundary (the consumer declares its own builder map). This avoids
-//     leaking a base-namespace-relative ref (`ov.arch-builder`) into a consumer
-//     where that namespace doesn't exist.
+//   - builder: is a map of REFS relative to the base's namespace → NOT copied
+//     across a boundary (a base-namespace-relative ref like `ov.arch-builder`
+//     would dangle in a consumer where that namespace doesn't exist).
+//     Instead, the consumer's builder is resolved DISTRO-KEYED in
+//     ResolveImage (ov/config.go:distroBuilderMap): an image's resolved
+//     distro (which DOES cross the boundary) selects the builder map of the
+//     root-namespace image that owns that distro (e.g. base.yml's `arch` →
+//     arch-builder), whose bare refs resolve in the importing namespace. So a
+//     cachyos/Arch image auto-gets arch-builder with no per-image declaration,
+//     and no namespace-relative ref ever leaks.
 
 // splitNamespaceRef splits a qualified ref on its FIRST `.` into (namespace,
 // remainder). A bare ref (no dot, or a leading/trailing dot) returns ok=false.

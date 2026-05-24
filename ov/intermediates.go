@@ -694,6 +694,14 @@ func createIntermediate(name, parentName string, uid int, pathLayers []string, c
 	for k, v := range cfg.Defaults.Builder {
 		builderMap[k] = v
 	}
+	// Distro-keyed default — the SAME mechanism ResolveImage /
+	// resolveEffectiveBuilder use: a cachyos/Arch intermediate seeds
+	// arch-builder from the root-namespace distro image, so it never falls back
+	// to the Fedora default even before the consumer-wins merge below (which
+	// remains authoritative for the hoisted layers).
+	for k, v := range cfg.distroBuilderMap(inheritedDistro) {
+		builderMap[k] = v
+	}
 	if parent, ok := result[parentName]; ok {
 		for k, v := range parent.Builder {
 			builderMap[k] = v

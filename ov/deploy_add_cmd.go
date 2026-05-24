@@ -762,20 +762,15 @@ func (c *DeployAddCmd) compileLayerPlans(ref *DeployRef, cfg *Config, distroCfg 
 	if builderCfg != nil {
 		img.BuilderConfig = builderCfg
 	}
-	// Populate img.Builder from cfg.Defaults.Builder. ResolveImage does
-	// this for normal images, but the synthetic-image path used by
-	// `ov deploy add <target:local>` (and the legacy `host`/`vm:<name>`
-	// adhoc paths) skipped it — leaving runLocal/execBuilder with no
-	// builder image when a layer's install needs cargo/npm/pixi/etc.
-	if cfg != nil && len(cfg.Defaults.Builder) > 0 {
-		if img.Builder == nil {
-			img.Builder = make(BuilderMap)
-		}
-		for typ, b := range cfg.Defaults.Builder {
-			if _, set := img.Builder[typ]; !set {
-				img.Builder[typ] = b
-			}
-		}
+	// Resolve the synthetic host/VM image's builder map through the SAME
+	// canonical method ResolveImage uses (resolveEffectiveBuilder), so a
+	// local/host deploy onto an Arch/cachyos host auto-selects arch-builder
+	// (distro-keyed) exactly like a built image would — no command-specific
+	// divergence. This path previously seeded from cfg.Defaults.Builder only,
+	// which gave a cachyos host fedora-builder and left runLocal/execBuilder
+	// with the wrong builder when a layer's install needs cargo/npm/pixi/aur.
+	if cfg != nil {
+		img.Builder = cfg.resolveEffectiveBuilder(img.Name, img.Distro, img.Base, img.IsExternalBase, img.Builder)
 	}
 	var plans []*InstallPlan
 	for _, name := range order {

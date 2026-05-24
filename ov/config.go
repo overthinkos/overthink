@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sort"
 
 	"gopkg.in/yaml.v3"
 )
@@ -490,27 +491,10 @@ func (c *Config) ResolveImage(name string, calverTag string, dir string, opts Re
 		resolved.Merge = c.Defaults.Merge
 	}
 
-	// Resolve builder: image -> base image (if internal) -> defaults -> {}
-	resolved.Builder = make(BuilderMap)
-	for typ, builder := range c.Defaults.Builder {
-		resolved.Builder[typ] = builder
-	}
-	if !resolved.IsExternalBase {
-		if baseImg, ok := c.Image[resolved.Base]; ok {
-			for typ, builder := range baseImg.Builder {
-				resolved.Builder[typ] = builder
-			}
-		}
-	}
-	for typ, builder := range img.Builder {
-		resolved.Builder[typ] = builder
-	}
-	// Filter self-references (builder images must not use themselves)
-	for typ, builder := range resolved.Builder {
-		if builder == name {
-			delete(resolved.Builder, typ)
-		}
-	}
+	// Builder resolution flows through the ONE canonical method so it can't
+	// diverge across commands (build/generate/inspect via ResolveImage, and
+	// `ov deploy add`'s synthetic host/VM image, both call this).
+	resolved.Builder = c.resolveEffectiveBuilder(name, resolved.Distro, resolved.Base, resolved.IsExternalBase, img.Builder)
 
 	// BuilderCapabilities: image-specific capability declaration, NOT inherited
 	resolved.BuilderCapabilities = img.Produce
@@ -668,6 +652,96 @@ func intPtr(v int) *int {
 // resolveVmConfig was removed in the VM hard-cutover. VM configuration
 // now lives on `kind: vm` entities in vm.yml (VmSpec); image.yml
 // entries no longer carry vm: or libvirt: fields.
+
+// resolveEffectiveBuilder computes an image's effective builder map via the
+// SINGLE canonical precedence, lowest→highest:
+//
+//	defaults.builder       (the project-wide baseline)
+//	→ distro-keyed default (the root image whose distro: matches THIS image's
+//	                        resolved distro — so an arch/cachyos image
+//	                        auto-selects arch-builder, a fedora image
+//	                        fedora-builder, with NO per-image builder: map)
+//	→ direct local base    (a same-namespace base's builder map)
+//	→ per-image override    (img.Builder)
+//
+// then self-references are filtered (a builder image must not use itself).
+//
+// Why distro-keyed and not base-inherited: a builder map holds
+// namespace-relative REFS, so it can't be copied across an import-namespace
+// boundary (a base's `ov.arch-builder` would dangle in a consumer where `ov.`
+// doesn't resolve — see ov/namespace.go). `distro:` IS a value and DOES cross
+// the boundary, so we key off the resolved distro and source the builder map
+// from a root-namespace image whose bare refs resolve HERE.
+//
+// EVERY builder-consuming path calls this — ResolveImage (image.yml images) and
+// the synthetic host/VM image in `ov deploy add` (deploy_add_cmd.go) — so the
+// resolution can never drift between commands.
+func (c *Config) resolveEffectiveBuilder(name string, distro []string, base string, isExternalBase bool, imgBuilder BuilderMap) BuilderMap {
+	out := make(BuilderMap)
+	for typ, b := range c.Defaults.Builder {
+		out[typ] = b
+	}
+	for typ, b := range c.distroBuilderMap(distro) {
+		out[typ] = b
+	}
+	if !isExternalBase {
+		if baseImg, ok := c.Image[base]; ok {
+			for typ, b := range baseImg.Builder {
+				out[typ] = b
+			}
+		}
+	}
+	for typ, b := range imgBuilder {
+		out[typ] = b
+	}
+	for typ, b := range out {
+		if b == name {
+			delete(out, typ)
+		}
+	}
+	return out
+}
+
+// distroBuilderMap returns the builder map of the root-namespace image that
+// owns the given distro — the distro-keyed builder default. This is what lets
+// a cachyos/Arch image auto-select `arch-builder` (and a Fedora image
+// `fedora-builder`) WITHOUT a per-image `builder:` declaration: the matching
+// source image (e.g. base.yml's `arch`, distro [arch], builder arch-builder)
+// lives in THIS root namespace, so its bare builder refs resolve here — unlike
+// a base's namespace-relative builder map, which must NOT be copied across an
+// import-namespace boundary (see ov/namespace.go).
+//
+// distroTags is the image's resolved distro in priority order (most-specific
+// first, e.g. ["cachyos","arch"] or ["fedora:43","fedora"]); the first tag with
+// a matching root image wins, so a cachyos image with no root `cachyos` image
+// correctly falls through to its `arch` tag → arch-builder. Only root images
+// that actually declare a non-empty builder map are considered. Root-image
+// iteration is name-sorted so the result is deterministic when more than one
+// image shares a distro tag.
+func (c *Config) distroBuilderMap(distroTags []string) BuilderMap {
+	if len(distroTags) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(c.Image))
+	for name := range c.Image {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, tag := range distroTags {
+		for _, name := range names {
+			img := c.Image[name]
+			if len(img.Builder) == 0 {
+				continue
+			}
+			for _, d := range img.Distro {
+				if d == tag {
+					return img.Builder
+				}
+			}
+		}
+	}
+	return nil
+}
 
 // walkBaseChainDistro walks the base chain through image.yml entries to find
 // the first ancestor with a distro: field set. Returns nil if no ancestor

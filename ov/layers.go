@@ -591,6 +591,16 @@ type Task struct {
 	Env       map[string]string `yaml:"env,omitempty"`     // env vars for download install scripts
 	Caps      string            `yaml:"caps,omitempty"`    // capability spec for setcap (empty = strip)
 	Comment   string            `yaml:"comment,omitempty"` // optional Containerfile comment
+	// Cache declares additional BuildKit cache-mount paths for this task's
+	// RUN, so a task that downloads or builds heavy artifacts (e.g. an SDK
+	// installer) can persist them across builds the SAME way package caches
+	// do — surviving an upstream layer cache-miss instead of re-fetching.
+	// Ownership is derived from the task's `user:` (root → shared/locked,
+	// non-root → uid/gid-owned). Paths must be absolute; ${VAR} is
+	// substituted. The cache-USE logic (sentinel checks, copy-into-place)
+	// lives in the task body — ov only provides the mount. Honored by
+	// `cmd:` and `download:`.
+	Cache []string `yaml:"cache,omitempty"`
 }
 
 // TaskVerbs is the set of valid discriminator keys on a Task.

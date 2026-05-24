@@ -28,7 +28,7 @@ layer:
         # Drivers install per-user (writes ~/.appium/node_modules);
         # JAVA_HOME + ANDROID_HOME come from upstream layer ENV directives
         # baked into the Containerfile.
-        export JAVA_HOME=/usr/lib/jvm/jre-21-openjdk
+        export JAVA_HOME=/usr/lib/jvm/ov-jdk21
         export ANDROID_HOME=/opt/android-sdk
         export PATH=$JAVA_HOME/bin:$PATH
         /usr/local/bin/appium driver install uiautomator2
@@ -39,7 +39,7 @@ layer:
       env:
         ANDROID_HOME: /opt/android-sdk
         ANDROID_SDK_ROOT: /opt/android-sdk
-        JAVA_HOME: /usr/lib/jvm/jre-21-openjdk
+        JAVA_HOME: /usr/lib/jvm/ov-jdk21
         HOME: /home/user
       restart: always
       priority: 40

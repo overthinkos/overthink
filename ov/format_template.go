@@ -84,10 +84,35 @@ func RenderCacheMounts(mounts []CacheMountDef, uid, gid int, sep string, trailin
 	return out
 }
 
+// RenderCacheMountsAuto renders a MIXED list where each entry is owned
+// (uid/gid) or shared per its own `owned:` flag — letting one builder declare
+// both root system caches (pacman → shared/locked) and user build caches
+// (makepkg SRCDEST, yay AUR clones → uid/gid-owned) in a single cache_mount
+// list. uid/gid apply only to the entries flagged owned.
+func RenderCacheMountsAuto(mounts []CacheMountDef, uid, gid int, sep string, trailing bool) string {
+	if len(mounts) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(mounts))
+	for _, m := range mounts {
+		if m.Owned {
+			parts = append(parts, OwnedCacheMount(m.Dst, uid, gid).String())
+		} else {
+			parts = append(parts, SharedCacheMount(m.Dst, m.Sharing).String())
+		}
+	}
+	out := strings.Join(parts, sep)
+	if trailing {
+		out += sep
+	}
+	return out
+}
+
 // templateFuncs provides helper functions for format/builder templates.
 var templateFuncs = template.FuncMap{
 	"cacheMounts":      func(m []CacheMountDef) string { return RenderCacheMounts(m, -1, 0, " \\\n    ", false) },
 	"cacheMountsOwned": func(m []CacheMountDef, uid, gid int) string { return RenderCacheMounts(m, uid, gid, " \\\n    ", true) },
+	"cacheMountsAuto":  func(m []CacheMountDef, uid, gid int) string { return RenderCacheMountsAuto(m, uid, gid, " \\\n    ", false) },
 
 	// quote returns a shell-safe quoted string.
 	"quote": func(s interface{}) string {

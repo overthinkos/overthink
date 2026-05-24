@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -368,35 +370,49 @@ func (s *w3cSession) executeScript(script string, args []interface{}) (json.RawM
 // appium install-app — mobile:installApp escape hatch
 // ---------------------------------------------------------------------------
 
-// AppiumInstallAppCmd: `ov eval appium install-app <image> --apk <path>`.
-// Reads the APK from the host filesystem, base64-encodes it, and calls
-// the W3C ExecuteScript escape hatch with `mobile: installApp`. The
-// `appPath` arg accepts either a remote path on the device or — when
-// the running Appium has the host filesystem visible — a host path.
-// Most setups, including eval-android-emulator-pod, expose the host workspace
-// inside the container at /workspace, so passing the in-container path
-// works without uploading.
-//
-// Two arg shapes for `mobile: installApp` are accepted by Appium 3.x:
-//   - `{"appPath": "/path/inside/container"}` — Appium reads the path
-//   - `{"app": "base64data"}` — Appium decodes
-// We use appPath since the canonical R10 flow bind-mounts the APK.
+// AppiumInstallAppCmd: `ov eval appium install-app <image> --apk <host-path>`.
+// `--apk` is a HOST filesystem path — symmetric with `adb: install`. The
+// in-container Appium server's `mobile: installApp` requires `appPath` (a
+// path IT can read; the base64 `{"app": …}` form is rejected with HTTP 400
+// "required parameter is missing: appPath"), so the host APK is first staged
+// INTO the container via `<engine> cp` to a temp path, then installApp is
+// called with that in-container path, then the temp file is removed. This
+// makes the verb self-contained: no bind-mount and no external staging step
+// are required (the eval-android-emulator-pod bed mounts no host dir).
 type AppiumInstallAppCmd struct {
 	Image string `arg:"" help:"Image name"`
-	Apk   string `long:"apk" required:"" help:"APK path visible to the Appium server (typically a bind-mounted /workspace path)"`
+	Apk   string `long:"apk" required:"" help:"APK path on the HOST (staged into the container automatically, like adb install)"`
 	appiumCommonFlags
 }
 
 func (c *AppiumInstallAppCmd) Run() error {
+	// Fail fast on a bad host path before touching session/container state.
+	if _, statErr := os.Stat(c.Apk); statErr != nil {
+		return fmt.Errorf("appium install-app: APK not found on host: %w", statErr)
+	}
 	sess, err := loadActiveSession(c.Image, c.Instance)
 	if err != nil {
 		return err
 	}
+	// Stage the host APK into the container so the in-container Appium
+	// server can read it via appPath. Same container the port resolution
+	// uses (resolveContainer), so this works wherever `appium: status`
+	// already works.
+	engine, containerName, err := resolveContainer(c.Image, c.Instance)
+	if err != nil {
+		return err
+	}
+	remote := "/tmp/ov-appium-" + filepath.Base(c.Apk)
+	if out, cpErr := exec.Command(engine, "cp", c.Apk, containerName+":"+remote).CombinedOutput(); cpErr != nil {
+		return fmt.Errorf("staging APK into %s: %v: %s", containerName, cpErr, strings.TrimSpace(string(out)))
+	}
+	defer exec.Command(engine, "exec", containerName, "rm", "-f", remote).Run()
+
 	s := newW3CSession(sess.BaseURL, sess.SessionID)
-	args := []interface{}{map[string]interface{}{"appPath": c.Apk}}
+	args := []interface{}{map[string]interface{}{"appPath": remote}}
 	result, err := s.executeScript("mobile: installApp", args)
 	if err != nil {
-		return fmt.Errorf("mobile: installApp %s: %w", c.Apk, err)
+		return fmt.Errorf("mobile: installApp %s (host %s): %w", remote, c.Apk, err)
 	}
 	if len(result) > 0 && string(result) != "null" {
 		fmt.Println(string(result))

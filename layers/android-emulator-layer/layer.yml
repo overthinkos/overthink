@@ -77,7 +77,7 @@ layer:
         EMULATOR_NAME: ov_avd_14
         EMULATOR_API_LEVEL: "34"
         EMULATOR_DEVICE: pixel_6
-        JAVA_HOME: /usr/lib/jvm/jre-21-openjdk
+        JAVA_HOME: /usr/lib/jvm/ov-jdk21
       restart: always
       priority: 30
       start_sec: 5
@@ -128,11 +128,27 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:5037}
       reachable: true
       timeout: 5s
-    # Pre-2026-05-16 these checks used `command: /opt/.../adb ... in_container: true`
-    # — that worked but required the runner to shell into the container.
-    # The new `adb:` verb (host-side goadb client) replaces them: same
-    # assertions, host-side execution, structured output. R5 mandates
-    # deletion of the deprecated path in the same commit.
+    # ORDER IS LOAD-BEARING. The eval runner executes checks in declaration
+    # order (evalrun.go Runner.Run — sequential, no sort), so the readiness
+    # GATE must come FIRST: `adb wait-for-device` polls sys.boot_completed
+    # every 2s until it is "1" (or timeout), tolerating the early-boot window
+    # where `adb devices` reports the device as "unknown". Every one-shot adb
+    # probe below it then runs against a fully-booted device. getprop/shell
+    # are SINGLE-SHOT (their `timeout:` is a per-attempt cap, NOT a retry
+    # budget), so a getprop placed BEFORE this gate fails instantly while the
+    # emulator is still booting (AdbError "error performing RunCommand").
+    #
+    # The `adb:` verb is the host-side goadb client (replaced the
+    # pre-2026-05-16 `command: /opt/.../adb … in_container: true` form): same
+    # assertions, host-side execution, structured output.
+    - id: adb-wait-for-device-ready
+      scope: deploy
+      adb: wait-for-device
+      # Cold-boot of the AVD on a fresh rebuild takes ~2 min; 300s leaves
+      # margin. The check timeout is forwarded to `wait-for-device --timeout`.
+      timeout: 300s
+      stdout:
+        - contains: ready
     - id: adb-detects-emulator
       scope: deploy
       adb: devices
@@ -144,10 +160,10 @@ layer:
       property: sys.boot_completed
       stdout:
         - contains: "1"
-      timeout: 300s
 
     # Extended adb verb coverage — proves each method end-to-end on a
-    # fresh disposable rebuild (R10 acceptance).
+    # fresh disposable rebuild (R10 acceptance). All run AFTER the readiness
+    # gate above, so the device is fully booted.
     - id: adb-shell-android-version
       scope: deploy
       adb: shell
@@ -155,12 +171,6 @@ layer:
       arg: [getprop, ro.build.version.release]
       stdout:
         - contains: "14"
-    - id: adb-wait-for-device-ready
-      scope: deploy
-      adb: wait-for-device
-      timeout: 240s
-      stdout:
-        - contains: ready
     # Disable Play Protect ADB-install verification before the install
     # check — on freshly-booted emulators Google's online verifier times
     # out (the AVD has no internet) and pm install fails with
@@ -185,6 +195,17 @@ layer:
       stdout:
         - contains: Success
       timeout: 60s
+      # PackageManager keeps initializing for a few seconds AFTER
+      # sys.boot_completed=1 (the wait-for-device gate above), so an install
+      # fired in that window fails with "Failed to parse APK file". This is
+      # the ONE package-mutating op that runs right after boot — `eventually:`
+      # re-runs the whole install (push + idempotent `pm install -r`) until it
+      # succeeds or the deadline, polling the exact end-to-end readiness
+      # condition (no proxy signal). The framework's synchronization
+      # primitive, NOT a fixed sleep. Once this passes, the device is settled,
+      # so the confirm/uninstall/appium ops below stay one-shot.
+      eventually: 180s
+      retry_interval: 5s
     - id: adb-shell-confirms-apidemos-installed
       scope: deploy
       adb: shell
@@ -224,14 +245,13 @@ layer:
     - id: appium-install-apidemos
       scope: deploy
       appium: install-app
-      # Appium runs in-container and reads `apk:` from ITS view of the
-      # filesystem. The R10 harness `podman cp`s the test APK to
-      # /tmp/ApiDemos-debug.apk before running `ov eval live`. The path
-      # is a stable agreement, not a bind mount, because the canonical
-      # workspace volume in this image is the AVD store — adding a
-      # tests bind would require an image-side volume declaration that
-      # only benefits R10. See README.md "R10 harness — APK staging".
-      apk: /tmp/ApiDemos-debug.apk
+      # `apk:` is a HOST path (resolved against the project root, identical
+      # to adb-install-apidemos above). `appium: install-app` stages it into
+      # the container via `<engine> cp` then calls mobile:installApp with the
+      # in-container path — no bind mount and no external staging step. (The
+      # base64 `{"app":…}` form is rejected by mobile:installApp; the file
+      # MUST be in-container, which the verb now guarantees.)
+      apk: ./tests/data/ApiDemos-debug.apk
       timeout: 60s
     - id: appium-screenshot-default-canvas
       scope: deploy

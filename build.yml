@@ -87,16 +87,30 @@ builder:
         cache_mount:
             - dst: /var/cache/pacman/pkg
               sharing: locked
+            # Owned (user-writable) caches for the AUR build user, persisted
+            # across builds so a stage cache-miss reuses the downloads instead
+            # of re-fetching from the AUR / upstream:
+            #   - /tmp/aur-srcdest    → makepkg SRCDEST (downloaded source
+            #                           tarballs / binaries, e.g. google-chrome's
+            #                           ~100MB upstream package).
+            #   - /tmp/aur-xdg-cache  → XDG_CACHE_HOME, so yay's AUR clone cache
+            #                           (<xdg>/yay) persists.
+            - dst: /tmp/aur-srcdest
+              owned: true
+            - dst: /tmp/aur-xdg-cache
+              owned: true
         stage_template: |
             FROM {{.BuilderRef}} AS {{.StageName}}
             USER root
             RUN echo '{{.User}} ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
             USER {{.UID}}
             WORKDIR {{.Home}}
-            RUN {{cacheMounts .CacheMounts}} \
-                mkdir -p /tmp/aur-build && \
+            ENV XDG_CACHE_HOME=/tmp/aur-xdg-cache
+            RUN {{cacheMountsAuto .CacheMounts .UID .GID}} \
+                mkdir -p /tmp/aur-build /tmp/aur-srcdest /tmp/aur-xdg-cache && \
                 cp /etc/makepkg.conf /tmp/makepkg.conf && \
                 sed -i '/^OPTIONS/s/ debug/ !debug/' /tmp/makepkg.conf && \
+                echo 'SRCDEST=/tmp/aur-srcdest' >> /tmp/makepkg.conf && \
                 yay -S --noconfirm --needed --builddir /tmp/aur-build --makepkgconf /tmp/makepkg.conf
             {{- range .Options}} {{.}}{{end}}
             {{- range .Packages}} \

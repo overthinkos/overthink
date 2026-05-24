@@ -7,9 +7,15 @@ layer:
     runtime root so consumers (Android SDK, Appium, Gradle, sbt, etc.) can
     discover it without hardcoding a distro-specific path.
   env:
-    JAVA_HOME: "/usr/lib/jvm/jre-21-openjdk"
+    # Distro-agnostic JAVA_HOME. The task below symlinks /usr/lib/jvm/ov-jdk21 to
+    # whichever JDK 21 root the distro package installed (fedora java-21-openjdk,
+    # arch java-21-openjdk, debian/ubuntu java-21-openjdk-amd64), so consumers
+    # (android-sdk, appium-server, the emulator service) never hardcode a
+    # distro-specific path. The previous hardcoded /usr/lib/jvm/jre-21-openjdk
+    # only existed on Fedora — it silently broke every other distro.
+    JAVA_HOME: "/usr/lib/jvm/ov-jdk21"
   path_append:
-    - "/usr/lib/jvm/jre-21-openjdk/bin"
+    - "/usr/lib/jvm/ov-jdk21/bin"
   distro:
     fedora:
       package:
@@ -24,7 +30,32 @@ layer:
     ubuntu:
       package:
         - openjdk-21-jdk-headless
+  task:
+    - cmd: |
+        set -e
+        # Establish the canonical, distro-agnostic JAVA_HOME (see env: above).
+        # Pick the JDK 21 root the distro package installed and symlink a stable
+        # path to it. Prefer the full JDK (has bin/javac) over a bare JRE.
+        jdk=""
+        for c in /usr/lib/jvm/java-21-openjdk /usr/lib/jvm/java-21-openjdk-amd64 \
+                 /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/jre-21-openjdk; do
+          if [ -x "$c/bin/java" ]; then jdk="$c"; break; fi
+        done
+        [ -n "$jdk" ] || { echo "java-openjdk: no JDK 21 found under /usr/lib/jvm" >&2; exit 1; }
+        ln -sfn "$jdk" /usr/lib/jvm/ov-jdk21
+        echo "java-openjdk: JAVA_HOME -> /usr/lib/jvm/ov-jdk21 -> $jdk"
+      user: root
   eval:
+    # Guard the cross-distro JAVA_HOME: the canonical symlink MUST resolve to a
+    # real JDK with java AND javac on every distro. This build-scope check fails
+    # if the symlink is missing/broken — exactly the regression that shipped when
+    # JAVA_HOME was hardcoded to the Fedora-only jre-21-openjdk path.
+    - id: java-home-canonical-java
+      command: test -x /usr/lib/jvm/ov-jdk21/bin/java
+      exit_status: 0
+    - id: java-home-canonical-javac
+      command: test -x /usr/lib/jvm/ov-jdk21/bin/javac
+      exit_status: 0
     - id: java-binary
       file: /usr/bin/java
       exists: true

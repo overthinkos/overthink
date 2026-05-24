@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+// TestAppiumInstallApp_MissingHostAPK proves install-app treats --apk as a
+// HOST path: a nonexistent host file fails fast with a clear "not found on
+// host" error BEFORE any session/container resolution. This would not hold
+// under the pre-fix code, which passed --apk straight through as an
+// in-container appPath and never stat'd the host filesystem.
+func TestAppiumInstallApp_MissingHostAPK(t *testing.T) {
+	c := &AppiumInstallAppCmd{Image: "no-such-image", Apk: "/nonexistent/does-not-exist.apk"}
+	err := c.Run()
+	if err == nil {
+		t.Fatal("expected error for missing host APK, got nil")
+	}
+	if !strings.Contains(err.Error(), "APK not found on host") {
+		t.Errorf("error = %q, want it to mention 'APK not found on host'", err.Error())
+	}
+}
+
 func TestPosSelectorStrategy_DefaultsXpath(t *testing.T) {
 	// Strategy omitted → no --strategy flag emitted (subprocess defaults to xpath).
 	c := &Check{Selector: "//Button"}

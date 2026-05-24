@@ -317,14 +317,26 @@ func TestEmitDownload_TarGz(t *testing.T) {
 		t.Fatalf("emitDownload: %v", err)
 	}
 	out := b.String()
-	if !strings.Contains(out, "tar -xzf - -C /usr/local/bin app") {
-		t.Errorf("missing tar -xzf with include filter:\n%s", out)
+	// Now extracts from the content-addressed cache file ($__c), not a stream.
+	if !strings.Contains(out, `tar -xzf "$__c" -C /usr/local/bin app`) {
+		t.Errorf("missing tar -xzf from cache file with include filter:\n%s", out)
 	}
 	if !strings.Contains(out, "BUILD_ARCH=$(uname -m)") {
 		t.Errorf("should set BUILD_ARCH from uname:\n%s", out)
 	}
-	if !strings.Contains(out, "/tmp/downloads") {
-		t.Errorf("should use downloads cache mount:\n%s", out)
+	// The file must actually be CACHED: content-addressed path under the mount,
+	// fetched only when absent, atomically renamed from .part on success.
+	if !strings.Contains(out, "/tmp/downloads/$(printf %s") || !strings.Contains(out, "sha256sum") {
+		t.Errorf("download must be content-addressed in /tmp/downloads:\n%s", out)
+	}
+	if !strings.Contains(out, `[ -s "$__c" ] ||`) {
+		t.Errorf("download must skip re-fetch when the cached file already exists:\n%s", out)
+	}
+	if !strings.Contains(out, `-o "$__c.part"`) || !strings.Contains(out, `mv -f "$__c.part" "$__c"`) {
+		t.Errorf("download must be integrity-safe (.part + atomic rename):\n%s", out)
+	}
+	if !strings.Contains(out, "--mount=type=cache,id=ov-tmp-downloads,dst=/tmp/downloads") {
+		t.Errorf("should declare the downloads cache mount:\n%s", out)
 	}
 }
 
@@ -338,23 +350,61 @@ func TestEmitDownload_Sh(t *testing.T) {
 		t.Fatalf("emitDownload: %v", err)
 	}
 	out := b.String()
-	// Env vars are shell-quoted inside a shell-quoted outer — double-escape.
-	// Confirm the env var name appears before "sh" and the value is present.
 	if !strings.Contains(out, "UV_INSTALL_DIR=") {
 		t.Errorf("should include env var assignment:\n%s", out)
 	}
 	if !strings.Contains(out, "/usr/local/bin") {
 		t.Errorf("should include env value:\n%s", out)
 	}
-	if !strings.Contains(out, "| ") || !strings.Contains(out, " sh") {
-		t.Errorf("should pipe into shell:\n%s", out)
+	// The install script is now cached then run from the cache file: the env
+	// vars precede `sh "$__c"` so the SCRIPT sees them.
+	if !strings.Contains(out, `sh "$__c"`) {
+		t.Errorf("should run the cached install script:\n%s", out)
 	}
-	// For install scripts, env vars belong before `sh` (so the script sees them),
-	// not before `curl` (which doesn't need them).
-	idxPipe := strings.Index(out, "| ")
+	if !strings.Contains(out, "sha256sum") || !strings.Contains(out, "/tmp/downloads") {
+		t.Errorf("install script should also be content-addressed in the cache:\n%s", out)
+	}
+	idxSh := strings.LastIndex(out, `sh "$__c"`)
 	idxEnv := strings.LastIndex(out, "UV_INSTALL_DIR=")
-	if idxEnv < idxPipe {
-		t.Errorf("env vars should appear AFTER pipe (before sh):\n%s", out)
+	if idxEnv > idxSh {
+		t.Errorf("env vars should appear BEFORE `sh \"$__c\"` so the script sees them:\n%s", out)
+	}
+}
+
+func TestEmitDownload_CacheModifier(t *testing.T) {
+	// A download task can declare extra `cache:` mounts (e.g. a build cache),
+	// owned per the task user. Root task → shared mount; user task → owned.
+	var b strings.Builder
+	if err := emitDownload(&b,
+		Task{Download: "https://x/app.zip", Extract: "zip", To: "/opt/app", User: "root",
+			Cache: []string{"/var/cache/app-build"}},
+		testResolvedImage()); err != nil {
+		t.Fatalf("emitDownload: %v", err)
+	}
+	out := b.String()
+	if !strings.Contains(out, "--mount=type=cache,id=ov-var-cache-app-build,dst=/var/cache/app-build,sharing=locked") {
+		t.Errorf("root download task should get a SHARED cache mount for cache:\n%s", out)
+	}
+	if !strings.Contains(out, `unzip -o "$__c" -d /opt/app`) {
+		t.Errorf("zip should extract from the cache file:\n%s", out)
+	}
+}
+
+func TestTaskCacheMounts_OwnershipByUser(t *testing.T) {
+	img := testResolvedImage() // UID/GID 1000 in the test fixture
+	// root task → shared (sharing=locked), no uid in id
+	root := taskCacheMounts(Task{User: "root", Cache: []string{"/var/cache/x"}}, img)
+	if len(root) != 1 || !strings.Contains(root[0], "sharing=locked") || strings.Contains(root[0], "uid=") {
+		t.Errorf("root cache mount should be shared (no uid): %v", root)
+	}
+	// user task → owned (uid/gid), id carries -uid<N>
+	user := taskCacheMounts(Task{User: "${USER}", Cache: []string{"/var/cache/x"}}, img)
+	if len(user) != 1 || !strings.Contains(user[0], "uid=") || !strings.Contains(user[0], "-uid") {
+		t.Errorf("non-root cache mount should be uid-owned: %v", user)
+	}
+	// no cache: → no mounts
+	if got := taskCacheMounts(Task{Cmd: "x"}, img); got != nil {
+		t.Errorf("no cache: should yield nil, got %v", got)
 	}
 }
 

@@ -1,12 +1,41 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
 )
+
+// TestPrintDebugRetentionNotice asserts that a FAILED bed prints the
+// target-appropriate inspect + destroy hints — the keep-the-bed-up-on-failure
+// behavior (fail() no longer tears the bed down). Each target kind gets the
+// right destroy command.
+func TestPrintDebugRetentionNotice(t *testing.T) {
+	cases := []struct {
+		name     string
+		node     DeploymentNode
+		wantSubs []string
+	}{
+		{"pod", DeploymentNode{Target: "pod"}, []string{"left running for debugging", "podman exec ov-bed1", "ov remove bed1"}},
+		{"vm", DeploymentNode{Target: "vm", Vm: "k3s-vm"}, []string{"VM \"k3s-vm\" left running", "ov vm destroy k3s-vm"}},
+		{"local", DeploymentNode{Target: "local"}, []string{"local apply left in place", "ov remove bed1"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			printDebugRetentionNotice(&buf, "bed1", tc.node)
+			got := buf.String()
+			for _, sub := range tc.wantSubs {
+				if !strings.Contains(got, sub) {
+					t.Errorf("notice for %s missing %q; got:\n%s", tc.name, sub, got)
+				}
+			}
+		})
+	}
+}
 
 // TestExitCodeOf asserts exit-code extraction: nil→0, plain error→1,
 // subprocess exit 2→2. Underpins the `ov eval run <bed>` exit-code

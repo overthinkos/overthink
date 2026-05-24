@@ -26,12 +26,15 @@ fi
 # ioctl (the only way to know for sure — Android emulator's own preflight
 # check reads /etc/group and gives wrong negatives in rootless containers
 # even when KVM access physically works). When KVM is reachable we force
-# `-accel kvm` to bypass the preflight; otherwise fall back to TCG
-# software emulation so the container at least boots (slowly) on
-# KVM-less hosts (e.g. CI runners).
+# `-accel on` to bypass the preflight; otherwise fall back to TCG software
+# emulation (`-accel off`) so the container at least boots (slowly) on
+# KVM-less hosts (e.g. CI runners). NB: the emulator's `-accel` flag only
+# accepts on|off|auto — `-accel kvm` is rejected ("Invalid '-accel kvm'
+# parameter, valid values are: on off auto") and the emulator exits
+# immediately, which supervisord reports as "FATAL Exited too quickly".
 if python3 -c "import os,fcntl; fd=os.open('/dev/kvm', os.O_RDWR); fcntl.ioctl(fd, 0xae00)" 2>/dev/null; then
-  ACCEL_FLAGS="-accel kvm"
-  echo "[start-emulator] KVM reachable; using -accel kvm" >&2
+  ACCEL_FLAGS="-accel on"
+  echo "[start-emulator] KVM reachable; using -accel on" >&2
 else
   ACCEL_FLAGS="-accel off"
   echo "[start-emulator] KVM not reachable; falling back to -accel off (slow)" >&2

@@ -1,5 +1,5 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: jupyter-ml
     require:
         - cuda
@@ -12,6 +12,10 @@ layer:
         NVIDIA_PYTHON_PROJECT: "~/.pixi"
         LD_LIBRARY_PATH: "/usr/lib64:$HOME/llama.cpp"
     distro:
+        arch:
+            package:
+                - git
+                - gcc
         fedora:
             package:
                 - git

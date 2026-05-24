@@ -1,9 +1,9 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: immich
     require:
         - supervisord
-        - nodejs24
+        - nodejs
         - postgresql
         - redis
         - ffmpeg
@@ -24,6 +24,17 @@ layer:
         REDIS_PORT: "6379"
         NODE_ENV: "production"
     distro:
+        arch:
+            # Arch image-lib names differ from Fedora: libvips (bundles headers — no
+            # -devel split), libraw, perl-image-exiftool (lowercase); gcc includes g++.
+            package:
+                - libvips
+                - libheif
+                - libraw
+                - perl-image-exiftool
+                - gcc
+                - make
+                - unzip
         fedora:
             package:
                 - vips

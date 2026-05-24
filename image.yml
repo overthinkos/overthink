@@ -74,7 +74,7 @@ image:
             - linux/amd64
         layer:
             - agent-forwarding
-            - nodejs24
+            - nodejs
             - supervisord
             - postgresql
             - vectorchord
@@ -90,7 +90,7 @@ image:
             - linux/amd64
         layer:
             - agent-forwarding
-            - nodejs24
+            - nodejs
             - cuda
             - python-ml
             - supervisord

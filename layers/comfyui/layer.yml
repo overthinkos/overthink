@@ -1,10 +1,14 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: comfyui
     require:
         - cuda
         - supervisord
     distro:
+        arch:
+            package:
+                - aria2
+                - git-lfs
         fedora:
             package:
                 - aria2

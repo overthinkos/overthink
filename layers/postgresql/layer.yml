@@ -1,8 +1,18 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: postgresql
     require: []
     distro:
+        arch:
+            # Arch `postgresql` ships the server (postgres, initdb, pg_ctl); psql,
+            # pg_isready and pg_config come from postgresql-libs (a hard dependency,
+            # pulled transitively). pgvector is not in the Arch repos — it builds
+            # from the AUR (consumer opts in with build: [pac, aur]).
+            package:
+                - postgresql
+            aur:
+                package:
+                    - pgvector
         fedora:
             package:
                 - postgresql-server
@@ -128,6 +138,8 @@ layer:
           exists: true
         - id: postgresql-package
           package: postgresql-server
+          package_map:
+            arch: postgresql
           installed: true
         - id: pgvector-package
           package: pgvector

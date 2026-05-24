@@ -1,8 +1,13 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: redis
     require: []
     distro:
+        arch:
+            # No `redis` package on Arch/CachyOS — valkey provides /usr/bin/redis-server
+            # and /usr/bin/redis-cli (the paths the service exec + evals below use).
+            package:
+                - valkey
         fedora:
             package:
                 - redis
@@ -26,6 +31,8 @@ layer:
         # request — query the actual installed provider.
         - id: redis-package
           package: valkey-compat-redis
+          package_map:
+            arch: valkey
           installed: true
         # Deploy-scope: against the running service. HOST_PORT resolves to the
         # effective deploy-time port mapping — works unchanged whether the

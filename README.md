@@ -381,7 +381,7 @@ ov deploy del host                    # reverses everything via ReverseOps + led
 
 | Category | Representative layers | Purpose |
 |---|---|---|
-| **Foundations** | `pixi`, `python`, `nodejs`, `nodejs24`, `rust`, `golang`, `build-toolchain`, `yay` | Package managers and language runtimes |
+| **Foundations** | `pixi`, `python`, `nodejs`, `rust`, `golang`, `build-toolchain`, `yay` | Package managers and language runtimes |
 | **Services & Infrastructure** | `supervisord`, `traefik`, `postgresql`, `vectorchord`, `redis`, `valkey`, `docker-ce`, `kubernetes` | Init, reverse proxy, databases, container-in-container |
 | **GPU & ML** | `cuda`, `rocm`, `nvidia`, `llama-cpp`, `python-ml`, `jupyter`, `jupyter-ml`, `unsloth`, `unsloth-studio`, `ollama`, `comfyui` | NVIDIA/AMD runtimes and ML stacks |
 | **Desktop Compositors** | `sway`, `labwc`, `wayvnc`, `pipewire`, `selkies` | Wayland/X11 servers, audio, browser-streamed desktops |

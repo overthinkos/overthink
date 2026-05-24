@@ -1,9 +1,12 @@
 layer:
-    version: 2026.144.1443
+    version: 2026.144.1531
     name: vectorchord
     require:
         - postgresql
     distro:
+        arch:
+            package:
+                - unzip
         fedora:
             package:
                 - unzip
@@ -17,14 +20,20 @@ layer:
         # runtime (env:). A future enhancement could unify them.
         VCHORD_VERSION: "1.1.1"
     task:
-        # VectorChord ships per-PostgreSQL-major zipped builds. We detect the
-        # installed Postgres major + extension dirs dynamically because the parent
-        # postgresql layer doesn't pin a fixed version and Fedora's pkglibdir path
-        # is arch-dependent (/usr/lib64/pgsql on x86_64/aarch64, different on 32-bit).
+        # VectorChord ships per-PostgreSQL-major zipped builds. Detect the installed
+        # Postgres major + extension dirs WITHOUT pg_config (absent on Fedora —
+        # it ships only in -devel packages the postgresql layer doesn't install;
+        # present on Arch via postgresql-libs, but we stay pg_config-free for both):
+        # `postgres --version` for the major, `find plpgsql.so` for pkglibdir
+        # (Fedora /usr/lib64/pgsql, Arch /usr/lib/postgresql), and a candidate
+        # loop for sharedir (Fedora /usr/share/pgsql, Arch /usr/share/postgresql).
         - cmd: |
             PG_MAJOR=$(postgres --version | awk '{print $NF}' | cut -d. -f1)
-            PKGLIBDIR=$(dirname "$(find /usr/lib*/pgsql -name plpgsql.so -print -quit 2>/dev/null)")
-            SHAREDIR=/usr/share/pgsql
+            PKGLIBDIR=$(dirname "$(find /usr/lib* -name plpgsql.so -print -quit 2>/dev/null)")
+            SHAREDIR=""
+            for d in /usr/share/pgsql /usr/share/postgresql; do
+                [ -d "$d/extension" ] && SHAREDIR="$d" && break
+            done
 
             if [ -z "$PKGLIBDIR" ] || [ ! -d "$PKGLIBDIR" ]; then
                 echo "Error: Could not detect PostgreSQL pkglibdir (plpgsql.so not found)" >&2
@@ -58,8 +67,8 @@ layer:
           user: root
     eval:
         - id: vchord-control-file
-          file: /usr/share/pgsql/extension/vchord.control
-          exists: true
+          command: SD=$(for d in /usr/share/pgsql /usr/share/postgresql; do [ -d "$d/extension" ] && echo "$d" && break; done); test -f "$SD/extension/vchord.control"
+          exit_status: 0
         - id: vchord-shared-preload-env
           scope: deploy
           command: printenv POSTGRES_SHARED_PRELOAD_LIBRARIES

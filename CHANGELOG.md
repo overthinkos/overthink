@@ -22,6 +22,51 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — CachyOS GPU image family + nodejs24→nodejs merge
+
+The NVIDIA/CUDA GPU image stack gained a **CachyOS (Arch) sibling family**
+alongside the Fedora GPU images. Eight images were added to the
+`overthinkos/cachyos` submodule (`image/cachyos`, its own `image.yml` after the
+per-kind-versioning `kind-files` split): `nvidia` (the CachyOS GPU base =
+cachyos + agent-forwarding + nvidia + cuda), `python-ml`, `jupyter-ml`,
+`ollama`, `comfyui`, `unsloth-studio`, `immich-ml`, and `selkies-desktop-nvidia`.
+They inherit `build: [pac]` + the `ov.arch-builder` builder map from the cachyos
+base within the submodule namespace (no per-image builder redeclaration);
+`immich-ml` and `selkies-desktop-nvidia` override `build: [pac, aur]` for AUR
+packages (pgvector; google-chrome + wlrctl). The GPU **layers** stay shared in
+the main repo, reached by `@github` ref.
+
+**Layer Arch support (main repo).** Additive `distro.arch` package branches were
+added to the GPU-stack layers, with Arch package names verified against the live
+CachyOS package database: `comfyui` (aria2, git-lfs), `jupyter-ml` (git, gcc),
+`redis` (**valkey** — Arch has no `redis`; valkey ships `/usr/bin/redis-server`
++ `/usr/bin/redis-cli`), `postgresql` (postgresql + postgresql-libs;
+**pgvector via AUR**), `immich` (libvips, libheif, libraw, perl-image-exiftool,
+gcc). Cross-distro `eval:` probes gained `package_map:` entries
+(`valkey-compat-redis→valkey`, `postgresql-server→postgresql`). The `vectorchord`
+layer's extension-dir detection switched from hardcoded `/usr/lib*/pgsql` +
+`/usr/share/pgsql` to `pg_config --pkglibdir` / `--sharedir`, authoritative on
+both Fedora (`pgsql`) and Arch (`postgresql`) layouts. Per the per-kind
+versioning rules (this cutover lands on top of that one), every changed layer's
+`version:` was bumped to `2026.144.1531`. Fedora package sets are byte-stable.
+
+**nodejs24 → nodejs merge.** The standalone `nodejs24` layer was deleted; its
+pnpm provision moved into the generic `nodejs` layer (a `package.json` with
+`pnpm@10`, installed via the npm builder into `~/.npm-global/bin`). Every
+consumer repointed to `nodejs`: the `immich` layer's `require:`, the main
+`immich`/`immich-ml` images, and `fedora-coder` (in `overthinkos/fedora`).
+Immich has no hard Node requirement (its `engines` pins only `pnpm>=10`; the
+`node` version is a non-enforced volta dev-pin), so consumers follow the
+distro-default Node — v26 on Arch, v22 on Fedora. R5 sweep: `git grep nodejs24`
+returns only this file.
+
+No further schema bump — this change is additive (new images, new distro
+sections, a layer removal) on top of the per-kind-versioning schema
+`2026.144.1443`. Cross-repo landing: the changed main-repo layers land + tag
+first, then `image/cachyos` reconciles its `@github` pins to that tag and runs
+the authoritative R10 (build → deploy → eval-live → fresh rebuild) of the eight
+GPU images on real NVIDIA hardware.
+
 ### 2026-05-24 — per-kind versioning: author-declared `version:` as the authoritative identity for layers AND images (hard cutover)
 
 Two long-standing defects shared one root cause — **the per-push CalVer git tag

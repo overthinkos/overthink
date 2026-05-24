@@ -4,6 +4,14 @@ layer:
     - supervisord
     - python
     - pipewire
+    # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+    # against ffmpeg's libav* + libx264 — without them at runtime the backend
+    # fails to load (libx264.so.165: cannot open shared object file), pixelflux
+    # never creates its wayland-1 compositor, and labwc/chrome crash-loop. The
+    # ffmpeg layer installs ffmpeg (arch: pulls x264 → libx264; fedora:
+    # negativo17), supplying every lib pixelflux links. R9: declare the runtime
+    # dep, don't rely on a transitive pull (none existed on the cachyos base).
+    - ffmpeg
   env:
     LANG: "C.UTF-8"
     PIXELFLUX_WAYLAND: "true"

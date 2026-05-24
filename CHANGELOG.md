@@ -22,6 +22,32 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — selkies layer requires `ffmpeg` (pixelflux runtime libs missing on the cachyos base) (bug fix, no schema bump)
+
+The cachyos-based `selkies-desktop` (since the affbd46 cachyos migration) deploys
+but its desktop never comes up: chrome crash-loops, `/json/version` EOFs. Root
+cause (definitively traced, not GPU capacity): pixelflux's Wayland backend
+(`pixelflux_wayland.so`, compiled in arch-builder) is dynamically linked against
+`libx264.so.165` + `libavcodec/util/filter`, but the cachyos final image installs
+no ffmpeg/x264 — so the backend fails to load
+(`libx264.so.165: cannot open shared object file`), `_GLOBAL_WAYLAND_BACKEND` is
+None, pixelflux never creates `/tmp/wayland-1`, and labwc → chrome never start.
+The GPU is fine (the GL renderer inits on renderD128 once the libs are present).
+
+The selkies layer compiles pixelflux but only required `supervisord/python/
+pipewire` — never declaring pixelflux's runtime link deps. The old Fedora-based
+selkies-desktop happened to get the libs transitively; the cachyos base does not.
+
+Fix: `layers/selkies/layer.yml` now `require: ffmpeg`. The ffmpeg layer installs
+`ffmpeg` (arch: pulls `x264` → `libx264.so.165`; fedora: negativo17), supplying
+every lib pixelflux links. Validated live: installing ffmpeg in the running bed
+made pixelflux load ("Rust Wayland Backend Initialized Globally"). R9 — runtime
+deps are declared, not assumed transitive. Affects selkies-desktop[-nvidia]
+(pixelflux consumers); sway-browser-vnc does not use the selkies layer.
+
+No schema/format change → no `MigrationStep`, no `version:` bump; landing push
+carries a fresh per-push `v<CalVer>` tag.
+
 ### 2026-05-24 — Add readiness waits (`eventually:`) to the chrome CDP/MCP deploy-scope eval probes (bug fix, no schema bump)
 
 Surfaced by `ov eval run eval-selkies-desktop-pod`: 105/106 live checks passed,

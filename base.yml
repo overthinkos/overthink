@@ -13,13 +13,15 @@
 #  Every builder/nonfree layer: list uses github references (not plain names) so
 #  the SAME file resolves both locally (root namespace) and remotely (the `ov`
 #  namespace in a submodule that has no layers/ of its own). github references
-#  everywhere, one definition. Each layer github ref MUST pin to the SAME tag the
-#  submodules pin their other refs to (CollectRemoteRefs rejects one bare ref at
-#  two versions; the shared pixi/nodejs/build-toolchain refs are the constraint).
+#  everywhere, one definition. The shared builder-layer refs (pixi / nodejs /
+#  build-toolchain / yay / rpmfusion) pin to one recent ecosystem tag so a
+#  consumer that also references a changed layer (e.g. nodejs) resolves it to a
+#  single version: the warn-and-newest-wins resolver is silent only when every
+#  reference to a given layer agrees on that layer's own version:.
 #
-#  version: is the SCHEMA CalVer (bumped by the import-namespace cutover); the
-#  internal layer refs stay at the ecosystem layer tag v2026.141.1600 (the layers
-#  did not move).
+#  version: is the SCHEMA CalVer (bumped by the per-kind-versioning cutover); the
+#  builder-layer refs pin to ecosystem tag v2026.144.2044. Run `ov image
+#  reconcile` to advance them together when a shared layer moves.
 version: 2026.143.844
 image:
     arch:
@@ -50,10 +52,10 @@ image:
     arch-builder:
         base: arch
         layer:
-            - '@github.com/overthinkos/overthink/layers/pixi:v2026.141.1600'
-            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.141.1600'
-            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.141.1600'
-            - '@github.com/overthinkos/overthink/layers/yay:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/pixi:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/layers/yay:v2026.144.2044'
         produce:
             - pixi
             - npm
@@ -84,9 +86,9 @@ image:
         # the base removes that ordering dependency entirely.
         base: fedora-nonfree
         layer:
-            - '@github.com/overthinkos/overthink/layers/pixi:v2026.141.1600'
-            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.141.1600'
-            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/pixi:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/layers/nodejs:v2026.144.2044'
+            - '@github.com/overthinkos/overthink/layers/build-toolchain:v2026.144.2044'
         produce:
             - pixi
             - npm
@@ -105,4 +107,4 @@ image:
             npm: fedora-builder
             pixi: fedora-builder
         layer:
-            - '@github.com/overthinkos/overthink/layers/rpmfusion:v2026.141.1600'
+            - '@github.com/overthinkos/overthink/layers/rpmfusion:v2026.144.2044'

@@ -22,7 +22,7 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
-### 2026-05-24 — selkies layer requires `ffmpeg` (pixelflux runtime libs missing on the cachyos base) (bug fix, no schema bump)
+### 2026-05-24 — selkies composes `ffmpeg` (pixelflux runtime libs missing on the cachyos base) + auto-detection eval tests (bug fix, no schema bump)
 
 The cachyos-based `selkies-desktop` (since the affbd46 cachyos migration) deploys
 but its desktop never comes up: chrome crash-loops, `/json/version` EOFs. Root
@@ -34,16 +34,34 @@ no ffmpeg/x264 — so the backend fails to load
 None, pixelflux never creates `/tmp/wayland-1`, and labwc → chrome never start.
 The GPU is fine (the GL renderer inits on renderD128 once the libs are present).
 
-The selkies layer compiles pixelflux but only required `supervisord/python/
-pipewire` — never declaring pixelflux's runtime link deps. The old Fedora-based
-selkies-desktop happened to get the libs transitively; the cachyos base does not.
+The selkies layer compiles pixelflux but never declared pixelflux's runtime link
+deps. The old Fedora-based selkies-desktop happened to get the libs transitively;
+the cachyos base does not.
 
-Fix: `layers/selkies/layer.yml` now `require: ffmpeg`. The ffmpeg layer installs
-`ffmpeg` (arch: pulls `x264` → `libx264.so.165`; fedora: negativo17), supplying
-every lib pixelflux links. Validated live: installing ffmpeg in the running bed
-made pixelflux load ("Rust Wayland Backend Initialized Globally"). R9 — runtime
-deps are declared, not assumed transitive. Affects selkies-desktop[-nvidia]
+Fix: `layers/selkies/layer.yml` now **composes** the ffmpeg layer via `layers:
+[ffmpeg]`. A first attempt used `require: ffmpeg`, but verifying the generated
+Containerfile showed it emitted no install (only a layer comment): `require:`
+ORDERS deps that are composed elsewhere, while `layers:` is what actually pulls a
+pure-package leaf layer into the build. `layers: [ffmpeg]` groups ffmpeg into the
+shared auto-intermediate (`…-ssh-client-ffmpeg-…`), whose Containerfile now runs
+`pacman -Syu ffmpeg` (arch: pulls `x264` → `libx264.so.165`) / `dnf install
+ffmpeg` (fedora: negativo17) — supplying every lib pixelflux links. Validated:
+installing ffmpeg in the running bed made pixelflux load ("Rust Wayland Backend
+Initialized Globally"); regenerating confirmed `ffmpeg` in the intermediate's
+pacman block. R9 — runtime deps are declared. Affects selkies-desktop[-nvidia]
 (pixelflux consumers); sway-browser-vnc does not use the selkies layer.
+
+Auto-detection eval tests added so this can never silently regress again (the
+prior eval suite passed despite the desktop being dead):
+- `layers/selkies/layer.yml`: `pixelflux-wayland-libs-resolvable` (BUILD-scope —
+  `ldd` of `pixelflux_wayland.so` asserts no `not found`; catches the missing
+  runtime lib at `ov eval image`, no deploy/GPU needed) + `pixelflux-wayland-socket`
+  (deploy — `/tmp/wayland-1` exists).
+- `layers/labwc/layer.yml`: `labwc-wayland-socket` (deploy — `/tmp/wayland-0`
+  exists; `service: labwc running` was crash-loop-blind).
+All validated against the live production instance (healthy: 0 `not found`,
+both sockets present) and against the broken cachyos build (4 `not found`, no
+sockets).
 
 No schema/format change → no `MigrationStep`, no `version:` bump; landing push
 carries a fresh per-push `v<CalVer>` tag.

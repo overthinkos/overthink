@@ -65,6 +65,18 @@ layer:
       scope: deploy
       service: labwc
       running: true
+    # service:running is crash-loop-blind — labwc reports RUNNING even while it
+    # restarts every few seconds when its prerequisite (pixelflux's wayland-1)
+    # is missing. Assert labwc actually created its nested compositor socket
+    # (wayland-0) — that requires the full pixelflux→labwc chain to be healthy
+    # and is the precondition for chrome to start. Poll for readiness.
+    - id: labwc-wayland-socket
+      scope: deploy
+      command: test -e /tmp/wayland-0
+      exit_status: 0
+      in_container: true
+      eventually: 60s
+      retry_interval: 3s
   service:
     - name: labwc
       exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"

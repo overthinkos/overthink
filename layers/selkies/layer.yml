@@ -4,13 +4,17 @@ layer:
     - supervisord
     - python
     - pipewire
-    # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
-    # against ffmpeg's libav* + libx264 — without them at runtime the backend
-    # fails to load (libx264.so.165: cannot open shared object file), pixelflux
-    # never creates its wayland-1 compositor, and labwc/chrome crash-loop. The
-    # ffmpeg layer installs ffmpeg (arch: pulls x264 → libx264; fedora:
-    # negativo17), supplying every lib pixelflux links. R9: declare the runtime
-    # dep, don't rely on a transitive pull (none existed on the cachyos base).
+  # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+  # against ffmpeg's libav* + libx264 — without them at runtime the backend fails
+  # to load (libx264.so.165: cannot open shared object file), pixelflux never
+  # creates its wayland-1 compositor, and labwc/chrome crash-loop. COMPOSE the
+  # ffmpeg layer (not merely `require:` it) so its packages are actually emitted
+  # into the final image — `require:` only orders deps that are composed
+  # elsewhere; `layers:` is what pulls a pure-package leaf in (the cachyos base
+  # had no transitive ffmpeg). The ffmpeg layer installs ffmpeg (arch: pulls
+  # x264 → libx264.so.165; fedora: negativo17), supplying every lib pixelflux
+  # links. R9: declare the runtime dep.
+  layers:
     - ffmpeg
   env:
     LANG: "C.UTF-8"
@@ -144,10 +148,34 @@ layer:
     - id: traefik-binary
       file: /usr/local/bin/traefik
       exists: true
+    # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+    # against ffmpeg's libav* + libx264. If those runtime libs are absent from
+    # the final image the backend silently fails to load, pixelflux never
+    # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
+    # every OTHER probe (files/services/ports/https) still passes. This ldd check
+    # catches that class of missing-runtime-lib regression at BUILD scope
+    # (`ov eval image`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+    # "not found", so the assertion is on the absence of that string.
+    - id: pixelflux-wayland-libs-resolvable
+      command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
+      exit_status: 0
+      stdout:
+        - not_contains: "not found"
     - id: selkies-service-running
       scope: deploy
       service: selkies
       running: true
+    # supervisord reports the `selkies` program RUNNING even when pixelflux's
+    # Wayland backend failed to load — so service:running is not sufficient.
+    # Assert the compositor socket actually exists (pixelflux created wayland-1),
+    # the precondition for labwc/chrome to start. Poll for readiness.
+    - id: pixelflux-wayland-socket
+      scope: deploy
+      command: test -e /tmp/wayland-1
+      exit_status: 0
+      in_container: true
+      eventually: 60s
+      retry_interval: 3s
     - id: traefik-service-running
       scope: deploy
       service: traefik

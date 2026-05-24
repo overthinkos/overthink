@@ -22,6 +22,33 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — Add readiness waits (`eventually:`) to the chrome CDP/MCP deploy-scope eval probes (bug fix, no schema bump)
+
+Surfaced by `ov eval run eval-selkies-desktop-pod`: 105/106 live checks passed,
+the lone failure being `http http://…:9222/json/version → EOF`. Root cause: a
+readiness race, not a defect — the cdp-proxy port was reachable, the CDP-backed
+MCP probe and the selkies web UI both passed, and the identical probe passed on
+`sway-browser-vnc`. On the heavier selkies-desktop startup (labwc + pixelflux +
+supervisorctl-started Chrome) Chrome's CDP HTTP endpoint simply wasn't answering
+yet when the one-shot probe fired right after the container reached "started".
+
+Fix: the chrome CDP/MCP deploy-scope probes now use the eval framework's existing
+`eventually:` readiness primitive (bounded poll-until-ready; the per-attempt
+`timeout:` is the inner cap) instead of firing once. This still FAILS if Chrome
+never comes up — it only tolerates startup latency, it does not mask a real
+outage (not a sleep/retry-on-flake workaround). Applied to ALL chrome-dependent
+deploy-scope probes (R3 — fix every surface, not just the one that flaked):
+
+- `layers/chrome-cdp/layer.yml`: `chrome-cdp-port` (addr, `eventually: 60s`) and
+  `chrome-cdp-version` (http `/json/version`, `eventually: 90s`).
+- `layers/chrome-devtools-mcp/layer.yml`: `chrome-devtools-mcp-port` (addr,
+  `eventually: 60s`), `mcp-chrome-devtools-ping` + `mcp-chrome-devtools-list-tools`
+  (mcp, `eventually: 90s` — the MCP server proxies to Chrome's CDP, so its
+  liveness depends on Chrome being up).
+
+No schema/format change → no `MigrationStep`, no `version:` bump; the landing push
+carries a fresh per-push `v<CalVer>` tag.
+
 ### 2026-05-23 — Fix layer-ordering bug (authored `layer:` order ignored by `GlobalLayerOrder`) + base `fedora-builder` on `fedora-nonfree` (bug fix, no schema bump)
 
 Surfaced while extracting the selkies image family into a submodule. A submodule

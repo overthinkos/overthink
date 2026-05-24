@@ -93,10 +93,21 @@ layer:
       addr: 127.0.0.1:${HOST_PORT:9222}
       reachable: true
       timeout: 5s
+      # Readiness wait: the cdp-proxy comes up shortly after the container
+      # starts; poll rather than fire once.
+      eventually: 60s
+      retry_interval: 2s
     - id: chrome-cdp-version
       scope: deploy
       http: http://127.0.0.1:${HOST_PORT:9222}/json/version
       status: 200
       timeout: 5s
+      # Readiness wait: Chrome's CDP HTTP endpoint (behind cdp-proxy) only
+      # answers once Chrome has fully started — on heavier desktops (labwc +
+      # pixelflux + supervisorctl-started Chrome) that is well after the
+      # container reaches "started". Poll until ready (still fails if Chrome
+      # never comes up) instead of one-shot, which raced and returned EOF.
+      eventually: 90s
+      retry_interval: 3s
       body:
         - contains: "webSocketDebuggerUrl"

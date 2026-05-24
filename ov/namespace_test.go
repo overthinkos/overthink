@@ -169,3 +169,82 @@ image:
 		t.Fatal("mutual import namespaces not mounted")
 	}
 }
+
+// TestResolveNamespacedBase_BuilderRefRequalified is the regression guard for the
+// cross-namespace builder-ref leak. When the root consumes a namespaced base
+// (`app: base: sub.widget`) whose builder map references the base's OWN namespace
+// (`widget: builder: {pixi: up.archlike-builder}`, where sub imports root as `up`),
+// pullNamespacedImage must re-qualify that builder ref (`up.archlike-builder` ->
+// `sub.up.archlike-builder`) — exactly as it re-qualifies `base:` — so it resolves
+// from the root config and matches the key the builder image is pulled under.
+//
+// Before the fix this failed with
+//
+//	import namespace "up" not found (resolving "up.archlike-builder")
+//
+// because the builder ref was re-resolved from root (no `up` namespace there).
+// Mirrors the real selkies-desktop (`builder: ov.arch-builder`) consumed by main's
+// android-emulator (`base: selkies.selkies-desktop`). The shape — a namespaced base
+// with BOTH buildable layers AND a namespace-relative builder map — is the exact
+// combination the prior tests never exercised.
+func TestResolveNamespacedBase_BuilderRefRequalified(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "overthink.yml", `version: 2026.143.844
+import:
+  - sub: ./sub
+image:
+  app:
+    base: sub.widget
+    distro: [fedora]
+    build: [rpm]
+  archlike-builder:
+    base: quay.io/fedora/fedora:43
+    distro: [fedora]
+    build: [rpm]
+    produce: [pixi]
+`)
+	writeFixture(t, root, "sub/overthink.yml", `version: 2026.143.844
+import:
+  - up: ../
+layer:
+  buildable:
+    task:
+      - cmd: "true"
+image:
+  widget:
+    base: quay.io/fedora/fedora:43
+    distro: [fedora]
+    build: [pac, aur]
+    builder:
+      pixi: up.archlike-builder
+    layer: [buildable]
+`)
+	uf, _, err := LoadUnified(root)
+	if err != nil {
+		t.Fatalf("LoadUnified: %v", err)
+	}
+	cfg := uf.ProjectConfig()
+	resolved, err := cfg.ResolveAllImage("test", root, ResolveOpts{})
+	if err != nil {
+		t.Fatalf("ResolveAllImage must NOT fail when a namespaced base's builder ref points into the base's own namespace: %v", err)
+	}
+	w, ok := resolved["sub.widget"]
+	if !ok {
+		t.Fatal("sub.widget not pulled into the resolved set")
+	}
+	if got := w.Builder.BuilderFor("pixi"); got != "sub.up.archlike-builder" {
+		t.Errorf("widget builder ref not re-qualified: got %q, want %q", got, "sub.up.archlike-builder")
+	}
+	if _, ok := resolved["sub.up.archlike-builder"]; !ok {
+		t.Errorf("re-qualified builder image sub.up.archlike-builder absent from resolved set (keys: %v)", keysOf(resolved))
+	}
+}
+
+func keysOf(m map[string]*ResolvedImage) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sortStrings(ks)
+	return ks
+}

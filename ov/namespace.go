@@ -161,13 +161,40 @@ func (c *Config) pullNamespacedImage(from *Config, ref, keyPrefix, calverTag, di
 	if err != nil {
 		return fmt.Errorf("resolving imported image %q: %w", fullKey, err)
 	}
+	// Re-qualify EVERY by-name ref to another image that the build graph later
+	// resolves. A pulled image's refs are namespace-relative to `cur` (the
+	// namespace it was authored in); left untouched they get re-resolved from
+	// the ROOT config — where `cur`'s own namespaces (e.g. `ov`) don't exist —
+	// yielding `import namespace "ov" not found`. Prefixing with curPrefix
+	// (`ov.arch-builder` → `selkies.ov.arch-builder`) makes each ref resolvable
+	// from root AND matches the key pullNamespacedImage stores the target under.
+	//
+	// The set of by-name image refs is the SINGLE source of truth in
+	// imageDirectDeps (graph.go): base + format builders + bootstrap builder.
+	// Keep this re-qualification in lockstep with that function — any new
+	// by-name image ref added there must be re-qualified here too.
+	requalify := func(r string) string {
+		if r == "" {
+			return r
+		}
+		return curPrefix + r
+	}
+	if len(ri.Builder) > 0 {
+		rk := make(BuilderMap, len(ri.Builder))
+		for format, b := range ri.Builder {
+			rk[format] = requalify(b)
+		}
+		ri.Builder = rk
+	}
+	ri.BootstrapBuilderImage = requalify(ri.BootstrapBuilderImage)
 	if ri.IsExternalBase {
 		out[fullKey] = ri
 		return nil
 	}
-	// Internal base within `cur` — re-key it fully-qualified, store, recurse.
+	// Internal base within `cur` — re-qualify it (drives the recursion below,
+	// so handled here rather than in the generic block above), store, recurse.
 	origBase := ri.Base
-	ri.Base = curPrefix + origBase
+	ri.Base = requalify(origBase)
 	out[fullKey] = ri
 	return c.pullNamespacedImage(cur, origBase, curPrefix, calverTag, dir, opts, out)
 }

@@ -22,6 +22,80 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — selkies image-family extraction (program family #2) + namespace builder-ref resolver fix
+
+The **selkies/sway streaming-desktop family** moved out of the main repo into the
+`overthinkos/selkies` submodule (`image/selkies`, tag `v2026.144.0906`) — family
+#2 of the image-extraction program after nvidia. The submodule inlines three
+images (`selkies-desktop` on the CachyOS/Arch base, `selkies-desktop-nvidia` on
+the Fedora GPU base [disabled], `sway-browser-vnc` on Fedora) plus two disposable
+R10 beds (`eval-selkies-desktop-pod`, `eval-sway-browser-vnc-pod`). It vendors
+nothing — every layer is an `@github` ref into main; the desktop **layers** stay
+in main (shared with `openclaw-desktop`). Bases arrive via the `ov` / `cachyos` /
+`nvidia` import namespaces. dbus is pinned `v2026.144.0531` to match the desktop
+metalayers' transitive require (avoids a swaync/a11y-tools conflict);
+agent-forwarding/ov stay on the ecosystem `v2026.141.1600`.
+
+**Main side.** `image.yml` drops the three image entries; `android-emulator`
+repoints to `base: selkies.selkies-desktop`; `eval.yml` drops the two beds (now in
+the submodule) and the matching bed-coverage-map lines; `overthink.yml` mounts
+`- selkies: '@github.com/overthinkos/selkies:v2026.144.0906'`. The
+`selkies-desktop-nvidia` mention in the `nvidia:` import comment and the
+`eval-sway-browser-vnc-pod` example in CLAUDE.md's R10-bed list were updated (R5).
+
+**Resolver fix (the extraction exposed a latent bug).** `android-emulator` is the
+first main image to consume a namespaced base (`selkies.selkies-desktop`) that
+itself carries a `builder:` map with namespace-relative refs
+(`builder: {pixi: ov.arch-builder}`, relative to the selkies namespace). The
+namespace resolver's `pullNamespacedImage` (`ov/namespace.go`) re-qualified a
+pulled base's `base:` ref to the fully-qualified ancestor but NOT its `builder:`
+or `bootstrap_builder_image` refs, so `ov.arch-builder` was re-resolved from main's
+root config (where `ov` is undefined) → `import namespace "ov" not found`. Fix:
+re-qualify EVERY by-name image ref a pulled namespaced image carries (base +
+format builders + bootstrap builder — the exact set `imageDirectDeps` in
+`graph.go` resolves) with the same namespace prefix
+(`ov.arch-builder` → `selkies.ov.arch-builder`), via one generic `requalify`
+helper kept in lockstep with `imageDirectDeps`. nvidia/cachyos never hit it
+(`nvidia.nvidia` has an empty builder map; `cachyos.cachyos` has no layers, so its
+builder is never pulled) — selkies-desktop is the first namespaced base with BOTH
+buildable layers AND a namespace-relative builder map.
+
+**Automatic future guard.** `ov image validate` (`validateImageDAG`) now SURFACES
+the `resolveNamespacedBases` error (it was swallowed with `_ =`), so a namespaced
+base — or its builder / bootstrap builder — that doesn't resolve is caught at
+`ov image validate` time, before a build hits it. A regression test
+(`TestResolveNamespacedBase_BuilderRefRequalified`) reproduces the exact uncovered
+shape and fails without the fix (verified: `import namespace "up" not found`).
+
+**Verification.** Both enabled selkies images passed full disposable R10 beds
+(`selkies-desktop` 193 checks, `sway-browser-vnc` 178 checks, 0 failures); main
+`ov image validate` is clean; the cross-repo resolution is proven by the rebuilt
+`ov` building the entire re-qualified chain (`selkies.ov.arch` →
+`selkies.ov.arch-builder` → `selkies-desktop`) from the pushed `v2026.144.0906`
+tag. The `android-emulator` full image build is blocked downstream by a
+pre-existing, selkies-unrelated gap — the `android-sdk` layer is fedora-only and
+lacks an arch package section, so it can't build on its cachyos base; that arch
+port is tracked as separate future-family work.
+
+Two (submodule) / three (main) accepted cross-repo newest-wins resolver notices
+remain: the selkies desktop metalayers ride `v2026.144.0531` while the shared
+arch/fedora builders pin the ecosystem baseline `v2026.141.1600`, so `pixi` /
+`nodejs` (and `ffmpeg` at the main level, via `cuda` vs `wl-record-pixelflux`) are
+referenced at two versions and the warn-and-newest-wins resolver picks the newest.
+Aligning them would require an ecosystem-wide baseline bump across main +
+arch/cachyos/fedora/debian/ubuntu, which the mutual main↔cachyos/nvidia frozen-tag
+import makes impossible without a transitional warning-state tag — deferred by
+operator decision.
+
+**Gitignore hygiene (same session, separate cutover).**
+`image/{arch,bootc,cachyos,debian,fedora,ubuntu}` each gained the `.build/` +
+`.containerignore` + `.dockerignore` + `.eval/` + `output/` gitignore entries that
+`image/nvidia` + `image/selkies` + main already ship, so generated build-context
+artifacts stop surfacing as untracked (submodule tags `v2026.144.0831`,
+superproject tag `v2026.144.0833`).
+
+No schema bump (relocation + resolver bugfix); `version:` stays `2026.143.844`.
+
 ### 2026-05-24 — Resolver docs + feat/-branch R10-gated git workflow + eval-coverage & zero-warnings gates + `ov image reconcile` (docs + tooling cutover, no schema bump)
 
 Forward-looking documentation of the warn-and-newest-wins resolver (the prior

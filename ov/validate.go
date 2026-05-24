@@ -738,10 +738,17 @@ func validateImageDAG(cfg *Config, layers map[string]*Layer, dir string, opts Re
 		return
 	}
 	// Pull in namespace-qualified base images (e.g. `versa: base: cachyos.cachyos`)
-	// so the DAG's base edges don't dangle — same enrichment ResolveAllImage does.
-	// Best-effort: a namespace-resolution error here is surfaced by the resolve
-	// path, not the DAG check, so ignore it (matches the per-image skip above).
-	_ = cfg.resolveNamespacedBases(images, calverTag, dir, opts)
+	// so the DAG's base edges don't dangle — same enrichment ResolveAllImages does.
+	// SURFACE a namespace-resolution error: an enabled image references a
+	// namespaced base — or that base's builder / bootstrap builder — that does
+	// not resolve. This is the automatic guard that catches namespace-ref leaks
+	// (e.g. a pulled base's `builder: ov.arch-builder` not re-qualified to
+	// `selkies.ov.arch-builder`) at `ov image validate` time, before a build hits
+	// it. The DAG check below can't run with dangling bases, so report + return.
+	if err := cfg.resolveNamespacedBases(images, calverTag, dir, opts); err != nil {
+		errs.Add("namespaced base resolution: %v", err)
+		return
+	}
 
 	_, orderErr := ResolveImageOrder(images, layers)
 	if orderErr != nil {

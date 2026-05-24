@@ -1425,8 +1425,6 @@ score:
 # `eval-sandbox` (the score `pod:` target), kept disjoint from these beds.
 #
 # Bed-to-verb coverage map:
-#   eval-sway-browser-vnc-pod (pod) — cdp, wl, vnc, dbus, mcp, record + pod-side
-#                                     file/service/port/process/http
 #   eval-k3s-vm               (vm)  — k8s (all 13 methods) + guest-side
 #                                     file/service/port/process, http via
 #                                     port-forward, VmDeployTarget end-to-end
@@ -1442,9 +1440,6 @@ score:
 #   eval-openclaw-pod         (pod) — minimal openclaw gateway on the cachyos base
 #   eval-openclaw-full-pod    (pod) — maximal openclaw-full on cachyos (AUR chrome,
 #                                     gogcli@latest, ffmpeg/sqlite arch coverage)
-#   eval-selkies-desktop-pod  (pod) — CPU streaming desktop on the cachyos base
-#                                     (labwc/waybar/swaync/pipewire/selkies +
-#                                     AUR google-chrome/wlrctl, pixelflux build)
 #   eval-openclaw-desktop-pod (pod) — all-in-one: selkies desktop + openclaw-full
 #                                     (claude-code/codex/gemini) + CPU ollama +
 #                                     nested ov toolchain (ov-full+container-nesting)
@@ -1454,32 +1449,6 @@ score:
 # ~/.config/overthink, /etc, /usr, or any operator-side directory.
 # =============================================================================
 eval:
-    # eval-sway-browser-vnc-pod deploys the SHIPPING sway-browser-vnc image
-    # (Sway desktop + Chrome + wayvnc). The image bakes binaries/services/
-    # cdp/vnc/wl/dbus + mcp (chrome-devtools-mcp layer); the eval: block adds
-    # the remaining deploy-scope probes (operator-side http, cdp list, wl
-    # sway-tree, record). Publishes the image's canonical 5900/9222/9224.
-    eval-sway-browser-vnc-pod:
-        target: pod
-        image: sway-browser-vnc
-        disposable: true
-        lifecycle: dev
-        eval:
-            - http: "http://127.0.0.1:${HOST_PORT:9222}/json/version"
-              id: esbv-pod-http-cdp
-              scope: deploy
-              status: 200
-            - cdp: list
-              id: esbv-pod-cdp-list
-              scope: deploy
-            - wl: sway-tree
-              id: esbv-pod-wl-sway-tree
-              scope: deploy
-            - record: start
-              id: esbv-pod-record-start
-              scope: deploy
-              record_name: eval-term
-              record_mode: terminal
     # eval-k3s-vm — disposable libvirt VM running k3s-server. Kubeconfig is
     # pulled back for host-side k8s: probes (all 13 methods) via the forwarded
     # :6443. A VM (native kernel + cgroup tree) sidesteps the rootless-podman
@@ -1632,35 +1601,6 @@ eval:
             - {id: eocf-pod-gog-latest, scope: deploy, file: "${HOME}/go/bin/gog", exists: true}
             - {id: eocf-pod-ffmpeg-arch, scope: deploy, file: /usr/bin/ffmpeg, exists: true}
             - {id: eocf-pod-sqlite-arch, scope: deploy, file: /usr/bin/sqlite3, exists: true}
-    # eval-selkies-desktop-pod deploys the CPU streaming desktop on the CachyOS
-    # (Arch) base. Exercises the cachyos→arch-builder pixi build of selkies
-    # (pixelflux Rust compile) AND the AUR build of google-chrome + wlrctl, plus
-    # the labwc/waybar/swaync/pipewire/traefik/sshd layer stack. Ports are
-    # remapped off the canonical 3000/9222/9224/2222 to avoid host clashes with a
-    # running selkies-desktop or the other desktop beds. The deploy-scope probes
-    # assert the AUR-built binaries actually landed on the running container; the
-    # baked layer/image evals (incl. the Selkies HTTPS 200 UI probe) cover the
-    # rest of the deploy surface.
-    eval-selkies-desktop-pod:
-        target: pod
-        image: selkies-desktop
-        disposable: true
-        lifecycle: dev
-        port:
-            - 33000:3000
-            - 39222:9222
-            - 39224:9224
-            - 32222:2222
-        description:
-            feature: "R10 bed for the CPU selkies-desktop streaming desktop on the CachyOS (Arch) base — exercises the cachyos→arch-builder pixi build of selkies (pixelflux Rust compile) plus the AUR build of google-chrome + wlrctl and the labwc/waybar/swaync/pipewire/traefik/sshd layer stack."
-            tag: [testing]
-        eval:
-            - {id: esd-pod-chrome-aur, scope: deploy, file: /usr/bin/google-chrome-stable, exists: true}
-            - {id: esd-pod-wlrctl-aur, scope: deploy, file: /usr/bin/wlrctl, exists: true}
-            - {id: esd-pod-wtype, scope: deploy, file: /usr/bin/wtype, exists: true}
-            - {id: esd-pod-labwc, scope: deploy, file: /usr/bin/labwc, exists: true}
-            - {id: esd-pod-swaync, scope: deploy, file: /usr/bin/swaync, exists: true}
-            - {id: esd-pod-pipewire, scope: deploy, file: /usr/bin/pipewire, exists: true}
     # eval-openclaw-desktop-pod deploys the all-in-one openclaw-desktop image on
     # the CachyOS (Arch) base — the selkies streaming desktop fused with the
     # openclaw-full gateway/tool stack (claude-code/codex/gemini), a CPU ollama,

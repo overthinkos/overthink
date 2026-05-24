@@ -26,3 +26,6 @@
 [submodule "image/nvidia"]
 	path = image/nvidia
 	url = https://github.com/overthinkos/nvidia.git
+[submodule "image/selkies"]
+	path = image/selkies
+	url = https://github.com/overthinkos/selkies.git

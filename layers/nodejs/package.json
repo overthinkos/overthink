@@ -1,7 +1,0 @@
-{
-  "name": "nodejs-npm",
-  "version": "1.0.0",
-  "dependencies": {
-    "pnpm": "10"
-  }
-}

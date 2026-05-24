@@ -164,6 +164,28 @@ GPU images on real NVIDIA hardware.
   attempt with zero added latency; a genuinely-broken deploy still fails after
   the deadline.
 
+- **`base.yml` builder-layer refs still pinned the pre-merge ecosystem tag →
+  nodejs resolved to two versions in every consumer.** The nodejs24→nodejs merge
+  moved the `nodejs` layer (`version:` `2026.144.1443` → `2026.144.1613`), but
+  `base.yml`'s `arch-builder` + `fedora-builder` still pinned
+  `pixi`/`nodejs`/`build-toolchain`/`yay`/`rpmfusion` at the pre-merge ecosystem
+  tag `v2026.141.1600` (the comment claiming "the layers did not move" was now
+  false). The consumers fetched both: `fedora-coder` pulled merged `nodejs`
+  (v1613) while its `fedora-builder` pulled the pre-merge one (v1443, the
+  remote-cache backfill of an un-versioned old layer) → warn-and-newest-wins.
+  The same surfaced in `main` itself through the `versa` → `cachyos` → `ov`(main)
+  mutual import. Fix (R5 stale-ref): advanced the `base.yml` builder-layer refs
+  to the post-merge ecosystem tag `v2026.144.2044` and re-aligned the consumers'
+  pins (`image/cachyos` and `image/fedora` reconcile their `@github` overthink
+  pins, including the `ov:` import, to a fixed post-merge `main` tag; `main`
+  re-points its `cachyos` `@github` import + submodule pointers to the
+  re-aligned `cachyos`). Because `main` ↔ `cachyos` mutually import, the bump is a
+  circular bootstrap: the producer (`main` `base.yml`) lands first at a provisional
+  tag (its own validate momentarily warns via the still-stale `cachyos` import),
+  then `cachyos` re-aligns to it, then `main` converges its `cachyos` import to
+  the re-aligned tag — clearing the warning. End state: every repo resolves
+  `nodejs` to a single version (v1613) with zero resolver warnings.
+
 ### 2026-05-24 — per-kind versioning: author-declared `version:` as the authoritative identity for layers AND images (hard cutover)
 
 Two long-standing defects shared one root cause — **the per-push CalVer git tag

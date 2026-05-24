@@ -1,265 +1,264 @@
 layer:
-  name: android-emulator-layer
-  description: |
-    Composite glue layer that turns the underlying selkies-desktop +
-    android-sdk + appium-server stack into a running Android 14 emulator.
-    Ships two helper scripts (start-emulator, wait-for-display), two
-    supervisord services (emulator + adb-server), the AVD volume, and the
-    /dev/kvm device-passthrough declaration that round-trips through the
-    OCI label into the quadlet.
-  require:
-    - android-sdk
-    - appium-server
-    - supervisord
-  env:
-    EMULATOR_NAME: "ov_avd_14"
-    EMULATOR_API_LEVEL: "34"
-    EMULATOR_DEVICE: "pixel_6"
-    ANDROID_AVD_HOME: "/home/user/.android/avd"
-  security:
-    devices:
-      - /dev/kvm
-    group_add:
-      # keep-groups is a crun annotation that maps the host user's supplementary
-      # groups (including kvm on rootless hosts) into the container without
-      # requiring a matching group to exist inside. Same pattern as immich-ml
-      # uses for /dev/kvm + /dev/dri passthrough on this project's hosts.
-      - keep-groups
-  task:
-    # Add the runtime user to the container's kvm group. KVM access via
-    # /dev/kvm actually works through crun's keep-groups + userns mapping
-    # without this (verified: `python3 -c "import os, fcntl; fd=os.open('/dev/kvm', os.O_RDWR); fcntl.ioctl(fd, 0xae00)"` returns the KVM API version), BUT the Android emulator's preflight check naively reads /etc/group, sees the user is not in the kvm
-    # group, and refuses to launch with "ERROR | x86_64 emulation
-    # currently requires hardware acceleration!". Satisfying the naive
-    # group membership check bypasses this entirely.
-    - cmd: |
-        set -e
-        USERNAME="$(getent passwd 1000 | cut -d: -f1)"
-        # Add user to BOTH the container's kvm group (satisfies the emulator's
-        # naive /etc/group preflight check that prints "The KVM line in
-        # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
-        # /dev/kvm inside a rootless container is owned by nobody:nobody
-        # because the host's kvm group (gid 990) maps through subgid to the
-        # overflow gid 65534. supervisord's setuid+initgroups drops the
-        # supplementary groups crun-keep-groups provided at container start,
-        # so user must be listed in /etc/group for both groups to retain
-        # access across the setuid boundary.
-        if getent group kvm >/dev/null 2>&1; then
-          usermod -aG kvm "${USERNAME}"
-        fi
-        if getent group nobody >/dev/null 2>&1; then
-          usermod -aG nobody "${USERNAME}"
-        fi
-      user: root
-    - copy: start-emulator
-      to: /usr/local/bin/start-emulator
-      mode: "0755"
-      user: root
-    - copy: wait-for-display
-      to: /usr/local/bin/wait-for-display
-      mode: "0755"
-      user: root
-    - mkdir: "${HOME}/.android"
-      user: "${USER}"
-      mode: "0755"
-    - mkdir: "${HOME}/.android/avd"
-      user: "${USER}"
-      mode: "0755"
-  service:
-    - name: emulator
-      exec: "/bin/bash -c '/usr/local/bin/wait-for-display && exec /usr/local/bin/start-emulator'"
-      env:
-        DISPLAY: ":0"
-        HOME: /home/user
-        ANDROID_HOME: /opt/android-sdk
-        ANDROID_SDK_ROOT: /opt/android-sdk
-        ANDROID_AVD_HOME: /home/user/.android/avd
-        EMULATOR_NAME: ov_avd_14
+    version: 2026.144.1443
+    name: android-emulator-layer
+    description: |
+        Composite glue layer that turns the underlying selkies-desktop +
+        android-sdk + appium-server stack into a running Android 14 emulator.
+        Ships two helper scripts (start-emulator, wait-for-display), two
+        supervisord services (emulator + adb-server), the AVD volume, and the
+        /dev/kvm device-passthrough declaration that round-trips through the
+        OCI label into the quadlet.
+    require:
+        - android-sdk
+        - appium-server
+        - supervisord
+    env:
+        EMULATOR_NAME: "ov_avd_14"
         EMULATOR_API_LEVEL: "34"
-        EMULATOR_DEVICE: pixel_6
-        JAVA_HOME: /usr/lib/jvm/ov-jdk21
-      restart: always
-      priority: 30
-      start_sec: 5
-      stop_signal: TERM
-      # supervisord's stopwaitsecs is a bare integer (seconds);
-      # the systemd-style "20s" form fails parse with
-      # "invalid literal for int(): '20s'". The init-system render
-      # for systemd-targeted images converts integers to TimeoutStopSec=.
-      stop_timeout: 20
-      user: user
-      scope: system
-      enable: true
-    - name: adb-server
-      exec: "/opt/android-sdk/platform-tools/adb -a -P 5037 server nodaemon"
-      env:
-        HOME: /home/user
-        ANDROID_HOME: /opt/android-sdk
-      restart: always
-      priority: 35
-      start_sec: 2
-      user: user
-      scope: system
-      enable: true
-  volume:
-    - name: android-avd
-      path: "/home/user/.android"
-  port:
-    - 5037
-  eval:
-    - id: start-emulator-script
-      file: /usr/local/bin/start-emulator
-      exists: true
-      mode: "0755"
-    - id: wait-for-display-script
-      file: /usr/local/bin/wait-for-display
-      exists: true
-      mode: "0755"
-    - id: avd-home-dir
-      file: ${HOME}/.android/avd
-      exists: true
-      filetype: directory
-    - id: emulator-service-running
-      scope: deploy
-      service: emulator
-      running: true
-    - id: adb-server-port
-      scope: deploy
-      addr: 127.0.0.1:${HOST_PORT:5037}
-      reachable: true
-      timeout: 5s
-    # ORDER IS LOAD-BEARING. The eval runner executes checks in declaration
-    # order (evalrun.go Runner.Run — sequential, no sort), so the readiness
-    # GATE must come FIRST: `adb wait-for-device` polls sys.boot_completed
-    # every 2s until it is "1" (or timeout), tolerating the early-boot window
-    # where `adb devices` reports the device as "unknown". Every one-shot adb
-    # probe below it then runs against a fully-booted device. getprop/shell
-    # are SINGLE-SHOT (their `timeout:` is a per-attempt cap, NOT a retry
-    # budget), so a getprop placed BEFORE this gate fails instantly while the
-    # emulator is still booting (AdbError "error performing RunCommand").
-    #
-    # The `adb:` verb is the host-side goadb client (replaced the
-    # pre-2026-05-16 `command: /opt/.../adb … in_container: true` form): same
-    # assertions, host-side execution, structured output.
-    - id: adb-wait-for-device-ready
-      scope: deploy
-      adb: wait-for-device
-      # Cold-boot of the AVD on a fresh rebuild takes ~2 min; 300s leaves
-      # margin. The check timeout is forwarded to `wait-for-device --timeout`.
-      timeout: 300s
-      stdout:
-        - contains: ready
-    - id: adb-detects-emulator
-      scope: deploy
-      adb: devices
-      stdout:
-        - contains: "emulator-5554"
-    - id: android-boot-completed
-      scope: deploy
-      adb: getprop
-      property: sys.boot_completed
-      stdout:
-        - contains: "1"
-
-    # Extended adb verb coverage — proves each method end-to-end on a
-    # fresh disposable rebuild (R10 acceptance). All run AFTER the readiness
-    # gate above, so the device is fully booted.
-    - id: adb-shell-android-version
-      scope: deploy
-      adb: shell
-      # Args[0..] becomes argv for the shell. Result asserted on stdout.
-      arg: [getprop, ro.build.version.release]
-      stdout:
-        - contains: "14"
-    # Disable Play Protect ADB-install verification before the install
-    # check — on freshly-booted emulators Google's online verifier times
-    # out (the AVD has no internet) and pm install fails with
-    # INSTALL_FAILED_VERIFICATION_FAILURE. Both global settings together
-    # cover the legacy + modern code paths. Idempotent — running twice
-    # is a no-op.
-    - id: adb-disable-verifier
-      scope: deploy
-      adb: shell
-      arg: [settings, put, global, package_verifier_enable, "0"]
-    - id: adb-disable-adb-install-verifier
-      scope: deploy
-      adb: shell
-      arg: [settings, put, global, verifier_verify_adb_installs, "0"]
-    - id: adb-install-apidemos
-      scope: deploy
-      adb: install
-      # adb: install reads `apk:` from the HOST filesystem (the host
-      # ov binary pushes via the ADB sync protocol). Path resolves
-      # against the project root.
-      apk: ./tests/data/ApiDemos-debug.apk
-      stdout:
-        - contains: Success
-      timeout: 60s
-      # PackageManager keeps initializing for a few seconds AFTER
-      # sys.boot_completed=1 (the wait-for-device gate above), so an install
-      # fired in that window fails with "Failed to parse APK file". This is
-      # the ONE package-mutating op that runs right after boot — `eventually:`
-      # re-runs the whole install (push + idempotent `pm install -r`) until it
-      # succeeds or the deadline, polling the exact end-to-end readiness
-      # condition (no proxy signal). The framework's synchronization
-      # primitive, NOT a fixed sleep. Once this passes, the device is settled,
-      # so the confirm/uninstall/appium ops below stay one-shot.
-      eventually: 180s
-      retry_interval: 5s
-    - id: adb-shell-confirms-apidemos-installed
-      scope: deploy
-      adb: shell
-      arg: [pm, list, packages, io.appium.android.apis]
-      stdout:
-        - contains: "io.appium.android.apis"
-    - id: adb-screencap-png-min-size
-      scope: deploy
-      adb: screencap
-      artifact: /tmp/ov-eval-adb-screencap.png
-      artifact_min_bytes: 5000
-    - id: adb-uninstall-apidemos
-      scope: deploy
-      adb: uninstall
-      # args[0] = package id (posPackageArg builder convention).
-      arg: [io.appium.android.apis]
-      stdout:
-        - contains: Success
-
-    # Appium verb coverage — full session lifecycle on a single check
-    # chain. Order matters: session-create must precede the operations,
-    # session-delete must come last. (The `appium: status` smoke check
-    # lives in the appium-server layer's own eval block — R3, no
-    # duplication — and gates this entire block via the layer chain.)
-    - id: appium-session-create
-      scope: deploy
-      appium: session-create
-      # UiAutomator2 needs to install its instrumentation server APK and
-      # wait for the test runner to come up on first invocation; on a
-      # freshly-booted emulator this exceeds the 30s default. Bump the
-      # two relevant timeouts to 120s so first-run R10 succeeds.
-      # `noReset` keeps state between session-create cycles for the same
-      # pod (faster re-runs during exploration).
-      caps: |
-        {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"14","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000}
-      timeout: 600s
-    - id: appium-install-apidemos
-      scope: deploy
-      appium: install-app
-      # `apk:` is a HOST path (resolved against the project root, identical
-      # to adb-install-apidemos above). `appium: install-app` stages it into
-      # the container via `<engine> cp` then calls mobile:installApp with the
-      # in-container path — no bind mount and no external staging step. (The
-      # base64 `{"app":…}` form is rejected by mobile:installApp; the file
-      # MUST be in-container, which the verb now guarantees.)
-      apk: ./tests/data/ApiDemos-debug.apk
-      timeout: 60s
-    - id: appium-screenshot-default-canvas
-      scope: deploy
-      appium: screenshot
-      artifact: /tmp/ov-eval-appium-screenshot.png
-      artifact_min_bytes: 5000
-    - id: appium-session-delete
-      scope: deploy
-      appium: session-delete
-      stdout:
-        - contains: deleted
+        EMULATOR_DEVICE: "pixel_6"
+        ANDROID_AVD_HOME: "/home/user/.android/avd"
+    security:
+        devices:
+            - /dev/kvm
+        group_add:
+            # keep-groups is a crun annotation that maps the host user's supplementary
+            # groups (including kvm on rootless hosts) into the container without
+            # requiring a matching group to exist inside. Same pattern as immich-ml
+            # uses for /dev/kvm + /dev/dri passthrough on this project's hosts.
+            - keep-groups
+    task:
+        # Add the runtime user to the container's kvm group. KVM access via
+        # /dev/kvm actually works through crun's keep-groups + userns mapping
+        # without this (verified: `python3 -c "import os, fcntl; fd=os.open('/dev/kvm', os.O_RDWR); fcntl.ioctl(fd, 0xae00)"` returns the KVM API version), BUT the Android emulator's preflight check naively reads /etc/group, sees the user is not in the kvm
+        # group, and refuses to launch with "ERROR | x86_64 emulation
+        # currently requires hardware acceleration!". Satisfying the naive
+        # group membership check bypasses this entirely.
+        - cmd: |
+            set -e
+            USERNAME="$(getent passwd 1000 | cut -d: -f1)"
+            # Add user to BOTH the container's kvm group (satisfies the emulator's
+            # naive /etc/group preflight check that prints "The KVM line in
+            # /etc/group is: [kvm:x:36:user]") AND the nobody group (gid 65534).
+            # /dev/kvm inside a rootless container is owned by nobody:nobody
+            # because the host's kvm group (gid 990) maps through subgid to the
+            # overflow gid 65534. supervisord's setuid+initgroups drops the
+            # supplementary groups crun-keep-groups provided at container start,
+            # so user must be listed in /etc/group for both groups to retain
+            # access across the setuid boundary.
+            if getent group kvm >/dev/null 2>&1; then
+              usermod -aG kvm "${USERNAME}"
+            fi
+            if getent group nobody >/dev/null 2>&1; then
+              usermod -aG nobody "${USERNAME}"
+            fi
+          user: root
+        - copy: start-emulator
+          to: /usr/local/bin/start-emulator
+          mode: "0755"
+          user: root
+        - copy: wait-for-display
+          to: /usr/local/bin/wait-for-display
+          mode: "0755"
+          user: root
+        - mkdir: "${HOME}/.android"
+          user: "${USER}"
+          mode: "0755"
+        - mkdir: "${HOME}/.android/avd"
+          user: "${USER}"
+          mode: "0755"
+    service:
+        - name: emulator
+          exec: "/bin/bash -c '/usr/local/bin/wait-for-display && exec /usr/local/bin/start-emulator'"
+          env:
+            DISPLAY: ":0"
+            HOME: /home/user
+            ANDROID_HOME: /opt/android-sdk
+            ANDROID_SDK_ROOT: /opt/android-sdk
+            ANDROID_AVD_HOME: /home/user/.android/avd
+            EMULATOR_NAME: ov_avd_14
+            EMULATOR_API_LEVEL: "34"
+            EMULATOR_DEVICE: pixel_6
+            JAVA_HOME: /usr/lib/jvm/ov-jdk21
+          restart: always
+          priority: 30
+          start_sec: 5
+          stop_signal: TERM
+          # supervisord's stopwaitsecs is a bare integer (seconds);
+          # the systemd-style "20s" form fails parse with
+          # "invalid literal for int(): '20s'". The init-system render
+          # for systemd-targeted images converts integers to TimeoutStopSec=.
+          stop_timeout: 20
+          user: user
+          scope: system
+          enable: true
+        - name: adb-server
+          exec: "/opt/android-sdk/platform-tools/adb -a -P 5037 server nodaemon"
+          env:
+            HOME: /home/user
+            ANDROID_HOME: /opt/android-sdk
+          restart: always
+          priority: 35
+          start_sec: 2
+          user: user
+          scope: system
+          enable: true
+    volume:
+        - name: android-avd
+          path: "/home/user/.android"
+    port:
+        - 5037
+    eval:
+        - id: start-emulator-script
+          file: /usr/local/bin/start-emulator
+          exists: true
+          mode: "0755"
+        - id: wait-for-display-script
+          file: /usr/local/bin/wait-for-display
+          exists: true
+          mode: "0755"
+        - id: avd-home-dir
+          file: ${HOME}/.android/avd
+          exists: true
+          filetype: directory
+        - id: emulator-service-running
+          scope: deploy
+          service: emulator
+          running: true
+        - id: adb-server-port
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:5037}
+          reachable: true
+          timeout: 5s
+        # ORDER IS LOAD-BEARING. The eval runner executes checks in declaration
+        # order (evalrun.go Runner.Run — sequential, no sort), so the readiness
+        # GATE must come FIRST: `adb wait-for-device` polls sys.boot_completed
+        # every 2s until it is "1" (or timeout), tolerating the early-boot window
+        # where `adb devices` reports the device as "unknown". Every one-shot adb
+        # probe below it then runs against a fully-booted device. getprop/shell
+        # are SINGLE-SHOT (their `timeout:` is a per-attempt cap, NOT a retry
+        # budget), so a getprop placed BEFORE this gate fails instantly while the
+        # emulator is still booting (AdbError "error performing RunCommand").
+        #
+        # The `adb:` verb is the host-side goadb client (replaced the
+        # pre-2026-05-16 `command: /opt/.../adb … in_container: true` form): same
+        # assertions, host-side execution, structured output.
+        - id: adb-wait-for-device-ready
+          scope: deploy
+          adb: wait-for-device
+          # Cold-boot of the AVD on a fresh rebuild takes ~2 min; 300s leaves
+          # margin. The check timeout is forwarded to `wait-for-device --timeout`.
+          timeout: 300s
+          stdout:
+            - contains: ready
+        - id: adb-detects-emulator
+          scope: deploy
+          adb: devices
+          stdout:
+            - contains: "emulator-5554"
+        - id: android-boot-completed
+          scope: deploy
+          adb: getprop
+          property: sys.boot_completed
+          stdout:
+            - contains: "1"
+        # Extended adb verb coverage — proves each method end-to-end on a
+        # fresh disposable rebuild (R10 acceptance). All run AFTER the readiness
+        # gate above, so the device is fully booted.
+        - id: adb-shell-android-version
+          scope: deploy
+          adb: shell
+          # Args[0..] becomes argv for the shell. Result asserted on stdout.
+          arg: [getprop, ro.build.version.release]
+          stdout:
+            - contains: "14"
+        # Disable Play Protect ADB-install verification before the install
+        # check — on freshly-booted emulators Google's online verifier times
+        # out (the AVD has no internet) and pm install fails with
+        # INSTALL_FAILED_VERIFICATION_FAILURE. Both global settings together
+        # cover the legacy + modern code paths. Idempotent — running twice
+        # is a no-op.
+        - id: adb-disable-verifier
+          scope: deploy
+          adb: shell
+          arg: [settings, put, global, package_verifier_enable, "0"]
+        - id: adb-disable-adb-install-verifier
+          scope: deploy
+          adb: shell
+          arg: [settings, put, global, verifier_verify_adb_installs, "0"]
+        - id: adb-install-apidemos
+          scope: deploy
+          adb: install
+          # adb: install reads `apk:` from the HOST filesystem (the host
+          # ov binary pushes via the ADB sync protocol). Path resolves
+          # against the project root.
+          apk: ./tests/data/ApiDemos-debug.apk
+          stdout:
+            - contains: Success
+          timeout: 60s
+          # PackageManager keeps initializing for a few seconds AFTER
+          # sys.boot_completed=1 (the wait-for-device gate above), so an install
+          # fired in that window fails with "Failed to parse APK file". This is
+          # the ONE package-mutating op that runs right after boot — `eventually:`
+          # re-runs the whole install (push + idempotent `pm install -r`) until it
+          # succeeds or the deadline, polling the exact end-to-end readiness
+          # condition (no proxy signal). The framework's synchronization
+          # primitive, NOT a fixed sleep. Once this passes, the device is settled,
+          # so the confirm/uninstall/appium ops below stay one-shot.
+          eventually: 180s
+          retry_interval: 5s
+        - id: adb-shell-confirms-apidemos-installed
+          scope: deploy
+          adb: shell
+          arg: [pm, list, packages, io.appium.android.apis]
+          stdout:
+            - contains: "io.appium.android.apis"
+        - id: adb-screencap-png-min-size
+          scope: deploy
+          adb: screencap
+          artifact: /tmp/ov-eval-adb-screencap.png
+          artifact_min_bytes: 5000
+        - id: adb-uninstall-apidemos
+          scope: deploy
+          adb: uninstall
+          # args[0] = package id (posPackageArg builder convention).
+          arg: [io.appium.android.apis]
+          stdout:
+            - contains: Success
+        # Appium verb coverage — full session lifecycle on a single check
+        # chain. Order matters: session-create must precede the operations,
+        # session-delete must come last. (The `appium: status` smoke check
+        # lives in the appium-server layer's own eval block — R3, no
+        # duplication — and gates this entire block via the layer chain.)
+        - id: appium-session-create
+          scope: deploy
+          appium: session-create
+          # UiAutomator2 needs to install its instrumentation server APK and
+          # wait for the test runner to come up on first invocation; on a
+          # freshly-booted emulator this exceeds the 30s default. Bump the
+          # two relevant timeouts to 120s so first-run R10 succeeds.
+          # `noReset` keeps state between session-create cycles for the same
+          # pod (faster re-runs during exploration).
+          caps: |
+            {"platformName":"Android","appium:automationName":"UiAutomator2","appium:deviceName":"emulator-5554","appium:platformVersion":"14","appium:noReset":true,"appium:newCommandTimeout":120,"appium:uiautomator2ServerInstallTimeout":240000,"appium:uiautomator2ServerLaunchTimeout":240000}
+          timeout: 600s
+        - id: appium-install-apidemos
+          scope: deploy
+          appium: install-app
+          # `apk:` is a HOST path (resolved against the project root, identical
+          # to adb-install-apidemos above). `appium: install-app` stages it into
+          # the container via `<engine> cp` then calls mobile:installApp with the
+          # in-container path — no bind mount and no external staging step. (The
+          # base64 `{"app":…}` form is rejected by mobile:installApp; the file
+          # MUST be in-container, which the verb now guarantees.)
+          apk: ./tests/data/ApiDemos-debug.apk
+          timeout: 60s
+        - id: appium-screenshot-default-canvas
+          scope: deploy
+          appium: screenshot
+          artifact: /tmp/ov-eval-appium-screenshot.png
+          artifact_min_bytes: 5000
+        - id: appium-session-delete
+          scope: deploy
+          appium: session-delete
+          stdout:
+            - contains: deleted

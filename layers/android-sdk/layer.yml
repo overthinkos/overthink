@@ -1,162 +1,163 @@
 layer:
-  name: android-sdk
-  description: |
-    Android SDK command-line tools + platform-tools + emulator + Android 14
-    (API 34) Google APIs x86_64 system image, installed under /opt/android-sdk
-    via Google's official cmdline-tools archive (no foreign base image).
-    JAVA_HOME-aware. requires java-openjdk for sdkmanager + emulator runtime.
-  require:
-    - java-openjdk
-  env:
-    ANDROID_HOME: "/opt/android-sdk"
-    ANDROID_SDK_ROOT: "/opt/android-sdk"
-  path_append:
-    - "/opt/android-sdk/cmdline-tools/latest/bin"
-    - "/opt/android-sdk/platform-tools"
-    - "/opt/android-sdk/emulator"
-  var:
-    CMDLINE_TOOLS_BUILD: "11076708"
-    EMULATOR_API_LEVEL: "34"
-    EMULATOR_SYS_IMG: "x86_64"
-    EMULATOR_IMG_TYPE: "google_apis"
-  distro:
-    fedora:
-      package:
-        - unzip
-        - which
-        - libstdc++
-        - mesa-libGL
-        - mesa-dri-drivers
-        - libX11
-        - libXrandr
-        - libXi
-        - libXcursor
-        - libXrender
-        - libXxf86vm
-        - libXfixes
-        - libXcomposite
-        - libxkbcommon-x11
-        - alsa-lib
-        - pulseaudio-libs
-        # Qt 6.5+ (bundled inside Android emulator) needs xcb-cursor to
-        # load the xcb platform plugin. Without it, the emulator's Qt UI
-        # crashes with "Could not load the Qt platform plugin xcb" and
-        # the whole emulator process exits before AVD boot.
-        - xcb-util-cursor
-    arch:
-      # Arch/cachyos equivalents of the fedora set — android-emulator bases on
-      # the cachyos (Arch) selkies-desktop, so without this section the SDK build
-      # fails (`unzip: command not found`) and the emulator's Qt/GL/audio runtime
-      # libs are absent. Many are already pulled by the selkies-desktop base;
-      # pacman --needed skips the duplicates.
-      package:
-        - unzip
-        - which
-        - gcc-libs
-        - mesa
-        - libglvnd
-        - libx11
-        - libxrandr
-        - libxi
-        - libxcursor
-        - libxrender
-        - libxxf86vm
-        - libxfixes
-        - libxcomposite
-        - libxkbcommon-x11
-        - alsa-lib
-        - libpulse
-        - xcb-util-cursor
-  task:
-    - mkdir: /opt/android-sdk
-      user: root
-      mode: "0755"
-    - download: "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_BUILD}_latest.zip"
-      extract: zip
-      to: /opt/android-sdk/_cmdtools-tmp
-      user: root
-    - cmd: |
-        set -euo pipefail
-        # Reshape: zip extracts to cmdline-tools/{bin,lib}; sdkmanager
-        # requires the cmdline-tools/latest/{bin,lib} layout to find
-        # peer tools relative to its own location.
-        mkdir -p /opt/android-sdk/cmdline-tools/latest
-        mv /opt/android-sdk/_cmdtools-tmp/cmdline-tools/* /opt/android-sdk/cmdline-tools/latest/
-        rm -rf /opt/android-sdk/_cmdtools-tmp
-        # Hand ownership to the runtime user so AVD creation + emulator
-        # state writes don't need root.
-        chown -R "$(getent passwd 1000 | cut -d: -f1)":"$(getent passwd 1000 | cut -d: -f1)" /opt/android-sdk
-      user: root
-    - cmd: |
-        set -euo pipefail
-        # Defensive: java-openjdk's env: JAVA_HOME is set in the Containerfile
-        # ENV stack, but we re-export here so this RUN works regardless of
-        # whether the layer is composed standalone vs. with the parent layer.
-        export JAVA_HOME=/usr/lib/jvm/ov-jdk21
-        export PATH=$JAVA_HOME/bin:/opt/android-sdk/cmdline-tools/latest/bin:$PATH
-        # The heavy sdkmanager packages (platform-tools + API platform +
-        # ~1.5GB x86_64 system image + emulator) are installed into the
-        # persistent `cache:` mount declared below, then copied into the image
-        # SDK root. The mount survives an upstream base-image cache-miss (the
-        # arch/cachyos `pacman -Syu` base rebuilds non-deterministically), so a
-        # rebuild REUSES the SDK instead of re-downloading from Google's CDN —
-        # which intermittently serves corrupt zips ("Error on ZipFile unknown
-        # archive"). The .ov-sdk-complete sentinel is written ONLY after a fully
-        # successful install, so a warm cache skips the install entirely and just
-        # copies; an interrupted run (no sentinel) re-runs sdkmanager, which
-        # incrementally completes the already-cached packages (it never re-clears
-        # the cache).
-        SDK_CACHE=/var/cache/ov-android-sdk
-        if [ ! -f "${SDK_CACHE}/.ov-sdk-complete" ]; then
-          # NEVER clear ${SDK_CACHE} — it IS the persistent cache mount; wiping it
-          # would defeat the whole point. sdkmanager --sdk_root is INCREMENTAL: it
-          # reads the packages already present (source.properties / package.xml)
-          # and installs only what's missing, re-fetching corrupt zips. So a
-          # partial cache from an interrupted run is COMPLETED here, not rebuilt,
-          # and a warm cache makes the install below a near-instant no-op (the
-          # sentinel skips even that). The mount point already exists (BuildKit
-          # creates it); we only write INTO it.
-          # Accept every license non-interactively. `yes | sdkmanager` triggers
-          # SIGPIPE on yes when sdkmanager closes stdin after the last license,
-          # and `set -euo pipefail` (above) propagates 141 as the pipeline exit.
-          # A bounded for-loop emits enough y's (100 >> the ~10 SDK licenses)
-          # and exits cleanly before sdkmanager finishes — no SIGPIPE.
-          for _ in $(seq 1 100); do echo y; done | sdkmanager --sdk_root="${SDK_CACHE}" --licenses >/dev/null
-          # Install: platform-tools (adb), API 34 platform, x86_64 google_apis
-          # system image (the AVD will boot from this), and the emulator binary.
-          sdkmanager --sdk_root="${SDK_CACHE}" \
-            "platform-tools" \
-            "platforms;android-${EMULATOR_API_LEVEL}" \
-            "system-images;android-${EMULATOR_API_LEVEL};${EMULATOR_IMG_TYPE};${EMULATOR_SYS_IMG}" \
-            "emulator"
-          touch "${SDK_CACHE}/.ov-sdk-complete"
-        fi
-        # Materialize the cached SDK components into the image SDK root
-        # (cmdline-tools are already at /opt/android-sdk from the download task).
-        cp -a "${SDK_CACHE}/." /opt/android-sdk/
-        rm -f /opt/android-sdk/.ov-sdk-complete
-      user: user
-      cache:
-        - /var/cache/ov-android-sdk
-  eval:
-    - id: sdkmanager-binary
-      file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
-      exists: true
-    - id: adb-binary
-      file: /opt/android-sdk/platform-tools/adb
-      exists: true
-    - id: emulator-binary
-      file: /opt/android-sdk/emulator/emulator
-      exists: true
-    - id: avdmanager-binary
-      file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
-      exists: true
-    - id: system-image-installed
-      file: /opt/android-sdk/system-images/android-34/google_apis/x86_64
-      exists: true
-      filetype: directory
-    - id: adb-runs
-      command: /opt/android-sdk/platform-tools/adb version
-      exit_status: 0
-      stdout:
-        - contains: "Android Debug Bridge"
+    version: 2026.144.1443
+    name: android-sdk
+    description: |
+        Android SDK command-line tools + platform-tools + emulator + Android 14
+        (API 34) Google APIs x86_64 system image, installed under /opt/android-sdk
+        via Google's official cmdline-tools archive (no foreign base image).
+        JAVA_HOME-aware. requires java-openjdk for sdkmanager + emulator runtime.
+    require:
+        - java-openjdk
+    env:
+        ANDROID_HOME: "/opt/android-sdk"
+        ANDROID_SDK_ROOT: "/opt/android-sdk"
+    path_append:
+        - "/opt/android-sdk/cmdline-tools/latest/bin"
+        - "/opt/android-sdk/platform-tools"
+        - "/opt/android-sdk/emulator"
+    var:
+        CMDLINE_TOOLS_BUILD: "11076708"
+        EMULATOR_API_LEVEL: "34"
+        EMULATOR_SYS_IMG: "x86_64"
+        EMULATOR_IMG_TYPE: "google_apis"
+    distro:
+        fedora:
+            package:
+                - unzip
+                - which
+                - libstdc++
+                - mesa-libGL
+                - mesa-dri-drivers
+                - libX11
+                - libXrandr
+                - libXi
+                - libXcursor
+                - libXrender
+                - libXxf86vm
+                - libXfixes
+                - libXcomposite
+                - libxkbcommon-x11
+                - alsa-lib
+                - pulseaudio-libs
+                # Qt 6.5+ (bundled inside Android emulator) needs xcb-cursor to
+                # load the xcb platform plugin. Without it, the emulator's Qt UI
+                # crashes with "Could not load the Qt platform plugin xcb" and
+                # the whole emulator process exits before AVD boot.
+                - xcb-util-cursor
+        arch:
+            # Arch/cachyos equivalents of the fedora set — android-emulator bases on
+            # the cachyos (Arch) selkies-desktop, so without this section the SDK build
+            # fails (`unzip: command not found`) and the emulator's Qt/GL/audio runtime
+            # libs are absent. Many are already pulled by the selkies-desktop base;
+            # pacman --needed skips the duplicates.
+            package:
+                - unzip
+                - which
+                - gcc-libs
+                - mesa
+                - libglvnd
+                - libx11
+                - libxrandr
+                - libxi
+                - libxcursor
+                - libxrender
+                - libxxf86vm
+                - libxfixes
+                - libxcomposite
+                - libxkbcommon-x11
+                - alsa-lib
+                - libpulse
+                - xcb-util-cursor
+    task:
+        - mkdir: /opt/android-sdk
+          user: root
+          mode: "0755"
+        - download: "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_BUILD}_latest.zip"
+          extract: zip
+          to: /opt/android-sdk/_cmdtools-tmp
+          user: root
+        - cmd: |
+            set -euo pipefail
+            # Reshape: zip extracts to cmdline-tools/{bin,lib}; sdkmanager
+            # requires the cmdline-tools/latest/{bin,lib} layout to find
+            # peer tools relative to its own location.
+            mkdir -p /opt/android-sdk/cmdline-tools/latest
+            mv /opt/android-sdk/_cmdtools-tmp/cmdline-tools/* /opt/android-sdk/cmdline-tools/latest/
+            rm -rf /opt/android-sdk/_cmdtools-tmp
+            # Hand ownership to the runtime user so AVD creation + emulator
+            # state writes don't need root.
+            chown -R "$(getent passwd 1000 | cut -d: -f1)":"$(getent passwd 1000 | cut -d: -f1)" /opt/android-sdk
+          user: root
+        - cmd: |
+            set -euo pipefail
+            # Defensive: java-openjdk's env: JAVA_HOME is set in the Containerfile
+            # ENV stack, but we re-export here so this RUN works regardless of
+            # whether the layer is composed standalone vs. with the parent layer.
+            export JAVA_HOME=/usr/lib/jvm/ov-jdk21
+            export PATH=$JAVA_HOME/bin:/opt/android-sdk/cmdline-tools/latest/bin:$PATH
+            # The heavy sdkmanager packages (platform-tools + API platform +
+            # ~1.5GB x86_64 system image + emulator) are installed into the
+            # persistent `cache:` mount declared below, then copied into the image
+            # SDK root. The mount survives an upstream base-image cache-miss (the
+            # arch/cachyos `pacman -Syu` base rebuilds non-deterministically), so a
+            # rebuild REUSES the SDK instead of re-downloading from Google's CDN —
+            # which intermittently serves corrupt zips ("Error on ZipFile unknown
+            # archive"). The .ov-sdk-complete sentinel is written ONLY after a fully
+            # successful install, so a warm cache skips the install entirely and just
+            # copies; an interrupted run (no sentinel) re-runs sdkmanager, which
+            # incrementally completes the already-cached packages (it never re-clears
+            # the cache).
+            SDK_CACHE=/var/cache/ov-android-sdk
+            if [ ! -f "${SDK_CACHE}/.ov-sdk-complete" ]; then
+              # NEVER clear ${SDK_CACHE} — it IS the persistent cache mount; wiping it
+              # would defeat the whole point. sdkmanager --sdk_root is INCREMENTAL: it
+              # reads the packages already present (source.properties / package.xml)
+              # and installs only what's missing, re-fetching corrupt zips. So a
+              # partial cache from an interrupted run is COMPLETED here, not rebuilt,
+              # and a warm cache makes the install below a near-instant no-op (the
+              # sentinel skips even that). The mount point already exists (BuildKit
+              # creates it); we only write INTO it.
+              # Accept every license non-interactively. `yes | sdkmanager` triggers
+              # SIGPIPE on yes when sdkmanager closes stdin after the last license,
+              # and `set -euo pipefail` (above) propagates 141 as the pipeline exit.
+              # A bounded for-loop emits enough y's (100 >> the ~10 SDK licenses)
+              # and exits cleanly before sdkmanager finishes — no SIGPIPE.
+              for _ in $(seq 1 100); do echo y; done | sdkmanager --sdk_root="${SDK_CACHE}" --licenses >/dev/null
+              # Install: platform-tools (adb), API 34 platform, x86_64 google_apis
+              # system image (the AVD will boot from this), and the emulator binary.
+              sdkmanager --sdk_root="${SDK_CACHE}" \
+                "platform-tools" \
+                "platforms;android-${EMULATOR_API_LEVEL}" \
+                "system-images;android-${EMULATOR_API_LEVEL};${EMULATOR_IMG_TYPE};${EMULATOR_SYS_IMG}" \
+                "emulator"
+              touch "${SDK_CACHE}/.ov-sdk-complete"
+            fi
+            # Materialize the cached SDK components into the image SDK root
+            # (cmdline-tools are already at /opt/android-sdk from the download task).
+            cp -a "${SDK_CACHE}/." /opt/android-sdk/
+            rm -f /opt/android-sdk/.ov-sdk-complete
+          user: user
+          cache:
+            - /var/cache/ov-android-sdk
+    eval:
+        - id: sdkmanager-binary
+          file: /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager
+          exists: true
+        - id: adb-binary
+          file: /opt/android-sdk/platform-tools/adb
+          exists: true
+        - id: emulator-binary
+          file: /opt/android-sdk/emulator/emulator
+          exists: true
+        - id: avdmanager-binary
+          file: /opt/android-sdk/cmdline-tools/latest/bin/avdmanager
+          exists: true
+        - id: system-image-installed
+          file: /opt/android-sdk/system-images/android-34/google_apis/x86_64
+          exists: true
+          filetype: directory
+        - id: adb-runs
+          command: /opt/android-sdk/platform-tools/adb version
+          exit_status: 0
+          stdout:
+            - contains: "Android Debug Bridge"

@@ -1,14 +1,15 @@
 layer:
-  name: gifgrep
-  description: GIF search and download CLI
-  require:
-    - golang
-  env:
-    GOPATH: "~/go"
-  path_append:
-    - "~/go/bin"
-  task:
-    - cmd: |
-        go install github.com/steipete/gifgrep/cmd/gifgrep@latest
-        go clean -cache
-      user: "${USER}"
+    version: 2026.144.1443
+    name: gifgrep
+    description: GIF search and download CLI
+    require:
+        - golang
+    env:
+        GOPATH: "~/go"
+    path_append:
+        - "~/go/bin"
+    task:
+        - cmd: |
+            go install github.com/steipete/gifgrep/cmd/gifgrep@latest
+            go clean -cache
+          user: "${USER}"

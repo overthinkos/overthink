@@ -1,53 +1,54 @@
 layer:
-  name: waybar-labwc
-  require:
-    - labwc
-  distro:
-    arch:
-      package:
-        - waybar
-    fedora:
-      package:
-        - waybar
-  task:
-    - mkdir: "${HOME}/.local/bin"
-      user: "${USER}"
-    - mkdir: "${HOME}/.config/waybar"
-      user: "${USER}"
-    - copy: waybar-labwc-wrapper
-      to: "${HOME}/.local/bin/waybar-labwc-wrapper"
-      mode: "0755"
-      user: "${USER}"
-    - copy: config.json
-      to: "${HOME}/.config/waybar/config"
-      mode: "0644"
-      user: "${USER}"
-    - copy: style.css
-      to: "${HOME}/.config/waybar/style.css"
-      mode: "0644"
-      user: "${USER}"
-  eval:
-    - id: waybar-binary
-      file: /usr/bin/waybar
-      exists: true
-    - id: waybar-labwc-wrapper
-      file: ${HOME}/.local/bin/waybar-labwc-wrapper
-      exists: true
-      mode: "0755"
-    - id: waybar-config
-      file: ${HOME}/.config/waybar/config
-      exists: true
-    - id: waybar-style
-      file: ${HOME}/.config/waybar/style.css
-      exists: true
-  service:
-    - name: waybar
-      exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
-      env:
-        WAYLAND_DISPLAY: wayland-0
-        XDG_RUNTIME_DIR: /tmp
-      restart: always
-      priority: 15
-      start_sec: 0
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: waybar-labwc
+    require:
+        - labwc
+    distro:
+        arch:
+            package:
+                - waybar
+        fedora:
+            package:
+                - waybar
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/waybar"
+          user: "${USER}"
+        - copy: waybar-labwc-wrapper
+          to: "${HOME}/.local/bin/waybar-labwc-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: config.json
+          to: "${HOME}/.config/waybar/config"
+          mode: "0644"
+          user: "${USER}"
+        - copy: style.css
+          to: "${HOME}/.config/waybar/style.css"
+          mode: "0644"
+          user: "${USER}"
+    eval:
+        - id: waybar-binary
+          file: /usr/bin/waybar
+          exists: true
+        - id: waybar-labwc-wrapper
+          file: ${HOME}/.local/bin/waybar-labwc-wrapper
+          exists: true
+          mode: "0755"
+        - id: waybar-config
+          file: ${HOME}/.config/waybar/config
+          exists: true
+        - id: waybar-style
+          file: ${HOME}/.config/waybar/style.css
+          exists: true
+    service:
+        - name: waybar
+          exec: "%(ENV_HOME)s/.local/bin/waybar-labwc-wrapper"
+          env:
+            WAYLAND_DISPLAY: wayland-0
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 15
+          start_sec: 0
+          enable: true
+          scope: system

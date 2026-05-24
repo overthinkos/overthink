@@ -1,4 +1,5 @@
 layer:
+  version: 2026.144.1443
   name: pixi
   task:
     - cmd: echo "installing pixi"

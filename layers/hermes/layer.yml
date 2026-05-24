@@ -1,99 +1,100 @@
 layer:
-  name: hermes
-  description: Hermes self-improving AI agent by Nous Research
-  require:
-    - nodejs
-    - supervisord
-    - ripgrep
-    - ffmpeg
-    - pipewire
-  env:
-    HERMES_HOME: "/opt/data"
-    TERMINAL_ENV: "local"
-  env_accept:
-    - name: OLLAMA_HOST
-      description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
-    - name: HERMES_MODEL
-      description: "Override default Hermes model (default depends on detected provider)"
-    - name: OV_MCP_SERVERS
-      description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
-    - name: BROWSER_CDP_URL
-      description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
-    - name: IMMICH_API_URL
-      description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
-  # Credential-store-backed env vars. Values live in the user's credential
-  # backend (keyring/config) and are injected at runtime via podman
-  # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
-  # or the quadlet file as plaintext. The ov/api-key/* keys are shared with
-  # openwebui so one `ov secrets set` populates both consumers. See
-  # /ov-build:secrets and /ov-image:layer.
-  secret_accept:
-    - name: OPENROUTER_API_KEY
-      description: "API key for OpenRouter LLM inference"
-      key: ov/api-key/openrouter
-    - name: OLLAMA_API_KEY
-      description: "API key for Ollama Cloud inference (https://ollama.com)"
-      key: ov/api-key/ollama
-    - name: TELEGRAM_BOT_TOKEN
-      description: "Telegram bot token for messaging"
-    - name: SLACK_BOT_TOKEN
-      description: "Slack bot token"
-    - name: DISCORD_BOT_TOKEN
-      description: "Discord bot token"
-    - name: IMMICH_API_KEY
-      description: "Immich API key for programmatic access to the running immich instance"
-      key: ov/api-key/immich
-  mcp_accept:
-    - name: jupyter
-      description: "JupyterLab CRDT MCP server for notebook manipulation"
-    - name: chrome-devtools
-      description: "Chrome DevTools MCP server for browser automation and inspection"
-  distro:
-    fedora:
-      package:
-        - alsa-lib
-        - portaudio
-  volume:
-    - name: data
-      path: "/opt/data"
-  alias:
-    - name: hermes
-      command: hermes
-    - name: hermes-agent
-      command: hermes-agent
-  task:
-    - mkdir: "${HOME}/.local/bin"
-      user: "${USER}"
-    - copy: hermes-entrypoint
-      to: "${HOME}/.local/bin/hermes-entrypoint"
-      mode: "0755"
-      user: "${USER}"
-  eval:
-    - id: hermes-entrypoint
-      file: ${HOME}/.local/bin/hermes-entrypoint
-      exists: true
-      mode: "0755"
-    - id: hermes-binary
-      file: ${HOME}/.pixi/envs/default/bin/hermes
-      exists: true
-    - id: hermes-data-volume-mount
-      scope: deploy
-      file: /opt/data
-      filetype: directory
-    - id: hermes-service-running
-      scope: deploy
-      service: hermes
-      running: true
-  service:
-    - name: hermes
-      exec: "%(ENV_HOME)s/.local/bin/hermes-entrypoint"
-      restart: always
-      working_directory: "%(ENV_HOME)s"
-      enable: true
-      scope: system
-    - name: hermes-whatsapp
-      exec: "node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js"
-      restart: always
-      working_directory: "%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge"
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: hermes
+    description: Hermes self-improving AI agent by Nous Research
+    require:
+        - nodejs
+        - supervisord
+        - ripgrep
+        - ffmpeg
+        - pipewire
+    env:
+        HERMES_HOME: "/opt/data"
+        TERMINAL_ENV: "local"
+    env_accept:
+        - name: OLLAMA_HOST
+          description: "Local Ollama server URL (auto-injected by ollama layer env_provides)"
+        - name: HERMES_MODEL
+          description: "Override default Hermes model (default depends on detected provider)"
+        - name: OV_MCP_SERVERS
+          description: "JSON array of MCP servers (auto-injected by mcp_provide layers)"
+        - name: BROWSER_CDP_URL
+          description: "Chrome DevTools Protocol URL for shared browser (auto-provided by chrome layer)"
+        - name: IMMICH_API_URL
+          description: "Immich HTTP API URL (auto-injected by immich layer env_provides)"
+    # Credential-store-backed env vars. Values live in the user's credential
+    # backend (keyring/config) and are injected at runtime via podman
+    # secrets (Secret=<name>,type=env,target=<var>). Never land in deploy.yml
+    # or the quadlet file as plaintext. The ov/api-key/* keys are shared with
+    # openwebui so one `ov secrets set` populates both consumers. See
+    # /ov-build:secrets and /ov-image:layer.
+    secret_accept:
+        - name: OPENROUTER_API_KEY
+          description: "API key for OpenRouter LLM inference"
+          key: ov/api-key/openrouter
+        - name: OLLAMA_API_KEY
+          description: "API key for Ollama Cloud inference (https://ollama.com)"
+          key: ov/api-key/ollama
+        - name: TELEGRAM_BOT_TOKEN
+          description: "Telegram bot token for messaging"
+        - name: SLACK_BOT_TOKEN
+          description: "Slack bot token"
+        - name: DISCORD_BOT_TOKEN
+          description: "Discord bot token"
+        - name: IMMICH_API_KEY
+          description: "Immich API key for programmatic access to the running immich instance"
+          key: ov/api-key/immich
+    mcp_accept:
+        - name: jupyter
+          description: "JupyterLab CRDT MCP server for notebook manipulation"
+        - name: chrome-devtools
+          description: "Chrome DevTools MCP server for browser automation and inspection"
+    distro:
+        fedora:
+            package:
+                - alsa-lib
+                - portaudio
+    volume:
+        - name: data
+          path: "/opt/data"
+    alias:
+        - name: hermes
+          command: hermes
+        - name: hermes-agent
+          command: hermes-agent
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - copy: hermes-entrypoint
+          to: "${HOME}/.local/bin/hermes-entrypoint"
+          mode: "0755"
+          user: "${USER}"
+    eval:
+        - id: hermes-entrypoint
+          file: ${HOME}/.local/bin/hermes-entrypoint
+          exists: true
+          mode: "0755"
+        - id: hermes-binary
+          file: ${HOME}/.pixi/envs/default/bin/hermes
+          exists: true
+        - id: hermes-data-volume-mount
+          scope: deploy
+          file: /opt/data
+          filetype: directory
+        - id: hermes-service-running
+          scope: deploy
+          service: hermes
+          running: true
+    service:
+        - name: hermes
+          exec: "%(ENV_HOME)s/.local/bin/hermes-entrypoint"
+          restart: always
+          working_directory: "%(ENV_HOME)s"
+          enable: true
+          scope: system
+        - name: hermes-whatsapp
+          exec: "node %(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge/bridge.js"
+          restart: always
+          working_directory: "%(ENV_HOME)s/hermes-agent/scripts/whatsapp-bridge"
+          enable: true
+          scope: system

@@ -1,25 +1,26 @@
 layer:
-  name: gnupg
-  description: GnuPG encryption and signing tools for GPG agent forwarding
-  distro:
-    arch:
-      package:
-        - gnupg
-    debian:
-      package:
-        - gnupg
-    fedora:
-      package:
-        - gnupg2
-    ubuntu:
-      package:
-        - gnupg
-  eval:
-    - id: gpg-binary
-      file: /usr/bin/gpg
-      exists: true
-    - id: gpg-version
-      command: /usr/bin/gpg --version
-      exit_status: 0
-      stdout:
-        - contains: "gpg (GnuPG)"
+    version: 2026.144.1443
+    name: gnupg
+    description: GnuPG encryption and signing tools for GPG agent forwarding
+    distro:
+        arch:
+            package:
+                - gnupg
+        debian:
+            package:
+                - gnupg
+        fedora:
+            package:
+                - gnupg2
+        ubuntu:
+            package:
+                - gnupg
+    eval:
+        - id: gpg-binary
+          file: /usr/bin/gpg
+          exists: true
+        - id: gpg-version
+          command: /usr/bin/gpg --version
+          exit_status: 0
+          stdout:
+            - contains: "gpg (GnuPG)"

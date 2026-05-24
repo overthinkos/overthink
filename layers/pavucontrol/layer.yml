@@ -1,15 +1,16 @@
 layer:
-  name: pavucontrol
-  require:
-    - pipewire
-  distro:
-    arch:
-      package:
-        - pavucontrol
-    fedora:
-      package:
-        - pavucontrol
-  eval:
-    - id: pavucontrol-binary
-      file: /usr/bin/pavucontrol
-      exists: true
+    version: 2026.144.1443
+    name: pavucontrol
+    require:
+        - pipewire
+    distro:
+        arch:
+            package:
+                - pavucontrol
+        fedora:
+            package:
+                - pavucontrol
+    eval:
+        - id: pavucontrol-binary
+          file: /usr/bin/pavucontrol
+          exists: true

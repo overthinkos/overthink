@@ -472,6 +472,16 @@ func validateLayerContents(layers map[string]*Layer, errs *ValidationError) {
 			errs.Add("layer %q: must have at least one install file (layer.yml rpm/deb packages, root.yml, pixi.toml, pyproject.toml, environment.yml, package.json, Cargo.toml, or user.yml) or a layers: field", name)
 		}
 
+		// `version:` is MANDATORY for the layer kind (optional for every other
+		// kind). It is the authoritative per-entity version that drives both the
+		// image's content-stable org.overthinkos.version label and cross-repo
+		// layer resolution (pickLayerVersion). Scoped to local layers — a fetched
+		// remote layer with no version is already a hard error at scan time
+		// (ScanAllLayerWithConfigOpts). Run `ov migrate` to backfill.
+		if !layer.Remote && layer.Version == "" {
+			errs.Add("layer %q: missing required `version:` (CalVer YYYY.DDD.HHMM). Run: ov migrate", name)
+		}
+
 		// If `directory:` redirected the source anchor, SourceDir must exist.
 		// (For the default case SourceDir == Path, which is guaranteed to exist.)
 		if layer.SourceDir != layer.Path && !dirExists(layer.SourceDir) {

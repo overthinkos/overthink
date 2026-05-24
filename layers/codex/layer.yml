@@ -1,12 +1,13 @@
 layer:
-  name: codex
-  description: OpenAI Codex CLI coding agent
-  require:
-    - nodejs
-  eval:
-    - id: codex-binary
-      file: ${HOME}/.npm-global/bin/codex
-      exists: true
-    - id: codex-version
-      command: ${HOME}/.npm-global/bin/codex --version
-      exit_status: 0
+    version: 2026.144.1443
+    name: codex
+    description: OpenAI Codex CLI coding agent
+    require:
+        - nodejs
+    eval:
+        - id: codex-binary
+          file: ${HOME}/.npm-global/bin/codex
+          exists: true
+        - id: codex-version
+          command: ${HOME}/.npm-global/bin/codex --version
+          exit_status: 0

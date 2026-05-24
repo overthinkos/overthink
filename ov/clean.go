@@ -72,12 +72,17 @@ func imageInUse(im LocalImageInfo, ids, refs map[string]bool) bool {
 	return false
 }
 
-// imageCalVer returns the newest CalVer among an image's tags (the build CalVer
-// in a `:YYYY.DDD.HHMM` tag), or ok=false if none of its tags is a CalVer. This
-// is the reliable per-build ordering key for retention — it reads the tag, so it
-// works even for images built before org.overthinkos.version carried the build
-// CalVer (older images label it "1").
-func imageCalVer(im LocalImageInfo) (CalVer, bool) {
+// imageLabelCalVer parses the image's org.overthinkos.version label (the
+// content-derived EffectiveVersion) — the PRIMARY retention ordering key.
+func imageLabelCalVer(im LocalImageInfo) (CalVer, bool) {
+	return ParseCalVer(im.Labels[LabelVersion])
+}
+
+// imageTagCalVer returns the newest CalVer among an image's `:YYYY.DDD.HHMM`
+// tags (the per-build timestamp) — the TIEBREAKER. Because the version label is
+// content-stable, many builds of an unchanged image share one label-CalVer, so
+// the tag is what distinguishes (and retains) the newest BUILD.
+func imageTagCalVer(im LocalImageInfo) (CalVer, bool) {
 	var best CalVer
 	found := false
 	for _, n := range im.Names {
@@ -88,6 +93,15 @@ func imageCalVer(im LocalImageInfo) (CalVer, bool) {
 		}
 	}
 	return best, found
+}
+
+// imageDatable reports whether an image carries EITHER a parseable label-CalVer
+// OR a parseable tag-CalVer — i.e. retention can order it. An undatable image
+// is never removed.
+func imageDatable(im LocalImageInfo) bool {
+	_, okL := imageLabelCalVer(im)
+	_, okT := imageTagCalVer(im)
+	return okL || okT
 }
 
 // pruneImagesByRetention removes all but the newest keepN builds per
@@ -122,24 +136,34 @@ func pruneImagesByRetention(engine string, keepN int, dryRun bool) ([]string, er
 
 	var removed []string
 	for _, group := range groups {
-		// Newest first by the image's CalVer TAG (the org.overthinkos.version
-		// LABEL is the schema version, not the build CalVer — the CalVer lives
-		// in the `:YYYY.DDD.HHMM` tag, read via extractCalVerTag). Images with no
-		// CalVer tag sort last and are skipped from removal below.
+		// Newest first by the org.overthinkos.version LABEL (the content-derived
+		// EffectiveVersion) as the PRIMARY key, then the `:YYYY.DDD.HHMM` build
+		// TAG as the TIEBREAKER. The label is content-stable, so unchanged-image
+		// builds share one label-CalVer and the tag is what keeps the newest
+		// BUILDS. Images datable by neither sort last and are skipped below.
 		sort.SliceStable(group, func(i, j int) bool {
-			vi, oki := imageCalVer(group[i])
-			vj, okj := imageCalVer(group[j])
-			if oki && okj {
-				return vj.Less(vi) // i before j when i is newer
+			li, okLi := imageLabelCalVer(group[i])
+			lj, okLj := imageLabelCalVer(group[j])
+			if okLi && okLj && li != lj {
+				return lj.Less(li) // newer label first
 			}
-			return oki && !okj // dateable sorts before undateable
+			if okLi != okLj {
+				return okLi // labelled sorts before unlabelled
+			}
+			// Equal (or both-absent) label-CalVer → tiebreak on the build tag.
+			ti, okTi := imageTagCalVer(group[i])
+			tj, okTj := imageTagCalVer(group[j])
+			if okTi && okTj {
+				return tj.Less(ti) // newer build first
+			}
+			return okTi && !okTj // dateable sorts before undateable
 		})
 		for idx, im := range group {
 			if idx < keepN {
 				continue // keep the newest keepN
 			}
-			if _, ok := imageCalVer(im); !ok {
-				continue // never remove an image we can't date (no CalVer tag)
+			if !imageDatable(im) {
+				continue // never remove an image we can't date (no label/tag CalVer)
 			}
 			if imageInUse(im, inUseIDs, inUseRefs) {
 				continue // referenced by a container/deploy

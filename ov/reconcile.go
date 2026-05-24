@@ -9,10 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ImageReconcileCmd aligns cross-repo `@github` version pins so the
-// warn-and-newest-wins resolver has nothing to warn about. For each distinct
-// repo referenced by the project's versioned YAML files, every pin of that repo
-// is rewritten to ONE target version: the newest already-referenced version
+// ImageReconcileCmd aligns cross-repo `@github` git-tag pins so every reference
+// of a repo fetches ONE commit — clearing any per-entity-version warning from
+// the resolver (which compares each layer's own `version:`, read after fetch).
+// For each distinct repo referenced by the project's versioned YAML files, every
+// pin of that repo is rewritten to ONE target version: the newest already-referenced version
 // (default) or the newest tag on the remote (`--remote`). Edits are
 // comment-preserving (yaml.v3 node API) and idempotent. Operates on the current
 // project (cwd; honors the top-level -C / --dir / OV_PROJECT_DIR). For a

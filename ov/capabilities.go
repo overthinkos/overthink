@@ -35,6 +35,7 @@ type Capabilities = ImageMetadata
 var CapabilityLabelMap = map[string]string{
 	// Identity
 	"Image":         LabelImage,
+	"Version":       LabelVersion,
 	"Registry":      LabelRegistry,
 	"Bootc":         LabelBootc,
 	"Status":        LabelStatus,
@@ -103,7 +104,7 @@ var CapabilityLabelMap = map[string]string{
 	"MCPAccepts":     LabelMCPAccepts,
 
 	// Declarative tests (image-level invariants + deploy defaults)
-	"Eval":  LabelEval,
+	"Eval": LabelEval,
 
 	// Gherkin-shaped self-description — three-section (layer/image/deploy)
 	// LabelDescriptionSet. Replaces the single-scalar Info/Status pair in

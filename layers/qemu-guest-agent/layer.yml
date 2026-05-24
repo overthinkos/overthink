@@ -1,11 +1,12 @@
 layer:
-  name: qemu-guest-agent
-  package:
-    - qemu-guest-agent
-  libvirt:
-    - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
-  service:
-    - name: qemu-guest-agent
-      use_packaged: qemu-guest-agent.service
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: qemu-guest-agent
+    package:
+        - qemu-guest-agent
+    libvirt:
+        - <channel type='unix'><target type='virtio' name='org.qemu.guest_agent.0'/></channel>
+    service:
+        - name: qemu-guest-agent
+          use_packaged: qemu-guest-agent.service
+          enable: true
+          scope: system

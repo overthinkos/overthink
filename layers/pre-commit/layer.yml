@@ -1,24 +1,25 @@
 layer:
-  name: pre-commit
-  require:
-    - nodejs
-    - rust # cargo install taplo-cli below requires cargo on PATH.
-    # (nodejs is retained for completeness; pre-commit itself needs node for some hooks.)
-  package:
-    - pre-commit
-  task:
-    - cmd: cargo install taplo-cli --locked
-      user: "${USER}"
-  eval:
-    - id: taplo-binary
-      file: ${HOME}/.cargo/bin/taplo
-      exists: true
-    - id: taplo-version
-      command: ${HOME}/.cargo/bin/taplo --version
-      exit_status: 0
-    - id: pre-commit-binary
-      file: ${HOME}/.pixi/envs/default/bin/pre-commit
-      exists: true
-    - id: pre-commit-version
-      command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
-      exit_status: 0
+    version: 2026.144.1443
+    name: pre-commit
+    require:
+        - nodejs
+        - rust # cargo install taplo-cli below requires cargo on PATH.
+        # (nodejs is retained for completeness; pre-commit itself needs node for some hooks.)
+    package:
+        - pre-commit
+    task:
+        - cmd: cargo install taplo-cli --locked
+          user: "${USER}"
+    eval:
+        - id: taplo-binary
+          file: ${HOME}/.cargo/bin/taplo
+          exists: true
+        - id: taplo-version
+          command: ${HOME}/.cargo/bin/taplo --version
+          exit_status: 0
+        - id: pre-commit-binary
+          file: ${HOME}/.pixi/envs/default/bin/pre-commit
+          exists: true
+        - id: pre-commit-version
+          command: ${HOME}/.pixi/envs/default/bin/pre-commit --version
+          exit_status: 0

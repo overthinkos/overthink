@@ -1,22 +1,23 @@
 layer:
-  name: direnv
-  description: direnv — automatic environment variable loading from .envrc files
-  package:
-    - direnv
-  # Shell hooks installed declaratively via the shell: schema (2026-05).
-  # bash/zsh/sh use the POSIX-style hook (eval $(direnv hook X)) — handled
-  # by the generic body with ${SHELL_NAME} substituted at install time.
-  # fish uses different syntax, so it gets a per-shell override.
-  shell:
-    init: |
-      eval "$(direnv hook ${SHELL_NAME})"
-    fish:
-      init: |
-        direnv hook fish | source
-  eval:
-    - id: direnv-binary
-      file: /usr/bin/direnv
-      exists: true
-    - id: direnv-version
-      command: /usr/bin/direnv version
-      exit_status: 0
+    version: 2026.144.1443
+    name: direnv
+    description: direnv — automatic environment variable loading from .envrc files
+    package:
+        - direnv
+    # Shell hooks installed declaratively via the shell: schema (2026-05).
+    # bash/zsh/sh use the POSIX-style hook (eval $(direnv hook X)) — handled
+    # by the generic body with ${SHELL_NAME} substituted at install time.
+    # fish uses different syntax, so it gets a per-shell override.
+    shell:
+        init: |
+            eval "$(direnv hook ${SHELL_NAME})"
+        fish:
+            init: |
+                direnv hook fish | source
+    eval:
+        - id: direnv-binary
+          file: /usr/bin/direnv
+          exists: true
+        - id: direnv-version
+          command: /usr/bin/direnv version
+          exit_status: 0

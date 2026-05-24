@@ -1,44 +1,45 @@
 layer:
-  name: xdg-portal
-  require:
-    - dbus
-    - sway
-    - pipewire
-  env:
-    XDG_CURRENT_DESKTOP: "sway"
-  distro:
-    fedora:
-      package:
-        - xdg-desktop-portal
-        - xdg-desktop-portal-wlr
-        - xdg-desktop-portal-gtk
-        - slurp
-  task:
-    - mkdir: "${HOME}/.config/sway/config.d"
-      user: "${USER}"
-    - copy: portal.conf
-      to: "${HOME}/.config/sway/config.d/portal.conf"
-      mode: "0644"
-      user: "${USER}"
-    - mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
-      user: "${USER}"
-    - copy: xdg-desktop-portal-wlr-config
-      to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
-      mode: "0644"
-      user: "${USER}"
-  eval:
-    - id: xdg-desktop-portal-package
-      package: xdg-desktop-portal
-      installed: true
-    - id: xdg-portal-wlr-package
-      package: xdg-desktop-portal-wlr
-      installed: true
-    - id: slurp-binary
-      file: /usr/bin/slurp
-      exists: true
-    - id: xdg-portal-wlr-config
-      file: ${HOME}/.config/xdg-desktop-portal-wlr/config
-      exists: true
-    - id: xdg-portal-sway-conf
-      file: ${HOME}/.config/sway/config.d/portal.conf
-      exists: true
+    version: 2026.144.1443
+    name: xdg-portal
+    require:
+        - dbus
+        - sway
+        - pipewire
+    env:
+        XDG_CURRENT_DESKTOP: "sway"
+    distro:
+        fedora:
+            package:
+                - xdg-desktop-portal
+                - xdg-desktop-portal-wlr
+                - xdg-desktop-portal-gtk
+                - slurp
+    task:
+        - mkdir: "${HOME}/.config/sway/config.d"
+          user: "${USER}"
+        - copy: portal.conf
+          to: "${HOME}/.config/sway/config.d/portal.conf"
+          mode: "0644"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/xdg-desktop-portal-wlr"
+          user: "${USER}"
+        - copy: xdg-desktop-portal-wlr-config
+          to: "${HOME}/.config/xdg-desktop-portal-wlr/config"
+          mode: "0644"
+          user: "${USER}"
+    eval:
+        - id: xdg-desktop-portal-package
+          package: xdg-desktop-portal
+          installed: true
+        - id: xdg-portal-wlr-package
+          package: xdg-desktop-portal-wlr
+          installed: true
+        - id: slurp-binary
+          file: /usr/bin/slurp
+          exists: true
+        - id: xdg-portal-wlr-config
+          file: ${HOME}/.config/xdg-desktop-portal-wlr/config
+          exists: true
+        - id: xdg-portal-sway-conf
+          file: ${HOME}/.config/sway/config.d/portal.conf
+          exists: true

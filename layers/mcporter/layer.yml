@@ -1,5 +1,6 @@
 layer:
-  name: mcporter
-  description: MCP server CLI for listing, configuring, and calling MCP tools
-  require:
-    - nodejs
+    version: 2026.144.1443
+    name: mcporter
+    description: MCP server CLI for listing, configuring, and calling MCP tools
+    require:
+        - nodejs

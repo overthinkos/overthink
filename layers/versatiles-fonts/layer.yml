@@ -1,63 +1,63 @@
 layer:
-  name: versatiles-fonts
-  description: "VersaTiles font glyphs — pre-rendered SDF (signed distance field) font files for MapLibre GL JS rendering of vector tiles. 10 font families (Fira Sans, Lato, Libre Baskerville, Merriweather Sans, Noto Sans, Nunito, Open Sans, PT Sans, Roboto, Source Sans 3). Installed locally from versatiles-org/versatiles-fonts GitHub releases so the notebook's shortbread MapLibre cell can render labels without hitting tiles.versatiles.org as a runtime font CDN. Re-exported by the versatiles-frontend layer's http.server at /fonts/."
-  require:
-    - supervisord
-  distro:
-    arch:
-      package:
-        - curl
-        - jq
-    fedora:
-      package:
-        - curl
-        - jq
-  task:
-    - mkdir: /opt/versatiles-fonts
-      user: root
-
-    # ---- versatiles-fonts SDF glyphs ----
-    # versatiles-org/versatiles-fonts ships `fonts.tar.gz` on each
-    # release with all 10 font families bundled. Resolve the asset
-    # URL via the GitHub release API rather than the static
-    # `releases/latest/download/` endpoint so a future asset-name
-    # change surfaces cleanly. The tarball lays out as
-    # `<font-family>/<zoom>-<range>.pbf` per MapLibre's standard
-    # glyph-URL convention.
-    - cmd: |
-        set -euo pipefail
-        ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
-          | jq -r '.assets[].browser_download_url' \
-          | grep -E '/fonts\.tar\.gz$' \
-          | head -1)
-        if [ -z "$ASSET" ]; then
-          echo "ERROR: could not find fonts.tar.gz on versatiles-fonts latest release" >&2
-          curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
-            | jq -r '.assets[].name' >&2
-          exit 1
-        fi
-        TMPDIR=$(mktemp -d)
-        cd "$TMPDIR"
-        curl -fsSL "$ASSET" -o fonts.tar.gz
-        tar -xzf fonts.tar.gz -C /opt/versatiles-fonts
-        cd /
-        rm -rf "$TMPDIR"
-      user: root
-  eval:
-    # Build-scope: at least one font family's glyph PBF range exists.
-    # `find ... -name '*.pbf'` matches MapLibre's standard glyph file
-    # layout regardless of whether the tarball nests under a top-level
-    # directory or expands flat.
-    - id: versatiles-fonts-bundle-present
-      command: |
-        find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
-      exit_status: 0
-    # Build-scope: Noto Sans Regular is the default MapLibre style
-    # font; assert it's present specifically. versatiles-fonts uses
-    # lowercase + underscore-separated directory names (e.g.
-    # `noto_sans_regular`, not `Noto Sans Regular`), verified against
-    # the v2.1.0 release.
-    - id: versatiles-fonts-noto-sans
-      command: |
-        find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
-      exit_status: 0
+    version: 2026.144.1443
+    name: versatiles-fonts
+    description: "VersaTiles font glyphs — pre-rendered SDF (signed distance field) font files for MapLibre GL JS rendering of vector tiles. 10 font families (Fira Sans, Lato, Libre Baskerville, Merriweather Sans, Noto Sans, Nunito, Open Sans, PT Sans, Roboto, Source Sans 3). Installed locally from versatiles-org/versatiles-fonts GitHub releases so the notebook's shortbread MapLibre cell can render labels without hitting tiles.versatiles.org as a runtime font CDN. Re-exported by the versatiles-frontend layer's http.server at /fonts/."
+    require:
+        - supervisord
+    distro:
+        arch:
+            package:
+                - curl
+                - jq
+        fedora:
+            package:
+                - curl
+                - jq
+    task:
+        - mkdir: /opt/versatiles-fonts
+          user: root
+        # ---- versatiles-fonts SDF glyphs ----
+        # versatiles-org/versatiles-fonts ships `fonts.tar.gz` on each
+        # release with all 10 font families bundled. Resolve the asset
+        # URL via the GitHub release API rather than the static
+        # `releases/latest/download/` endpoint so a future asset-name
+        # change surfaces cleanly. The tarball lays out as
+        # `<font-family>/<zoom>-<range>.pbf` per MapLibre's standard
+        # glyph-URL convention.
+        - cmd: |
+            set -euo pipefail
+            ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
+              | jq -r '.assets[].browser_download_url' \
+              | grep -E '/fonts\.tar\.gz$' \
+              | head -1)
+            if [ -z "$ASSET" ]; then
+              echo "ERROR: could not find fonts.tar.gz on versatiles-fonts latest release" >&2
+              curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-fonts/releases/latest" \
+                | jq -r '.assets[].name' >&2
+              exit 1
+            fi
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+            curl -fsSL "$ASSET" -o fonts.tar.gz
+            tar -xzf fonts.tar.gz -C /opt/versatiles-fonts
+            cd /
+            rm -rf "$TMPDIR"
+          user: root
+    eval:
+        # Build-scope: at least one font family's glyph PBF range exists.
+        # `find ... -name '*.pbf'` matches MapLibre's standard glyph file
+        # layout regardless of whether the tarball nests under a top-level
+        # directory or expands flat.
+        - id: versatiles-fonts-bundle-present
+          command: |
+            find /opt/versatiles-fonts -name '*.pbf' -size +1c | head -1 | grep -q .
+          exit_status: 0
+        # Build-scope: Noto Sans Regular is the default MapLibre style
+        # font; assert it's present specifically. versatiles-fonts uses
+        # lowercase + underscore-separated directory names (e.g.
+        # `noto_sans_regular`, not `Noto Sans Regular`), verified against
+        # the v2.1.0 release.
+        - id: versatiles-fonts-noto-sans
+          command: |
+            find /opt/versatiles-fonts -path '*noto_sans_regular*' -name '*.pbf' | head -1 | grep -q .
+          exit_status: 0

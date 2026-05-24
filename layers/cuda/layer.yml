@@ -1,128 +1,129 @@
 layer:
-  name: cuda
-  require:
-    - nvidia
-    - ffmpeg
-  env:
-    # /usr is correct on Fedora (where CUDA RPMs land in /usr/bin, /usr/lib64,
-    # /usr/include). On Arch, extra/cuda installs to /opt/cuda — a
-    # post-install symlink task below stitches the canonical /usr/bin/nvcc,
-    # /usr/include/cudnn.h, and /usr/lib64/libcudart.so.* paths into place
-    # so consumer layers (llama-cpp, vllm, comfyui, jupyter-ml) compile
-    # against the same paths regardless of distro.
-    CUDA_HOME: "/usr"
-  distro:
-    arch:
-      package:
-        # Arch extra/cuda is a precompiled binary package — full toolkit
-        # (nvcc, cudart, nvrtc, cupti, curand, cccl, cufile) at /opt/cuda.
-        # Arch extra/cudnn is also precompiled; headers land at
-        # /opt/cuda/targets/x86_64-linux/include/. The post-install symlink
-        # task below maps these into /usr-rooted paths.
-        # python-onnxruntime-cpu is in the CachyOS extra repo (pulled
-        # transitively as a dependency); no AUR build needed — the bare
-        # `python-onnxruntime` AUR package fails to build under the
-        # rootless arch-builder stage. The eval probe below maps
-        # `onnxruntime` to `python-onnxruntime-cpu` on Arch via
-        # package_map.
-        - cuda
-        - cudnn
-        - python-onnxruntime-cpu
-    fedora:
-      package:
-        - onnxruntime
-        - libaio-devel
-        - cpio
-        - cuda-nvcc
-        - cuda-cudart-devel
-        - cuda-cudart-static
-        - cuda-nvrtc-devel
-        - cuda-cupti-devel
-        - libcurand-devel
-        - cuda-cccl-devel
-        - cuda-cudnn
-        - libcufile-devel
-      exclude:
-        - "nvidia-driver*"
-      repo:
-        # NVIDIA's official CUDA repo for Fedora 43 — CDN-backed, fast.
-        # This is the primary source for the cuda-* RPMs below; negativo17
-        # mirrors the same upstream artifacts but at glacial speed
-        # (single-server, ~24 KB/s on big files like cuda-nvcc 32 MiB).
-        # negativo17 is kept below ONLY for onnxruntime, which is the one
-        # package not available on NVIDIA's repo.
-        - name: cuda-fedora43-x86_64
-          url: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/cuda-fedora43.repo"
-          gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/D42D0685.pub"
-        - name: fedora-multimedia
-          url: "https://negativo17.org/repos/fedora-multimedia.repo"
-          gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
-  task:
-    # Fedora-only: cuDNN headers are shipped in a -devel package that has
-    # a hard dependency on the NVIDIA driver. Extract headers + lib
-    # symlinks manually via rpm2cpio to bypass the driver pull-in. Skipped
-    # on Arch (where extra/cudnn installs headers cleanly to /opt/cuda).
-    - cmd: |
-        if [ ! -f /etc/fedora-release ]; then
-          exit 0
-        fi
-        CUDNN_DIR=$(mktemp -d)
-        cd "$CUDNN_DIR"
-        if dnf5 download --enable-repo="fedora-multimedia" cuda-cudnn-devel 2>/dev/null; then
-          rpm2cpio cuda-cudnn-devel*.rpm | cpio -idm 2>/dev/null
-          [ -d ./usr/include ] && cp -v ./usr/include/cudnn*.h /usr/include/
-          while IFS= read -r -d '' link; do
-            name=$(basename "$link")
-            versioned=""
-            for v in /usr/lib64/"${name}".*; do
-              if [ -f "$v" ] && ! echo "$v" | grep -q '\.so$'; then
-                versioned="$v"; break
-              fi
+    version: 2026.144.1443
+    name: cuda
+    require:
+        - nvidia
+        - ffmpeg
+    env:
+        # /usr is correct on Fedora (where CUDA RPMs land in /usr/bin, /usr/lib64,
+        # /usr/include). On Arch, extra/cuda installs to /opt/cuda — a
+        # post-install symlink task below stitches the canonical /usr/bin/nvcc,
+        # /usr/include/cudnn.h, and /usr/lib64/libcudart.so.* paths into place
+        # so consumer layers (llama-cpp, vllm, comfyui, jupyter-ml) compile
+        # against the same paths regardless of distro.
+        CUDA_HOME: "/usr"
+    distro:
+        arch:
+            package:
+                # Arch extra/cuda is a precompiled binary package — full toolkit
+                # (nvcc, cudart, nvrtc, cupti, curand, cccl, cufile) at /opt/cuda.
+                # Arch extra/cudnn is also precompiled; headers land at
+                # /opt/cuda/targets/x86_64-linux/include/. The post-install symlink
+                # task below maps these into /usr-rooted paths.
+                # python-onnxruntime-cpu is in the CachyOS extra repo (pulled
+                # transitively as a dependency); no AUR build needed — the bare
+                # `python-onnxruntime` AUR package fails to build under the
+                # rootless arch-builder stage. The eval probe below maps
+                # `onnxruntime` to `python-onnxruntime-cpu` on Arch via
+                # package_map.
+                - cuda
+                - cudnn
+                - python-onnxruntime-cpu
+        fedora:
+            package:
+                - onnxruntime
+                - libaio-devel
+                - cpio
+                - cuda-nvcc
+                - cuda-cudart-devel
+                - cuda-cudart-static
+                - cuda-nvrtc-devel
+                - cuda-cupti-devel
+                - libcurand-devel
+                - cuda-cccl-devel
+                - cuda-cudnn
+                - libcufile-devel
+            exclude:
+                - "nvidia-driver*"
+            repo:
+                # NVIDIA's official CUDA repo for Fedora 43 — CDN-backed, fast.
+                # This is the primary source for the cuda-* RPMs below; negativo17
+                # mirrors the same upstream artifacts but at glacial speed
+                # (single-server, ~24 KB/s on big files like cuda-nvcc 32 MiB).
+                # negativo17 is kept below ONLY for onnxruntime, which is the one
+                # package not available on NVIDIA's repo.
+                - name: cuda-fedora43-x86_64
+                  url: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/cuda-fedora43.repo"
+                  gpgkey: "https://developer.download.nvidia.com/compute/cuda/repos/fedora43/x86_64/D42D0685.pub"
+                - name: fedora-multimedia
+                  url: "https://negativo17.org/repos/fedora-multimedia.repo"
+                  gpgkey: "https://negativo17.org/repos/RPM-GPG-KEY-slaanesh"
+    task:
+        # Fedora-only: cuDNN headers are shipped in a -devel package that has
+        # a hard dependency on the NVIDIA driver. Extract headers + lib
+        # symlinks manually via rpm2cpio to bypass the driver pull-in. Skipped
+        # on Arch (where extra/cudnn installs headers cleanly to /opt/cuda).
+        - cmd: |
+            if [ ! -f /etc/fedora-release ]; then
+              exit 0
+            fi
+            CUDNN_DIR=$(mktemp -d)
+            cd "$CUDNN_DIR"
+            if dnf5 download --enable-repo="fedora-multimedia" cuda-cudnn-devel 2>/dev/null; then
+              rpm2cpio cuda-cudnn-devel*.rpm | cpio -idm 2>/dev/null
+              [ -d ./usr/include ] && cp -v ./usr/include/cudnn*.h /usr/include/
+              while IFS= read -r -d '' link; do
+                name=$(basename "$link")
+                versioned=""
+                for v in /usr/lib64/"${name}".*; do
+                  if [ -f "$v" ] && ! echo "$v" | grep -q '\.so$'; then
+                    versioned="$v"; break
+                  fi
+                done
+                [ -n "$versioned" ] && [ ! -e /usr/lib64/"$name" ] && ln -sv "$(basename "$versioned")" /usr/lib64/"$name"
+              done < <(find ./usr/lib64 -maxdepth 1 -name '*.so' -type l -print0 2>/dev/null)
+            fi
+            cd / && rm -rf "$CUDNN_DIR"
+          user: root
+        # Arch-only: stitch /opt/cuda/* into the canonical /usr-rooted layout
+        # so every downstream consumer sees the same paths irrespective of
+        # distro. Skipped on Fedora (where the RPMs install at /usr/* directly).
+        - cmd: |
+            if [ ! -f /etc/arch-release ]; then
+              exit 0
+            fi
+            # nvcc + cuobjdump + ptxas + nvprof — every binary in /opt/cuda/bin
+            for bin in /opt/cuda/bin/*; do
+              [ -e "$bin" ] && ln -sf "$bin" /usr/bin/$(basename "$bin")
             done
-            [ -n "$versioned" ] && [ ! -e /usr/lib64/"$name" ] && ln -sv "$(basename "$versioned")" /usr/lib64/"$name"
-          done < <(find ./usr/lib64 -maxdepth 1 -name '*.so' -type l -print0 2>/dev/null)
-        fi
-        cd / && rm -rf "$CUDNN_DIR"
-      user: root
-    # Arch-only: stitch /opt/cuda/* into the canonical /usr-rooted layout
-    # so every downstream consumer sees the same paths irrespective of
-    # distro. Skipped on Fedora (where the RPMs install at /usr/* directly).
-    - cmd: |
-        if [ ! -f /etc/arch-release ]; then
-          exit 0
-        fi
-        # nvcc + cuobjdump + ptxas + nvprof — every binary in /opt/cuda/bin
-        for bin in /opt/cuda/bin/*; do
-          [ -e "$bin" ] && ln -sf "$bin" /usr/bin/$(basename "$bin")
-        done
-        # Headers — cudnn*.h live in /opt/cuda/targets/x86_64-linux/include
-        # on the cudnn package, while CUDA's own headers live in
-        # /opt/cuda/include. Symlink both into /usr/include.
-        for inc in /opt/cuda/include/*.h /opt/cuda/targets/x86_64-linux/include/*.h; do
-          [ -e "$inc" ] && ln -sf "$inc" /usr/include/$(basename "$inc")
-        done
-        # Libraries: libcudart, libcudnn, libcurand, etc.
-        mkdir -p /usr/lib64
-        for so in /opt/cuda/targets/x86_64-linux/lib/*.so* /opt/cuda/lib64/*.so*; do
-          [ -e "$so" ] && ln -sf "$so" /usr/lib64/$(basename "$so")
-        done
-      user: root
-  eval:
-    - id: cuda-nvcc-binary
-      file: /usr/bin/nvcc
-      exists: true
-    - id: cuda-cudart-package
-      package: cuda-cudart-devel
-      package_map:
-        arch: cuda
-        fedora: cuda-cudart-devel
-      installed: true
-    - id: cudnn-header
-      command: ls /usr/include/cudnn.h
-      exit_status: 0
-    - id: onnxruntime-package
-      package: onnxruntime
-      package_map:
-        arch: python-onnxruntime-cpu
-        fedora: onnxruntime
-      installed: true
+            # Headers — cudnn*.h live in /opt/cuda/targets/x86_64-linux/include
+            # on the cudnn package, while CUDA's own headers live in
+            # /opt/cuda/include. Symlink both into /usr/include.
+            for inc in /opt/cuda/include/*.h /opt/cuda/targets/x86_64-linux/include/*.h; do
+              [ -e "$inc" ] && ln -sf "$inc" /usr/include/$(basename "$inc")
+            done
+            # Libraries: libcudart, libcudnn, libcurand, etc.
+            mkdir -p /usr/lib64
+            for so in /opt/cuda/targets/x86_64-linux/lib/*.so* /opt/cuda/lib64/*.so*; do
+              [ -e "$so" ] && ln -sf "$so" /usr/lib64/$(basename "$so")
+            done
+          user: root
+    eval:
+        - id: cuda-nvcc-binary
+          file: /usr/bin/nvcc
+          exists: true
+        - id: cuda-cudart-package
+          package: cuda-cudart-devel
+          package_map:
+            arch: cuda
+            fedora: cuda-cudart-devel
+          installed: true
+        - id: cudnn-header
+          command: ls /usr/include/cudnn.h
+          exit_status: 0
+        - id: onnxruntime-package
+          package: onnxruntime
+          package_map:
+            arch: python-onnxruntime-cpu
+            fedora: onnxruntime
+          installed: true

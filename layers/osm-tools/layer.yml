@@ -1,214 +1,211 @@
 layer:
-  name: osm-tools
-  description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
-  require:
-    - supervisord
-  distro:
-    arch:
-      # gdal pulls in ocl-icd which collides with opencl-nvidia's
-      # /usr/lib/libOpenCL.so (NVIDIA ships its own ICD loader rather
-      # than the generic one). The two are both legitimate OpenCL ICDs,
-      # but their file lists overlap. Force overwrite so the ocl-icd
-      # install replaces opencl-nvidia's libOpenCL.so files. NVIDIA
-      # OpenCL still works at runtime via /etc/OpenCL/vendors/nvidia.icd.
-      option:
-        - --overwrite=*
-      package:
-        # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
-        # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
-        - gdal
-        - jq
-        # Build deps for tippecanoe (no Arch package; built from source).
-        # Arch's gcc package contains the C++ frontend (no -devel split).
-        - git
-        - make
-        - gcc
-        - sqlite
-        # NOTE: no explicit zlib — CachyOS ships zlib-ng-compat which
-        # provides the same library/ABI and would conflict with `zlib`.
-        # tippecanoe links against -lz which resolves through zlib-ng-compat.
-        #
-        # rust: needed for the `cargo install gpq-tiles` task below.
-        # gpq-tiles ships no usable PyPI wheels for Python 3.13/Linux
-        # x86_64 (v0.6.0 has only a cp38 manylinux wheel), and the
-        # marimo pixi env has [pypi-options] no-build = true (load-
-        # bearing for apache-airflow's resolution). So we install the
-        # crates.io binary system-wide via cargo. The rust package
-        # pulls cargo + rustc; ~350 MB image-size delta.
-        - rust
-    fedora:
-      package:
-        # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
-        # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
-        - gdal
-        # jq — used by the dynamic-version pmtiles download below to parse
-        # the GitHub release API response. Also useful for inspecting
-        # martin's /catalog endpoint and for pipeline scripts.
-        - jq
-        # Build deps for tippecanoe (which has no Fedora package — felt/
-        # tippecanoe is OSS but ships only source; the build below installs
-        # it). git is also needed for the clone.
-        - git
-        - make
-        - gcc-c++
-        - sqlite-devel
-        - zlib-devel
-        # rust: same rationale as the arch section — used by the
-        # cargo install gpq-tiles task below.
-        - rust
-        - cargo
-  port:
-    - 3000      # martin tile server HTTP
-  # MARTIN_PUBLIC_URL is consumed BY THE BROWSER (folium / MapLibre HTML
-  # embeds the tile-source URL directly), so the value must be the host-
-  # side mapping for container port 3000 — not the container-internal
-  # address. The {{.HostPort 3000}} placeholder resolves at ov config
-  # time against the actual resolved port mapping (works with both
-  # `port: [auto]` and explicit `port: [23000:3000]` deploy.yml forms).
-  env_provide:
-    MARTIN_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 3000}}"
-  task:
-    # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----
-    # NOT in Fedora repos and upstream (felt/tippecanoe) ships only source —
-    # no GitHub release binaries exist. Build from source in-image. The
-    # build is small (~200 MB git clone, <1 min `make -j`); cleanup keeps
-    # the image lean. Build deps (git/make/gcc-c++/sqlite-devel/zlib-devel)
-    # are declared in distros.fedora.packages above.
-    - cmd: |
-        set -euo pipefail
-        git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
-        cd /tmp/tippecanoe
-        make -j"$(nproc)"
-        make install PREFIX=/usr/local
-        cd /
-        rm -rf /tmp/tippecanoe
-      user: root
-
-    # ---- martin (tile server) ----
-    # Static-musl Rust binary (the gnu build hard-depends on libicuuc.so.74
-    # / libicui18n.so.74 which aren't on Fedora 43 — it ships libicu 77;
-    # musl is self-contained). Pinned to martin-v1.9.0 rather than tracking
-    # `releases/latest/download/` because maplibre/martin's release pipeline
-    # has, on multiple occasions, published a tag (e.g. martin-v1.9.1) with
-    # zero attached assets while CI was mid-upload — `latest/download/...`
-    # returned 404 for every asset until the assets caught up. A principled
-    # version pin avoids the "upstream half-published a release" failure
-    # class entirely (R4: no transient-flake workarounds; the fix is the
-    # pin, not a retry loop). Bump the version explicitly when needed.
-    - download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
-      extract: tar.gz
-      to: /usr/local/bin
-      include: [martin]
-      user: root
-
-    # ---- pmtiles CLI (protomaps/go-pmtiles) ----
-    # Asset filenames embed the version (`go-pmtiles_<v>_Linux_x86_64.tar.gz`),
-    # so the releases/latest/download/ static-redirect trick can't reach them.
-    # Resolve the latest tag via the GitHub API, then download + extract +
-    # install in one shell. jq comes from the rpm: list above; curl is
-    # always present in fedora minimal.
-    - cmd: |
-        set -euo pipefail
-        LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
-        VERSION="${LATEST#v}"
-        TMPDIR=$(mktemp -d)
-        cd "$TMPDIR"
-        curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
-          -o pmtiles.tar.gz
-        tar -xzf pmtiles.tar.gz pmtiles
-        install -m 0755 pmtiles /usr/local/bin/pmtiles
-        cd / && rm -rf "$TMPDIR"
-      user: root
-
-    # ---- gpq-tiles (GeoParquet → PMTiles direct converter) ----
-    # geoparquet-io/gpq-tiles v0.6.0 publishes wheels only for Python 3.8
-    # on Linux x86_64; our marimo pixi env is Python <3.14 and has
-    # [pypi-options] no-build = true (load-bearing — without it, uv
-    # downgrades apache-airflow to v1.10.2 which fails on the removed
-    # `imp` module). So we build the binary from crates.io via cargo
-    # and install system-wide at /usr/local/bin/gpq-tiles. The
-    # ~/.cargo/registry + .cargo/git build caches are dropped after
-    # install to keep the image lean. Build duration: ~5-10 min on a
-    # warm rust toolchain (cargo compiles 80+ transitive crates).
-    - cmd: |
-        set -euo pipefail
-        cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
-        rm -rf /root/.cargo/registry /root/.cargo/git \
-               /root/.cargo/.crates.toml /root/.cargo/.crates2.json
-      user: root
-
-    # ---- martin wrapper ----
-    # Tiny shell wrapper that pre-creates the tile source directory under
-    # the user-owned workspace volume before exec'ing martin. The directory
-    # may not exist yet on first deploy (the DAG hasn't run); without
-    # mkdir -p, martin would error or warn. With it, martin starts with
-    # an empty source dir and auto-discovers tiles as the DAG produces
-    # them. `exec` keeps PID 1 ownership for proper signal handling.
-    - write: /usr/local/bin/martin-wrapper.sh
-      mode: "0755"
-      user: root
-      content: |
-        #!/usr/bin/env bash
-        set -euo pipefail
-        DIR="/workspace/tiles/pmtiles"
-        mkdir -p "$DIR"
-        exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
-  eval:
-    # Build-scope: every CLI binary present + responds to --version.
-    - id: tippecanoe-installed
-      command: tippecanoe --version
-      exit_status: 0
-    - id: gdal-installed
-      command: ogr2ogr --version
-      exit_status: 0
-    - id: jq-installed
-      command: jq --version
-      exit_status: 0
-    - id: martin-installed
-      command: martin --version
-      exit_status: 0
-    - id: pmtiles-installed
-      command: pmtiles version
-      exit_status: 0
-    - id: gpq-tiles-installed
-      command: /usr/local/bin/gpq-tiles --version
-      exit_status: 0
-    - id: martin-wrapper-installed
-      file: /usr/local/bin/martin-wrapper.sh
-      exists: true
-      mode: "0755"
-    # Deploy-scope: martin service running + HTTP catalog endpoint responsive.
-    # Pre-DAG the catalog is empty (no PMTiles published yet); post-DAG it
-    # lists the monaco tile set. R10 step 16 re-verifies post-DAG.
-    - id: martin-running
-      scope: deploy
-      service: martin
-      running: true
-    - id: martin-port-reachable
-      scope: deploy
-      addr: "127.0.0.1:${HOST_PORT:3000}"
-      reachable: true
-      timeout: 10s
-    - id: martin-http-catalog
-      scope: deploy
-      http: "http://127.0.0.1:${HOST_PORT:3000}/catalog"
-      status: 200
-      timeout: 10s
-    - id: martin-tiles-dir-runtime
-      scope: deploy
-      command: test -d /workspace/tiles/pmtiles
-      exit_status: 0
-      in_container: true
-  service:
-    - name: martin
-      # Wrapper script ensures the tile source dir exists under the
-      # user-owned workspace volume before exec-ing martin. Service
-      # runs as the container user (supervisord default); the workspace
-      # volume's first-mount seeding (via --userns=keep-id) means the
-      # dir lands user-owned, so DAG tasks (also user) can write tile
-      # output that martin then auto-discovers.
-      exec: /usr/local/bin/martin-wrapper.sh
-      restart: always
-      priority: 33
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: osm-tools
+    description: "OpenStreetMap data pipeline tooling: tippecanoe (GeoJSON → MBTiles/PMTiles), gdal CLI (ogr2ogr/ogrinfo for format conversion), pmtiles CLI (PMTiles inspection/conversion), and martin (Rust tile server). Martin reads tiles from /workspace/tiles/pmtiles/ — the user-owned workspace volume — so DAG output and tile-server input share one persistent location with no chown / volume-shadow tricks."
+    require:
+        - supervisord
+    distro:
+        arch:
+            # gdal pulls in ocl-icd which collides with opencl-nvidia's
+            # /usr/lib/libOpenCL.so (NVIDIA ships its own ICD loader rather
+            # than the generic one). The two are both legitimate OpenCL ICDs,
+            # but their file lists overlap. Force overwrite so the ocl-icd
+            # install replaces opencl-nvidia's libOpenCL.so files. NVIDIA
+            # OpenCL still works at runtime via /etc/OpenCL/vendors/nvidia.icd.
+            option:
+                - --overwrite=*
+            package:
+                # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
+                # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
+                - gdal
+                - jq
+                # Build deps for tippecanoe (no Arch package; built from source).
+                # Arch's gcc package contains the C++ frontend (no -devel split).
+                - git
+                - make
+                - gcc
+                - sqlite
+                # NOTE: no explicit zlib — CachyOS ships zlib-ng-compat which
+                # provides the same library/ABI and would conflict with `zlib`.
+                # tippecanoe links against -lz which resolves through zlib-ng-compat.
+                #
+                # rust: needed for the `cargo install gpq-tiles` task below.
+                # gpq-tiles ships no usable PyPI wheels for Python 3.13/Linux
+                # x86_64 (v0.6.0 has only a cp38 manylinux wheel), and the
+                # marimo pixi env has [pypi-options] no-build = true (load-
+                # bearing for apache-airflow's resolution). So we install the
+                # crates.io binary system-wide via cargo. The rust package
+                # pulls cargo + rustc; ~350 MB image-size delta.
+                - rust
+        fedora:
+            package:
+                # gdal CLI — ogr2ogr / ogrinfo. Used by the sample DAG to convert
+                # quackosm's GeoParquet output to GeoJSON for tippecanoe input.
+                - gdal
+                # jq — used by the dynamic-version pmtiles download below to parse
+                # the GitHub release API response. Also useful for inspecting
+                # martin's /catalog endpoint and for pipeline scripts.
+                - jq
+                # Build deps for tippecanoe (which has no Fedora package — felt/
+                # tippecanoe is OSS but ships only source; the build below installs
+                # it). git is also needed for the clone.
+                - git
+                - make
+                - gcc-c++
+                - sqlite-devel
+                - zlib-devel
+                # rust: same rationale as the arch section — used by the
+                # cargo install gpq-tiles task below.
+                - rust
+                - cargo
+    port:
+        - 3000 # martin tile server HTTP
+    # MARTIN_PUBLIC_URL is consumed BY THE BROWSER (folium / MapLibre HTML
+    # embeds the tile-source URL directly), so the value must be the host-
+    # side mapping for container port 3000 — not the container-internal
+    # address. The {{.HostPort 3000}} placeholder resolves at ov config
+    # time against the actual resolved port mapping (works with both
+    # `port: [auto]` and explicit `port: [23000:3000]` deploy.yml forms).
+    env_provide:
+        MARTIN_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 3000}}"
+    task:
+        # ---- tippecanoe (GeoJSON → MBTiles/PMTiles) ----
+        # NOT in Fedora repos and upstream (felt/tippecanoe) ships only source —
+        # no GitHub release binaries exist. Build from source in-image. The
+        # build is small (~200 MB git clone, <1 min `make -j`); cleanup keeps
+        # the image lean. Build deps (git/make/gcc-c++/sqlite-devel/zlib-devel)
+        # are declared in distros.fedora.packages above.
+        - cmd: |
+            set -euo pipefail
+            git clone --depth 1 https://github.com/felt/tippecanoe /tmp/tippecanoe
+            cd /tmp/tippecanoe
+            make -j"$(nproc)"
+            make install PREFIX=/usr/local
+            cd /
+            rm -rf /tmp/tippecanoe
+          user: root
+        # ---- martin (tile server) ----
+        # Static-musl Rust binary (the gnu build hard-depends on libicuuc.so.74
+        # / libicui18n.so.74 which aren't on Fedora 43 — it ships libicu 77;
+        # musl is self-contained). Pinned to martin-v1.9.0 rather than tracking
+        # `releases/latest/download/` because maplibre/martin's release pipeline
+        # has, on multiple occasions, published a tag (e.g. martin-v1.9.1) with
+        # zero attached assets while CI was mid-upload — `latest/download/...`
+        # returned 404 for every asset until the assets caught up. A principled
+        # version pin avoids the "upstream half-published a release" failure
+        # class entirely (R4: no transient-flake workarounds; the fix is the
+        # pin, not a retry loop). Bump the version explicitly when needed.
+        - download: "https://github.com/maplibre/martin/releases/download/martin-v1.9.0/martin-${BUILD_ARCH}-unknown-linux-musl.tar.gz"
+          extract: tar.gz
+          to: /usr/local/bin
+          include: [martin]
+          user: root
+        # ---- pmtiles CLI (protomaps/go-pmtiles) ----
+        # Asset filenames embed the version (`go-pmtiles_<v>_Linux_x86_64.tar.gz`),
+        # so the releases/latest/download/ static-redirect trick can't reach them.
+        # Resolve the latest tag via the GitHub API, then download + extract +
+        # install in one shell. jq comes from the rpm: list above; curl is
+        # always present in fedora minimal.
+        - cmd: |
+            set -euo pipefail
+            LATEST=$(curl -fsSL "https://api.github.com/repos/protomaps/go-pmtiles/releases/latest" | jq -r '.tag_name')
+            VERSION="${LATEST#v}"
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+            curl -fsSL "https://github.com/protomaps/go-pmtiles/releases/download/${LATEST}/go-pmtiles_${VERSION}_Linux_${BUILD_ARCH}.tar.gz" \
+              -o pmtiles.tar.gz
+            tar -xzf pmtiles.tar.gz pmtiles
+            install -m 0755 pmtiles /usr/local/bin/pmtiles
+            cd / && rm -rf "$TMPDIR"
+          user: root
+        # ---- gpq-tiles (GeoParquet → PMTiles direct converter) ----
+        # geoparquet-io/gpq-tiles v0.6.0 publishes wheels only for Python 3.8
+        # on Linux x86_64; our marimo pixi env is Python <3.14 and has
+        # [pypi-options] no-build = true (load-bearing — without it, uv
+        # downgrades apache-airflow to v1.10.2 which fails on the removed
+        # `imp` module). So we build the binary from crates.io via cargo
+        # and install system-wide at /usr/local/bin/gpq-tiles. The
+        # ~/.cargo/registry + .cargo/git build caches are dropped after
+        # install to keep the image lean. Build duration: ~5-10 min on a
+        # warm rust toolchain (cargo compiles 80+ transitive crates).
+        - cmd: |
+            set -euo pipefail
+            cargo install gpq-tiles --root /usr/local --jobs "$(nproc)"
+            rm -rf /root/.cargo/registry /root/.cargo/git \
+                   /root/.cargo/.crates.toml /root/.cargo/.crates2.json
+          user: root
+        # ---- martin wrapper ----
+        # Tiny shell wrapper that pre-creates the tile source directory under
+        # the user-owned workspace volume before exec'ing martin. The directory
+        # may not exist yet on first deploy (the DAG hasn't run); without
+        # mkdir -p, martin would error or warn. With it, martin starts with
+        # an empty source dir and auto-discovers tiles as the DAG produces
+        # them. `exec` keeps PID 1 ownership for proper signal handling.
+        - write: /usr/local/bin/martin-wrapper.sh
+          mode: "0755"
+          user: root
+          content: |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            DIR="/workspace/tiles/pmtiles"
+            mkdir -p "$DIR"
+            exec /usr/local/bin/martin --listen-addresses 0.0.0.0:3000 "$DIR"
+    eval:
+        # Build-scope: every CLI binary present + responds to --version.
+        - id: tippecanoe-installed
+          command: tippecanoe --version
+          exit_status: 0
+        - id: gdal-installed
+          command: ogr2ogr --version
+          exit_status: 0
+        - id: jq-installed
+          command: jq --version
+          exit_status: 0
+        - id: martin-installed
+          command: martin --version
+          exit_status: 0
+        - id: pmtiles-installed
+          command: pmtiles version
+          exit_status: 0
+        - id: gpq-tiles-installed
+          command: /usr/local/bin/gpq-tiles --version
+          exit_status: 0
+        - id: martin-wrapper-installed
+          file: /usr/local/bin/martin-wrapper.sh
+          exists: true
+          mode: "0755"
+        # Deploy-scope: martin service running + HTTP catalog endpoint responsive.
+        # Pre-DAG the catalog is empty (no PMTiles published yet); post-DAG it
+        # lists the monaco tile set. R10 step 16 re-verifies post-DAG.
+        - id: martin-running
+          scope: deploy
+          service: martin
+          running: true
+        - id: martin-port-reachable
+          scope: deploy
+          addr: "127.0.0.1:${HOST_PORT:3000}"
+          reachable: true
+          timeout: 10s
+        - id: martin-http-catalog
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:3000}/catalog"
+          status: 200
+          timeout: 10s
+        - id: martin-tiles-dir-runtime
+          scope: deploy
+          command: test -d /workspace/tiles/pmtiles
+          exit_status: 0
+          in_container: true
+    service:
+        - name: martin
+          # Wrapper script ensures the tile source dir exists under the
+          # user-owned workspace volume before exec-ing martin. Service
+          # runs as the container user (supervisord default); the workspace
+          # volume's first-mount seeding (via --userns=keep-id) means the
+          # dir lands user-owned, so DAG tasks (also user) can write tile
+          # output that martin then auto-discovers.
+          exec: /usr/local/bin/martin-wrapper.sh
+          restart: always
+          priority: 33
+          enable: true
+          scope: system

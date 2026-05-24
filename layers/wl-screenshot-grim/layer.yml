@@ -1,13 +1,14 @@
 layer:
-  name: wl-screenshot-grim
-  distro:
-    fedora:
-      package:
-        - grim
-  eval:
-    - id: grim-binary
-      file: /usr/bin/grim
-      exists: true
-    - id: grim-package
-      package: grim
-      installed: true
+    version: 2026.144.1443
+    name: wl-screenshot-grim
+    distro:
+        fedora:
+            package:
+                - grim
+    eval:
+        - id: grim-binary
+          file: /usr/bin/grim
+          exists: true
+        - id: grim-package
+          package: grim
+          installed: true

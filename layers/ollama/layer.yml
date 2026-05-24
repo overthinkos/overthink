@@ -1,49 +1,50 @@
 layer:
-  name: ollama
-  require:
-    # GPU-agnostic: the ollama binary auto-detects the GPU at runtime (CPU
-    # fallback when none present), so CUDA is an IMAGE-level composition choice
-    # (the `ollama` image lists `cuda` explicitly), NOT a layer dependency.
-    # This lets CPU consumers (e.g. `openclaw-desktop` on cachyos) compose the
-    # layer without dragging the Fedora/NVIDIA `cuda` layer onto a pac base.
-    - supervisord
-  env:
-    OLLAMA_HOST: "0.0.0.0"
-    OLLAMA_MODELS: "~/.ollama/models"
-  env_provide:
-    OLLAMA_HOST: "http://{{.ContainerName}}:11434"
-  port:
-    - 11434
-  volume:
-    - name: models
-      path: "~/.ollama"
-  alias:
-    - name: ollama
-      command: ollama
-  task:
-    # Ollama binary release tarball (no systemd)
-    - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
-      extract: tar.zst
-      to: /usr
-      user: root
-  eval:
-    # Build-scope invariants on the installed artifact.
-    - id: ollama-binary
-      file: /usr/bin/ollama
-      exists: true
-    # Deploy-scope reachability + API liveness.
-    - id: ollama-tags-api
-      scope: deploy
-      http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
-      status: 200
-    - id: ollama-version
-      scope: deploy
-      command: ollama --version
-      stdout:
-        - matches: "^ollama version"
-  service:
-    - name: ollama
-      exec: "ollama serve"
-      restart: always
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: ollama
+    require:
+        # GPU-agnostic: the ollama binary auto-detects the GPU at runtime (CPU
+        # fallback when none present), so CUDA is an IMAGE-level composition choice
+        # (the `ollama` image lists `cuda` explicitly), NOT a layer dependency.
+        # This lets CPU consumers (e.g. `openclaw-desktop` on cachyos) compose the
+        # layer without dragging the Fedora/NVIDIA `cuda` layer onto a pac base.
+        - supervisord
+    env:
+        OLLAMA_HOST: "0.0.0.0"
+        OLLAMA_MODELS: "~/.ollama/models"
+    env_provide:
+        OLLAMA_HOST: "http://{{.ContainerName}}:11434"
+    port:
+        - 11434
+    volume:
+        - name: models
+          path: "~/.ollama"
+    alias:
+        - name: ollama
+          command: ollama
+    task:
+        # Ollama binary release tarball (no systemd)
+        - download: "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst"
+          extract: tar.zst
+          to: /usr
+          user: root
+    eval:
+        # Build-scope invariants on the installed artifact.
+        - id: ollama-binary
+          file: /usr/bin/ollama
+          exists: true
+        # Deploy-scope reachability + API liveness.
+        - id: ollama-tags-api
+          scope: deploy
+          http: http://127.0.0.1:${HOST_PORT:11434}/api/tags
+          status: 200
+        - id: ollama-version
+          scope: deploy
+          command: ollama --version
+          stdout:
+            - matches: "^ollama version"
+    service:
+        - name: ollama
+          exec: "ollama serve"
+          restart: always
+          enable: true
+          scope: system

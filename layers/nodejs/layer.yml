@@ -1,42 +1,43 @@
 layer:
-  name: nodejs
-  env:
-    NPM_CONFIG_PREFIX: "~/.npm-global"
-    npm_config_cache: "~/.cache/npm"
-  path_append:
-    - "~/.npm-global/bin"
-  package:
-    - nodejs
-  distro:
-    arch:
-      package:
-        - npm
-    debian:
-      package:
-        - npm
-    fedora:
-      package:
-        - npm
-    ubuntu:
-      package:
-        - npm
-    ubuntu-24.04:
-      repo:
-        - name: nodesource
-          url: "https://deb.nodesource.com/node_20.x"
-          key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
-          suite: nodistro
-          components: main
-  eval:
-    - id: node-binary
-      file: /usr/bin/node
-      exists: true
-    - id: node-version
-      command: /usr/bin/node --version
-      exit_status: 0
-    - id: npm-binary
-      file: /usr/bin/npm
-      exists: true
-    - id: npm-version
-      command: /usr/bin/npm --version
-      exit_status: 0
+    version: 2026.144.1443
+    name: nodejs
+    env:
+        NPM_CONFIG_PREFIX: "~/.npm-global"
+        npm_config_cache: "~/.cache/npm"
+    path_append:
+        - "~/.npm-global/bin"
+    package:
+        - nodejs
+    distro:
+        arch:
+            package:
+                - npm
+        debian:
+            package:
+                - npm
+        fedora:
+            package:
+                - npm
+        ubuntu:
+            package:
+                - npm
+        ubuntu-24.04:
+            repo:
+                - name: nodesource
+                  url: "https://deb.nodesource.com/node_20.x"
+                  key: "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key"
+                  suite: nodistro
+                  components: main
+    eval:
+        - id: node-binary
+          file: /usr/bin/node
+          exists: true
+        - id: node-version
+          command: /usr/bin/node --version
+          exit_status: 0
+        - id: npm-binary
+          file: /usr/bin/npm
+          exists: true
+        - id: npm-version
+          command: /usr/bin/npm --version
+          exit_status: 0

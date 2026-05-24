@@ -1,89 +1,90 @@
 layer:
-  name: labwc
-  require:
-    - dbus
-  # autostart script has a wait-for-supervisord-socket guard (see autostart)
-  env:
-    WAYLAND_DISPLAY: "wayland-0"
-    XDG_RUNTIME_DIR: "/tmp"
-  env_accept:
-    - name: XKB_DEFAULT_LAYOUT
-      description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
-    - name: XKB_DEFAULT_VARIANT
-      description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
-    - name: XKB_DEFAULT_MODEL
-      description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
-    - name: XKB_DEFAULT_OPTIONS
-      description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
-  distro:
-    arch:
-      package:
-        - labwc
-        - foot
-        - xorg-xwayland
-        - thunar
-    fedora:
-      package:
-        - labwc
-        - foot
-        - xorg-x11-server-Xwayland
-        - thunar
-  task:
-    - mkdir: "${HOME}/.local/bin"
-      user: "${USER}"
-    - mkdir: "${HOME}/.config/labwc"
-      user: "${USER}"
-    - copy: labwc-wrapper
-      to: "${HOME}/.local/bin/labwc-wrapper"
-      mode: "0755"
-      user: "${USER}"
-    - copy: rc.xml
-      to: "${HOME}/.config/labwc/rc.xml"
-      mode: "0644"
-      user: "${USER}"
-    - copy: autostart
-      to: "${HOME}/.config/labwc/autostart"
-      mode: "0644"
-      user: "${USER}"
-  eval:
-    - id: labwc-binary
-      file: /usr/bin/labwc
-      exists: true
-    - id: labwc-wrapper
-      file: ${HOME}/.local/bin/labwc-wrapper
-      exists: true
-    - id: labwc-rc
-      file: ${HOME}/.config/labwc/rc.xml
-      exists: true
-    - id: labwc-autostart
-      file: ${HOME}/.config/labwc/autostart
-      exists: true
-    - id: xwayland-binary
-      file: /usr/bin/Xwayland
-      exists: true
-    - id: labwc-service-running
-      scope: deploy
-      service: labwc
-      running: true
-    # service:running is crash-loop-blind — labwc reports RUNNING even while it
-    # restarts every few seconds when its prerequisite (pixelflux's wayland-1)
-    # is missing. Assert labwc actually created its nested compositor socket
-    # (wayland-0) — that requires the full pixelflux→labwc chain to be healthy
-    # and is the precondition for chrome to start. Poll for readiness.
-    - id: labwc-wayland-socket
-      scope: deploy
-      command: test -e /tmp/wayland-0
-      exit_status: 0
-      in_container: true
-      eventually: 60s
-      retry_interval: 3s
-  service:
-    - name: labwc
-      exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
-      env:
-        XDG_RUNTIME_DIR: /tmp
-      restart: always
-      priority: 12
-      start_sec: 2
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: labwc
+    require:
+        - dbus
+    # autostart script has a wait-for-supervisord-socket guard (see autostart)
+    env:
+        WAYLAND_DISPLAY: "wayland-0"
+        XDG_RUNTIME_DIR: "/tmp"
+    env_accept:
+        - name: XKB_DEFAULT_LAYOUT
+          description: "XKB keyboard layout (e.g., us, de, fr, gb). Default: us"
+        - name: XKB_DEFAULT_VARIANT
+          description: "XKB keyboard variant (e.g., dvorak, nodeadkeys). Default: none"
+        - name: XKB_DEFAULT_MODEL
+          description: "XKB keyboard model (e.g., pc105, pc104, chromebook). Default: pc105"
+        - name: XKB_DEFAULT_OPTIONS
+          description: "XKB options (e.g., compose:ralt, caps:escape). Default: none"
+    distro:
+        arch:
+            package:
+                - labwc
+                - foot
+                - xorg-xwayland
+                - thunar
+        fedora:
+            package:
+                - labwc
+                - foot
+                - xorg-x11-server-Xwayland
+                - thunar
+    task:
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/labwc"
+          user: "${USER}"
+        - copy: labwc-wrapper
+          to: "${HOME}/.local/bin/labwc-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: rc.xml
+          to: "${HOME}/.config/labwc/rc.xml"
+          mode: "0644"
+          user: "${USER}"
+        - copy: autostart
+          to: "${HOME}/.config/labwc/autostart"
+          mode: "0644"
+          user: "${USER}"
+    eval:
+        - id: labwc-binary
+          file: /usr/bin/labwc
+          exists: true
+        - id: labwc-wrapper
+          file: ${HOME}/.local/bin/labwc-wrapper
+          exists: true
+        - id: labwc-rc
+          file: ${HOME}/.config/labwc/rc.xml
+          exists: true
+        - id: labwc-autostart
+          file: ${HOME}/.config/labwc/autostart
+          exists: true
+        - id: xwayland-binary
+          file: /usr/bin/Xwayland
+          exists: true
+        - id: labwc-service-running
+          scope: deploy
+          service: labwc
+          running: true
+        # service:running is crash-loop-blind — labwc reports RUNNING even while it
+        # restarts every few seconds when its prerequisite (pixelflux's wayland-1)
+        # is missing. Assert labwc actually created its nested compositor socket
+        # (wayland-0) — that requires the full pixelflux→labwc chain to be healthy
+        # and is the precondition for chrome to start. Poll for readiness.
+        - id: labwc-wayland-socket
+          scope: deploy
+          command: test -e /tmp/wayland-0
+          exit_status: 0
+          in_container: true
+          eventually: 60s
+          retry_interval: 3s
+    service:
+        - name: labwc
+          exec: "%(ENV_HOME)s/.local/bin/labwc-wrapper"
+          env:
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 12
+          start_sec: 2
+          enable: true
+          scope: system

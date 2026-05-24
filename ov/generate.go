@@ -163,7 +163,7 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		return nil, fmt.Errorf("computing global layer order: %w", err)
 	}
 
-	return &Generator{
+	g := &Generator{
 		Dir:            dir,
 		Config:         cfg,
 		Layers:         layers,
@@ -172,7 +172,16 @@ func NewGenerator(dir string, tag string, opts ResolveOpts) (*Generator, error) 
 		BuildDir:       filepath.Join(dir, ".build"),
 		Containerfiles: make(map[string]string),
 		GlobalOrder:    globalOrder,
-	}, nil
+	}
+
+	// Derive each image's content-stable identity (org.overthinkos.version)
+	// from per-entity versions now that the base chain + auto-intermediates are
+	// materialized. See effective_version.go.
+	if err := g.computeEffectiveVersions(); err != nil {
+		return nil, err
+	}
+
+	return g, nil
 }
 
 // cleanStaleBuildDirs removes image directories in .build/ that don't correspond
@@ -798,9 +807,10 @@ func (g *Generator) generateDataImageContainerfile(imageName string, img *Resolv
 	// Data staging COPY instructions
 	g.writeDataStaging(&b, layerOrder, img)
 
-	// Minimal labels (no init, no services, no ports)
+	// Minimal labels (no init, no services, no ports). Content-derived
+	// EffectiveVersion (not the per-build tag) — see writeLabels.
 	b.WriteString("# Image metadata\n")
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.Tag))
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
 	if img.Registry != "" {
 		b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelRegistry, img.Registry))
@@ -1691,11 +1701,14 @@ func (g *Generator) renderFormatInstallFromPackages(b *strings.Builder, packages
 func (g *Generator) writeLabels(b *strings.Builder, imageName string, layerOrder []string, img *ResolvedImage) {
 	b.WriteString("# Image metadata\n")
 
-	// Always-present labels. org.overthinkos.version carries the BUILD CalVer
-	// (== the image's tag) — the version the generate run stamped the image
-	// with — so it's meaningful and matches the tag. ExtractMetadata uses it as
-	// the "is this an ov image?" presence sentinel.
-	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.Tag))
+	// Always-present labels. org.overthinkos.version carries the image's
+	// content-derived EffectiveVersion (its dedicated version:, else the highest
+	// layer version across the base chain) — NOT the per-build tag. It is stable
+	// across builds when no layer changed, so a child's FROM <base> SHA doesn't
+	// shift and cache-misses don't cascade. See effective_version.go. Resolution
+	// prefers this label over the tag (local_image.go); it is also the
+	// "is this an ov image?" presence sentinel (ExtractMetadata).
+	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelVersion, img.EffectiveVersion))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelImage, imageName))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelUID, strconv.Itoa(img.UID)))
 	b.WriteString(fmt.Sprintf("LABEL %s=%q\n", LabelGID, strconv.Itoa(img.GID)))

@@ -1,108 +1,107 @@
 layer:
-  name: shortbread
-  description: "Shortbread vector-tile schema generation via Tilemaker. Builds systemed/tilemaker (C++/Lua) from source and bundles the official shortbread-tiles/shortbread-tilemaker Lua + JSON configuration so the notebook's DAG can produce monaco-shortbread.pmtiles from an OSM PBF. The Shortbread schema is the de-facto general-purpose OSM vector-tile schema documented at https://shortbread-tiles.org."
-  require:
-    - supervisord
-  distro:
-    arch:
-      package:
-        # Tilemaker's build deps. On Arch the gcc package supplies the
-        # C++ frontend (no -devel split). lua is the embedding runtime
-        # the shortbread process.lua hooks into. boost-libs / protobuf
-        # / shapelib / sqlite / zlib are the linkage-level deps the
-        # tilemaker Makefile expects.
-        - git
-        - make
-        - gcc
-        - lua
-        - sqlite
-        - boost-libs
-        - boost          # headers — tilemaker's Makefile includes <boost/...>
-        - protobuf
-        - shapelib
-        - rapidjson      # tilemaker's include/shared_data.h: #include "rapidjson/document.h"
-        # NOTE: no explicit zlib (CachyOS ships zlib-ng-compat which
-        # provides the same ABI; tippecanoe in osm-tools-layer follows
-        # the same pattern).
-    fedora:
-      package:
-        - git
-        - make
-        - gcc-c++
-        - lua-devel
-        - sqlite-devel
-        - zlib-devel
-        - boost-devel
-        - protobuf-devel
-        - shapelib-devel
-        - rapidjson-devel
-  task:
-    # ---- tilemaker (C++ + Lua OSM → vector-tile generator) ----
-    # systemed/tilemaker has no Arch package and no GitHub release
-    # binaries — build from source. The C++ + Lua build is ~2-3 min
-    # on a warm package cache. Pattern mirrors the existing tippecanoe
-    # build in /ov-versa:osm-tools-layer: shallow clone → make -j →
-    # `make install PREFIX=/usr/local` → cleanup.
-    - cmd: |
-        set -euo pipefail
-        git clone --depth 1 https://github.com/systemed/tilemaker /tmp/tilemaker
-        cd /tmp/tilemaker
-        # Boost 1.91+ (CachyOS / Arch as of 2026-Q1) made
-        # boost::system a HEADER-ONLY library: `libboost_system.so`
-        # no longer exists. tilemaker's Makefile still ships
-        # `-lboost_system` in its link line, which fails with
-        # `cannot find -lboost_system`. Strip the flag — the
-        # boost::system functionality lives in headers, no link
-        # step needed. boost_filesystem + boost_program_options
-        # still ship as .so libraries, so we keep those.
-        sed -i 's/-lboost_system//g' Makefile
-        make -j"$(nproc)"
-        make install PREFIX=/usr/local
-        cd /
-        rm -rf /tmp/tilemaker
-      user: root
-
-    # ---- shortbread-tilemaker config bundle ----
-    # The official shortbread-tiles/shortbread-tilemaker repo ships
-    # process.lua (the per-feature classifier) + config.json (the
-    # layer/zoom schema definition). Drop the entire repo at
-    # /opt/shortbread-tilemaker/ minus the .git/ directory so the
-    # notebook's DAG can invoke tilemaker with --process + --config
-    # pointing at those files.
-    - cmd: |
-        set -euo pipefail
-        git clone --depth 1 https://github.com/shortbread-tiles/shortbread-tilemaker /opt/shortbread-tilemaker
-        rm -rf /opt/shortbread-tilemaker/.git
-      user: root
-
-    # ---- output directory (versatiles serve watches it) ----
-    # versatiles serve (in /ov-versa:versatiles) is configured to
-    # watch /workspace/tiles/shortbread/. Pre-creating the directory
-    # at build time means versatiles starts cleanly on a fresh deploy
-    # even before any DAG runs (otherwise versatiles errors on the
-    # missing directory).
-    - mkdir: /workspace/tiles/shortbread
-      user: root
-      mode: "0755"
-  eval:
-    # Build-scope: tilemaker binary installed. tilemaker has no
-    # `--version` flag (verified 2026-Q2); use `command -v` to confirm
-    # the binary is on PATH.
-    - id: tilemaker-installed
-      command: command -v tilemaker
-      exit_status: 0
-    # Build-scope: shortbread config files dropped at expected paths.
-    - id: shortbread-process-lua
-      file: /opt/shortbread-tilemaker/process.lua
-      exists: true
-    - id: shortbread-config-json
-      file: /opt/shortbread-tilemaker/config.json
-      exists: true
-    # Deploy-scope: the versatiles-watched directory is present on a
-    # fresh deploy (the mkdir above lands at image-build time; the
-    # workspace volume seed preserves it).
-    - id: shortbread-tiles-dir-runtime
-      scope: deploy
-      command: test -d /workspace/tiles/shortbread
-      exit_status: 0
-      in_container: true
+    version: 2026.144.1443
+    name: shortbread
+    description: "Shortbread vector-tile schema generation via Tilemaker. Builds systemed/tilemaker (C++/Lua) from source and bundles the official shortbread-tiles/shortbread-tilemaker Lua + JSON configuration so the notebook's DAG can produce monaco-shortbread.pmtiles from an OSM PBF. The Shortbread schema is the de-facto general-purpose OSM vector-tile schema documented at https://shortbread-tiles.org."
+    require:
+        - supervisord
+    distro:
+        arch:
+            package:
+                # Tilemaker's build deps. On Arch the gcc package supplies the
+                # C++ frontend (no -devel split). lua is the embedding runtime
+                # the shortbread process.lua hooks into. boost-libs / protobuf
+                # / shapelib / sqlite / zlib are the linkage-level deps the
+                # tilemaker Makefile expects.
+                - git
+                - make
+                - gcc
+                - lua
+                - sqlite
+                - boost-libs
+                - boost # headers — tilemaker's Makefile includes <boost/...>
+                - protobuf
+                - shapelib
+                - rapidjson # tilemaker's include/shared_data.h: #include "rapidjson/document.h"
+                # NOTE: no explicit zlib (CachyOS ships zlib-ng-compat which
+                # provides the same ABI; tippecanoe in osm-tools-layer follows
+                # the same pattern).
+        fedora:
+            package:
+                - git
+                - make
+                - gcc-c++
+                - lua-devel
+                - sqlite-devel
+                - zlib-devel
+                - boost-devel
+                - protobuf-devel
+                - shapelib-devel
+                - rapidjson-devel
+    task:
+        # ---- tilemaker (C++ + Lua OSM → vector-tile generator) ----
+        # systemed/tilemaker has no Arch package and no GitHub release
+        # binaries — build from source. The C++ + Lua build is ~2-3 min
+        # on a warm package cache. Pattern mirrors the existing tippecanoe
+        # build in /ov-versa:osm-tools-layer: shallow clone → make -j →
+        # `make install PREFIX=/usr/local` → cleanup.
+        - cmd: |
+            set -euo pipefail
+            git clone --depth 1 https://github.com/systemed/tilemaker /tmp/tilemaker
+            cd /tmp/tilemaker
+            # Boost 1.91+ (CachyOS / Arch as of 2026-Q1) made
+            # boost::system a HEADER-ONLY library: `libboost_system.so`
+            # no longer exists. tilemaker's Makefile still ships
+            # `-lboost_system` in its link line, which fails with
+            # `cannot find -lboost_system`. Strip the flag — the
+            # boost::system functionality lives in headers, no link
+            # step needed. boost_filesystem + boost_program_options
+            # still ship as .so libraries, so we keep those.
+            sed -i 's/-lboost_system//g' Makefile
+            make -j"$(nproc)"
+            make install PREFIX=/usr/local
+            cd /
+            rm -rf /tmp/tilemaker
+          user: root
+        # ---- shortbread-tilemaker config bundle ----
+        # The official shortbread-tiles/shortbread-tilemaker repo ships
+        # process.lua (the per-feature classifier) + config.json (the
+        # layer/zoom schema definition). Drop the entire repo at
+        # /opt/shortbread-tilemaker/ minus the .git/ directory so the
+        # notebook's DAG can invoke tilemaker with --process + --config
+        # pointing at those files.
+        - cmd: |
+            set -euo pipefail
+            git clone --depth 1 https://github.com/shortbread-tiles/shortbread-tilemaker /opt/shortbread-tilemaker
+            rm -rf /opt/shortbread-tilemaker/.git
+          user: root
+        # ---- output directory (versatiles serve watches it) ----
+        # versatiles serve (in /ov-versa:versatiles) is configured to
+        # watch /workspace/tiles/shortbread/. Pre-creating the directory
+        # at build time means versatiles starts cleanly on a fresh deploy
+        # even before any DAG runs (otherwise versatiles errors on the
+        # missing directory).
+        - mkdir: /workspace/tiles/shortbread
+          user: root
+          mode: "0755"
+    eval:
+        # Build-scope: tilemaker binary installed. tilemaker has no
+        # `--version` flag (verified 2026-Q2); use `command -v` to confirm
+        # the binary is on PATH.
+        - id: tilemaker-installed
+          command: command -v tilemaker
+          exit_status: 0
+        # Build-scope: shortbread config files dropped at expected paths.
+        - id: shortbread-process-lua
+          file: /opt/shortbread-tilemaker/process.lua
+          exists: true
+        - id: shortbread-config-json
+          file: /opt/shortbread-tilemaker/config.json
+          exists: true
+        # Deploy-scope: the versatiles-watched directory is present on a
+        # fresh deploy (the mkdir above lands at image-build time; the
+        # workspace volume seed preserves it).
+        - id: shortbread-tiles-dir-runtime
+          scope: deploy
+          command: test -d /workspace/tiles/shortbread
+          exit_status: 0
+          in_container: true

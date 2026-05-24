@@ -1,57 +1,58 @@
 layer:
-  name: swaync
-  require:
-    - dbus
-  distro:
-    arch:
-      package:
-        - swaync
-    fedora:
-      package:
-        - SwayNotificationCenter
-  task:
-    # Remove D-Bus auto-activation service files to prevent D-Bus from spawning
-    # competing swaync instances. In supervisord-managed containers, swaync is
-    # started by supervisord — D-Bus activation races with it, causing the
-    # supervisord instance to lose its bus name and exit with status 1.
-    - cmd: |
-        rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
-        rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
-      user: root
-    - mkdir: "${HOME}/.local/bin"
-      user: "${USER}"
-    - mkdir: "${HOME}/.config/swaync"
-      user: "${USER}"
-    - copy: swaync-wrapper
-      to: "${HOME}/.local/bin/swaync-wrapper"
-      mode: "0755"
-      user: "${USER}"
-    - copy: config.json
-      to: "${HOME}/.config/swaync/config.json"
-      mode: "0644"
-      user: "${USER}"
-    - copy: style.css
-      to: "${HOME}/.config/swaync/style.css"
-      mode: "0644"
-      user: "${USER}"
-  eval:
-    - id: swaync-binary
-      file: /usr/bin/swaync
-      exists: true
-    - id: swaync-config
-      file: ${HOME}/.config/swaync/config.json
-      exists: true
-    - id: swaync-style
-      file: ${HOME}/.config/swaync/style.css
-      exists: true
-  service:
-    - name: swaync
-      exec: "%(ENV_HOME)s/.local/bin/swaync-wrapper"
-      env:
-        WAYLAND_DISPLAY: wayland-0
-        XDG_RUNTIME_DIR: /tmp
-      restart: always
-      priority: 14
-      start_sec: 2
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: swaync
+    require:
+        - dbus
+    distro:
+        arch:
+            package:
+                - swaync
+        fedora:
+            package:
+                - SwayNotificationCenter
+    task:
+        # Remove D-Bus auto-activation service files to prevent D-Bus from spawning
+        # competing swaync instances. In supervisord-managed containers, swaync is
+        # started by supervisord — D-Bus activation races with it, causing the
+        # supervisord instance to lose its bus name and exit with status 1.
+        - cmd: |
+            rm -f /usr/share/dbus-1/services/org.erikreider.swaync.service
+            rm -f /usr/share/dbus-1/services/org.erikreider.swaync.cc.service
+          user: root
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/swaync"
+          user: "${USER}"
+        - copy: swaync-wrapper
+          to: "${HOME}/.local/bin/swaync-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: config.json
+          to: "${HOME}/.config/swaync/config.json"
+          mode: "0644"
+          user: "${USER}"
+        - copy: style.css
+          to: "${HOME}/.config/swaync/style.css"
+          mode: "0644"
+          user: "${USER}"
+    eval:
+        - id: swaync-binary
+          file: /usr/bin/swaync
+          exists: true
+        - id: swaync-config
+          file: ${HOME}/.config/swaync/config.json
+          exists: true
+        - id: swaync-style
+          file: ${HOME}/.config/swaync/style.css
+          exists: true
+    service:
+        - name: swaync
+          exec: "%(ENV_HOME)s/.local/bin/swaync-wrapper"
+          env:
+            WAYLAND_DISPLAY: wayland-0
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 14
+          start_sec: 2
+          enable: true
+          scope: system

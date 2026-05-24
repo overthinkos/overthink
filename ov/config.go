@@ -72,7 +72,7 @@ type SecurityConfig struct {
 	IpcMode     string   `yaml:"ipc_mode,omitempty" json:"ipc_mode,omitempty"`   // --ipc=<value>: "host" | "private" | "shareable" | "". When "host", podman REJECTS shm_size (the host's /dev/shm is shared in-kernel, sized by the host); the quadlet generator drops ShmSize= directives in that case.
 	ShmSize     string   `yaml:"shm_size,omitempty" json:"shm_size,omitempty"`   // shared memory size (e.g. "1g", "256m")
 	GroupAdd    []string `yaml:"group_add,omitempty" json:"group_add,omitempty"` // --group-add values (e.g. "keep-groups", "video")
-	Mounts      []string `yaml:"mount,omitempty" json:"mounts,omitempty"`       // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
+	Mounts      []string `yaml:"mount,omitempty" json:"mounts,omitempty"`        // host mounts (e.g. "/dev/input:/dev/input:rw", "tmpfs:/run/udev:rw,size=1m")
 	// Resource caps. Sizes use the same suffixes as ShmSize ("6g", "500m", "1024k").
 	// Layer merging is smallest-wins (tightest cap is safest); image-level values override.
 	MemoryMax     string `yaml:"memory_max,omitempty" json:"memory_max,omitempty"`           // hard OOM threshold (cgroup memory.max, podman --memory, systemd MemoryMax)
@@ -152,10 +152,10 @@ type ImageConfig struct {
 	// jobsFallback / podmanJobsCapFallback). Pointers distinguish "unset"
 	// from a deliberate zero so the precedence chain is exact.
 	Jobs          *int     `yaml:"jobs,omitempty"`            // outer: concurrent IMAGE builds per DAG level (flag --jobs / env OV_BUILD_JOBS)
-	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`    // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env OV_PODMAN_JOBS)
+	PodmanJobs    *int     `yaml:"podman_jobs,omitempty"`     // inner: stages per `podman build` (0 = auto; flag --podman-jobs / env OV_PODMAN_JOBS)
 	PodmanJobsCap *int     `yaml:"podman_jobs_cap,omitempty"` // ceiling for the auto podman-jobs calc: min(NCPU, cap)
-	ContextIgnore []string `yaml:"context_ignore,omitempty"` // extra build-context excludes merged into the generated .containerignore/.dockerignore
-	Cache         string   `yaml:"cache,omitempty"`          // default build cache mode (image|registry|gha|none); flag --cache / env OV_BUILD_CACHE wins
+	ContextIgnore []string `yaml:"context_ignore,omitempty"`  // extra build-context excludes merged into the generated .containerignore/.dockerignore
+	Cache         string   `yaml:"cache,omitempty"`           // default build cache mode (image|registry|gha|none); flag --cache / env OV_BUILD_CACHE wins
 
 	// Reusable-artifact retention (project-wide; authored under defaults:).
 	// keep_images = newest CalVer tags to keep per image after `ov image build`;
@@ -198,10 +198,17 @@ func boolPtr(v bool) *bool {
 // ResolvedImage represents a fully resolved image configuration
 type ResolvedImage struct {
 	Name    string
-	Version string `json:"version,omitempty"` // CalVer version from image.yml
-	Status  string `json:"status,omitempty"`  // effective status (worst of image + layers)
-	Info    string `json:"info,omitempty"`    // aggregated info from image + layers
-	Base    string // Resolved base (external OCI ref or internal image name)
+	Version string `json:"version,omitempty"` // authored per-entity CalVer (image.yml `version:`); optional
+	// EffectiveVersion is the content-derived identity emitted as the
+	// org.overthinkos.version label: the dedicated Version if set, else the
+	// highest layer version across the full chain (computeEffectiveVersions in
+	// effective_version.go, run by the generator once the base chain +
+	// auto-intermediates are materialized). Stable across builds when no layer
+	// changed — this is what keeps a child's FROM <base> SHA from shifting.
+	EffectiveVersion string `json:"effective_version,omitempty"`
+	Status           string `json:"status,omitempty"` // effective status (worst of image + layers)
+	Info             string `json:"info,omitempty"`   // aggregated info from image + layers
+	Base             string // Resolved base (external OCI ref or internal image name)
 	// From mirrors ImageConfig.From after resolution. When non-empty
 	// (e.g. "builder:pacstrap"), the generator emits FROM scratch +
 	// ADD <staged-rootfs.tar.gz> instead of FROM <base>.

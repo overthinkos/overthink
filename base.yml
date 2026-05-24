@@ -23,6 +23,7 @@
 version: 2026.143.844
 image:
     arch:
+        version: 2026.144.1443
         # quay.io is the official Arch Linux registry mirror (same image content
         # as docker.io/library/archlinux) WITHOUT Docker Hub's aggressive
         # unauthenticated pull-rate limit — which otherwise blocks CI / repeated
@@ -55,6 +56,7 @@ image:
             - cargo
             - aur
     fedora:
+        version: 2026.144.1443
         base: quay.io/fedora/fedora:43
         distro:
             - fedora:43

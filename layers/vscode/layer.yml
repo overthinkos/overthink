@@ -1,22 +1,23 @@
 layer:
-  name: vscode
-  distro:
-    arch:
-      aur:
-        package:
-          - visual-studio-code-bin
-        # AUR `replaces:` entries — pre-removed via `pacman -Rs --noconfirm`
-        # immediately before the `pacman -U` of the AUR build artifact.
-        # Required because `visual-studio-code-bin` and the official
-        # repo `code` package both own /usr/bin/code etc.; pacman aborts
-        # with "unresolvable package conflicts" otherwise. Idempotent —
-        # entries are skipped silently when the package isn't installed.
-        replace:
-          - code
-    fedora:
-      package:
-        - code
-      repo:
-        - name: code
-          url: "https://packages.microsoft.com/yumrepos/vscode"
-          gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"
+    version: 2026.144.1443
+    name: vscode
+    distro:
+        arch:
+            aur:
+                package:
+                    - visual-studio-code-bin
+                # AUR `replaces:` entries — pre-removed via `pacman -Rs --noconfirm`
+                # immediately before the `pacman -U` of the AUR build artifact.
+                # Required because `visual-studio-code-bin` and the official
+                # repo `code` package both own /usr/bin/code etc.; pacman aborts
+                # with "unresolvable package conflicts" otherwise. Idempotent —
+                # entries are skipped silently when the package isn't installed.
+                replace:
+                    - code
+        fedora:
+            package:
+                - code
+            repo:
+                - name: code
+                  url: "https://packages.microsoft.com/yumrepos/vscode"
+                  gpgkey: "https://packages.microsoft.com/keys/microsoft.asc"

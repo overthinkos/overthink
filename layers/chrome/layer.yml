@@ -1,65 +1,66 @@
 layer:
-  name: chrome
-  description: |
-    Google Chrome browser package. Cross-distro: pulls from Google's
-    direct repo on RPM, AUR on Arch/CachyOS. No CDP scaffolding, no
-    supervisord — for headless container CDP automation, compose
-    /ov-selkies:chrome-cdp on top.
-  env:
-    CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
-  env_accept:
-    - name: HTTP_PROXY
-      description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
-    - name: HTTPS_PROXY
-      description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
-    - name: NO_PROXY
-      description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
-  security:
-    shm_size: "1g"
-    memory_max: "6g"
-    memory_high: "5g"
-    memory_swap_max: "2g"
-  package:
-    - alsa-lib
-    - at-spi2-core
-    - gtk3
-    - libdrm
-    - libxkbcommon
-    - nss
-    - procps-ng
-    - libva-utils
-  distro:
-    arch:
-      package:
-        - vulkan-icd-loader
-        - mesa
-        - libcups
-        - iproute2
-      aur:
-        package:
-          - google-chrome
-    fedora:
-      package:
-        - vulkan-loader
-        - mesa-dri-drivers
-        - cups-libs
-        - iproute
-        - google-chrome-stable
-      repo:
-        - name: google-chrome
-          url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
-          gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
-  task:
-    # Register chrome as the default browser in xdg-settings. Best-effort
-    # only — xdg-settings has a fragile KDE codepath that calls qtpaths,
-    # which isn't installed on every host. Failure here doesn't break the
-    # deploy: chrome is still installed, just not registered as default.
-    - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
-      user: "${USER}"
-  volume:
-    - name: chrome-data
-      path: "~/.chrome-debug"
-  eval:
-    - id: google-chrome-binary
-      file: /usr/bin/google-chrome-stable
-      exists: true
+    version: 2026.144.1443
+    name: chrome
+    description: |
+        Google Chrome browser package. Cross-distro: pulls from Google's
+        direct repo on RPM, AUR on Arch/CachyOS. No CDP scaffolding, no
+        supervisord — for headless container CDP automation, compose
+        /ov-selkies:chrome-cdp on top.
+    env:
+        CHROME_FLAGS: "--ozone-platform=wayland --enable-features=UseOzonePlatform,VaapiVideoDecodeLinuxGL,VaapiIgnoreDriverChecks"
+    env_accept:
+        - name: HTTP_PROXY
+          description: "HTTP proxy URL for Chrome (e.g., http://proxy:8080)"
+        - name: HTTPS_PROXY
+          description: "HTTPS proxy URL for Chrome (e.g., http://proxy:8080)"
+        - name: NO_PROXY
+          description: "Comma-separated bypass list (e.g., localhost,127.0.0.1,.internal)"
+    security:
+        shm_size: "1g"
+        memory_max: "6g"
+        memory_high: "5g"
+        memory_swap_max: "2g"
+    package:
+        - alsa-lib
+        - at-spi2-core
+        - gtk3
+        - libdrm
+        - libxkbcommon
+        - nss
+        - procps-ng
+        - libva-utils
+    distro:
+        arch:
+            package:
+                - vulkan-icd-loader
+                - mesa
+                - libcups
+                - iproute2
+            aur:
+                package:
+                    - google-chrome
+        fedora:
+            package:
+                - vulkan-loader
+                - mesa-dri-drivers
+                - cups-libs
+                - iproute
+                - google-chrome-stable
+            repo:
+                - name: google-chrome
+                  url: "https://dl.google.com/linux/chrome/rpm/stable/x86_64"
+                  gpgkey: "https://dl.google.com/linux/linux_signing_key.pub"
+    task:
+        # Register chrome as the default browser in xdg-settings. Best-effort
+        # only — xdg-settings has a fragile KDE codepath that calls qtpaths,
+        # which isn't installed on every host. Failure here doesn't break the
+        # deploy: chrome is still installed, just not registered as default.
+        - cmd: BROWSER= xdg-settings set default-web-browser google-chrome.desktop || true
+          user: "${USER}"
+    volume:
+        - name: chrome-data
+          path: "~/.chrome-debug"
+    eval:
+        - id: google-chrome-binary
+          file: /usr/bin/google-chrome-stable
+          exists: true

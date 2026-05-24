@@ -1,16 +1,17 @@
 layer:
-  name: xterm
-  distro:
-    arch:
-      package:
-        - xterm
-    fedora:
-      package:
-        - xterm
-  eval:
-    - id: xterm-binary
-      file: /usr/bin/xterm
-      exists: true
-    - id: xterm-package
-      package: xterm
-      installed: true
+    version: 2026.144.1443
+    name: xterm
+    distro:
+        arch:
+            package:
+                - xterm
+        fedora:
+            package:
+                - xterm
+    eval:
+        - id: xterm-binary
+          file: /usr/bin/xterm
+          exists: true
+        - id: xterm-package
+          package: xterm
+          installed: true

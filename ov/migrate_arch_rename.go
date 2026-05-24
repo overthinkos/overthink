@@ -7,7 +7,10 @@ package main
 // `arch-pacstrap*` everywhere in a project's YAML — EXCEPT external Arch
 // strings that must stay verbatim:
 //
-//   - docker.io/library/archlinux  (the upstream base image)
+//   - ANY external registry ref whose path contains archlinux, matched by SHAPE
+//     (a registry host + path), e.g. quay.io/archlinux/archlinux (the official
+//     quay mirror), docker.io/library/archlinux, ghcr.io/<ns>/archlinux-* —
+//     see archRenameExternalRefRe
 //   - pacman-key --populate archlinux  (the literal keyring name)
 //   - archlinux.org  (mirrorlist URLs)
 //   - archlinux-keyring  (the keyring package name)
@@ -29,29 +32,56 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 )
 
-// archRenameExternals are the substrings that legitimately contain "archlinux"
-// and must survive the rename. Each is swapped for a NUL-delimited placeholder
-// before the global replace, then restored after — so the embedded "archlinux"
-// inside them is never touched.
+// archRenameExternalRefRe matches an EXTERNAL registry reference whose path
+// contains "archlinux" — a registry-host segment (a token carrying a "." or ":"
+// before the first "/") followed by a path component containing archlinux. This
+// protects the quay.io/archlinux/archlinux mirror, docker.io/library/archlinux,
+// ghcr.io/<ns>/archlinux-*, registry.example:5000/.../archlinux, etc. by SHAPE —
+// no per-registry enumeration. Internal identifiers (the `archlinux` distro tag,
+// archlinux-builder, archlinux-pacstrap*) have no registry-host segment and are
+// therefore still renamed.
+var archRenameExternalRefRe = regexp.MustCompile(`[A-Za-z0-9._-]+[.:][A-Za-z0-9._:-]*/[A-Za-z0-9._/-]*archlinux[A-Za-z0-9._/-]*`)
+
+// archRenameExternals are the NON-registry substrings that legitimately contain
+// "archlinux" and must survive the rename: a CLI argument, a bare mirrorlist
+// hostname, and a package name. (Registry refs are handled by the regex above.)
+// Each is swapped for a NUL-delimited placeholder before the global replace,
+// then restored after — so the embedded "archlinux" is never touched.
 var archRenameExternals = []struct{ token, placeholder string }{
-	{"library/archlinux", "\x00OVX_LIB\x00"},
 	{"populate archlinux", "\x00OVX_POP\x00"},
 	{"archlinux.org", "\x00OVX_ORG\x00"},
 	{"archlinux-keyring", "\x00OVX_KR\x00"},
 }
 
-// archRenameText performs the protected archlinux→arch substitution.
+// archRenameText performs the protected archlinux→arch substitution. External
+// registry refs (by shape) AND the non-registry literals are stashed behind
+// placeholders before the global replace, then restored — so only genuine
+// internal identifiers are renamed.
 func archRenameText(s string) string {
+	// 1. Stash external registry refs (shape-based; one placeholder per match).
+	var protected []string
+	s = archRenameExternalRefRe.ReplaceAllStringFunc(s, func(m string) string {
+		ph := fmt.Sprintf("\x00OVX_RE%d\x00", len(protected))
+		protected = append(protected, m)
+		return ph
+	})
+	// 2. Stash the non-registry literals.
 	for _, e := range archRenameExternals {
 		s = strings.ReplaceAll(s, e.token, e.placeholder)
 	}
+	// 3. Rename every remaining (internal) archlinux identifier.
 	s = strings.ReplaceAll(s, "archlinux", "arch")
+	// 4. Restore literals, then the regex-protected refs (reverse order).
 	for _, e := range archRenameExternals {
 		s = strings.ReplaceAll(s, e.placeholder, e.token)
+	}
+	for i := len(protected) - 1; i >= 0; i-- {
+		s = strings.ReplaceAll(s, fmt.Sprintf("\x00OVX_RE%d\x00", i), protected[i])
 	}
 	return s
 }

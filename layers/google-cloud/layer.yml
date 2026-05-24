@@ -1,39 +1,37 @@
 layer:
-  name: google-cloud
-  description: Google Cloud SDK (gcloud, gsutil, bq)
-
-  task:
-    # Google Cloud SDK only ships x86_64 linux tarballs — no arch template
-    # needed. The bundled install.sh wires up shell completion / PATH.
-    - cmd: |
-        curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz" \
-          -o /tmp/google-cloud-sdk.tar.gz
-        mkdir -p /var/opt
-        tar -xzf /tmp/google-cloud-sdk.tar.gz -C /var/opt/
-        rm -f /tmp/google-cloud-sdk.tar.gz
-        /var/opt/google-cloud-sdk/install.sh --quiet --usage-reporting false --command-completion false --path-update false
-        for cmd in gcloud gsutil bq; do
-          ln -sf /var/opt/google-cloud-sdk/bin/$cmd /usr/bin/$cmd
-        done
-      user: root
-
-  eval:
-    - id: gcloud-binary
-      file: /usr/bin/gcloud
-      exists: true
-    - id: gcloud-version
-      command: /usr/bin/gcloud --version
-      exit_status: 0
-    - id: gsutil-binary
-      file: /usr/bin/gsutil
-      exists: true
-    - id: gsutil-version
-      command: /usr/bin/gsutil version
-      exit_status: 0
-    - id: bq-binary
-      file: /usr/bin/bq
-      exists: true
-    - id: bq-version
-      command: /usr/bin/bq version
-      exit_status: 0
-
+    version: 2026.144.1443
+    name: google-cloud
+    description: Google Cloud SDK (gcloud, gsutil, bq)
+    task:
+        # Google Cloud SDK only ships x86_64 linux tarballs — no arch template
+        # needed. The bundled install.sh wires up shell completion / PATH.
+        - cmd: |
+            curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-linux-x86_64.tar.gz" \
+              -o /tmp/google-cloud-sdk.tar.gz
+            mkdir -p /var/opt
+            tar -xzf /tmp/google-cloud-sdk.tar.gz -C /var/opt/
+            rm -f /tmp/google-cloud-sdk.tar.gz
+            /var/opt/google-cloud-sdk/install.sh --quiet --usage-reporting false --command-completion false --path-update false
+            for cmd in gcloud gsutil bq; do
+              ln -sf /var/opt/google-cloud-sdk/bin/$cmd /usr/bin/$cmd
+            done
+          user: root
+    eval:
+        - id: gcloud-binary
+          file: /usr/bin/gcloud
+          exists: true
+        - id: gcloud-version
+          command: /usr/bin/gcloud --version
+          exit_status: 0
+        - id: gsutil-binary
+          file: /usr/bin/gsutil
+          exists: true
+        - id: gsutil-version
+          command: /usr/bin/gsutil version
+          exit_status: 0
+        - id: bq-binary
+          file: /usr/bin/bq
+          exists: true
+        - id: bq-version
+          command: /usr/bin/bq version
+          exit_status: 0

@@ -1,23 +1,23 @@
 layer:
-  name: selkies-desktop
-  layer:
-    - pipewire
-    - chrome
-    - chrome-cdp
-    - labwc
-    - waybar-labwc
-    - desktop-fonts
-    - swaync
-    - pavucontrol
-    - wl-tools
-    - wl-screenshot-pixelflux
-    - wl-overlay
-    - wl-record-pixelflux
-    - a11y-tools
-    - xterm
-    - tmux
-    - asciinema
-    - fastfetch
-    - selkies
-    - sshd
-
+    version: 2026.144.1443
+    name: selkies-desktop
+    layer:
+        - pipewire
+        - chrome
+        - chrome-cdp
+        - labwc
+        - waybar-labwc
+        - desktop-fonts
+        - swaync
+        - pavucontrol
+        - wl-tools
+        - wl-screenshot-pixelflux
+        - wl-overlay
+        - wl-record-pixelflux
+        - a11y-tools
+        - xterm
+        - tmux
+        - asciinema
+        - fastfetch
+        - selkies
+        - sshd

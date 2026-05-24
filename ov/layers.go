@@ -1518,31 +1518,23 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 		return layers, nil
 	}
 
-	// 3. Auto-download and scan each required (repo, version) pair, RECURSING
-	// into every fetched remote layer's transitive deps. A remote layer's
-	// plain-name require:/layers: dep resolves to a sibling in the same repo at
-	// the same version; an @-ref dep resolves to its own repo/version. Fix-point
-	// until no new refs surface, so cross-repo transitive closures (e.g.
-	// ov-full → virtualization → socat) are fully materialized.
+	// 3. Per-entity-version resolution. The git tag is ONLY the fetch coordinate;
+	// the authority is each layer's own `version:`, read AFTER fetch. So fetch
+	// EVERY distinct (repo, git-tag) referenced (directly or transitively),
+	// collect each materialization as a candidate, then arbitrate per bare ref by
+	// per-entity version (pickLayerVersion). A remote layer's plain-name
+	// require:/layers: dep is a same-repo sibling at the SAME git tag; an @-ref
+	// dep carries its own repo/git-tag. Fix-point until no new (repo, git-tag,
+	// ref) surfaces, so cross-repo transitive closures are fully materialized.
 	type repoVer struct{ repo, ver string }
-	// Shared warn-and-newest-wins resolution (same mechanism as
-	// CollectRemoteRefsOpts). Seeded from the initial collection's winners so a
-	// transitive dep that requests an already-collected layer at a NEWER version
-	// supersedes it (the layer is re-scanned at the newer version), while an
-	// older one is ignored with a warning. This replaced the silent
-	// first-writer-wins drop that shipped images missing a newer layer's packages.
-	tracker := newRefVersionTracker()
-	for _, dl := range downloads {
-		for _, ref := range dl.Refs {
-			tracker.record(ref, dl.Version, "remote ref collection")
-		}
-	}
-	scannedAt := make(map[string]string)       // bare ref -> version already scanned into the layer map
-	defaultBranches := make(map[string]string) // repo → resolved default branch
+	candidates := make(map[string][]layerCandidate) // bare ref -> all fetched materializations
+	scanned := make(map[repoVer]map[string]bool)    // (repo, git-tag) -> refs already scanned
+	defaultBranches := make(map[string]string)      // repo → resolved default branch
+
 	queue := downloads
 	for len(queue) > 0 {
 		nextByKey := make(map[repoVer]map[string]bool)
-		enqueue := func(repo, ver, bare, source string) error {
+		enqueue := func(repo, ver, bare string) error {
 			if ver == "" {
 				if b, ok := defaultBranches[repo]; ok {
 					ver = b
@@ -1555,13 +1547,10 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 					ver = b
 				}
 			}
-			// Only enqueue when this version WINS (first sighting or newer than
-			// the current winner). A losing (older/equal-already-scanned) ref is
-			// dropped — newest-wins, with the warning emitted by record.
-			if !tracker.record(bare, ver, source) {
-				return nil
-			}
 			key := repoVer{repo, ver}
+			if scanned[key][bare] {
+				return nil // this exact (repo, git-tag, ref) already scanned
+			}
 			if nextByKey[key] == nil {
 				nextByKey[key] = make(map[string]bool)
 			}
@@ -1570,53 +1559,60 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 		}
 
 		for _, dl := range queue {
-			cachePath, err := EnsureRepoDownloaded(dl.RepoPath, dl.Version)
-			if err != nil {
-				return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
+			key := repoVer{dl.RepoPath, dl.Version}
+			done := scanned[key]
+			if done == nil {
+				done = make(map[string]bool)
+				scanned[key] = done
 			}
 			wantRefs := make(map[string]bool)
 			for _, ref := range dl.Refs {
-				// Scan only the CURRENT winning version, and only if not already
-				// scanned at it (a newer winner discovered later re-scans + overwrites).
-				if tracker.versions[ref] == dl.Version && scannedAt[ref] != dl.Version {
+				if !done[ref] {
 					wantRefs[ref] = true
 				}
 			}
 			if len(wantRefs) == 0 {
 				continue
 			}
+			cachePath, err := EnsureRepoDownloaded(dl.RepoPath, dl.Version)
+			if err != nil {
+				return nil, fmt.Errorf("downloading %s:%s: %w", dl.RepoPath, dl.Version, err)
+			}
 			remoteLayers, err := ScanRemoteLayer(cachePath, dl.RepoPath, wantRefs)
 			if err != nil {
 				return nil, fmt.Errorf("scanning %s:%s: %w", dl.RepoPath, dl.Version, err)
 			}
+			for ref := range wantRefs {
+				done[ref] = true
+			}
 			for ref, layer := range remoteLayers {
-				if _, ok := layers[layer.Name]; ok {
-					fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", layer.Name, ref)
+				if layer.Version == "" {
+					return nil, fmt.Errorf("remote layer %q (from %s@%s) declares no version:; its producer repo must declare one (run `ov migrate` there)", ref, dl.RepoPath, dl.Version)
 				}
-				// Newest-wins: a re-scan at a newer version overwrites the prior entry.
-				layers[ref] = layer
-				scannedAt[ref] = dl.Version
+				candidates[ref] = append(candidates[ref], layerCandidate{
+					layer:   layer,
+					version: layer.Version,
+					gitTag:  dl.Version,
+					source:  dl.RepoPath + "@" + dl.Version,
+				})
 
-				// Enqueue this layer's transitive deps. The LayerRef's original
-				// .Raw form drives the decision: an @-ref carries its own pinned
-				// repo/version; a plain name becomes a same-repo, same-version
-				// sibling.
-				enqueueDep := func(dep LayerRef, kind string) error {
-					src := fmt.Sprintf("layer %s %s", layer.Name, kind)
+				// Enqueue this materialization's transitive deps. A plain-name dep
+				// is a same-repo sibling at the SAME git tag; an @-ref dep carries
+				// its own pinned repo/git-tag.
+				enqueueDep := func(dep LayerRef) error {
 					if dep.IsRemote() {
 						p := ParseRemoteRef(dep.Raw)
-						return enqueue(p.RepoPath, p.Version, dep.Bare(), src)
+						return enqueue(p.RepoPath, p.Version, dep.Bare())
 					}
-					sibling := dl.RepoPath + "/" + layer.SubPathPrefix + dep.Raw
-					return enqueue(dl.RepoPath, dl.Version, sibling, src)
+					return enqueue(dl.RepoPath, dl.Version, dl.RepoPath+"/"+layer.SubPathPrefix+dep.Raw)
 				}
 				for _, dep := range layer.Require {
-					if err := enqueueDep(dep, "require"); err != nil {
+					if err := enqueueDep(dep); err != nil {
 						return nil, err
 					}
 				}
 				for _, dep := range layer.IncludedLayer {
-					if err := enqueueDep(dep, "layer"); err != nil {
+					if err := enqueueDep(dep); err != nil {
 						return nil, err
 					}
 				}
@@ -1633,7 +1629,51 @@ func ScanAllLayerWithConfigOpts(dir string, cfg *Config, opts ResolveOpts) (map[
 		}
 	}
 
+	// 4. Arbitrate each bare ref by per-entity version; materialize the winner.
+	for ref, cands := range candidates {
+		winner := pickLayerVersion(ref, cands)
+		if _, ok := layers[winner.layer.Name]; ok {
+			fmt.Fprintf(os.Stderr, "Note: local layer %q shadows remote layer %q\n", winner.layer.Name, ref)
+		}
+		layers[ref] = winner.layer
+	}
+
 	return layers, nil
+}
+
+// layerCandidate is one fetched materialization of a bare layer ref. The git tag
+// is the fetch coordinate; version is the layer's own per-entity `version:`.
+type layerCandidate struct {
+	layer   *Layer
+	version string // per-entity version (layer.Version) — mandatory, never ""
+	gitTag  string // fetch coordinate (the @github :vTAG)
+	source  string // "<repo>@<git-tag>" for warning attribution
+}
+
+// pickLayerVersion arbitrates the candidates of ONE bare ref by per-entity
+// version. Same per-entity version across different git tags => NO warning, the
+// newest git tag wins (freshness). Different per-entity versions => warn once
+// (naming the winner + a loser) and the newest per-entity version wins. This is
+// the sole layer-version arbiter — direct and transitive refs both flow through
+// it. cands is non-empty.
+func pickLayerVersion(bareRef string, cands []layerCandidate) layerCandidate {
+	best := cands[0]
+	for _, c := range cands[1:] {
+		if compareCalVer(c.version, best.version) > 0 {
+			best = c // newer per-entity version
+		} else if c.version == best.version && compareSemver(c.gitTag, best.gitTag) > 0 {
+			best = c // same per-entity version: prefer the newest git tag
+		}
+	}
+	for _, c := range cands {
+		if c.version != best.version {
+			fmt.Fprintf(os.Stderr,
+				"Warning: layer %s resolved to multiple versions; using newest %s (from %s), ignoring %s (from %s)\n",
+				bareRef, best.version, best.source, c.version, c.source)
+			break
+		}
+	}
+	return best
 }
 
 // fileExists checks if a file exists

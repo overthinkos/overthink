@@ -102,17 +102,19 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 
 	var labelCands, nameCands []resolverCandidate
 	for _, img := range images {
+		labelCalVer := img.Labels[LabelVersion] // content-derived EffectiveVersion (primary key)
 		// Label-preferred: org.overthinkos.image equals the short name.
 		if img.Labels[LabelImage] == input && input != "" {
-			ver := img.Labels[LabelVersion]
 			for _, n := range img.Names {
-				// Prefer tag-CalVer over label-CalVer when both present;
-				// the tag is what podman run / quadlet consumes.
-				tagCalVer := extractCalVerTag(n)
-				if tagCalVer == "" {
-					tagCalVer = ver
-				}
-				labelCands = append(labelCands, resolverCandidate{ref: n, calver: tagCalVer})
+				// label-CalVer is the PRIMARY ordering key; tag-CalVer (the
+				// per-build timestamp) is the TIEBREAKER that picks the newest
+				// BUILD among images sharing one content-stable label. No
+				// label↔tag substitution — they are independent keys.
+				labelCands = append(labelCands, resolverCandidate{
+					ref:         n,
+					labelCalVer: labelCalVer,
+					tagCalVer:   extractCalVerTag(n),
+				})
 			}
 			continue
 		}
@@ -122,7 +124,11 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 		// the base image's label.
 		for _, name := range img.Names {
 			if shortNameMatchesRef(name, input) {
-				nameCands = append(nameCands, resolverCandidate{ref: name, calver: extractCalVerTag(name)})
+				nameCands = append(nameCands, resolverCandidate{
+					ref:         name,
+					labelCalVer: labelCalVer,
+					tagCalVer:   extractCalVerTag(name),
+				})
 			}
 		}
 	}
@@ -135,22 +141,22 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 		return "", fmt.Errorf("%w: %s", ErrImageNotLocal, input)
 	}
 
-	// Sort by CalVer descending. YYYY.DDD.HHMM is NOT lexically
-	// sortable — DDD is 1-366 (1 vs 99 vs 366) and HHMM is 0-2359
-	// (9:49 → "949", 10:54 → "1054"), both variable-width. Parse each
-	// component numerically. Entries with no CalVer sort to the
-	// bottom so a tagged CalVer beats a label-only match of equal
-	// rank.
-	// Tiebreak rationale: when two refs share the same CalVer, prefer the
-	// one whose repo's trailing segment exactly matches `input` (the
-	// requested short name). Without this, a per-deploy alias like
-	// `<registry>/<base>/<instance>:<cv>` sorts BEFORE the base
-	// `<registry>/<base>:<cv>` because ASCII `/` (47) < `:` (58) in raw
-	// lexical compare — silently picking the instance alias when the
-	// caller asked for the base short name. Pattern A deploys create
-	// these aliases via `bumpDeployAlias` (update_deploy_dispatch.go)
-	// inheriting the base image's `org.overthinkos.image` label, so
-	// both refs land in `labelCands` with identical CalVers.
+	// Sort newest-first. The label-CalVer (the content-derived
+	// org.overthinkos.version) is the PRIMARY key — it ALWAYS takes priority
+	// over the tag-CalVer. The tag-CalVer (the per-build YYYY.DDD.HHMM
+	// timestamp) is the TIEBREAKER: a content-stable label means many builds
+	// share one label-CalVer, so the tag is what selects the newest BUILD.
+	// YYYY.DDD.HHMM is NOT lexically sortable (DDD 1-366, HHMM 0-2359, both
+	// variable-width) — compareCalVer parses each component numerically; an
+	// empty CalVer sorts last (compareCalVerKey).
+	// Final tiebreak: prefer the ref whose repo trailing segment exactly
+	// matches `input` (the base over a per-deploy alias). Without it a
+	// `<registry>/<base>/<instance>:<cv>` alias sorts BEFORE the base
+	// `<registry>/<base>:<cv>` (ASCII `/` < `:`), silently picking the
+	// instance alias. Pattern A deploys create these via `bumpDeployAlias`
+	// (update_deploy_dispatch.go), inheriting the base's
+	// `org.overthinkos.image` label, so both land in `labelCands` with
+	// identical label+tag CalVers.
 	matchesShortName := func(ref, name string) bool {
 		// Strip tag/digest, take repo's trailing segment, compare.
 		repo := ref
@@ -163,29 +169,27 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 		return repo == name
 	}
 	sort.SliceStable(cands, func(i, j int) bool {
-		if cands[i].calver == cands[j].calver {
-			iMatch := matchesShortName(cands[i].ref, input)
-			jMatch := matchesShortName(cands[j].ref, input)
-			if iMatch != jMatch {
-				return iMatch
-			}
-			return cands[i].ref < cands[j].ref
+		// Primary: label-CalVer descending (label > tag, always).
+		if c := compareCalVerKey(cands[i].labelCalVer, cands[j].labelCalVer); c != 0 {
+			return c > 0
 		}
-		if cands[i].calver == "" {
-			return false
+		// Tiebreaker: tag-CalVer descending (newest build).
+		if c := compareCalVerKey(cands[i].tagCalVer, cands[j].tagCalVer); c != 0 {
+			return c > 0
 		}
-		if cands[j].calver == "" {
-			return true
+		iMatch := matchesShortName(cands[i].ref, input)
+		jMatch := matchesShortName(cands[j].ref, input)
+		if iMatch != jMatch {
+			return iMatch
 		}
-		return compareCalVer(cands[i].calver, cands[j].calver) > 0
+		return cands[i].ref < cands[j].ref
 	})
 
-	// If the top candidate has no CalVer AND there are multiple
-	// distinct repositories among the candidates, that's a genuine
-	// cross-repo ambiguity (e.g. two third-party `:latest` tags).
-	// Surface the full list so the user can disambiguate with a full
-	// ref. CalVer-tagged candidates never hit this branch.
-	if cands[0].calver == "" && !sameRepoAcross(cands) {
+	// If the top candidate has NEITHER a label-CalVer NOR a tag-CalVer AND
+	// there are multiple distinct repositories among the candidates, that's a
+	// genuine cross-repo ambiguity (e.g. two third-party `:latest` tags).
+	// Surface the full list so the user can disambiguate with a full ref.
+	if cands[0].labelCalVer == "" && cands[0].tagCalVer == "" && !sameRepoAcross(cands) {
 		refs := make([]string, len(cands))
 		for i, c := range cands {
 			refs[i] = c.ref
@@ -197,13 +201,31 @@ func resolveLocalImageRef(engine, input string) (string, error) {
 	return cands[0].ref, nil
 }
 
-// resolverCandidate pairs a full image ref with its parsed CalVer
-// (from the `:<calver>` tag or the `org.overthinkos.version` label).
-// Used internally by resolveLocalImageRef to sort candidates
-// newest-first before picking one.
+// resolverCandidate pairs a full image ref with its two CalVer keys: the
+// labelCalVer (org.overthinkos.version — the content-derived EffectiveVersion,
+// the PRIMARY ordering key) and the tagCalVer (the `:<calver>` build-timestamp
+// tag, the TIEBREAKER). Used internally by resolveLocalImageRef to sort
+// candidates newest-first before picking one.
 type resolverCandidate struct {
-	ref    string
-	calver string
+	ref         string
+	labelCalVer string
+	tagCalVer   string
+}
+
+// compareCalVerKey orders two CalVer strings with "" sorting LAST (lowest
+// rank): returns >0 when a ranks higher (newer) than b, <0 when lower, 0 when
+// equal. A non-empty CalVer always outranks an empty one.
+func compareCalVerKey(a, b string) int {
+	if a == b {
+		return 0
+	}
+	if a == "" {
+		return -1
+	}
+	if b == "" {
+		return 1
+	}
+	return compareCalVer(a, b)
 }
 
 // sameRepoAcross reports whether every candidate ref shares the same

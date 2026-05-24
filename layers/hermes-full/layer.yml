@@ -1,15 +1,14 @@
 layer:
-  name: hermes-full
-  description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
-
-  layer:
-    - hermes
-    - claude-code
-    - codex
-    - gemini
-    - forgecode
-    - dev-tools
-    - devops-tools
-    - ov
-    - tmux
-
+    version: 2026.144.1443
+    name: hermes-full
+    description: Hermes agent with AI CLIs, developer tools, DevOps tools, and ov
+    layer:
+        - hermes
+        - claude-code
+        - codex
+        - gemini
+        - forgecode
+        - dev-tools
+        - devops-tools
+        - ov
+        - tmux

@@ -1,168 +1,168 @@
 layer:
-  name: versatiles
-  description: "VersaTiles CLI (versatiles-rs) — single Rust binary that does convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles, and .tar tile-container formats. Ships a supervisord service running `versatiles serve` on port 8090 (host-mapped 28090) that watches /workspace/tiles/shortbread/. The convert subcommand is symmetric: PMTiles ↔ .versatiles ↔ MBTiles round-trip; the layer's eval probes assert the round-trip works end-to-end as the canonical interop verification."
-  require:
-    - supervisord
-  distro:
-    arch:
-      package:
-        # curl + jq pull the GitHub-API release listing dynamically so
-        # the install step picks up whatever versatiles-rs version is
-        # current at build time (mirrors the pmtiles install in
-        # /ov-versa:osm-tools-layer). jq is already pulled by
-        # osm-tools so this is a soft dep; declared here for layer
-        # composability if osm-tools is ever removed.
-        - curl
-        - jq
-    fedora:
-      package:
-        - curl
-        - jq
-  port:
-    - 8090      # versatiles serve HTTP (host-mapped 28090)
-  # VERSATILES_PUBLIC_URL is browser-side — embedded into MapLibre HTML
-  # for the shortbread map cell (which fetches /tiles/<source>/{z}/{x}/{y}
-  # directly from versatiles serve, bypassing the martin path).
-  env_provide:
-    VERSATILES_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8090}}"
-  task:
-    # ---- versatiles-rs binary ----
-    # Pre-built linux-x86_64-gnu tarball from GitHub releases. The
-    # asset name follows the pattern
-    # `versatiles-linux-x86_64-gnu.tar.gz` (verified against
-    # versatiles-rs v4.0.0). We resolve the latest tag dynamically
-    # rather than pinning v4.0.0 so subsequent builds pick up
-    # bugfixes — versatiles-rs has been on a quarterly release
-    # cadence with backward-compatible CLI surface.
-    - cmd: |
-        set -euo pipefail
-        # The release asset name follows the pattern
-        # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
-        # verified against v4.0.0). musl variants also ship; we
-        # pick gnu since the versa image's other Rust binaries
-        # (martin) also use the gnu glibc variant.
-        ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-rs/releases/latest" \
-          | jq -r '.assets[].browser_download_url' \
-          | grep -E 'versatiles-linux-gnu-x86_64\.tar\.gz$' \
-          | head -1)
-        if [ -z "$ASSET" ]; then
-          echo "ERROR: could not find versatiles-rs linux-x86_64-gnu tarball" >&2
-          curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-rs/releases/latest" \
-            | jq -r '.assets[].name' >&2
-          exit 1
-        fi
-        TMPDIR=$(mktemp -d)
-        cd "$TMPDIR"
-        curl -fsSL "$ASSET" -o vt.tar.gz
-        tar -xzf vt.tar.gz
-        # The tarball lays out `versatiles` directly at the archive
-        # root (no inner directory). Find it generically so a future
-        # layout change doesn't silently break.
-        BIN=$(find . -name versatiles -type f -executable | head -1)
-        install -m 0755 "$BIN" /usr/local/bin/versatiles
-        cd /
-        rm -rf "$TMPDIR"
-      user: root
-
-    # ---- versatiles serve wrapper ----
-    # Mirrors the martin-wrapper.sh pattern in osm-tools-layer.
-    # Pre-creates the shortbread tile directory (the shortbread layer
-    # also creates it at image-build time, but defense-in-depth:
-    # versatiles errors out if the directory is missing at startup).
-    # `exec` keeps PID 1 ownership for proper signal handling under
-    # supervisord.
-    - write: /usr/local/bin/versatiles-wrapper.sh
-      mode: "0755"
-      user: root
-      content: |
-        #!/usr/bin/env bash
-        set -euo pipefail
-        DIR="/workspace/tiles/shortbread"
-        mkdir -p "$DIR"
-        # versatiles serve refuses to start when given an empty directory
-        # ("no tiles found" error). To guarantee at least one valid
-        # source on every startup (including fresh deploys before the
-        # shortbread DAG has run), always include the public
-        # download.versatiles.org/osm.versatiles container as the FIRST
-        # source. After the shortbread DAG produces local files and
-        # calls supervisorctl restart, this wrapper re-runs and APPENDS
-        # the local tile containers to the arg list — they appear as
-        # /tiles/monaco-shortbread/ etc., parallel to the remote /tiles/osm/.
-        ARGS=("https://download.versatiles.org/osm.versatiles")
-        # Append local tile containers individually. shopt -s nullglob
-        # so the loop doesn't run with literal '*.pmtiles' when empty.
-        shopt -s nullglob
-        for f in "$DIR"/*.pmtiles "$DIR"/*.versatiles "$DIR"/*.mbtiles; do
-          ARGS+=("$f")
-        done
-        echo "versatiles-wrapper: starting versatiles serve with ${#ARGS[@]} source(s)" >&2
-        exec /usr/local/bin/versatiles serve --port 8090 "${ARGS[@]}"
-  eval:
-    # Build-scope: versatiles binary present + the convert subcommand
-    # is shipped (verifies the binary isn't a stripped-down build).
-    - id: versatiles-installed
-      command: versatiles --version
-      exit_status: 0
-    - id: versatiles-convert-help
-      command: versatiles convert --help
-      exit_status: 0
-    - id: versatiles-wrapper-installed
-      file: /usr/local/bin/versatiles-wrapper.sh
-      exists: true
-      mode: "0755"
-    # Deploy-scope: supervisord service is RUNNING + port 8090 reachable.
-    - id: versatiles-running
-      scope: deploy
-      service: versatiles
-      running: true
-    - id: versatiles-port-reachable
-      scope: deploy
-      addr: "127.0.0.1:${HOST_PORT:8090}"
-      reachable: true
-      timeout: 10s
-    # versatiles serve doesn't serve a root index — `GET /` returns
-    # 404. Probe a known-good tile endpoint from the always-on remote
-    # `osm.versatiles` source instead (added by the wrapper). The
-    # response body is binary MVT-PBF; we only need the 200 status.
-    - id: versatiles-http-up
-      scope: deploy
-      http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
-      status: 200
-      timeout: 10s
-    # Deploy-scope: end-to-end convert round-trip on the OSM DAG's
-    # output. This is the canonical interop verification — PMTiles in,
-    # .versatiles out, PMTiles back; both intermediate files must
-    # exist and `versatiles probe` must succeed on each. Runs only
-    # after the OSM DAG has produced monaco.pmtiles (the prior
-    # deploy-scope probes don't depend on it; this one does).
-    - id: versatiles-convert-roundtrip
-      scope: deploy
-      in_container: true
-      command: |
-        set -euo pipefail
-        SRC=/workspace/tiles/pmtiles/monaco.pmtiles
-        # If the OSM DAG hasn't run yet on this deploy, skip the
-        # check cleanly — the notebook's R10 end-to-end covers the
-        # post-DAG state. The eval here covers the static binary
-        # surface; the DAG path is exercised by the notebook test.
-        if [ ! -f "$SRC" ]; then
-          echo "SKIP: $SRC not present yet (OSM DAG has not run on this deploy)"
-          exit 0
-        fi
-        TMP=$(mktemp -d)
-        trap "rm -rf $TMP" EXIT
-        versatiles convert "$SRC" "$TMP/monaco.versatiles"
-        versatiles convert "$TMP/monaco.versatiles" "$TMP/monaco-roundtrip.pmtiles"
-        test -s "$TMP/monaco.versatiles"
-        test -s "$TMP/monaco-roundtrip.pmtiles"
-        # Probe both ends to verify they're readable + parseable.
-        versatiles probe "$SRC" >/dev/null
-        versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
-      exit_status: 0
-  service:
-    - name: versatiles
-      exec: /usr/local/bin/versatiles-wrapper.sh
-      restart: always
-      priority: 37
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: versatiles
+    description: "VersaTiles CLI (versatiles-rs) — single Rust binary that does convert / serve / probe / dev for the .versatiles, .pmtiles, .mbtiles, and .tar tile-container formats. Ships a supervisord service running `versatiles serve` on port 8090 (host-mapped 28090) that watches /workspace/tiles/shortbread/. The convert subcommand is symmetric: PMTiles ↔ .versatiles ↔ MBTiles round-trip; the layer's eval probes assert the round-trip works end-to-end as the canonical interop verification."
+    require:
+        - supervisord
+    distro:
+        arch:
+            package:
+                # curl + jq pull the GitHub-API release listing dynamically so
+                # the install step picks up whatever versatiles-rs version is
+                # current at build time (mirrors the pmtiles install in
+                # /ov-versa:osm-tools-layer). jq is already pulled by
+                # osm-tools so this is a soft dep; declared here for layer
+                # composability if osm-tools is ever removed.
+                - curl
+                - jq
+        fedora:
+            package:
+                - curl
+                - jq
+    port:
+        - 8090 # versatiles serve HTTP (host-mapped 28090)
+    # VERSATILES_PUBLIC_URL is browser-side — embedded into MapLibre HTML
+    # for the shortbread map cell (which fetches /tiles/<source>/{z}/{x}/{y}
+    # directly from versatiles serve, bypassing the martin path).
+    env_provide:
+        VERSATILES_PUBLIC_URL: "http://127.0.0.1:{{.HostPort 8090}}"
+    task:
+        # ---- versatiles-rs binary ----
+        # Pre-built linux-x86_64-gnu tarball from GitHub releases. The
+        # asset name follows the pattern
+        # `versatiles-linux-x86_64-gnu.tar.gz` (verified against
+        # versatiles-rs v4.0.0). We resolve the latest tag dynamically
+        # rather than pinning v4.0.0 so subsequent builds pick up
+        # bugfixes — versatiles-rs has been on a quarterly release
+        # cadence with backward-compatible CLI surface.
+        - cmd: |
+            set -euo pipefail
+            # The release asset name follows the pattern
+            # `versatiles-linux-gnu-x86_64.tar.gz` (gnu BEFORE x86_64,
+            # verified against v4.0.0). musl variants also ship; we
+            # pick gnu since the versa image's other Rust binaries
+            # (martin) also use the gnu glibc variant.
+            ASSET=$(curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-rs/releases/latest" \
+              | jq -r '.assets[].browser_download_url' \
+              | grep -E 'versatiles-linux-gnu-x86_64\.tar\.gz$' \
+              | head -1)
+            if [ -z "$ASSET" ]; then
+              echo "ERROR: could not find versatiles-rs linux-x86_64-gnu tarball" >&2
+              curl -fsSL "https://api.github.com/repos/versatiles-org/versatiles-rs/releases/latest" \
+                | jq -r '.assets[].name' >&2
+              exit 1
+            fi
+            TMPDIR=$(mktemp -d)
+            cd "$TMPDIR"
+            curl -fsSL "$ASSET" -o vt.tar.gz
+            tar -xzf vt.tar.gz
+            # The tarball lays out `versatiles` directly at the archive
+            # root (no inner directory). Find it generically so a future
+            # layout change doesn't silently break.
+            BIN=$(find . -name versatiles -type f -executable | head -1)
+            install -m 0755 "$BIN" /usr/local/bin/versatiles
+            cd /
+            rm -rf "$TMPDIR"
+          user: root
+        # ---- versatiles serve wrapper ----
+        # Mirrors the martin-wrapper.sh pattern in osm-tools-layer.
+        # Pre-creates the shortbread tile directory (the shortbread layer
+        # also creates it at image-build time, but defense-in-depth:
+        # versatiles errors out if the directory is missing at startup).
+        # `exec` keeps PID 1 ownership for proper signal handling under
+        # supervisord.
+        - write: /usr/local/bin/versatiles-wrapper.sh
+          mode: "0755"
+          user: root
+          content: |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            DIR="/workspace/tiles/shortbread"
+            mkdir -p "$DIR"
+            # versatiles serve refuses to start when given an empty directory
+            # ("no tiles found" error). To guarantee at least one valid
+            # source on every startup (including fresh deploys before the
+            # shortbread DAG has run), always include the public
+            # download.versatiles.org/osm.versatiles container as the FIRST
+            # source. After the shortbread DAG produces local files and
+            # calls supervisorctl restart, this wrapper re-runs and APPENDS
+            # the local tile containers to the arg list — they appear as
+            # /tiles/monaco-shortbread/ etc., parallel to the remote /tiles/osm/.
+            ARGS=("https://download.versatiles.org/osm.versatiles")
+            # Append local tile containers individually. shopt -s nullglob
+            # so the loop doesn't run with literal '*.pmtiles' when empty.
+            shopt -s nullglob
+            for f in "$DIR"/*.pmtiles "$DIR"/*.versatiles "$DIR"/*.mbtiles; do
+              ARGS+=("$f")
+            done
+            echo "versatiles-wrapper: starting versatiles serve with ${#ARGS[@]} source(s)" >&2
+            exec /usr/local/bin/versatiles serve --port 8090 "${ARGS[@]}"
+    eval:
+        # Build-scope: versatiles binary present + the convert subcommand
+        # is shipped (verifies the binary isn't a stripped-down build).
+        - id: versatiles-installed
+          command: versatiles --version
+          exit_status: 0
+        - id: versatiles-convert-help
+          command: versatiles convert --help
+          exit_status: 0
+        - id: versatiles-wrapper-installed
+          file: /usr/local/bin/versatiles-wrapper.sh
+          exists: true
+          mode: "0755"
+        # Deploy-scope: supervisord service is RUNNING + port 8090 reachable.
+        - id: versatiles-running
+          scope: deploy
+          service: versatiles
+          running: true
+        - id: versatiles-port-reachable
+          scope: deploy
+          addr: "127.0.0.1:${HOST_PORT:8090}"
+          reachable: true
+          timeout: 10s
+        # versatiles serve doesn't serve a root index — `GET /` returns
+        # 404. Probe a known-good tile endpoint from the always-on remote
+        # `osm.versatiles` source instead (added by the wrapper). The
+        # response body is binary MVT-PBF; we only need the 200 status.
+        - id: versatiles-http-up
+          scope: deploy
+          http: "http://127.0.0.1:${HOST_PORT:8090}/tiles/osm/0/0/0.pbf"
+          status: 200
+          timeout: 10s
+        # Deploy-scope: end-to-end convert round-trip on the OSM DAG's
+        # output. This is the canonical interop verification — PMTiles in,
+        # .versatiles out, PMTiles back; both intermediate files must
+        # exist and `versatiles probe` must succeed on each. Runs only
+        # after the OSM DAG has produced monaco.pmtiles (the prior
+        # deploy-scope probes don't depend on it; this one does).
+        - id: versatiles-convert-roundtrip
+          scope: deploy
+          in_container: true
+          command: |
+            set -euo pipefail
+            SRC=/workspace/tiles/pmtiles/monaco.pmtiles
+            # If the OSM DAG hasn't run yet on this deploy, skip the
+            # check cleanly — the notebook's R10 end-to-end covers the
+            # post-DAG state. The eval here covers the static binary
+            # surface; the DAG path is exercised by the notebook test.
+            if [ ! -f "$SRC" ]; then
+              echo "SKIP: $SRC not present yet (OSM DAG has not run on this deploy)"
+              exit 0
+            fi
+            TMP=$(mktemp -d)
+            trap "rm -rf $TMP" EXIT
+            versatiles convert "$SRC" "$TMP/monaco.versatiles"
+            versatiles convert "$TMP/monaco.versatiles" "$TMP/monaco-roundtrip.pmtiles"
+            test -s "$TMP/monaco.versatiles"
+            test -s "$TMP/monaco-roundtrip.pmtiles"
+            # Probe both ends to verify they're readable + parseable.
+            versatiles probe "$SRC" >/dev/null
+            versatiles probe "$TMP/monaco-roundtrip.pmtiles" >/dev/null
+          exit_status: 0
+    service:
+        - name: versatiles
+          exec: /usr/local/bin/versatiles-wrapper.sh
+          restart: always
+          priority: 37
+          enable: true
+          scope: system

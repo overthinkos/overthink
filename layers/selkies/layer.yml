@@ -1,218 +1,219 @@
 layer:
-  name: selkies
-  require:
-    - supervisord
-    - python
-    - pipewire
-  # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
-  # against ffmpeg's libav* + libx264 — without them at runtime the backend fails
-  # to load (libx264.so.165: cannot open shared object file), pixelflux never
-  # creates its wayland-1 compositor, and labwc/chrome crash-loop. COMPOSE the
-  # ffmpeg layer (not merely `require:` it) so its packages are actually emitted
-  # into the final image — `require:` only orders deps that are composed
-  # elsewhere; `layers:` is what pulls a pure-package leaf in (the cachyos base
-  # had no transitive ffmpeg). The ffmpeg layer installs ffmpeg (arch: pulls
-  # x264 → libx264.so.165; fedora: negativo17), supplying every lib pixelflux
-  # links. R9: declare the runtime dep.
-  layers:
-    - ffmpeg
-  env:
-    LANG: "C.UTF-8"
-    PIXELFLUX_WAYLAND: "true"
-    PULSE_SERVER: "unix:/tmp/pulse/native"
-  port:
-    - "https+insecure:3000"
-  security:
-    shm_size: "1g"
-  volume:
-    - name: selkies-config
-      path: "~/.config/selkies"
-  distro:
-    arch:
-      package:
-        - wl-clipboard
-        - libice
-        - libsm
-        - libpulse
-        - libva-mesa-driver
-        - libva
-        - libva-utils
-        - procps-ng
-        - iproute2
-        - iputils
-        - strace
-        - htop
-        - file
-        - lsof
-        - openssl
-    fedora:
-      package:
-        - wl-clipboard
-        - libICE
-        - libSM
-        - pulseaudio-libs
-        - pulseaudio-utils
-        - mesa-va-drivers
-        - libva
-        - libva-utils
-        - procps-ng
-        - iproute
-        - iputils
-        - strace
-        - htop
-        - file
-        - lsof
-        # openssl required by the self-signed-cert task at line ~59.
-        # Previously assumed to be pulled in transitively from Fedora 43's
-        # base packages; a recent base-image refresh dropped it, breaking
-        # the selkies-desktop build chain. Declared explicitly to insulate
-        # against future base-image trimming.
-        - openssl
-  var:
-    TRAEFIK_VERSION: v3.4.0
-  task:
-    # Move pre-built Selkies web UI from the pixi build-stage output into the
-    # system share directory. The pixi stage writes to /home/user/.local/share
-    # under the build user's home; we relocate so the runtime has no dependency
-    # on the builder-user layout.
-    - cmd: |
-        mkdir -p /usr/local/share/selkies/web
-        cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
-        rm -rf /home/user/.local/share/selkies-build
-      user: root
-    # Traefik binary (same version the dedicated traefik layer uses).
-    - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
-      extract: tar.gz
-      to: /usr/local/bin
-      include: [traefik]
-      user: root
-    # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
-    # procedural — stays in cmd: rather than a contrived write: pair.
-    - mkdir: /usr/local/share/selkies/certs
-      user: root
-    - cmd: |
-        openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
-          -keyout /usr/local/share/selkies/certs/selkies.key \
-          -out /usr/local/share/selkies/certs/selkies.crt \
-          -days 3650 -nodes \
-          -subj "/CN=selkies" \
-          -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
-        chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
-      user: root
-    # Traefik configs from the layer dir.
-    - copy: traefik.yml
-      to: /usr/local/share/selkies/traefik.yml
-      mode: "0644"
-      user: root
-    - copy: traefik-dynamic.yml
-      to: /usr/local/share/selkies/traefik-dynamic.yml
-      mode: "0644"
-      user: root
-    # User-phase setup: wrappers for the three services.
-    - mkdir: "${HOME}/.local/bin"
-      user: "${USER}"
-    - mkdir: "${HOME}/.config/selkies"
-      user: "${USER}"
-    - copy: selkies-wrapper
-      to: "${HOME}/.local/bin/selkies-wrapper"
-      mode: "0755"
-      user: "${USER}"
-    - copy: selkies-capture-server
-      to: "${HOME}/.local/bin/selkies-capture-server"
-      mode: "0755"
-      user: "${USER}"
-    - copy: selkies-fileserver
-      to: "${HOME}/.local/bin/selkies-fileserver"
-      mode: "0755"
-      user: "${USER}"
-  eval:
-    - id: selkies-wrapper
-      file: ${HOME}/.local/bin/selkies-wrapper
-      exists: true
-      mode: "0755"
-    - id: selkies-capture-server
-      file: ${HOME}/.local/bin/selkies-capture-server
-      exists: true
-    - id: selkies-fileserver
-      file: ${HOME}/.local/bin/selkies-fileserver
-      exists: true
-    - id: selkies-web-ui
-      file: /usr/local/share/selkies/web
-      filetype: directory
-    - id: selkies-cert
-      file: /usr/local/share/selkies/certs/selkies.crt
-      exists: true
-    - id: selkies-cert-key
-      file: /usr/local/share/selkies/certs/selkies.key
-      exists: true
-    - id: traefik-binary
-      file: /usr/local/bin/traefik
-      exists: true
-    # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
-    # against ffmpeg's libav* + libx264. If those runtime libs are absent from
-    # the final image the backend silently fails to load, pixelflux never
-    # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
-    # every OTHER probe (files/services/ports/https) still passes. This ldd check
-    # catches that class of missing-runtime-lib regression at BUILD scope
-    # (`ov eval image`) — no deploy or GPU needed. ldd exits 0 even when a lib is
-    # "not found", so the assertion is on the absence of that string.
-    - id: pixelflux-wayland-libs-resolvable
-      command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
-      exit_status: 0
-      stdout:
-        - not_contains: "not found"
-    - id: selkies-service-running
-      scope: deploy
-      service: selkies
-      running: true
-    # supervisord reports the `selkies` program RUNNING even when pixelflux's
-    # Wayland backend failed to load — so service:running is not sufficient.
-    # Assert the compositor socket actually exists (pixelflux created wayland-1),
-    # the precondition for labwc/chrome to start. Poll for readiness.
-    - id: pixelflux-wayland-socket
-      scope: deploy
-      command: test -e /tmp/wayland-1
-      exit_status: 0
-      in_container: true
-      eventually: 60s
-      retry_interval: 3s
-    - id: traefik-service-running
-      scope: deploy
-      service: traefik
-      running: true
-    - id: selkies-port-reachable
-      scope: deploy
-      addr: 127.0.0.1:${HOST_PORT:3000}
-      reachable: true
-      timeout: 5s
-    - id: selkies-https
-      scope: deploy
-      http: https://127.0.0.1:${HOST_PORT:3000}/
-      status: 200
-      allow_insecure: true
-      timeout: 10s
-  service:
-    - name: traefik
-      exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
-      restart: always
-      priority: 18
-      start_sec: 1
-      enable: true
-      scope: system
-    - name: selkies-fileserver
-      exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
-      restart: always
-      priority: 19
-      start_sec: 1
-      enable: true
-      scope: system
-    - name: selkies
-      exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
-      env:
-        PIXELFLUX_WAYLAND: true
-        XDG_RUNTIME_DIR: /tmp
-      restart: always
-      priority: 8
-      start_sec: 3
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: selkies
+    require:
+        - supervisord
+        - python
+        - pipewire
+    # pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+    # against ffmpeg's libav* + libx264 — without them at runtime the backend fails
+    # to load (libx264.so.165: cannot open shared object file), pixelflux never
+    # creates its wayland-1 compositor, and labwc/chrome crash-loop. COMPOSE the
+    # ffmpeg layer (not merely `require:` it) so its packages are actually emitted
+    # into the final image — `require:` only orders deps that are composed
+    # elsewhere; `layers:` is what pulls a pure-package leaf in (the cachyos base
+    # had no transitive ffmpeg). The ffmpeg layer installs ffmpeg (arch: pulls
+    # x264 → libx264.so.165; fedora: negativo17), supplying every lib pixelflux
+    # links. R9: declare the runtime dep.
+    layer:
+        - ffmpeg
+    env:
+        LANG: "C.UTF-8"
+        PIXELFLUX_WAYLAND: "true"
+        PULSE_SERVER: "unix:/tmp/pulse/native"
+    port:
+        - "https+insecure:3000"
+    security:
+        shm_size: "1g"
+    volume:
+        - name: selkies-config
+          path: "~/.config/selkies"
+    distro:
+        arch:
+            package:
+                - wl-clipboard
+                - libice
+                - libsm
+                - libpulse
+                - libva-mesa-driver
+                - libva
+                - libva-utils
+                - procps-ng
+                - iproute2
+                - iputils
+                - strace
+                - htop
+                - file
+                - lsof
+                - openssl
+        fedora:
+            package:
+                - wl-clipboard
+                - libICE
+                - libSM
+                - pulseaudio-libs
+                - pulseaudio-utils
+                - mesa-va-drivers
+                - libva
+                - libva-utils
+                - procps-ng
+                - iproute
+                - iputils
+                - strace
+                - htop
+                - file
+                - lsof
+                # openssl required by the self-signed-cert task at line ~59.
+                # Previously assumed to be pulled in transitively from Fedora 43's
+                # base packages; a recent base-image refresh dropped it, breaking
+                # the selkies-desktop build chain. Declared explicitly to insulate
+                # against future base-image trimming.
+                - openssl
+    var:
+        TRAEFIK_VERSION: v3.4.0
+    task:
+        # Move pre-built Selkies web UI from the pixi build-stage output into the
+        # system share directory. The pixi stage writes to /home/user/.local/share
+        # under the build user's home; we relocate so the runtime has no dependency
+        # on the builder-user layout.
+        - cmd: |
+            mkdir -p /usr/local/share/selkies/web
+            cp -r /home/user/.local/share/selkies-build/web/* /usr/local/share/selkies/web/
+            rm -rf /home/user/.local/share/selkies-build
+          user: root
+        # Traefik binary (same version the dedicated traefik layer uses).
+        - download: "https://github.com/traefik/traefik/releases/download/${TRAEFIK_VERSION}/traefik_${TRAEFIK_VERSION}_linux_${ARCH}.tar.gz"
+          extract: tar.gz
+          to: /usr/local/bin
+          include: [traefik]
+          user: root
+        # Self-signed cert for HTTPS secure context (dev-only). openssl is genuinely
+        # procedural — stays in cmd: rather than a contrived write: pair.
+        - mkdir: /usr/local/share/selkies/certs
+          user: root
+        - cmd: |
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 \
+              -keyout /usr/local/share/selkies/certs/selkies.key \
+              -out /usr/local/share/selkies/certs/selkies.crt \
+              -days 3650 -nodes \
+              -subj "/CN=selkies" \
+              -addext "subjectAltName=DNS:localhost,DNS:selkies.localhost,DNS:*.localhost,DNS:ov-selkies-desktop,IP:127.0.0.1"
+            chmod 644 /usr/local/share/selkies/certs/selkies.crt /usr/local/share/selkies/certs/selkies.key
+          user: root
+        # Traefik configs from the layer dir.
+        - copy: traefik.yml
+          to: /usr/local/share/selkies/traefik.yml
+          mode: "0644"
+          user: root
+        - copy: traefik-dynamic.yml
+          to: /usr/local/share/selkies/traefik-dynamic.yml
+          mode: "0644"
+          user: root
+        # User-phase setup: wrappers for the three services.
+        - mkdir: "${HOME}/.local/bin"
+          user: "${USER}"
+        - mkdir: "${HOME}/.config/selkies"
+          user: "${USER}"
+        - copy: selkies-wrapper
+          to: "${HOME}/.local/bin/selkies-wrapper"
+          mode: "0755"
+          user: "${USER}"
+        - copy: selkies-capture-server
+          to: "${HOME}/.local/bin/selkies-capture-server"
+          mode: "0755"
+          user: "${USER}"
+        - copy: selkies-fileserver
+          to: "${HOME}/.local/bin/selkies-fileserver"
+          mode: "0755"
+          user: "${USER}"
+    eval:
+        - id: selkies-wrapper
+          file: ${HOME}/.local/bin/selkies-wrapper
+          exists: true
+          mode: "0755"
+        - id: selkies-capture-server
+          file: ${HOME}/.local/bin/selkies-capture-server
+          exists: true
+        - id: selkies-fileserver
+          file: ${HOME}/.local/bin/selkies-fileserver
+          exists: true
+        - id: selkies-web-ui
+          file: /usr/local/share/selkies/web
+          filetype: directory
+        - id: selkies-cert
+          file: /usr/local/share/selkies/certs/selkies.crt
+          exists: true
+        - id: selkies-cert-key
+          file: /usr/local/share/selkies/certs/selkies.key
+          exists: true
+        - id: traefik-binary
+          file: /usr/local/bin/traefik
+          exists: true
+        # Pixelflux's Wayland backend (pixelflux_wayland.so) is dynamically linked
+        # against ffmpeg's libav* + libx264. If those runtime libs are absent from
+        # the final image the backend silently fails to load, pixelflux never
+        # creates wayland-1, and the whole desktop (labwc/chrome) crash-loops — while
+        # every OTHER probe (files/services/ports/https) still passes. This ldd check
+        # catches that class of missing-runtime-lib regression at BUILD scope
+        # (`ov eval image`) — no deploy or GPU needed. ldd exits 0 even when a lib is
+        # "not found", so the assertion is on the absence of that string.
+        - id: pixelflux-wayland-libs-resolvable
+          command: ldd ${HOME}/.pixi/envs/default/lib/python3.*/site-packages/pixelflux/pixelflux_wayland*.so
+          exit_status: 0
+          stdout:
+            - not_contains: "not found"
+        - id: selkies-service-running
+          scope: deploy
+          service: selkies
+          running: true
+        # supervisord reports the `selkies` program RUNNING even when pixelflux's
+        # Wayland backend failed to load — so service:running is not sufficient.
+        # Assert the compositor socket actually exists (pixelflux created wayland-1),
+        # the precondition for labwc/chrome to start. Poll for readiness.
+        - id: pixelflux-wayland-socket
+          scope: deploy
+          command: test -e /tmp/wayland-1
+          exit_status: 0
+          in_container: true
+          eventually: 60s
+          retry_interval: 3s
+        - id: traefik-service-running
+          scope: deploy
+          service: traefik
+          running: true
+        - id: selkies-port-reachable
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:3000}
+          reachable: true
+          timeout: 5s
+        - id: selkies-https
+          scope: deploy
+          http: https://127.0.0.1:${HOST_PORT:3000}/
+          status: 200
+          allow_insecure: true
+          timeout: 10s
+    service:
+        - name: traefik
+          exec: "/usr/local/bin/traefik --configFile=/usr/local/share/selkies/traefik.yml"
+          restart: always
+          priority: 18
+          start_sec: 1
+          enable: true
+          scope: system
+        - name: selkies-fileserver
+          exec: "python3 %(ENV_HOME)s/.local/bin/selkies-fileserver"
+          restart: always
+          priority: 19
+          start_sec: 1
+          enable: true
+          scope: system
+        - name: selkies
+          exec: "%(ENV_HOME)s/.local/bin/selkies-wrapper"
+          env:
+            PIXELFLUX_WAYLAND: true
+            XDG_RUNTIME_DIR: /tmp
+          restart: always
+          priority: 8
+          start_sec: 3
+          enable: true
+          scope: system

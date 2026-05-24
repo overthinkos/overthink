@@ -1,22 +1,21 @@
 layer:
-  name: eval-composition-layer
-  description:
-    feature: bench-composition — marker for from-composition-selftest hand-written probe
-    narrative: |
-      Writes /etc/ov-ov-composition-selftest, satisfying the
-      composition-handwritten-probe scenario in from-composition-selftest.
-
-  task:
-    - mkdir: /etc
-      user: root
-      mode: "0755"
-    - write: /etc/ov-composition-selftest
-      user: root
-      mode: "0644"
-      content: |
-        ov composition selftest marker
-
-  eval:
-    - id: composition-marker-exists
-      file: /etc/ov-composition-selftest
-      exists: true
+    version: 2026.144.1443
+    name: eval-composition-layer
+    description:
+        feature: bench-composition — marker for from-composition-selftest hand-written probe
+        narrative: |
+            Writes /etc/ov-ov-composition-selftest, satisfying the
+            composition-handwritten-probe scenario in from-composition-selftest.
+    task:
+        - mkdir: /etc
+          user: root
+          mode: "0755"
+        - write: /etc/ov-composition-selftest
+          user: root
+          mode: "0644"
+          content: |
+            ov composition selftest marker
+    eval:
+        - id: composition-marker-exists
+          file: /etc/ov-composition-selftest
+          exists: true

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -40,48 +43,58 @@ func TestLayerRef(t *testing.T) {
 	}
 }
 
-// TestRefVersionTracker covers the warn-and-newest-wins resolution shared by the
-// initial collector and the transitive fix-point fetch — the regression guard
-// for the silent version-collision that shipped images missing a newer layer's
-// packages. record returns winning=true when the version should be fetched.
-func TestRefVersionTracker(t *testing.T) {
-	tr := newRefVersionTracker()
-	ref := "github.com/o/r/layers/x"
+// TestPickLayerVersion covers the per-entity-version arbiter (the sole
+// layer-version resolver). Same per-entity `version:` across different git tags
+// resolves with NO warning — the newest git tag wins for freshness — which is
+// the Problem-B regression guard: a repo re-tag of an UNCHANGED layer must not
+// warn. Different per-entity versions warn once and the newest version wins.
+func TestPickLayerVersion(t *testing.T) {
+	mk := func(ver, tag string) layerCandidate {
+		return layerCandidate{
+			layer:   &Layer{Name: "x", Version: ver},
+			version: ver,
+			gitTag:  tag,
+			source:  "github.com/o/r@" + tag,
+		}
+	}
+	capture := func(fn func() layerCandidate) (layerCandidate, string) {
+		old := os.Stderr
+		r, w, _ := os.Pipe()
+		os.Stderr = w
+		got := fn()
+		_ = w.Close()
+		os.Stderr = old
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		return got, buf.String()
+	}
 
-	// First sighting wins (fetch it).
-	if !tr.record(ref, "v1.0.0", "src-a") {
-		t.Fatal("first record should win")
+	// Same per-entity version, different git tags -> NO warning, newest tag wins.
+	got, warn := capture(func() layerCandidate {
+		return pickLayerVersion("github.com/o/r/layers/x", []layerCandidate{
+			mk("2026.141.1600", "v2026.141.1600"),
+			mk("2026.141.1600", "v2026.150.900"),
+		})
+	})
+	if warn != "" {
+		t.Errorf("same per-entity version must not warn, got: %q", warn)
 	}
-	// Same version again: not a new fetch.
-	if tr.record(ref, "v1.0.0", "src-b") {
-		t.Fatal("same-version record should not win again")
+	if got.gitTag != "v2026.150.900" {
+		t.Errorf("freshness tiebreak: want newest git tag v2026.150.900, got %q", got.gitTag)
 	}
-	// An OLDER version loses to the current winner (no re-fetch).
-	if tr.record(ref, "v0.9.0", "src-c") {
-		t.Error("older version must lose to the current winner")
+
+	// Different per-entity versions -> exactly one warning, newest version wins.
+	got, warn = capture(func() layerCandidate {
+		return pickLayerVersion("github.com/o/r/layers/x", []layerCandidate{
+			mk("2026.141.1600", "v2026.141.1600"),
+			mk("2026.144.531", "v2026.144.531"),
+		})
+	})
+	if got.version != "2026.144.531" {
+		t.Errorf("newest per-entity version must win, got %q", got.version)
 	}
-	if tr.versions[ref] != "v1.0.0" {
-		t.Errorf("winner after older ref = %q, want v1.0.0", tr.versions[ref])
-	}
-	// A NEWER version wins (re-fetch) and becomes the winner.
-	if !tr.record(ref, "v2.0.0", "src-d") {
-		t.Error("newer version must win")
-	}
-	if tr.versions[ref] != "v2.0.0" {
-		t.Errorf("winner after newer ref = %q, want v2.0.0", tr.versions[ref])
-	}
-	// CalVer ordering: a newer day-of-year wins over an older one.
-	cal := "github.com/o/r/layers/cal"
-	tr.record(cal, "v2026.141.1600", "infra")
-	if !tr.record(cal, "v2026.144.0531", "selkies") {
-		t.Error("newer CalVer (v2026.144.0531) must win over v2026.141.1600")
-	}
-	if tr.versions[cal] != "v2026.144.0531" {
-		t.Errorf("CalVer winner = %q, want v2026.144.0531", tr.versions[cal])
-	}
-	// A different ref is tracked independently.
-	if !tr.record("github.com/o/r/layers/y", "v9.0.0", "src-e") {
-		t.Fatal("independent ref first sighting should win")
+	if !strings.Contains(warn, "resolved to multiple versions") || !strings.Contains(warn, "2026.144.531") {
+		t.Errorf("expected one multi-version warning naming the winner, got: %q", warn)
 	}
 }
 
@@ -404,10 +417,12 @@ func TestCollectRemoteRefsOptsIncludeDisabled(t *testing.T) {
 	}
 }
 
-func TestCollectRemoteRefsSameLayerVersionNewestWins(t *testing.T) {
-	// Same bare ref at different versions: no error — warn-and-newest-wins
-	// resolves to the highest version (here the image layer at v2.0.0 over the
-	// local layer's require at v1.0.0).
+func TestCollectRemoteRefsSameLayerBothTagsCollected(t *testing.T) {
+	// Same bare ref at two git tags: collection now emits BOTH (the git tag is
+	// only the FETCH coordinate). Per-entity-version arbitration (newest-wins,
+	// or no-warning when the layer's own version: matches) happens AFTER fetch in
+	// pickLayerVersion — see TestPickLayerVersion. Collection's job is just to
+	// fetch every distinct (repo, git-tag).
 	cfg := &Config{
 		Image: map[string]ImageConfig{
 			"myapp": {
@@ -418,7 +433,7 @@ func TestCollectRemoteRefsSameLayerVersionNewestWins(t *testing.T) {
 		},
 	}
 	layers := map[string]*Layer{
-		"local": {Name: "local", Require: toLayerRefs([]string{
+		"local": {Name: "local", Version: "2026.1.1", Require: toLayerRefs([]string{
 			"@github.com/org/repo/layers/cuda:v1.0.0",
 		})},
 	}
@@ -427,17 +442,16 @@ func TestCollectRemoteRefsSameLayerVersionNewestWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CollectRemoteRefs() unexpected error: %v", err)
 	}
-	// Exactly one download for cuda, at the newest version.
-	var cudaVers []string
+	cudaVers := map[string]bool{}
 	for _, dl := range downloads {
 		for _, ref := range dl.Refs {
 			if ref == "github.com/org/repo/layers/cuda" {
-				cudaVers = append(cudaVers, dl.Version)
+				cudaVers[dl.Version] = true
 			}
 		}
 	}
-	if len(cudaVers) != 1 || cudaVers[0] != "v2.0.0" {
-		t.Errorf("cuda resolved to %v, want exactly [v2.0.0] (newest-wins)", cudaVers)
+	if !cudaVers["v1.0.0"] || !cudaVers["v2.0.0"] || len(cudaVers) != 2 {
+		t.Errorf("cuda fetch coordinates = %v, want both [v1.0.0 v2.0.0] collected", cudaVers)
 	}
 }
 

@@ -22,6 +22,82 @@ from their former homes so nothing is lost in the relocation.
 
 ## 2026-05
 
+### 2026-05-24 — per-kind versioning: author-declared `version:` as the authoritative identity for layers AND images (hard cutover)
+
+Two long-standing defects shared one root cause — **the per-push CalVer git tag
+was overloaded as both a fetch coordinate AND an identity**, and the image
+identity LABEL was a per-build timestamp:
+
+- **Cache cascade.** `org.overthinkos.version` was emitted as the build-time
+  CalVer (`img.Tag`, one `ComputeCalVer()` per generate). Baked into every image,
+  it changed the image config → image SHA on *every* build, so a child's
+  `FROM <base>:<tag>` resolved to a new SHA and cache-misses cascaded down the
+  whole chain — a warm no-source-change rebuild recompiled everything.
+- **Spurious version warnings.** Layer warn-and-newest-wins compared the **repo
+  git tag** (`LayerRef.Version()` = the `:vTAG` suffix), which advances on every
+  push, so an UNCHANGED layer was reported as a "different version" merely because
+  its repo got re-tagged for an unrelated push.
+
+The cutover made the per-entity `version:` fields (which existed in the schema but
+were inert) load-bearing:
+
+- **`version:` is MANDATORY for the `layer` kind, OPTIONAL for every other kind.**
+  `validateLayerContents` hard-errors a local layer with no `version:`.
+- **Image `org.overthinkos.version` = content-derived `EffectiveVersion`** — the
+  image's dedicated `version:` if set, else the highest layer `version:` across
+  the whole base chain (new `ov/effective_version.go`, run by `NewGenerator` after
+  intermediates + global order are materialized; traverses namespaced bases via
+  the fully-qualified `g.Images` keys). Stable across builds when no layer changed
+  → no FROM-SHA cascade. Bare distro bases (`arch`/`fedora`, submodule bases) are
+  layerless, so they carry a dedicated `version:`; builders + auto-intermediates
+  derive the highest layer version automatically.
+- **LABEL-CalVer now ALWAYS takes priority over TAG-CalVer** (this REVERSED the
+  prior behavior — `local_image.go` used to "prefer tag-CalVer over label-CalVer").
+  `resolveLocalImageRef` keys on the label-CalVer (primary) with the tag-CalVer as
+  the tiebreaker that picks the newest BUILD among builds sharing one
+  content-stable label; `ov clean` retention (`imageLabelCalVer` +
+  `imageTagCalVer`) does the same. The label↔tag substitution fallback was deleted.
+- **Layer resolution is per-entity, post-fetch.** `refVersionTracker` (which
+  compared git tags before fetch and warned on a re-tag) was DELETED.
+  `CollectRemoteRefsOpts` now collects EVERY distinct `(repo, git-tag)`; the
+  `ScanAllLayerWithConfigOpts` fix-point fetches each, reads each layer's own
+  `version:`, and `pickLayerVersion` arbitrates per bare ref: same per-entity
+  version across different git tags → NO warning (newest git tag wins for
+  freshness); different per-entity versions → warn once and the newest per-entity
+  version wins. A fetched layer with no `version:` is a HARD ERROR.
+- **Hard cutover, no compat shims.** The runtime hard-errors on any
+  non-conformant config (missing layer version, unresolvable image version,
+  unversioned fetched remote layer) with an `ov migrate` hint. The new
+  `entity-version` `MigrationStep` (schema `2026.144.1442`; HEAD bumped to
+  `2026.144.1443`) backfills `version:` on every layer.yml + every bare-base image
+  entry (no `layer:` field AND an external `base:`), comment-preserving via the
+  yaml.v3 node API, skipping the `image/` submodules (each migrates in its own
+  repo) and `testdata`. `RunProjectMigrations` (remote-cache auto-migration)
+  backfills fetched first-party remotes, which is what lets the runtime drop the
+  fallback.
+
+**`arch-rename` migrator bug found + fixed in the same tree (R2).** Running the
+full `ov migrate` chain surfaced a latent bug: the `arch-rename` step
+(schema 2026.141.1559) used a literal denylist for external Arch strings that
+covered `docker.io/library/archlinux` but NOT the quay mirror, so it corrupted
+`base: quay.io/archlinux/archlinux:latest` → `quay.io/arch/arch:latest`. RCA via
+`/ov-internals:root-cause-analyzer`: a denylist of literals can never be
+complete. Fixed generally — `archRenameExternalRefRe` now protects ANY external
+registry ref (a registry-host segment with a `.`/`:` before the first `/`) whose
+path contains `archlinux`, by SHAPE — covering the quay mirror, `ghcr.io/.../archlinux-*`,
+and any future registry. Added `migrate_arch_rename_test.go` (the absent coverage
+that let the bug ship); restored the corrupted `base.yml` line.
+
+Standing rules established (stated forward-looking in CLAUDE.md "Per-kind
+versioning" / "Layer-version resolution" + `/ov-internals:capabilities`,
+`/ov-internals:go`, `/ov-build:validate`, `/ov-build:reconcile`,
+`/ov-internals:generate-source`). Files: `ov/effective_version.go` (new),
+`ov/migrate_entity_version.go` (new), `ov/{config,labels,capabilities,generate,
+local_image,clean,refs,layers,validate,migrate_registry,migrate_arch_rename}.go`,
+plus the backfilled `layers/*/layer.yml` + root YAML stamps. `build.yml` stays at
+its older schema stamp by design (not in the calver-schema stamp set; carries no
+per-entity-versioned entities).
+
 ### 2026-05-24 — android-emulator R10 bed green: build fixes + adb-eval ordering + appium host-path install + keep-pod-on-failure
 
 The `eval-android-emulator-pod` bed had never passed end-to-end. Five

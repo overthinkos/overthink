@@ -1,18 +1,19 @@
 layer:
-  name: gogcli
-  description: Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs)
-  require:
-    - golang
-  env:
-    GOPATH: "~/go"
-  path_append:
-    - "~/go/bin"
-  task:
-    - cmd: |
-        go install github.com/steipete/gogcli/cmd/gog@latest
-        go clean -cache
-      user: "${USER}"
-  eval:
-    - id: gog-binary
-      file: ${HOME}/go/bin/gog
-      exists: true
+    version: 2026.144.1443
+    name: gogcli
+    description: Google Workspace CLI (Gmail, Calendar, Drive, Contacts, Sheets, Docs)
+    require:
+        - golang
+    env:
+        GOPATH: "~/go"
+    path_append:
+        - "~/go/bin"
+    task:
+        - cmd: |
+            go install github.com/steipete/gogcli/cmd/gog@latest
+            go clean -cache
+          user: "${USER}"
+    eval:
+        - id: gog-binary
+          file: ${HOME}/go/bin/gog
+          exists: true

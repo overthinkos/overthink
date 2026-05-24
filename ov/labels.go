@@ -64,7 +64,7 @@ const (
 	LabelMCPProvides     = "org.overthinkos.mcp_provides"
 	LabelMCPRequires     = "org.overthinkos.mcp_requires"
 	LabelMCPAccepts      = "org.overthinkos.mcp_accepts"
-	LabelEval           = "org.overthinkos.eval" // three-section test manifest (layer/image/deploy)
+	LabelEval            = "org.overthinkos.eval" // three-section test manifest (layer/image/deploy)
 	// LabelDescription — three-section Gherkin-shaped self-description for
 	// every `kind:` entity the image rolled up. Each section carries one
 	// LabeledDescription per contributing entity (layer/image/deploy).
@@ -138,6 +138,7 @@ type LabelDataEntry struct {
 // ImageMetadata is the runtime-relevant config extracted from image labels.
 type ImageMetadata struct {
 	Image     string
+	Version   string // org.overthinkos.version — content-derived EffectiveVersion (highest layer version, or the image's dedicated version:)
 	Registry  string
 	Bootc     bool
 	UID       int
@@ -253,6 +254,10 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 
 	version := labels[LabelVersion]
 	if version == "" {
+		// Empty org.overthinkos.version => not an overthink image (a plain
+		// registry base). This is the ov-vs-non-ov boundary, NOT a
+		// backward-compat shim: every overthink image always emits a
+		// non-empty EffectiveVersion.
 		return nil, nil
 	}
 
@@ -261,6 +266,7 @@ func ExtractMetadata(engine, imageRef string) (*ImageMetadata, error) {
 	// MergeDeployOntoMetadata (deploy.yml → metadata).
 	meta := &ImageMetadata{
 		Image:    labels[LabelImage],
+		Version:  version,
 		Registry: labels[LabelRegistry],
 		User:     labels[LabelUser],
 		Home:     labels[LabelHome],

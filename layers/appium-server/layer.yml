@@ -1,77 +1,78 @@
 layer:
-  name: appium-server
-  description: |
-    Appium 3.x WebDriver server with the uiautomator2 driver for
-    Android automation. Installs appium system-wide via
-    `NPM_CONFIG_PREFIX=/usr/local npm i -g appium` so the binary at
-    /usr/local/bin/appium is on every user's PATH; the uiautomator2
-    driver lives in the runtime user's ~/.appium per Appium convention.
-  require:
-    - nodejs
-    - java-openjdk
-    - android-sdk
-    - supervisord
-  task:
-    - cmd: |
-        set -euo pipefail
-        # System-wide global install — overrides nodejs layer's per-user
-        # NPM_CONFIG_PREFIX so /usr/local/bin/appium is universally on PATH.
-        NPM_CONFIG_PREFIX=/usr/local npm install -g appium
-        # Cleanup npm cache (gigabytes otherwise).
-        npm cache clean --force 2>/dev/null || true
-      user: root
-    - mkdir: "${HOME}/.appium"
-      user: "${USER}"
-      mode: "0755"
-    - cmd: |
-        set -euo pipefail
-        # Drivers install per-user (writes ~/.appium/node_modules);
-        # JAVA_HOME + ANDROID_HOME come from upstream layer ENV directives
-        # baked into the Containerfile.
-        export JAVA_HOME=/usr/lib/jvm/ov-jdk21
-        export ANDROID_HOME=/opt/android-sdk
-        export PATH=$JAVA_HOME/bin:$PATH
-        /usr/local/bin/appium driver install uiautomator2
-      user: "${USER}"
-  service:
-    - name: appium
-      exec: "/usr/local/bin/appium --address 0.0.0.0 --port 4723 --base-path /wd/hub --log-level info"
-      env:
-        ANDROID_HOME: /opt/android-sdk
-        ANDROID_SDK_ROOT: /opt/android-sdk
-        JAVA_HOME: /usr/lib/jvm/ov-jdk21
-        HOME: /home/user
-      restart: always
-      priority: 40
-      start_sec: 3
-      enable: true
-      scope: system
-  port:
-    - 4723
-  eval:
-    - id: appium-binary
-      file: /usr/local/bin/appium
-      exists: true
-    - id: appium-runs
-      command: /usr/local/bin/appium --version
-      exit_status: 0
-      stdout:
-        - matches: "^[0-9]+\\."
-    - id: uiautomator2-driver
-      file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
-      exists: true
-      filetype: directory
-    - id: appium-status-endpoint
-      scope: deploy
-      http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
-      status: 200
-      timeout: 10s
-    - id: appium-status-ready
-      scope: deploy
-      # Replaces the pre-2026-05-16 `command: curl …/status` form.
-      # The new `appium: status` verb uses the host-side selenium-SDK /
-      # raw-HTTP client and the same HOST_PORT resolution as ${HOST_PORT:4723},
-      # but without requiring `curl` to be available on the host.
-      appium: status
-      stdout:
-        - contains: '"ready":true'
+    version: 2026.144.1443
+    name: appium-server
+    description: |
+        Appium 3.x WebDriver server with the uiautomator2 driver for
+        Android automation. Installs appium system-wide via
+        `NPM_CONFIG_PREFIX=/usr/local npm i -g appium` so the binary at
+        /usr/local/bin/appium is on every user's PATH; the uiautomator2
+        driver lives in the runtime user's ~/.appium per Appium convention.
+    require:
+        - nodejs
+        - java-openjdk
+        - android-sdk
+        - supervisord
+    task:
+        - cmd: |
+            set -euo pipefail
+            # System-wide global install — overrides nodejs layer's per-user
+            # NPM_CONFIG_PREFIX so /usr/local/bin/appium is universally on PATH.
+            NPM_CONFIG_PREFIX=/usr/local npm install -g appium
+            # Cleanup npm cache (gigabytes otherwise).
+            npm cache clean --force 2>/dev/null || true
+          user: root
+        - mkdir: "${HOME}/.appium"
+          user: "${USER}"
+          mode: "0755"
+        - cmd: |
+            set -euo pipefail
+            # Drivers install per-user (writes ~/.appium/node_modules);
+            # JAVA_HOME + ANDROID_HOME come from upstream layer ENV directives
+            # baked into the Containerfile.
+            export JAVA_HOME=/usr/lib/jvm/ov-jdk21
+            export ANDROID_HOME=/opt/android-sdk
+            export PATH=$JAVA_HOME/bin:$PATH
+            /usr/local/bin/appium driver install uiautomator2
+          user: "${USER}"
+    service:
+        - name: appium
+          exec: "/usr/local/bin/appium --address 0.0.0.0 --port 4723 --base-path /wd/hub --log-level info"
+          env:
+            ANDROID_HOME: /opt/android-sdk
+            ANDROID_SDK_ROOT: /opt/android-sdk
+            JAVA_HOME: /usr/lib/jvm/ov-jdk21
+            HOME: /home/user
+          restart: always
+          priority: 40
+          start_sec: 3
+          enable: true
+          scope: system
+    port:
+        - 4723
+    eval:
+        - id: appium-binary
+          file: /usr/local/bin/appium
+          exists: true
+        - id: appium-runs
+          command: /usr/local/bin/appium --version
+          exit_status: 0
+          stdout:
+            - matches: "^[0-9]+\\."
+        - id: uiautomator2-driver
+          file: ${HOME}/.appium/node_modules/appium-uiautomator2-driver
+          exists: true
+          filetype: directory
+        - id: appium-status-endpoint
+          scope: deploy
+          http: http://127.0.0.1:${HOST_PORT:4723}/wd/hub/status
+          status: 200
+          timeout: 10s
+        - id: appium-status-ready
+          scope: deploy
+          # Replaces the pre-2026-05-16 `command: curl …/status` form.
+          # The new `appium: status` verb uses the host-side selenium-SDK /
+          # raw-HTTP client and the same HOST_PORT resolution as ${HOST_PORT:4723},
+          # but without requiring `curl` to be available on the host.
+          appium: status
+          stdout:
+            - contains: '"ready":true'

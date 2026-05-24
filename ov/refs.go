@@ -159,64 +159,13 @@ func bareRefs(refs []LayerRef) []string {
 	return out
 }
 
-// refVersionTracker resolves each layer (bare ref) to a SINGLE version when it
-// is referenced at more than one — the policy the whole resolver depends on. A
-// given bare ref may be referenced many times; when two references disagree on
-// version, ov does NOT fail: it warns once (naming both versions and their
-// sources) and keeps the NEWEST (highest CalVer/semver). This soft policy lets a
-// build proceed with the latest referenced version of each layer rather than
-// requiring every reference across the whole import graph to pin the same tag.
-// It is the single shared mechanism behind BOTH the initial ref collection
-// (CollectRemoteRefsOpts) and the transitive fix-point fetch
-// (ScanAllLayerWithConfigOpts), so the SAME newest-wins choice (and warning) is
-// applied uniformly to direct and transitive references. See CHANGELOG.md.
-type refVersionTracker struct {
-	versions map[string]string // bareRef -> winning (newest) version
-	sources  map[string]string // bareRef -> source of the winning version
-	warned   map[string]bool   // bareRef -> already warned (one warning per layer)
-}
-
-func newRefVersionTracker() *refVersionTracker {
-	return &refVersionTracker{
-		versions: make(map[string]string),
-		sources:  make(map[string]string),
-		warned:   make(map[string]bool),
-	}
-}
-
-// record registers a reference to bareRef at version (attributed to source). It
-// returns winning=true when `version` is (now) the version that should be
-// fetched/scanned for bareRef — i.e. the FIRST reference, or one NEWER than the
-// current winner. It returns false when this reference loses to an
-// already-recorded equal-or-newer version. On a version DISAGREEMENT it emits a
-// single warning naming both versions and keeps the newest.
-func (t *refVersionTracker) record(bareRef, version, source string) (winning bool) {
-	existing, ok := t.versions[bareRef]
-	if !ok {
-		t.versions[bareRef] = version
-		t.sources[bareRef] = source
-		return true
-	}
-	if existing == version {
-		return false // already known at this version
-	}
-	newWins := compareSemver(version, existing) > 0
-	if !t.warned[bareRef] {
-		win, winSrc, lose, loseSrc := existing, t.sources[bareRef], version, source
-		if newWins {
-			win, winSrc, lose, loseSrc = version, source, existing, t.sources[bareRef]
-		}
-		fmt.Fprintf(os.Stderr, "Warning: layer %s referenced at multiple versions; using newest %s (from %s), ignoring %s (from %s)\n",
-			bareRef, win, winSrc, lose, loseSrc)
-		t.warned[bareRef] = true
-	}
-	if newWins {
-		t.versions[bareRef] = version
-		t.sources[bareRef] = source
-		return true
-	}
-	return false
-}
+// Layer-version resolution is per-entity, not per-git-tag: the `@github…:vTAG`
+// suffix is ONLY the FETCH coordinate (which commit to clone). The authority is
+// the layer's own `version:` field, read AFTER fetch and arbitrated by
+// pickLayerVersion in ScanAllLayerWithConfigOpts (layers.go). So a repo re-tag
+// that doesn't change a layer emits no warning. CollectRemoteRefsOpts below
+// therefore collects EVERY distinct (repo, git-tag) a ref is referenced at;
+// the per-entity dedup + warn happens once, after fetch.
 
 // RepoCacheDir returns the cache directory for remote repos.
 // Uses $OV_REPO_CACHE env var if set, otherwise ~/.cache/ov/repos/
@@ -320,16 +269,18 @@ func CollectRemoteRefs(cfg *Config, layers map[string]*Layer) ([]RemoteDownload,
 // fetched/registered, surfacing as "unknown layer" while computing global layer
 // order.
 func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOpts) ([]RemoteDownload, error) {
-	// Warn-and-newest-wins version resolution (shared with the fix-point fetch).
-	// The winning version per bare ref is only known after EVERY reference has
-	// been recorded, so downloads are built from the tracker AFTER collection
-	// rather than appended inline.
-	tracker := newRefVersionTracker()
-	bareRepo := make(map[string]string) // bareRef -> repoPath (for grouping downloads)
+	// Collect EVERY distinct (repo, git-tag) a ref is referenced at. The git tag
+	// is only the FETCH coordinate — per-entity-version arbitration (and any
+	// warning) happens AFTER fetch in ScanAllLayerWithConfigOpts, so a re-tag of
+	// an unchanged layer no longer warns here. `source` is unused now (kept for
+	// call-site stability + future diagnostics).
+	type repoVer struct{ repo, ver string }
+	pairs := make(map[repoVer]map[string]bool) // (repo, git-tag) -> set of bare refs
 	// Track resolved default branches per repo (to avoid duplicate git queries)
 	defaultBranches := make(map[string]string)
 
 	addRef := func(ref, source string) error {
+		_ = source
 		if !IsRemoteLayerRef(ref) {
 			return nil
 		}
@@ -351,8 +302,11 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 				fmt.Fprintf(os.Stderr, "Resolved @%s -> %s (default branch)\n", parsed.RepoPath, version)
 			}
 		}
-		bareRepo[bareRef] = parsed.RepoPath
-		tracker.record(bareRef, version, source)
+		key := repoVer{parsed.RepoPath, version}
+		if pairs[key] == nil {
+			pairs[key] = make(map[string]bool)
+		}
+		pairs[key][bareRef] = true
 		return nil
 	}
 
@@ -448,22 +402,12 @@ func CollectRemoteRefsOpts(cfg *Config, layers map[string]*Layer, opts ResolveOp
 		}
 	}
 
-	// Build downloads from the WINNING version per bare ref (newest-wins is now
-	// resolved across all references), grouped by (repo, version).
-	type repoVer struct{ repo, ver string }
-	downloads := make(map[repoVer]map[string]bool)
-	for bareRef, ver := range tracker.versions {
-		key := repoVer{bareRepo[bareRef], ver}
-		if downloads[key] == nil {
-			downloads[key] = make(map[string]bool)
-		}
-		downloads[key][bareRef] = true
-	}
-
-	// Convert to sorted list
+	// Emit one RemoteDownload per distinct (repo, git-tag). A bare ref pinned at
+	// two git tags yields two downloads (both fetched); the post-fetch
+	// arbitration keeps one materialization per bare ref.
 	var result []RemoteDownload
-	for key, refs := range downloads {
-		var refList []string
+	for key, refs := range pairs {
+		refList := make([]string, 0, len(refs))
 		for ref := range refs {
 			refList = append(refList, ref)
 		}

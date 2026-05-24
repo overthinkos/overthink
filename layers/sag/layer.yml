@@ -1,18 +1,19 @@
 layer:
-  name: sag
-  description: ElevenLabs text-to-speech CLI
-  require:
-    - golang
-  distro:
-    fedora:
-      package:
-        - alsa-lib-devel
-  env:
-    GOPATH: "~/go"
-  path_append:
-    - "~/go/bin"
-  task:
-    - cmd: |
-        go install github.com/steipete/sag/cmd/sag@latest
-        go clean -cache
-      user: "${USER}"
+    version: 2026.144.1443
+    name: sag
+    description: ElevenLabs text-to-speech CLI
+    require:
+        - golang
+    distro:
+        fedora:
+            package:
+                - alsa-lib-devel
+    env:
+        GOPATH: "~/go"
+    path_append:
+        - "~/go/bin"
+    task:
+        - cmd: |
+            go install github.com/steipete/sag/cmd/sag@latest
+            go clean -cache
+          user: "${USER}"

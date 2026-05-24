@@ -1,57 +1,58 @@
 layer:
-  name: chrome-devtools-mcp
-  description: Chrome DevTools MCP server via mcp-proxy (Streamable HTTP on port 9224)
-  require:
-    - nodejs
-    - supervisord
-  port:
-    - 9224
-  mcp_provide:
-    - name: chrome-devtools
-      url: "http://{{.ContainerName}}:9224/mcp"
-      transport: http
-  eval:
-    - id: chrome-devtools-mcp-binary
-      file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
-      exists: true
-    - id: mcp-proxy-binary
-      file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
-      exists: true
-    - id: chrome-devtools-mcp-service
-      scope: deploy
-      service: chrome-devtools-mcp
-      running: true
-    - id: chrome-devtools-mcp-port
-      scope: deploy
-      addr: 127.0.0.1:${HOST_PORT:9224}
-      reachable: true
-      timeout: 5s
-      # Readiness wait: the mcp-proxy binds 9224 shortly after start.
-      eventually: 60s
-      retry_interval: 2s
-    # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
-    # Runs only under `ov eval live <image>` (deploy-scope). No `call` test — the
-    # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
-    # safe non-destructive probes.
-    # Readiness waits: the MCP server proxies to Chrome's CDP (--browser-url
-    # 9222), so its liveness depends on Chrome being up — poll until ready.
-    - id: mcp-chrome-devtools-ping
-      scope: deploy
-      mcp: ping
-      timeout: 10s
-      eventually: 90s
-      retry_interval: 3s
-    - id: mcp-chrome-devtools-list-tools
-      scope: deploy
-      mcp: list-tools
-      eventually: 90s
-      retry_interval: 3s
-      stdout:
-        - contains: navigate_page
-        - contains: take_screenshot
-  service:
-    - name: chrome-devtools-mcp
-      exec: "%(ENV_HOME)s/.pixi/envs/default/bin/mcp-proxy --host 0.0.0.0 --port 9224 -- %(ENV_HOME)s/.npm-global/bin/chrome-devtools-mcp --browser-url http://127.0.0.1:9222 --no-usage-statistics"
-      restart: always
-      enable: true
-      scope: system
+    version: 2026.144.1443
+    name: chrome-devtools-mcp
+    description: Chrome DevTools MCP server via mcp-proxy (Streamable HTTP on port 9224)
+    require:
+        - nodejs
+        - supervisord
+    port:
+        - 9224
+    mcp_provide:
+        - name: chrome-devtools
+          url: "http://{{.ContainerName}}:9224/mcp"
+          transport: http
+    eval:
+        - id: chrome-devtools-mcp-binary
+          file: ${HOME}/.npm-global/bin/chrome-devtools-mcp
+          exists: true
+        - id: mcp-proxy-binary
+          file: ${HOME}/.pixi/envs/default/bin/mcp-proxy
+          exists: true
+        - id: chrome-devtools-mcp-service
+          scope: deploy
+          service: chrome-devtools-mcp
+          running: true
+        - id: chrome-devtools-mcp-port
+          scope: deploy
+          addr: 127.0.0.1:${HOST_PORT:9224}
+          reachable: true
+          timeout: 5s
+          # Readiness wait: the mcp-proxy binds 9224 shortly after start.
+          eventually: 60s
+          retry_interval: 2s
+        # MCP server exercised live via github.com/modelcontextprotocol/go-sdk.
+        # Runs only under `ov eval live <image>` (deploy-scope). No `call` test — the
+        # chrome-devtools tools need a live Chrome session; ping + tool-catalog are
+        # safe non-destructive probes.
+        # Readiness waits: the MCP server proxies to Chrome's CDP (--browser-url
+        # 9222), so its liveness depends on Chrome being up — poll until ready.
+        - id: mcp-chrome-devtools-ping
+          scope: deploy
+          mcp: ping
+          timeout: 10s
+          eventually: 90s
+          retry_interval: 3s
+        - id: mcp-chrome-devtools-list-tools
+          scope: deploy
+          mcp: list-tools
+          eventually: 90s
+          retry_interval: 3s
+          stdout:
+            - contains: navigate_page
+            - contains: take_screenshot
+    service:
+        - name: chrome-devtools-mcp
+          exec: "%(ENV_HOME)s/.pixi/envs/default/bin/mcp-proxy --host 0.0.0.0 --port 9224 -- %(ENV_HOME)s/.npm-global/bin/chrome-devtools-mcp --browser-url http://127.0.0.1:9222 --no-usage-statistics"
+          restart: always
+          enable: true
+          scope: system

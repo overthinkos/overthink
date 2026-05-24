@@ -1,12 +1,13 @@
 layer:
-  name: gemini
-  description: Google Gemini CLI for AI coding assistance and search
-  require:
-    - nodejs
-  eval:
-    - id: gemini-binary
-      file: ${HOME}/.npm-global/bin/gemini
-      exists: true
-    - id: gemini-version
-      command: ${HOME}/.npm-global/bin/gemini --version
-      exit_status: 0
+    version: 2026.144.1443
+    name: gemini
+    description: Google Gemini CLI for AI coding assistance and search
+    require:
+        - nodejs
+    eval:
+        - id: gemini-binary
+          file: ${HOME}/.npm-global/bin/gemini
+          exists: true
+        - id: gemini-version
+          command: ${HOME}/.npm-global/bin/gemini --version
+          exit_status: 0

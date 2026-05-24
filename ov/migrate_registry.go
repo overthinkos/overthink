@@ -70,7 +70,7 @@ type MigrationStep struct {
 // closure references it, and the registry's last entry uses it as its Version,
 // so the two are guaranteed equal (asserted by TestRegistryHeadMatchesLatest).
 // Bump it — and append the matching MigrationStep — for each future cutover.
-var latestSchemaVersion = mustCalVer("2026.143.844")
+var latestSchemaVersion = mustCalVer("2026.144.1443")
 
 // migrationSteps is the ordered registry. Chronological by git landing date
 // (see `git log --diff-filter=A` on each migrate_*.go), which is the order the
@@ -159,6 +159,16 @@ func migrationSteps() []MigrationStep {
 		{mustCalVer("2026.143.843"), "import-namespace", false, func(c *MigrateContext) (bool, error) {
 			w, err := MigrateImportNamespace(c.Dir, c.DryRun)
 			return len(w) > 0, err
+		}},
+		// 2026-05 per-kind versioning cutover: the per-entity `version:` field
+		// became load-bearing (image content-stable label + cross-repo layer
+		// resolution). Backfills every layer.yml + bare-base image entry with the
+		// HEAD CalVer. TouchesHost is false so remote-cache auto-migration also
+		// backfills fetched remote layers (the runtime then hard-errors on an
+		// unversioned fetched layer rather than carrying a fallback). See CHANGELOG.md.
+		{mustCalVer("2026.144.1442"), "entity-version", false, func(c *MigrateContext) (bool, error) {
+			r, err := MigrateEntityVersion(c.Dir, latestSchemaVersion.String(), c.DryRun)
+			return len(r) > 0, err
 		}},
 		// HEAD — the schema stamp. Must stay LAST so LatestSchemaVersion picks it up
 		// and every versioned file lands on this CalVer. This is the integer→CalVer

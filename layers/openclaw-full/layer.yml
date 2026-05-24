@@ -1,33 +1,32 @@
 layer:
-  name: openclaw-full
-  description: Maximal headless OpenClaw deployment (gateway + all feasible CLI tools/skills; no system Chrome/CDP)
-
-  layer:
-    - openclaw
-    - claude-code
-    - codex
-    - gemini
-    - clawhub
-    - mcporter
-    - oracle
-    - xurl
-    - summarize
-    - playwright
-    - blogwatcher
-    - gifgrep
-    - wacli
-    - goplaces
-    - songsee
-    - sag
-    - camsnap
-    - gogcli
-    - ordercli
-    - himalaya
-    - uv
-    - nano-pdf
-    - gh
-    - tmux
-    - ffmpeg
-    - ripgrep
-    - sqlite
-
+    version: 2026.144.1443
+    name: openclaw-full
+    description: Maximal headless OpenClaw deployment (gateway + all feasible CLI tools/skills; no system Chrome/CDP)
+    layer:
+        - openclaw
+        - claude-code
+        - codex
+        - gemini
+        - clawhub
+        - mcporter
+        - oracle
+        - xurl
+        - summarize
+        - playwright
+        - blogwatcher
+        - gifgrep
+        - wacli
+        - goplaces
+        - songsee
+        - sag
+        - camsnap
+        - gogcli
+        - ordercli
+        - himalaya
+        - uv
+        - nano-pdf
+        - gh
+        - tmux
+        - ffmpeg
+        - ripgrep
+        - sqlite

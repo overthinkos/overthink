@@ -1,40 +1,41 @@
 layer:
-  name: notebook-templates
-  data:
-    - src: data/notebooks
-      volume: workspace
-  eval:
-    - id: notebook-templates-dir
-      scope: deploy
-      file: ${VOLUME_CONTAINER_PATH:workspace}
-      filetype: directory
-    # Regex has no `$` anchor — find's output ends with `\n`, and Go's regexp
-    # treats `$` as end-of-input (not end-of-line) which then doesn't match.
-    - id: notebook-templates-present
-      scope: deploy
-      command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
-      exit_status: 0
-      stdout:
-        - matches: "\\.ipynb"
-  description:
-    feature: Starter notebook templates for jupyter
-    narrative: |
-      Provisions a small set of starter .ipynb files into the workspace
-      volume at deploy time so a fresh JupyterLab pod has runnable
-      examples on first open. Data-only — no packages, no services. The
-      data: block copies layers/notebook-templates/data/notebooks/
-      into the volume's root; consumers (jupyter, jupyter-ml) compose
-      this layer to ship the templates.
-    scenario:
-      - name: starter notebook templates land in the workspace volume
-        step:
-          - then: workspace volume is mounted as a directory at the canonical path
-            scope: deploy
-            file: ${VOLUME_CONTAINER_PATH:workspace}
-            filetype: directory
-          - and: at least one .ipynb starter template is present in that workspace
-            scope: deploy
-            command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
-            exit_status: 0
-            stdout:
-              - matches: "\\.ipynb"
+    version: 2026.144.1443
+    name: notebook-templates
+    data:
+        - src: data/notebooks
+          volume: workspace
+    eval:
+        - id: notebook-templates-dir
+          scope: deploy
+          file: ${VOLUME_CONTAINER_PATH:workspace}
+          filetype: directory
+        # Regex has no `$` anchor — find's output ends with `\n`, and Go's regexp
+        # treats `$` as end-of-input (not end-of-line) which then doesn't match.
+        - id: notebook-templates-present
+          scope: deploy
+          command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
+          exit_status: 0
+          stdout:
+            - matches: "\\.ipynb"
+    description:
+        feature: Starter notebook templates for jupyter
+        narrative: |
+            Provisions a small set of starter .ipynb files into the workspace
+            volume at deploy time so a fresh JupyterLab pod has runnable
+            examples on first open. Data-only — no packages, no services. The
+            data: block copies layers/notebook-templates/data/notebooks/
+            into the volume's root; consumers (jupyter, jupyter-ml) compose
+            this layer to ship the templates.
+        scenario:
+            - name: starter notebook templates land in the workspace volume
+              step:
+                - then: workspace volume is mounted as a directory at the canonical path
+                  scope: deploy
+                  file: ${VOLUME_CONTAINER_PATH:workspace}
+                  filetype: directory
+                - and: at least one .ipynb starter template is present in that workspace
+                  scope: deploy
+                  command: find ${VOLUME_CONTAINER_PATH:workspace} -maxdepth 3 -name "*.ipynb" -print -quit
+                  exit_status: 0
+                  stdout:
+                    - matches: "\\.ipynb"

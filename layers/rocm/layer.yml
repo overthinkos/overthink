@@ -1,14 +1,15 @@
 layer:
-  name: rocm
-  env:
-    ROCM_PATH: "/usr"
-  security:
-    group_add:
-      - keep-groups
-  distro:
-    fedora:
-      package:
-        - rocm-hip-runtime
-        - rocm-opencl
-        - rocm-clinfo
-        - rocm-smi
+    version: 2026.144.1443
+    name: rocm
+    env:
+        ROCM_PATH: "/usr"
+    security:
+        group_add:
+            - keep-groups
+    distro:
+        fedora:
+            package:
+                - rocm-hip-runtime
+                - rocm-opencl
+                - rocm-clinfo
+                - rocm-smi
